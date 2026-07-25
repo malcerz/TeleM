@@ -1,0 +1,70 @@
+{
+  "version": 5,
+  "global": {
+    "text_outline": 3
+  },
+  "custom_texts": [],
+  "indicators": {
+    "time_block": {
+      "enabled": true,
+      "label": "Czas",
+      "x": 0.01499605367008682,
+      "y": 0.023842917251051893,
+      "rotation": 0,
+      "font_label": 0.0125,
+      "font_date": 0.02,
+      "font_time": 0.02,
+      "show_value": false,
+      "font_size": 0.021,
+      "size": 0.029
+    },
+    "speed_text": {
+      "enabled": true,
+      "label": "speed_text",
+      "x": 0.5126475548060708,
+      "y": 0.7385947385947386,
+      "rotation": 0,
+      "form": "gauge",
+      "font_size": 0.025,
+      "size": 0.1,
+      "thickness": 3,
+      "min_val": 0,
+      "max_val": 100,
+      "ticks": 0,
+      "show_value": true,
+      "source": "gpmf",
+      "smoothing": 0,
+      "decimals": 1,
+      "show_units": true,
+      "text_offset_x": 0.0,
+      "text_offset_y": 0.0,
+      "start_angle": 180,
+      "sweep_angle": 180,
+      "marker_size": 6,
+      "marker_color": "#FFFFFF",
+      "bar_width": 3,
+      "show_bar": false,
+      "window_s": 30.0,
+      "chart_color": "#00AAFF",
+      "fill_color": "#00AAFF",
+      "fill_alpha": 80,
+      "grid_color": "#444444",
+      "show_grid": true,
+      "line_width": 2,
+      "segments": 30,
+      "segment_gap": 3,
+      "segment_radius": 4,
+      "inactive_alpha": 60,
+      "inactive_color": "#333333",
+      "direction": "horizontal",
+      "grow_height": false,
+      "show_min": true,
+      "show_max": true,
+      "show_label": true
+    }
+  },
+  "smoothing": {
+    "method": "moving_average",
+    "strength": 3
+  }
+}

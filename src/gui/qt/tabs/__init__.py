@@ -1,0 +1,1 @@
+"""Zakładki głównego okna."""

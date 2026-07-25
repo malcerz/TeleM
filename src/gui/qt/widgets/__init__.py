@@ -1,0 +1,1 @@
+"""Widgety wielokrotnego użytku."""

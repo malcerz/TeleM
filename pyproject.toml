@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telem"
+version = "0.16.9"
+description = "GoPro video telemetry overlay application"
+requires-python = ">=3.10"
+dependencies = [
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+fit = [
+    "fitparse>=1.2",
+]
+video = [
+    "opencv-python>=4.8",
+]
+json-accel = [
+    "orjson>=3.9",
+]
+all = [
+    "fitparse>=1.2",
+    "opencv-python>=4.8",
+    "orjson>=3.9",
+]
+
+[project.scripts]
+telem = "src.gui.hud_tuner_app:main"
+
+[project.urls]
+Homepage = "https://github.com/adramad/telem"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
