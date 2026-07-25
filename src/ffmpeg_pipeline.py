@@ -683,19 +683,23 @@ def _build_stream_ffmpeg_cmd(
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command for the streaming pipeline.
 
-    When *hwaccel* is ``"cuda"``, the GPU ``overlay_cuda`` filter is used
-    so that the compositing itself runs on the GPU.  When no rotation is
-    needed the composited frame stays in GPU memory all the way to NVENC.
-    Rotation filters (vflip/hflip/transpose) are CPU-only, so a single
-    ``hwdownload`` is inserted *after* the GPU overlay – before the
-    rotation step – rather than downloading every raw video frame first.
+    When *hwaccel* is ``"cuda"`` and no rotation is needed, the GPU
+    ``overlay_cuda`` filter is used so that compositing runs on the GPU.
+    When rotation is required the caller skips ``-hwaccel`` entirely so
+    that decoding, overlay and rotation all happen on the CPU without
+    format-negotiation issues between ``hflip`` and the encoder.
     """
     hwaccel_cuda = bool(hwaccel == "cuda")
     needs_rotation = bool(
         rotation_degrees in (90, 180, 270) or container_rotation == 180
     )
-    use_gpu_overlay = hwaccel_cuda or (target_res and encoder == "nv")
+    use_gpu_overlay = hwaccel_cuda and not needs_rotation
     target_res = RESOLUTION_MAP.get(resolution_name)
+
+    # Safety: never try GPU→CPU overlay without hwdownload (caller should
+    # have cleared hwaccel when rotation is needed, but just in case).
+    if hwaccel_cuda and needs_rotation:
+        hwaccel_cuda = False
 
     # ── Base filter (video scaling) ─────────────────────────────────────
     if target_res and encoder == "nv":
@@ -705,25 +709,20 @@ def _build_stream_ffmpeg_cmd(
         )
     elif target_res:
         base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
-    elif hwaccel_cuda:
+    elif use_gpu_overlay:
         base_filter = "[0:v]null[base]"               # stay on GPU
     else:
         base_filter = "[0:v]null[base]"
 
     # ── Overlay stream & operator ───────────────────────────────────────
-    if hwaccel_cuda:
+    if use_gpu_overlay:
         ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
         ov_op = "overlay_cuda"
     else:
         ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
         ov_op = "overlay"
 
-    # ── Rotation suffix (CPU filters – need hwdownload first) ───────────
-    if needs_rotation and hwaccel_cuda:
-        _rot_dl = "hwdownload,format=nv12,"
-    else:
-        _rot_dl = ""
-
+    # ── Filter complex (per rotation variant) ───────────────────────────
     if container_rotation in (90, 270):
         filter_complex = (
             f"{base_filter};{ov_input};"
@@ -733,19 +732,19 @@ def _build_stream_ffmpeg_cmd(
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}vflip,hflip[vout]"
+            f"[vtemp]format=yuv420p,vflip,hflip[vout]"
         )
     elif rotation_degrees == 90:
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}transpose=1[vout]"
+            f"[vtemp]transpose=1[vout]"
         )
     elif rotation_degrees == 270:
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}transpose=2[vout]"
+            f"[vtemp]transpose=2[vout]"
         )
     else:
         filter_complex = (
@@ -1036,6 +1035,13 @@ def stream_overlay_to_ffmpeg(
 
     # Build FFmpeg input args
     hwaccel = detect_gpu_decoder()
+    needs_rotation = bool(
+        rotation_degrees in (90, 180, 270) or container_rotation == 180
+    )
+    # Rotation filters (vflip/hflip/transpose) are CPU-only – skip hwaccel
+    # to avoid format negotiation issues between hwdownload → overlay → hflip.
+    if needs_rotation:
+        hwaccel = None
     input_args: list[str] = []
     if hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
@@ -1100,6 +1106,8 @@ def stream_overlay_to_ffmpeg(
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                     _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb)
         else:
+            from concurrent.futures import wait, FIRST_COMPLETED
+
             with ProcessPoolExecutor(
                 max_workers=n_workers,
                 initializer=init_worker,
@@ -1115,24 +1123,64 @@ def stream_overlay_to_ffmpeg(
                     target_fps, update_rate_step, total_overlay_frames,
                 ),
             ) as ex:
-                # ex.map() with chunksize = natural sliding window + zero buffer
-                chunk = max(1, total_overlay_frames // max(1, n_workers * 4))
-                results = ex.map(render_frame_bytes_job, jobs, chunksize=chunk)
+                # ── Bounded sliding window ──────────────────────────────
+                # At most MAX_IN_FLIGHT frames can be in-flight + in the
+                # reorder buffer at any time (each ~8 MB for 1080p).
+                MAX_IN_FLIGHT = max(1, n_workers * 4)
+                pending: set = set()
+                reorder_buf: dict[int, bytes] = {}
+                next_idx = 0
+                submitted = 0
 
-                for idx, png_bytes in results:
-                    if cancel_event is not None and cancel_event.is_set():
-                        try:
-                            ex.shutdown(wait=False, cancel_futures=True)
-                        except Exception:
-                            pass
-                        break
-                    process.stdin.buffer.write(png_bytes)
-                    total_piped += 1
-                    if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                        _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb)
+                # Fill initial window
+                for _ in range(min(MAX_IN_FLIGHT, total_overlay_frames)):
+                    pending.add(ex.submit(render_frame_bytes_job, (submitted,)))
+                    submitted += 1
+
+                while pending and not (
+                    cancel_event is not None and cancel_event.is_set()
+                ):
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED,
+                                         timeout=0.1)
+                    for fut in done:
+                        idx, png_bytes = fut.result()
+                        reorder_buf[idx] = png_bytes
+
+                        # Drain consecutive frames to FFmpeg
+                        while next_idx in reorder_buf:
+                            process.stdin.buffer.write(reorder_buf.pop(next_idx))
+                            total_piped += 1
+                            next_idx += 1
+                            if total_piped % 50 == 0 or total_piped == total_overlay_frames:
+                                _report_stream_progress(
+                                    total_piped, total_overlay_frames,
+                                    start_time, progress_cb,
+                                )
+
+                        # Top up the sliding window if below limit
+                        if (
+                            submitted < total_overlay_frames
+                            and len(reorder_buf) < MAX_IN_FLIGHT
+                        ):
+                            pending.add(
+                                ex.submit(render_frame_bytes_job, (submitted,))
+                            )
+                            submitted += 1
 
                 if cancel_event is not None and cancel_event.is_set():
+                    for f in pending:
+                        f.cancel()
                     ex.shutdown(wait=False, cancel_futures=True)
+
+                # Drain final reorder buffer
+                while next_idx in reorder_buf:
+                    process.stdin.buffer.write(reorder_buf.pop(next_idx))
+                    total_piped += 1
+                    next_idx += 1
+                    _report_stream_progress(
+                        total_piped, total_overlay_frames,
+                        start_time, progress_cb,
+                    )
 
         process.stdin.close()
     except BrokenPipeError:
@@ -1314,17 +1362,21 @@ def apply_overlay_video(
         rotation_degrees in (90, 180, 270) or container_rotation == 180
     )
 
-    # GPU overlay when CUDA is active – download only after overlay if
-    # rotation is needed (vflip/hflip/transpose are CPU-side filters).
-    if hwaccel == "cuda":
+    # Rotation filters (vflip/hflip/transpose) are CPU-only – skip hwaccel
+    # to avoid format-negotiation issues between hflip and the encoder.
+    if needs_rotation:
+        hwaccel = None
+
+    # GPU overlay when CUDA is active and no rotation is needed.
+    use_gpu = (hwaccel == "cuda") and not needs_rotation
+
+    if use_gpu:
         ov_op = "overlay_cuda"
         ov_fps = f"[1:v]fps={target_fps},format=rgba,hwupload_cuda"
     else:
         ov_op = "overlay"
         ov_fps = f"[1:v]fps={target_fps}"
 
-    # Rotation suffix: hwdownload before CPU-only rotation filters
-    _rot_dl = "hwdownload,format=nv12," if needs_rotation and hwaccel == "cuda" else ""
     ov_chain = f"{ov_fps}[ov]"
 
     input_args: list[str] = []
@@ -1357,19 +1409,19 @@ def apply_overlay_video(
         filter_complex = (
             f"{base_chain};{ov_chain};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}vflip,hflip[vout]"
+            f"[vtemp]vflip,hflip[vout]"
         )
     elif rotation_degrees == 90:
         filter_complex = (
             f"{base_chain};{ov_chain};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}transpose=1[vout]"
+            f"[vtemp]transpose=1[vout]"
         )
     elif rotation_degrees == 270:
         filter_complex = (
             f"{base_chain};{ov_chain};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]{_rot_dl}transpose=2[vout]"
+            f"[vtemp]transpose=2[vout]"
         )
     else:
         filter_complex = (
