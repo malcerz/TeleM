@@ -49,6 +49,12 @@ def get_value_schema() -> list[tuple]:
         ("chart_color", "color", None, None, None),
         ("fill_color", "color", None, None, None),
         ("fill_alpha", "int", 0, 255, 5),
+        # Gauge-specific
+        ("start_angle", "int", 0, 360, 5),
+        ("sweep_angle", "int", 30, 360, 5),
+        ("needle_length", "float", 0.5, 2.0, 0.05),
+        ("needle_width", "int", 2, 20, 1),
+        ("needle_color", "color", None, None, None),
     ]
 
 
@@ -81,7 +87,9 @@ def get_segment_bar_schema() -> list[tuple]:
 _FORM_FIELDS: dict[str, set[str]] = {
     "text":  {"font_size", "size", "show_value", "value_offset_x", "value_offset_y"},
     "gauge": {"font_size", "size", "thickness", "min_val", "max_val", "ticks",
-              "show_value", "value_offset_x", "value_offset_y"},
+              "show_value", "value_offset_x", "value_offset_y",
+              "start_angle", "sweep_angle",
+              "needle_length", "needle_width", "needle_color"},
     "bar":   {"font_size", "size", "thickness", "min_val", "max_val", "ticks",
               "show_value", "value_offset_x", "value_offset_y",
               "show_range_labels", "range_label_offset_x", "range_label_offset_y", "range_label_spread_x"},
