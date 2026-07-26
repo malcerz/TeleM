@@ -82,8 +82,9 @@
       "source": "fit",
       "unit": "",
       "chart_color": "#ffff00",
-      "fill_color": "#ffff7f",
-      "fill_alpha": 50
+      "fill_color": "#55007f",
+      "fill_alpha": 0,
+      "show_grid": true
     },
     "fit_curVpower_text": {
       "enabled": false,

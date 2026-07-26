@@ -694,14 +694,13 @@ class AppController:
             "enabled": True, "label": key, "x": 0.5, "y": 0.5,
             "rotation": 0, "form": "text", "font_size": 0.025,
             "size": 0.1, "thickness": 3, "min_val": 0, "max_val": 100,
-            "ticks": 0, "show_value": True, "source": "gpmf", "smoothing": 0,
-            "decimals": 1, "show_units": True,
+            "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
             # Text
             "text_offset_x": 0.0, "text_offset_y": 0.0,
             # Gauge
             "start_angle": 180, "sweep_angle": 180,
+            "needle_length": 1.1, "needle_width": 4, "needle_color": "#DC3232",
             "marker_size": 6, "marker_color": "#FFFFFF",
-            "bar_width": 3, "show_bar": False,
             # Chart
             "window_s": 30.0, "chart_color": "#00AAFF",
             "fill_color": "#00AAFF", "fill_alpha": 80,
@@ -720,23 +719,14 @@ class AppController:
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
-        # Ustal domyślną formę na podstawie klucza
-        _key_lower = key.lower()
-        if any(x in _key_lower for x in ("speed", "passing_speed", "passing_speedabs")):
-            defaults["form"] = "gauge"
-            defaults["size"] = 0.12
-        elif any(x in _key_lower for x in ("cad", "heart_rate", "hr", "power", "curvpower")):
-            defaults["form"] = "chart"
-            defaults["size"] = 0.14
-        elif any(x in _key_lower for x in ("alt", "distance", "dist")):
-            defaults["form"] = "bar"
-            defaults["size"] = 0.15
-        elif any(x in _key_lower for x in ("battery", "solar", "gopro_battery")):
-            defaults["form"] = "segment_bar"
-            defaults["size"] = 0.12
-            defaults["segments"] = 20
-        elif key == "track_map":
-            # Mapa – od razu jako tryb map (nie text)
+        # Ustal domyślną formę na podstawie klucza (z rejestru indicators.py)
+        from src.indicators import get_form_for_key
+        _form, _form_overrides = get_form_for_key(key)
+        defaults["form"] = _form
+        defaults.update(_form_overrides)
+
+        if key == "track_map":
+            # Mapa – ma własne ustawienia niezależnie od rejestru
             defaults["form"] = "map"
             defaults["size"] = 0.18
             defaults["zoom"] = 16
