@@ -807,7 +807,17 @@ def _normalise_dt(target_dt: datetime) -> datetime:
 def _normalise_samples(
     samples: list[tuple[datetime, Any]]
 ) -> list[tuple[datetime, Any]]:
-    """Strip timezone info from all sample datetimes."""
+    """Strip timezone info from all sample datetimes.
+
+    Returns a new list only if any datetime has timezone info.
+    If all are already naive, returns the original list (zero-copy)."""
+    needs_normalise = False
+    for dt, _ in samples:
+        if dt.tzinfo is not None:
+            needs_normalise = True
+            break
+    if not needs_normalise:
+        return samples
     return [(dt.replace(tzinfo=None), v) for dt, v in samples]
 
 
@@ -819,8 +829,7 @@ def interpolate_speed(
     samples = _normalise_samples(samples)
     if not samples:
         return 0.0
-    times = [dt for dt, _ in samples]
-    idx = bisect_left(times, target_dt)
+    idx = bisect_left(samples, target_dt, key=lambda x: x[0])
     if idx <= 0:
         if samples and target_dt < samples[0][0]:
             return 0.0
@@ -843,8 +852,7 @@ def interpolate_distance(
     track_samples = _normalise_samples(track_samples)
     if not track_samples:
         return 0.0
-    times = [dt for dt, _ in track_samples]
-    idx = bisect_left(times, target_dt)
+    idx = bisect_left(track_samples, target_dt, key=lambda x: x[0])
     if idx <= 0:
         if track_samples and target_dt < track_samples[0][0]:
             return 0.0

@@ -16,7 +16,6 @@ import queue
 import subprocess
 import sys
 import threading
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -97,6 +96,7 @@ class AppController:
         self.last_preview_ts = -1.0
         self.indicator_bboxes: dict = {}
         self._selected_stream_key: str = ""
+        self._cut_regions: list[tuple[float, float]] = []
 
         # Wczytaj startowy preset z def_layout.json jeśli istnieje
         self._startup_preset_path: str = ""
@@ -205,14 +205,8 @@ class AppController:
                         video_paths, ts,
                         self.ffmpeg_exe, self.ffprobe_exe, target_w=960,
                     )
-                    t_frame = time.perf_counter()
                     if img:
                         self.src_img = img
-                        print(
-                            f"[PROFILE] extract_frame: "
-                            f"{(time.perf_counter()-t_frame)*1000:.1f}ms",
-                            flush=True,
-                        )
                         self.last_preview_ts = ts
                         self._render_preview(ts)
                 except Exception as e:
@@ -317,6 +311,16 @@ class AppController:
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=self.fit_path,
                     )
+
+                # Odczytaj cut_regions z layoutu
+                self._cut_regions = self.layout.get("cut_regions", [])
+                if isinstance(self._cut_regions, list):
+                    self._cut_regions = [
+                        (float(a), float(b)) for a, b in self._cut_regions
+                        if isinstance(a, (int, float)) and isinstance(b, (int, float))
+                    ]
+                else:
+                    self._cut_regions = []
 
                 # Zarejestruj pola FIT
                 if self.telemetry.fit_data:
@@ -882,8 +886,14 @@ class AppController:
         if not path:
             return
         try:
+            # Dołącz cut_regions do zapisywanego layoutu
+            layout_copy = dict(self.layout)
+            if self._cut_regions:
+                layout_copy["cut_regions"] = self._cut_regions
+            else:
+                layout_copy.pop("cut_regions", None)
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(self.layout, f, indent=2, ensure_ascii=False)
+                json.dump(layout_copy, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self.signals.sig_error.emit(f"Błąd zapisu presetu: {e}")
 
@@ -960,6 +970,54 @@ class AppController:
 
         # Odśwież podgląd
         self._render_preview()
+
+    # ═════════════════════════════════════════════════════════════════════
+    # TRIM / CUT
+    # ═════════════════════════════════════════════════════════════════════
+
+    def add_cut_region(self, start_s: float, end_s: float) -> None:
+        """Dodaj fragment do wycięcia."""
+        if end_s <= start_s:
+            return
+        # Wytnij tylko część, która nie koliduje z istniejącymi cięciami
+        new_regions: list[tuple[float, float]] = [(start_s, end_s)]
+        for existing in self._cut_regions:
+            # Jeżeli nachodzi na istniejące cięcie — scal (poszerz)
+            a, b = existing
+            merged = False
+            for i, (ns, ne) in enumerate(new_regions):
+                if ns <= b and ne >= a:
+                    new_regions[i] = (min(ns, a), max(ne, b))
+                    merged = True
+                    break
+            if not merged:
+                new_regions.append(existing)
+        # Posortuj
+        new_regions.sort(key=lambda x: x[0])
+        self._cut_regions = new_regions
+        self.signals.sig_cut_region_added.emit(start_s, end_s)
+
+    def undo_cut_region(self) -> None:
+        """Cofnij ostatnie cięcie."""
+        if not self._cut_regions:
+            return
+        idx = len(self._cut_regions) - 1
+        removed = self._cut_regions.pop()
+        self.signals.sig_cut_region_removed.emit(idx)
+
+    def clear_cut_regions(self) -> None:
+        """Przywróć wszystkie wycięte fragmenty."""
+        if not self._cut_regions:
+            return
+        self._cut_regions.clear()
+        self.signals.sig_cut_regions_cleared.emit()
+
+    def is_in_cut_region(self, seconds: float) -> bool:
+        """Sprawdź czy dany czas znajduje się w wyciętym fragmencie."""
+        for start_s, end_s in self._cut_regions:
+            if start_s <= seconds <= end_s:
+                return True
+        return False
 
     # ═════════════════════════════════════════════════════════════════════
     # RENDEROWANIE PODGLĄDU
@@ -1102,7 +1160,6 @@ class AppController:
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
         """Renderuje podgląd nakładki i wysyła QPixmap do GUI."""
-        t0 = time.perf_counter()
         try:
             if not self.video_path:
                 return
@@ -1116,7 +1173,6 @@ class AppController:
             indicator_overrides: dict[str, float] = {}
             overlay_data: dict | None = None
             target_dt = None
-            t1 = time.perf_counter()
 
             if self.telemetry.start_dt_utc:
                 current_ts = seek_seconds if seek_seconds is not None else 0
@@ -1181,12 +1237,6 @@ class AppController:
                 date_txt = overlay_data["date_text"]
                 time_txt = overlay_data["time_text"]
 
-            t2 = time.perf_counter()
-            if self._prepare_cache:
-                print(f"[CACHE] ranges: cached", flush=True)
-            else:
-                print(f"[CACHE] ranges: computed fresh", flush=True)
-
             # Pozycja dla kursora na wykresach
             current_position = (
                 seek_seconds / max(1.0, self.video_duration_s)
@@ -1194,8 +1244,26 @@ class AppController:
                 else 0.0
             )
 
-            # Renderuj overlay (istniejąca funkcja)
-            self.indicator_bboxes.clear()
+            # Sprawdź czy klatka jest w wyciętym fragmencie
+            current_ts = seek_seconds if seek_seconds is not None else 0
+            if self.is_in_cut_region(current_ts):
+                preview = self.src_img.convert("RGBA").copy()
+                from PIL import ImageDraw
+                draw = ImageDraw.Draw(preview)
+                bar_h = max(4, int(preview.height * 0.02))
+                draw.rectangle(
+                    [(0, preview.height - bar_h), (preview.width, preview.height)],
+                    fill=(200, 50, 50, 160),
+                )
+                draw.text(
+                    (preview.width // 2 - 60, preview.height - bar_h - 16),
+                    "-= WYCIĘTY FRAGMENT =-",
+                    fill=(200, 50, 50, 220),
+                )
+                self.indicator_bboxes.clear()
+                overlay_data = None
+            else:
+                self.indicator_bboxes.clear()
 
             if overlay_data is not None:
                 preview = render_preview(
@@ -1226,25 +1294,29 @@ class AppController:
                     start_dt_utc=overlay_data["start_dt_utc"],
                 )
             else:
-                # No telemetry – show blank overlay
-                from src.overlay_renderer import compose_overlay
-                overlay = compose_overlay(
-                    src_w, src_h, self.layout, self.font_path,
-                    date_txt, time_txt,
-                    0.0, 0.0, 1.0, 0.0, None, None,
-                    0.0, 0.0, 0.0,
-                    indicator_values={}, max_speed_kmh=None,
-                    power_value=0.0, atemp_value=0.0,
-                    hr_value=0.0, cad_value=0.0, battery_value=0.0,
-                    chart_data={}, current_position=current_position,
-                    extra_indicators={}, gps_track=[],
-                    target_dt=None, start_dt_utc=None,
-                )
-                preview = self.src_img.convert("RGBA").copy()
-                preview.alpha_composite(overlay)
+                # Check if preview already set (cut region or no telemetry)
+                try:
+                    _ = preview
+                except NameError:
+                    preview = None
+                if preview is None:
+                    # No telemetry – show blank overlay
+                    from src.overlay_renderer import compose_overlay
+                    overlay = compose_overlay(
+                        src_w, src_h, self.layout, self.font_path,
+                        date_txt, time_txt,
+                        0.0, 0.0, 1.0, 0.0, None, None,
+                        0.0, 0.0, 0.0,
+                        indicator_values={}, max_speed_kmh=None,
+                        power_value=0.0, atemp_value=0.0,
+                        hr_value=0.0, cad_value=0.0, battery_value=0.0,
+                        chart_data={}, current_position=current_position,
+                        extra_indicators={}, gps_track=[],
+                        target_dt=None, start_dt_utc=None,
+                    )
+                    preview = self.src_img.convert("RGBA").copy()
+                    preview.alpha_composite(overlay)
                 self.indicator_bboxes.clear()
-
-            t3 = time.perf_counter()
 
             # Konwertuj PIL Image → QPixmap
             from PySide6.QtGui import QImage, QPixmap
@@ -1255,15 +1327,6 @@ class AppController:
                 img_rgb.width * 3, QImage.Format_RGB888,
             )
             pixmap = QPixmap.fromImage(qimg)
-            t4 = time.perf_counter()
-            print(
-                f"[PROFILE] target_dt: {(t1-t0)*1000:.1f}ms | "
-                f"overlay_data: {(t2-t1)*1000:.1f}ms | "
-                f"render: {(t3-t2)*1000:.1f}ms | "
-                f"convert: {(t4-t3)*1000:.1f}ms | "
-                f"TOTAL: {(t4-t0)*1000:.1f}ms",
-                flush=True,
-            )
             self.signals.sig_preview_frame_ready.emit(pixmap)
             self.signals.sig_bboxes_ready.emit(
                 dict(self.indicator_bboxes),
@@ -1278,9 +1341,22 @@ class AppController:
     # SEEK
     # ═════════════════════════════════════════════════════════════════════
 
+    def _skip_cut_regions(self, seconds: float, forward: bool = True) -> float:
+        """Przeskocz do przodu/tyłu poza wycięty fragment."""
+        if not self._cut_regions:
+            return seconds
+        for start_s, end_s in self._cut_regions:
+            margin = 0.1  # 100ms marginesu poza cięciem
+            if forward and start_s - margin <= seconds <= end_s:
+                return end_s + margin
+            if not forward and start_s <= seconds <= end_s + margin:
+                return max(0.0, start_s - margin)
+        return seconds
+
     def _on_seek_changed(self, seconds: float) -> None:
         """Użytkownik przesunął oś czasu."""
-        self._playback_pos = seconds  # sync playback position
+        seconds = self._skip_cut_regions(seconds)
+        self._playback_pos = seconds
         if (
             self.video_paths
             and abs(seconds - self.last_preview_ts) > 0.1
@@ -1305,7 +1381,7 @@ class AppController:
         self._playback_step()
 
     def _on_playback_stop(self) -> None:
-        """Użytkownik kliknął Stop — zatrzymaj playback."""
+        """Użytkownik kliknął Stop — zatrzymaj playback i opróżnij kolejkę."""
         self._playing = False
         if self._playback_timer is not None:
             try:
@@ -1313,21 +1389,23 @@ class AppController:
             except Exception:
                 pass
             self._playback_timer = None
+        try:
+            while True:
+                self._preview_queue.get_nowait()
+                self._preview_queue.task_done()
+        except queue.Empty:
+            pass
 
     def _playback_step(self) -> None:
         """Przesuń seek o 1 klatkę i zaplanuj następny krok."""
         if not self._playing:
             return
-        # Oblicz aktualny seek z ostatniego wejścia wideo
         step = 1.0 / max(self.fps, 1.0)
-        # Odczytaj obecną pozycję seeka przez ostatnio wyrenderowany podgląd
-        # Używamy sig_seek_changed -> _on_seek_changed, więc musimy sami
-        # zarządzać bieżącą pozycją. Symulujemy przesunięcie suwaka.
-        # Pobieramy ostatnią pozycję z ostatniego wysłanego seeka.
-        # Najprościej: przechowujemy ostatnią pozycję.
         if not hasattr(self, '_playback_pos'):
             self._playback_pos = 0.0
         nxt = self._playback_pos + step
+        # Przeskocz wycięte fragmenty
+        nxt = self._skip_cut_regions(nxt)
         if nxt >= self.video_duration_s:
             self._on_playback_stop()
             self._playback_pos = 0.0

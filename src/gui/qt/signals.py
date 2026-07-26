@@ -56,6 +56,13 @@ class AppSignals(QObject):
     sig_playback_start = Signal()
     sig_playback_stop = Signal()
 
+    # Trim / cut
+    sig_cut_region_added = Signal(float, float)
+    # (start_s: float, end_s: float)
+    sig_cut_region_removed = Signal(int)
+    # (index: int)
+    sig_cut_regions_cleared = Signal()
+
     # ── Kontroler → GUI ──────────────────────────────────────────────────
 
     # Dostępne strumienie danych po analizie

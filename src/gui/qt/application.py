@@ -19,10 +19,9 @@ def main() -> None:
     app.setApplicationName("TeleMGP")
 
     # Inicjalizacja kontrolera (most GUI ↔ logika biznesowa)
-    _controller = AppController()  # noqa: F841
-
-    # Główne okno – pełny ekran
+    _controller = AppController()
     window = MainWindow()
+    window._project_tab.set_controller(_controller)  # noqa: F841
     window.showMaximized()
 
     # ── Tryb testowy: python TeleMGP0.py -test ──────────────────────────

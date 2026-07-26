@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.gui.qt.signals import get_signals
+from src.gui.qt.widgets.trim_bar import TrimBar
 
 
 class VideoPreview(QWidget):
@@ -22,6 +23,7 @@ class VideoPreview(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.signals = get_signals()
+        self._controller: object = None  # ustawiane przez set_controller()
         self._duration_s = 100.0
         self._bboxes: dict[str, tuple[int, int, int, int]] = {}
         self._dragging_key: str | None = None
@@ -30,6 +32,7 @@ class VideoPreview(QWidget):
         self._pixmap_offset: tuple[int, int] = (0, 0)
         self._original_size: tuple[int, int] = (0, 0)
         self._build_ui()
+        self._connect_trim()
         # Event filter na image_label do przechwytywania zdarzeń myszy
         self.image_label.installEventFilter(self)
 
@@ -48,6 +51,18 @@ class VideoPreview(QWidget):
         self.image_label.setScaledContents(False)
         self.image_label.setMouseTracking(True)
         layout.addWidget(self.image_label, 1)
+
+        # ── Etykieta instrukcji wycinania ──
+        self.trim_label = QLabel(
+            "Kliknij na pasek poniżej, aby zaznaczyć fragment do wycięcia"
+        )
+        self.trim_label.setStyleSheet("color: #666; font-size: 9px; padding: 0 4px;")
+        self.trim_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.trim_label)
+
+        # ── Pasek wycinania (TrimBar) ──
+        self.trim_bar = TrimBar()
+        layout.addWidget(self.trim_bar)
 
         # Oś czasu + Play/Stop (ta sama linia)
         time_row = QHBoxLayout()
@@ -92,6 +107,37 @@ class VideoPreview(QWidget):
         self.duration_label.setAlignment(Qt.AlignRight)
         self.duration_label.setStyleSheet("color: #aaa; font-size: 11px;")
         time_row.addWidget(self.duration_label)
+
+        # ── Przyciski wycinania ──
+        self.cut_btn = QPushButton("\u2702")  # ✂
+        self.cut_btn.setFixedSize(26, 26)
+        self.cut_btn.setToolTip("Wytnij zaznaczony fragment")
+        self.cut_btn.setStyleSheet(
+            "QPushButton { background-color: #5a3a2a; color: #ffaa66; "
+            "border: 1px solid #7a5a4a; border-radius: 3px; font-size: 13px; }"
+            "QPushButton:hover { background-color: #7a4a3a; }"
+        )
+        time_row.addWidget(self.cut_btn)
+
+        self.undo_cut_btn = QPushButton("\u21B6")  # ↶
+        self.undo_cut_btn.setFixedSize(26, 26)
+        self.undo_cut_btn.setToolTip("Cofnij ostatnie wycięcie")
+        self.undo_cut_btn.setStyleSheet(
+            "QPushButton { background-color: #3a3a5a; color: #8888ff; "
+            "border: 1px solid #5a5a7a; border-radius: 3px; font-size: 13px; }"
+            "QPushButton:hover { background-color: #4a4a7a; }"
+        )
+        time_row.addWidget(self.undo_cut_btn)
+
+        self.restore_cut_btn = QPushButton("\u21A9")  # ↩
+        self.restore_cut_btn.setFixedSize(26, 26)
+        self.restore_cut_btn.setToolTip("Przywróć wszystkie wycięte fragmenty")
+        self.restore_cut_btn.setStyleSheet(
+            "QPushButton { background-color: #3a5a3a; color: #88ff88; "
+            "border: 1px solid #5a7a5a; border-radius: 3px; font-size: 13px; }"
+            "QPushButton:hover { background-color: #4a7a4a; }"
+        )
+        time_row.addWidget(self.restore_cut_btn)
 
         layout.addLayout(time_row)
 
@@ -206,6 +252,47 @@ class VideoPreview(QWidget):
         total_m = int(self._duration_s // 60)
         total_s = int(self._duration_s % 60)
         self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
+        self.trim_bar.set_duration(duration_s)
+
+    # ── Trim / cut ─────────────────────────────────────────────────────
+
+    def set_controller(self, controller: object) -> None:
+        """Ustaw referencję do kontrolera (wywoływane z project_tab)."""
+        self._controller = controller
+
+    def _connect_trim(self) -> None:
+        self.cut_btn.clicked.connect(self._on_cut)
+        self.undo_cut_btn.clicked.connect(self._on_undo_cut)
+        self.restore_cut_btn.clicked.connect(self._on_restore_cut)
+
+    def _on_cut(self) -> None:
+        """Kliknięto ✂ — wytnij zaznaczony fragment A-B."""
+        sel = self.trim_bar.get_selection()
+        if sel and self._controller and hasattr(self._controller, 'add_cut_region'):
+            self._controller.add_cut_region(sel[0], sel[1])
+            self.refresh_trim_bar()
+
+    def _on_undo_cut(self) -> None:
+        """Kliknięto ↶ — cofnij ostatnie wycięcie."""
+        if self._controller and hasattr(self._controller, 'undo_cut_region'):
+            self._controller.undo_cut_region()
+
+    def _on_restore_cut(self) -> None:
+        """Kliknięto ↩ — przywróć wszystkie wycięte fragmenty."""
+        if self._controller and hasattr(self._controller, 'clear_cut_regions'):
+            self._controller.clear_cut_regions()
+
+    # ── Sloty odświeżania TrimBar po zmianie regionów ──────────────────
+
+    def refresh_trim_bar(self) -> None:
+        """Odśwież pasek wycinania z aktualnych regionów kontrolera."""
+        if self._controller and hasattr(self._controller, '_cut_regions'):
+            self.trim_bar.set_cut_regions(self._controller._cut_regions)
+            self.trim_bar.clear_marks()
+        if self._controller and self._controller._cut_regions:
+            self.trim_label.hide()
+        else:
+            self.trim_label.show()
 
     # ── Slot: przesunięcie suwaka ──────────────────────────────────────
 

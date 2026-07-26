@@ -13,9 +13,6 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 
-import time
-
-
 def prepare_overlay_frame_data(
     *,
     layout: dict[str, Any],
@@ -58,8 +55,6 @@ def prepare_overlay_frame_data(
         interpolate_iso, interpolate_exposure, interpolate_temperature,
     )
 
-    _t0 = time.perf_counter()
-
     # ── Time strings ──────────────────────────────────────────────────
     local_dt = target_dt + timedelta(hours=tz_offset_hours)
     date_text = local_dt.strftime("%Y-%m-%d")
@@ -95,8 +90,6 @@ def prepare_overlay_frame_data(
             indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
         elif ind_key in ("alt_visual", "alt_text"):
             indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
-
-    _t1 = time.perf_counter()
 
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
@@ -165,13 +158,11 @@ def prepare_overlay_frame_data(
                 max_alt = max(alts)
 
     # ── FIT / extra values ────────────────────────────────────────────
-    _t_resolve = time.perf_counter()
     power_value = resolve_cache_value("power", target_dt) if resolve_cache_value else 0.0
     atemp_value = resolve_cache_value("atemp", target_dt) if resolve_cache_value else 0.0
     hr_value = resolve_cache_value("hr", target_dt) if resolve_cache_value else 0.0
     cad_value = resolve_cache_value("cad", target_dt) if resolve_cache_value else 0.0
     battery_value = resolve_cache_value("battery", target_dt) if resolve_cache_value else 0.0
-    _t_resolve_end = time.perf_counter()
 
     # ── Build extra_indicators (FIT fields + remaining dynamic) ───────
     from src.indicators.registry import HARDCODED_KEYS
@@ -204,8 +195,6 @@ def prepare_overlay_frame_data(
         label = cfg.get("label", key)
         extra_indicators[key] = (val, unit, label)
 
-    _t2 = time.perf_counter()
-
     # ── Position / chart data ─────────────────────────────────────────
     current_position = (
         current_index / max(1, total_frames - 1)
@@ -214,15 +203,6 @@ def prepare_overlay_frame_data(
 
     # ── GPS track ─────────────────────────────────────────────────────
     gps_trk: list = gps_track or []
-
-    print(
-        f"[PROFILE] prep_data: interp={(_t1-_t0)*1000:.1f}ms "
-        f"ranges={(_t_resolve-_t1)*1000:.1f}ms "
-        f"resolve={(_t_resolve_end-_t_resolve)*1000:.1f}ms "
-        f"extra={(_t2-_t_resolve_end)*1000:.1f}ms "
-        f"total={(_t2-_t0)*1000:.1f}ms",
-        flush=True,
-    )
 
     return {
         "date_text": date_text,

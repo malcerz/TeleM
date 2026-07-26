@@ -216,6 +216,7 @@ def init_worker(
     target_fps: Optional[float] = None,
     update_rate_step: int = 1,
     total_overlay_frames: Optional[int] = None,
+    cut_regions: Optional[list[tuple[float, float]]] = None,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes."""
     WORKER_CACHE["video_width"] = video_width
@@ -249,6 +250,64 @@ def init_worker(
     WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(
         layout, _get_source_samples, _resolve_cache_samples,
     )
+
+    # ── Precompute static ranges (max_distance_m, max_speed_kmh, min/max_alt) ──
+    _prep_cache: dict[str, Any] = {}
+    indic = layout.get("indicators", {})
+
+    # max_distance_m
+    trk = track_samples or []
+    gpx_trk = gpx_track_samples or []
+    fit_trk = fit_data.get("track", []) if fit_data else []
+    dist_src = indic.get("dist_visual", {}).get("source", "gpmf")
+    if dist_src == "gpx":
+        trk_for_range = gpx_trk or trk
+    elif dist_src == "fit":
+        trk_for_range = fit_trk or trk
+    else:
+        trk_for_range = trk
+    _prep_cache["max_distance_m"] = trk_for_range[-1][1] if trk_for_range else None
+
+    # max_speed_kmh
+    spd = speed_samples or []
+    gpx_spd = gpx_speed_samples or []
+    fit_spd = fit_data.get("speed", []) if fit_data else []
+    spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+    if spd_src == "gpx":
+        spd_for_range = gpx_spd or spd
+    elif spd_src == "fit":
+        spd_for_range = fit_spd or spd
+    else:
+        spd_for_range = spd
+    if spd_for_range:
+        spd_vals = [s for _, s in spd_for_range]
+        _prep_cache["max_speed_kmh"] = max(spd_vals) if spd_vals else None
+    else:
+        _prep_cache["max_speed_kmh"] = None
+
+    # min_alt / max_alt
+    alt_s = alt_samples or []
+    gpx_alt_s = gpx_alt_samples or []
+    fit_alt_s = fit_data.get("alt", []) if fit_data else []
+    alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+    if alt_src == "gpx":
+        alt_for_range = gpx_alt_s or alt_s
+    elif alt_src == "fit":
+        alt_for_range = fit_alt_s or alt_s
+    else:
+        alt_for_range = alt_s
+    if alt_for_range:
+        alts = [a for _, a in alt_for_range]
+        _prep_cache["min_alt"] = min(alts) if alts else None
+        _prep_cache["max_alt"] = max(alts) if alts else None
+    else:
+        _prep_cache["min_alt"] = None
+        _prep_cache["max_alt"] = None
+
+    WORKER_CACHE["_prep_cache"] = _prep_cache
+
+    # ── Cut regions ────────────────────────────────────────────────────────
+    WORKER_CACHE["_cut_regions"] = cut_regions or []
 
 
 # ── Worker cache helpers ────────────────────────────────────────────────────
@@ -816,6 +875,15 @@ def render_overlay_frame(
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
 
+    # Sprawdź czy klatka jest w wyciętym fragmencie — zwróć pustą przezroczystą nakładkę
+    cut_regions = WORKER_CACHE.get("_cut_regions", [])
+    sample_t = (index * update_rate_step) / target_fps
+    current_t = sample_t
+    for cut_start, cut_end in cut_regions:
+        if cut_start <= current_t <= cut_end:
+            from PIL import Image
+            return Image.new("RGBA", (video_width, video_height), (0, 0, 0, 0))
+
     from src.overlay_renderer import prepare_overlay_frame_data
     data = prepare_overlay_frame_data(
         layout=layout,
@@ -841,6 +909,7 @@ def render_overlay_frame(
         current_index=index,
         chart_data=chart_data,
         resolve_cache_value=_resolve_cache_value,
+        _range_cache=WORKER_CACHE.get("_prep_cache"),
     )
 
     return compose_overlay(
@@ -938,6 +1007,9 @@ def stream_overlay_to_ffmpeg(
     - Producer: ProcessPoolExecutor renders frames in parallel -> (index, bytes)
     - Consumer: main thread receives, sorts by index, pipes to FFmpeg
     """
+    # Pobierz cut_regions z layoutu (przekazane przez kontroler)
+    cut_regions = layout.get("cut_regions", [])
+
     generation_fps = target_fps / update_rate_step
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
 
@@ -951,6 +1023,7 @@ def stream_overlay_to_ffmpeg(
         start_dt_utc, tz_offset_hours,
         speed_samples, track_samples, alt_samples,
         target_fps, update_rate_step, total_overlay_frames,
+        cut_regions=cut_regions,
     )
 
     if cancel_event is not None and cancel_event.is_set():
