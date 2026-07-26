@@ -324,7 +324,7 @@
       "show_min": true,
       "show_max": true,
       "show_label": true,
-      "needle_length": 0.5
+      "needle_length": 0.45
     }
   },
   "smoothing": {

@@ -16,6 +16,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -138,6 +139,9 @@ class AppController:
         )
 
         # ── Preview worker ─────────────────────────────────────────────
+        # ── Przygotowanie danych podglądu — cache wartości stałych ──────
+        self._prepare_cache: dict = {}
+
         self._preview_queue: queue.Queue = queue.Queue(maxsize=1)
         self._preview_worker: Optional[threading.Thread] = None
         self._start_preview_worker()
@@ -201,8 +205,14 @@ class AppController:
                         video_paths, ts,
                         self.ffmpeg_exe, self.ffprobe_exe, target_w=960,
                     )
+                    t_frame = time.perf_counter()
                     if img:
                         self.src_img = img
+                        print(
+                            f"[PROFILE] extract_frame: "
+                            f"{(time.perf_counter()-t_frame)*1000:.1f}ms",
+                            flush=True,
+                        )
                         self.last_preview_ts = ts
                         self._render_preview(ts)
                 except Exception as e:
@@ -224,6 +234,7 @@ class AppController:
         fit_path: str,
     ) -> None:
         """Użytkownik wybrał pliki w zakładce Wczytywanie."""
+        self._prepare_cache.clear()
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
 
         def bg_load() -> None:
@@ -878,6 +889,7 @@ class AppController:
 
     def _on_load_preset(self) -> None:
         """Wczytuje układ z pliku JSON i odświeża podgląd."""
+        self._prepare_cache.clear()
         path, _ = QFileDialog.getOpenFileName(
             None, "Wczytaj preset układu", "",
             "JSON (*.json);;Wszystkie (*.*)",
@@ -941,6 +953,10 @@ class AppController:
         # Inwalidacja cache mapy
         if stream_key == "track_map" and field_name in ("zoom", "map_style"):
             clear_map_cache()
+
+        # Inwalidacja cache przygotowania — gdy zmieni się form/source zmieniają dane statyczne
+        if field_name in ("source", "form", "min_val", "max_val"):
+            self._prepare_cache.clear()
 
         # Odśwież podgląd
         self._render_preview()
@@ -1021,8 +1037,72 @@ class AppController:
                 self.telemetry.resolve_samples(field_name), target_dt, window)
         return None
 
+    # ── Cache wartości stałych dla prepare_overlay_frame_data ──────────
+
+    def _build_prepare_cache(self) -> None:
+        """Oblicza raz wartości zakresów (const dla całego wideo)."""
+        spd = self.telemetry.speed_samples or []
+        trk = self.telemetry.track_samples or []
+        alt = self.telemetry.alt_samples or []
+        gpx_spd = self.telemetry.gpx_speed_samples or []
+        gpx_trk = self.telemetry.gpx_track_samples or []
+        gpx_alt = self.telemetry.gpx_alt_samples or []
+        fit_data = self.telemetry.fit_data or {}
+
+        # Odczytać źródła z layoutu (tak samo jak prepare_overlay_frame_data)
+        indic = self.layout.get("indicators", {})
+
+        # max_distance_m — per source
+        max_dist = None
+        dist_src = indic.get("dist_visual", {}).get("source", "gpmf")
+        if dist_src == "gpx":
+            trk_for_range = gpx_trk or trk
+        elif dist_src == "fit":
+            trk_for_range = fit_data.get("track", []) or trk
+        else:
+            trk_for_range = trk
+        if trk_for_range:
+            max_dist = trk_for_range[-1][1]
+
+        # max_speed_kmh — per source
+        max_spd = None
+        spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+        if spd_src == "gpx":
+            spd_for_range = gpx_spd or spd
+        elif spd_src == "fit":
+            spd_for_range = fit_data.get("speed", []) or spd
+        else:
+            spd_for_range = spd
+        if spd_for_range:
+            vals = [s for _, s in spd_for_range]
+            if vals:
+                max_spd = max(vals)
+
+        # min_alt / max_alt — per source
+        min_a = max_a = None
+        alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+        if alt_src == "gpx":
+            alt_for_range = gpx_alt or alt
+        elif alt_src == "fit":
+            alt_for_range = fit_data.get("alt", []) or alt
+        else:
+            alt_for_range = alt
+        if alt_for_range:
+            alts = [a for _, a in alt_for_range]
+            if alts:
+                min_a = min(alts)
+                max_a = max(alts)
+
+        self._prepare_cache = {
+            "max_distance_m": max_dist,
+            "max_speed_kmh": max_spd,
+            "min_alt": min_a,
+            "max_alt": max_a,
+        }
+
     def _render_preview(self, seek_seconds: float | None = None) -> None:
         """Renderuje podgląd nakładki i wysyła QPixmap do GUI."""
+        t0 = time.perf_counter()
         try:
             if not self.video_path:
                 return
@@ -1036,6 +1116,7 @@ class AppController:
             indicator_overrides: dict[str, float] = {}
             overlay_data: dict | None = None
             target_dt = None
+            t1 = time.perf_counter()
 
             if self.telemetry.start_dt_utc:
                 current_ts = seek_seconds if seek_seconds is not None else 0
@@ -1052,6 +1133,10 @@ class AppController:
                     self.telemetry.get_samples_for_source,
                     self.telemetry.resolve_samples,
                 )
+
+                # ── Oblicz raz wartości stałe (niezależne od klatki) ──
+                if not self._prepare_cache:
+                    self._build_prepare_cache()
 
                 overlay_data = None
                 try:
@@ -1083,6 +1168,7 @@ class AppController:
                         chart_data=chart_data,
                         extra_field_keys=getattr(self, "fit_ext_fields", None),
                         resolve_cache_value=lambda k, dt: self.telemetry.resolve_value(k, dt),
+                        _range_cache=self._prepare_cache,
                     )
                     if overlay_data:
                         date_txt = overlay_data["date_text"]
@@ -1094,6 +1180,12 @@ class AppController:
 
                 date_txt = overlay_data["date_text"]
                 time_txt = overlay_data["time_text"]
+
+            t2 = time.perf_counter()
+            if self._prepare_cache:
+                print(f"[CACHE] ranges: cached", flush=True)
+            else:
+                print(f"[CACHE] ranges: computed fresh", flush=True)
 
             # Pozycja dla kursora na wykresach
             current_position = (
@@ -1152,6 +1244,8 @@ class AppController:
                 preview.alpha_composite(overlay)
                 self.indicator_bboxes.clear()
 
+            t3 = time.perf_counter()
+
             # Konwertuj PIL Image → QPixmap
             from PySide6.QtGui import QImage, QPixmap
             img_rgb = preview.convert("RGB")
@@ -1161,6 +1255,15 @@ class AppController:
                 img_rgb.width * 3, QImage.Format_RGB888,
             )
             pixmap = QPixmap.fromImage(qimg)
+            t4 = time.perf_counter()
+            print(
+                f"[PROFILE] target_dt: {(t1-t0)*1000:.1f}ms | "
+                f"overlay_data: {(t2-t1)*1000:.1f}ms | "
+                f"render: {(t3-t2)*1000:.1f}ms | "
+                f"convert: {(t4-t3)*1000:.1f}ms | "
+                f"TOTAL: {(t4-t0)*1000:.1f}ms",
+                flush=True,
+            )
             self.signals.sig_preview_frame_ready.emit(pixmap)
             self.signals.sig_bboxes_ready.emit(
                 dict(self.indicator_bboxes),

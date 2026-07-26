@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 
+import time
+
+
 def prepare_overlay_frame_data(
     *,
     layout: dict[str, Any],
@@ -39,6 +42,7 @@ def prepare_overlay_frame_data(
     chart_data: Optional[dict[str, list[float]]] = None,
     extra_field_keys: Optional[list[str]] = None,
     resolve_cache_value: Optional[Callable] = None,
+    _range_cache: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Prepare all values needed by ``compose_overlay`` for a single frame.
 
@@ -53,6 +57,8 @@ def prepare_overlay_frame_data(
         interpolate_speed, interpolate_distance, interpolate_altitude,
         interpolate_iso, interpolate_exposure, interpolate_temperature,
     )
+
+    _t0 = time.perf_counter()
 
     # ── Time strings ──────────────────────────────────────────────────
     local_dt = target_dt + timedelta(hours=tz_offset_hours)
@@ -90,6 +96,8 @@ def prepare_overlay_frame_data(
         elif ind_key in ("alt_visual", "alt_text"):
             indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
 
+    _t1 = time.perf_counter()
+
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
         "speed_visual", interpolate_speed(speed_samples, target_dt))
@@ -103,55 +111,67 @@ def prepare_overlay_frame_data(
     temp_value = interpolate_temperature(temperature_samples or [], target_dt)
 
     # ── max_distance_m (per source) ───────────────────────────────────
-    max_distance_m: Optional[float] = None
-    dist_src = layout.get("indicators", {}).get("dist_visual", {}).get("source", "gpmf")
-    if dist_src == "gpx":
-        gpx_trk_l = gpx_track_samples or []
-        if gpx_trk_l:
-            max_distance_m = gpx_trk_l[-1][1]
-    elif dist_src == "fit":
-        fit_trk_l = (fit_data or {}).get("track", [])
-        if fit_trk_l:
-            max_distance_m = fit_trk_l[-1][1]
-    if max_distance_m is None and track_samples:
-        max_distance_m = track_samples[-1][1]
+    if _range_cache and "max_distance_m" in _range_cache:
+        max_distance_m = _range_cache["max_distance_m"]
+    else:
+        max_distance_m = None
+        dist_src = layout.get("indicators", {}).get("dist_visual", {}).get("source", "gpmf")
+        if dist_src == "gpx":
+            gpx_trk_l = gpx_track_samples or []
+            if gpx_trk_l:
+                max_distance_m = gpx_trk_l[-1][1]
+        elif dist_src == "fit":
+            fit_trk_l = (fit_data or {}).get("track", [])
+            if fit_trk_l:
+                max_distance_m = fit_trk_l[-1][1]
+        if max_distance_m is None and track_samples:
+            max_distance_m = track_samples[-1][1]
 
     # ── max_speed_kmh (per source) ────────────────────────────────────
-    max_speed_kmh: Optional[float] = None
-    spd_src = layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
-    if spd_src == "gpx":
-        spd_for_range = (gpx_speed_samples or []) or speed_samples
-    elif spd_src == "fit":
-        spd_for_range = (fit_data or {}).get("speed", []) or speed_samples
+    if _range_cache and "max_speed_kmh" in _range_cache:
+        max_speed_kmh = _range_cache["max_speed_kmh"]
     else:
-        spd_for_range = speed_samples
-    if spd_for_range:
-        spd_vals = [s for _, s in spd_for_range]
-        if spd_vals:
-            max_speed_kmh = max(spd_vals)
+        max_speed_kmh = None
+        spd_src = layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
+        if spd_src == "gpx":
+            spd_for_range = (gpx_speed_samples or []) or speed_samples
+        elif spd_src == "fit":
+            spd_for_range = (fit_data or {}).get("speed", []) or speed_samples
+        else:
+            spd_for_range = speed_samples
+        if spd_for_range:
+            spd_vals = [s for _, s in spd_for_range]
+            if spd_vals:
+                max_speed_kmh = max(spd_vals)
 
     # ── min_alt / max_alt (per source) ────────────────────────────────
-    min_alt: Optional[float] = None
-    max_alt: Optional[float] = None
-    alt_src = layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
-    if alt_src == "gpx":
-        alt_for_range = (gpx_alt_samples or []) or alt_samples
-    elif alt_src == "fit":
-        alt_for_range = (fit_data or {}).get("alt", []) or alt_samples
+    if _range_cache and "min_alt" in _range_cache:
+        min_alt = _range_cache["min_alt"]
+        max_alt = _range_cache["max_alt"]
     else:
-        alt_for_range = alt_samples
-    if alt_for_range:
-        alts = [a for _, a in alt_for_range]
-        if alts:
-            min_alt = min(alts)
-            max_alt = max(alts)
+        min_alt = None
+        max_alt = None
+        alt_src = layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
+        if alt_src == "gpx":
+            alt_for_range = (gpx_alt_samples or []) or alt_samples
+        elif alt_src == "fit":
+            alt_for_range = (fit_data or {}).get("alt", []) or alt_samples
+        else:
+            alt_for_range = alt_samples
+        if alt_for_range:
+            alts = [a for _, a in alt_for_range]
+            if alts:
+                min_alt = min(alts)
+                max_alt = max(alts)
 
     # ── FIT / extra values ────────────────────────────────────────────
+    _t_resolve = time.perf_counter()
     power_value = resolve_cache_value("power", target_dt) if resolve_cache_value else 0.0
     atemp_value = resolve_cache_value("atemp", target_dt) if resolve_cache_value else 0.0
     hr_value = resolve_cache_value("hr", target_dt) if resolve_cache_value else 0.0
     cad_value = resolve_cache_value("cad", target_dt) if resolve_cache_value else 0.0
     battery_value = resolve_cache_value("battery", target_dt) if resolve_cache_value else 0.0
+    _t_resolve_end = time.perf_counter()
 
     # ── Build extra_indicators (FIT fields + remaining dynamic) ───────
     from src.indicators.registry import HARDCODED_KEYS
@@ -184,6 +204,8 @@ def prepare_overlay_frame_data(
         label = cfg.get("label", key)
         extra_indicators[key] = (val, unit, label)
 
+    _t2 = time.perf_counter()
+
     # ── Position / chart data ─────────────────────────────────────────
     current_position = (
         current_index / max(1, total_frames - 1)
@@ -192,6 +214,15 @@ def prepare_overlay_frame_data(
 
     # ── GPS track ─────────────────────────────────────────────────────
     gps_trk: list = gps_track or []
+
+    print(
+        f"[PROFILE] prep_data: interp={(_t1-_t0)*1000:.1f}ms "
+        f"ranges={(_t_resolve-_t1)*1000:.1f}ms "
+        f"resolve={(_t_resolve_end-_t_resolve)*1000:.1f}ms "
+        f"extra={(_t2-_t_resolve_end)*1000:.1f}ms "
+        f"total={(_t2-_t0)*1000:.1f}ms",
+        flush=True,
+    )
 
     return {
         "date_text": date_text,
