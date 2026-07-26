@@ -1775,6 +1775,7 @@ def prepare_overlay_frame_data(
 
     Returns a dict suitable for ``**kwargs`` to ``compose_overlay``.
     """
+    from datetime import timedelta
     from src.telemetry_extract import (
         interpolate_speed, interpolate_distance, interpolate_altitude,
         interpolate_iso, interpolate_exposure, interpolate_temperature,

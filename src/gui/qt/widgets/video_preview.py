@@ -25,6 +25,7 @@ class VideoPreview(QWidget):
         self._duration_s = 100.0
         self._bboxes: dict[str, tuple[int, int, int, int]] = {}
         self._dragging_key: str | None = None
+        self._drag_offset_norm: tuple[float, float] = (0.0, 0.0)
         self._pixmap_size: tuple[int, int] = (0, 0)
         self._pixmap_offset: tuple[int, int] = (0, 0)
         self._original_size: tuple[int, int] = (0, 0)
@@ -138,6 +139,16 @@ class VideoPreview(QWidget):
                     key = self._hit_test(nx, ny)
                     if key:
                         self._dragging_key = key
+                        # Zapisz offset między kursorem a środkiem wskaźnika
+                        ow, oh = self._original_size
+                        bbox = self._bboxes.get(key)
+                        if bbox and ow > 0 and oh > 0:
+                            bx, by, bw, bh = bbox
+                            cx = (bx + bw / 2) / ow
+                            cy = (by + bh / 2) / oh
+                            self._drag_offset_norm = (nx - cx, ny - cy)
+                        else:
+                            self._drag_offset_norm = (0.0, 0.0)
                         self.signals.sig_indicator_clicked.emit(key)
                         return True
                 return super().eventFilter(obj, event)
@@ -146,12 +157,16 @@ class VideoPreview(QWidget):
                 if in_pixmap:
                     nx = max(0.0, min(1.0, nx))
                     ny = max(0.0, min(1.0, ny))
-                    self.signals.sig_indicator_moved.emit(self._dragging_key, nx, ny)
+                    ox, oy = self._drag_offset_norm
+                    self.signals.sig_indicator_moved.emit(
+                        self._dragging_key, nx - ox, ny - oy,
+                    )
                     return True
                 return super().eventFilter(obj, event)
 
             if event.type() == QEvent.MouseButtonRelease:
                 self._dragging_key = None
+                self._drag_offset_norm = (0.0, 0.0)
                 return super().eventFilter(obj, event)
 
         return super().eventFilter(obj, event)

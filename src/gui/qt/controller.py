@@ -11,6 +11,7 @@ Kontroler:
 from __future__ import annotations
 
 import json
+import math
 import queue
 import subprocess
 import sys
@@ -283,6 +284,7 @@ class AppController:
                 else:
                     def_layout = self.base_dir / "def_layout.json"
                     self.layout = normalize_layout(def_layout, w, h)
+                self._selected_stream_key = ""
                 self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
 
                 # Wczytaj/wygeneruj metadane
@@ -664,13 +666,27 @@ class AppController:
 
         if stream_key not in self.layout["indicators"]:
             self._create_indicator(stream_key)
+        else:
+            # Jeśli istnieje ale jest wyłączony (np. z presetu) – włącz go
+            cfg = self.layout["indicators"][stream_key]
+            if not cfg.get("enabled", True):
+                cfg["enabled"] = True
+                print(f"[STREAM] Enabled existing indicator: {stream_key}", flush=True)
 
         cfg = self.layout["indicators"][stream_key]
         form = cfg.get("form", "text")
         schema = get_schema_for_form(form)
 
         self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
-        self._render_preview()
+
+        try:
+            self._render_preview()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.signals.sig_error.emit(
+                f"Błąd renderowania podglądu: {e}"
+            )
 
     def _create_indicator(self, key: str) -> None:
         """Tworzy domyślny wskaźnik w layoucie."""
@@ -703,6 +719,22 @@ class AppController:
             defaults["source"] = "fit"
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
+
+        # Ustal domyślną formę na podstawie klucza
+        _key_lower = key.lower()
+        if any(x in _key_lower for x in ("speed", "passing_speed", "passing_speedabs")):
+            defaults["form"] = "gauge"
+            defaults["size"] = 0.12
+        elif any(x in _key_lower for x in ("cad", "heart_rate", "hr", "power", "curvpower")):
+            defaults["form"] = "chart"
+            defaults["size"] = 0.14
+        elif any(x in _key_lower for x in ("alt", "distance", "dist")):
+            defaults["form"] = "bar"
+            defaults["size"] = 0.15
+        elif any(x in _key_lower for x in ("battery", "solar", "gopro_battery")):
+            defaults["form"] = "segment_bar"
+            defaults["size"] = 0.12
+            defaults["segments"] = 20
         elif key == "track_map":
             # Mapa – od razu jako tryb map (nie text)
             defaults["form"] = "map"
@@ -714,11 +746,82 @@ class AppController:
             defaults["x"] = 0.02
             defaults["y"] = 0.15
 
+        # Automatycznie ustaw min/max z danych telemetrycznych
+        _min_v, _max_v = self._get_indicator_range(key)
+        if _min_v is not None and _max_v is not None:
+            defaults["min_val"] = _min_v
+            defaults["max_val"] = _max_v
+
         self.layout["indicators"][key] = defaults
 
-    # ═════════════════════════════════════════════════════════════════════
-    # PRZECIĄGNIĘCIE WSKAŹNIKA NA PODGLĄDZIE
-    # ═════════════════════════════════════════════════════════════════════
+    def _get_indicator_range(self, key: str) -> tuple[float | None, float | None]:
+        """Odczytaj min/max wartości z danych telemetrycznych dla wskaźnika.
+
+        Zwraca (min_val, max_val) zaokrąglone do pełnych dziesiątek,
+        lub (None, None) gdy brak danych.
+        """
+        samples: list[tuple] | None = None
+
+        # FIT fields: fit_{field_name}_text
+        if key.startswith("fit_") and key.endswith("_text"):
+            field_name = key[4:-5]
+            if self.telemetry.fit_data and field_name in self.telemetry.fit_data:
+                samples = self.telemetry.fit_data[field_name]
+
+        # GPX fields
+        elif key in ("hr_text",):
+            samples = self.telemetry.gpx_hr_samples
+        elif key in ("cad_text",):
+            samples = self.telemetry.gpx_cad_samples
+        elif key in ("power_text",):
+            samples = self.telemetry.gpx_power_samples
+        elif key in ("atemp_text",):
+            samples = self.telemetry.gpx_atemp_samples
+        elif key == "speed_text_gpx":
+            samples = self.telemetry.gpx_speed_samples
+
+        # GPMF fields
+        elif key in ("speed_text",):
+            samples = self.telemetry.speed_samples
+        elif key in ("dist_text",):
+            samples = self.telemetry.track_samples
+        elif key in ("alt_text",):
+            samples = self.telemetry.alt_samples
+        elif key in ("iso_text",):
+            samples = self.telemetry.iso_samples
+        elif key in ("exposure_text",):
+            samples = self.telemetry.exposure_samples
+        elif key in ("temp_text",):
+            samples = self.telemetry.temperature_samples
+
+        if not samples:
+            return None, None
+
+        vals = [v for _, v in samples if v is not None]
+        if len(vals) < 2:
+            return None, None
+
+        raw_min = min(vals)
+        raw_max = max(vals)
+
+        is_temperature = key in ("temp_text", "atemp_text") or "temperature" in key or "atemp" in key
+
+        # Temperature: min = 0 unless negative
+        if is_temperature:
+            if raw_min >= 0:
+                min_val = 0.0
+            else:
+                min_val = math.floor(raw_min / 10.0) * 10.0
+        else:
+            min_val = math.floor(raw_min / 10.0) * 10.0
+
+        max_val = math.ceil(raw_max / 10.0) * 10.0
+
+        # Zabezpieczenie: max > min
+        if max_val <= min_val:
+            max_val = min_val + 10.0
+
+        return min_val, max_val
 
     def _on_indicator_moved(self, key: str, x_norm: float, y_norm: float) -> None:
         """Przeciągnięto wskaźnik myszką — aktualizuj pozycję w layoucie."""
@@ -801,6 +904,16 @@ class AppController:
                 self.layout_mgr.layout = self.layout
             self._selected_stream_key = ""
             self.indicator_bboxes.clear()
+            # Odśwież strumienie danych – DataStreamBar musi się zaktualizować
+            if self.telemetry:
+                from src.gui.qt.models import get_schema_for_form
+                if self.telemetry.fit_data:
+                    fit_keys = self.telemetry.register_fit_fields(
+                        self.layout, BUILTIN_FIELDS,
+                    )
+                    self.fit_ext_fields = list(fit_keys)
+                streams = self._discover_data_streams()
+                self.signals.sig_data_streams_ready.emit(streams)
             self._render_preview()
         except Exception as e:
             self.signals.sig_error.emit(f"Błąd wczytania presetu: {e}")
@@ -950,35 +1063,44 @@ class AppController:
                     self.telemetry.resolve_samples,
                 )
 
-                overlay_data = prepare_overlay_frame_data(
-                    layout=self.layout,
-                    target_dt=target_dt,
-                    tz_offset_hours=2,  # hardcoded – same as render pipeline default
-                    start_dt_utc=self.telemetry.start_dt_utc,
-                    speed_samples=self.telemetry.speed_samples or [],
-                    track_samples=self.telemetry.track_samples or [],
-                    alt_samples=self.telemetry.alt_samples or [],
-                    iso_samples=self.telemetry.iso_samples,
-                    exposure_samples=self.telemetry.exposure_samples,
-                    temperature_samples=self.telemetry.temperature_samples,
-                    gpx_speed_samples=self.telemetry.gpx_speed_samples,
-                    gpx_track_samples=self.telemetry.gpx_track_samples,
-                    gpx_alt_samples=self.telemetry.gpx_alt_samples,
-                    gpx_power_samples=self.telemetry.gpx_power_samples,
-                    gpx_atemp_samples=self.telemetry.gpx_atemp_samples,
-                    gpx_hr_samples=self.telemetry.gpx_hr_samples,
-                    gpx_cad_samples=self.telemetry.gpx_cad_samples,
-                    fit_data=self.telemetry.fit_data,
-                    gps_track=self.telemetry.get_gps_track_for_source(
-                        self.layout.get("indicators", {})
-                        .get("track_map", {}).get("source", "fit")
-                    ),
-                    total_frames=max(1, int(self.video_duration_s)),
-                    current_index=int(current_ts) if current_ts else 0,
-                    chart_data=chart_data,
-                    extra_field_keys=getattr(self, "fit_ext_fields", None),
-                    resolve_cache_value=lambda k, dt: self.telemetry.resolve_value(k, dt),
-                )
+                overlay_data = None
+                try:
+                    overlay_data = prepare_overlay_frame_data(
+                        layout=self.layout,
+                        target_dt=target_dt,
+                        tz_offset_hours=2,  # hardcoded – same as render pipeline default
+                        start_dt_utc=self.telemetry.start_dt_utc,
+                        speed_samples=self.telemetry.speed_samples or [],
+                        track_samples=self.telemetry.track_samples or [],
+                        alt_samples=self.telemetry.alt_samples or [],
+                        iso_samples=self.telemetry.iso_samples,
+                        exposure_samples=self.telemetry.exposure_samples,
+                        temperature_samples=self.telemetry.temperature_samples,
+                        gpx_speed_samples=self.telemetry.gpx_speed_samples,
+                        gpx_track_samples=self.telemetry.gpx_track_samples,
+                        gpx_alt_samples=self.telemetry.gpx_alt_samples,
+                        gpx_power_samples=self.telemetry.gpx_power_samples,
+                        gpx_atemp_samples=self.telemetry.gpx_atemp_samples,
+                        gpx_hr_samples=self.telemetry.gpx_hr_samples,
+                        gpx_cad_samples=self.telemetry.gpx_cad_samples,
+                        fit_data=self.telemetry.fit_data,
+                        gps_track=self.telemetry.get_gps_track_for_source(
+                            self.layout.get("indicators", {})
+                            .get("track_map", {}).get("source", "fit")
+                        ),
+                        total_frames=max(1, int(self.video_duration_s)),
+                        current_index=int(current_ts) if current_ts else 0,
+                        chart_data=chart_data,
+                        extra_field_keys=getattr(self, "fit_ext_fields", None),
+                        resolve_cache_value=lambda k, dt: self.telemetry.resolve_value(k, dt),
+                    )
+                    if overlay_data:
+                        date_txt = overlay_data["date_text"]
+                        time_txt = overlay_data["time_text"]
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"[PREVIEW] prepare_overlay_frame_data failed: {e}", flush=True)
 
                 date_txt = overlay_data["date_text"]
                 time_txt = overlay_data["time_text"]
