@@ -929,13 +929,9 @@ class AppController:
                 return
 
             # Wartości domyślne (demo)
-            speed_val, dist_m, max_dist = 0.0, 0.0, 1.0
-            alt_val = 0.0
             date_txt, time_txt = "----.--.--", "--:--:--"
-            iso_val = exp_val = temp_val = 0.0
-            power_val = atemp_val = hr_val = cad_val = battery_val = 0.0
-            max_speed_kmh = None
-            min_alt = max_alt = None
+            indicator_overrides: dict[str, float] = {}
+            overlay_data: dict | None = None
             target_dt = None
 
             if self.telemetry.start_dt_utc:
@@ -944,47 +940,48 @@ class AppController:
                 if target_dt.tzinfo is None:
                     target_dt = target_dt.replace(tzinfo=timezone.utc)
 
-                speed_val = interpolate_speed(
-                    self.telemetry.speed_samples, target_dt,
+                from src.overlay_renderer import (
+                    prepare_overlay_frame_data, build_chart_data,
                 )
-                dist_m = interpolate_distance(
-                    self.telemetry.track_samples, target_dt,
+
+                chart_data = build_chart_data(
+                    self.layout,
+                    self.telemetry.get_samples_for_source,
+                    self.telemetry.resolve_samples,
                 )
-                if self.telemetry.track_samples:
-                    max_dist = max(self.telemetry.track_samples[-1][1], 1)
-                    # Dopasuj max_dist do źródła dist_visual (jak w render_overlay_frame)
-                    dist_src = self.layout.get("indicators", {}).get("dist_visual", {}).get("source", "gpmf")
-                    _, trk_s, _ = self.telemetry.get_samples_for_source(dist_src)
-                    if trk_s:
-                        max_dist = max(trk_s[-1][1], 1)
-                if self.telemetry.alt_samples:
-                    alt_val = interpolate_altitude(
-                        self.telemetry.alt_samples, target_dt,
-                    )
-                    alt_src = self.layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
-                    min_alt, max_alt = self.telemetry.get_alt_range(alt_src)
 
-                iso_val = self.telemetry.resolve_value("iso", target_dt) or 0
-                exp_val = self.telemetry.resolve_value("exposure", target_dt) or 0
-                temp_val = self.telemetry.resolve_value("temperature", target_dt) or 0
-                power_val = self.telemetry.resolve_value("power", target_dt) or 0
-                atemp_val = self.telemetry.resolve_value("atemp", target_dt) or 0
-                hr_val = self.telemetry.resolve_value("hr", target_dt) or 0
-                cad_val = self.telemetry.resolve_value("cad", target_dt) or 0
-                battery_val = self.telemetry.resolve_value("battery", target_dt) or 0
+                overlay_data = prepare_overlay_frame_data(
+                    layout=self.layout,
+                    target_dt=target_dt,
+                    tz_offset_hours=2,  # hardcoded – same as render pipeline default
+                    start_dt_utc=self.telemetry.start_dt_utc,
+                    speed_samples=self.telemetry.speed_samples or [],
+                    track_samples=self.telemetry.track_samples or [],
+                    alt_samples=self.telemetry.alt_samples or [],
+                    iso_samples=self.telemetry.iso_samples,
+                    exposure_samples=self.telemetry.exposure_samples,
+                    temperature_samples=self.telemetry.temperature_samples,
+                    gpx_speed_samples=self.telemetry.gpx_speed_samples,
+                    gpx_track_samples=self.telemetry.gpx_track_samples,
+                    gpx_alt_samples=self.telemetry.gpx_alt_samples,
+                    gpx_power_samples=self.telemetry.gpx_power_samples,
+                    gpx_atemp_samples=self.telemetry.gpx_atemp_samples,
+                    gpx_hr_samples=self.telemetry.gpx_hr_samples,
+                    gpx_cad_samples=self.telemetry.gpx_cad_samples,
+                    fit_data=self.telemetry.fit_data,
+                    gps_track=self.telemetry.get_gps_track_for_source(
+                        self.layout.get("indicators", {})
+                        .get("track_map", {}).get("source", "fit")
+                    ),
+                    total_frames=max(1, int(self.video_duration_s)),
+                    current_index=int(current_ts) if current_ts else 0,
+                    chart_data=chart_data,
+                    extra_field_keys=getattr(self, "fit_ext_fields", None),
+                    resolve_cache_value=lambda k, dt: self.telemetry.resolve_value(k, dt),
+                )
 
-                # max_speed_kmh z odpowiedniego źródła (jak w render_overlay_frame)
-                max_speed_kmh = None
-                spd_src = self.layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
-                spd_s, _, _ = self.telemetry.get_samples_for_source(spd_src)
-                if spd_s:
-                    spd_vals = [s for _, s in spd_s]
-                    if spd_vals:
-                        max_speed_kmh = max(spd_vals)
-
-                local_dt = target_dt + timedelta(hours=2)
-                date_txt = local_dt.strftime("%Y-%m-%d")
-                time_txt = local_dt.strftime("%H:%M:%S")
+                date_txt = overlay_data["date_text"]
+                time_txt = overlay_data["time_text"]
 
             # Pozycja dla kursora na wykresach
             current_position = (
@@ -996,91 +993,52 @@ class AppController:
             # Renderuj overlay (istniejąca funkcja)
             self.indicator_bboxes.clear()
 
-            # Extra indicators (FIT + wszystkie dynamiczne poza hardcoded)
-            extra_indicators: dict[str, tuple[float, str, str]] = {}
-
-            # Zbiór kluczy z hardcoded indicator_defs w overlay_renderer
-            hardcoded_keys = {
-                "speed_visual", "speed_text", "dist_visual", "dist_text",
-                "alt_visual", "alt_text", "iso_text", "exposure_text",
-                "temp_text", "power_text", "atemp_text", "hr_text",
-                "cad_text", "battery_text", "track_map", "time_block",
-            }
-
-            if target_dt is not None:
-                # FIT fields
-                if hasattr(self, "fit_ext_fields") and self.fit_ext_fields:
-                    for key in self.fit_ext_fields:
-                        field_name = key[4:-5]  # strip "fit_" and "_text"
-                        if field_name in self.telemetry.fit_data:
-                            val = self.telemetry.resolve_value(field_name, target_dt) or 0.0
-                        else:
-                            val = 0.0
-                        cfg = self.layout.get("indicators", {}).get(key, {})
-                        unit = cfg.get("unit", "")
-                        label = cfg.get("label", field_name)
-                        extra_indicators[key] = (val, unit, label)
-
-                # Inne dynamiczne wskaźniki (spoza hardcoded listy)
-                for key in list(self.layout.get("indicators", {}).keys()):
-                    if key in hardcoded_keys or key in extra_indicators:
-                        continue
-                    cfg = self.layout["indicators"][key]
-                    val = 0.0
-                    unit = cfg.get("unit", "")
-                    label = cfg.get("label", key)
-                    extra_indicators[key] = (val, unit, label)
-
-            # Chart data (dla wykresów)
-            chart_data: dict[str, list[float]] = {}
-            # Per-indicator overrides – TYLKO speed/dist/alt (zgodnie z render_overlay_frame)
-            # UWAGA: indicator_values w compose_overlay nadpisuje wartości domyślne.
-            # Aby podgląd i finalny rendering były w 100% zgodne, musimy umieszczać
-            # w indicator_values te same klucze co w render_overlay_frame.
-            indicator_values: dict[str, float] = {}
-            if target_dt is not None and self.telemetry:
-                from src.overlay_renderer import build_chart_data
-                chart_data = build_chart_data(
-                    self.layout,
-                    self.telemetry.get_samples_for_source,
-                    self.telemetry.resolve_samples,
+            if overlay_data is not None:
+                preview = render_preview(
+                    self.src_img, self.layout, self.font_path,
+                    overlay_data["date_text"], overlay_data["time_text"],
+                    overlay_data["speed_value"],
+                    overlay_data["distance_m"],
+                    overlay_data["max_distance_m"],
+                    overlay_data["alt_value"],
+                    overlay_data["min_alt"],
+                    overlay_data["max_alt"],
+                    overlay_data["iso_value"],
+                    overlay_data["exposure_value"],
+                    overlay_data["temp_value"],
+                    indicator_values=overlay_data["indicator_values"],
+                    max_speed_kmh=overlay_data["max_speed_kmh"],
+                    power_value=overlay_data["power_value"],
+                    atemp_value=overlay_data["atemp_value"],
+                    hr_value=overlay_data["hr_value"],
+                    cad_value=overlay_data["cad_value"],
+                    battery_value=overlay_data["battery_value"],
+                    _bboxes=self.indicator_bboxes,
+                    extra_indicators=overlay_data["extra_indicators"],
+                    chart_data=overlay_data["chart_data"],
+                    current_position=current_position,
+                    gps_track=overlay_data["gps_track"],
+                    target_dt=overlay_data["target_dt"],
+                    start_dt_utc=overlay_data["start_dt_utc"],
                 )
-
-                # Tylko speed/dist/alt – per-source selection (identycznie jak w render_overlay_frame)
-                for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
-                                "alt_visual", "alt_text"):
-                    ind_cfg = self.layout.get("indicators", {}).get(ind_key, {})
-                    if not ind_cfg.get("enabled", True):
-                        continue
-                    src = ind_cfg.get("source", "gpmf")
-                    spd_s, trk_s, alt_s = self.telemetry.get_samples_for_source(src)
-                    if ind_key in ("speed_visual", "speed_text"):
-                        indicator_values[ind_key] = interpolate_speed(spd_s, target_dt)
-                    elif ind_key in ("dist_visual", "dist_text"):
-                        indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
-                    elif ind_key in ("alt_visual", "alt_text"):
-                        indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
-
-            preview = render_preview(
-                self.src_img, self.layout, self.font_path,
-                date_txt, time_txt,
-                speed_val, dist_m, max_dist, alt_val, min_alt, max_alt,
-                iso_val, exp_val, temp_val,
-                indicator_values=indicator_values,
-                max_speed_kmh=max_speed_kmh,
-                power_value=power_val, atemp_value=atemp_val,
-                hr_value=hr_val, cad_value=cad_val,
-                battery_value=battery_val, _bboxes=self.indicator_bboxes,
-                extra_indicators=extra_indicators,
-                chart_data=chart_data,
-                current_position=current_position,
-                gps_track=self.telemetry.get_gps_track_for_source(
-                    self.layout.get("indicators", {})
-                    .get("track_map", {}).get("source", "fit")
-                ),
-                target_dt=target_dt,
-                start_dt_utc=self.telemetry.start_dt_utc,
-            )
+            else:
+                # No telemetry – show blank overlay
+                from src.overlay_renderer import compose_overlay
+                overlay = compose_overlay(
+                    src_w, src_h, self.layout, self.font_path,
+                    date_txt, time_txt,
+                    0.0, 0.0, 1.0, 0.0, None, None,
+                    0.0, 0.0, 0.0,
+                    indicator_values={}, max_speed_kmh=None,
+                    power_value=0.0, atemp_value=0.0,
+                    hr_value=0.0, cad_value=0.0, battery_value=0.0,
+                    chart_data={}, current_position=current_position,
+                    extra_indicators={}, gps_track=[],
+                    target_dt=None, start_dt_utc=None,
+                )
+                preview = self.src_img.convert("RGBA").copy()
+                preview.alpha_composite(overlay)
+                self.indicator_bboxes.clear()
 
             # Konwertuj PIL Image → QPixmap
             from PySide6.QtGui import QImage, QPixmap
