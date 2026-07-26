@@ -799,7 +799,7 @@ class AppController:
         # Temperature: min = 0 unless negative
         if is_temperature:
             if raw_min >= 0:
-                min_val = 0.0
+                min_val = 0.1
             else:
                 min_val = math.floor(raw_min / 10.0) * 10.0
         else:

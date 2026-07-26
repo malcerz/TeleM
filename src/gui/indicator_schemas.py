@@ -52,58 +52,13 @@ def get_value_schema() -> list[tuple]:
         # Gauge-specific
         ("start_angle", "int", 0, 360, 5),
         ("sweep_angle", "int", 30, 360, 5),
-        ("needle_length", "float", 0.5, 2.0, 0.05),
+        ("needle_length", "float", 0.1, 2.0, 0.05),
         ("needle_width", "int", 2, 20, 1),
         ("needle_color", "color", None, None, None),
     ]
 
 
 # ── Per-form field filtering ─────────────────────────────────────────────────
-
-def get_segment_bar_schema() -> list[tuple]:
-    """Return the schema fields for segment_bar indicators."""
-    return get_common_schema() + [
-        ("form", "choice", ["text", "gauge", "bar", "chart", "segment_bar"], None, None),
-        ("source", "choice", TELEMETRY_SOURCES, None, None),
-        ("width", "int", 250, 800, 10),
-        ("height", "int", 50, 300, 5),
-        ("segments", "int", 20, 100, 1),
-        ("segment_gap", "int", 2, 20, 1),
-        ("segment_radius", "int", 2, 20, 1),
-        ("min_val", "float", 0.0, 1000.0, 1.0),
-        ("max_val", "float", 100.0, 10000.0, 1.0),
-        ("show_value", "bool", None, None, None),
-        ("show_min", "bool", None, None, None),
-        ("show_max", "bool", None, None, None),
-        ("show_label", "bool", None, None, None),
-        ("decimals", "int", 0, 3, 1),
-        ("direction", "choice", ["horizontal", "vertical"], None, None),
-        ("grow_height", "bool", None, None, None),
-        ("inactive_alpha", "int", 100, 255, 5),
-        ("inactive_color", "color", None, None, None),
-    ]
-
-
-_FORM_FIELDS: dict[str, set[str]] = {
-    "text":  {"font_size", "size", "show_value", "value_offset_x", "value_offset_y"},
-    "gauge": {"font_size", "size", "thickness", "min_val", "max_val", "ticks",
-              "show_value", "value_offset_x", "value_offset_y",
-              "start_angle", "sweep_angle",
-              "needle_length", "needle_width", "needle_color"},
-    "bar":   {"font_size", "size", "thickness", "min_val", "max_val", "ticks",
-              "show_value", "value_offset_x", "value_offset_y",
-              "show_range_labels", "range_label_offset_x", "range_label_offset_y", "range_label_spread_x"},
-    "chart": {"font_size", "size", "thickness", "chart_color", "fill_color", "fill_alpha"},
-    "segment_bar": {"width", "height", "segments", "segment_gap", "segment_radius",
-                    "min_val", "max_val", "show_value", "show_min", "show_max",
-                    "show_label", "decimals", "direction", "grow_height",
-                    "inactive_alpha", "inactive_color", "source"},
-    "map":        {"font_size", "size", "zoom", "map_style", "marker_size", "marker_color"},
-    "static_map": {"font_size", "size", "zoom", "map_style", "marker_size", "marker_color"},
-}
-
-_ALL_FORM_FIELDS: set[str] = set().union(*_FORM_FIELDS.values()).union({"form"})
-
 
 # ── Built-in indicator definitions ───────────────────────────────────────────
 

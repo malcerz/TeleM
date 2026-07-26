@@ -161,7 +161,7 @@ def _gauge_tab_fields() -> list[FieldSchema]:
         FieldSchema("sweep_angle", "int", "Rozpiętość",
                     tab="Gauge", min_val=30, max_val=360, step=5),
         FieldSchema("needle_length", "float", "Dł. wskazówki",
-                    tab="Gauge", min_val=0.5, max_val=2.0, step=0.05),
+                    tab="Gauge", min_val=0.1, max_val=2.0, step=0.05),
         FieldSchema("needle_width", "int", "Grubość wskazówki",
                     tab="Gauge", min_val=2, max_val=20, step=1),
         FieldSchema("needle_color", "color", "Kolor wskazówki", tab="Gauge"),

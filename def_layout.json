@@ -323,7 +323,8 @@
       "grow_height": false,
       "show_min": true,
       "show_max": true,
-      "show_label": true
+      "show_label": true,
+      "needle_length": 0.5
     }
   },
   "smoothing": {
