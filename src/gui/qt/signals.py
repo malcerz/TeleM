@@ -56,6 +56,9 @@ class AppSignals(QObject):
     sig_seek_position = Signal(float)
     # (seconds: float)
 
+    # Tryb podglądu: "hud" (z nakładką) vs "gpu_video" (czyste wideo GPU)
+    sig_preview_mode_changed = Signal(str)
+
     # Playback: start / stop
     sig_playback_start = Signal()
     sig_playback_stop = Signal()

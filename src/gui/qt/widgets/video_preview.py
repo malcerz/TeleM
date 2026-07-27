@@ -6,7 +6,14 @@ from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
+    QStackedWidget, QComboBox,
 )
+
+try:
+    from PySide6.QtMultimediaWidgets import QVideoWidget
+    _HAS_VIDEO_WIDGET = True
+except ImportError:
+    _HAS_VIDEO_WIDGET = False
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.seek_bar import SeekBar
@@ -31,6 +38,7 @@ class VideoPreview(QWidget):
         self._pixmap_size: tuple[int, int] = (0, 0)
         self._pixmap_offset: tuple[int, int] = (0, 0)
         self._original_size: tuple[int, int] = (0, 0)
+        self.video_widget = None
         self._build_ui()
         self._connect_trim()
         # Event filter na image_label do przechwytywania zdarzeń myszy
@@ -39,8 +47,12 @@ class VideoPreview(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
 
-        # Obraz podglądu
+        # Stack podglądu (HUD Label vs GPU QVideoWidget)
+        self.stacked_widget = QStackedWidget()
+
+        # Obraz podglądu HUD (Label)
         self.image_label = QLabel("Wybierz plik wideo\nw zakładce Wczytywanie")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setStyleSheet(
@@ -50,12 +62,34 @@ class VideoPreview(QWidget):
         self.image_label.setMinimumSize(400, 300)
         self.image_label.setScaledContents(False)
         self.image_label.setMouseTracking(True)
-        layout.addWidget(self.image_label, 1)
+        self.stacked_widget.addWidget(self.image_label)
 
-        # Oś czasu + Play/Stop (ta sama linia)
+        # Natywne wyjście wideo GPU
+        if _HAS_VIDEO_WIDGET:
+            self.video_widget = QVideoWidget()
+            self.video_widget.setStyleSheet("background-color: #000;")
+            self.stacked_widget.addWidget(self.video_widget)
+
+        layout.addWidget(self.stacked_widget, 1)
+
+        # Oś czasu + Play/Stop + Tryb podglądu
         time_row = QHBoxLayout()
         time_row.setContentsMargins(4, 2, 4, 2)
         time_row.setSpacing(4)
+
+        # Przełącznik trybu podglądu
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("\u25C6 HUD + Wideo")
+        if _HAS_VIDEO_WIDGET:
+            self.mode_combo.addItem("\u26A1 Czyste Wideo GPU (Max FPS)")
+        self.mode_combo.setToolTip("Wybierz tryb wyświetlania podglądu")
+        self.mode_combo.setStyleSheet(
+            "QComboBox { background-color: #222; color: #ddd; border: 1px solid #444; "
+            "border-radius: 3px; padding: 2px 6px; font-size: 11px; font-weight: bold; }"
+            "QComboBox QAbstractItemView { background-color: #222; color: #ddd; selection-background-color: #444; }"
+        )
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        time_row.addWidget(self.mode_combo)
 
         self.play_btn = QPushButton("\u25B6")
         self.play_btn.setFixedSize(28, 26)
@@ -254,11 +288,19 @@ class VideoPreview(QWidget):
         self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
         self.seek_bar.set_duration(duration_s)
 
-    # ¦¦ Trim / cut ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+    def _on_mode_changed(self, index: int) -> None:
+        """Zmiana trybu podglądu (HUD vs Czyste Wideo GPU)."""
+        self.stacked_widget.setCurrentIndex(index)
+        mode = "hud" if index == 0 else "gpu_video"
+        self.signals.sig_preview_mode_changed.emit(mode)
+
+    # ── Trim / cut ───────────────────────────────────────────────────
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z project_tab)."""
         self._controller = controller
+        if hasattr(controller, "set_video_widget") and self.video_widget:
+            controller.set_video_widget(self.video_widget)
 
     def _connect_trim(self) -> None:
         self.cut_btn.clicked.connect(self._on_cut)

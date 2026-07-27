@@ -171,6 +171,8 @@ class AppController:
         self._playback_timer: Optional[QTimer] = None
         self._playback_pos: float = 0.0
         self._playing = False
+        self.video_widget: Optional[object] = None
+        self._preview_mode: str = "hud"
 
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
@@ -192,6 +194,7 @@ class AppController:
         s.sig_settings_changed.connect(self._on_settings_changed)
         s.sig_playback_start.connect(self._on_playback_start)
         s.sig_playback_stop.connect(self._on_playback_stop)
+        s.sig_preview_mode_changed.connect(self._on_preview_mode_changed)
         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
 
     def _load_startup_preset(self) -> None:
@@ -208,6 +211,23 @@ class AppController:
     # ═════════════════════════════════════════════════════════════════════
     # QMEDIAPLAYER — SPRZĘTOWE DEKODOWANIE WIDEO
     # ═════════════════════════════════════════════════════════════════════
+
+    def set_video_widget(self, widget: object) -> None:
+        """Ustawia widget QVideoWidget do natywnego odtwarzania sprzętowego."""
+        self.video_widget = widget
+        if self._preview_mode == "gpu_video" and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+            self.media_player.setVideoOutput(widget)
+
+    def _on_preview_mode_changed(self, mode: str) -> None:
+        """Przełącza tryb podglądu (HUD Overlay vs Czyste Wideo GPU)."""
+        self._preview_mode = mode
+        if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
+            return
+        if mode == "gpu_video" and self.video_widget:
+            self.media_player.setVideoOutput(self.video_widget)
+        else:
+            self.media_player.setVideoOutput(self.video_sink)
+            self._render_preview(self.media_player.position() / 1000.0)
 
     def _setup_media_player(self) -> None:
         """Inicjalizuje QMediaPlayer + QVideoSink do podglądu wideo."""
@@ -245,6 +265,20 @@ class AppController:
 
     def _on_video_frame(self, frame) -> None:
         """Szybki handler — tylko zapisz klatkę, compositing w workerze."""
+        if self._preview_mode == "gpu_video":
+            return
+
+        # ── KLUCZOWA OPTYMALIZACJA: wczesny return gdy worker jest zajęty ──
+        # Nie wywołujemy frame.toImage() ani nie kopiujemy 33MB VRAM->RAM gdy kolejka jest pełna!
+        if self._comp_queue.full():
+            return
+
+        # Frame-dropping podczas playbacku
+        if self._playing:
+            self._frame_counter += 1
+            if self._frame_counter % self._composite_every_n != 0:
+                return
+
         qimg = frame.toImage()
         if qimg is None or qimg.isNull():
             return
@@ -255,12 +289,6 @@ class AppController:
             self._seek_pending = False
             if not self._playing:
                 self.media_player.pause()
-
-        # Frame-dropping podczas playbacku
-        if self._playing:
-            self._frame_counter += 1
-            if self._frame_counter % self._composite_every_n != 0:
-                return
 
         # Skaluj i konwertuj QImage → PIL szybko w GUI wątku (~1-2ms)
         # Resztę robi worker.
@@ -295,7 +323,7 @@ class AppController:
         return qimg.scaled(
             self._preview_target_w, preview_h,
             Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
+            Qt.FastTransformation,
         )
 
     @staticmethod
