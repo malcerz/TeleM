@@ -48,8 +48,12 @@ class AppSignals(QObject):
     sig_settings_changed = Signal(str, object)
     # (setting_name: str, value: Any)
 
-    # Oś czasu: zmiana pozycji seek
+    # Oś czasu: zmiana pozycji seek (GUI → Kontroler)
     sig_seek_changed = Signal(float)
+    # (seconds: float)
+
+    # Oś czasu: rzeczywista pozycja po przeskoczeniu cięć (Kontroler → GUI)
+    sig_seek_position = Signal(float)
     # (seconds: float)
 
     # Playback: start / stop

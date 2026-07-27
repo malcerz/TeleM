@@ -72,15 +72,14 @@ class ProjectTab(QWidget):
         s.sig_data_streams_ready.connect(self.data_bar.on_streams_ready)
         s.sig_properties_ready.connect(self.property_editor.on_properties_ready)
         s.sig_video_duration_ready.connect(self.video_preview.on_duration_ready)
+        s.sig_seek_position.connect(self.video_preview._on_seek_position)
+        s.sig_cut_region_added.connect(self.video_preview._on_cut_region_changed)
+        s.sig_cut_region_removed.connect(self.video_preview._on_cut_region_changed)
+        s.sig_cut_regions_cleared.connect(self.video_preview._on_cut_region_changed)
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z application.py)."""
         self.video_preview.set_controller(controller)
-        # Nasłuchuj sygnałów trim, żeby odświeżyć TrimBar
-        s = self.signals
-        s.sig_cut_region_added.connect(lambda a, b: self.video_preview.refresh_trim_bar())
-        s.sig_cut_region_removed.connect(lambda i: self.video_preview.refresh_trim_bar())
-        s.sig_cut_regions_cleared.connect(self.video_preview.refresh_trim_bar)
 
     # ── Wymuszanie proporcji 16:9 ──────────────────────────────────────
 

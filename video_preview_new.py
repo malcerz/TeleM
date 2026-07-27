@@ -1,15 +1,15 @@
-"""Widget podglądu wideo z osią czasu i interakcją myszką."""
+﻿"""Widget podglądu wideo z osią czasu i interakcją myszką."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
+    QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton,
 )
 
 from src.gui.qt.signals import get_signals
-from src.gui.qt.widgets.seek_bar import SeekBar
+from src.gui.qt.widgets.marker_bar import MarkerBar
 
 
 class VideoPreview(QWidget):
@@ -53,6 +53,12 @@ class VideoPreview(QWidget):
         layout.addWidget(self.image_label, 1)
 
         # Oś czasu + Play/Stop (ta sama linia)
+        # Znaczniki A/B (pod suwakiem)
+        self.marker_bar = MarkerBar()
+        self.marker_bar.setFixedHeight(6)
+        layout.addWidget(self.marker_bar)
+
+        # Oś czasu + Play/Stop (ta sama linia)
         time_row = QHBoxLayout()
         time_row.setContentsMargins(4, 2, 4, 2)
         time_row.setSpacing(4)
@@ -84,9 +90,11 @@ class VideoPreview(QWidget):
         self.time_label.setStyleSheet("color: #aaa; font-size: 11px;")
         time_row.addWidget(self.time_label)
 
-        self.seek_bar = SeekBar()
-        self.seek_bar.sig_position_changed.connect(self._on_seek)
-        time_row.addWidget(self.seek_bar, 1)
+        self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider.setRange(0, 10000)  # 0.01s rozdzielczość, max 100s
+        self.seek_slider.setTickPosition(QSlider.NoTicks)
+        self.seek_slider.valueChanged.connect(self._on_seek)
+        time_row.addWidget(self.seek_slider, 1)
 
         self.duration_label = QLabel("00:00")
         self.duration_label.setFixedWidth(50)
@@ -94,9 +102,9 @@ class VideoPreview(QWidget):
         self.duration_label.setStyleSheet("color: #aaa; font-size: 11px;")
         time_row.addWidget(self.duration_label)
 
-        # ¦¦ Przyciski wycinania ¦¦
+        # ── Przyciski wycinania ──
 
-        self.cut_btn = QPushButton("\u2702")  # ?
+        self.cut_btn = QPushButton("\u2702")  # ✂
         self.cut_btn.setFixedSize(26, 26)
         self.cut_btn.setToolTip("Wytnij zaznaczony fragment")
         self.cut_btn.setStyleSheet(
@@ -106,7 +114,7 @@ class VideoPreview(QWidget):
         )
         time_row.addWidget(self.cut_btn)
 
-        self.undo_cut_btn = QPushButton("\u21B6")  # ?
+        self.undo_cut_btn = QPushButton("\u21B6")  # ↶
         self.undo_cut_btn.setFixedSize(26, 26)
         self.undo_cut_btn.setToolTip("Cofnij ostatnie wycięcie")
         self.undo_cut_btn.setStyleSheet(
@@ -116,7 +124,7 @@ class VideoPreview(QWidget):
         )
         time_row.addWidget(self.undo_cut_btn)
 
-        self.restore_cut_btn = QPushButton("\u21A9")  # ?
+        self.restore_cut_btn = QPushButton("\u21A9")  # ↩
         self.restore_cut_btn.setFixedSize(26, 26)
         self.restore_cut_btn.setToolTip("Przywróć wszystkie wycięte fragmenty")
         self.restore_cut_btn.setStyleSheet(
@@ -128,7 +136,7 @@ class VideoPreview(QWidget):
 
         layout.addLayout(time_row)
 
-    # ¦¦ Slot: nowa klatka podglądu ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+    # ── Slot: nowa klatka podglądu ─────────────────────────────────────
 
     def on_frame_ready(self, pixmap: QPixmap) -> None:
         """Odbiera QPixmap z kontrolera i wyświetla."""
@@ -230,72 +238,30 @@ class VideoPreview(QWidget):
                 return key
         return None
 
-    # ¦¦ Slot: długość wideo ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+    # ── Slot: długość wideo ────────────────────────────────────────────
 
     def on_duration_ready(self, duration_s: float) -> None:
-        """Ustawia długość wideo na seekbarze i znacznikach A/B."""
+        """Ustawia maksymalną wartość suwaka na podstawie długości wideo."""
         self._duration_s = max(duration_s, 1.0)
+        self.seek_slider.setRange(0, int(self._duration_s * 100))
         total_m = int(self._duration_s // 60)
         total_s = int(self._duration_s % 60)
         self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
-        self.seek_bar.set_duration(duration_s)
+        self.marker_bar.set_duration(duration_s)
 
-    # ¦¦ Trim / cut ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+    # ── Trim / cut ─────────────────────────────────────────────────────
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z project_tab)."""
         self._controller = controller
 
     def _connect_trim(self) -> None:
-        self.cut_btn.clicked.connect(self._on_cut)
-        self.undo_cut_btn.clicked.connect(self._on_undo_cut)
-        self.restore_cut_btn.clicked.connect(self._on_restore_cut)
+            # ── Slot: przesunięcie suwaka ──────────────────────────────────────
 
-    def _on_cut(self) -> None:
-        """Kliknięto ✂ — wytnij aktualny zakres A-B."""
-        eff_a, eff_b = self.seek_bar.get_range()
-        if eff_b - eff_a < 0.1 or not self._controller:
-            return
-        if not hasattr(self._controller, 'add_cut_region'):
-            return
-        # Przelicz z efektywnego na oryginalny czas
-        orig_a = self.seek_bar.eff_to_orig(eff_a)
-        orig_b = self.seek_bar.eff_to_orig(eff_b)
-        self._controller.add_cut_region(orig_a, orig_b)
-        # Resetuj A-B na całość (efektywny czas)
-        self.seek_bar.set_range(0.0, self.seek_bar._effective_duration_s)
-
-    def _on_undo_cut(self) -> None:
-        """Kliknięto ↩ — cofnij ostatnie wycięcie."""
-        if self._controller and hasattr(self._controller, 'undo_cut_region'):
-            self._controller.undo_cut_region()
-
-    def _on_restore_cut(self) -> None:
-        """Kliknięto ↩ — przywróć wszystkie wycięte fragmenty."""
-        if self._controller and hasattr(self._controller, 'clear_cut_regions'):
-            self._controller.clear_cut_regions()
-
-    def _on_cut_region_changed(self, *args) -> None:
-        """Aktualizuj seek bar po zmianie listy wyciętych fragmentów."""
-        if self._controller and hasattr(self._controller, '_cut_regions'):
-            self.seek_bar.set_cut_regions(self._controller._cut_regions)
-            # Zaktualizuj etykietę duration (efektywny czas)
-            eff_dur = self.seek_bar._effective_duration_s
-            total_m = int(eff_dur // 60)
-            total_s = int(eff_dur % 60)
-            self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
-
-    # ¦¦ Slot: przesunięcie seekbara ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-
-    def _on_seek(self, seconds: float) -> None:
-        """Użytkownik przeciągnął pasek (efektywny czas) → przelicz na oryginalny."""
-        orig = self.seek_bar.eff_to_orig(seconds)
-        self.signals.sig_seek_changed.emit(orig)
-
-    def _on_seek_position(self, seconds: float) -> None:
-        """Kontroler skorygował pozycję (oryginalny czas) → przelicz na efektywny."""
-        eff = self.seek_bar.orig_to_eff(seconds)
-        self.seek_bar.set_position(eff)
-        mins = int(eff // 60)
-        secs = int(eff % 60)
+    def _on_seek(self, value: int) -> None:
+        seconds = value / 100.0
+        mins = int(seconds // 60)
+        secs = int(seconds % 60)
         self.time_label.setText(f"{mins:02d}:{secs:02d}")
+        self.signals.sig_seek_changed.emit(seconds)
+

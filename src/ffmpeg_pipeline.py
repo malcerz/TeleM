@@ -739,6 +739,7 @@ def _build_stream_ffmpeg_cmd(
     container_rotation: int,
     rotation_degrees: int,
     hwaccel: str | None = None,
+    cut_regions: list[tuple[float, float]] | None = None,
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command for the streaming pipeline.
 
@@ -785,31 +786,48 @@ def _build_stream_ffmpeg_cmd(
     if container_rotation in (90, 270):
         filter_complex = (
             f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vout]"
+            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
         )
     elif rotation_degrees == 180 or container_rotation == 180:
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]format=yuv420p,vflip,hflip[vout]"
+            f"[vtemp]format=yuv420p,vflip,hflip[vtemp2]"
         )
     elif rotation_degrees == 90:
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]transpose=1[vout]"
+            f"[vtemp]transpose=1[vtemp2]"
         )
     elif rotation_degrees == 270:
         filter_complex = (
             f"{base_filter};{ov_input};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]transpose=2[vout]"
+            f"[vtemp]transpose=2[vtemp2]"
         )
     else:
         filter_complex = (
             f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vout]"
+            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
         )
+
+    # ── Cut region drop (select filter) ────────────────────────────────
+    has_rotation = any(
+        d in (180, 90, 270) for d in (container_rotation, rotation_degrees)
+    )
+    if cut_regions and len(cut_regions) > 0:
+        # Build select expression: drop frames in cut regions
+        parts = []
+        for cs, ce in cut_regions:
+            parts.append(f"between(t,{cs},{ce})")
+        select_expr = "not(" + "+".join(parts) + ")"
+        tag_in = "[vtemp]" if not has_rotation else "[vtemp2]"
+        filter_complex += f";{tag_in}select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+    elif has_rotation:
+        filter_complex += ";[vtemp2]null[vout]"
+    else:
+        filter_complex += ";[vtemp]null[vout]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
@@ -1061,6 +1079,7 @@ def stream_overlay_to_ffmpeg(
         render_w, render_h, resolution_name,
         container_rotation, rotation_degrees,
         hwaccel=hwaccel,
+        cut_regions=cut_regions,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)

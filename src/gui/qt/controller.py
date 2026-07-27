@@ -996,6 +996,7 @@ class AppController:
         new_regions.sort(key=lambda x: x[0])
         self._cut_regions = new_regions
         self.signals.sig_cut_region_added.emit(start_s, end_s)
+        self._render_preview()
 
     def undo_cut_region(self) -> None:
         """Cofnij ostatnie cięcie."""
@@ -1357,6 +1358,7 @@ class AppController:
         """Użytkownik przesunął oś czasu."""
         seconds = self._skip_cut_regions(seconds)
         self._playback_pos = seconds
+        self.signals.sig_seek_position.emit(seconds)
         if (
             self.video_paths
             and abs(seconds - self.last_preview_ts) > 0.1
@@ -1409,10 +1411,10 @@ class AppController:
         if nxt >= self.video_duration_s:
             self._on_playback_stop()
             self._playback_pos = 0.0
-            self.signals.sig_seek_changed.emit(0.0)
+            self.signals.sig_seek_position.emit(0.0)
             return
         self._playback_pos = nxt
-        self.signals.sig_seek_changed.emit(nxt)
+        self.signals.sig_seek_position.emit(nxt)
         interval = max(16, int(step * 1000))
         self._playback_timer = QTimer.singleShot(interval, self._playback_step)
 
@@ -1469,7 +1471,7 @@ class AppController:
         w = int(streams[0].get("width", 1920)) if streams else 1920
         h = int(streams[0].get("height", 1080)) if streams else 1080
 
-        layout = self.layout
+        layout = dict(self.layout, cut_regions=list(self._cut_regions))
         records = ensure_records_list(load_json_with_fallback(meta))
 
         # Odczytaj rotację z metadanych (tak samo jak w export_controller)
