@@ -21,8 +21,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 from PIL import Image
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFileDialog
+
+try:
+    from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
+    _QT_MULTIMEDIA_AVAILABLE = True
+except ImportError:
+    _QT_MULTIMEDIA_AVAILABLE = False
 
 # ── Istniejąca logika biznesowa (NIETKNIĘTA) ──────────────────────────────
 from src.gui.layout_manager import LayoutManager, default_layout, normalize_layout, resolve_font_path
@@ -138,13 +145,24 @@ class AppController:
             normalize_layout_fn=normalize_layout,
         )
 
-        # ── Preview worker ─────────────────────────────────────────────
         # ── Przygotowanie danych podglądu — cache wartości stałych ──────
         self._prepare_cache: dict = {}
 
-        self._preview_queue: queue.Queue = queue.Queue(maxsize=1)
-        self._preview_worker: Optional[threading.Thread] = None
-        self._start_preview_worker()
+        # ── QMediaPlayer (GPU-accelerated preview) ─────────────────────
+        self._setup_media_player()
+        self.last_src_qimg: Any = None
+        self.last_src_pil: Image.Image | None = None
+        self._seek_pending = False
+        self._frame_counter = 0
+        self._composite_every_n = 1
+        # Docelowa szerokość podglądu — kompozytowanie w niższej rozdzielczości
+        self._preview_target_w = 960
+
+        # ── Worker compositingu (tło — nie blokuje GUI) ────────────────
+        self._comp_queue: queue.Queue = queue.Queue(maxsize=2)
+        self._comp_worker_running = True
+        self._comp_thread: Optional[threading.Thread] = None
+        self._start_compositing_worker()
 
         # ── Render state ───────────────────────────────────────────────
         self.render_cancel_event = threading.Event()
@@ -188,34 +206,112 @@ class AppController:
                 self._startup_preset_path = ""
 
     # ═════════════════════════════════════════════════════════════════════
-    # WORKER PODGLĄDU
+    # QMEDIAPLAYER — SPRZĘTOWE DEKODOWANIE WIDEO
     # ═════════════════════════════════════════════════════════════════════
 
-    def _start_preview_worker(self) -> None:
+    def _setup_media_player(self) -> None:
+        """Inicjalizuje QMediaPlayer + QVideoSink do podglądu wideo."""
+        if not _QT_MULTIMEDIA_AVAILABLE:
+            return
+        self.media_player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(self.audio_output)
+        self.audio_output.setVolume(0)  # wyciszone
+
+        # Jawnie utwórz QVideoSink i ustaw jako output — FFmpeg backend
+        # nie tworzy domyślnego sinka (videoSink() zwraca None).
+        self.video_sink = QVideoSink()
+        self.video_sink.videoFrameChanged.connect(self._on_video_frame)
+        self.media_player.setVideoOutput(self.video_sink)
+
+    def _start_compositing_worker(self) -> None:
+        """Worker: odbiera PIL Image z kolejki i kompozytuje w tle."""
         def worker() -> None:
-            while True:
+            while self._comp_worker_running:
                 try:
-                    task = self._preview_queue.get()
+                    task = self._comp_queue.get(timeout=0.2)
                     if task is None:
                         break
-                    video_paths, ts = task
-                    if not self.ffmpeg_exe or not self.ffprobe_exe:
-                        continue
-                    img = extract_frame(
-                        video_paths, ts,
-                        self.ffmpeg_exe, self.ffprobe_exe, target_w=960,
-                    )
-                    if img:
-                        self.src_img = img
-                        self.last_preview_ts = ts
-                        self._render_preview(ts)
+                    pil_img, seek_seconds = task
+                    # Compositing w tle — nie blokuje GUI
+                    self._render_preview_from_pil(pil_img, seek_seconds)
+                except queue.Empty:
+                    continue
                 except Exception as e:
-                    print(f"[Preview worker] {e}", flush=True)
-                finally:
-                    self._preview_queue.task_done()
+                    print(f"[CompWorker] {e}", flush=True)
 
-        self._preview_worker = threading.Thread(target=worker, daemon=True)
-        self._preview_worker.start()
+        self._comp_thread = threading.Thread(target=worker, daemon=True)
+        self._comp_thread.start()
+
+    def _on_video_frame(self, frame) -> None:
+        """Szybki handler — tylko zapisz klatkę, compositing w workerze."""
+        qimg = frame.toImage()
+        if qimg is None or qimg.isNull():
+            return
+        self.last_src_qimg = qimg
+
+        # Seek pending → pauzuj po pierwszej klatce
+        if self._seek_pending:
+            self._seek_pending = False
+            if not self._playing:
+                self.media_player.pause()
+
+        # Frame-dropping podczas playbacku
+        if self._playing:
+            self._frame_counter += 1
+            if self._frame_counter % self._composite_every_n != 0:
+                return
+
+        # Skaluj i konwertuj QImage → PIL szybko w GUI wątku (~1-2ms)
+        # Resztę robi worker.
+        preview_qimg = self._scale_qimg_to_preview(qimg)
+        pil_img = self._qimage_to_pil(preview_qimg)
+        self.last_src_pil = pil_img
+        current_ts = self.media_player.position() / 1000.0
+        self.last_preview_ts = current_ts
+
+        # Push do kolejki workera — compositing w tle
+        try:
+            self._comp_queue.get_nowait()
+        except queue.Empty:
+            pass
+        self._comp_queue.put((pil_img, current_ts))
+
+    def _render_preview_from_pil(self, pil_img: Image.Image, seek_seconds: float) -> None:
+        """Renderuje nakładki na PIL Image (wołane z wątku workera).
+
+        Emituje gotowy QImage z powrotem do GUI (QueuedConnection).
+        """
+        self.src_img = pil_img
+        self._render_preview(seek_seconds)
+
+    def _scale_qimg_to_preview(self, qimg: QImage) -> QImage:
+        """Skaluje QImage do `_preview_target_w` (zachowując proporcje)."""
+        src_w, src_h = qimg.width(), qimg.height()
+        if src_w <= self._preview_target_w:
+            return qimg  # już wystarczająco małe
+        ratio = self._preview_target_w / src_w
+        preview_h = max(1, int(src_h * ratio))
+        return qimg.scaled(
+            self._preview_target_w, preview_h,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+
+    @staticmethod
+    def _qimage_to_pil(qimg: QImage) -> Image.Image:
+        """Konwertuje QImage → PIL Image (RGB). Handluje stride padding."""
+        if qimg.format() != QImage.Format_RGB888:
+            qimg = qimg.convertToFormat(QImage.Format_RGB888)
+        w, h = qimg.width(), qimg.height()
+        stride = qimg.bytesPerLine()
+        raw = bytes(qimg.bits())
+        if stride == w * 3:
+            data = raw[: w * h * 3]
+        else:
+            rows = [raw[y * stride : y * stride + w * 3] for y in range(h)]
+            data = b"".join(rows)
+        return Image.frombuffer("RGB", (w, h), data, "raw", "RGB", 0, 1)
 
     # ═════════════════════════════════════════════════════════════════════
     # OBSŁUGA ZDARZEŃ GUI — WYBÓR PLIKÓW
@@ -252,6 +348,12 @@ class AppController:
                     return
                 self.ffprobe_exe = ffprobe_exe
                 self.ffmpeg_exe = ffmpeg_exe
+
+                # Ustaw źródło QMediaPlayer (GPU-accelerated preview)
+                if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+                    self.media_player.setSource(
+                        QUrl.fromLocalFile(str(self.video_path))
+                    )
 
                 # Analiza wideo
                 self.signals.sig_progress.emit(15, "Analiza strumienia...")
@@ -334,12 +436,20 @@ class AppController:
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
 
-                # Pobierz pierwszą klatkę i wyrenderuj podgląd
+                # Pobierz pierwszą klatkę, skaluj do rozdzielczości podglądu i wyrenderuj
                 clear_capture_cache()
                 first_frame = extract_frame(
                     self.video_paths, 0, ffmpeg_exe, ffprobe_exe,
                 )
                 if first_frame:
+                    # Skaluj do rozdzielczości podglądu
+                    w, h = first_frame.size
+                    if w > self._preview_target_w:
+                        ratio = self._preview_target_w / w
+                        new_h = max(1, int(h * ratio))
+                        first_frame = first_frame.resize(
+                            (self._preview_target_w, new_h), Image.LANCZOS,
+                        )
                     self.src_img = first_frame
                 self._render_preview(0)
 
@@ -1160,7 +1270,11 @@ class AppController:
         }
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
-        """Renderuje podgląd nakładki i wysyła QPixmap do GUI."""
+        """Renderuje podgląd nakładki i wysyła QImage do GUI."""
+        # Auto-refresh źródła z QVideoSink cache (gdy zmiana layoutu, nie seek)
+        if self.last_src_pil is not None:
+            self.src_img = self.last_src_pil
+
         try:
             if not self.video_path:
                 return
@@ -1319,16 +1433,15 @@ class AppController:
                     preview.alpha_composite(overlay)
                 self.indicator_bboxes.clear()
 
-            # Konwertuj PIL Image → QPixmap
-            from PySide6.QtGui import QImage, QPixmap
+            # Konwertuj PIL Image → QImage (thread-safe, GUI wątek zrobi QPixmap)
+            from PySide6.QtGui import QImage
             img_rgb = preview.convert("RGB")
             data = img_rgb.tobytes("raw", "RGB")
             qimg = QImage(
                 data, img_rgb.width, img_rgb.height,
                 img_rgb.width * 3, QImage.Format_RGB888,
             )
-            pixmap = QPixmap.fromImage(qimg)
-            self.signals.sig_preview_frame_ready.emit(pixmap)
+            self.signals.sig_preview_frame_ready.emit(qimg)
             self.signals.sig_bboxes_ready.emit(
                 dict(self.indicator_bboxes),
                 self.src_img.width, self.src_img.height,
@@ -1359,54 +1472,55 @@ class AppController:
         seconds = self._skip_cut_regions(seconds)
         self._playback_pos = seconds
         self.signals.sig_seek_position.emit(seconds)
-        if (
-            self.video_paths
-            and abs(seconds - self.last_preview_ts) > 0.1
-        ):
-            try:
-                self._preview_queue.get_nowait()
-            except queue.Empty:
-                pass
-            self._preview_queue.put((self.video_paths, seconds))
 
-        self._render_preview(seconds)
+        # Seek w QMediaPlayer — GPU, natychmiastowa klatka
+        if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
+            return
+        self._seek_pending = True
+        pos_ms = max(0, int(seconds * 1000))
+        self.media_player.setPosition(pos_ms)
+        # Jeśli pauza — odpalamy play na moment, by dostać klatkę
+        if not self._playing:
+            self.media_player.play()
 
     # ═════════════════════════════════════════════════════════════════════
     # PLAYBACK
     # ═════════════════════════════════════════════════════════════════════
 
     def _on_playback_start(self) -> None:
-        """Użytkownik kliknął Play — uruchom automatyczny seek."""
+        """Użytkownik kliknął Play — GPU-accelerated playback."""
         if not self.video_path or self.video_duration_s <= 0:
             return
         self._playing = True
-        self._playback_step()
+        self._frame_counter = 0
+        self._composite_every_n = 1  # benchmark: 27ms composite < 35ms frame interval
+        if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+            self.media_player.play()
 
     def _on_playback_stop(self) -> None:
-        """Użytkownik kliknął Stop — zatrzymaj playback i opróżnij kolejkę."""
+        """Użytkownik kliknął Stop."""
         self._playing = False
+        if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+            self.media_player.pause()
         if self._playback_timer is not None:
             try:
                 self._playback_timer.stop()
             except Exception:
                 pass
             self._playback_timer = None
-        try:
-            while True:
-                self._preview_queue.get_nowait()
-                self._preview_queue.task_done()
-        except queue.Empty:
-            pass
 
     def _playback_step(self) -> None:
-        """Przesuń seek o 1 klatkę i zaplanuj następny krok."""
+        """Przesuń pozycję i zaplanuj następny krok.
+
+        QMediaPlayer gra w tle — klatki płyną z _on_video_frame.
+        Ten timer służy tylko do wyznaczania końca playbacku.
+        """
         if not self._playing:
             return
         step = 1.0 / max(self.fps, 1.0)
-        if not hasattr(self, '_playback_pos'):
+        if not hasattr(self, "_playback_pos"):
             self._playback_pos = 0.0
         nxt = self._playback_pos + step
-        # Przeskocz wycięte fragmenty
         nxt = self._skip_cut_regions(nxt)
         if nxt >= self.video_duration_s:
             self._on_playback_stop()

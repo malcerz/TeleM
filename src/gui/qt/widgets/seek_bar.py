@@ -9,7 +9,7 @@ Zastępuje osobny QSlider + MarkerBar jednym widgetem.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QPointF
+from PySide6.QtCore import Qt, Signal, QPointF, QTimer
 from PySide6.QtGui import QPainter, QColor, QPolygonF, QCursor
 from PySide6.QtWidgets import QWidget
 
@@ -31,6 +31,12 @@ class SeekBar(QWidget):
         self._mark_b: float = 100.0               # znacznik B (efektywny)
         self._dragging: str | None = None         # None | "seek" | "A" | "B"
         self._cut_regions: list[tuple[float, float]] = []
+
+        self._pending_seek_s: float = 0.0
+        self._seek_timer = QTimer(self)
+        self._seek_timer.setSingleShot(True)
+        self._seek_timer.setInterval(50)  # 50ms debounce
+        self._seek_timer.timeout.connect(self._emit_debounced_seek)
 
         self.setMinimumHeight(26)
         self.setMaximumHeight(26)
@@ -296,7 +302,8 @@ class SeekBar(QWidget):
 
         if self._dragging == "seek":
             self._position_s = sec
-            self.sig_position_changed.emit(sec)
+            self._pending_seek_s = sec
+            self._seek_timer.start()  # restart debounce
         elif self._dragging == "A":
             self._mark_a = sec
             self.sig_range_changed.emit(*self.get_range())
@@ -306,7 +313,15 @@ class SeekBar(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
-        if self._dragging is not None and self._dragging in ("A", "B"):
-            self.sig_range_changed.emit(*self.get_range())
+        if self._dragging is not None:
+            if self._dragging == "seek":
+                self._seek_timer.stop()
+                self.sig_position_changed.emit(self._position_s)
+            elif self._dragging in ("A", "B"):
+                self.sig_range_changed.emit(*self.get_range())
         self._dragging = None
         self.update()
+
+    def _emit_debounced_seek(self) -> None:
+        """Emituje sig_position_changed po upływie debounce (przeciąganie)."""
+        self.sig_position_changed.emit(self._pending_seek_s)

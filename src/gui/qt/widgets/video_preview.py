@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QEvent
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
 )
@@ -130,14 +130,24 @@ class VideoPreview(QWidget):
 
     # ¦¦ Slot: nowa klatka podglądu ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 
-    def on_frame_ready(self, pixmap: QPixmap) -> None:
-        """Odbiera QPixmap z kontrolera i wyświetla."""
-        if pixmap is None or pixmap.isNull():
+    def on_frame_ready(self, qimg: QImage | QPixmap) -> None:
+        """Odbiera QImage/QPixmap z kontrolera i wyświetla.
+
+        QImage jest thread-safe i przychodzi z workera przez QueuedConnection.
+        Konwersja na QPixmap (wymaga GUI wątku) odbywa się tutaj.
+        """
+        if qimg is None:
+            return
+        if isinstance(qimg, QImage) and not qimg.isNull():
+            pixmap = QPixmap.fromImage(qimg)
+        elif isinstance(qimg, QPixmap) and not qimg.isNull():
+            pixmap = qimg
+        else:
             return
         scaled = pixmap.scaled(
             self.image_label.size(),
             Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
+            Qt.FastTransformation,
         )
         self.image_label.setPixmap(scaled)
         self.image_label.setStyleSheet(
@@ -161,6 +171,10 @@ class VideoPreview(QWidget):
         if obj is self.image_label and event.type() in (
             QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.MouseButtonRelease,
         ):
+            # Szybki return gdy nic nie przeciągamy — oszczędza obliczenia geometrii
+            if event.type() == QEvent.MouseMove and not self._dragging_key:
+                return super().eventFilter(obj, event)
+
             me = event  # type: QMouseEvent
             # Współrzędne względem labela
             lx, ly = me.position().x(), me.position().y()

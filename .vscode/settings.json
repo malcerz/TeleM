@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd K:\\\\GoPro\\\\TeleM ; python -c \"\nimport os, sys, traceback\ntry:\n    from PySide6\\.QtCore import QCoreApplication\n    from PySide6\\.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink\n    \n    app = QCoreApplication\\(sys\\.argv\\)\n    \n    player = QMediaPlayer\\(\\)\n    audio = QAudioOutput\\(\\)\n    player\\.setAudioOutput\\(audio\\)\n    audio\\.setVolume\\(0\\)\n    \n    sink = QVideoSink\\(\\)\n    print\\(f'QVideoSink created: \\{sink\\}'\\)\n    print\\(f'QVideoSink is null: \\{sink is None\\}'\\)\n    \n    # Próbuj setVideoOutput z QVideoSink\n    try:\n        player\\.setVideoOutput\\(sink\\)\n        print\\('setVideoOutput\\(sink\\) OK'\\)\n    except TypeError as e:\n        print\\(f'setVideoOutput\\(sink\\) FAILED: \\{e\\}'\\)\n        # Próbuj przez videoSink\\(\\)\n        default_sink = player\\.videoSink\\(\\)\n        print\\(f'default videoSink\\(\\): \\{default_sink\\}'\\)\n    \n    print\\('Player ready:', player\\)\n    \nexcept Exception as e:\n    traceback\\.print_exc\\(\\)\n\nprint\\('Done'\\)\n\"\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python \\.\\\\TeleMGP0\\.py -test 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
