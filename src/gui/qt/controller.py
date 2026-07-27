@@ -147,6 +147,7 @@ class AppController:
 
         # ── Przygotowanie danych podglądu — cache wartości stałych ──────
         self._prepare_cache: dict = {}
+        self._chart_data_cache: Optional[dict] = None
 
         # ── QMediaPlayer (GPU-accelerated preview) ─────────────────────
         self._setup_media_player()
@@ -176,6 +177,11 @@ class AppController:
 
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
+
+    def _clear_caches(self) -> None:
+        """Czyszczenie pamięci podręcznej wyliczeń podglądu."""
+        self._prepare_cache.clear()
+        self._chart_data_cache = None
 
     def _connect_signals(self) -> None:
         s = self.signals
@@ -352,7 +358,7 @@ class AppController:
         fit_path: str,
     ) -> None:
         """Użytkownik wybrał pliki w zakładce Wczytywanie."""
-        self._prepare_cache.clear()
+        self._clear_caches()
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
 
         def bg_load() -> None:
@@ -1037,7 +1043,7 @@ class AppController:
 
     def _on_load_preset(self) -> None:
         """Wczytuje układ z pliku JSON i odświeża podgląd."""
-        self._prepare_cache.clear()
+        self._clear_caches()
         path, _ = QFileDialog.getOpenFileName(
             None, "Wczytaj preset układu", "",
             "JSON (*.json);;Wszystkie (*.*)",
@@ -1104,7 +1110,7 @@ class AppController:
 
         # Inwalidacja cache przygotowania — gdy zmieni się form/source zmieniają dane statyczne
         if field_name in ("source", "form", "min_val", "max_val"):
-            self._prepare_cache.clear()
+            self._clear_caches()
 
         # Odśwież podgląd
         self._render_preview()
@@ -1327,11 +1333,13 @@ class AppController:
                     prepare_overlay_frame_data, build_chart_data,
                 )
 
-                chart_data = build_chart_data(
-                    self.layout,
-                    self.telemetry.get_samples_for_source,
-                    self.telemetry.resolve_samples,
-                )
+                if self._chart_data_cache is None:
+                    self._chart_data_cache = build_chart_data(
+                        self.layout,
+                        self.telemetry.get_samples_for_source,
+                        self.telemetry.resolve_samples,
+                    )
+                chart_data = self._chart_data_cache
 
                 # ── Oblicz raz wartości stałe (niezależne od klatki) ──
                 if not self._prepare_cache:

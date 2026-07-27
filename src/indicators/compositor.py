@@ -52,6 +52,7 @@ def compose_overlay(
     gps_track: Optional[list[tuple[Any, float, float]]] = None,
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
+    fast_preview: bool = False,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
 
@@ -175,8 +176,8 @@ def compose_overlay(
             chart_vals = chart_data[key]
 
         # Determine supersampling factor (global or per-indicator)
-        global_ss = layout.get("global", {}).get("antialiasing", 1)
-        ss = current_cfg.get("supersample", global_ss)
+        global_ss = 1 if fast_preview else layout.get("global", {}).get("antialiasing", 1)
+        ss = 1 if fast_preview else current_cfg.get("supersample", global_ss)
         res, rx, ry, extra = render_value_indicator(
             canvas_w,
             canvas_h,
@@ -465,8 +466,8 @@ def render_preview(
         current_position=current_position,
         extra_indicators=extra_indicators,
         gps_track=gps_track,
-        target_dt=target_dt,
         start_dt_utc=start_dt_utc,
+        fast_preview=True,
     )
     img.alpha_composite(overlay)
     return img

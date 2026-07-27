@@ -10,11 +10,14 @@ from __future__ import annotations
 import io
 import math
 import os
+import queue
 import shlex
 import subprocess
+import threading
 import time
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
+from multiprocessing import shared_memory
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -974,6 +977,155 @@ def render_frame_bytes_job(job: tuple) -> tuple[int, bytes]:
     return index, img.tobytes()
 
 
+# ── Shared Memory frame pool ────────────────────────────────────────────────
+#
+# Eliminates the ~33 MB pickle IPC overhead per 4K RGBA frame by writing
+# rendered frame bytes directly into pre-allocated shared memory blocks.
+# The worker returns only (index, shm_slot_id) — ~50 bytes via pickle
+# instead of 33 MB.
+
+
+class SharedFramePool:
+    """Pool of pre-allocated shared memory blocks for zero-copy IPC.
+
+    Each slot holds one raw RGBA frame (overlay_w × overlay_h × 4 bytes).
+    Workers acquire a slot, write frame data, and release it after the
+    main thread has consumed it.
+    """
+
+    def __init__(self, n_slots: int, frame_size_bytes: int) -> None:
+        self.n_slots = n_slots
+        self.frame_size = frame_size_bytes
+        self._shm_blocks: list[shared_memory.SharedMemory] = []
+        self._free: queue.Queue[int] = queue.Queue()
+        for i in range(n_slots):
+            shm = shared_memory.SharedMemory(create=True, size=frame_size_bytes)
+            self._shm_blocks.append(shm)
+            self._free.put(i)
+
+    def shm_names(self) -> list[str]:
+        """Return list of SHM block names (for passing to worker processes)."""
+        return [shm.name for shm in self._shm_blocks]
+
+    def acquire(self, timeout: float = 30.0) -> int:
+        """Acquire a free slot index (blocks until one is available)."""
+        return self._free.get(timeout=timeout)
+
+    def release(self, slot: int) -> None:
+        """Release a slot back to the free pool."""
+        self._free.put(slot)
+
+    def read(self, slot: int) -> bytes:
+        """Read raw frame bytes from a slot (zero-copy via memoryview)."""
+        return bytes(self._shm_blocks[slot].buf[:self.frame_size])
+
+    def read_into(self, slot: int, dest: Any) -> None:
+        """Write slot contents directly to a writable file-like object."""
+        dest.write(self._shm_blocks[slot].buf[:self.frame_size])
+
+    def close(self) -> None:
+        """Close and unlink all shared memory blocks."""
+        for shm in self._shm_blocks:
+            try:
+                shm.close()
+                shm.unlink()
+            except Exception:
+                pass
+        self._shm_blocks.clear()
+
+
+# Global references set by worker initialiser — one per child process.
+_SHM_BLOCKS: list[shared_memory.SharedMemory | None] = []
+_SHM_FRAME_SIZE: int = 0
+
+
+def _init_shm_in_worker(shm_names: list[str], frame_size: int) -> None:
+    """Attach to existing shared memory blocks in a child worker process."""
+    global _SHM_BLOCKS, _SHM_FRAME_SIZE
+    _SHM_FRAME_SIZE = frame_size
+    _SHM_BLOCKS = []
+    for name in shm_names:
+        _SHM_BLOCKS.append(shared_memory.SharedMemory(name=name, create=False))
+
+
+def _close_shm_in_worker() -> None:
+    """Detach from shared memory (called at worker shutdown via atexit)."""
+    global _SHM_BLOCKS
+    for shm in _SHM_BLOCKS:
+        if shm is not None:
+            try:
+                shm.close()
+            except Exception:
+                pass
+    _SHM_BLOCKS = []
+
+
+def _init_worker_with_shm(
+    shm_names: list[str], frame_size: int,
+    *init_worker_args: Any,
+) -> None:
+    """Combined initialiser: set up WORKER_CACHE + attach SHM blocks."""
+    import atexit
+    init_worker(*init_worker_args)
+    _init_shm_in_worker(shm_names, frame_size)
+    atexit.register(_close_shm_in_worker)
+
+
+def render_frame_shm_job(job: tuple) -> tuple[int, int]:
+    """Render one overlay frame into a shared memory slot.
+
+    Args:
+        job: (frame_index, shm_slot_id)
+
+    Returns:
+        (frame_index, shm_slot_id) — only ~50 bytes through pickle.
+    """
+    index, slot = job
+    start_dt_utc = WORKER_CACHE.get("start_dt_utc")
+    tz_offset_hours = WORKER_CACHE.get("tz_offset_hours")
+    speed_samples = WORKER_CACHE.get("speed_samples")
+    track_samples = WORKER_CACHE.get("track_samples")
+    alt_samples = WORKER_CACHE.get("alt_samples")
+    target_fps = WORKER_CACHE.get("target_fps")
+    update_rate_step = WORKER_CACHE.get("update_rate_step", 1)
+    img = render_overlay_frame(
+        index, start_dt_utc, tz_offset_hours,
+        speed_samples, track_samples, alt_samples,
+        target_fps, update_rate_step,
+    )
+    raw = img.tobytes()
+    _SHM_BLOCKS[slot].buf[:_SHM_FRAME_SIZE] = raw
+    return index, slot
+
+
+# ── Async pipe writer thread ────────────────────────────────────────────────
+
+
+def _pipe_writer_thread(
+    write_queue: queue.Queue,
+    stdin_buffer: Any,
+    done_event: threading.Event,
+) -> None:
+    """Background thread that drains frame bytes to FFmpeg stdin pipe.
+
+    Receives (bytes_data,) from write_queue and writes to stdin_buffer.
+    Terminates when done_event is set and queue is empty, or on None sentinel.
+    """
+    try:
+        while True:
+            try:
+                item = write_queue.get(timeout=0.5)
+            except queue.Empty:
+                if done_event.is_set():
+                    break
+                continue
+            if item is None:  # sentinel
+                break
+            stdin_buffer.write(item)
+    except (BrokenPipeError, OSError):
+        pass
+
+
 # ── Streaming pipeline (producer-consumer) ──────────────────────────────────
 
 
@@ -1106,50 +1258,78 @@ def stream_overlay_to_ffmpeg(
 
     start_time = time.time()
     total_piped = 0
-    jobs = [(i,) for i in range(total_overlay_frames)]
     workers = workers or max(1, (os.cpu_count() or 1) - 1)
     n_workers = min(workers, total_overlay_frames)
 
+    # Frame size in bytes: RGBA = 4 bytes per pixel
+    frame_size = overlay_w * overlay_h * 4
+
+    # ── Async pipe writer (background thread) ───────────────────────────
+    pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
+    pipe_done = threading.Event()
+    writer_t = threading.Thread(
+        target=_pipe_writer_thread,
+        args=(pipe_queue, process.stdin.buffer, pipe_done),
+        daemon=True,
+    )
+    writer_t.start()
+
+    shm_pool: SharedFramePool | None = None
+
     try:
         if n_workers <= 1:
+            # Single worker — no IPC, direct rendering
             for i in range(total_overlay_frames):
                 if cancel_event is not None and cancel_event.is_set():
                     break
-                _, png_bytes = render_frame_bytes_job((i,))
-                process.stdin.buffer.write(png_bytes)
+                _, raw_bytes = render_frame_bytes_job((i,))
+                pipe_queue.put(raw_bytes)
                 total_piped += 1
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                     _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
+            # ── Shared Memory pool ──────────────────────────────────────
+            # Number of SHM slots: enough to keep workers busy + reorder buffer
+            MAX_IN_FLIGHT = max(4, n_workers * 6)
+            n_shm_slots = MAX_IN_FLIGHT
+            shm_pool = SharedFramePool(n_shm_slots, frame_size)
+            shm_names = shm_pool.shm_names()
+
+            init_args = (
+                overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
+                iso_samples, exposure_samples, temperature_samples,
+                gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
+                gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
+                fit_data,
+                gps_track,
+                start_dt_utc, tz_offset_hours,
+                speed_samples, track_samples, alt_samples,
+                target_fps, update_rate_step, total_overlay_frames,
+            )
+
+            print(
+                f"[STREAM] SHM pool: {n_shm_slots} slots × {frame_size / 1024 / 1024:.1f} MB = "
+                f"{n_shm_slots * frame_size / 1024 / 1024:.0f} MB total | "
+                f"workers={n_workers} | MAX_IN_FLIGHT={MAX_IN_FLIGHT}",
+                flush=True,
+            )
+
             with ProcessPoolExecutor(
                 max_workers=n_workers,
-                initializer=init_worker,
-                initargs=(
-                    overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
-                    iso_samples, exposure_samples, temperature_samples,
-                    gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
-                    gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
-                    fit_data,
-                    gps_track,
-                    start_dt_utc, tz_offset_hours,
-                    speed_samples, track_samples, alt_samples,
-                    target_fps, update_rate_step, total_overlay_frames,
-                ),
+                initializer=_init_worker_with_shm,
+                initargs=(shm_names, frame_size, *init_args),
             ) as ex:
-                # ── Bounded sliding window ──────────────────────────────
-                # At most MAX_IN_FLIGHT frames can be in-flight + in the
-                # reorder buffer at any time (each ~8 MB for 1080p).
-                MAX_IN_FLIGHT = max(1, n_workers * 4)
                 pending: set = set()
-                reorder_buf: dict[int, bytes] = {}
+                reorder_buf: dict[int, int] = {}  # frame_idx -> shm_slot
                 next_idx = 0
                 submitted = 0
 
-                # Fill initial window
+                # Fill initial window — acquire SHM slots and submit jobs
                 for _ in range(min(MAX_IN_FLIGHT, total_overlay_frames)):
-                    pending.add(ex.submit(render_frame_bytes_job, (submitted,)))
+                    slot = shm_pool.acquire(timeout=30.0)
+                    pending.add(ex.submit(render_frame_shm_job, (submitted, slot)))
                     submitted += 1
 
                 while pending and not (
@@ -1158,29 +1338,33 @@ def stream_overlay_to_ffmpeg(
                     done, pending = wait(pending, return_when=FIRST_COMPLETED,
                                          timeout=0.1)
                     for fut in done:
-                        idx, png_bytes = fut.result()
-                        reorder_buf[idx] = png_bytes
+                        idx, slot = fut.result()
+                        reorder_buf[idx] = slot
 
-                        # Drain consecutive frames to FFmpeg
-                        while next_idx in reorder_buf:
-                            process.stdin.buffer.write(reorder_buf.pop(next_idx))
-                            total_piped += 1
-                            next_idx += 1
-                            if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                                _report_stream_progress(
-                                    total_piped, total_overlay_frames,
-                                    start_time, progress_cb,
-                                )
-
-                        # Top up the sliding window if below limit
-                        if (
-                            submitted < total_overlay_frames
-                            and len(reorder_buf) < MAX_IN_FLIGHT
-                        ):
-                            pending.add(
-                                ex.submit(render_frame_bytes_job, (submitted,))
+                    # Drain consecutive frames to pipe writer queue
+                    while next_idx in reorder_buf:
+                        slot = reorder_buf.pop(next_idx)
+                        frame_bytes = shm_pool.read(slot)
+                        shm_pool.release(slot)
+                        pipe_queue.put(frame_bytes)
+                        total_piped += 1
+                        next_idx += 1
+                        if total_piped % 50 == 0 or total_piped == total_overlay_frames:
+                            _report_stream_progress(
+                                total_piped, total_overlay_frames,
+                                start_time, progress_cb,
                             )
-                            submitted += 1
+
+                    # Aggressive top-up: fill ALL available slots in the window
+                    while (
+                        submitted < total_overlay_frames
+                        and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
+                    ):
+                        slot = shm_pool.acquire(timeout=30.0)
+                        pending.add(
+                            ex.submit(render_frame_shm_job, (submitted, slot))
+                        )
+                        submitted += 1
 
                 if cancel_event is not None and cancel_event.is_set():
                     for f in pending:
@@ -1189,7 +1373,10 @@ def stream_overlay_to_ffmpeg(
 
                 # Drain final reorder buffer
                 while next_idx in reorder_buf:
-                    process.stdin.buffer.write(reorder_buf.pop(next_idx))
+                    slot = reorder_buf.pop(next_idx)
+                    frame_bytes = shm_pool.read(slot)
+                    shm_pool.release(slot)
+                    pipe_queue.put(frame_bytes)
                     total_piped += 1
                     next_idx += 1
                     _report_stream_progress(
@@ -1197,18 +1384,31 @@ def stream_overlay_to_ffmpeg(
                         start_time, progress_cb,
                     )
 
-        process.stdin.close()
+        # Signal pipe writer to finish and close stdin
+        pipe_done.set()
+        pipe_queue.put(None)  # sentinel
+        writer_t.join(timeout=30.0)
+        try:
+            process.stdin.close()
+        except Exception:
+            pass
     except BrokenPipeError:
         print("[STREAM] FFmpeg pipe closed unexpectedly.", flush=True)
     except Exception as e:
         print(f"[STREAM] Error: {e}", flush=True)
         import traceback
         traceback.print_exc()
+        pipe_done.set()
+        pipe_queue.put(None)
         try:
             process.terminate()
         except Exception:
             pass
         raise
+    finally:
+        # Always clean up SHM pool
+        if shm_pool is not None:
+            shm_pool.close()
 
     remaining: list[str] = []
     for line in process.stdout:

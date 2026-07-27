@@ -27,7 +27,7 @@ def _render_gauge_indicator(
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
 ):
     """Render a gauge-form indicator (background cached)."""
-    ss = max(2, ss)
+    ss = max(1, ss)
     gauge_fs = max(8, fs * ss)
     gauge_font = load_font(font_path, gauge_fs)
     gauge_outline = outline * ss
