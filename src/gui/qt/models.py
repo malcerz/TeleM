@@ -293,7 +293,7 @@ def map_indicator_fields() -> list[FieldSchema]:
                         min_val=10, max_val=20, step=1),
             FieldSchema("map_style", "choice", "Styl mapy", tab="Text",
                         choices=["light_all", "light_nolabels", "dark_all",
-                                 "dark_nolabels", "voyager_all", "voyager_nolabels"]),
+                                 "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"]),
             FieldSchema("marker_size", "int", "Znacznik", tab="Text",
                         min_val=3, max_val=20, step=1),
             FieldSchema("marker_color", "color", "Kolor znacz.", tab="Text"),

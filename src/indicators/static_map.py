@@ -38,6 +38,9 @@ def _render_static_map_indicator(
         if _pc_key not in _render_static_map_indicator._precached:
             _render_static_map_indicator._precached.add(_pc_key)
             threading.Thread(target=precache_map_tiles, args=(gps_track, zoom, map_style), daemon=True).start()
+            _is_first = True
+        else:
+            _is_first = False
 
         if target_dt is not None:
             import bisect
@@ -64,7 +67,7 @@ def _render_static_map_indicator(
             zoom=zoom, map_style=map_style,
             marker_radius=int(cfg.get("marker_size", 7)),
             marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
-            download_missing=False,
+            download_missing=_is_first,
         )
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:

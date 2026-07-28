@@ -44,6 +44,7 @@ MAP_STYLES: dict[str, str] = {
     "voyager_all":     "https://a.basemaps.cartocdn.com/voyager_all/{z}/{x}/{y}.png",
     "voyager_nolabels":"https://a.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}.png",
     "osm":             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "satellite":       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 }
 
 

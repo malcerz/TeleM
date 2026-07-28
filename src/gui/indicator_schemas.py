@@ -131,7 +131,7 @@ BUILTIN_FIELDS: dict[str, list[tuple]] = {
         ("zoom", "int", 10, 20, 1),
         ("map_style", "choice",
             ["light_all", "light_nolabels", "dark_all", "dark_nolabels",
-             "voyager_all", "voyager_nolabels"],
+             "voyager_all", "voyager_nolabels", "satellite"],
          None, None),
         ("marker_size", "int", 3, 20, 1),
         ("marker_color", "color", None, None, None),
