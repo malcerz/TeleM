@@ -833,6 +833,11 @@ class AppController:
                 print(f"[STREAM] Enabled existing indicator: {stream_key}", flush=True)
 
         cfg = self.layout["indicators"][stream_key]
+
+        # Migracja: time_display zawsze używa form="time_display"
+        if stream_key == "time_display" and cfg.get("form") != "time_display":
+            cfg["form"] = "time_display"
+
         form = cfg.get("form", "text")
         schema = get_schema_for_form(form)
 
@@ -878,11 +883,44 @@ class AppController:
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
+        # Ustal domyślną etykietę dla znanych kluczy
+        _label_map = {
+            "time_display": "Czas",
+        }
+        if key in _label_map:
+            defaults["label"] = _label_map[key]
+
+        # Specjalne domyślne wartości dla time_display
+        if key == "time_display":
+            defaults["show_date"] = True
+            defaults["show_time"] = True
+            defaults["show_elapsed"] = True
+            defaults["show_avg_speed"] = True
+            defaults["show_date_label"] = True
+            defaults["date_label"] = "Data"
+            defaults["show_time_label"] = True
+            defaults["time_label"] = "Godzina"
+            defaults["show_elapsed_label"] = True
+            defaults["elapsed_label"] = "Czas"
+            defaults["show_avg_speed_label"] = True
+            defaults["avg_speed_label"] = "Średnia prędkość"
+            defaults["font_size"] = 0.020
+            defaults["date_font_size"] = 0.020
+            defaults["time_font_size"] = 0.025
+            defaults["elapsed_font_size"] = 0.025
+            defaults["avg_speed_font_size"] = 0.020
+            defaults["x"] = 0.020
+            defaults["y"] = 0.030
+
         # Ustal domyślną formę na podstawie klucza (z rejestru indicators.py)
         from src.indicators import get_form_for_key
         _form, _form_overrides = get_form_for_key(key)
         defaults["form"] = _form
         defaults.update(_form_overrides)
+
+        # time_display – własna forma, po get_form_for_key (jak track_map)
+        if key == "time_display":
+            defaults["form"] = "time_display"
 
         if key == "track_map":
             # Mapa – ma własne ustawienia niezależnie od rejestru
@@ -1160,7 +1198,7 @@ class AppController:
     def is_in_cut_region(self, seconds: float) -> bool:
         """Sprawdź czy dany czas znajduje się w wyciętym fragmencie."""
         for start_s, end_s in self._cut_regions:
-            if start_s <= seconds <= end_s:
+            if start_s <= seconds < end_s:
                 return True
         return False
 
@@ -1443,6 +1481,8 @@ class AppController:
                     gps_track=overlay_data["gps_track"],
                     target_dt=overlay_data["target_dt"],
                     start_dt_utc=overlay_data["start_dt_utc"],
+                    elapsed_seconds=overlay_data["elapsed_seconds"],
+                    avg_speed_kmh=overlay_data["avg_speed_kmh"],
                 )
             else:
                 # Check if preview already set (cut region or no telemetry)
@@ -1556,8 +1596,11 @@ class AppController:
         step = 1.0 / max(self.fps, 1.0)
         if not hasattr(self, "_playback_pos"):
             self._playback_pos = 0.0
-        nxt = self._playback_pos + step
-        nxt = self._skip_cut_regions(nxt)
+        raw_next = self._playback_pos + step
+        nxt = self._skip_cut_regions(raw_next)
+        if nxt != raw_next and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+            self._seek_pending = True
+            self.media_player.setPosition(max(0, int(nxt * 1000)))
         if nxt >= self.video_duration_s:
             self._on_playback_stop()
             self._playback_pos = 0.0

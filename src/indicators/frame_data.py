@@ -164,6 +164,16 @@ def prepare_overlay_frame_data(
     cad_value = resolve_cache_value("cad", target_dt) if resolve_cache_value else 0.0
     battery_value = resolve_cache_value("battery", target_dt) if resolve_cache_value else 0.0
 
+    # ── Elapsed time & average speed (for time_display) ───────────────
+    elapsed_seconds = 0.0
+    if start_dt_utc is not None and target_dt is not None:
+        elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
+
+    avg_speed_kmh = 0.0
+    if elapsed_seconds > 0 and distance_m > 0:
+        # average speed = total distance / total time * 3.6 (m/s → km/h)
+        avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
+
     # ── Build extra_indicators (FIT fields + remaining dynamic) ───────
     from src.indicators.registry import HARDCODED_KEYS
 
@@ -229,4 +239,6 @@ def prepare_overlay_frame_data(
         "gps_track": gps_trk,
         "target_dt": target_dt,
         "start_dt_utc": start_dt_utc,
+        "elapsed_seconds": elapsed_seconds,
+        "avg_speed_kmh": avg_speed_kmh,
     }

@@ -81,7 +81,8 @@ class VideoPreview(QWidget):
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("\u25C6 HUD + Wideo")
         if _HAS_VIDEO_WIDGET:
-            self.mode_combo.addItem("\u26A1 Czyste Wideo GPU (Max FPS)")
+            self.mode_combo.addItem("Video")
+        self.mode_combo.setFixedWidth(130)
         self.mode_combo.setToolTip("Wybierz tryb wyświetlania podglądu")
         self.mode_combo.setStyleSheet(
             "QComboBox { background-color: #222; color: #ddd; border: 1px solid #444; "
@@ -310,7 +311,7 @@ class VideoPreview(QWidget):
     def _on_cut(self) -> None:
         """Kliknięto ✂ — wytnij aktualny zakres A-B."""
         eff_a, eff_b = self.seek_bar.get_range()
-        if eff_b - eff_a < 0.1 or not self._controller:
+        if not self.seek_bar.has_selection() or eff_b - eff_a < 0.1 or not self._controller:
             return
         if not hasattr(self._controller, 'add_cut_region'):
             return
@@ -318,8 +319,7 @@ class VideoPreview(QWidget):
         orig_a = self.seek_bar.eff_to_orig(eff_a)
         orig_b = self.seek_bar.eff_to_orig(eff_b)
         self._controller.add_cut_region(orig_a, orig_b)
-        # Resetuj A-B na całość (efektywny czas)
-        self.seek_bar.set_range(0.0, self.seek_bar._effective_duration_s)
+        self.seek_bar.clear_selection()
 
     def _on_undo_cut(self) -> None:
         """Kliknięto ↩ — cofnij ostatnie wycięcie."""
@@ -335,6 +335,8 @@ class VideoPreview(QWidget):
         """Aktualizuj seek bar po zmianie listy wyciętych fragmentów."""
         if self._controller and hasattr(self._controller, '_cut_regions'):
             self.seek_bar.set_cut_regions(self._controller._cut_regions)
+            # Po aktualizacji cięć odśwież podgląd – przeskocz za wycięty zakres
+            self._on_seek(self.seek_bar.get_position())
             # Zaktualizuj etykietę duration (efektywny czas)
             eff_dur = self.seek_bar._effective_duration_s
             total_m = int(eff_dur // 60)

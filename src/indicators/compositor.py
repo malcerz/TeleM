@@ -20,6 +20,7 @@ from src.indicators.dispatcher import render_value_indicator
 from src.indicators.helpers import load_font, s
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_block import render_time_block
+from src.indicators.time_display import render_time_display
 
 
 def compose_overlay(
@@ -52,6 +53,8 @@ def compose_overlay(
     gps_track: Optional[list[tuple[Any, float, float]]] = None,
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
+    elapsed_seconds: float = 0.0,
+    avg_speed_kmh: float = 0.0,
     fast_preview: bool = False,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
@@ -98,6 +101,30 @@ def compose_overlay(
                     int(tby - tb.height // 2),
                     tb.width,
                     tb.height,
+                )
+
+    # Time display (multi-line info block)
+    if "time_display" in layout.get("indicators", {}):
+        td, tdx, tdy = render_time_display(
+            canvas_w, canvas_h, layout, font_path,
+            date_text, time_text, elapsed_seconds, avg_speed_kmh,
+        )
+        if td:
+            td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
+            rotated_paste(img, td, tdx + td.width // 2, tdy + td.height // 2, td_rotation)
+            if td_rotation == 90:
+                _bboxes["time_display"] = (
+                    int(tdx - td.height // 2),
+                    int(tdy - td.width // 2),
+                    td.height,
+                    td.width,
+                )
+            else:
+                _bboxes["time_display"] = (
+                    int(tdx - td.width // 2),
+                    int(tdy - td.height // 2),
+                    td.width,
+                    td.height,
                 )
 
     if indicator_values is None:
@@ -327,6 +354,7 @@ def compose_overlay(
     # ── Extra indicators (dynamically discovered, e.g. FIT fields) ──
     rendered_keys = {k for k, _, _, _ in indicator_defs}
     rendered_keys.add("time_block")  # already rendered above, skip fallback
+    rendered_keys.add("time_display")  # already rendered above, skip fallback
     if extra_indicators:
         for key, (value, unit, label) in extra_indicators.items():
             if key not in layout["indicators"]:
@@ -335,6 +363,7 @@ def compose_overlay(
             if not current_cfg.get("enabled", True):
                 continue
             label = current_cfg.get("label", label)
+
             fv = f"{value:.1f} {unit}" if unit else f"{value:.1f}"
             chart_vals = chart_data.get(key) if chart_data else None
             res, rx, ry, _extra = render_value_indicator(
@@ -430,6 +459,8 @@ def render_preview(
     gps_track: Optional[list[tuple[Any, float, float]]] = None,
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
+    elapsed_seconds: float = 0.0,
+    avg_speed_kmh: float = 0.0,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top."""
     # Avoid a full-resolution copy if the image is already RGBA
@@ -467,6 +498,8 @@ def render_preview(
         extra_indicators=extra_indicators,
         gps_track=gps_track,
         start_dt_utc=start_dt_utc,
+        elapsed_seconds=elapsed_seconds,
+        avg_speed_kmh=avg_speed_kmh,
         fast_preview=True,
     )
     img.alpha_composite(overlay)

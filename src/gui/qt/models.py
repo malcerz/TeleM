@@ -301,6 +301,54 @@ def map_indicator_fields() -> list[FieldSchema]:
     )
 
 
+def time_display_indicator_fields() -> list[FieldSchema]:
+    """TimeDisplay: Header + 4 per-line tabs."""
+    header = [
+        FieldSchema("size", "float", "Rozmiar", tab="",
+                    min_val=0.001, max_val=1.0, step=0.001),
+        FieldSchema("label", "text", "Etykieta", tab=""),
+        FieldSchema("x", "float", "Pozycja X", tab="",
+                    min_val=0.0, max_val=1.0, step=0.001),
+        FieldSchema("y", "float", "Pozycja Y", tab="",
+                    min_val=0.0, max_val=1.0, step=0.001),
+        FieldSchema("rotation", "choice", "Rotacja", tab="",
+                    choices=["0", "90", "180", "270"]),
+    ]
+    date_tab = [
+        FieldSchema("show_date", "bool", "Pokaż datę", tab="Data"),
+        FieldSchema("show_date_label", "bool", "Pokaż etykietę", tab="Data"),
+        FieldSchema("date_label", "text", "Etykieta", tab="Data"),
+        FieldSchema("date_font_size", "float", "Rozmiar czcionki",
+                    tab="Data", min_val=0.008, max_val=0.08, step=0.001),
+        FieldSchema("date_color", "color", "Kolor", tab="Data"),
+    ]
+    time_tab = [
+        FieldSchema("show_time", "bool", "Pokaż czas GPMF", tab="Czas"),
+        FieldSchema("show_time_label", "bool", "Pokaż etykietę", tab="Czas"),
+        FieldSchema("time_label", "text", "Etykieta", tab="Czas"),
+        FieldSchema("time_font_size", "float", "Rozmiar czcionki",
+                    tab="Czas", min_val=0.008, max_val=0.08, step=0.001),
+        FieldSchema("time_color", "color", "Kolor", tab="Czas"),
+    ]
+    elapsed_tab = [
+        FieldSchema("show_elapsed", "bool", "Pokaż czas od startu", tab="Od początku"),
+        FieldSchema("show_elapsed_label", "bool", "Pokaż etykietę", tab="Od początku"),
+        FieldSchema("elapsed_label", "text", "Etykieta", tab="Od początku"),
+        FieldSchema("elapsed_font_size", "float", "Rozmiar czcionki",
+                    tab="Od początku", min_val=0.008, max_val=0.08, step=0.001),
+        FieldSchema("elapsed_color", "color", "Kolor", tab="Od początku"),
+    ]
+    avg_speed_tab = [
+        FieldSchema("show_avg_speed", "bool", "Pokaż śr. prędkość", tab="Śr. prędkość"),
+        FieldSchema("show_avg_speed_label", "bool", "Pokaż etykietę", tab="Śr. prędkość"),
+        FieldSchema("avg_speed_label", "text", "Etykieta", tab="Śr. prędkość"),
+        FieldSchema("avg_speed_font_size", "float", "Rozmiar czcionki",
+                    tab="Śr. prędkość", min_val=0.008, max_val=0.08, step=0.001),
+        FieldSchema("avg_speed_color", "color", "Kolor", tab="Śr. prędkość"),
+    ]
+    return header + date_tab + time_tab + elapsed_tab + avg_speed_tab
+
+
 # Mapa: forma → funkcja generująca schemat
 FORM_SCHEMA_MAP: dict[str, callable] = {
     "text":        text_indicator_fields,
@@ -310,6 +358,7 @@ FORM_SCHEMA_MAP: dict[str, callable] = {
     "segment_bar": segment_bar_indicator_fields,
     "map":         map_indicator_fields,
     "static_map":  map_indicator_fields,
+    "time_display": time_display_indicator_fields,
 }
 
 

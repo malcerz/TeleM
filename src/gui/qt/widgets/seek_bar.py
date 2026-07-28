@@ -31,6 +31,7 @@ class SeekBar(QWidget):
         self._mark_b: float = 100.0               # znacznik B (efektywny)
         self._dragging: str | None = None         # None | "seek" | "A" | "B"
         self._cut_regions: list[tuple[float, float]] = []
+        self._has_selection = False
 
         self._pending_seek_s: float = 0.0
         self._seek_timer = QTimer(self)
@@ -52,13 +53,13 @@ class SeekBar(QWidget):
     # ═════════════════════════════════════════════════════════════════════
 
     def set_duration(self, duration_s: float) -> None:
-        """Ustaw długość wideo w sekundach."""
+        """Ustaw długość nowego wideo i wyczyść poprzednie zaznaczenie."""
         self._duration_s = max(1.0, duration_s)
         self._effective_duration_s = self._duration_s
-        if self._mark_b > self._effective_duration_s:
-            self._mark_b = self._effective_duration_s
-        if self._position_s > self._effective_duration_s:
-            self._position_s = self._effective_duration_s
+        self._position_s = 0.0
+        self._mark_a = 0.0
+        self._mark_b = self._effective_duration_s
+        self._has_selection = False
         self.update()
 
     def set_position(self, seconds: float) -> None:
@@ -74,10 +75,22 @@ class SeekBar(QWidget):
         """Zwróć efektywną długość (po odjęciu wycięć)."""
         return self._effective_duration_s
 
+    def has_selection(self) -> bool:
+        """Zwróć, czy użytkownik ustawił zakres A-B do wycięcia."""
+        return self._has_selection
+
+    def clear_selection(self) -> None:
+        """Usuń bieżące zaznaczenie A-B bez zmiany zatwierdzonych cięć."""
+        self._mark_a = 0.0
+        self._mark_b = self._effective_duration_s
+        self._has_selection = False
+        self.update()
+
     def set_range(self, a: float, b: float) -> None:
         """Ustaw zakres A-B w efektywnym czasie (NIE emituje sygnału)."""
         self._mark_a = max(0.0, min(self._effective_duration_s, a))
         self._mark_b = max(0.0, min(self._effective_duration_s, b))
+        self._has_selection = True
         self.update()
 
     def get_range(self) -> tuple[float, float]:
@@ -86,14 +99,15 @@ class SeekBar(QWidget):
 
     def set_cut_regions(self, regions: list[tuple[float, float]]) -> None:
         """Ustaw listę zatwierdzonych wycięć i przelicz efektywną długość."""
-        self._cut_regions = list(regions)
+        self._cut_regions = sorted(
+            (max(0.0, start), min(self._duration_s, end))
+            for start, end in regions
+            if end > start
+        )
         total_cut = sum(ce - cs for cs, ce in self._cut_regions)
         self._effective_duration_s = max(1.0, self._duration_s - total_cut)
-        if self._position_s > self._effective_duration_s:
-            self._position_s = self._effective_duration_s
-        if self._mark_b > self._effective_duration_s:
-            self._mark_b = self._effective_duration_s
-        self.update()
+        self._position_s = min(self._position_s, self._effective_duration_s)
+        self.clear_selection()
 
     # ── Konwersja efektywny ↔ oryginalny czas ──────────────────────────
 
@@ -178,7 +192,6 @@ class SeekBar(QWidget):
         bar_y = self._bar_y
         bar_h = self._bar_h
         dur = self._effective_duration_s
-        orig_dur = self._duration_s
 
         # Tło (przezroczyste)
         painter.fillRect(0, 0, w, h, QColor(0, 0, 0, 0))
@@ -199,16 +212,14 @@ class SeekBar(QWidget):
                     int(x1), bar_y, max(1, int(x2 - x1)), bar_h, 2, 2,
                 )
 
-        # --- Wycięte fragmenty (ciemnoczerwone, NA WIERZCHU) ---
-        if dur > 0:
-            for cut_start, cut_end in self._cut_regions:
-                cx1 = self._sec_to_x(max(0, cut_start))
-                cx2 = self._sec_to_x(min(dur, cut_end))
-                if cx2 - cx1 >= 1:
-                    painter.setBrush(QColor(160, 40, 40, 220))
-                    painter.drawRoundedRect(
-                        int(cx1), bar_y, max(1, int(cx2 - cx1)), bar_h, 2, 2,
-                    )
+        # --- Znaczniki cięć (wąskie czerwone karbowania na efektywnej osi) ---
+        if self._cut_regions:
+            painter.setBrush(QColor(220, 60, 60, 200))
+            painter.setPen(Qt.NoPen)
+            for cs, ce in self._cut_regions:
+                cx = self._sec_to_x(self.orig_to_eff(cs))
+                notch_h = bar_h + 6
+                painter.drawRect(int(cx) - 1, bar_y - 3, 3, notch_h)
 
         # --- Znacznik pozycji (thumb) ---
         if dur > 0:
@@ -288,7 +299,7 @@ class SeekBar(QWidget):
             self._dragging = "seek"
             # Natychmiastowy seek do klikniętej pozycji
             sec = self._x_to_sec(x)
-            sec = max(0.0, min(self._duration_s, sec))
+            sec = max(0.0, min(self._effective_duration_s, sec))
             self._position_s = sec
             self.sig_position_changed.emit(sec)
             self.update()
@@ -298,7 +309,7 @@ class SeekBar(QWidget):
             return
         x = event.position().x()
         sec = self._x_to_sec(x)
-        sec = max(0.0, min(self._duration_s, sec))
+        sec = max(0.0, min(self._effective_duration_s, sec))
 
         if self._dragging == "seek":
             self._position_s = sec
@@ -306,9 +317,11 @@ class SeekBar(QWidget):
             self._seek_timer.start()  # restart debounce
         elif self._dragging == "A":
             self._mark_a = sec
+            self._has_selection = True
             self.sig_range_changed.emit(*self.get_range())
         elif self._dragging == "B":
             self._mark_b = sec
+            self._has_selection = True
             self.sig_range_changed.emit(*self.get_range())
         self.update()
 

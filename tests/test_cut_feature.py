@@ -1,7 +1,7 @@
 """Testy end-to-end dla funkcji wycinania fragmentów (A-B → ✂).
 
 Weryfikują: SeekBar.set_range → VideoPreview._on_cut → Controller.add_cut_region
-→ sygnały → SeekBar.set_cut_regions (ciemnoczerwone na pasku).
+→ sygnały → SeekBar.set_cut_regions (skrócona oś czasu).
 """
 
 from __future__ import annotations
@@ -72,6 +72,12 @@ class TestSeekBar:
         assert a == 0.0
         assert b == 45.0
 
+    def test_default_range_is_not_a_cut_selection(self, qapp):
+        from src.gui.qt.widgets.seek_bar import SeekBar
+        sb = SeekBar()
+        sb.set_duration(60.0)
+        assert not sb.has_selection()
+
     def test_set_range_ordered(self, qapp):
         from src.gui.qt.widgets.seek_bar import SeekBar
         sb = SeekBar()
@@ -88,6 +94,7 @@ class TestSeekBar:
         sb.set_cut_regions([(10.0, 20.0), (40.0, 50.0)])
         assert len(sb._cut_regions) == 2
         assert sb._cut_regions[0] == (10.0, 20.0)
+        assert sb.get_range() == (0.0, 40.0)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +139,16 @@ class TestCutFlow:
         vp.seek_bar.set_range(30.0, 40.0)
         vp._on_cut()
         assert len(ctrl._cut_regions) == 2
+        assert ctrl._cut_regions == [(10.0, 20.0), (30.0, 40.0)]
+
+    def test_second_cut_maps_from_shortened_timeline(self, vp, ctrl):
+        vp.on_duration_ready(60.0)
+        ctrl.add_cut_region(10.0, 20.0)
+        vp._on_cut_region_changed()
+
+        vp.seek_bar.set_range(20.0, 30.0)
+        vp._on_cut()
+
         assert ctrl._cut_regions == [(10.0, 20.0), (30.0, 40.0)]
 
     def test_undo_removes_last(self, vp, ctrl):
@@ -223,6 +240,49 @@ class TestSkipCutRegions:
         assert skip(7.0) == 10.1
         assert skip(22.0) == 25.1
         assert skip(15.0) == 15.0
+
+    def test_playback_seek_physically_skips_cut(self, monkeypatch):
+        import src.gui.qt.controller as controller_module
+
+        class Player:
+            def __init__(self):
+                self.positions: list[int] = []
+
+            def setPosition(self, position: int) -> None:
+                self.positions.append(position)
+
+        class Signals:
+            class SeekPosition:
+                def emit(self, _seconds: float) -> None:
+                    pass
+
+            sig_seek_position = SeekPosition()
+
+        class Playback:
+            _skip_cut_regions = controller_module.AppController._skip_cut_regions
+
+            def __init__(self):
+                self._playing = True
+                self._playback_pos = 9.95
+                self._cut_regions = [(10.0, 20.0)]
+                self.fps = 10.0
+                self.video_duration_s = 60.0
+                self.media_player = Player()
+                self.signals = Signals()
+                self._playback_step = lambda: None
+
+        monkeypatch.setattr(controller_module, "_QT_MULTIMEDIA_AVAILABLE", True)
+        monkeypatch.setattr(
+            controller_module.QTimer,
+            "singleShot",
+            lambda _interval, _callback: None,
+        )
+
+        playback = Playback()
+        controller_module.AppController._playback_step(playback)
+
+        assert playback._playback_pos == pytest.approx(20.1)
+        assert playback.media_player.positions == [20100]
 
 
 # ---------------------------------------------------------------------------

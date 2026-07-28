@@ -556,6 +556,14 @@ def render_overlay_job(job: tuple) -> int:
         ind_cfg = layout["indicators"][ind_key]
         extra_indicators[ind_key] = (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", ind_key))
 
+    # ── Elapsed time & average speed (for time_display) ───────────────
+    _elapsed = 0.0
+    if start_dt_utc is not None and current_dt_utc is not None:
+        _elapsed = max(0.0, (current_dt_utc - start_dt_utc).total_seconds())
+    _avg_spd = 0.0
+    if _elapsed > 0 and distance_m > 0:
+        _avg_spd = (distance_m / _elapsed) * 3.6
+
     img = compose_overlay(
         video_width, video_height, layout, font_path, date_text, time_text,
         speed_value, distance_m, max_distance_m, alt_value,
@@ -569,6 +577,8 @@ def render_overlay_job(job: tuple) -> int:
         gps_track=WORKER_CACHE.get("gps_track", []),
         target_dt=current_dt_utc,
         start_dt_utc=start_dt_utc,
+        elapsed_seconds=_elapsed,
+        avg_speed_kmh=_avg_spd,
     )
     img.save(overlay_dir / f"overlay_{index:06d}.bmp", format="BMP")
     return index
@@ -819,14 +829,22 @@ def _build_stream_ffmpeg_cmd(
     has_rotation = any(
         d in (180, 90, 270) for d in (container_rotation, rotation_degrees)
     )
-    if cut_regions and len(cut_regions) > 0:
-        # Build select expression: drop frames in cut regions
+    has_cuts = bool(cut_regions and len(cut_regions) > 0)
+    if has_cuts:
+        # Build select/aselect expression: drop frames in cut regions
         parts = []
         for cs, ce in cut_regions:
             parts.append(f"between(t,{cs},{ce})")
         select_expr = "not(" + "+".join(parts) + ")"
         tag_in = "[vtemp]" if not has_rotation else "[vtemp2]"
-        filter_complex += f";{tag_in}select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+        filter_complex += (
+            f";{tag_in}select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+        )
+        # Audio: aselect – tnie ścieżkę audio tak samo jak wideo
+        filter_complex += (
+            f";[0:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
+        )
+        print(f"[CUT] select filter: {select_expr}", flush=True)
     elif has_rotation:
         filter_complex += ";[vtemp2]null[vout]"
     else:
@@ -840,26 +858,48 @@ def _build_stream_ffmpeg_cmd(
         "-r", str(generation_fps),
         "-i", "pipe:0",
         "-filter_complex", filter_complex,
-        "-map", "[vout]", "-map", "0:a?",
-        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
+        "-map", "[vout]",
     ]
+
+    if has_cuts:
+        # Gdy są cięcia – audio przechodzi przez aselect, potrzebuje re-encoda
+        cmd.extend(["-map", "[aout]?"])
+    else:
+        # Bez cięć – audio kopiowane wprost z pliku
+        cmd.extend(["-map", "0:a?"])
+
+    cmd.extend([
+        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
+    ])
 
     if encoder == "nv":
         cmd.extend([
             "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
-            "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu), "-c:a", "copy",
+            "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu),
         ])
+        if has_cuts:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
     elif encoder == "intel":
         cmd.extend([
             "-c:v", "hevc_qsv", "-preset", "veryfast",
             "-global_quality", "24", "-look_ahead", "0",
-            "-async_depth", "4", "-pix_fmt", "nv12", "-c:a", "copy",
+            "-async_depth", "4", "-pix_fmt", "nv12",
         ])
+        if has_cuts:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
     else:
         cmd.extend([
             "-c:v", "libx265", "-preset", "medium", "-crf", "24",
-            "-pix_fmt", "yuv420p", "-c:a", "copy",
+            "-pix_fmt", "yuv420p",
         ])
+        if has_cuts:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
 
     cmd = append_bitrate_args(cmd, encoder, video_bitrate)
     cmd.append(str(output_file))
@@ -883,27 +923,27 @@ def render_overlay_frame(
     """Render a single overlay frame – returns PIL Image RGBA. Uses WORKER_CACHE."""
     video_width = WORKER_CACHE["video_width"]
     video_height = WORKER_CACHE["video_height"]
+
+    # ── Wczesny return: klatka w wyciętym fragmencie → pusta nakładka ──
+    sample_t = (index * update_rate_step) / target_fps
+    current_t = sample_t
+    cut_regions = WORKER_CACHE.get("_cut_regions", [])
+    for cut_start, cut_end in cut_regions:
+        if cut_start <= current_t < cut_end:
+            from PIL import Image
+            return Image.new("RGBA", (video_width, video_height), (0, 0, 0, 0))
+
     font_path = WORKER_CACHE["font_path"]
     layout = WORKER_CACHE["layout"]
     iso_samples = WORKER_CACHE.get("iso_samples", [])
     exposure_samples = WORKER_CACHE.get("exposure_samples", [])
     temperature_samples = WORKER_CACHE.get("temperature_samples", [])
 
-    sample_t = (index * update_rate_step) / target_fps
     t0 = start_dt_utc if start_dt_utc is not None else speed_samples[0][0]
     current_dt_utc = t0 + timedelta(seconds=sample_t)
 
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
-
-    # Sprawdź czy klatka jest w wyciętym fragmencie — zwróć pustą przezroczystą nakładkę
-    cut_regions = WORKER_CACHE.get("_cut_regions", [])
-    sample_t = (index * update_rate_step) / target_fps
-    current_t = sample_t
-    for cut_start, cut_end in cut_regions:
-        if cut_start <= current_t <= cut_end:
-            from PIL import Image
-            return Image.new("RGBA", (video_width, video_height), (0, 0, 0, 0))
 
     from src.overlay_renderer import prepare_overlay_frame_data
     data = prepare_overlay_frame_data(
@@ -952,6 +992,8 @@ def render_overlay_frame(
         gps_track=data["gps_track"],
         target_dt=data["target_dt"],
         start_dt_utc=data["start_dt_utc"],
+        elapsed_seconds=data["elapsed_seconds"],
+        avg_speed_kmh=data["avg_speed_kmh"],
     )
 
 
