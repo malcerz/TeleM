@@ -171,6 +171,7 @@ def precache_map_tiles(
     zoom: int = 16,
     map_style: str = DEFAULT_MAP_STYLE,
     margin: int = 2,
+    zooms: list[int] | None = None,
 ) -> int:
     """Download all unique map tiles needed for the entire GPS track.
 
@@ -179,13 +180,21 @@ def precache_map_tiles(
     """
     if Image is None or not gps_track:
         return 0
+
+    if zooms is None:
+        zooms = [zoom]
+
     needed: set[tuple[int, int, int]] = set()
-    for _, lat, lon in gps_track:
-        tx = int(lon_to_tile_x(lon, zoom))
-        ty = int(lat_to_tile_y(lat, zoom))
-        for dx in range(-margin, margin + 1):
-            for dy in range(-margin, margin + 1):
-                needed.add((zoom, tx + dx, ty + dy))
+    for z in zooms:
+        for _, lat, lon in gps_track:
+            cx = lon_to_tile_x(lon, z)
+            cy = lat_to_tile_y(lat, z)
+            tx = int(cx)
+            ty = int(cy)
+            for dx in range(-margin, margin + 1):
+                for dy in range(-margin, margin + 1):
+                    needed.add((z, tx + dx, ty + dy))
+
     cnt = 0
     for z, x, y in needed:
         if download_tile(z, x, y, style=map_style, download=True) is not None:
@@ -204,6 +213,8 @@ def render_map_overlay(
     track_width: int = 3,
     marker_color: tuple[int, int, int, int] = (255, 255, 255, 255),
     marker_radius: int = 7,
+    hide_marker: bool = False,
+    hide_track: bool = False,
     margin: int = 4,
     download_missing: bool = True,
 ) -> Image.Image:
@@ -333,18 +344,19 @@ def render_map_overlay(
             points_px.append(None)
 
     segments: list[tuple[int, int]] = []
-    for pt in points_px:
-        if pt is None:
-            if len(segments) >= 2:
-                td.line(segments, fill=track_color, width=track_width, joint="curve")
-            segments = []
-        else:
-            segments.append(pt)
-    if len(segments) >= 2:
-        td.line(segments, fill=track_color, width=track_width, joint="curve")
+    if not hide_track:
+        for pt in points_px:
+            if pt is None:
+                if len(segments) >= 2:
+                    td.line(segments, fill=track_color, width=track_width, joint="curve")
+                segments = []
+            else:
+                segments.append(pt)
+        if len(segments) >= 2:
+            td.line(segments, fill=track_color, width=track_width, joint="curve")
 
     # ── Position marker ─────────────────────────────────────────────────
-    if 0 <= ci < len(points_px) and points_px[ci] is not None:
+    if not hide_marker and 0 <= ci < len(points_px) and points_px[ci] is not None:
         mx, my = points_px[ci]
         for r in range(marker_radius + 4, marker_radius - 1, -1):
             alpha = 80 if r > marker_radius + 1 else 200

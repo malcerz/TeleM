@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
-    QLabel, QLineEdit, QHBoxLayout, QFileDialog, QMessageBox,
+    QLabel, QHBoxLayout, QFileDialog, QMessageBox,
 )
 
 from src.gui.qt.signals import get_signals
@@ -27,50 +27,39 @@ class LoadTab(QWidget):
         vbox.setAlignment(Qt.AlignTop)
         vbox.setContentsMargins(24, 24, 24, 24)
 
-        # ── Sekcja MP4 (wymagane) ──────────────────────────────────────
+        # ── Sekcja Pliki źródłowe ──────────────────────────────────────
         group = QGroupBox("Pliki źródłowe")
         group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         form = QFormLayout(group)
-        form.setSpacing(12)
+        form.setSpacing(14)
 
-        # MP4
-        row_mp4 = QHBoxLayout()
-        self.edit_mp4 = QLineEdit()
-        self.edit_mp4.setReadOnly(True)
-        self.edit_mp4.setPlaceholderText("Wybierz plik(i) MP4...")
-        self.edit_mp4.setMinimumHeight(28)
-        row_mp4.addWidget(self.edit_mp4)
-        btn_mp4 = QPushButton("Wybierz")
-        btn_mp4.setMinimumHeight(28)
-        btn_mp4.clicked.connect(self._select_mp4)
-        row_mp4.addWidget(btn_mp4)
-        form.addRow("MP4 (wymagane):", row_mp4)
+        # Szerokie paski stylizowane na pola wejściowe z obsługą kliknięcia
+        self._placeholder_style = (
+            "QPushButton { text-align: left; padding: 4px 12px; background-color: #ffffff; "
+            "color: #666666; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; }"
+            "QPushButton:hover { background-color: #f5f5f5; border-color: #999999; color: #333333; }"
+        )
+        self._selected_style = (
+            "QPushButton { text-align: left; padding: 4px 12px; background-color: #ffffff; "
+            "color: #111111; border: 1.5px solid #0078d4; border-radius: 4px; font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #f0f7ff; border-color: #1084d4; }"
+        )
 
-        # GPX
-        row_gpx = QHBoxLayout()
-        self.edit_gpx = QLineEdit()
-        self.edit_gpx.setReadOnly(True)
-        self.edit_gpx.setPlaceholderText("(opcjonalnie)")
-        self.edit_gpx.setMinimumHeight(28)
-        row_gpx.addWidget(self.edit_gpx)
-        btn_gpx = QPushButton("Wybierz")
-        btn_gpx.setMinimumHeight(28)
-        btn_gpx.clicked.connect(self._select_gpx)
-        row_gpx.addWidget(btn_gpx)
-        form.addRow("GPX:", row_gpx)
+        # MP4 bar
+        self.btn_mp4 = QPushButton("Wybierz plik(i) MP4...")
+        self.btn_mp4.setMinimumHeight(34)
+        self.btn_mp4.setCursor(Qt.PointingHandCursor)
+        self.btn_mp4.setStyleSheet(self._placeholder_style)
+        self.btn_mp4.clicked.connect(self._select_mp4)
+        form.addRow("MP4 (wymagane):", self.btn_mp4)
 
-        # FIT
-        row_fit = QHBoxLayout()
-        self.edit_fit = QLineEdit()
-        self.edit_fit.setReadOnly(True)
-        self.edit_fit.setPlaceholderText("(opcjonalnie)")
-        self.edit_fit.setMinimumHeight(28)
-        row_fit.addWidget(self.edit_fit)
-        btn_fit = QPushButton("Wybierz")
-        btn_fit.setMinimumHeight(28)
-        btn_fit.clicked.connect(self._select_fit)
-        row_fit.addWidget(btn_fit)
-        form.addRow("FIT:", row_fit)
+        # Telemetry bar (FIT / GPX)
+        self.btn_telemetry = QPushButton("Wybierz FIT/GPX (opcjonalnie)...")
+        self.btn_telemetry.setMinimumHeight(34)
+        self.btn_telemetry.setCursor(Qt.PointingHandCursor)
+        self.btn_telemetry.setStyleSheet(self._placeholder_style)
+        self.btn_telemetry.clicked.connect(self._select_telemetry)
+        form.addRow("FIT / GPX:", self.btn_telemetry)
 
         vbox.addWidget(group)
 
@@ -111,26 +100,25 @@ class LoadTab(QWidget):
             "Wideo (*.mp4 *.MP4 *.mov *.MOV)",
         )
         if paths:
-            self.edit_mp4.setText("; ".join(paths))
             self._video_paths = paths
+            self.btn_mp4.setText("; ".join(paths))
+            self.btn_mp4.setStyleSheet(self._selected_style)
 
-    def _select_gpx(self) -> None:
+    def _select_telemetry(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Wybierz plik GPX", "",
-            "GPX (*.gpx *.GPX)",
+            self, "Wybierz plik FIT lub GPX", "",
+            "Pliki telemetryczne (*.fit *.FIT *.gpx *.GPX);;FIT (*.fit *.FIT);;GPX (*.gpx *.GPX)",
         )
         if path:
-            self.edit_gpx.setText(path)
-            self._gpx_path = path
-
-    def _select_fit(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Wybierz plik FIT", "",
-            "FIT (*.fit *.FIT)",
-        )
-        if path:
-            self.edit_fit.setText(path)
-            self._fit_path = path
+            ext = path.lower()
+            if ext.endswith(".fit"):
+                self._fit_path = path
+                self._gpx_path = ""
+            elif ext.endswith(".gpx"):
+                self._gpx_path = path
+                self._fit_path = ""
+            self.btn_telemetry.setText(path)
+            self.btn_telemetry.setStyleSheet(self._selected_style)
 
     def _on_load(self) -> None:
         if not self._video_paths:
@@ -156,9 +144,10 @@ class LoadTab(QWidget):
                 pass
 
     def _on_clear(self) -> None:
-        self.edit_mp4.clear()
-        self.edit_gpx.clear()
-        self.edit_fit.clear()
+        self.btn_mp4.setText("Wybierz plik(i) MP4...")
+        self.btn_mp4.setStyleSheet(self._placeholder_style)
+        self.btn_telemetry.setText("Wybierz FIT/GPX (opcjonalnie)...")
+        self.btn_telemetry.setStyleSheet(self._placeholder_style)
         self._video_paths = []
         self._gpx_path = ""
         self._fit_path = ""

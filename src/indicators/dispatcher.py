@@ -53,7 +53,8 @@ def render_value_indicator(
     min_dim = min(canvas_w, canvas_h)
     outline_raw = int(layout["global"].get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
-    fs = max(8, s(cfg.get("font_size", 0.02), min_dim))
+    fs_val = cfg.get("font_size") if "font_size" in cfg else cfg.get("size", 0.02)
+    fs = max(8, s(fs_val, min_dim))
     font = load_font(font_path, fs)
 
     val_min = float(cfg.get("min_val", 0))
@@ -83,7 +84,7 @@ def render_value_indicator(
     elif form == "bar":
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "gauge":
-        return _render_gauge_indicator(**_kwargs)
+        return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "chart":
         return _render_chart_indicator(
             **_kwargs,
@@ -92,7 +93,7 @@ def render_value_indicator(
             formatted_val=formatted_val,
         )
     elif form == "segment_bar":
-        return _render_segment_bar_indicator(**_kwargs)
+        return _render_segment_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "static_map":
         return _render_static_map_indicator(
             **_kwargs,

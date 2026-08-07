@@ -37,7 +37,12 @@ def _render_static_map_indicator(
             _render_static_map_indicator._precached = set()
         if _pc_key not in _render_static_map_indicator._precached:
             _render_static_map_indicator._precached.add(_pc_key)
-            threading.Thread(target=precache_map_tiles, args=(gps_track, zoom, map_style), daemon=True).start()
+            zooms_to_cache = list(range(13, 19))
+            if zoom not in zooms_to_cache:
+                zooms_to_cache.append(zoom)
+            zooms_to_cache.sort(key=lambda z: abs(z - zoom))
+            
+            threading.Thread(target=precache_map_tiles, args=(gps_track, zoom, map_style, 2, zooms_to_cache), daemon=True).start()
             _is_first = True
         else:
             _is_first = False
@@ -62,12 +67,25 @@ def _render_static_map_indicator(
             ci = int(round((current_position if current_position is not None else 0.0) * (len(gps_track) - 1)))
             ci = max(0, min(len(gps_track) - 1, ci))
 
+        track_color_cfg = cfg.get("track_color", "#FF3C1E")
+        track_color = _parse_marker_color(track_color_cfg)
+        if len(track_color) == 3:
+            track_color = (*track_color, 220)
+            
+        track_width = int(cfg.get("track_width", 3))
+        hide_marker = bool(cfg.get("hide_marker", False))
+        hide_track = bool(cfg.get("hide_track", False))
+
         map_img = render_map_overlay(
             gps_track, ci, map_w, map_h,
             zoom=zoom, map_style=map_style,
             marker_radius=int(cfg.get("marker_size", 7)),
             marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
-            download_missing=_is_first,
+            track_color=track_color,
+            track_width=track_width,
+            hide_marker=hide_marker,
+            hide_track=hide_track,
+            download_missing=False,
         )
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:

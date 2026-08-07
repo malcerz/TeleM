@@ -17,6 +17,7 @@ from src.indicators.helpers import load_font, parse_hex_color, s
 def _render_segment_bar_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
+    formatted_val=None,
 ):
     """Render a segment-bar indicator."""
     ss = max(1, ss)
@@ -113,7 +114,8 @@ def _render_segment_bar_indicator(
         except Exception:
             seg_font = font
         seg_outline = max(1, seg_fs // 12)
-        txt_color = (255, 255, 255, 255)
+        txt_color_rgb = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
+        txt_color = (txt_color_rgb[0], txt_color_rgb[1], txt_color_rgb[2], 255)
         dim_color = (180, 180, 180, 255)
 
     y_bottom, x_margin = bar_h - seg_fs - 2, 4
@@ -125,7 +127,7 @@ def _render_segment_bar_indicator(
 
     min_str = f"{min_value:.{decimals}f}" if decimals else f"{min_value:.0f}"
     max_str = f"{max_value:.{decimals}f}" if decimals else f"{max_value:.0f}"
-    val_str = f"{value:.{decimals}f}" if decimals else f"{value:.0f}"
+    val_str = formatted_val if formatted_val is not None else (f"{value:.{decimals}f}" if decimals else f"{value:.0f}")
 
     if show_min:
         draw.text((x_margin, y_bottom), min_str, font=seg_font,

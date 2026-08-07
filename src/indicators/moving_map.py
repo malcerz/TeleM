@@ -34,17 +34,37 @@ def _render_moving_map_indicator(
             _render_moving_map_indicator._map_renderers = {}
         _cache = _render_moving_map_indicator._map_renderers
 
+        track_color_cfg = cfg.get("track_color", "#FF3C1E")
+        track_color = _parse_marker_color(track_color_cfg)
+        if len(track_color) == 3:
+            track_color = (*track_color, 220)
+        track_width = int(cfg.get("track_width", 3))
+
         if cache_key not in _cache:
             renderer = MovingMapRenderer(
                 gps_track, zoom=zoom, style=map_style,
                 marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
                 marker_radius=int(cfg.get("marker_size", 7)),
+                track_color=track_color,
+                track_width=track_width,
             )
             _cache[cache_key] = renderer
             renderer._is_first_render = True
-            renderer.background_precache(margin=2)
+            
+            # Precache common zoom levels to make slider smoother
+            zooms_to_cache = list(range(13, 19))
+            if zoom not in zooms_to_cache:
+                zooms_to_cache.append(zoom)
+            zooms_to_cache.sort(key=lambda z: abs(z - zoom))
+            
+            renderer.background_precache(margin=2, zooms=zooms_to_cache)
         else:
             renderer = _cache[cache_key]
+            # Update renderer properties that can change dynamically
+            renderer._trk_color = track_color
+            renderer._trk_width = track_width
+            renderer._mkr_color = _parse_marker_color(cfg.get("marker_color", "#FFFFFF"))
+            renderer._mkr_radius = int(cfg.get("marker_size", 7))
 
         map_w = size_px
         map_h = max(40, int(map_w * 0.65))
@@ -61,7 +81,15 @@ def _render_moving_map_indicator(
             ts = (current_position if current_position is not None else 0.0) * dur
         
         dl_missing = getattr(renderer, '_is_first_render', False)
-        map_img = renderer.render(ts, map_w, map_h, download_missing=dl_missing)
+        hide_marker = bool(cfg.get("hide_marker", False))
+        hide_track = bool(cfg.get("hide_track", False))
+        
+        map_img = renderer.render(
+            ts, map_w, map_h, 
+            download_missing=False,
+            draw_track=not hide_track,
+            draw_marker=not hide_marker
+        )
         renderer._is_first_render = False
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:

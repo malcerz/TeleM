@@ -59,14 +59,24 @@ def _render_chart_indicator(
         if gc:
             grid_rgba = (gc[0], gc[1], gc[2], 60)
 
+    line_width = int(cfg.get("line_width", cfg.get("thickness", 2)))
+    custom_min = float(cfg["min_val"]) if "min_val" in cfg else None
+    custom_max = float(cfg["max_val"]) if "max_val" in cfg else None
+    label_count = int(cfg.get("label_count", 2))
+    label_units = bool(cfg.get("label_units", False))
+    show_average = bool(cfg.get("show_average", False))
+
     chart_img = generate_history_chart(
         chart_vals, chart_w, chart_h,
         line_color=line_clr,
-        line_thickness=max(1, int(float(cfg.get("thickness", 1)))),
+        line_thickness=max(1, line_width),
         fill_alpha=chart_fill_alpha, fill_color=chart_fill_color,
         current_index=ci, cursor_color=(255, 255, 255),
         show_axes=True, grid_color=grid_rgba,
         time_labels=time_labels, supersample=1,
+        custom_min_val=custom_min, custom_max_val=custom_max,
+        label_count=label_count, label_units=label_units, unit=unit,
+        show_average=show_average,
     )
 
     margin_top = fs + 8 if label else 0
@@ -74,19 +84,26 @@ def _render_chart_indicator(
     final_img = Image.new("RGBA", (chart_w + 8, final_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(final_img)
 
+    text_color_rgb = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
+    text_color = (text_color_rgb[0], text_color_rgb[1], text_color_rgb[2], 255)
+
+    tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
+    toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
+
     if label:
         draw.text(
-            (4, 0), label, font=font,
-            fill=(210, 210, 210, 255),
+            (4 + tox, toy), label, font=font,
+            fill=text_color,
             stroke_width=outline, stroke_fill=(0, 0, 0, 255),
         )
     final_img.paste(chart_img, (4, margin_top), chart_img)
 
-    v_str = formatted_val if formatted_val else f"{value:.1f} {unit}"
-    vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0
-    draw.text(
-        (chart_w - vw, 0), v_str, font=font,
-        fill=(255, 255, 255, 255),
-        stroke_width=outline, stroke_fill=(0, 0, 0, 255),
-    )
+    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
+    if v_str:
+        vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0
+        draw.text(
+            (chart_w - vw + tox, toy), v_str, font=font,
+            fill=text_color,
+            stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+        )
     return final_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

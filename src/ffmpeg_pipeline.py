@@ -70,49 +70,52 @@ def _test_hwaccel(hwaccel: str) -> bool:
         return False
 
 
-def detect_gpu_decoder() -> str | None:
+def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
     """Return the best ``-hwaccel`` flag for this system, or ``None`` for CPU.
 
+    If *preferred_encoder* is 'intel', prefers 'qsv' or 'd3d11va'.
+    If *preferred_encoder* is 'nv', prefers 'cuda'.
     Checks NVIDIA (nvidia-smi), then queries ffmpeg -hwaccels for available
     hardware accelerators and validates each candidate with a short test.
-    Result is cached in ``_GPU_DECODER_CACHE``.
+    Result is cached per preferred encoder in ``_GPU_DECODER_CACHE``.
     """
     global _GPU_DECODER_CACHE
-    if _GPU_DECODER_CACHE is not False:
-        return _GPU_DECODER_CACHE  # type: ignore[return-value]
+    cache_key = preferred_encoder.lower()
+    if isinstance(_GPU_DECODER_CACHE, dict) and cache_key in _GPU_DECODER_CACHE:
+        return _GPU_DECODER_CACHE[cache_key]
 
-    _GPU_DECODER_CACHE = None  # default: CPU only
+    if not isinstance(_GPU_DECODER_CACHE, dict):
+        _GPU_DECODER_CACHE = {}
 
-    # 1) NVIDIA CUDA – quick check via nvidia-smi
-    try:
-        r = subprocess.run(
-            ["nvidia-smi"], capture_output=True, timeout=5,
-            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
-        )
-        if r.returncode == 0 and _test_hwaccel("cuda"):
-            _GPU_DECODER_CACHE = "cuda"
-            return "cuda"
-    except Exception:
-        pass
+    selected_hw = None
 
-    # 2) Probe available hwaccels and test each in priority order
-    try:
-        r = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-hwaccels"],
-            capture_output=True, text=True, timeout=5,
-            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
-        )
-        if r.returncode == 0:
-            accels = r.stdout.lower()
-            # Prefer d3d11va on Windows (AMD + Intel), qsv on Intel, vaapi on Linux
-            for hw in ("cuda", "d3d11va", "qsv", "vaapi", "vulkan"):
-                if hw in accels and _test_hwaccel(hw):
-                    _GPU_DECODER_CACHE = hw
-                    return hw
-    except Exception:
-        pass
+    if preferred_encoder == "intel":
+        # On dual GPU systems (NVIDIA + Intel), '-hwaccel qsv' often locks up FFmpeg
+        # when decoding input video in a pipe. 'd3d11va' / 'dxva2' work reliably on Intel GPU.
+        for hw in ("d3d11va", "dxva2", "vulkan"):
+            if _test_hwaccel(hw):
+                selected_hw = hw
+                break
+    elif preferred_encoder == "nv":
+        try:
+            r = subprocess.run(
+                ["nvidia-smi"], capture_output=True, timeout=5,
+                **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
+            )
+            if r.returncode == 0 and _test_hwaccel("cuda"):
+                selected_hw = "cuda"
+        except Exception:
+            pass
 
-    return None
+    if selected_hw is None:
+        # Fallback priority check
+        for hw in ("cuda", "qsv", "d3d11va", "vaapi", "vulkan"):
+            if _test_hwaccel(hw):
+                selected_hw = hw
+                break
+
+    _GPU_DECODER_CACHE[cache_key] = selected_hw
+    return selected_hw
 
 
 def _nt_startupinfo() -> Any:
@@ -220,6 +223,7 @@ def init_worker(
     update_rate_step: int = 1,
     total_overlay_frames: Optional[int] = None,
     cut_regions: Optional[list[tuple[float, float]]] = None,
+    effective_rotation: int = 0,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes."""
     WORKER_CACHE["video_width"] = video_width
@@ -309,8 +313,9 @@ def init_worker(
 
     WORKER_CACHE["_prep_cache"] = _prep_cache
 
-    # ── Cut regions ────────────────────────────────────────────────────────
+    # ── Cut regions & rotation ─────────────────────────────────────────────
     WORKER_CACHE["_cut_regions"] = cut_regions or []
+    WORKER_CACHE["effective_rotation"] = effective_rotation
 
 
 # ── Worker cache helpers ────────────────────────────────────────────────────
@@ -580,6 +585,16 @@ def render_overlay_job(job: tuple) -> int:
         elapsed_seconds=_elapsed,
         avg_speed_kmh=_avg_spd,
     )
+    rot = WORKER_CACHE.get("effective_rotation", 0) % 360
+    if rot == 180:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_180)
+    elif rot == 90:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_270)
+    elif rot == 270:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_90)
     img.save(overlay_dir / f"overlay_{index:06d}.bmp", format="BMP")
     return index
 
@@ -753,6 +768,7 @@ def _build_stream_ffmpeg_cmd(
     rotation_degrees: int,
     hwaccel: str | None = None,
     cut_regions: list[tuple[float, float]] | None = None,
+    audio_input_args: list[str] | None = None,
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command for the streaming pipeline.
 
@@ -762,17 +778,7 @@ def _build_stream_ffmpeg_cmd(
     that decoding, overlay and rotation all happen on the CPU without
     format-negotiation issues between ``hflip`` and the encoder.
     """
-    hwaccel_cuda = bool(hwaccel == "cuda")
-    needs_rotation = bool(
-        rotation_degrees in (90, 180, 270) or container_rotation == 180
-    )
-    use_gpu_overlay = hwaccel_cuda and not needs_rotation
     target_res = RESOLUTION_MAP.get(resolution_name)
-
-    # Safety: never try GPU→CPU overlay without hwdownload (caller should
-    # have cleared hwaccel when rotation is needed, but just in case).
-    if hwaccel_cuda and needs_rotation:
-        hwaccel_cuda = False
 
     # ── Base filter (video scaling) ─────────────────────────────────────
     if target_res and encoder == "nv":
@@ -782,53 +788,19 @@ def _build_stream_ffmpeg_cmd(
         )
     elif target_res:
         base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
-    elif use_gpu_overlay:
-        base_filter = "[0:v]null[base]"               # stay on GPU
     else:
         base_filter = "[0:v]null[base]"
 
     # ── Overlay stream & operator ───────────────────────────────────────
-    if use_gpu_overlay:
-        ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
-        ov_op = "overlay_cuda"
-    else:
-        ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
-        ov_op = "overlay"
+    ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
+    ov_op = "overlay"
 
-    # ── Filter complex (per rotation variant) ───────────────────────────
-    if container_rotation in (90, 270):
-        filter_complex = (
-            f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
-        )
-    elif rotation_degrees == 180 or container_rotation == 180:
-        filter_complex = (
-            f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]format=yuv420p,vflip,hflip[vtemp2]"
-        )
-    elif rotation_degrees == 90:
-        filter_complex = (
-            f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]transpose=1[vtemp2]"
-        )
-    elif rotation_degrees == 270:
-        filter_complex = (
-            f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
-            f"[vtemp]transpose=2[vtemp2]"
-        )
-    else:
-        filter_complex = (
-            f"{base_filter};{ov_input};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
-        )
+    filter_complex = (
+        f"{base_filter};{ov_input};"
+        f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
+    )
 
     # ── Cut region drop (select filter) ────────────────────────────────
-    has_rotation = any(
-        d in (180, 90, 270) for d in (container_rotation, rotation_degrees)
-    )
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
     if has_cuts:
         # Build select/aselect expression: drop frames in cut regions
@@ -836,17 +808,15 @@ def _build_stream_ffmpeg_cmd(
         for cs, ce in cut_regions:
             parts.append(f"between(t,{cs},{ce})")
         select_expr = "not(" + "+".join(parts) + ")"
-        tag_in = "[vtemp]" if not has_rotation else "[vtemp2]"
         filter_complex += (
-            f";{tag_in}select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
         )
         # Audio: aselect – tnie ścieżkę audio tak samo jak wideo
+        audio_idx = "2" if audio_input_args else "0"
         filter_complex += (
-            f";[0:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
+            f";[{audio_idx}:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
         )
         print(f"[CUT] select filter: {select_expr}", flush=True)
-    elif has_rotation:
-        filter_complex += ";[vtemp2]null[vout]"
     else:
         filter_complex += ";[vtemp]null[vout]"
 
@@ -857,19 +827,25 @@ def _build_stream_ffmpeg_cmd(
         "-s", f"{overlay_w}x{overlay_h}",
         "-r", str(generation_fps),
         "-i", "pipe:0",
+    ]
+    if audio_input_args:
+        cmd.extend(audio_input_args)
+    cmd.extend([
         "-filter_complex", filter_complex,
         "-map", "[vout]",
-    ]
+    ])
 
     if has_cuts:
         # Gdy są cięcia – audio przechodzi przez aselect, potrzebuje re-encoda
         cmd.extend(["-map", "[aout]?"])
     else:
         # Bez cięć – audio kopiowane wprost z pliku
-        cmd.extend(["-map", "0:a?"])
+        audio_idx = "2" if audio_input_args else "0"
+        cmd.extend(["-map", f"{audio_idx}:a?"])
 
+    effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     cmd.extend([
-        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
+        "-map_metadata", "-1", "-metadata:s:v:0", f"rotate={effective_rotation}",
     ])
 
     if encoder == "nv":
@@ -939,7 +915,34 @@ def render_overlay_frame(
     exposure_samples = WORKER_CACHE.get("exposure_samples", [])
     temperature_samples = WORKER_CACHE.get("temperature_samples", [])
 
-    t0 = start_dt_utc if start_dt_utc is not None else speed_samples[0][0]
+    t0 = start_dt_utc
+    if t0 is None:
+        fallback_lists = [
+            speed_samples, track_samples, alt_samples,
+            WORKER_CACHE.get("gpx_speed_samples"),
+            WORKER_CACHE.get("gpx_track_samples"),
+            WORKER_CACHE.get("gpx_alt_samples"),
+        ]
+        fit_dict = WORKER_CACHE.get("fit_data")
+        if fit_dict and isinstance(fit_dict, dict):
+            fallback_lists.extend(fit_dict.values())
+
+        for lst in fallback_lists:
+            if lst and len(lst) > 0 and lst[0] and len(lst[0]) > 0:
+                t0 = lst[0][0]
+                break
+        if t0 is None:
+            from datetime import timezone
+            t0 = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    # Upewnij się, że t0 to datetime (konwertuj float/int sekundy z epoch na datetime)
+    if not isinstance(t0, datetime):
+        from datetime import timezone
+        try:
+            t0 = datetime.fromtimestamp(float(t0), timezone.utc)
+        except Exception:
+            t0 = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
     current_dt_utc = t0 + timedelta(seconds=sample_t)
 
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
@@ -973,7 +976,7 @@ def render_overlay_frame(
         _range_cache=WORKER_CACHE.get("_prep_cache"),
     )
 
-    return compose_overlay(
+    img = compose_overlay(
         video_width, video_height, layout, font_path,
         data["date_text"], data["time_text"],
         data["speed_value"], data["distance_m"], data["max_distance_m"],
@@ -995,6 +998,17 @@ def render_overlay_frame(
         elapsed_seconds=data["elapsed_seconds"],
         avg_speed_kmh=data["avg_speed_kmh"],
     )
+    rot = WORKER_CACHE.get("effective_rotation", 0) % 360
+    if rot == 180:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_180)
+    elif rot == 90:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_270)
+    elif rot == 270:
+        from PIL import Image
+        img = img.transpose(Image.ROTATE_90)
+    return img
 
 
 # ── Frame bytes job (streaming worker) ──────────────────────────────────────
@@ -1225,6 +1239,7 @@ def stream_overlay_to_ffmpeg(
     generation_fps = target_fps / update_rate_step
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
 
+    effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     init_worker(
         overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
         iso_samples, exposure_samples, temperature_samples,
@@ -1236,25 +1251,18 @@ def stream_overlay_to_ffmpeg(
         speed_samples, track_samples, alt_samples,
         target_fps, update_rate_step, total_overlay_frames,
         cut_regions=cut_regions,
+        effective_rotation=effective_rotation,
     )
 
     if cancel_event is not None and cancel_event.is_set():
         return 0
 
     # Build FFmpeg input args
-    hwaccel = detect_gpu_decoder()
-    needs_rotation = bool(
-        rotation_degrees in (90, 180, 270) or container_rotation == 180
-    )
-    # Rotation filters (vflip/hflip/transpose) are CPU-only – skip hwaccel
-    # to avoid format negotiation issues between hwdownload → overlay → hflip.
-    if needs_rotation:
-        hwaccel = None
+    hwaccel = detect_gpu_decoder(encoder)
     input_args: list[str] = []
+    audio_input_args: list[str] = []
     if hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
-        if hwaccel == "qsv":
-            input_args.extend(["-hwaccel_output_format", "nv12"])
     if isinstance(input_files, list) and len(input_files) > 1:
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         with open(concat_txt, "w", encoding="utf-8") as f:
@@ -1262,9 +1270,12 @@ def stream_overlay_to_ffmpeg(
                 escaped_p = str(p.absolute()).replace("'", "'\\''")
                 f.write(f"file '{escaped_p}'\n")
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
+        audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        input_args.extend(["-autorotate", "-i", str(input_file)])
+        auto_rot = "-noautorotate" if container_rotation != 0 else "-autorotate"
+        input_args.extend([auto_rot, "-i", str(input_file)])
+        audio_input_args.extend(["-i", str(input_file)])
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
@@ -1274,6 +1285,7 @@ def stream_overlay_to_ffmpeg(
         container_rotation, rotation_degrees,
         hwaccel=hwaccel,
         cut_regions=cut_regions,
+        audio_input_args=audio_input_args,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
@@ -1334,7 +1346,7 @@ def stream_overlay_to_ffmpeg(
 
             # ── Shared Memory pool ──────────────────────────────────────
             # Number of SHM slots: enough to keep workers busy + reorder buffer
-            MAX_IN_FLIGHT = max(4, n_workers * 6)
+            MAX_IN_FLIGHT = max(4, n_workers * 2)
             n_shm_slots = MAX_IN_FLIGHT
             shm_pool = SharedFramePool(n_shm_slots, frame_size)
             shm_names = shm_pool.shm_names()
@@ -1349,6 +1361,7 @@ def stream_overlay_to_ffmpeg(
                 start_dt_utc, tz_offset_hours,
                 speed_samples, track_samples, alt_samples,
                 target_fps, update_rate_step, total_overlay_frames,
+                cut_regions, effective_rotation,
             )
 
             print(
@@ -1614,20 +1627,10 @@ def apply_overlay_video(
     """Apply a pre-rendered overlay video onto the source video."""
     base_chain = scale_filter_for_resolution(resolution_name)
 
-    hwaccel = detect_gpu_decoder()
-    needs_rotation = bool(
-        rotation_degrees in (90, 180, 270) or container_rotation == 180
-    )
+    hwaccel = detect_gpu_decoder(encoder)
 
-    # Rotation filters (vflip/hflip/transpose) are CPU-only – skip hwaccel
-    # to avoid format-negotiation issues between hflip and the encoder.
-    if needs_rotation:
-        hwaccel = None
-
-    # GPU overlay when CUDA is active and no rotation is needed.
-    use_gpu = (hwaccel == "cuda") and not needs_rotation
-
-    if use_gpu:
+    # Hardware acceleration works natively with rotation metadata in container
+    if hwaccel == "cuda":
         ov_op = "overlay_cuda"
         ov_fps = f"[1:v]fps={target_fps},format=rgba,hwupload_cuda"
     else:
@@ -1650,19 +1653,10 @@ def apply_overlay_video(
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        input_args.extend(["-autorotate", "-i", str(input_file)])
+        auto_rot = "-noautorotate" if container_rotation != 0 else "-autorotate"
+        input_args.extend([auto_rot, "-i", str(input_file)])
 
-    if container_rotation == 180:
-        filter_complex = (
-            f"{base_chain};{ov_chain};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vout]"
-        )
-    elif container_rotation in (90, 270):
-        filter_complex = (
-            f"{base_chain};{ov_chain};"
-            f"[base][ov]{ov_op}=0:0:shortest=1[vout]"
-        )
-    elif rotation_degrees == 180:
+    if rotation_degrees == 180:
         filter_complex = (
             f"{base_chain};{ov_chain};"
             f"[base][ov]{ov_op}=0:0:shortest=1[vtemp];"
@@ -1686,13 +1680,14 @@ def apply_overlay_video(
             f"[base][ov]{ov_op}=0:0:shortest=1[vout]"
         )
 
+    effective_rotation = container_rotation if container_rotation != 0 else (rotation_degrees if rotation_degrees != 0 else 0)
     cmd: list[str] = [
         ffmpeg_exe, "-y",
         *input_args,
         "-i", str(overlay_video),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "0:a?",
-        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
+        "-map_metadata", "-1", "-metadata:s:v:0", f"rotate={effective_rotation}",
     ]
 
     try:

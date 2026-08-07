@@ -183,13 +183,20 @@ class MovingMapRenderer:
 
     # ── Offline pre-cache ───────────────────────────────────────────
 
-    def precache_tiles(self, margin=2) -> int:
-        """Download ALL tiles needed for the entire track. Returns count."""
+    def precache_tiles(self, margin=2, zooms=None) -> int:
+        """Download ALL tiles needed for the entire track for given zooms. Returns count."""
+        if zooms is None:
+            zooms = [self._zoom]
+            
         needed: set[tuple] = set()
-        for tx, ty in self._tiles:
-            for dx in range(-margin, margin + 1):
-                for dy in range(-margin, margin + 1):
-                    needed.add((self._zoom, tx + dx, ty + dy))
+        for z in zooms:
+            # We must recalculate tile coords for each zoom level!
+            for _, lat, lon in self._gps:
+                from src.moving_map import _lat_lon_to_tile
+                tx, ty, _, _ = _lat_lon_to_tile(lat, lon, z)
+                for dx in range(-margin, margin + 1):
+                    for dy in range(-margin, margin + 1):
+                        needed.add((z, tx + dx, ty + dy))
         cnt = 0
         for z, x, y in needed:
             if self._cache.get(z, x, y, self._style): continue
@@ -197,17 +204,18 @@ class MovingMapRenderer:
             if d: self._cache.put(z, x, y, self._style, d); cnt += 1
         return cnt
 
-    def background_precache(self, margin=2, done_callback=None) -> threading.Thread:
-        """Uruchamia w tle pobieranie wszystkich kafelków dla całej trasy.
+    def background_precache(self, margin=2, done_callback=None, zooms=None) -> threading.Thread:
+        """Uruchamia w tle pobieranie kafelków dla zadanych zoomów i całej trasy.
 
         Args:
             margin: Liczba dodatkowych kafelków wokół każdego punktu GPS.
             done_callback: Opcjonalna funkcja wołana po zakończeniu cache'owania.
+            zooms: Lista poziomów zoom do zbuforowania. Domyślnie tylko aktualny.
         Returns:
             Wątek wykonujący precache (daemon, można go ignorować).
         """
         def _run():
-            self.precache_tiles(margin=margin)
+            self.precache_tiles(margin=margin, zooms=zooms)
             if done_callback:
                 try:
                     done_callback()

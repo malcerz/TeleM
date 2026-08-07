@@ -11,7 +11,7 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.helpers import s
+from src.indicators.helpers import s, parse_hex_color
 
 
 def _render_bar_indicator(
@@ -24,13 +24,15 @@ def _render_bar_indicator(
     img = Image.new("RGBA", (w + 40 * ss, h + 30 * ss), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    v_str = f"{value:.1f} {unit}"
+    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
     show_value = cfg.get("show_value", True)
+
+    text_color = parse_hex_color(cfg.get("text_color", "#D2D2D2")) or (210, 210, 210)
 
     if label:
         draw.text(
             (20 * ss, 0), label, font=font,
-            fill=(210, 210, 210, 255),
+            fill=(text_color[0], text_color[1], text_color[2], 255),
             stroke_width=outline, stroke_fill=(0, 0, 0, 255),
         )
 

@@ -32,6 +32,7 @@ class PropertyEditor(QWidget):
         self.signals = get_signals()
         self._current_key: str = ""
         self._suppress_emit: bool = False
+        self._field_widgets: dict[str, QWidget] = {}
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -59,16 +60,9 @@ class PropertyEditor(QWidget):
             "  border: 1px solid #800000; border-radius: 3px;"
             "  padding: 2px 8px; font-size: 10px; font-weight: bold;"
             "}"
-            "QPushButton:hover {"
-            "  background-color: #7a0000; color: #ffaaaa;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #3a0000;"
-            "}"
+            "QPushButton:hover { background-color: #800000; }"
         )
-        self.delete_btn.clicked.connect(
-            lambda: self.signals.sig_delete_indicator.emit(self._current_key)
-        )
+        self.delete_btn.clicked.connect(self._on_delete_clicked)
         self.delete_btn.setVisible(False)
         row.addWidget(self.delete_btn)
         row.addStretch()
@@ -91,10 +85,36 @@ class PropertyEditor(QWidget):
         self.placeholder.setWordWrap(True)
         layout.addWidget(self.placeholder)
 
+    def _on_delete_clicked(self) -> None:
+        self.signals.sig_delete_indicator.emit(self._current_key)
+
+    def update_field_values(self, values: dict) -> None:
+        """Aktualizuje wartości w istniejących widgetach bez przebudowywania UI."""
+        self._suppress_emit = True
+        try:
+            for name, val in values.items():
+                w = self._field_widgets.get(name)
+                if w is None or val is None:
+                    continue
+                if isinstance(w, QDoubleSpinBox):
+                    w.setValue(float(val))
+                elif isinstance(w, QSpinBox):
+                    w.setValue(int(val))
+                elif isinstance(w, QCheckBox):
+                    w.setChecked(bool(val))
+                elif isinstance(w, QComboBox):
+                    w.setCurrentText(str(val))
+                elif isinstance(w, QLineEdit):
+                    w.setText(str(val))
+            if "smoothing" in values and hasattr(self, "_smoothing_spin") and self._smoothing_spin:
+                self._smoothing_spin.setValue(int(values["smoothing"]))
+        finally:
+            self._suppress_emit = False
+
     def on_properties_ready(
         self, stream_key: str, schema: list[FieldSchema], values: dict,
     ) -> None:
-        """Kontroler wysłał schemat i wartości — zbuduj formularz."""
+        """Kontroler wysłał schemat i wartości — zbuduj formularz lub zaktualizuj wartości."""
         if not stream_key:
             # Wyczyść panel
             self._current_key = ""
@@ -104,6 +124,11 @@ class PropertyEditor(QWidget):
             self.form_container.setVisible(False)
             if self.form_container.layout():
                 self._clear_layout(self.form_container.layout())
+            self._field_widgets.clear()
+            return
+
+        if self._current_key == stream_key and len(self._field_widgets) == len(schema):
+            self.update_field_values(values)
             return
 
         self._current_key = stream_key
@@ -111,6 +136,7 @@ class PropertyEditor(QWidget):
         self.delete_btn.setVisible(True)
         self.placeholder.setVisible(False)
 
+        self._field_widgets.clear()
         self._build_form(schema, values)
         self.form_container.setVisible(True)
 
@@ -167,7 +193,7 @@ class PropertyEditor(QWidget):
 
         # ── Zakładki ──────────────────────────────────────────────────
         tab_order = ["Text", "Data", "Czas", "Od początku", "Śr. prędkość",
-                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Shape"]
+                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Path", "Shape"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
         for field in schema:
             if field.tab in grouped:
@@ -226,15 +252,16 @@ class PropertyEditor(QWidget):
         """Tworzy widget dla pojedynczego pola schematu."""
         name = field.name
 
+        res_widget = None
         if field.field_type == "bool":
             cb = QCheckBox()
             cb.setChecked(bool(value))
             cb.toggled.connect(
                 lambda checked, n=name: self._emit_change(n, checked)
             )
-            return cb
+            res_widget = cb
 
-        if field.field_type == "choice":
+        elif field.field_type == "choice":
             cmb = QComboBox()
             if field.choices:
                 cmb.addItems([str(c) for c in field.choices])
@@ -243,9 +270,9 @@ class PropertyEditor(QWidget):
             cmb.currentTextChanged.connect(
                 lambda txt, n=name: self._emit_change(n, txt)
             )
-            return cmb
+            res_widget = cmb
 
-        if field.field_type == "int":
+        elif field.field_type == "int":
             spin = QSpinBox()
             if field.min_val is not None and field.max_val is not None:
                 spin.setRange(int(field.min_val), int(field.max_val))
@@ -259,9 +286,9 @@ class PropertyEditor(QWidget):
             spin.valueChanged.connect(
                 lambda v, n=name: self._emit_change(n, v)
             )
-            return spin
+            res_widget = spin
 
-        if field.field_type == "float":
+        elif field.field_type == "float":
             spin = QDoubleSpinBox()
             if field.min_val is not None and field.max_val is not None:
                 spin.setRange(float(field.min_val), float(field.max_val))
@@ -277,16 +304,16 @@ class PropertyEditor(QWidget):
             spin.valueChanged.connect(
                 lambda v, n=name: self._emit_change(n, v)
             )
-            return spin
+            res_widget = spin
 
-        if field.field_type == "text":
+        elif field.field_type == "text":
             edit = QLineEdit(str(value) if value is not None else "")
             edit.textChanged.connect(
                 lambda txt, n=name: self._emit_change(n, txt)
             )
-            return edit
+            res_widget = edit
 
-        if field.field_type == "color":
+        elif field.field_type == "color":
             row = QWidget()
             hbox = QHBoxLayout(row)
             hbox.setContentsMargins(0, 0, 0, 0)
@@ -300,7 +327,6 @@ class PropertyEditor(QWidget):
             )
             hbox.addWidget(edit)
 
-            # Podgląd koloru
             color_swatch = QLabel()
             color_swatch.setFixedSize(24, 24)
             color_swatch.setStyleSheet(
@@ -318,9 +344,12 @@ class PropertyEditor(QWidget):
             hbox.addWidget(btn)
             hbox.addStretch()
 
+            self._field_widgets[name] = edit
             return row
 
-        return None
+        if res_widget is not None:
+            self._field_widgets[name] = res_widget
+        return res_widget
 
     def _pick_color(self, edit: QLineEdit, swatch: QLabel) -> None:
         color = QColorDialog.getColor()

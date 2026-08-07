@@ -150,9 +150,10 @@ def _ticks_tab_fields(with_range: bool = True) -> list[FieldSchema]:
 def _gauge_tab_fields() -> list[FieldSchema]:
     """Zakładka Gauge – kropka kursora, kąt, pionowy bar."""
     return [
-        FieldSchema("marker_size", "int", "Size",
-                    tab="Gauge", min_val=3, max_val=20, step=1),
-        FieldSchema("marker_color", "color", "Color", tab="Gauge"),
+        FieldSchema("show_marker", "bool", "Kropka środka", tab="Gauge"),
+        FieldSchema("marker_size", "int", "Rozmiar kropki",
+                    tab="Gauge", min_val=0, max_val=30, step=1),
+        FieldSchema("marker_color", "color", "Kolor kropki", tab="Gauge"),
         FieldSchema("bar_width", "int", "Width",
                     tab="Gauge", min_val=1, max_val=10, step=1),
         FieldSchema("show_bar", "bool", "Bar", tab="Gauge"),
@@ -258,7 +259,7 @@ def chart_indicator_fields() -> list[FieldSchema]:
     """Chart: Header, Text, Labels, Ticks, Chart (własna zakładka)."""
     return (
         _header_fields() + _form_field()
-        + _text_tab_fields(with_color=False)
+        + _text_tab_fields(with_color=True)
         + _labels_tab_fields()
         + _ticks_tab_fields()
         + _chart_tab_fields()
@@ -281,6 +282,64 @@ def segment_bar_indicator_fields() -> list[FieldSchema]:
     )
 
 
+def _map_labels_tab_fields() -> list[FieldSchema]:
+    return [
+        FieldSchema("show_label", "bool", "Tytuł (Title)", tab="Labels"),
+        FieldSchema("label_font_size", "float", "Rozmiar (Size)", tab="Labels",
+                    min_val=1.0, max_val=20.0, step=0.1),
+        FieldSchema("text_distance", "float", "Dystans (Distance)", tab="Labels",
+                    min_val=-5.0, max_val=5.0, step=0.1),
+    ]
+
+
+def _map_gauge_tab_fields() -> list[FieldSchema]:
+    return [
+        FieldSchema("hide_marker", "bool", "Ukryj znacznik", tab="Gauge"),
+        FieldSchema("arrow_marker", "bool", "Strzałka zamiast kropki", tab="Gauge"),
+        FieldSchema("marker_size", "int", "Rozmiar (Size)", tab="Gauge",
+                    min_val=1, max_val=20, step=1),
+        FieldSchema("marker_color", "color", "Kolor", tab="Gauge"),
+    ]
+
+
+def _map_path_tab_fields() -> list[FieldSchema]:
+    return [
+        FieldSchema("hide_track", "bool", "Ukryj (Hide)", tab="Path"),
+        FieldSchema("track_width", "int", "Grubość (Width)", tab="Path",
+                    min_val=1, max_val=20, step=1),
+        FieldSchema("track_color", "color", "Kolor", tab="Path"),
+    ]
+
+
+def _map_shape_tab_fields() -> list[FieldSchema]:
+    return [
+        FieldSchema("map_style", "choice", "Mapa (Map)", tab="Shape",
+                    choices=["light_all", "light_nolabels", "dark_all",
+                             "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"]),
+        FieldSchema("map_shape", "choice", "Kształt (Shape)", tab="Shape",
+                    choices=["square", "round"]),
+        FieldSchema("language", "choice", "Język (Language)", tab="Shape",
+                    choices=["English", "Polski"]),
+        FieldSchema("light_mode", "choice", "Światło (Light)", tab="Shape",
+                    choices=["Day", "Night"]),
+        FieldSchema("opacity", "float", "Przezroczystość", tab="Shape",
+                    min_val=0.0, max_val=10.0, step=0.1),
+        FieldSchema("zoom", "int", "Zoom", tab="Shape",
+                    min_val=1, max_val=24, step=1),
+        FieldSchema("pitch", "float", "Pochylenie (Pitch)", tab="Shape",
+                    min_val=0.0, max_val=60.0, step=1.0),
+        FieldSchema("orient", "float", "Orientacja", tab="Shape",
+                    min_val=0.0, max_val=10.0, step=0.1),
+        FieldSchema("magnify", "float", "Powiększenie", tab="Shape",
+                    min_val=0.5, max_val=3.0, step=0.1),
+        FieldSchema("terrain", "float", "Teren (Terrain)", tab="Shape",
+                    min_val=0.0, max_val=5.0, step=0.1),
+        FieldSchema("highlights", "bool", "Podświetlenia", tab="Shape"),
+        FieldSchema("rotate", "float", "Obrót (Rotate)", tab="Shape",
+                    min_val=-180.0, max_val=180.0, step=1.0),
+    ]
+
+
 def map_indicator_fields() -> list[FieldSchema]:
     """Map: Header, Text, mapa."""
     return (
@@ -288,16 +347,10 @@ def map_indicator_fields() -> list[FieldSchema]:
         + [FieldSchema("form", "choice", "Typ mapy", tab="",
                        choices=["map", "static_map"])]
         + _text_tab_fields(with_color=False)
-        + [
-            FieldSchema("zoom", "int", "Zoom", tab="Text",
-                        min_val=10, max_val=20, step=1),
-            FieldSchema("map_style", "choice", "Styl mapy", tab="Text",
-                        choices=["light_all", "light_nolabels", "dark_all",
-                                 "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"]),
-            FieldSchema("marker_size", "int", "Znacznik", tab="Text",
-                        min_val=3, max_val=20, step=1),
-            FieldSchema("marker_color", "color", "Kolor znacz.", tab="Text"),
-        ]
+        + _map_labels_tab_fields()
+        + _map_gauge_tab_fields()
+        + _map_path_tab_fields()
+        + _map_shape_tab_fields()
     )
 
 

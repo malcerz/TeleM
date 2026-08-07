@@ -20,10 +20,26 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import threading
+import queue
+from collections import defaultdict
+from PySide6.QtCore import QObject, Signal, QTimer, QUrl, Qt
 from PIL import Image
-from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFileDialog
+
+import os
+
+# ── Import mpv z obsługą ścieżki DLL ────────────────────────────────────
+_MPV_BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+if _MPV_BASE_DIR.exists():
+    os.environ["PATH"] = str(_MPV_BASE_DIR) + os.pathsep + os.environ.get("PATH", "")
+
+try:
+    import mpv
+    _MPV_AVAILABLE = True
+except Exception:
+    _MPV_AVAILABLE = False
 
 try:
     from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
@@ -174,6 +190,8 @@ class AppController:
         self._playing = False
         self.video_widget: Optional[object] = None
         self._preview_mode: str = "hud"
+        self.mpv_player = None
+        self._mpv_timer = None
 
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
@@ -204,29 +222,54 @@ class AppController:
         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
 
     def _load_startup_preset(self) -> None:
-        """Wczytaj _startup_preset z def_layout.json jeśli istnieje."""
+        """Wczytaj def_layout.json oraz _startup_preset jeśli istnieje."""
         def_layout = self.base_dir / "def_layout.json"
         if def_layout.exists():
             try:
-                data = json.loads(def_layout.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
-                    self._startup_preset_path = data.get("_startup_preset", "")
-            except Exception:
-                self._startup_preset_path = ""
+                self.layout = normalize_layout(def_layout, 1280, 720)
+                self._startup_preset_path = self.layout.get("_startup_preset", "")
+            except Exception as e:
+                print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)
 
     # ═════════════════════════════════════════════════════════════════════
     # QMEDIAPLAYER — SPRZĘTOWE DEKODOWANIE WIDEO
     # ═════════════════════════════════════════════════════════════════════
 
-    def set_video_widget(self, widget: object) -> None:
+    def is_using_mpv(self) -> bool:
+        return self.mpv_player is not None
+
+    def set_video_widget(self, widget: object, mpv_widget: object = None) -> None:
         """Ustawia widget QVideoWidget do natywnego odtwarzania sprzętowego."""
         self.video_widget = widget
-        if self._preview_mode == "gpu_video" and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
-            self.media_player.setVideoOutput(widget)
+        self.mpv_widget = mpv_widget or widget
+        if _MPV_AVAILABLE and self.mpv_widget is not None:
+            try:
+                if getattr(self, "mpv_player", None):
+                    try:
+                        self.mpv_player.terminate()
+                    except Exception:
+                        pass
+                self.mpv_player = mpv.MPV(
+                    wid=str(int(self.mpv_widget.winId())),
+                    hwdec='auto',
+                    keep_open='yes'
+                )
+                print("[Controller] MPV zinicjalizowany pomyślnie z akceleracją sprzętową!")
+            except Exception as e:
+                print(f"[Controller] Nie udało się zainicjalizować MPV: {e}. Używam QMediaPlayer.")
+                self.mpv_player = None
+
+        if not self.is_using_mpv():
+            if self._preview_mode == "gpu_video" and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+                self.media_player.setVideoOutput(self.video_widget)
 
     def _on_preview_mode_changed(self, mode: str) -> None:
         """Przełącza tryb podglądu (HUD Overlay vs Czyste Wideo GPU)."""
         self._preview_mode = mode
+        if self.is_using_mpv():
+            self._render_preview(self.mpv_player.time_pos or 0.0)
+            return
+
         if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
             return
         if mode == "gpu_video" and self.video_widget:
@@ -317,6 +360,8 @@ class AppController:
         Emituje gotowy QImage z powrotem do GUI (QueuedConnection).
         """
         self.src_img = pil_img
+        self.last_src_pil = pil_img
+        self.last_preview_ts = seek_seconds
         self._render_preview(seek_seconds)
 
     def _scale_qimg_to_preview(self, qimg: QImage) -> QImage:
@@ -388,6 +433,10 @@ class AppController:
                     self.media_player.setSource(
                         QUrl.fromLocalFile(str(self.video_path))
                     )
+
+                if self.is_using_mpv():
+                    self.mpv_player.play(str(self.video_path))
+                    self.mpv_player.pause = True
 
                 # Analiza wideo
                 self.signals.sig_progress.emit(15, "Analiza strumienia...")
@@ -470,21 +519,27 @@ class AppController:
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
 
-                # Pobierz pierwszą klatkę, skaluj do rozdzielczości podglądu i wyrenderuj
-                clear_capture_cache()
-                first_frame = extract_frame(
-                    self.video_paths, 0, ffmpeg_exe, ffprobe_exe,
-                )
+                if self.is_using_mpv():
+                    target_h = int(self._preview_target_w * h / w) if w > 0 else 540
+                    first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                else:
+                    clear_capture_cache()
+                    first_frame = extract_frame(
+                        self.video_paths, 0, ffmpeg_exe, ffprobe_exe,
+                    )
                 if first_frame:
-                    # Skaluj do rozdzielczości podglądu
-                    w, h = first_frame.size
-                    if w > self._preview_target_w:
-                        ratio = self._preview_target_w / w
-                        new_h = max(1, int(h * ratio))
-                        first_frame = first_frame.resize(
-                            (self._preview_target_w, new_h), Image.LANCZOS,
-                        )
+                    if not self.is_using_mpv():
+                        # Skaluj do rozdzielczości podglądu
+                        w, h = first_frame.size
+                        if w > self._preview_target_w:
+                            ratio = self._preview_target_w / w
+                            new_h = max(1, int(h * ratio))
+                            first_frame = first_frame.resize(
+                                (self._preview_target_w, new_h), Image.LANCZOS,
+                            )
                     self.src_img = first_frame
+                    self.last_src_pil = first_frame
+                    self.last_preview_ts = 0.0
                 self._render_preview(0)
 
                 self.signals.sig_progress.emit(100, "Gotowe")
@@ -506,7 +561,16 @@ class AppController:
 
         meta = self.video_path.with_suffix(".json")
         if meta.exists():
-            records = ensure_records_list(load_json_with_fallback(meta))
+            records = None
+            try:
+                data = load_json_with_fallback(meta)
+                if isinstance(data, dict) and ("indicators" in data or "version" in data):
+                    print("[Telemetry] Wykryto plik JSON będący presetem układu, a nie cache telemetrii. Ignoruję.", flush=True)
+                else:
+                    records = ensure_records_list(data)
+            except Exception as e:
+                print(f"[Telemetry] Błąd odczytu JSON cache: {e}", flush=True)
+
             if records:
                 self.signals.sig_progress.emit(45, "Wczytywanie JSON...")
                 self.telemetry.records = records
@@ -1014,8 +1078,14 @@ class AppController:
         """Przeciągnięto wskaźnik myszką — aktualizuj pozycję w layoucie."""
         if key not in self.layout.get("indicators", {}):
             return
-        self.layout["indicators"][key]["x"] = x_norm
-        self.layout["indicators"][key]["y"] = y_norm
+        cfg = self.layout["indicators"][key]
+        cfg["x"] = round(x_norm, 4)
+        cfg["y"] = round(y_norm, 4)
+
+        form = cfg.get("form", "text")
+        schema = get_schema_for_form(form)
+        self.signals.sig_properties_ready.emit(key, schema, dict(cfg))
+
         self._render_preview()
 
     # ═════════════════════════════════════════════════════════════════════
@@ -1133,6 +1203,11 @@ class AppController:
         old_form = cfg.get("form", "text")
         cfg[field_name] = value
 
+        if field_name == "size":
+            cfg["font_size"] = value
+        elif field_name == "font_size":
+            cfg["size"] = value
+
         # Jeśli zmieniono formę — wyślij nowy schemat
         if field_name == "form" and value != old_form:
             schema = get_schema_for_form(value)
@@ -1141,10 +1216,6 @@ class AppController:
         # Synchronizuj layout_mgr
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout
-
-        # Inwalidacja cache mapy
-        if stream_key == "track_map" and field_name in ("zoom", "map_style"):
-            clear_map_cache()
 
         # Inwalidacja cache przygotowania — gdy zmieni się form/source zmieniają dane statyczne
         if field_name in ("source", "form", "min_val", "max_val"):
@@ -1343,24 +1414,57 @@ class AppController:
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
         """Renderuje podgląd nakładki i wysyła QImage do GUI."""
-        # Auto-refresh źródła z QVideoSink cache (gdy zmiana layoutu, nie seek)
-        if self.last_src_pil is not None:
-            self.src_img = self.last_src_pil
+        import time
+        t_func_start = time.time()
+        
+        if not self.video_path:
+            return
 
+        w = self.layout.get("width", 1280)
+        h = self.layout.get("height", 720)
+        target_h = int(self._preview_target_w * h / w) if w > 0 else 720
+
+        t_0 = time.time()
+        if self.is_using_mpv():
+            self.src_img = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+            self.last_src_pil = self.src_img
+            if seek_seconds is not None:
+                self.last_preview_ts = seek_seconds
+        elif self._preview_mode == "gpu_video":
+            self.src_img = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+            self.last_src_pil = self.src_img
+            if seek_seconds is not None:
+                self.last_preview_ts = seek_seconds
+        else:
+            if seek_seconds is not None:
+                last_ts = getattr(self, "last_preview_ts", -1.0)
+                if self.last_src_pil is None or abs(seek_seconds - last_ts) > 0.05:
+                    from src.video_helpers import extract_frame
+                    frame = extract_frame(
+                        self.video_path, seek_seconds,
+                        ffmpeg_exe=self.ffmpeg_exe or "ffmpeg",
+                        ffprobe_exe=self.ffprobe_exe or "ffprobe",
+                        target_w=self._preview_target_w,
+                    )
+                    if frame:
+                        self.src_img = frame.convert("RGBA")
+                        self.last_src_pil = self.src_img
+                        self.last_preview_ts = seek_seconds
+            elif self.last_src_pil is not None:
+                self.src_img = self.last_src_pil
+
+        t_1 = time.time()
+        print(f"[DEBUG PREVIEW] is_using_mpv={self.is_using_mpv()} start_dt_utc={self.telemetry.start_dt_utc} speed_samples_len={len(self.telemetry.speed_samples) if self.telemetry.speed_samples else 0} gps_track_len={len(self.telemetry.track_samples) if self.telemetry.track_samples else 0}", flush=True)
         try:
-            if not self.video_path:
-                return
-
             src_w, src_h = self.src_img.size
             if src_w < 10 or src_h < 10:
                 return
 
-            # Wartości domyślne (demo)
             date_txt, time_txt = "----.--.--", "--:--:--"
-            indicator_overrides: dict[str, float] = {}
-            overlay_data: dict | None = None
+            overlay_data = None
             target_dt = None
 
+            t_2 = time.time()
             if self.telemetry.start_dt_utc:
                 current_ts = seek_seconds if seek_seconds is not None else 0
                 target_dt = self.telemetry.start_dt_utc + timedelta(seconds=current_ts)
@@ -1383,12 +1487,11 @@ class AppController:
                 if not self._prepare_cache:
                     self._build_prepare_cache()
 
-                overlay_data = None
                 try:
                     overlay_data = prepare_overlay_frame_data(
                         layout=self.layout,
                         target_dt=target_dt,
-                        tz_offset_hours=2,  # hardcoded – same as render pipeline default
+                        tz_offset_hours=2,
                         start_dt_utc=self.telemetry.start_dt_utc,
                         speed_samples=self.telemetry.speed_samples or [],
                         track_samples=self.telemetry.track_samples or [],
@@ -1421,11 +1524,9 @@ class AppController:
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
-                    print(f"[PREVIEW] prepare_overlay_frame_data failed: {e}", flush=True)
-
-                date_txt = overlay_data["date_text"]
-                time_txt = overlay_data["time_text"]
-
+            
+            t_3 = time.time()
+            
             # Pozycja dla kursora na wykresach
             current_position = (
                 seek_seconds / max(1.0, self.video_duration_s)
@@ -1454,7 +1555,10 @@ class AppController:
             else:
                 self.indicator_bboxes.clear()
 
+            t_4 = time.time()
+
             if overlay_data is not None:
+                from src.overlay_renderer import render_preview
                 preview = render_preview(
                     self.src_img, self.layout, self.font_path,
                     overlay_data["date_text"], overlay_data["time_text"],
@@ -1511,12 +1615,22 @@ class AppController:
 
             # Konwertuj PIL Image → QImage (thread-safe, GUI wątek zrobi QPixmap)
             from PySide6.QtGui import QImage
-            img_rgb = preview.convert("RGB")
-            data = img_rgb.tobytes("raw", "RGB")
-            qimg = QImage(
-                data, img_rgb.width, img_rgb.height,
-                img_rgb.width * 3, QImage.Format_RGB888,
-            )
+            if self.is_using_mpv():
+                img_rgba = preview.convert("RGBA")
+                data = img_rgba.tobytes("raw", "RGBA")
+                qimg = QImage(
+                    data, img_rgba.width, img_rgba.height,
+                    img_rgba.width * 4, QImage.Format_RGBA8888,
+                )
+                qimg.nd = data
+            else:
+                img_rgb = preview.convert("RGB")
+                data = img_rgb.tobytes("raw", "RGB")
+                qimg = QImage(
+                    data, img_rgb.width, img_rgb.height,
+                    img_rgb.width * 3, QImage.Format_RGB888,
+                )
+                qimg.nd = data
             self.signals.sig_preview_frame_ready.emit(qimg)
             self.signals.sig_bboxes_ready.emit(
                 dict(self.indicator_bboxes),
@@ -1549,6 +1663,14 @@ class AppController:
         self._playback_pos = seconds
         self.signals.sig_seek_position.emit(seconds)
 
+        if self.is_using_mpv():
+            try:
+                self.mpv_player.time_pos = seconds
+                self._render_preview(seconds)
+            except Exception as e:
+                print(f"[MPV Seek Error] {e}")
+            return
+
         # Seek w QMediaPlayer — GPU, natychmiastowa klatka
         if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
             return
@@ -1570,12 +1692,33 @@ class AppController:
         self._playing = True
         self._frame_counter = 0
         self._composite_every_n = 1  # benchmark: 27ms composite < 35ms frame interval
+
+        if self.is_using_mpv():
+            try:
+                self.mpv_player.pause = False
+                if self._mpv_timer is None:
+                    self._mpv_timer = QTimer()
+                    self._mpv_timer.timeout.connect(self._on_mpv_playback_tick)
+                self._mpv_timer.start(33)  # ~30 FPS HUD update
+            except Exception as e:
+                print(f"[MPV Play Error] {e}")
+            return
+
         if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
             self.media_player.play()
 
     def _on_playback_stop(self) -> None:
         """Użytkownik kliknął Stop."""
         self._playing = False
+        if self.is_using_mpv():
+            try:
+                self.mpv_player.pause = True
+            except Exception:
+                pass
+            if self._mpv_timer is not None:
+                self._mpv_timer.stop()
+            return
+
         if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
             self.media_player.pause()
         if self._playback_timer is not None:
@@ -1584,6 +1727,33 @@ class AppController:
             except Exception:
                 pass
             self._playback_timer = None
+
+    def _on_mpv_playback_tick(self) -> None:
+        if not self._playing or not self.is_using_mpv():
+            return
+        try:
+            pos = self.mpv_player.time_pos or 0.0
+            
+            # Przeskakuj regiony wycięte
+            nxt = self._skip_cut_regions(pos)
+            if abs(nxt - pos) > 0.1:
+                self.mpv_player.time_pos = nxt
+                pos = nxt
+            
+            # Wykrycie końca wideo
+            if pos >= self.video_duration_s:
+                self._on_playback_stop()
+                self.signals.sig_seek_position.emit(0.0)
+                try:
+                    self.mpv_player.time_pos = 0.0
+                except Exception:
+                    pass
+                return
+
+            self.signals.sig_seek_position.emit(pos)
+            self._render_preview(pos)
+        except Exception as e:
+            print(f"[MPV Tick Error] {e}")
 
     def _playback_step(self) -> None:
         """Przesuń pozycję i zaplanuj następny krok.

@@ -269,19 +269,25 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
 def normalize_layout(layout_path: Path | str | None, video_width: int, video_height: int) -> dict[str, Any]:
     layout = default_layout(video_width, video_height)
     if layout_path and Path(layout_path).exists():
-        user = json.loads(Path(layout_path).read_text(encoding='utf-8'))
+        try:
+            user = json.loads(Path(layout_path).read_text(encoding='utf-8'))
+        except Exception:
+            return layout
         if not isinstance(user, dict):
             return layout
-        layout["global"].update(user.get("global", {}))
-        layout["smoothing"].update(user.get("smoothing", {}))
+
+        if "global" in user and isinstance(user["global"], dict):
+            layout["global"].update(user["global"])
+        if "smoothing" in user and isinstance(user["smoothing"], dict):
+            layout["smoothing"].update(user["smoothing"])
+        if "_startup_preset" in user:
+            layout["_startup_preset"] = user["_startup_preset"]
+        if "cut_regions" in user:
+            layout["cut_regions"] = user["cut_regions"]
+
         if "indicators" in user and isinstance(user["indicators"], dict):
-            for k, v in user["indicators"].items():
-                if isinstance(v, dict):
-                    if k in layout["indicators"]:
-                        layout["indicators"][k].update(v)
-                    else:
-                        layout["indicators"][k] = v
-        if "custom_texts" in user:
+            layout["indicators"] = user["indicators"]
+        if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
 
         if user.get("version", 0) < 5:

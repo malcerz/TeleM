@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QEvent
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
     QStackedWidget, QComboBox,
@@ -17,6 +17,54 @@ except ImportError:
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.seek_bar import SeekBar
+
+
+class TopLevelHUDWindow(QWidget):
+    """Okno nakładki HUD z przezroczystym tłem przypisane do okna głównego."""
+    def __init__(self, parent_preview_widget):
+        super().__init__(None)
+        self.parent_preview_widget = parent_preview_widget
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowTransparentForInput)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.hud_pixmap = None
+
+    def set_hud_pixmap(self, pixmap):
+        self.hud_pixmap = pixmap
+        self.update()
+
+    def sync_geometry(self):
+        if not self.parent_preview_widget:
+            return
+        main_win = self.parent_preview_widget.window()
+        if main_win and main_win != self and self.parent() != main_win:
+            self.setParent(main_win)
+            self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowTransparentForInput)
+            self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+        if main_win and (main_win.isMinimized() or not self.parent_preview_widget.isVisible()):
+            self.hide()
+            return
+
+        if self.parent_preview_widget.stacked_widget:
+            widget = self.parent_preview_widget.stacked_widget
+            if not widget.isVisible():
+                self.hide()
+                return
+            global_pos = widget.mapToGlobal(widget.rect().topLeft())
+            self.setGeometry(global_pos.x(), global_pos.y(), widget.width(), widget.height())
+            if self.parent_preview_widget.is_using_mpv() and self.parent_preview_widget.isVisible():
+                self.show()
+                self.raise_()
+
+    def paintEvent(self, event):
+        if self.hud_pixmap and not self.hud_pixmap.isNull():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            scaled = self.hud_pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            ox = (self.width() - scaled.width()) // 2
+            oy = (self.height() - scaled.height()) // 2
+            painter.drawPixmap(ox, oy, scaled)
+            painter.end()
 
 
 class VideoPreview(QWidget):
@@ -38,9 +86,12 @@ class VideoPreview(QWidget):
         self._pixmap_size: tuple[int, int] = (0, 0)
         self._pixmap_offset: tuple[int, int] = (0, 0)
         self._original_size: tuple[int, int] = (0, 0)
-        self.video_widget = None
+        self._is_playing = False
         self._build_ui()
         self._connect_trim()
+        
+        self.hud_overlay = TopLevelHUDWindow(self)
+        
         # Event filter na image_label do przechwytywania zdarzeń myszy
         self.image_label.installEventFilter(self)
 
@@ -64,55 +115,41 @@ class VideoPreview(QWidget):
         self.image_label.setMouseTracking(True)
         self.stacked_widget.addWidget(self.image_label)
 
-        # Natywne wyjście wideo GPU
+        # Specjalny QWidget tylko dla MPV (aby uniknąć konfliktów z QVideoWidget)
+        self.mpv_widget = QWidget()
+        self.mpv_widget.setAttribute(Qt.WA_NativeWindow, True)
+        self.mpv_widget.setAttribute(Qt.WA_DontCreateNativeAncestors, True)
+        self.mpv_widget.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.mpv_widget.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.stacked_widget.addWidget(self.mpv_widget)
+
+        # Tradycyjne wyjście dla QMediaPlayer
         if _HAS_VIDEO_WIDGET:
             self.video_widget = QVideoWidget()
-            self.video_widget.setStyleSheet("background-color: #000;")
+            self.video_widget.setStyleSheet("background-color: #000000;")
+            self.stacked_widget.addWidget(self.video_widget)
+        else:
+            self.video_widget = QWidget()
+            self.video_widget.setStyleSheet("background-color: #000000;")
             self.stacked_widget.addWidget(self.video_widget)
 
         layout.addWidget(self.stacked_widget, 1)
 
-        # Oś czasu + Play/Stop + Tryb podglądu
+        # Oś czasu + Play/Stop
         time_row = QHBoxLayout()
         time_row.setContentsMargins(4, 2, 4, 2)
         time_row.setSpacing(4)
 
-        # Przełącznik trybu podglądu
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("\u25C6 HUD + Wideo")
-        if _HAS_VIDEO_WIDGET:
-            self.mode_combo.addItem("Video")
-        self.mode_combo.setFixedWidth(130)
-        self.mode_combo.setToolTip("Wybierz tryb wyświetlania podglądu")
-        self.mode_combo.setStyleSheet(
-            "QComboBox { background-color: #222; color: #ddd; border: 1px solid #444; "
-            "border-radius: 3px; padding: 2px 6px; font-size: 11px; font-weight: bold; }"
-            "QComboBox QAbstractItemView { background-color: #222; color: #ddd; selection-background-color: #444; }"
-        )
-        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        time_row.addWidget(self.mode_combo)
-
         self.play_btn = QPushButton("\u25B6")
         self.play_btn.setFixedSize(28, 26)
-        self.play_btn.setToolTip("Odtwarzaj")
+        self.play_btn.setToolTip("Odtwarzaj / Pauza")
         self.play_btn.setStyleSheet(
             "QPushButton { background-color: #2a6a2a; color: #88ff88; "
             "border: 1px solid #4a8a4a; border-radius: 3px; font-weight: bold; font-size: 13px; }"
             "QPushButton:hover { background-color: #3a8a3a; }"
         )
-        self.play_btn.clicked.connect(lambda: self.signals.sig_playback_start.emit())
+        self.play_btn.clicked.connect(self._toggle_playback)
         time_row.addWidget(self.play_btn)
-
-        self.stop_btn = QPushButton("\u25A0")
-        self.stop_btn.setFixedSize(28, 26)
-        self.stop_btn.setToolTip("Zatrzymaj")
-        self.stop_btn.setStyleSheet(
-            "QPushButton { background-color: #6a2a2a; color: #ff8888; "
-            "border: 1px solid #8a4a4a; border-radius: 3px; font-weight: bold; font-size: 13px; }"
-            "QPushButton:hover { background-color: #8a3a3a; }"
-        )
-        self.stop_btn.clicked.connect(lambda: self.signals.sig_playback_stop.emit())
-        time_row.addWidget(self.stop_btn)
 
         self.time_label = QLabel("00:00")
         self.time_label.setFixedWidth(50)
@@ -165,6 +202,51 @@ class VideoPreview(QWidget):
 
     # ¦¦ Slot: nowa klatka podglądu ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 
+    def is_using_mpv(self) -> bool:
+        return self._controller is not None and getattr(self._controller, "mpv_player", None) is not None
+
+    def _toggle_playback(self) -> None:
+        """Przełącza odtwarzanie między Play (▶) a Pause (❚❚)."""
+        if self._is_playing:
+            self._is_playing = False
+            self.play_btn.setText("▶")
+            self.play_btn.setToolTip("Odtwarzaj")
+            self.play_btn.setStyleSheet(
+                "QPushButton { background-color: #2a6a2a; color: #88ff88; "
+                "border: 1px solid #4a8a4a; border-radius: 3px; font-weight: bold; font-size: 13px; }"
+                "QPushButton:hover { background-color: #3a8a3a; }"
+            )
+            self.signals.sig_playback_stop.emit()
+        else:
+            self._is_playing = True
+            self.play_btn.setText("❚❚")
+            self.play_btn.setToolTip("Zatrzymaj")
+            self.play_btn.setStyleSheet(
+                "QPushButton { background-color: #6a2a2a; color: #ff8888; "
+                "border: 1px solid #8a4a4a; border-radius: 3px; font-weight: bold; font-size: 13px; }"
+                "QPushButton:hover { background-color: #8a3a3a; }"
+            )
+            self.signals.sig_playback_start.emit()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        win = self.window()
+        if win:
+            win.installEventFilter(self)
+        if self.is_using_mpv():
+            self.hud_overlay.show()
+            self.hud_overlay.sync_geometry()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if hasattr(self, "hud_overlay"):
+            self.hud_overlay.hide()
+
+    def closeEvent(self, event):
+        if hasattr(self, "hud_overlay"):
+            self.hud_overlay.close()
+        super().closeEvent(event)
+
     def on_frame_ready(self, qimg: QImage | QPixmap) -> None:
         """Odbiera QImage/QPixmap z kontrolera i wyświetla.
 
@@ -173,6 +255,19 @@ class VideoPreview(QWidget):
         """
         if qimg is None:
             return
+        
+        if self.is_using_mpv():
+            if isinstance(qimg, QImage) and not qimg.isNull():
+                pixmap = QPixmap.fromImage(qimg)
+            elif isinstance(qimg, QPixmap) and not qimg.isNull():
+                pixmap = qimg
+            else:
+                return
+            if hasattr(self, "hud_overlay"):
+                self.hud_overlay.set_hud_pixmap(pixmap)
+                self.hud_overlay.sync_geometry()
+            return
+
         if isinstance(qimg, QImage) and not qimg.isNull():
             pixmap = QPixmap.fromImage(qimg)
         elif isinstance(qimg, QPixmap) and not qimg.isNull():
@@ -188,6 +283,7 @@ class VideoPreview(QWidget):
         self.image_label.setStyleSheet(
             "background-color: #1a1a1a; border: 1px solid #333;"
         )
+
         # Zapisz rozmiar i offset wyświetlonej pixmapy (do przeliczania współrzędnych)
         pix_size = scaled.size()
         self._pixmap_size = (pix_size.width(), pix_size.height())
@@ -202,18 +298,36 @@ class VideoPreview(QWidget):
         self._original_size = (orig_w, orig_h)
 
     def eventFilter(self, obj, event) -> bool:
-        """Przechwytuje zdarzenia myszy na image_label."""
-        if obj is self.image_label and event.type() in (
+        """Przechwytuje zdarzenia myszy i przemieszczania okna głównego."""
+        if obj is self.window():
+            if event.type() in (QEvent.Move, QEvent.Resize):
+                if self.is_using_mpv() and self.isVisible():
+                    self.hud_overlay.sync_geometry()
+            elif event.type() == QEvent.WindowStateChange:
+                if self.window().isMinimized():
+                    self.hud_overlay.hide()
+                else:
+                    if self.is_using_mpv() and self.isVisible():
+                        self.hud_overlay.show()
+                        self.hud_overlay.sync_geometry()
+            elif event.type() in (QEvent.Hide, QEvent.Close):
+                self.hud_overlay.hide()
+            elif event.type() == QEvent.Show:
+                if self.is_using_mpv() and self.isVisible():
+                    self.hud_overlay.show()
+                    self.hud_overlay.sync_geometry()
+            return super().eventFilter(obj, event)
+
+        if obj in (self.image_label, self.video_widget, getattr(self, 'mpv_widget', None)) and event.type() in (
             QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.MouseButtonRelease,
         ):
-            # Szybki return gdy nic nie przeciągamy — oszczędza obliczenia geometrii
             if event.type() == QEvent.MouseMove and not self._dragging_key:
                 return super().eventFilter(obj, event)
 
             me = event  # type: QMouseEvent
-            # Współrzędne względem labela
             lx, ly = me.position().x(), me.position().y()
-            nx, ny = self._norm_from_label(lx, ly)
+            w, h = obj.width(), obj.height()
+            nx, ny = self._norm_from_geometry(lx, ly, w, h)
             in_pixmap = 0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0
 
             if event.type() == QEvent.MouseButtonPress and me.button() == Qt.LeftButton:
@@ -221,7 +335,6 @@ class VideoPreview(QWidget):
                     key = self._hit_test(nx, ny)
                     if key:
                         self._dragging_key = key
-                        # Zapisz offset między kursorem a środkiem wskaźnika
                         ow, oh = self._original_size
                         bbox = self._bboxes.get(key)
                         if bbox and ow > 0 and oh > 0:
@@ -253,13 +366,20 @@ class VideoPreview(QWidget):
 
         return super().eventFilter(obj, event)
 
-    def _norm_from_label(self, label_x: int, label_y: int) -> tuple[float, float]:
-        """Przelicza współrzędne w labelu na znormalizowane (0..1) w oryginalnym obrazie."""
-        pw, ph = self._pixmap_size
-        ox, oy = self._pixmap_offset
-        # Współrzędne względem pixmapy
-        px = (label_x - ox) / pw if pw else 0.0
-        py = (label_y - oy) / ph if ph else 0.0
+    def _norm_from_geometry(self, label_x: float, label_y: float, w: int, h: int) -> tuple[float, float]:
+        """Przelicza współrzędne w widgetu na znormalizowane (0..1) w oryginalnym obrazie."""
+        ow, oh = self._original_size
+        if ow <= 0 or oh <= 0:
+            return 0.0, 0.0
+        
+        scale = min(w / ow, h / oh)
+        pw = ow * scale
+        ph = oh * scale
+        ox = (w - pw) / 2
+        oy = (h - ph) / 2
+        
+        px = (label_x - ox) / pw if pw > 0 else 0.0
+        py = (label_y - oy) / ph if ph > 0 else 0.0
         return (px, py)
 
     def _hit_test(self, nx: float, ny: float) -> str | None:
@@ -289,19 +409,19 @@ class VideoPreview(QWidget):
         self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
         self.seek_bar.set_duration(duration_s)
 
-    def _on_mode_changed(self, index: int) -> None:
-        """Zmiana trybu podglądu (HUD vs Czyste Wideo GPU)."""
-        self.stacked_widget.setCurrentIndex(index)
-        mode = "hud" if index == 0 else "gpu_video"
-        self.signals.sig_preview_mode_changed.emit(mode)
-
-    # ── Trim / cut ───────────────────────────────────────────────────
-
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z project_tab)."""
         self._controller = controller
         if hasattr(controller, "set_video_widget") and self.video_widget:
-            controller.set_video_widget(self.video_widget)
+            controller.set_video_widget(self.video_widget, getattr(self, 'mpv_widget', None))
+        if self.is_using_mpv():
+            self.stacked_widget.setCurrentIndex(1)
+            self.hud_overlay.show()
+            self.hud_overlay.sync_geometry()
+            if hasattr(self, 'mpv_widget') and self.mpv_widget:
+                self.mpv_widget.installEventFilter(self)
+            if self.video_widget:
+                self.video_widget.installEventFilter(self)
 
     def _connect_trim(self) -> None:
         self.cut_btn.clicked.connect(self._on_cut)

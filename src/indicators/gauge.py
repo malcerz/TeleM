@@ -25,6 +25,7 @@ from src.indicators.helpers import (
 def _render_gauge_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
+    formatted_val=None,
 ):
     """Render a gauge-form indicator (background cached)."""
     ss = max(1, ss)
@@ -39,43 +40,77 @@ def _render_gauge_indicator(
     sweep_deg = int(cfg.get("sweep_angle", 180))
     end_deg = start_deg + sweep_deg
 
-    display_min = 0
-    display_max = math.ceil(val_max / 10.0) * 10 if val_max > 0 else 10
+    min_val_cfg = cfg.get("min_val")
+    max_val_cfg = cfg.get("max_val")
+
+    if min_val_cfg is not None:
+        display_min = float(math.floor(float(min_val_cfg) / 10.0) * 10)
+    else:
+        display_min = 0.0
+
+    if max_val_cfg is not None:
+        raw_max = float(max_val_cfg)
+    elif val_max > 0:
+        raw_max = val_max
+    else:
+        raw_max = 100.0
+
+    display_max = float(math.ceil(raw_max / 10.0) * 10)
+    if display_max <= display_min:
+        display_max = display_min + 10.0
+
+    span = display_max - display_min
+    if span <= 0:
+        span = 10.0
+        display_max = display_min + span
+
+    if span <= 15:
+        step_val = 1.0 if span <= 5 else 5.0
+    elif span <= 60:
+        step_val = 10.0
+    elif span <= 140:
+        step_val = 20.0
+    elif span <= 300:
+        step_val = 50.0
+    else:
+        step_val = 100.0
+
+    major_intervals = max(1, int(round(span / step_val)))
+    sub_ticks_count = max(1, ticks) if ticks > 0 else 10
+    total_ticks = major_intervals * sub_ticks_count
 
     # ── Static background: tick marks + numbers (cached) ──
     bg_key = _static_cache_key(
         "gauge_bg", img_size, start_deg, sweep_deg,
-        display_max, ticks, thickness, ss, gauge_fs, font_path, outline,
+        display_min, display_max, ticks, thickness, ss, gauge_fs, font_path, outline,
     )
     bg = _STATIC_CACHE.get(bg_key)
     if bg is None:
         bg = Image.new("RGBA", (img_size, img_size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(bg)
-        major_ticks_count = int(display_max / 10)
-        if major_ticks_count < 1:
-            major_ticks_count = 1
-        sub_ticks_count = max(1, ticks) if ticks > 0 else 10
-        total_ticks = major_ticks_count * sub_ticks_count
 
         for i in range(total_ticks + 1):
             a = math.radians(start_deg + (end_deg - start_deg) * i / total_ticks)
             cos_a, sin_a = math.cos(a), math.sin(a)
             if i % sub_ticks_count == 0:
-                tick_len = thickness * ss
-                tick_width = max(3 * ss, int(thickness // 3) * ss)
+                # Główna kreska (pełna dziesiątka) — grubsza i dłuższa z etykietą
+                tick_len = thickness * 1.4 * ss
+                tick_width = max(3 * ss, int(thickness * 0.8) * ss)
                 tick_val = display_min + (display_max - display_min) * (i / total_ticks)
                 txt_tick = f"{tick_val:.0f}"
-                text_radius = radius - tick_len - (radius * 0.20)
+                text_radius = radius - tick_len - (radius * 0.16)
                 tx, ty = cx + cos_a * text_radius, cy + sin_a * text_radius
                 draw.text((tx, ty), txt_tick, font=gauge_font,
                     fill=(255, 255, 255, 240), stroke_width=ss,
                     stroke_fill=(0, 0, 0, 255), anchor="mm")
-            elif i % (sub_ticks_count // 2) == 0:
-                tick_len = thickness * 0.7 * ss
-                tick_width = max(2 * ss, int(thickness // 4) * ss)
+            elif sub_ticks_count % 2 == 0 and i % (sub_ticks_count // 2) == 0:
+                # Średnia kreska pośrodku (np. 5)
+                tick_len = thickness * 0.9 * ss
+                tick_width = max(2 * ss, int(thickness * 0.5) * ss)
             else:
-                tick_len = thickness * 0.4 * ss
-                tick_width = max(1 * ss, int(thickness // 6) * ss)
+                # Mniejsza i cieńsza kreska (sub-tick)
+                tick_len = thickness * 0.5 * ss
+                tick_width = max(1 * ss, int(thickness * 0.3) * ss)
             r_out, r_in = radius, radius - tick_len
             x1, y1 = cx + cos_a * r_in, cy + sin_a * r_in
             x2, y2 = cx + cos_a * r_out, cy + sin_a * r_out
@@ -128,6 +163,18 @@ def _render_gauge_indicator(
         (tip_x, tip_y),
     ], fill=needle_fill)
 
+    # Marker (center dot cap)
+    show_marker = bool(cfg.get("show_marker", False))
+    marker_size = int(cfg.get("marker_size", 0))
+    if show_marker and marker_size > 0:
+        r = max(1, marker_size)
+        marker_color = parse_hex_color(cfg.get("marker_color", "#333333")) or (51, 51, 51)
+        marker_fill = (marker_color[0], marker_color[1], marker_color[2], 255)
+        draw.ellipse([
+            _cx - r, _cy - r,
+            _cx + r, _cy + r
+        ], fill=marker_fill, outline=(120, 120, 120, 255), width=1)
+
     # Center text
     show_value = cfg.get("show_value", True)
     _fs_ds = max(8, fs)
@@ -143,15 +190,17 @@ def _render_gauge_indicator(
             stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
         )
     elif show_value:
-        txt_main = f"{value:.1f}"
-        tw = draw.textbbox((0, 0), txt_main, font=_c_font)[2]
-        ox = int(round(cfg.get("text_offset_x", 0.0) * out_gauge_size))
-        oy = int(round(cfg.get("text_offset_y", 0.0) * out_gauge_size))
-        draw.text(
-            (_cx - tw // 2 + ox, _cy + int(radius * 0.15 / ss) + oy),
-            txt_main, font=_c_font,
-            fill=(255, 255, 255, 255),
-            stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
-        )
+        txt_main = formatted_val if formatted_val is not None else f"{value:.1f}"
+        if txt_main:
+            text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
+            tw = draw.textbbox((0, 0), txt_main, font=_c_font)[2]
+            ox = int(round(cfg.get("text_offset_x", 0.0) * out_gauge_size))
+            oy = int(round(cfg.get("text_offset_y", 0.0) * out_gauge_size))
+            draw.text(
+                (_cx - tw // 2 + ox, _cy + int(radius * 0.15 / ss) + oy),
+                txt_main, font=_c_font,
+                fill=(text_color[0], text_color[1], text_color[2], 255),
+                stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
+            )
 
     return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

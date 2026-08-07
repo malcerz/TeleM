@@ -31,27 +31,14 @@ def generate_history_chart(
     time_labels: Optional[list[str]] = None,
     value_labels: Optional[list[str]] = None,
     supersample: int = 1,
+    custom_min_val: Optional[float] = None,
+    custom_max_val: Optional[float] = None,
+    label_count: int = 2,
+    label_units: bool = False,
+    unit: str = "",
+    show_average: bool = False,
 ) -> Image.Image:
-    """Generate a universal line chart with transparent fill, axes, and optional cursor.
-
-    Args:
-        history_values: Data points to plot.
-        width: Output image width in pixels.
-        height: Output image height in pixels.
-        line_color: RGB tuple for the main line.
-        line_thickness: Width of the main line.
-        fill_alpha: Fill transparency (0-255).
-        fill_color: Optional separate fill colour (defaults to line_color).
-        current_index: Index of the cursor position (None = no cursor).
-        cursor_color: RGB for the cursor line.
-        show_axes: Whether to draw axes with labels.
-        time_labels: 5 strings for X-axis labels.
-        value_labels: Strings for Y-axis labels (defaults to [min, max]).
-        supersample: Render at Nx resolution then downscale for anti-aliasing (1=off).
-
-    Returns:
-        RGBA PIL.Image.
-    """
+    """Generate a universal line chart with transparent fill, axes, and optional cursor."""
     ss = max(1, int(supersample))
     out_w, out_h = width, height
     width *= ss
@@ -65,14 +52,18 @@ def generate_history_chart(
     has_data = history_values and len(history_values) >= 2
 
     if has_data:
-        min_val = float(min(history_values))
-        max_val = float(max(history_values))
+        data_min = float(min(history_values))
+        data_max = float(max(history_values))
     else:
-        min_val = 0.0
-        max_val = 100.0
+        data_min = 0.0
+        data_max = 100.0
+
+    min_val = custom_min_val if custom_min_val is not None else data_min
+    max_val = custom_max_val if custom_max_val is not None else data_max
+    if min_val >= max_val:
+        max_val = min_val + 1.0
+
     val_range = max_val - min_val
-    if val_range == 0:
-        val_range = 1.0
 
     num_points = len(history_values) if has_data else 0
 
@@ -98,21 +89,32 @@ def generate_history_chart(
         draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
         draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
 
-        # ── Horizontal grid lines ──
-        if grid_color is not None:
-            y_positions = [plot_y2, plot_y1]
-            for yp in y_positions:
-                draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=1)
-
         try:
             font_axis = load_font_cache_small(10)
         except Exception:
             font_axis = None
 
-        y_label_values = value_labels if value_labels else [f"{min_val:.0f}", f"{max_val:.0f}"]
-        y_positions = [plot_y2, plot_y1]
+        count = max(2, label_count)
+        y_label_values = []
+        y_positions = []
+        if value_labels:
+            y_label_values = value_labels
+            for i in range(len(value_labels)):
+                frac = i / max(1, len(value_labels) - 1)
+                y_positions.append(plot_y2 - frac * plot_h)
+        else:
+            for i in range(count):
+                frac = i / (count - 1)
+                v = min_val + frac * val_range
+                u_suffix = f" {unit}" if (label_units and unit) else ""
+                y_label_values.append(f"{v:.0f}{u_suffix}")
+                y_positions.append(plot_y2 - frac * plot_h)
 
-        for i, (lbl, yp) in enumerate(zip(y_label_values, y_positions)):
+        # ── Horizontal grid lines & Y labels ──
+        for lbl, yp in zip(y_label_values, y_positions):
+            if grid_color is not None:
+                draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=1)
+            draw.line((plot_x1 - 4, yp, plot_x1, yp), fill=tick_color, width=1)
             if font_axis:
                 bbox = draw.textbbox((0, 0), lbl, font=font_axis)
                 tw = bbox[2] - bbox[0]
@@ -126,9 +128,6 @@ def generate_history_chart(
                 draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
             else:
                 draw.text((tx, ty), lbl, fill=label_color)
-
-        draw.line((plot_x1 - 4, plot_y2, plot_x1, plot_y2), fill=tick_color, width=1)
-        draw.line((plot_x1 - 4, plot_y1, plot_x1, plot_y1), fill=tick_color, width=1)
 
         x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
         for i, lbl in enumerate(x_labels):
@@ -175,6 +174,17 @@ def generate_history_chart(
 
     # Draw the line
     draw.line(points, fill=(line_color[0], line_color[1], line_color[2], 255), width=line_thickness, joint="round")
+
+    # Draw average line
+    if show_average and has_data:
+        avg_val = float(sum(history_values) / len(history_values))
+        if min_val <= avg_val <= max_val:
+            v_margin = line_thickness + 1
+            usable_h = plot_h - (2 * v_margin)
+            avg_y = plot_y2 - v_margin - ((avg_val - min_val) / val_range) * usable_h
+            avg_color = (255, 200, 0, 220)
+            for x in range(int(plot_x1), int(plot_x2), 6 * ss):
+                draw.line((x, avg_y, min(x + 3 * ss, plot_x2), avg_y), fill=avg_color, width=max(1, ss))
 
     # Draw cursor
     if current_index is not None and 0 <= current_index < num_points:

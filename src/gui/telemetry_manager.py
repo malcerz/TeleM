@@ -3,7 +3,7 @@ GPMF (ExifTool), GPX and FIT sources."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -79,6 +79,48 @@ _GPMF_NATIVE: set[str] = {"speed", "alt", "dist", "track", "iso", "exposure", "t
 _SOURCE_SWITCH_KEYS: tuple[str, ...] = (
     "speed_visual", "speed_text", "dist_visual", "dist_text", "alt_visual", "alt_text",
 )
+
+
+def _compute_smart_time_offset(
+    records_start_ts: datetime,
+    records_end_ts: datetime,
+    video_start_dt: Optional[datetime],
+) -> timedelta:
+    """Compute optimal timestamp offset to align FIT/GPX timestamps with video_start_dt.
+
+    1. Direct match: video_start_dt falls inside FIT activity range -> 0 offset.
+    2. Timezone difference (e.g. FIT in local time UTC+2, video in naive/UTC) -> integer hour offset.
+    3. Unsynced/independent clocks -> offset fit_start to video_start_dt.
+    """
+    if video_start_dt is None:
+        return timedelta(0)
+
+    vid_dt = video_start_dt.replace(tzinfo=None) if video_start_dt.tzinfo is not None else video_start_dt
+    fit_start = records_start_ts.replace(tzinfo=None) if records_start_ts.tzinfo is not None else records_start_ts
+    fit_end = records_end_ts.replace(tzinfo=None) if records_end_ts.tzinfo is not None else records_end_ts
+
+    margin = timedelta(minutes=5)
+
+    # 1. Direct match
+    if (fit_start - margin) <= vid_dt <= (fit_end + margin):
+        print(f"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]", flush=True)
+        return timedelta(0)
+
+    # 2. Integer hour timezone offset match (e.g. FIT local time vs UTC)
+    for tz_h in range(-14, 15):
+        if tz_h == 0:
+            continue
+        shifted_fit_start = fit_start - timedelta(hours=tz_h)
+        shifted_fit_end = fit_end - timedelta(hours=tz_h)
+        if (shifted_fit_start - margin) <= vid_dt <= (shifted_fit_end + margin):
+            offset = -timedelta(hours=tz_h)
+            print(f"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]", flush=True)
+            return offset
+
+    # 3. Fallback: if video_dt does not overlap at all, align FIT start to vid_dt
+    fallback_offset = vid_dt - fit_start
+    print(f"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})", flush=True)
+    return fallback_offset
 
 
 class TelemetryDataManager:
@@ -328,6 +370,16 @@ class TelemetryDataManager:
         if not points:
             return False
 
+        # Apply smart timestamp alignment
+        offset = _compute_smart_time_offset(
+            points[0][0], points[-1][0], start_dt
+        )
+        if offset != timedelta(0):
+            points = [
+                (pt[0] + offset, pt[1], pt[2], pt[3], pt[4])
+                for pt in points
+            ]
+
         # Extract GPS track (timestamp, lat, lon) for map rendering
         # GpxPoint = tuple[datetime, float, float, float, dict]
         self.gpx_gps_track = [
@@ -392,47 +444,25 @@ class TelemetryDataManager:
         if not records:
             return False
 
+        # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"], records[-1]["timestamp"], start_dt
+        )
+        if offset != timedelta(0):
+            for r in records:
+                r["timestamp"] = r["timestamp"] + offset
+
         # Extract GPS track (timestamp, lat, lon) for map rendering
-        # — synchronize timestamps to video start so they match start_dt_utc
-        if start_dt is not None and records:
-            # FIT timestamps są naive UTC (parse_fit zdejmuje timezone),
-            # start_dt może być aware UTC. Sprowadź do naive UTC.
-            first_ts = records[0]["timestamp"]
-            if start_dt.tzinfo is not None:
-                start_dt_naive = start_dt.replace(tzinfo=None)
-            else:
-                start_dt_naive = start_dt
-            offset = start_dt_naive - first_ts
-            self.fit_gps_track = [
-                (r["timestamp"] + offset, r["lat"], r["lon"])
-                for r in records
-                if r.get("lat") is not None and r.get("lon") is not None
-            ]
-        elif records:
-            self.fit_gps_track = [
-                (r["timestamp"], r["lat"], r["lon"])
-                for r in records
-                if r.get("lat") is not None and r.get("lon") is not None
-            ]
+        self.fit_gps_track = [
+            (r["timestamp"], r["lat"], r["lon"])
+            for r in records
+            if r.get("lat") is not None and r.get("lon") is not None
+        ]
 
         # Synchronise to video timeline to get per-field sample dict
         fit_result = sync_fit_to_video(records, start_dt)
         if not fit_result:
             return False
-
-        # Przesuń timestampy fit_data o ten sam offset co fit_gps_track
-        # (sync_fit_to_video zwraca surowe czasy FIT bez przesunięcia)
-        if start_dt is not None and records:
-            first_ts = records[0]["timestamp"]
-            if start_dt.tzinfo is not None:
-                start_dt_naive = start_dt.replace(tzinfo=None)
-            else:
-                start_dt_naive = start_dt
-            offset = start_dt_naive - first_ts
-            shifted: dict[str, list[tuple[datetime, float]]] = {}
-            for key, samples in fit_result.items():
-                shifted[key] = [(ts + offset, v) for ts, v in samples]
-            fit_result = shifted
 
         self.fit_data = {}
         for key, samples in fit_result.items():
@@ -653,7 +683,7 @@ class TelemetryDataManager:
                     "label": field_name.replace("_", " ").title(),
                     "x": 0.5, "y": 0.08, "rotation": 0,
                     "form": "text",
-                    "font_size": 0.018, "size": 0.1, "thickness": 0.001,
+                    "font_size": 0.025, "size": 0.025, "thickness": 0.001,
                     "min_val": min_val, "max_val": max(max_val, min_val + 1),
                     "ticks": 0, "source": "fit",
                     "unit": "",
