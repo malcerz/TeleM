@@ -31,7 +31,7 @@ tools = [
 telem = "src.gui.qt.application:main"
 
 [project.urls]
-Homepage = "https://github.com/adramad/telem"
+Homepage = "https://github.com/malcerz/TeleM"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

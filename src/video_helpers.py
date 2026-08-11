@@ -16,7 +16,7 @@ except ImportError:
     print("Błąd: brakuje Pillow. Zainstaluj: python -m pip install pillow", file=sys.stderr)
     sys.exit(1)
 
-from src.ffmpeg_pipeline import detect_gpu_decoder
+from src.ffmpeg.detection import detect_gpu_decoder
 
 _FFPROBE_DURATION_CACHE: dict[str, float] = {}
 _CV2_CAP_CACHE: dict[str, any] = {}
