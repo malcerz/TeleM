@@ -376,11 +376,13 @@ def render_preview(
     start_dt_utc: Optional[datetime] = None,
     elapsed_seconds: float = 0.0,
     avg_speed_kmh: float = 0.0,
+    inplace: bool = False,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top."""
     # Avoid a full-resolution copy if the image is already RGBA
     img = src_img if src_img.mode == "RGBA" else src_img.convert("RGBA")
-    img = img.copy()
+    if not inplace:
+        img = img.copy()
     w, h = img.size
     if _bboxes is None:
         _bboxes = {}

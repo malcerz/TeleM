@@ -48,6 +48,10 @@ class SharedFramePool:
         """Read raw frame bytes from a slot (zero-copy via memoryview)."""
         return bytes(self._shm_blocks[slot].buf[:self.frame_size])
 
+    def get_memview(self, slot: int) -> memoryview:
+        """Return memoryview of the shared memory slot directly without copying."""
+        return self._shm_blocks[slot].buf[:self.frame_size]
+
     def read_into(self, slot: int, dest: Any) -> None:
         """Write slot contents directly to a writable file-like object."""
         dest.write(self._shm_blocks[slot].buf[:self.frame_size])

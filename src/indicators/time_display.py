@@ -84,6 +84,22 @@ def render_time_display(
     if show_avg_speed:
         avg_speed_str = f"{avg_speed_kmh:.1f} km/h"
 
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+
+    td_cfg_str = str(sorted(cfg.items()))
+    global_cfg_str = str(sorted(layout.get("global", {}).items()))
+
+    cache_key = _static_cache_key(
+        "time_display", canvas_w, canvas_h, font_path,
+        date_text, time_text, elapsed_str, avg_speed_str,
+        td_cfg_str, global_cfg_str
+    )
+    px_x = s(cfg["x"], canvas_w)
+    px_y = s(cfg["y"], canvas_h)
+    cached = _STATIC_CACHE.get(cache_key)
+    if cached is not None:
+        return cached, px_x, px_y
+
     # ── Line definitions ──────────────────────────────────────────────
     # (show_flag, text, config_prefix, default_color_rgb, default_label)
     line_defs: list[tuple[bool, str, str, tuple[int, int, int], str]] = [
@@ -164,4 +180,6 @@ def render_time_display(
     if not bbox:
         return None, 0, 0
 
-    return tmp.crop(bbox), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h)
+    cropped = tmp.crop(bbox)
+    _STATIC_CACHE[cache_key] = cropped
+    return cropped, px_x, px_y

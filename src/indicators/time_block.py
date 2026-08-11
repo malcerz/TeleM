@@ -33,6 +33,21 @@ def render_time_block(
     if cfg is None or not cfg.get("enabled", True):
         return None, 0, 0
 
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+    
+    tb_cfg_str = str(sorted(cfg.items()))
+    global_cfg_str = str(sorted(layout.get("global", {}).items()))
+    
+    cache_key = _static_cache_key(
+        "time_block", canvas_w, canvas_h, font_path,
+        date_text, time_text, tb_cfg_str, global_cfg_str
+    )
+    px_x = s(cfg["x"], canvas_w)
+    px_y = s(cfg["y"], canvas_h)
+    cached = _STATIC_CACHE.get(cache_key)
+    if cached is not None:
+        return cached, px_x, px_y
+
     min_dim = min(canvas_w, canvas_h)
     outline_raw = int(layout["global"].get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
@@ -86,4 +101,6 @@ def render_time_block(
     if not bbox:
         return None, 0, 0
 
-    return tmp.crop(bbox), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h)
+    cropped = tmp.crop(bbox)
+    _STATIC_CACHE[cache_key] = cropped
+    return cropped, px_x, px_y

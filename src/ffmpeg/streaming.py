@@ -26,6 +26,7 @@ from src.ffmpeg.shared_memory import (
     render_frame_shm_job,
 )
 from src.ffmpeg.frame_renderer import render_frame_bytes_job
+from src.benchmark import BenchmarkTracker
 
 
 def _pipe_writer_thread(
@@ -38,6 +39,7 @@ def _pipe_writer_thread(
     Receives (bytes_data,) from write_queue and writes to stdin_buffer.
     Terminates when done_event is set and queue is empty, or on None sentinel.
     """
+    bt = BenchmarkTracker.get_instance()
     try:
         while True:
             try:
@@ -48,7 +50,11 @@ def _pipe_writer_thread(
                 continue
             if item is None:  # sentinel
                 break
-            stdin_buffer.write(item)
+            bt.start_timer("ffmpeg_write")
+            try:
+                stdin_buffer.write(item)
+            finally:
+                bt.stop_timer("ffmpeg_write")
     except (BrokenPipeError, OSError):
         pass
 
@@ -279,17 +285,25 @@ def stream_overlay_to_ffmpeg(
     # Frame size in bytes: RGBA = 4 bytes per pixel
     frame_size = overlay_w * overlay_h * 4
 
+    shm_pool: SharedFramePool | None = None
+    if n_workers > 1:
+        # Number of SHM slots: enough to keep workers busy + reorder buffer
+        MAX_IN_FLIGHT = max(4, n_workers * 2)
+        n_shm_slots = MAX_IN_FLIGHT
+        shm_pool = SharedFramePool(n_shm_slots, frame_size)
+    else:
+        MAX_IN_FLIGHT = 1
+        n_shm_slots = 1
+
     # ── Async pipe writer (background thread) ───────────────────────────
     pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
     pipe_done = threading.Event()
     writer_t = threading.Thread(
         target=_pipe_writer_thread,
-        args=(pipe_queue, process.stdin.buffer, pipe_done),
+        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool),
         daemon=True,
     )
     writer_t.start()
-
-    shm_pool: SharedFramePool | None = None
 
     try:
         if n_workers <= 1:
@@ -305,11 +319,6 @@ def stream_overlay_to_ffmpeg(
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
-            # ── Shared Memory pool ──────────────────────────────────────
-            # Number of SHM slots: enough to keep workers busy + reorder buffer
-            MAX_IN_FLIGHT = max(4, n_workers * 2)
-            n_shm_slots = MAX_IN_FLIGHT
-            shm_pool = SharedFramePool(n_shm_slots, frame_size)
             shm_names = shm_pool.shm_names()
 
             init_args = (
@@ -357,12 +366,11 @@ def stream_overlay_to_ffmpeg(
                         idx, slot = fut.result()
                         reorder_buf[idx] = slot
 
-                    # Drain consecutive frames to pipe writer queue
+                    # Drain consecutive frames to pipe writer queue (zero-copy)
                     while next_idx in reorder_buf:
                         slot = reorder_buf.pop(next_idx)
-                        frame_bytes = shm_pool.read(slot)
-                        shm_pool.release(slot)
-                        pipe_queue.put(frame_bytes)
+                        memview = shm_pool.get_memview(slot)
+                        pipe_queue.put((slot, memview))
                         total_piped += 1
                         next_idx += 1
                         if total_piped % 50 == 0 or total_piped == total_overlay_frames:
@@ -387,12 +395,11 @@ def stream_overlay_to_ffmpeg(
                         f.cancel()
                     ex.shutdown(wait=False, cancel_futures=True)
 
-                # Drain final reorder buffer
+                # Drain final reorder buffer (zero-copy)
                 while next_idx in reorder_buf:
                     slot = reorder_buf.pop(next_idx)
-                    frame_bytes = shm_pool.read(slot)
-                    shm_pool.release(slot)
-                    pipe_queue.put(frame_bytes)
+                    memview = shm_pool.get_memview(slot)
+                    pipe_queue.put((slot, memview))
                     total_piped += 1
                     next_idx += 1
                     _report_stream_progress(
@@ -441,5 +448,8 @@ def stream_overlay_to_ffmpeg(
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         if concat_txt.exists():
             concat_txt.unlink()
+
+    # Wydrukuj podsumowanie wydajności renderowania
+    BenchmarkTracker.get_instance().print_summary()
 
     return total_piped

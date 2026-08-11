@@ -29,25 +29,42 @@ def _render_bar_indicator(
 
     text_color = parse_hex_color(cfg.get("text_color", "#D2D2D2")) or (210, 210, 210)
 
-    if label:
-        draw.text(
-            (20 * ss, 0), label, font=font,
-            fill=(text_color[0], text_color[1], text_color[2], 255),
-            stroke_width=outline, stroke_fill=(0, 0, 0, 255),
-        )
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
 
+    cfg_str = str(sorted(cfg.items()))
+    global_cfg_str = str(sorted(layout.get("global", {}).items()))
+
+    bg_key = _static_cache_key(
+        "bar_bg", w, h, label, font_path, ticks, thickness, cfg_str, global_cfg_str, ss
+    )
+    bg = _STATIC_CACHE.get(bg_key)
+    if bg is None:
+        bg = Image.new("RGBA", (w + 40 * ss, h + 30 * ss), (0, 0, 0, 0))
+        draw_bg = ImageDraw.Draw(bg)
+        if label:
+            draw_bg.text(
+                (20 * ss, 0), label, font=font,
+                fill=(text_color[0], text_color[1], text_color[2], 255),
+                stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+            )
+        by = h - thickness - 5 * ss
+        x1, x2 = 20 * ss, w + 20 * ss
+        draw_bg.line((x1, by, x2, by), fill=(160, 160, 160, 180), width=thickness * ss)
+
+        if ticks > 1:
+            for i in range(ticks + 1):
+                xt = x1 + (w * i / ticks)
+                draw_bg.line(
+                    (xt, by - thickness * ss, xt, by + thickness * ss),
+                    fill=(245, 245, 245, 220),
+                    width=max(1, thickness // 4 * ss),
+                )
+        _STATIC_CACHE[bg_key] = bg
+
+    img = bg.copy()
+    draw = ImageDraw.Draw(img)
     by = h - thickness - 5 * ss
     x1, x2 = 20 * ss, w + 20 * ss
-    draw.line((x1, by, x2, by), fill=(160, 160, 160, 180), width=thickness * ss)
-
-    if ticks > 1:
-        for i in range(ticks + 1):
-            xt = x1 + (w * i / ticks)
-            draw.line(
-                (xt, by - thickness * ss, xt, by + thickness * ss),
-                fill=(245, 245, 245, 220),
-                width=max(1, thickness // 4 * ss),
-            )
 
     frac = max(0, min(1, (value - val_min) / (val_max - val_min))) if val_max > val_min else 0
     dot_x = x1 + frac * w

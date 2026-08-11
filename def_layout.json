@@ -388,6 +388,22 @@
       "ticks": 0,
       "source": "fit",
       "unit": ""
+    },
+    "fit_fractional_cadence_text": {
+      "enabled": false,
+      "label": "Fractional Cadence",
+      "x": 50.0,
+      "y": 8.0,
+      "rotation": 0,
+      "form": "text",
+      "font_size": 2.5,
+      "size": 2.5,
+      "thickness": 1,
+      "min_val": 0.0,
+      "max_val": 1.0,
+      "ticks": 0,
+      "source": "fit",
+      "unit": ""
     }
   },
   "smoothing": {
