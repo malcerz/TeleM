@@ -8,28 +8,27 @@ version = "0.16.9"
 description = "GoPro video telemetry overlay application"
 requires-python = ">=3.10"
 dependencies = [
+    "PySide6>=6.6",
+    "numpy>=1.26",
     "Pillow>=10.0",
+    "opencv-python>=4.8",
+    "fitparse>=1.2",
+    "orjson>=3.9",
+    "python-mpv>=1.0",
+    "pyopencl>=2024.1",
 ]
 
 [project.optional-dependencies]
-fit = [
-    "fitparse>=1.2",
+dev = [
+    "pytest>=8.0",
 ]
-video = [
-    "opencv-python>=4.8",
-    "python-mpv>=1.0",
-]
-json-accel = [
-    "orjson>=3.9",
-]
-all = [
-    "fitparse>=1.2",
-    "opencv-python>=4.8",
-    "orjson>=3.9",
+
+tools = [
+    "py7zr>=0.20",
 ]
 
 [project.scripts]
-telem = "src.gui.hud_tuner_app:main"
+telem = "src.gui.qt.application:main"
 
 [project.urls]
 Homepage = "https://github.com/adramad/telem"

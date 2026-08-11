@@ -1,4 +1,4 @@
-﻿"""Overlay renderer – re-exports from the `indicators` package.
+"""Overlay renderer – re-exports from the `indicators` package.
 
 Everything has been migrated to `src/indicators/` for better organisation.
 This module exists for backwards compatibility – all existing `from

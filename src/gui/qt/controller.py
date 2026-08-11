@@ -16,13 +16,10 @@ import queue
 import subprocess
 import sys
 import threading
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
-
-import threading
-import queue
-from collections import defaultdict
 from PySide6.QtCore import QObject, Signal, QTimer, QUrl, Qt
 from PIL import Image
 from PySide6.QtGui import QImage

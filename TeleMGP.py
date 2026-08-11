@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """TeleM – GoPro Telemetry Overlay Application (launcher).
 
-Uruchamia nowy interfejs PySide6 z czterema zakładkami.
-Stary interfejs Tkinter dostępny przez: python -c "from src.gui.hud_tuner_app import main; main()"
+Uruchamia interfejs PySide6 z czterema zakładkami:
+Wczytywanie / Projekt / Rendering / Ustawienia.
 """
 import sys
 from pathlib import Path
