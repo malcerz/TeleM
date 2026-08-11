@@ -485,7 +485,13 @@ def extract_temperature_samples(
 def extract_speed_samples(
     records: list[dict[str, Any]], prefer_3d: bool = True
 ) -> list[tuple[datetime, float]]:
-    """Extract speed samples (2D or 3D) from ExifTool records."""
+    """Extract speed samples (2D or 3D) from ExifTool records.
+
+    GoPro GPMF stores GPSSpeed/GPSSpeed3D natively in **km/h** (verified
+    against position-derived haversine speed and matching Garmin FIT data),
+    so the raw value is returned as-is — it already matches the units used
+    by the HUD (km/h) and the FIT/GPX speed sources. Do NOT multiply by 3.6.
+    """
     records = ensure_records_list(records)
     samples: list[tuple[datetime, float]] = []
 
@@ -515,6 +521,7 @@ def extract_speed_samples(
             if dt is None:
                 continue
 
+            # GoPro GPSSpeed/GPSSpeed3D are already in km/h — return as-is
             samples.append((dt, max(0.0, speed)))
 
     samples.sort(key=lambda x: x[0])
@@ -945,9 +952,15 @@ def interpolate_temperature(
 def interpolate_value(
     samples: list[tuple[datetime, float]], target_dt: datetime
 ) -> float:
-    """Generic step interpolation for scalar values (power, atemp, hr, cad)."""
+    """Generic step interpolation for scalar values (power, atemp, hr, cad, FIT fields).
+
+    Only speed and distance are interpolated linearly (smooth per frame);
+    the remaining FIT/GPX-derived values (HR, power, cadence, temperature,
+    battery and every ``fit_*`` field) are shown as steps — the previous
+    sample is held until the next one arrives (~1 s for Garmin FIT).
+    """
     if not samples:
-        return 0
+        return 0.0
     target_dt = _normalise_dt(target_dt)
     samples = _normalise_samples(samples)
     times = [dt for dt, _ in samples]

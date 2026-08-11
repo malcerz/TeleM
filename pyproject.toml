@@ -17,6 +17,7 @@ fit = [
 ]
 video = [
     "opencv-python>=4.8",
+    "python-mpv>=1.0",
 ]
 json-accel = [
     "orjson>=3.9",

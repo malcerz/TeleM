@@ -5,10 +5,11 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
-    QLabel, QHBoxLayout, QFileDialog, QMessageBox,
+    QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox,
 )
 
 from src.gui.qt.signals import get_signals
+from src.gui.qt.mpv_hwdec import detect_preview_vendor, get_available_vendors, vendor_label
 
 
 class LoadTab(QWidget):
@@ -87,6 +88,37 @@ class LoadTab(QWidget):
 
         vbox.addLayout(btn_row)
 
+        # ── Akcelerator podglądu (nowy) ───────────────────────────────────
+        accel_row = QHBoxLayout()
+        accel_row.setContentsMargins(0, 2, 0, 2)
+        accel_row.setSpacing(6)
+        lbl_gpu = QLabel("Podgląd GPU:")
+        lbl_gpu.setStyleSheet("color: #aaa; font-size: 12px;")
+        lbl_gpu.setFixedWidth(80)
+        accel_row.addWidget(lbl_gpu)
+
+        self.cmb_preview_accel = QComboBox()
+        self.cmb_preview_accel.setMinimumWidth(140)
+        self.cmb_preview_accel.setStyleSheet(
+            "QComboBox { background-color: #2a2a2a; color: #ddd; "
+            "border: 1px solid #555; border-radius: 3px; padding: 2px 8px; font-size: 12px; }"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView { background-color: #2a2a2a; color: #ddd; selection-background-color: #0078d4; }"
+        )
+
+        # Populate with "Auto" + detected vendors
+        self.cmb_preview_accel.addItem("Auto", "auto")
+        best = detect_preview_vendor()
+        for code in get_available_vendors():
+            self.cmb_preview_accel.addItem(vendor_label(code), code)
+
+        # Pre-select "Auto"
+        self.cmb_preview_accel.setCurrentIndex(0)
+        self.cmb_preview_accel.currentIndexChanged.connect(self._on_accel_changed)
+        accel_row.addWidget(self.cmb_preview_accel)
+        accel_row.addStretch()
+        vbox.addLayout(accel_row)
+
         # Informacja
         self.lbl_info = QLabel("Nie wczytano plików.")
         self.lbl_info.setStyleSheet("color: #888; font-size: 12px;")
@@ -142,6 +174,11 @@ class LoadTab(QWidget):
                 self.signals.sig_progress.disconnect(self._on_loading_done)
             except Exception:
                 pass
+
+    def _on_accel_changed(self, _index: int) -> None:
+        """Emit preview accelerator changed when the user picks a new GPU."""
+        vendor = self.cmb_preview_accel.currentData()
+        self.signals.sig_preview_accel_changed.emit(vendor or "auto")
 
     def _on_clear(self) -> None:
         self.btn_mp4.setText("Wybierz plik(i) MP4...")

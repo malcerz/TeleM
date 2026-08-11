@@ -32,8 +32,16 @@ class RenderTab(QWidget):
         form.setSpacing(10)
 
         self.cmb_encoder = QComboBox()
-        self.cmb_encoder.addItems(["nv", "intel", "cpu"])
-        self.cmb_encoder.setToolTip("nv = NVIDIA NVENC, intel = Intel QuickSync, cpu = software")
+        self.cmb_encoder.addItems(["nv", "amd", "intel", "cpu"])
+        self.cmb_encoder.setToolTip("nv = NVIDIA NVENC, amd = AMD AMF, intel = Intel QuickSync, cpu = software")
+        try:
+            from src.ffmpeg_pipeline import detect_best_encoder
+            best_enc = detect_best_encoder()
+            idx = self.cmb_encoder.findText(best_enc)
+            if idx >= 0:
+                self.cmb_encoder.setCurrentIndex(idx)
+        except Exception:
+            pass
         form.addRow("Encoder:", self.cmb_encoder)
 
         self.cmb_resolution = QComboBox()

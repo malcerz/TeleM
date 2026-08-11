@@ -12,7 +12,7 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
-from src.indicators.helpers import _parse_marker_color, s
+from src.indicators.helpers import _parse_marker_color, s, apply_map_shape
 
 
 def _render_moving_map_indicator(
@@ -67,13 +67,21 @@ def _render_moving_map_indicator(
             renderer._mkr_radius = int(cfg.get("marker_size", 7))
 
         map_w = size_px
-        map_h = max(40, int(map_w * 0.65))
+        map_h = map_w  # kwadrat / średnica okręgu (kształt z zakładki Shape)
         if target_dt is not None:
             gps0 = gps_track[0][0]
             if hasattr(gps0, 'timestamp'):
-                gps0_ts = (gps0.replace(tzinfo=timezone.utc).timestamp()
-                           if gps0.tzinfo is None else gps0.timestamp())
-                ts = target_dt.timestamp() - gps0_ts
+                # Normalise BOTH timestamps to consistent UTC epochs, otherwise
+                # a naive target_dt would be interpreted as local time while the
+                # track start is read as UTC — shifting the marker by the local
+                # UTC offset (e.g. 2 h) and pinning it to the start of the route.
+                target_epoch = (target_dt.timestamp()
+                                if target_dt.tzinfo is not None
+                                else target_dt.replace(tzinfo=timezone.utc).timestamp())
+                gps0_ts = (gps0.timestamp()
+                           if gps0.tzinfo is not None
+                           else gps0.replace(tzinfo=timezone.utc).timestamp())
+                ts = target_epoch - gps0_ts
             else:
                 ts = 0.0
         else:
@@ -91,6 +99,8 @@ def _render_moving_map_indicator(
             draw_marker=not hide_marker
         )
         renderer._is_first_render = False
+        # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
+        map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:
         return None, 0, 0, None

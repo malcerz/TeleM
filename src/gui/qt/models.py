@@ -59,12 +59,13 @@ def _header_fields(with_source: bool = True) -> list[FieldSchema]:
     """Pola zawsze widoczne nad zakładkami (pozycja, etykieta, rotacja)."""
     fields = [
         FieldSchema("size", "float", "Rozmiar", tab="",
-                    min_val=0.01, max_val=0.5, step=0.001),
+                    min_val=1.0, max_val=50.0, step=0.1),
         FieldSchema("label", "text", "Etykieta", tab=""),
+        FieldSchema("unit", "text", "Jednostka", tab=""),
         FieldSchema("x", "float", "Pozycja X", tab="",
-                    min_val=0.0, max_val=1.0, step=0.001),
+                    min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("y", "float", "Pozycja Y", tab="",
-                    min_val=0.0, max_val=1.0, step=0.001),
+                    min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("rotation", "choice", "Rotacja", tab="",
                     choices=["0", "90", "180", "270"]),
     ]
@@ -86,14 +87,14 @@ def _form_field(choices: list[str] | None = None) -> list[FieldSchema]:
 
 
 def _text_tab_fields(
-    font_range=(0.005, 0.1), repo_range=(-0.3, 0.3),
+    font_range=(0.5, 10.0), repo_range=(-0.5, 0.5),
     with_color: bool = True, with_distance: bool = False,
 ) -> list[FieldSchema]:
     """Zakładka Text – wygląd tekstu wartości i jego pozycja."""
     fields: list[FieldSchema] = [
         FieldSchema("font_size", "float", "Size",
                     tab="Text",
-                    min_val=font_range[0], max_val=font_range[1], step=0.001),
+                    min_val=font_range[0], max_val=font_range[1], step=0.1),
         FieldSchema("decimals", "int", "Decimals",
                     tab="Text", min_val=0, max_val=3, step=1),
         FieldSchema("show_value", "bool", "Value", tab="Text"),
@@ -102,17 +103,17 @@ def _text_tab_fields(
     if with_distance:
         fields.append(
             FieldSchema("text_distance", "float", "Distance",
-                        tab="Text", min_val=-2.0, max_val=2.0, step=0.1))
+                        tab="Text", min_val=-200.0, max_val=200.0, step=1.0))
     if with_color:
         fields.append(
             FieldSchema("text_color", "color", "Color", tab="Text"))
     fields += [
         FieldSchema("text_offset_x", "float", "Pos X",
                     tab="Text",
-                    min_val=repo_range[0], max_val=repo_range[1], step=0.001),
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01),
         FieldSchema("text_offset_y", "float", "Pos Y",
                     tab="Text",
-                    min_val=repo_range[0], max_val=repo_range[1], step=0.001),
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01),
     ]
     return fields
 
@@ -129,20 +130,20 @@ def _labels_tab_fields() -> list[FieldSchema]:
     ]
 
 
-def _ticks_tab_fields(with_range: bool = True) -> list[FieldSchema]:
+def _ticks_tab_fields(with_range: bool = True, with_ticks: bool = True) -> list[FieldSchema]:
     """Zakładka Ticks – podziałki i zakres wartości."""
-    fields: list[FieldSchema] = [
-        FieldSchema("ticks", "int", "Tick",
-                    tab="Ticks", min_val=0, max_val=20, step=1),
-        FieldSchema("thickness", "int", "Width",
-                    tab="Ticks", min_val=1, max_val=10, step=1),
-    ]
+    fields: list[FieldSchema] = []
+    if with_ticks:
+        fields.append(FieldSchema("ticks", "int", "Tick",
+                                  tab="Ticks", min_val=0, max_val=20, step=1))
+    fields.append(FieldSchema("thickness", "int", "Width",
+                              tab="Ticks", min_val=1, max_val=10, step=1))
     if with_range:
         fields += [
             FieldSchema("min_val", "float", "Minimum", tab="Ticks",
-                        min_val=0, max_val=1000, step=1),
+                        min_val=-1000, max_val=1000, step=1),
             FieldSchema("max_val", "float", "Maksimum", tab="Ticks",
-                        min_val=1, max_val=10000, step=1),
+                        min_val=-1000, max_val=10000, step=1),
         ]
     return fields
 
@@ -154,9 +155,6 @@ def _gauge_tab_fields() -> list[FieldSchema]:
         FieldSchema("marker_size", "int", "Rozmiar kropki",
                     tab="Gauge", min_val=0, max_val=30, step=1),
         FieldSchema("marker_color", "color", "Kolor kropki", tab="Gauge"),
-        FieldSchema("bar_width", "int", "Width",
-                    tab="Gauge", min_val=1, max_val=10, step=1),
-        FieldSchema("show_bar", "bool", "Bar", tab="Gauge"),
         FieldSchema("start_angle", "int", "Kąt startu",
                     tab="Gauge", min_val=0, max_val=360, step=5),
         FieldSchema("sweep_angle", "int", "Rozpiętość",
@@ -178,8 +176,6 @@ def _chart_tab_fields() -> list[FieldSchema]:
                     min_val=0, max_val=255, step=5),
         FieldSchema("grid_color", "color", "Siatka", tab="Chart"),
         FieldSchema("show_grid", "bool", "Pokaż siatkę", tab="Chart"),
-        FieldSchema("window_s", "float", "Okno czasu (s)", tab="Chart",
-                    min_val=5.0, max_val=300.0, step=5.0),
         FieldSchema("line_width", "int", "Grubość linii", tab="Chart",
                     min_val=1, max_val=8, step=1),
     ]
@@ -224,11 +220,10 @@ def text_indicator_fields() -> list[FieldSchema]:
 
 
 def gauge_indicator_fields() -> list[FieldSchema]:
-    """Gauge: Header, Text, Labels, Ticks, Gauge."""
+    """Gauge: Header, Text, Ticks, Gauge."""
     return (
         _header_fields() + _form_field()
         + _text_tab_fields()
-        + _labels_tab_fields()
         + _ticks_tab_fields()
         + _gauge_tab_fields()
     )
@@ -245,9 +240,9 @@ def bar_indicator_fields() -> list[FieldSchema]:
         + [
             FieldSchema("show_range_labels", "bool", "Pokaż zakres", tab="Text"),
             FieldSchema("range_label_offset_x", "float", "Offset X", tab="Text",
-                        min_val=-0.2, max_val=0.2, step=0.001),
+                        min_val=-20.0, max_val=20.0, step=0.1),
             FieldSchema("range_label_offset_y", "float", "Offset Y", tab="Text",
-                        min_val=-0.2, max_val=0.2, step=0.001),
+                        min_val=-20.0, max_val=20.0, step=0.1),
             FieldSchema("bar_direction", "choice", "Kierunek", tab="Gauge",
                         choices=["horizontal", "vertical"]),
             FieldSchema("dot_color", "color", "Kolor kropki", tab="Gauge"),
@@ -256,12 +251,12 @@ def bar_indicator_fields() -> list[FieldSchema]:
 
 
 def chart_indicator_fields() -> list[FieldSchema]:
-    """Chart: Header, Text, Labels, Ticks, Chart (własna zakładka)."""
+    """Chart: Header, Text, Labels, Ticks (bez Tick), Chart (własna zakładka)."""
     return (
         _header_fields() + _form_field()
         + _text_tab_fields(with_color=True)
         + _labels_tab_fields()
-        + _ticks_tab_fields()
+        + _ticks_tab_fields(with_ticks=False)
         + _chart_tab_fields()
     )
 
@@ -358,12 +353,12 @@ def time_display_indicator_fields() -> list[FieldSchema]:
     """TimeDisplay: Header + 4 per-line tabs."""
     header = [
         FieldSchema("size", "float", "Rozmiar", tab="",
-                    min_val=0.001, max_val=1.0, step=0.001),
+                    min_val=0.1, max_val=100.0, step=0.1),
         FieldSchema("label", "text", "Etykieta", tab=""),
         FieldSchema("x", "float", "Pozycja X", tab="",
-                    min_val=0.0, max_val=1.0, step=0.001),
+                    min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("y", "float", "Pozycja Y", tab="",
-                    min_val=0.0, max_val=1.0, step=0.001),
+                    min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("rotation", "choice", "Rotacja", tab="",
                     choices=["0", "90", "180", "270"]),
     ]
@@ -372,7 +367,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_date_label", "bool", "Pokaż etykietę", tab="Data"),
         FieldSchema("date_label", "text", "Etykieta", tab="Data"),
         FieldSchema("date_font_size", "float", "Rozmiar czcionki",
-                    tab="Data", min_val=0.008, max_val=0.08, step=0.001),
+                    tab="Data", min_val=0.8, max_val=8.0, step=0.1),
         FieldSchema("date_color", "color", "Kolor", tab="Data"),
     ]
     time_tab = [
@@ -380,7 +375,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_time_label", "bool", "Pokaż etykietę", tab="Czas"),
         FieldSchema("time_label", "text", "Etykieta", tab="Czas"),
         FieldSchema("time_font_size", "float", "Rozmiar czcionki",
-                    tab="Czas", min_val=0.008, max_val=0.08, step=0.001),
+                    tab="Czas", min_val=0.8, max_val=8.0, step=0.1),
         FieldSchema("time_color", "color", "Kolor", tab="Czas"),
     ]
     elapsed_tab = [
@@ -388,7 +383,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_elapsed_label", "bool", "Pokaż etykietę", tab="Od początku"),
         FieldSchema("elapsed_label", "text", "Etykieta", tab="Od początku"),
         FieldSchema("elapsed_font_size", "float", "Rozmiar czcionki",
-                    tab="Od początku", min_val=0.008, max_val=0.08, step=0.001),
+                    tab="Od początku", min_val=0.8, max_val=8.0, step=0.1),
         FieldSchema("elapsed_color", "color", "Kolor", tab="Od początku"),
     ]
     avg_speed_tab = [
@@ -396,7 +391,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_avg_speed_label", "bool", "Pokaż etykietę", tab="Śr. prędkość"),
         FieldSchema("avg_speed_label", "text", "Etykieta", tab="Śr. prędkość"),
         FieldSchema("avg_speed_font_size", "float", "Rozmiar czcionki",
-                    tab="Śr. prędkość", min_val=0.008, max_val=0.08, step=0.001),
+                    tab="Śr. prędkość", min_val=0.8, max_val=8.0, step=0.1),
         FieldSchema("avg_speed_color", "color", "Kolor", tab="Śr. prędkość"),
     ]
     return header + date_tab + time_tab + elapsed_tab + avg_speed_tab
@@ -419,3 +414,19 @@ def get_schema_for_form(form: str) -> list[FieldSchema]:
     """Zwraca schemat pól dla podanej formy wskaźnika."""
     fn = FORM_SCHEMA_MAP.get(form, text_indicator_fields)
     return fn()
+
+
+def _sync_size_font_fields(cfg: dict, field_name: str) -> None:
+    """Synchronizuje size/font_size tylko dla formy "text".
+
+    Dla formy "text" oba pola sterują rozmiarem tekstu — trzymamy je w zgodzie.
+    Dla gauge/chart/bar/segment_bar/map pole ``size`` ustawia wymiary wskaźnika,
+    a ``font_size`` rozmiar czcionki etykiety — muszą pozostać niezależne, inaczej
+    "Size" z zakładki Text zmieniałby rozmiar całego wskaźnika.
+    """
+    if cfg.get("form", "text") != "text":
+        return
+    if field_name == "size":
+        cfg["font_size"] = cfg["size"]
+    elif field_name == "font_size":
+        cfg["size"] = cfg["font_size"]

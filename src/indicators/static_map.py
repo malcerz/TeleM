@@ -13,7 +13,7 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
-from src.indicators.helpers import _parse_marker_color, s
+from src.indicators.helpers import _parse_marker_color, s, apply_map_shape
 
 
 def _render_static_map_indicator(
@@ -28,7 +28,7 @@ def _render_static_map_indicator(
         from src.map_renderer import render_map_overlay, precache_map_tiles
 
         map_w = size_px
-        map_h = max(40, int(map_w * 0.65))
+        map_h = map_w  # kwadrat / średnica okręgu (kształt z zakładki Shape)
         zoom = int(cfg.get("zoom", 16))
         map_style = cfg.get("map_style", "light_all")
 
@@ -49,7 +49,10 @@ def _render_static_map_indicator(
 
         if target_dt is not None:
             import bisect
-            target_ts = target_dt.timestamp()
+            # Normalise to consistent UTC epoch (naive → treated as UTC)
+            target_ts = (target_dt.timestamp()
+                         if target_dt.tzinfo is not None
+                         else target_dt.replace(tzinfo=timezone.utc).timestamp())
             cache_key = id(gps_track)
             if (not hasattr(_render_static_map_indicator, "_gps_times")
                     or _render_static_map_indicator._gps_times_id != cache_key):
@@ -87,6 +90,8 @@ def _render_static_map_indicator(
             hide_track=hide_track,
             download_missing=False,
         )
+        # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
+        map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:
         return None, 0, 0, None

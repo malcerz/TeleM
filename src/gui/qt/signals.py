@@ -59,6 +59,10 @@ class AppSignals(QObject):
     # Tryb podglądu: "hud" (z nakładką) vs "gpu_video" (czyste wideo GPU)
     sig_preview_mode_changed = Signal(str)
 
+    # Wybór akceleratora podglądu z UI
+    sig_preview_accel_changed = Signal(str)
+    # (vendor: str – 'auto', 'nv', 'amd', 'intel', 'cpu')
+
     # Playback: start / stop
     sig_playback_start = Signal()
     sig_playback_stop = Signal()

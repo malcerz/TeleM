@@ -66,6 +66,14 @@ def _render_chart_indicator(
     label_units = bool(cfg.get("label_units", False))
     show_average = bool(cfg.get("show_average", False))
 
+    # label_font_size (Właściwości) → pixel size, clamped to fit the chart
+    lfs = cfg.get("label_font_size")
+    if lfs:
+        label_fs_px = max(7, int(s(float(lfs), min_dim)))
+        label_fs_px = min(label_fs_px, max(8, chart_h // 2))
+    else:
+        label_fs_px = 0
+
     chart_img = generate_history_chart(
         chart_vals, chart_w, chart_h,
         line_color=line_clr,
@@ -77,6 +85,7 @@ def _render_chart_indicator(
         custom_min_val=custom_min, custom_max_val=custom_max,
         label_count=label_count, label_units=label_units, unit=unit,
         show_average=show_average,
+        label_font_size=label_fs_px, font_path=font_path,
     )
 
     margin_top = fs + 8 if label else 0

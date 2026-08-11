@@ -101,6 +101,9 @@ class SettingsTab(QWidget):
         self.spin_threads = QSpinBox()
         self.spin_threads.setRange(1, 32)
         self.spin_threads.setValue(8)
+        self.spin_threads.valueChanged.connect(
+            lambda v: self.signals.sig_settings_changed.emit("threads", v)
+        )
         perf_form.addRow("Liczba wątków:", self.spin_threads)
 
         row_cache = QHBoxLayout()

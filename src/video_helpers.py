@@ -62,15 +62,20 @@ def sanitize_output_path(path_text):
 
 
 def get_proxy_path(video_path):
+    """Return a low-res proxy path for the given video, or None.
+
+    Used only as a fallback for OpenCV frame extraction (CPU path).
+    The primary preview path now goes through QMediaPlayer (HW-accelerated).
+    """
     p = Path(video_path)
     parent = p.parent
     name = p.name
-    
+
     for ext in ('.mp4', '.MP4'):
         cand = parent / f"{p.stem}_proxy{ext}"
         if cand.exists():
             return cand
-            
+
     if len(name) >= 4:
         for prefix_type in [('GX', 'GL'), ('gx', 'gl'), ('GH', 'GL'), ('gh', 'gl'), ('GP', 'GL'), ('gp', 'gl')]:
             src_pref, tgt_pref = prefix_type
@@ -80,12 +85,12 @@ def get_proxy_path(video_path):
                     cand = parent / Path(lrv_name).with_suffix(ext)
                     if cand.exists() and cand != p:
                         return cand
-                        
+
     for ext in ('.lrv', '.LRV'):
         cand = p.with_suffix(ext)
         if cand.exists() and cand != p:
             return cand
-            
+
     return None
 
 
@@ -94,7 +99,23 @@ def get_cached_capture(path):
     if path_str not in _CV2_CAP_CACHE:
         try:
             import cv2
-            cap = cv2.VideoCapture(path_str)
+            cap = None
+            # Try hardware-accelerated capture first (OpenCV ≥ 4.5.4)
+            if hasattr(cv2, 'CAP_PROP_HW_ACCELERATION') and hasattr(cv2, 'VIDEO_ACCELERATION_ANY'):
+                try:
+                    cap = cv2.VideoCapture(
+                        path_str,
+                        cv2.CAP_FFMPEG,
+                        [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY]
+                    )
+                    if not cap.isOpened():
+                        cap.release()
+                        cap = None
+                except Exception:
+                    cap = None
+            # Fallback: standard CPU capture
+            if cap is None:
+                cap = cv2.VideoCapture(path_str)
             if cap.isOpened():
                 _CV2_CAP_CACHE[path_str] = cap
             else:
@@ -113,7 +134,7 @@ def clear_capture_cache():
     _CV2_CAP_CACHE.clear()
 
 
-def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ffprobe', target_w=960):
+def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ffprobe', target_w=960, preferred_encoder=''):
     if not isinstance(video_paths, list):
         video_paths = [video_paths]
 
@@ -168,7 +189,7 @@ def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ff
     if target_w:
         scale_filter = ['-vf', f'scale={target_w}:-1']
 
-    hwaccel = detect_gpu_decoder()
+    hwaccel = detect_gpu_decoder(preferred_encoder)
     for attempt in (0, 1):
         cmd = [ffmpeg_exe]
         if attempt == 0 and hwaccel:

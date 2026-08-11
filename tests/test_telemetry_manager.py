@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import pytest
 
-from src.gui.telemetry_manager import Sample, TelemetryDataManager
+from src.gui.telemetry_manager import (
+    Sample,
+    TelemetryDataManager,
+    _align_offset_by_track,
+    _compute_smart_time_offset,
+)
 
 # ── Mock function factories ─────────────────────────────────────────────────
 
@@ -124,10 +129,11 @@ class TestTelemetryDataManager:
     def test_resolve_value(
         self, manager: TelemetryDataManager, dt: datetime
     ) -> None:
-        """resolve_value() should return interpolated value."""
+        """resolve_value('speed') should use linear interpolation (not the step mock)."""
         manager.load_gpmf_records([{"dummy": True}])
         val = manager.resolve_value("speed", dt)
-        assert val == 42.0
+        # samples = [(dt, 50.0), (dt+1s, 55.0)]; target == dt → 50.0
+        assert val == 50.0
 
     def test_resolve_value_no_data(
         self, manager: TelemetryDataManager, dt: datetime
@@ -200,3 +206,205 @@ class TestTelemetryDataManager:
             video_paths=None, exiftool_path="exiftool", silent=True
         )
         assert result is None
+
+
+# ── SmartSync: GPS-track alignment ──────────────────────────────────────────
+
+
+class TestResolveValueFieldAware:
+    """resolve_value: liniowo dla prędkości/dystansu/wysokości, schodkowo dla reszty."""
+
+    def _manager(self):
+        from src.telemetry_extract import interpolate_value
+
+        m = TelemetryDataManager()
+        m._interpolate_fn = interpolate_value
+        return m
+
+    def test_enhanced_speed_linear(self):
+        """Pole FIT enhanced_speed → interpolacja LINIOWA (płynny licznik)."""
+        from datetime import datetime, timedelta
+
+        m = self._manager()
+        base = datetime(2026, 7, 29, 6, 30, 0)
+        m.fit_data = {
+            "enhanced_speed": [
+                (base, 10.0),
+                (base + timedelta(seconds=1), 20.0),
+            ],
+        }
+        mid = base + timedelta(seconds=0.5)
+        assert m.resolve_value("enhanced_speed", mid) == pytest.approx(15.0)
+
+    def test_distance_linear(self):
+        """Pole FIT distance → interpolacja LINIOWA (płynny dystans)."""
+        from datetime import datetime, timedelta
+
+        m = self._manager()
+        base = datetime(2026, 7, 29, 6, 30, 0)
+        m.fit_data = {
+            "distance": [
+                (base, 0.0),
+                (base + timedelta(seconds=1), 100.0),
+            ],
+        }
+        mid = base + timedelta(seconds=0.5)
+        assert m.resolve_value("distance", mid) == pytest.approx(50.0)
+
+    def test_hr_step(self):
+        """Pole FIT heart_rate → interpolacja SCHODKOWA (co ~1 s)."""
+        from datetime import datetime, timedelta
+
+        m = self._manager()
+        base = datetime(2026, 7, 29, 6, 30, 0)
+        m.fit_data = {
+            "heart_rate": [
+                (base, 100.0),
+                (base + timedelta(seconds=1), 120.0),
+            ],
+        }
+        mid = base + timedelta(seconds=0.5)
+        assert m.resolve_value("heart_rate", mid) == 100.0
+
+    def test_hr_alias_step(self):
+        """Alias "hr" → heart_rate, schodkowo."""
+        from datetime import datetime, timedelta
+
+        m = self._manager()
+        base = datetime(2026, 7, 29, 6, 30, 0)
+        m.fit_data = {
+            "heart_rate": [
+                (base, 100.0),
+                (base + timedelta(seconds=1), 120.0),
+            ],
+        }
+        mid = base + timedelta(seconds=0.5)
+        assert m.resolve_value("hr", mid) == 100.0
+
+
+class TestSmartTimeOffsetTrackAlignment:
+    """Tests for GPS-track-based SmartSync offset alignment.
+
+    The GoPro camera clock can drift by minutes/hours, so time-overlap
+    matching alone is unreliable.  Matching GPS positions is ground truth.
+    """
+
+    # A small loop route around (54.0, 18.0)
+    _ROUTE = [
+        (54.000000, 18.000000),
+        (54.000500, 18.000000),
+        (54.001000, 18.000500),
+        (54.000500, 18.001000),
+        (54.000000, 18.001000),
+        (54.000000, 18.000000),
+        (54.000500, 18.000000),
+        (54.001000, 18.000500),
+        (54.000500, 18.001000),
+        (54.000000, 18.001000),
+        (54.000000, 18.000000),
+    ]
+
+    def _gpmf_track(self, start: datetime) -> list[tuple[datetime, float, float]]:
+        """GPMF track with 10s spacing."""
+        return [
+            (start + timedelta(seconds=10 * i), lat, lon)
+            for i, (lat, lon) in enumerate(self._ROUTE)
+        ]
+
+    def _fit_records(
+        self, start: datetime
+    ) -> list[dict]:
+        """FIT records with the same route but 10s spacing + a clock offset."""
+        return [
+            {
+                "timestamp": start + timedelta(seconds=10 * i),
+                "lat": lat,
+                "lon": lon,
+            }
+            for i, (lat, lon) in enumerate(self._ROUTE)
+        ]
+
+    def test_finds_true_clock_offset(self) -> None:
+        """Video clock 1h behind FIT -> track alignment finds -3600s, not direct match."""
+        video_start = datetime(2026, 7, 29, 6, 27, 54)
+        fit_start = video_start + timedelta(hours=1)  # Garmin clock 1h ahead
+
+        gpmf = self._gpmf_track(video_start)
+        records = self._fit_records(fit_start)
+
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"],
+            records[-1]["timestamp"],
+            video_start,
+            records=records,
+            gpmf_track=gpmf,
+        )
+        assert offset == timedelta(hours=-1)
+
+    def test_zero_offset_when_clocks_aligned(self) -> None:
+        """Same ride, synced clocks -> offset 0."""
+        video_start = datetime(2026, 7, 29, 6, 27, 54)
+        gpmf = self._gpmf_track(video_start)
+        records = self._fit_records(video_start)
+
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"],
+            records[-1]["timestamp"],
+            video_start,
+            records=records,
+            gpmf_track=gpmf,
+        )
+        assert offset == timedelta(0)
+
+    def test_falls_back_to_direct_match_when_routes_differ(self) -> None:
+        """Different ride (no position overlap) -> falls back to time-based match."""
+        video_start = datetime(2026, 7, 29, 6, 27, 54)
+        # FIT ride 10 km away (different route)
+        gpmf = self._gpmf_track(video_start)
+        records = [
+            {
+                "timestamp": video_start + timedelta(seconds=10 * i),
+                "lat": lat + 0.1,
+                "lon": lon + 0.1,
+            }
+            for i, (lat, lon) in enumerate(self._ROUTE)
+        ]
+
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"],
+            records[-1]["timestamp"],
+            video_start,
+            records=records,
+            gpmf_track=gpmf,
+        )
+        # Direct time match wins (video start inside FIT range)
+        assert offset == timedelta(0)
+
+    def test_no_track_data_uses_time_match(self) -> None:
+        """No GPS data -> plain time-based direct match."""
+        video_start = datetime(2026, 7, 29, 6, 27, 54)
+        records = self._fit_records(video_start)
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"],
+            records[-1]["timestamp"],
+            video_start,
+            records=records,
+            gpmf_track=[],
+        )
+        assert offset == timedelta(0)
+
+    def test_align_offset_by_track_returns_none_without_data(self) -> None:
+        """No positions -> None (caller falls back to time matching)."""
+        assert _align_offset_by_track(None, None) is None
+        assert _align_offset_by_track([], []) is None
+
+    def test_align_offset_by_track_negative_offset(self) -> None:
+        """Video clock 1h AHEAD of FIT -> positive offset to apply."""
+        video_start = datetime(2026, 7, 29, 6, 27, 54)
+        fit_start = video_start - timedelta(hours=1)  # Garmin clock 1h behind
+
+        gpmf = self._gpmf_track(video_start)
+        records = self._fit_records(fit_start)
+
+        offset = _align_offset_by_track(records, gpmf)
+        assert offset == timedelta(hours=1)

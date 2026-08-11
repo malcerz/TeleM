@@ -81,19 +81,108 @@ _SOURCE_SWITCH_KEYS: tuple[str, ...] = (
 )
 
 
+def _align_offset_by_track(
+    records: Optional[list[dict]],
+    gpmf_track: Optional[list[tuple[datetime, float, float]]],
+) -> Optional[timedelta]:
+    """Cross-correlate video (GPMF) GPS positions with FIT/GPX positions to find
+    the true clock offset between the GoPro and the external device.
+
+    The GoPro camera clock can drift by minutes or even hours, so time-overlap
+    matching alone (``_compute_smart_time_offset``) is unreliable.  Matching GPS
+    positions is ground truth: for each sampled video GPS point we find the
+    nearest FIT/GPX point and record the time delta.  The most common delta is
+    the clock offset between the two devices.
+
+    Returns the offset to ADD to FIT/GPX record timestamps to bring them onto
+    the video timeline, or None when no confident position-based match exists
+    (no GPS data, or the routes do not overlap).
+    """
+    if not records or not gpmf_track:
+        return None
+
+    fit_pts = [
+        (r["timestamp"].replace(tzinfo=None), r["lat"], r["lon"])
+        for r in records
+        if r.get("lat") is not None and r.get("lon") is not None
+    ]
+    if len(fit_pts) < 10 or len(gpmf_track) < 10:
+        return None
+
+    try:
+        from src.telemetry_extract import haversine_m
+    except ImportError:
+        return None
+
+    # Sample points for speed; for each, find the nearest FIT/GPX point
+    deltas: list[float] = []
+    g_step = max(1, len(gpmf_track) // 80)
+    f_step = max(1, len(fit_pts) // 400)
+    for i in range(0, len(gpmf_track), g_step):
+        gdt, glat, glon = gpmf_track[i]
+        if glat is None or glon is None:
+            continue
+        gdt = gdt.replace(tzinfo=None) if gdt.tzinfo is not None else gdt
+        best_d = 1e18
+        best_delta = 0.0
+        for j in range(0, len(fit_pts), f_step):
+            fdt, flat, flon = fit_pts[j]
+            d = haversine_m(glat, glon, flat, flon)
+            if d < best_d:
+                best_d = d
+                best_delta = (fdt - gdt).total_seconds()
+        if best_d < 100.0:  # within 100 m -> same route, record candidate delta
+            deltas.append(round(best_delta / 5.0) * 5.0)
+
+    if not deltas:
+        print(
+            "[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may "
+            "be from a different ride than the video.",
+            flush=True,
+        )
+        return None
+
+    if len(deltas) < max(5, (len(gpmf_track) // g_step) // 4):
+        return None  # too few confident matches -> fall back to time matching
+
+    from collections import Counter
+
+    offset_s, count = Counter(deltas).most_common(1)[0]
+    if count < 3:
+        return None
+
+    # delta = fit_time - video_time; offset to apply = video - fit = -delta
+    offset = -timedelta(seconds=offset_s)
+    print(
+        f"[SmartSync] GPS track alignment: offset={offset} "
+        f"({count}/{len(deltas)} matched points)",
+        flush=True,
+    )
+    return offset
+
+
 def _compute_smart_time_offset(
     records_start_ts: datetime,
     records_end_ts: datetime,
     video_start_dt: Optional[datetime],
+    records: Optional[list[dict]] = None,
+    gpmf_track: Optional[list[tuple[datetime, float, float]]] = None,
 ) -> timedelta:
     """Compute optimal timestamp offset to align FIT/GPX timestamps with video_start_dt.
 
+    0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate
+       the video GPS track with the device GPS track.
     1. Direct match: video_start_dt falls inside FIT activity range -> 0 offset.
     2. Timezone difference (e.g. FIT in local time UTC+2, video in naive/UTC) -> integer hour offset.
     3. Unsynced/independent clocks -> offset fit_start to video_start_dt.
     """
     if video_start_dt is None:
         return timedelta(0)
+
+    # 0. GPS-track-based alignment — ground truth when both tracks are available
+    track_offset = _align_offset_by_track(records, gpmf_track)
+    if track_offset is not None:
+        return track_offset
 
     vid_dt = video_start_dt.replace(tzinfo=None) if video_start_dt.tzinfo is not None else video_start_dt
     fit_start = records_start_ts.replace(tzinfo=None) if records_start_ts.tzinfo is not None else records_start_ts
@@ -370,9 +459,19 @@ class TelemetryDataManager:
         if not points:
             return False
 
-        # Apply smart timestamp alignment
+        # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
+        # Prefer GPS-track cross-correlation when both tracks are available.
+        gpx_records = [
+            {"timestamp": p[0], "lat": p[1], "lon": p[2]}
+            for p in points
+            if p[1] is not None and p[2] is not None
+        ]
+        gpmf_track = self.gps_track
+        if not gpmf_track and self.records and self._extract_gps_track:
+            gpmf_track = self._extract_gps_track(self.records)
         offset = _compute_smart_time_offset(
-            points[0][0], points[-1][0], start_dt
+            points[0][0], points[-1][0], start_dt,
+            records=gpx_records, gpmf_track=gpmf_track,
         )
         if offset != timedelta(0):
             points = [
@@ -445,8 +544,13 @@ class TelemetryDataManager:
             return False
 
         # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
+        # Prefer GPS-track cross-correlation when both tracks are available.
+        gpmf_track = self.gps_track
+        if not gpmf_track and self.records and self._extract_gps_track:
+            gpmf_track = self._extract_gps_track(self.records)
         offset = _compute_smart_time_offset(
-            records[0]["timestamp"], records[-1]["timestamp"], start_dt
+            records[0]["timestamp"], records[-1]["timestamp"], start_dt,
+            records=records, gpmf_track=gpmf_track,
         )
         if offset != timedelta(0):
             for r in records:
@@ -572,6 +676,31 @@ class TelemetryDataManager:
         samples = self._resolve_samples(field_name, prefer)
         if not samples:
             return None
+        return self._interpolate_field(samples, target_dt, field_name)
+
+    def _interpolate_field(
+        self, samples: SampleList, target_dt: datetime, field_name: str
+    ) -> Optional[float]:
+        """Linear interpolation for speed/distance/altitude fields, step for the rest.
+
+        Only speed and distance (and altitude, consistent with the main alt
+        indicators) are interpolated linearly so they update smoothly on every
+        frame; the remaining FIT/GPX fields (HR, power, cadence, temperature,
+        battery, ...) keep step interpolation (~1 s for Garmin FIT).
+        """
+        try:
+            from src.telemetry_extract import (
+                interpolate_speed, interpolate_distance, interpolate_altitude,
+            )
+        except ImportError:
+            return self._interpolate(samples, target_dt)
+
+        if field_name in ("speed", "enhanced_speed"):
+            return interpolate_speed(samples, target_dt)
+        if field_name in ("distance", "dist", "track"):
+            return interpolate_distance(samples, target_dt)
+        if field_name in ("alt", "enhanced_altitude", "altitude"):
+            return interpolate_altitude(samples, target_dt)
         return self._interpolate(samples, target_dt)
 
     def resolve_samples(self, field_name: str, prefer: str = "fit") -> SampleList:
@@ -681,9 +810,9 @@ class TelemetryDataManager:
                 indicators[key] = {
                     "enabled": False,
                     "label": field_name.replace("_", " ").title(),
-                    "x": 0.5, "y": 0.08, "rotation": 0,
+                    "x": 50.0, "y": 8.0, "rotation": 0,
                     "form": "text",
-                    "font_size": 0.025, "size": 0.025, "thickness": 0.001,
+                    "font_size": 2.5, "size": 2.5, "thickness": 1,
                     "min_val": min_val, "max_val": max(max_val, min_val + 1),
                     "ticks": 0, "source": "fit",
                     "unit": "",

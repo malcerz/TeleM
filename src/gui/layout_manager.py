@@ -128,9 +128,9 @@ class LayoutManager:
         texts.append({
             "enabled": True,
             "text": f"Custom {idx}",
-            "x": 0.5,
-            "y": 0.5,
-            "font_size": 0.025,
+            "x": 50.0,
+            "y": 50.0,
+            "font_size": 2.5,
             "color": "#FFFFFF",
             "rotation": 0,
         })
@@ -173,27 +173,27 @@ class LayoutManager:
 
 def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
     return {
-        "version": 5,
+        "version": 6,
         "global": {"text_outline": 3},
         "custom_texts": [],
         "indicators": {
             "time_block": {
-                "enabled": True, "label": "Czas", "x": 0.018, "y": 0.030, "rotation": 0,
-                "font_label": 0.0125, "font_date": 0.020, "font_time": 0.020
+                "enabled": True, "label": "Czas", "x": 1.8, "y": 3.0, "rotation": 0,
+                "font_label": 1.25, "font_date": 2.0, "font_time": 2.0
             },
             "speed_visual": {
-                "enabled": True, "label": "", "x": 0.50, "y": 0.78, "rotation": 0, "form": "gauge",
-                "font_size": 0.0125, "size": 0.108, "thickness": 0.007, "min_val": 0, "max_val": 60, "ticks": 6,
+                "enabled": True, "label": "", "x": 50.0, "y": 78.0, "rotation": 0, "form": "gauge",
+                "font_size": 1.25, "size": 10.8, "thickness": 0.7, "min_val": 0, "max_val": 60, "ticks": 6,
                 "source": "gpmf"
             },
             "speed_text": {
-                "enabled": True, "label": "", "x": 0.50, "y": 0.855, "rotation": 0, "form": "text",
-                "font_size": 0.042, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 100, "ticks": 0,
+                "enabled": True, "label": "", "x": 50.0, "y": 85.5, "rotation": 0, "form": "text",
+                "font_size": 4.2, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 100, "ticks": 0,
                 "source": "gpmf"
             },
             "dist_visual": {
-                "enabled": True, "label": "", "x": 0.50, "y": 0.925, "rotation": 0, "form": "bar",
-                "font_size": 0.0125, "size": 0.20, "thickness": 0.004, "min_val": 0, "max_val": 10, "ticks": 5,
+                "enabled": True, "label": "", "x": 50.0, "y": 92.5, "rotation": 0, "form": "bar",
+                "font_size": 1.25, "size": 20.0, "thickness": 0.4, "min_val": 0, "max_val": 10, "ticks": 5,
                 "show_range_labels": True,
                 "range_label_offset_x": 0.0,
                 "range_label_offset_y": 0.0,
@@ -203,13 +203,13 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
                 "source": "gpmf"
             },
             "dist_text": {
-                "enabled": True, "label": "", "x": 0.50, "y": 0.955, "rotation": 0, "form": "text",
-                "font_size": 0.017, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 100, "ticks": 0,
+                "enabled": True, "label": "", "x": 50.0, "y": 95.5, "rotation": 0, "form": "text",
+                "font_size": 1.7, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 100, "ticks": 0,
                 "source": "gpmf"
             },
             "alt_visual": {
-                "enabled": True, "label": "Alt", "x": 0.04, "y": 0.80, "rotation": 90, "form": "bar",
-                "font_size": 0.0125, "size": 0.20, "thickness": 0.006, "min_val": 0, "max_val": 100, "ticks": 5,
+                "enabled": True, "label": "Alt", "x": 4.0, "y": 80.0, "rotation": 90, "form": "bar",
+                "font_size": 1.25, "size": 20.0, "thickness": 0.6, "min_val": 0, "max_val": 100, "ticks": 5,
                 "show_range_labels": True,
                 "range_label_offset_x": 0.0,
                 "range_label_offset_y": 0.0,
@@ -219,46 +219,47 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
                 "source": "gpmf"
             },
             "alt_text": {
-                "enabled": True, "label": "", "x": 0.025, "y": 0.8, "rotation": 0, "form": "text",
-                "font_size": 0.017, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 1000, "ticks": 0,
+                "enabled": True, "label": "", "x": 2.5, "y": 80.0, "rotation": 0, "form": "text",
+                "font_size": 1.7, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 1000, "ticks": 0,
                 "source": "gpmf"
             },
             "iso_text": {
-                "enabled": True, "label": "ISO", "x": 0.90, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 12800, "ticks": 0
+                "enabled": True, "label": "ISO", "x": 90.0, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 12800, "ticks": 0
             },
             "exposure_text": {
-                "enabled": True, "label": "Exp", "x": 0.82, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 10000, "ticks": 0
+                "enabled": True, "label": "Exp", "x": 82.0, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 10000, "ticks": 0
             },
             "temp_text": {
-                "enabled": True, "label": "Temp", "x": 0.74, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 100, "ticks": 0
+                "enabled": True, "label": "Temp", "x": 74.0, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 100, "ticks": 0
             },
             "power_text": {
-                "enabled": True, "label": "Moc", "x": 0.185, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 1000, "ticks": 0
+                "enabled": True, "label": "Moc", "x": 18.5, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 1000, "ticks": 0
             },
             "atemp_text": {
-                "enabled": True, "label": "ATemp", "x": 0.265, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": -20, "max_val": 60, "ticks": 0
+                "enabled": True, "label": "ATemp", "x": 26.5, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": -20, "max_val": 60, "ticks": 0
             },
             "hr_text": {
-                "enabled": True, "label": "HR", "x": 0.345, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 250, "ticks": 0
+                "enabled": True, "label": "HR", "x": 34.5, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 250, "ticks": 0
             },
             "cad_text": {
-                "enabled": True, "label": "Cad", "x": 0.41, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 200, "ticks": 0
+                "enabled": True, "label": "Cad", "x": 41.0, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 200, "ticks": 0
             },
             "battery_text": {
-                "enabled": True, "label": "Bat", "x": 0.49, "y": 0.08, "rotation": 0, "form": "text",
-                "font_size": 0.018, "size": 0.1, "thickness": 0.001, "min_val": 0, "max_val": 100, "ticks": 0
+                "enabled": True, "label": "Bat", "x": 49.0, "y": 8.0, "rotation": 0, "form": "text",
+                "font_size": 1.8, "size": 10.0, "thickness": 0.1, "min_val": 0, "max_val": 100, "ticks": 0
             },
             "track_map": {
-                "enabled": False, "label": "Mapa", "x": 0.02, "y": 0.15, "rotation": 0, "form": "map",
-                "font_size": 0.012, "size": 0.18, "thickness": 1, "zoom": 16,
-                "source": "gpmf", "map_style": "light_all", "min_val": 0, "max_val": 1, "ticks": 0,
+                "enabled": False, "label": "Mapa", "x": 2.0, "y": 15.0, "rotation": 0, "form": "map",
+                "font_size": 1.2, "size": 18.0, "thickness": 1, "zoom": 16,
+                "source": "gpmf", "map_style": "light_all", "map_shape": "square",
+                "min_val": 0, "max_val": 1, "ticks": 0,
                 "marker_size": 7, "marker_color": "#FFFFFF",
             },
         },
@@ -311,7 +312,27 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
                 layout["indicators"]["dist_text"] = db.copy()
                 layout["indicators"]["dist_text"]["form"] = "text"
                 layout["indicators"]["dist_text"]["font_size"] = db.get("font_value", 0.017)
-            layout["version"] = 5
+
+        if user.get("version", 0) < 6:
+            relative_fields = [
+                "x", "y", "size", "font_size", "font_label", "font_date", "font_time",
+                "date_font_size", "time_font_size", "elapsed_font_size", "avg_speed_font_size",
+                "value_offset_x", "value_offset_y", "range_label_offset_x",
+                "range_label_offset_y", "range_label_spread_x", "text_offset_x", "text_offset_y"
+            ]
+            for ind in layout.get("indicators", {}).values():
+                if isinstance(ind, dict):
+                    for field in relative_fields:
+                        if field in ind and isinstance(ind[field], (int, float)):
+                            if -1.0 <= ind[field] <= 1.0:
+                                ind[field] = round(float(ind[field]) * 100.0, 4)
+            for ct in layout.get("custom_texts", []):
+                if isinstance(ct, dict):
+                    for field in ("x", "y", "font_size"):
+                        if field in ct and isinstance(ct[field], (int, float)):
+                            if -1.0 <= ct[field] <= 1.0:
+                                ct[field] = round(float(ct[field]) * 100.0, 4)
+            layout["version"] = 6
 
     return layout
 

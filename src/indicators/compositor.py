@@ -87,18 +87,21 @@ def compose_overlay(
         tb, tbx, tby = render_time_block(canvas_w, canvas_h, layout, font_path, date_text, time_text)
         if tb:
             tb_rotation = layout["indicators"]["time_block"].get("rotation", 0)
-            rotated_paste(img, tb, tbx + tb.width // 2, tby + tb.height // 2, tb_rotation)
-            if tb_rotation == 90:
+            # Treść jest wklejana środkiem w (cx, cy); pozycja layout x/y to lewy-górny róg.
+            cx = tbx + tb.width // 2
+            cy = tby + tb.height // 2
+            rotated_paste(img, tb, cx, cy, tb_rotation)
+            if tb_rotation in (90, 270):
                 _bboxes["time_block"] = (
-                    int(tbx - tb.height // 2),
-                    int(tby - tb.width // 2),
+                    int(cx - tb.height // 2),
+                    int(cy - tb.width // 2),
                     tb.height,
                     tb.width,
                 )
             else:
                 _bboxes["time_block"] = (
-                    int(tbx - tb.width // 2),
-                    int(tby - tb.height // 2),
+                    int(cx - tb.width // 2),
+                    int(cy - tb.height // 2),
                     tb.width,
                     tb.height,
                 )
@@ -111,18 +114,20 @@ def compose_overlay(
         )
         if td:
             td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
-            rotated_paste(img, td, tdx + td.width // 2, tdy + td.height // 2, td_rotation)
-            if td_rotation == 90:
+            cx = tdx + td.width // 2
+            cy = tdy + td.height // 2
+            rotated_paste(img, td, cx, cy, td_rotation)
+            if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
-                    int(tdx - td.height // 2),
-                    int(tdy - td.width // 2),
+                    int(cx - td.height // 2),
+                    int(cy - td.width // 2),
                     td.height,
                     td.width,
                 )
             else:
                 _bboxes["time_display"] = (
-                    int(tdx - td.width // 2),
-                    int(tdy - td.height // 2),
+                    int(cx - td.width // 2),
+                    int(cy - td.height // 2),
                     td.width,
                     td.height,
                 )
@@ -173,7 +178,9 @@ def compose_overlay(
         value, default_unit, default_label = known_vals.get(
             key, (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", key))
         )
-        unit = ind_cfg.get("unit", default_unit)
+        # An empty string in the layout must not suppress a sensible unit —
+        # fall back to the default unit for the data source.
+        unit = ind_cfg.get("unit") or default_unit
         label = ind_cfg.get("label", default_label)
 
         current_cfg = ind_cfg.copy()
@@ -405,10 +412,18 @@ def render_preview(
         current_position=current_position,
         extra_indicators=extra_indicators,
         gps_track=gps_track,
+        target_dt=target_dt,
         start_dt_utc=start_dt_utc,
         elapsed_seconds=elapsed_seconds,
         avg_speed_kmh=avg_speed_kmh,
         fast_preview=True,
     )
+    try:
+        from src.indicators.gpu_compositor import GpuCompositor
+        gpu = GpuCompositor.get_instance()
+        if gpu:
+            return gpu.alpha_blend_pil(img, overlay, 0, 0)
+    except Exception:
+        pass
     img.alpha_composite(overlay)
     return img

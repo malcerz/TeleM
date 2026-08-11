@@ -34,6 +34,11 @@ import os
 _MPV_BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 if _MPV_BASE_DIR.exists():
     os.environ["PATH"] = str(_MPV_BASE_DIR) + os.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(str(_MPV_BASE_DIR))
+        except Exception:
+            pass
 
 try:
     import mpv
@@ -73,8 +78,14 @@ from src.ffmpeg_pipeline import (
     detect_best_encoder, stream_overlay_to_ffmpeg,
 )
 
-from src.gui.qt.models import DataStream, FieldSchema, get_schema_for_form
+from src.gui.qt.models import (
+    DataStream, FieldSchema, _sync_size_font_fields, get_schema_for_form,
+)
 from src.gui.qt.signals import get_signals
+from src.gui.qt.mpv_hwdec import (
+    build_mpv_options, detect_preview_vendor, get_hwdec_diagnostics,
+    vendor_label as _vendor_label,
+)
 
 try:
     from src.telemetry_gpmf_new import gpmf_to_exiftool_json
@@ -183,6 +194,7 @@ class AppController:
 
         # ── Render state ───────────────────────────────────────────────
         self.render_cancel_event = threading.Event()
+        self.render_threads: Optional[int] = None
 
         # ── Playback state ────────────────────────────────────────────
         self._playback_timer: Optional[QTimer] = None
@@ -192,6 +204,19 @@ class AppController:
         self._preview_mode: str = "hud"
         self.mpv_player = None
         self._mpv_timer = None
+        self.mpv_preview_vendor: str = "auto"  # auto / nv / amd / intel / cpu
+        self.mpv_hwdec_active: str | None = None
+
+        # ── Inicjalizacja GPU ───────────────────────────────────────────
+        try:
+            from src.indicators.gpu_compositor import GpuCompositor
+            gpu = GpuCompositor.get_instance()
+            if gpu:
+                print(f"[Controller] Akceleracja GPU aktywna: {gpu.device_name}", flush=True)
+            else:
+                print("[Controller] Akceleracja GPU niedostępna, używam trybu CPU/Pillow", flush=True)
+        except Exception as e:
+            print(f"[Controller] Błąd inicjalizacji GPU: {e}", flush=True)
 
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
@@ -219,6 +244,7 @@ class AppController:
         s.sig_playback_start.connect(self._on_playback_start)
         s.sig_playback_stop.connect(self._on_playback_stop)
         s.sig_preview_mode_changed.connect(self._on_preview_mode_changed)
+        s.sig_preview_accel_changed.connect(self._on_preview_accel_changed)
         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
 
     def _load_startup_preset(self) -> None:
@@ -249,12 +275,21 @@ class AppController:
                         self.mpv_player.terminate()
                     except Exception:
                         pass
+
+                # Resolve 'auto' to actual vendor for initialisation
+                vendor = self.mpv_preview_vendor
+                if vendor == "auto":
+                    vendor = detect_preview_vendor()
+                    self.mpv_preview_vendor = vendor  # remember resolved
+
+                opts = build_mpv_options(vendor)
                 self.mpv_player = mpv.MPV(
                     wid=str(int(self.mpv_widget.winId())),
-                    hwdec='auto',
-                    keep_open='yes'
+                    **opts,
                 )
-                print("[Controller] MPV zinicjalizowany pomyślnie z akceleracją sprzętową!")
+                label = _vendor_label(vendor)
+                print(f"[Controller] MPV zinicjalizowany pomyślnie (GPU: {label}, "
+                      f"hwdec={opts.get('hwdec','auto')})")
             except Exception as e:
                 print(f"[Controller] Nie udało się zainicjalizować MPV: {e}. Używam QMediaPlayer.")
                 self.mpv_player = None
@@ -262,6 +297,51 @@ class AppController:
         if not self.is_using_mpv():
             if self._preview_mode == "gpu_video" and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
                 self.media_player.setVideoOutput(self.video_widget)
+
+    def reinit_mpv(self, vendor: str) -> None:
+        """Re-create the mpv player with a new GPU vendor selection.
+
+        Preserves the current playback position and file so the preview
+        continues seamlessly after the switch.
+        """
+        if not _MPV_AVAILABLE or not self.mpv_widget:
+            return
+
+        current_file = self.video_path
+        current_pos = 0.0
+        was_playing = self._playing
+
+        if self.mpv_player and current_file:
+            try:
+                current_pos = self.mpv_player.time_pos or 0.0
+            except Exception:
+                current_pos = 0.0
+            try:
+                self.mpv_player.terminate()
+            except Exception:
+                pass
+            self.mpv_player = None
+        self._mpv_timer = None
+
+        self.mpv_preview_vendor = vendor
+        self.set_video_widget(self.video_widget, self.mpv_widget)
+
+        if self.mpv_player and current_file:
+            self.mpv_player.play(str(current_file))
+            self.mpv_player.pause = True
+            try:
+                self.mpv_player.time_pos = current_pos
+            except Exception:
+                pass
+            # Emit a preview refresh to repaint HUD overlay
+            self._render_preview(current_pos)
+
+    def _on_preview_accel_changed(self, vendor: str) -> None:
+        """Handle the preview accelerator combo change from the UI."""
+        if vendor == self.mpv_preview_vendor:
+            return
+        print(f"[Controller] Podgląd GPU zmieniony na: {_vendor_label(vendor)}")
+        self.reinit_mpv(vendor)
 
     def _on_preview_mode_changed(self, mode: str) -> None:
         """Przełącza tryb podglądu (HUD Overlay vs Czyste Wideo GPU)."""
@@ -522,10 +602,16 @@ class AppController:
                 if self.is_using_mpv():
                     target_h = int(self._preview_target_w * h / w) if w > 0 else 540
                     first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                elif _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+                    # QMediaPlayer is loaded — first frame will arrive via
+                    # _on_video_frame callback (hardware-accelerated).
+                    # Use placeholder until then.
+                    target_h = int(self._preview_target_w * h / w) if w > 0 else 540
+                    first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
                 else:
                     clear_capture_cache()
                     first_frame = extract_frame(
-                        self.video_paths, 0, ffmpeg_exe, ffprobe_exe,
+                        self.video_paths, 0, ffmpeg_exe, ffprobe_exe, target_w=self._preview_target_w, preferred_encoder=self.ui.render_tab.cmb_encoder.currentText() if getattr(self, "ui", None) and getattr(self.ui, "render_tab", None) else ""
                     )
                 if first_frame:
                     if not self.is_using_mpv():
@@ -541,6 +627,10 @@ class AppController:
                     self.last_src_pil = first_frame
                     self.last_preview_ts = 0.0
                 self._render_preview(0)
+
+                # ── Hwdec diagnostics (deferred, needs main thread) ────
+                if self.is_using_mpv():
+                    QTimer.singleShot(1500, self._check_mpv_hwdec)
 
                 self.signals.sig_progress.emit(100, "Gotowe")
 
@@ -919,9 +1009,9 @@ class AppController:
     def _create_indicator(self, key: str) -> None:
         """Tworzy domyślny wskaźnik w layoucie."""
         defaults: dict[str, Any] = {
-            "enabled": True, "label": key, "x": 0.5, "y": 0.5,
-            "rotation": 0, "form": "text", "font_size": 0.025,
-            "size": 0.1, "thickness": 3, "min_val": 0, "max_val": 100,
+            "enabled": True, "label": key, "x": 50.0, "y": 50.0,
+            "rotation": 0, "form": "text", "font_size": 2.5,
+            "size": 10.0, "thickness": 3, "min_val": 0, "max_val": 100,
             "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
             # Text
             "text_offset_x": 0.0, "text_offset_y": 0.0,
@@ -968,13 +1058,13 @@ class AppController:
             defaults["elapsed_label"] = "Czas"
             defaults["show_avg_speed_label"] = True
             defaults["avg_speed_label"] = "Średnia prędkość"
-            defaults["font_size"] = 0.020
-            defaults["date_font_size"] = 0.020
-            defaults["time_font_size"] = 0.025
-            defaults["elapsed_font_size"] = 0.025
-            defaults["avg_speed_font_size"] = 0.020
-            defaults["x"] = 0.020
-            defaults["y"] = 0.030
+            defaults["font_size"] = 2.0
+            defaults["date_font_size"] = 2.0
+            defaults["time_font_size"] = 2.5
+            defaults["elapsed_font_size"] = 2.5
+            defaults["avg_speed_font_size"] = 2.0
+            defaults["x"] = 2.0
+            defaults["y"] = 3.0
 
         # Ustal domyślną formę na podstawie klucza (z rejestru indicators.py)
         from src.indicators import get_form_for_key
@@ -989,13 +1079,13 @@ class AppController:
         if key == "track_map":
             # Mapa – ma własne ustawienia niezależnie od rejestru
             defaults["form"] = "map"
-            defaults["size"] = 0.18
+            defaults["size"] = 18.0
             defaults["zoom"] = 16
             defaults["map_style"] = "light_all"
             defaults["marker_size"] = 7
             defaults["marker_color"] = "#FFFFFF"
-            defaults["x"] = 0.02
-            defaults["y"] = 0.15
+            defaults["x"] = 2.0
+            defaults["y"] = 15.0
 
         # Automatycznie ustaw min/max z danych telemetrycznych
         _min_v, _max_v = self._get_indicator_range(key)
@@ -1075,12 +1165,12 @@ class AppController:
         return min_val, max_val
 
     def _on_indicator_moved(self, key: str, x_norm: float, y_norm: float) -> None:
-        """Przeciągnięto wskaźnik myszką — aktualizuj pozycję w layoucie."""
+        """Przeciągnięto wskaźnik myszką — aktualizuj pozycję w layoucie (skala 0-100)."""
         if key not in self.layout.get("indicators", {}):
             return
         cfg = self.layout["indicators"][key]
-        cfg["x"] = round(x_norm, 4)
-        cfg["y"] = round(y_norm, 4)
+        cfg["x"] = round(x_norm, 2)
+        cfg["y"] = round(y_norm, 2)
 
         form = cfg.get("form", "text")
         schema = get_schema_for_form(form)
@@ -1114,9 +1204,9 @@ class AppController:
         # Zachowaj time_block jako bazowy wskaźnik daty/czasu, usuń resztę
         time_block_cfg = self.layout.get("indicators", {}).get(
             "time_block",
-            {"enabled": True, "label": "Czas", "x": 0.018, "y": 0.030,
-             "rotation": 0, "font_label": 0.0125, "font_date": 0.020,
-             "font_time": 0.020},
+            {"enabled": True, "label": "Czas", "x": 1.8, "y": 3.0,
+             "rotation": 0, "font_label": 1.25, "font_date": 2.0,
+             "font_time": 2.0},
         )
         self.layout["indicators"] = {"time_block": time_block_cfg}
         self.layout["custom_texts"] = []
@@ -1203,10 +1293,10 @@ class AppController:
         old_form = cfg.get("form", "text")
         cfg[field_name] = value
 
-        if field_name == "size":
-            cfg["font_size"] = value
-        elif field_name == "font_size":
-            cfg["size"] = value
+        # "Rozmiar" (size) i "Size" (font_size) są zsynchronizowane tylko dla
+        # formy "text". Dla gauge/chart/bar itd. size = wymiary, font_size =
+        # czcionka — muszą być niezależne (patrz _sync_size_font_fields).
+        _sync_size_font_fields(cfg, field_name)
 
         # Jeśli zmieniono formę — wyślij nowy schemat
         if field_name == "form" and value != old_form:
@@ -1439,22 +1529,50 @@ class AppController:
             if seek_seconds is not None:
                 last_ts = getattr(self, "last_preview_ts", -1.0)
                 if self.last_src_pil is None or abs(seek_seconds - last_ts) > 0.05:
-                    from src.video_helpers import extract_frame
-                    frame = extract_frame(
-                        self.video_path, seek_seconds,
-                        ffmpeg_exe=self.ffmpeg_exe or "ffmpeg",
-                        ffprobe_exe=self.ffprobe_exe or "ffprobe",
-                        target_w=self._preview_target_w,
-                    )
-                    if frame:
-                        self.src_img = frame.convert("RGBA")
-                        self.last_src_pil = self.src_img
+                    # Prefer QMediaPlayer path — hardware-accelerated decode
+                    # (d3d11va on AMD, NVDEC on NVIDIA, QSV on Intel).
+                    # QMediaPlayer delivers frames asynchronously via
+                    # _on_video_frame → _render_preview_from_pil, which will
+                    # call _render_preview again with the decoded frame already
+                    # in self.last_src_pil / self.src_img.
+                    if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+                        self._seek_pending = True
+                        pos_ms = max(0, int(seek_seconds * 1000))
+                        self.media_player.setPosition(pos_ms)
+                        if not self._playing:
+                            self.media_player.play()
                         self.last_preview_ts = seek_seconds
+                        # Use the last available frame while waiting for the
+                        # new one to arrive from QMediaPlayer.
+                        if self.last_src_pil is not None:
+                            self.src_img = self.last_src_pil
+                        else:
+                            # No frame yet — create placeholder
+                            self.src_img = Image.new(
+                                "RGBA",
+                                (self._preview_target_w, target_h),
+                                (0, 0, 0, 0),
+                            )
+                            self.last_src_pil = self.src_img
+                    else:
+                        # Fallback: synchronous CPU decode via OpenCV / FFmpeg
+                        from src.video_helpers import extract_frame
+                        frame = extract_frame(
+                            self.video_path, seek_seconds,
+                            ffmpeg_exe=self.ffmpeg_exe or "ffmpeg",
+                            ffprobe_exe=self.ffprobe_exe or "ffprobe",
+                            target_w=self._preview_target_w,
+                            preferred_encoder=self.ui.render_tab.cmb_encoder.currentText() if getattr(self, "ui", None) and getattr(self.ui, "render_tab", None) else ""
+                        )
+                        if frame:
+                            self.src_img = frame.convert("RGBA")
+                            self.last_src_pil = self.src_img
+                            self.last_preview_ts = seek_seconds
             elif self.last_src_pil is not None:
                 self.src_img = self.last_src_pil
 
         t_1 = time.time()
-        print(f"[DEBUG PREVIEW] is_using_mpv={self.is_using_mpv()} start_dt_utc={self.telemetry.start_dt_utc} speed_samples_len={len(self.telemetry.speed_samples) if self.telemetry.speed_samples else 0} gps_track_len={len(self.telemetry.track_samples) if self.telemetry.track_samples else 0}", flush=True)
+        # usunięto spamujący print, który spowalniał terminal przy playbacku
         try:
             src_w, src_h = self.src_img.size
             if src_w < 10 or src_h < 10:
@@ -1671,15 +1789,9 @@ class AppController:
                 print(f"[MPV Seek Error] {e}")
             return
 
-        # Seek w QMediaPlayer — GPU, natychmiastowa klatka
-        if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
-            return
-        self._seek_pending = True
-        pos_ms = max(0, int(seconds * 1000))
-        self.media_player.setPosition(pos_ms)
-        # Jeśli pauza — odpalamy play na moment, by dostać klatkę
-        if not self._playing:
-            self.media_player.play()
+        # _render_preview handles QMediaPlayer seeking internally
+        # (hardware-accelerated frame decode via _on_video_frame callback)
+        self._render_preview(seconds)
 
     # ═════════════════════════════════════════════════════════════════════
     # PLAYBACK
@@ -1691,7 +1803,7 @@ class AppController:
             return
         self._playing = True
         self._frame_counter = 0
-        self._composite_every_n = 1  # benchmark: 27ms composite < 35ms frame interval
+        self._composite_every_n = 3  # ograniczenie do ~10 FPS, aby zapobiec zamrożeniu CPU przy programowym QMediaPlayer
 
         if self.is_using_mpv():
             try:
@@ -1755,6 +1867,34 @@ class AppController:
         except Exception as e:
             print(f"[MPV Tick Error] {e}")
 
+    def _check_mpv_hwdec(self) -> None:
+        """Verify that mpv is actually using hardware decoding.
+
+        Called ~1.5s after file load to give mpv time to initialise the
+        decoder.  Logs the active hwdec, interop, GPU context, and VO.
+        If software-only decoding is detected, prints a warning.
+        """
+        if not self.is_using_mpv():
+            return
+        try:
+            diag = get_hwdec_diagnostics(self.mpv_player)
+            # Store for potential UI use
+            self.mpv_hwdec_active = diag.get("hwdec_current")
+            hw = diag.get("hwdec_current")
+            if hw and hw != "no":
+                print(f"[MPV HW] Dekodowanie sprzętowe aktywne: {hw}")
+                print(f"          interop={diag.get('hwdec_interop')}, "
+                      f"vo={diag.get('current_vo')}, "
+                      f"gpu_ctx={diag.get('current_gpu_context')}, "
+                      f"fmt={diag.get('pixelformat')}")
+            else:
+                print("[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE "
+                      "(brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.")
+                print(f"          hwdec-current={hw}, "
+                      f"codec={diag.get('video_codec')}")
+        except Exception as e:
+            print(f"[MPV HW] Nie udało się odczytać diagnostyki: {e}")
+
     def _playback_step(self) -> None:
         """Przesuń pozycję i zaplanuj następny krok.
 
@@ -1812,6 +1952,15 @@ class AppController:
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
         encoder = options.get("encoder", detect_best_encoder())
+        # Validate that the requested hardware encoder actually works on this GPU
+        from src.ffmpeg_pipeline import _test_encoder
+        if encoder == "nv" and not _test_encoder("hevc_nvenc"):
+            encoder = detect_best_encoder()
+        elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
+            encoder = detect_best_encoder()
+        elif encoder == "intel" and not _test_encoder("hevc_qsv"):
+            encoder = detect_best_encoder()
+
         resolution = options.get("resolution", "source")
         output = options.get("output", "output.mp4")
         video_bitrate = options.get("bitrate", "40M")
@@ -1866,6 +2015,16 @@ class AppController:
             "alt_samples": alt,
         }
 
+        # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)
+        # FFmpeg will automatically scale the overlay to render_w/render_h
+        max_overlay_w = 1920
+        if w > max_overlay_w:
+            ov_w = max_overlay_w
+            ov_h = int(max_overlay_w * h / w) if w > 0 else 1080
+        else:
+            ov_w = w
+            ov_h = h
+
         stream_overlay_to_ffmpeg(
             ffmpeg_exe=ffmpeg_exe,
             input_files=self.video_paths,
@@ -1882,7 +2041,7 @@ class AppController:
             target_fps=fps_stream,
             update_rate_step=1,
             max_distance_m=track[-1][1] if track else 0,
-            workers=None,
+            workers=self.render_threads,
             iso_samples=self.telemetry.iso_samples,
             exposure_samples=self.telemetry.exposure_samples,
             temperature_samples=self.telemetry.temperature_samples,
@@ -1906,8 +2065,8 @@ class AppController:
             video_bitrate=video_bitrate,
             rotation_degrees=effective_rotation,
             container_rotation=container_rotation_arg,
-            overlay_w=w,
-            overlay_h=h,
+            overlay_w=ov_w,
+            overlay_h=ov_h,
             render_w=w,
             render_h=h,
         )
@@ -1922,7 +2081,9 @@ class AppController:
     # ═════════════════════════════════════════════════════════════════════
 
     def _on_settings_changed(self, name: str, value: Any) -> None:
-        if name == "font":
+        if name == "threads":
+            self.render_threads = int(value)
+        elif name == "font":
             self.font_path = resolve_font_path(str(value))
             FONT_CACHE.clear()
             self._render_preview()

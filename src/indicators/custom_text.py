@@ -13,7 +13,7 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.helpers import load_font, parse_hex_color
+from src.indicators.helpers import load_font, parse_hex_color, _STATIC_CACHE, _static_cache_key
 
 
 def render_custom_text(
@@ -38,9 +38,17 @@ def render_custom_text(
     if not text:
         return None, 0, 0
     min_dim = min(canvas_w, canvas_h)
-    font_size_px = max(8, int(round(cfg.get("font_size", 0.03) * min_dim)))
-    font = load_font(font_path, font_size_px)
+    font_size_px = max(8, int(round((cfg.get("font_size", 2.5) / 100.0) * min_dim)))
     color_hex = cfg.get("color", "#FFFFFF")
+    px = int(round((cfg.get("x", 50.0) / 100.0) * canvas_w))
+    py = int(round((cfg.get("y", 50.0) / 100.0) * canvas_h))
+
+    cache_key = _static_cache_key("custom_text", canvas_w, canvas_h, font_path, text, font_size_px, color_hex, stroke_width)
+    cached = _STATIC_CACHE.get(cache_key)
+    if cached is not None:
+        return cached, px, py
+
+    font = load_font(font_path, font_size_px)
     rgb = parse_hex_color(color_hex)
     if rgb is None:
         rgb = (255, 255, 255)
@@ -54,6 +62,5 @@ def render_custom_text(
     overlay = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     draw.text((4, 4), text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=(0, 0, 0, 200))
-    px = int(round(cfg.get("x", 0.5) * canvas_w))
-    py = int(round(cfg.get("y", 0.5) * canvas_h))
+    _STATIC_CACHE[cache_key] = overlay
     return overlay, px, py

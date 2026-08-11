@@ -328,7 +328,7 @@ class VideoPreview(QWidget):
             lx, ly = me.position().x(), me.position().y()
             w, h = obj.width(), obj.height()
             nx, ny = self._norm_from_geometry(lx, ly, w, h)
-            in_pixmap = 0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0
+            in_pixmap = 0.0 <= nx <= 100.0 and 0.0 <= ny <= 100.0
 
             if event.type() == QEvent.MouseButtonPress and me.button() == Qt.LeftButton:
                 if in_pixmap:
@@ -339,9 +339,19 @@ class VideoPreview(QWidget):
                         bbox = self._bboxes.get(key)
                         if bbox and ow > 0 and oh > 0:
                             bx, by, bw, bh = bbox
-                            cx = (bx + bw / 2) / ow
-                            cy = (by + bh / 2) / oh
-                            self._drag_offset_norm = (nx - cx, ny - cy)
+                            # Semantyka pozycji (x, y) w layoucie zależy od formy:
+                            #   - "text" oraz time_block/time_display → LEWY-GÓRNY róg
+                            #   - bar/gauge/chart/segment_bar/map → ŚRODEK
+                            # Kotwiczymy na właściwym punkcie (skala 0..100, zgodna
+                            # z _norm_from_geometry), żeby wskaźnik nie przeskakiwał
+                            # o połowę swojego rozmiaru przy chwyceniu.
+                            if self._uses_topleft_anchor(key):
+                                ax = bx / ow * 100.0
+                                ay = by / oh * 100.0
+                            else:
+                                ax = (bx + bw / 2) / ow * 100.0
+                                ay = (by + bh / 2) / oh * 100.0
+                            self._drag_offset_norm = (nx - ax, ny - ay)
                         else:
                             self._drag_offset_norm = (0.0, 0.0)
                         self.signals.sig_indicator_clicked.emit(key)
@@ -350,8 +360,8 @@ class VideoPreview(QWidget):
 
             if event.type() == QEvent.MouseMove and self._dragging_key:
                 if in_pixmap:
-                    nx = max(0.0, min(1.0, nx))
-                    ny = max(0.0, min(1.0, ny))
+                    nx = max(0.0, min(100.0, nx))
+                    ny = max(0.0, min(100.0, ny))
                     ox, oy = self._drag_offset_norm
                     self.signals.sig_indicator_moved.emit(
                         self._dragging_key, nx - ox, ny - oy,
@@ -367,7 +377,7 @@ class VideoPreview(QWidget):
         return super().eventFilter(obj, event)
 
     def _norm_from_geometry(self, label_x: float, label_y: float, w: int, h: int) -> tuple[float, float]:
-        """Przelicza współrzędne w widgetu na znormalizowane (0..1) w oryginalnym obrazie."""
+        """Przelicza współrzędne w widgetu na znormalizowane (0..100) w oryginalnym obrazie."""
         ow, oh = self._original_size
         if ow <= 0 or oh <= 0:
             return 0.0, 0.0
@@ -378,22 +388,38 @@ class VideoPreview(QWidget):
         ox = (w - pw) / 2
         oy = (h - ph) / 2
         
-        px = (label_x - ox) / pw if pw > 0 else 0.0
-        py = (label_y - oy) / ph if ph > 0 else 0.0
+        px = ((label_x - ox) / pw * 100.0) if pw > 0 else 0.0
+        py = ((label_y - oy) / ph * 100.0) if ph > 0 else 0.0
         return (px, py)
+
+    def _uses_topleft_anchor(self, key: str) -> bool:
+        """True gdy pozycja (x, y) w layoucie oznacza LEWY-GÓRNY róg wskaźnika.
+
+        W kompozytorze wskaźniki z formą "text" (oraz specjalne
+        time_block/time_display) są pozycjonowane lewym-górnym rogiem;
+        pozostałe formy (bar, gauge, chart, segment_bar, map, static_map)
+        są pozycjonowane środkiem.
+        """
+        if key in ("time_block", "time_display"):
+            return True
+        ctrl = self._controller
+        if ctrl is None:
+            return True
+        cfg = getattr(ctrl, "layout", {}).get("indicators", {}).get(key, {})
+        return str(cfg.get("form", "text") or "text") == "text"
 
     def _hit_test(self, nx: float, ny: float) -> str | None:
         """Sprawdza który wskaźnik został kliknięty.
 
-        nx, ny to współrzędne znormalizowane (0..1) względem oryginalnego obrazu.
+        nx, ny to współrzędne znormalizowane (0..100) względem oryginalnego obrazu.
         Bboxy w self._bboxes są w pikselach oryginalnego obrazu.
         """
         ow, oh = self._original_size
         if ow <= 0 or oh <= 0:
             return None
-        # Przelicz znormalizowane współrzędne na piksele oryginału
-        click_x = nx * ow
-        click_y = ny * oh
+        # Przelicz znormalizowane współrzędne (0..100) na piksele oryginału
+        click_x = (nx / 100.0) * ow
+        click_y = (ny / 100.0) * oh
         for key, (bx, by, bw, bh) in self._bboxes.items():
             if bx <= click_x <= bx + bw and by <= click_y <= by + bh:
                 return key

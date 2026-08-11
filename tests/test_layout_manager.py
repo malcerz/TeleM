@@ -19,26 +19,26 @@ def default_layout_fn() -> Any:
 
     def _default(w: int, h: int) -> dict[str, Any]:
         return {
-            "version": 5,
+            "version": 6,
             "global": {"text_outline": 3},
             "custom_texts": [],
             "indicators": {
                 "speed_text": {
                     "enabled": True,
                     "label": "",
-                    "x": 0.5,
-                    "y": 0.5,
+                    "x": 50.0,
+                    "y": 50.0,
                     "form": "text",
-                    "font_size": 0.04,
+                    "font_size": 4.2,
                     "source": "gpmf",
                 },
                 "alt_text": {
                     "enabled": True,
                     "label": "Alt",
-                    "x": 0.1,
-                    "y": 0.8,
+                    "x": 10.0,
+                    "y": 80.0,
                     "form": "text",
-                    "font_size": 0.017,
+                    "font_size": 1.7,
                     "source": "gpmf",
                 },
             },
@@ -55,17 +55,17 @@ def normalize_layout_fn() -> Any:
         layout_path: Path | str | None, w: int, h: int
     ) -> dict[str, Any]:
         base = {
-            "version": 5,
+            "version": 6,
             "global": {"text_outline": 3},
             "custom_texts": [],
             "indicators": {
                 "speed_text": {
                     "enabled": True,
                     "label": "",
-                    "x": 0.5,
-                    "y": 0.5,
+                    "x": 50.0,
+                    "y": 50.0,
                     "form": "text",
-                    "font_size": 0.04,
+                    "font_size": 4.2,
                     "source": "gpmf",
                 },
             },
@@ -107,7 +107,7 @@ class TestLayoutManager:
         assert "indicators" in layout
         assert "speed_text" in layout["indicators"]
         assert layout["indicators"]["speed_text"]["enabled"] is True
-        assert layout["indicators"]["speed_text"]["x"] == 0.5
+        assert layout["indicators"]["speed_text"]["x"] == 50.0
 
     def test_load_no_file(self, manager: LayoutManager) -> None:
         """load() without a file should return defaults."""
@@ -120,7 +120,7 @@ class TestLayoutManager:
         """load() with a JSON file should merge user settings."""
         user_layout = {
             "indicators": {
-                "speed_text": {"x": 0.75, "font_size": 0.06},
+                "speed_text": {"x": 75.0, "font_size": 6.0},
             },
             "global": {"text_outline": 5},
         }
@@ -130,8 +130,8 @@ class TestLayoutManager:
         )
 
         layout = manager.load(layout_file, 1920, 1080)
-        assert layout["indicators"]["speed_text"]["x"] == 0.75
-        assert layout["indicators"]["speed_text"]["font_size"] == 0.06
+        assert layout["indicators"]["speed_text"]["x"] == 75.0
+        assert layout["indicators"]["speed_text"]["font_size"] == 6.0
         assert layout["global"]["text_outline"] == 5
 
     def test_save(self, manager: LayoutManager, tmp_path: Path) -> None:
@@ -203,9 +203,9 @@ class TestLayoutManager:
         manager.remove_custom_text(0)
         assert len(manager.get_custom_texts()) == 1
 
-        manager.update_custom_text(0, text="Updated", x=0.3)
+        manager.update_custom_text(0, text="Updated", x=30.0)
         assert manager.get_custom_texts()[0]["text"] == "Updated"
-        assert manager.get_custom_texts()[0]["x"] == 0.3
+        assert manager.get_custom_texts()[0]["x"] == 30.0
 
     def test_remove_custom_text_out_of_range(
         self, manager: LayoutManager

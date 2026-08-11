@@ -70,8 +70,9 @@ def _parse_marker_color(hex_color: str) -> tuple[int, int, int, int]:
 # ── Scaling ────────────────────────────────────────────────────────────────
 
 def s(value: float, base: int) -> int:
-    """Scale a relative value (0.0-1.0 range) to an absolute pixel size."""
-    return max(1, int(round(value * base)))
+    """Scale a relative percentage value (0.0-100.0 range, where 50 is center/50%) to an absolute pixel size."""
+    return max(1, int(round((value / 100.0) * base)))
+
 
 
 # ── Font loading ───────────────────────────────────────────────────────────
@@ -101,3 +102,29 @@ The key is a tuple of all parameters that affect the static image."""
 def _static_cache_key(*args) -> tuple:
     """Build a hashable cache key from a set of static parameters."""
     return args
+
+
+def apply_map_shape(img, shape: str):
+    """Apply the configured map shape to a rendered map image.
+
+    - ``"round"`` (or ``"circle"``) → circular crop (alpha mask).
+    - anything else → square (the map is already rendered square).
+
+    Returns the (possibly modified) image.
+    """
+    if img is None:
+        return img
+    if str(shape).lower() not in ("round", "circle"):
+        return img
+    try:
+        from PIL import ImageDraw
+
+        w, h = img.size
+        mask = Image.new("L", (w, h), 0)
+        d = ImageDraw.Draw(mask)
+        d.ellipse((0, 0, w - 1, h - 1), fill=255)
+        img = img.copy()
+        img.putalpha(mask)
+    except Exception:
+        pass
+    return img

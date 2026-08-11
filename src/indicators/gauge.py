@@ -22,6 +22,46 @@ from src.indicators.helpers import (
 )
 
 
+def _gauge_ticks(display_min: float, raw_max: float, ticks: int) -> tuple:
+    """Compute gauge scale parameters from the requested min/max.
+
+    Returns ``(display_min, display_max, step_val, major_intervals,
+    sub_ticks_count, total_ticks)``. ``display_max`` is rounded UP to the next
+    multiple of a "nice" step so that major tick labels land on round numbers
+    (e.g. requested max 180 -> display 0..200 with labels 0/50/100/150/200).
+    """
+    if raw_max > 0:
+        display_max = float(math.ceil(raw_max / 10.0) * 10)
+    else:
+        display_max = 100.0
+    if display_max <= display_min:
+        display_max = display_min + 10.0
+
+    span = display_max - display_min
+
+    if span <= 15:
+        step_val = 1.0 if span <= 5 else 5.0
+    elif span <= 60:
+        step_val = 10.0
+    elif span <= 140:
+        step_val = 20.0
+    elif span <= 300:
+        step_val = 50.0
+    else:
+        step_val = 100.0
+
+    # Round the displayed maximum UP to the next multiple of step_val, so the
+    # major tick labels land on round numbers (e.g. max 180 -> 0,50,...,200).
+    major_intervals = max(1, int(math.ceil(span / step_val)))
+    display_max = display_min + major_intervals * step_val
+    span = display_max - display_min
+
+    sub_ticks_count = max(1, ticks) if ticks > 0 else 10
+    total_ticks = major_intervals * sub_ticks_count
+    return (display_min, display_max, step_val, major_intervals,
+            sub_ticks_count, total_ticks)
+
+
 def _render_gauge_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
@@ -55,29 +95,8 @@ def _render_gauge_indicator(
     else:
         raw_max = 100.0
 
-    display_max = float(math.ceil(raw_max / 10.0) * 10)
-    if display_max <= display_min:
-        display_max = display_min + 10.0
-
-    span = display_max - display_min
-    if span <= 0:
-        span = 10.0
-        display_max = display_min + span
-
-    if span <= 15:
-        step_val = 1.0 if span <= 5 else 5.0
-    elif span <= 60:
-        step_val = 10.0
-    elif span <= 140:
-        step_val = 20.0
-    elif span <= 300:
-        step_val = 50.0
-    else:
-        step_val = 100.0
-
-    major_intervals = max(1, int(round(span / step_val)))
-    sub_ticks_count = max(1, ticks) if ticks > 0 else 10
-    total_ticks = major_intervals * sub_ticks_count
+    (display_min, display_max, step_val, major_intervals,
+     sub_ticks_count, total_ticks) = _gauge_ticks(display_min, raw_max, ticks)
 
     # ── Static background: tick marks + numbers (cached) ──
     bg_key = _static_cache_key(
@@ -143,7 +162,9 @@ def _render_gauge_indicator(
 
     # Needle
     needle_len_rel = cfg.get("needle_length", 1.1)
-    needle_r_out = max(2, int(radius * needle_len_rel / (1 if ss > 1 else 1)))
+    # The background is rendered at `radius * ss` and downscaled to output
+    # space, while the needle is drawn in output space — so scale by /ss.
+    needle_r_out = max(2, int(radius * needle_len_rel / ss))
     needle_r_in = max(1, int(radius * 0.05))
     needle_width_px = max(2, int(cfg.get("needle_width", 4) * 1.5))
     needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
@@ -175,21 +196,12 @@ def _render_gauge_indicator(
             _cx + r, _cy + r
         ], fill=marker_fill, outline=(120, 120, 120, 255), width=1)
 
-    # Center text
+    # Center text — always the current value, honouring show_value/show_units
+    # (formatted_val is built by the compositor from those flags).
     show_value = cfg.get("show_value", True)
     _fs_ds = max(8, fs)
     _c_font = load_font(font_path, _fs_ds)
-    if key == "speed_visual" and label:
-        tw = draw.textbbox((0, 0), label, font=_c_font)[2]
-        ox = int(round(cfg.get("text_offset_x", 0.0) * out_gauge_size))
-        oy = int(round(cfg.get("text_offset_y", 0.0) * out_gauge_size))
-        draw.text(
-            (_cx - tw // 2 + ox, _cy + int(radius * 0.15 / ss) + oy),
-            label, font=_c_font,
-            fill=(255, 255, 255, 255),
-            stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
-        )
-    elif show_value:
+    if show_value:
         txt_main = formatted_val if formatted_val is not None else f"{value:.1f}"
         if txt_main:
             text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)

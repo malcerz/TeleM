@@ -249,9 +249,9 @@ class MovingMapRenderer:
             download_missing: If True, download missing tiles on demand (may block).
                 If False, only cached tiles are used – uncached areas stay grey.
         """
-        idx = self._idx(ts)
-        cx, cy = self._tiles[idx]
-        cpx, cpy = self._px_x[idx], self._px_y[idx]
+        # Interpolowana pozycja → płynny ruch co klatkę (nie skok co ~1 s)
+        cpx, cpy = self._interp_pos(ts)
+        cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
 
         # Tile range covering output size
         half_w = int(math.ceil(w / 2 / TILE_SIZE)) + 1
@@ -280,19 +280,20 @@ class MovingMapRenderer:
         if draw_track or draw_marker:
             d = ImageDraw.Draw(img)
             ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
-            if draw_track and idx >= 1:
-                pts = [(x - ox, y - oy) for i in range(idx + 1)
-                       for x, y in [(self._px_x[i], self._px_y[i])]]
-                if len(pts) >= 2:
-                    d.line(pts, fill=self._trk_color, width=self._trk_width,
-                           joint="round")
+            if draw_track and len(self._gps) >= 2:
+                # CAŁA trasa narysowana od razu (nie tylko przejechany fragment)
+                pts = [(self._px_x[i] - ox, self._px_y[i] - oy)
+                       for i in range(len(self._gps))]
+                d.line(pts, fill=self._trk_color, width=self._trk_width,
+                       joint="round")
             if draw_marker:
+                # Kropka (marker) na interpolowanej pozycji — środek mapy
                 mx, my = cpx - ox, cpy - oy
                 r = self._mkr_radius
                 d.ellipse((mx - r, my - r, mx + r, my + r),
                           fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
 
-        # Crop to output size centred on current position
+        # Crop to output size centred on current (interpolated) position
         scx, scy = cpx - tx1 * TILE_SIZE, cpy - ty1 * TILE_SIZE
         x1 = max(0, int(scx - w / 2))
         y1 = max(0, int(scy - h / 2))
@@ -306,6 +307,32 @@ class MovingMapRenderer:
                                 (h - cropped.height) // 2))
             return pad
         return cropped
+
+    def _interp_pos(self, ts: float) -> tuple[float, float]:
+        """Return interpolated (px_x, px_y) at timestamp *ts* (seconds from track start).
+
+        Linear interpolation between the two GPS points bracketing the target
+        time → smooth per-frame movement instead of jumping between the 1 Hz
+        samples.
+        """
+        n = len(self._gps)
+        if n == 0:
+            return 0.0, 0.0
+        target = self._ts0 + min(max(ts, 0), self._dur)
+        idx = self._idx(ts)
+        if idx <= 0:
+            return self._px_x[0], self._px_y[0]
+        if idx >= n:
+            return self._px_x[-1], self._px_y[-1]
+        t0 = self._gps[idx - 1][0].timestamp()
+        t1 = self._gps[idx][0].timestamp()
+        span = t1 - t0
+        if span <= 0:
+            return self._px_x[idx], self._px_y[idx]
+        frac = max(0.0, min(1.0, (target - t0) / span))
+        x = self._px_x[idx - 1] + (self._px_x[idx] - self._px_x[idx - 1]) * frac
+        y = self._px_y[idx - 1] + (self._px_y[idx] - self._px_y[idx - 1]) * frac
+        return x, y
 
     def _idx(self, ts: float) -> int:
         """Find GPS index closest to timestamp."""

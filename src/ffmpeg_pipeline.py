@@ -89,7 +89,12 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
 
     selected_hw = None
 
-    if preferred_encoder == "intel":
+    if preferred_encoder == "amd":
+        for hw in ("d3d11va", "dxva2", "vulkan", "vaapi"):
+            if _test_hwaccel(hw):
+                selected_hw = hw
+                break
+    elif preferred_encoder == "intel":
         # On dual GPU systems (NVIDIA + Intel), '-hwaccel qsv' often locks up FFmpeg
         # when decoding input video in a pipe. 'd3d11va' / 'dxva2' work reliably on Intel GPU.
         for hw in ("d3d11va", "dxva2", "vulkan"):
@@ -109,7 +114,7 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
 
     if selected_hw is None:
         # Fallback priority check
-        for hw in ("cuda", "qsv", "d3d11va", "vaapi", "vulkan"):
+        for hw in ("cuda", "d3d11va", "dxva2", "qsv", "vaapi", "vulkan"):
             if _test_hwaccel(hw):
                 selected_hw = hw
                 break
@@ -168,10 +173,13 @@ def detect_best_encoder() -> str:
         )
         if r.returncode == 0:
             encoders = r.stdout
-            # Prefer NVIDIA NVENC, then Intel QSV
+            # Prefer NVIDIA NVENC, then AMD AMF, then Intel QSV
             if "hevc_nvenc" in encoders and _test_encoder("hevc_nvenc"):
-                # Don't overwrite _GPU_DECODER_CACHE – it belongs to the decoder
                 return "nv"
+            if "hevc_amf" in encoders and _test_encoder("hevc_amf"):
+                return "amd"
+            if "h264_amf" in encoders and _test_encoder("h264_amf"):
+                return "amd"
             if "hevc_qsv" in encoders and _test_encoder("hevc_qsv"):
                 return "intel"
     except Exception:
@@ -379,6 +387,14 @@ def _resolve_cache_value(
 
     if not samples:
         return None
+    # Linear interpolation for speed/distance/altitude fields (smooth per frame),
+    # step for the rest — must match telemetry_manager.resolve_value.
+    if field_name in ("speed", "enhanced_speed"):
+        return interpolate_speed(samples, target_dt)
+    if field_name in ("distance", "dist", "track"):
+        return interpolate_distance(samples, target_dt)
+    if field_name in ("alt", "enhanced_altitude", "altitude"):
+        return interpolate_altitude(samples, target_dt)
     return interpolate_value(samples, target_dt)
 
 
@@ -632,6 +648,7 @@ def generate_overlay_sequence(
     gpx_hr_samples: Optional[list] = None,
     gpx_cad_samples: Optional[list] = None,
     fit_data: Optional[dict[str, list]] = None,
+    gps_track: Optional[list] = None,
 ) -> int:
     """Generate overlay frames as BMP files using multiprocessing."""
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -657,6 +674,7 @@ def generate_overlay_sequence(
             gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
             gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
             fit_data=fit_data,
+            gps_track=gps_track,
             start_dt_utc=start_dt_utc, tz_offset_hours=tz_offset_hours,
             speed_samples=speed_samples, track_samples=track_samples,
             alt_samples=alt_samples, target_fps=target_fps,
@@ -686,6 +704,7 @@ def generate_overlay_sequence(
             gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
             gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
             fit_data,
+            gps_track,
             start_dt_utc, tz_offset_hours,
             speed_samples, track_samples, alt_samples,
             target_fps, update_rate_step,
@@ -792,7 +811,10 @@ def _build_stream_ffmpeg_cmd(
         base_filter = "[0:v]null[base]"
 
     # ── Overlay stream & operator ───────────────────────────────────────
-    ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
+    if overlay_w != render_w or overlay_h != render_h:
+        ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear[ov]"
+    else:
+        ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
     ov_op = "overlay"
 
     filter_complex = (
@@ -852,6 +874,16 @@ def _build_stream_ffmpeg_cmd(
         cmd.extend([
             "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
             "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu),
+        ])
+        if has_cuts:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            cmd.extend(["-c:a", "copy"])
+    elif encoder == "amd":
+        amf_encoder = "hevc_amf" if _test_encoder("hevc_amf") else "h264_amf"
+        cmd.extend([
+            "-c:v", amf_encoder, "-usage", "transcoding", "-quality", "speed",
+            "-rc", "cbr", "-pix_fmt", "nv12",
         ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
@@ -1310,6 +1342,19 @@ def stream_overlay_to_ffmpeg(
     if active_process_holder is not None:
         active_process_holder["process"] = process
 
+    # ── Async stdout reader thread (prevents FFmpeg stdout buffer deadlock) ──
+    stdout_lines: list[str] = []
+
+    def _stdout_reader() -> None:
+        try:
+            for line in process.stdout:
+                stdout_lines.append(line.strip())
+        except Exception:
+            pass
+
+    stdout_t = threading.Thread(target=_stdout_reader, daemon=True)
+    stdout_t.start()
+
     start_time = time.time()
     total_piped = 0
     workers = workers or max(1, (os.cpu_count() or 1) - 1)
@@ -1465,9 +1510,7 @@ def stream_overlay_to_ffmpeg(
         if shm_pool is not None:
             shm_pool.close()
 
-    remaining: list[str] = []
-    for line in process.stdout:
-        remaining.append(line.strip())
+    stdout_t.join(timeout=10.0)
     process.wait()
 
     if active_process_holder is not None:
@@ -1475,7 +1518,7 @@ def stream_overlay_to_ffmpeg(
 
     rc = process.returncode
     if rc != 0 and not (cancel_event is not None and cancel_event.is_set()):
-        extra = "\n".join(remaining).strip()
+        extra = "\n".join(stdout_lines).strip()
         raise RuntimeError(f"FFmpeg failed with exit code {rc}\n{extra}")
 
     if isinstance(input_files, list) and len(input_files) > 1:
@@ -1588,7 +1631,7 @@ def append_bitrate_args(cmd: list[str], encoder: str, video_bitrate: str) -> lis
     """Append bitrate arguments to an ffmpeg command."""
     if not video_bitrate:
         return cmd
-    if encoder == "nv":
+    if encoder in ("nv", "amd"):
         cmd.extend(["-b:v", video_bitrate, "-maxrate", video_bitrate])
         bufsize = video_bitrate
         try:
@@ -1699,6 +1742,12 @@ def apply_overlay_video(
         cmd.extend([
             "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
             "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu), "-c:a", "copy",
+        ])
+    elif encoder == "amd":
+        amf_encoder = "hevc_amf" if _test_encoder("hevc_amf") else "h264_amf"
+        cmd.extend([
+            "-c:v", amf_encoder, "-usage", "transcoding", "-quality", "speed",
+            "-rc", "cbr", "-pix_fmt", "nv12", "-c:a", "copy",
         ])
     elif encoder == "intel":
         cmd.extend([

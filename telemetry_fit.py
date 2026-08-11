@@ -96,9 +96,16 @@ def parse_fit(fit_path: Path | str) -> list[RecordDict] | None:
         alt = raw.get("enhanced_altitude") or raw.get("altitude")
         rec["alt"] = _try_float(alt)
 
-        # Speed: m/s → km/h
+        # Speed: m/s → km/h (enhanced_speed preferred, GPS speed fallback)
         speed_ms = raw.get("enhanced_speed") or raw.get("speed")
         rec["speed"] = _try_float(speed_ms, scale=3.6)
+
+        # enhanced_speed is the more accurate (GPS+accelerometer) speed.
+        # Store it in km/h as well so `fit_enhanced_speed_text` gauge
+        # shows correct units (it resolves the "enhanced_speed" field).
+        enhanced_ms = raw.get("enhanced_speed")
+        if enhanced_ms is not None:
+            rec["enhanced_speed"] = _try_float(enhanced_ms, scale=3.6)
 
         # Every other scalar field
         for name, value in raw.items():
@@ -106,7 +113,7 @@ def parse_fit(fit_path: Path | str) -> list[RecordDict] | None:
                 continue
             if name in (
                 "timestamp", "position_lat", "position_long",
-                "altitude", "speed",
+                "altitude", "speed", "enhanced_speed",
             ):
                 continue
             if isinstance(value, (list, tuple)):

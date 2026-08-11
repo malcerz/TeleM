@@ -12,20 +12,20 @@ from __future__ import annotations
 # (priority: first match wins)
 # Each entry is (substring_to_match, form_name, size_multiplier)
 DEFAULT_FORM_RULES: list[tuple[str, str, float]] = [
-    ("passing_speedabs", "gauge", 0.12),
-    ("passing_speed",    "gauge", 0.12),
-    ("speed",            "gauge", 0.12),
-    ("cad",              "chart", 0.3),
-    ("heart_rate",       "chart", 0.3),
-    ("hr",               "chart", 0.3),
-    ("power",            "chart", 0.3),
-    ("curvpower",        "chart", 0.3),
-    ("alt",              "bar",   0.15),
-    ("distance",         "bar",   0.15),
-    ("dist",             "bar",   0.15),
-    ("battery",          "segment_bar", 0.12),
-    ("solar",            "segment_bar", 0.12),
-    ("gopro_battery",    "segment_bar", 0.12),
+    ("passing_speedabs", "gauge", 12.0),
+    ("passing_speed",    "gauge", 12.0),
+    ("speed",            "gauge", 12.0),
+    ("cad",              "chart", 30.0),
+    ("heart_rate",       "chart", 30.0),
+    ("hr",               "chart", 30.0),
+    ("power",            "chart", 30.0),
+    ("curvpower",        "chart", 30.0),
+    ("alt",              "bar",   15.0),
+    ("distance",         "bar",   15.0),
+    ("dist",             "bar",   15.0),
+    ("battery",          "segment_bar", 12.0),
+    ("solar",            "segment_bar", 12.0),
+    ("gopro_battery",    "segment_bar", 12.0),
 ]
 
 

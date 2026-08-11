@@ -177,13 +177,31 @@ def prepare_overlay_frame_data(
     # ── Build extra_indicators (FIT fields + remaining dynamic) ───────
     from src.indicators.registry import HARDCODED_KEYS
 
+    # Sensible default units for known FIT field names (used when the layout
+    # config does not provide an explicit unit).
+    FIT_UNIT_HINTS: dict[str, str] = {
+        "speed": "km/h", "enhanced_speed": "km/h", "ground_speed": "km/h",
+        "distance": "km", "altitude": "m", "enhanced_altitude": "m",
+        "heart_rate": "BPM", "cadence": "rpm", "power": "W",
+        "temperature": "\u00b0C", "torque_effectiveness": "%",
+        "vertical_oscillation": "mm", "stance_time": "ms",
+    }
+
     extra_indicators: dict[str, tuple[float, str, str]] = {}
 
     # 1) FIT fields (from extra_field_keys list or from layout keys)
-    fit_keys = extra_field_keys if extra_field_keys is not None else [
-        k for k in layout.get("indicators", {})
-        if k.startswith("fit_") and k.endswith("_text")
-    ]
+    raw_fit_keys = extra_field_keys if extra_field_keys is not None else []
+    fit_keys = []
+    for k in raw_fit_keys:
+        if k.startswith("fit_") and k.endswith("_text"):
+            fit_keys.append(k)
+        else:
+            fit_keys.append(f"fit_{k}_text")
+            
+    for k in layout.get("indicators", {}):
+        if k.startswith("fit_") and k.endswith("_text") and k not in fit_keys:
+            fit_keys.append(k)
+
     for key in fit_keys:
         field_name = key[4:-5]
         if resolve_cache_value:
@@ -191,7 +209,7 @@ def prepare_overlay_frame_data(
         else:
             val = 0.0
         cfg = layout.get("indicators", {}).get(key, {})
-        unit = cfg.get("unit", "")
+        unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
         extra_indicators[key] = (val, unit, label)
 
