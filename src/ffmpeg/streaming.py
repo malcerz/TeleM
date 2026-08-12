@@ -19,7 +19,11 @@ from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
 from src.ffmpeg.worker_cache import init_worker
-from src.ffmpeg.command_builder import _build_stream_ffmpeg_cmd, get_layout_hud_bbox
+from src.ffmpeg.command_builder import (
+    _build_stream_ffmpeg_cmd,
+    get_layout_hud_bbox,
+    get_layout_hud_regions,
+)
 from src.ffmpeg.shared_memory import (
     SharedFramePool,
     _init_worker_with_shm,
@@ -99,18 +103,10 @@ def _acquire_shm_slot(
     """
     if process.poll() is not None:
         raise RuntimeError(
-            f"FFmpeg exited early (code {process.returncode})\n"
-            f"{chr(10).join(stdout_lines).strip()}"
+            f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
+            f"FFmpeg log output:\n" + "\n".join(stdout_lines[-30:])
         )
-    try:
-        return shm_pool.acquire(timeout=timeout)
-    except queue.Empty:
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"FFmpeg exited early (code {process.returncode})\n"
-                f"{chr(10).join(stdout_lines).strip()}"
-            )
-        raise
+    return shm_pool.acquire(timeout=timeout)
 
 
 def run_ffmpeg_with_progress(
@@ -182,7 +178,7 @@ def run_ffmpeg_with_progress(
 
 def stream_overlay_to_ffmpeg(
     ffmpeg_exe: str,
-    input_files: list,
+    input_files: str | list[str],
     output_file: str,
     duration_s: float,
     start_dt_utc: Optional[datetime],
@@ -193,10 +189,10 @@ def stream_overlay_to_ffmpeg(
     font_path: str,
     layout: dict[str, Any],
     field_samples: dict[str, Any],
+    max_distance_m: float | None = None,
     target_fps: float = 30.0,
     update_rate_step: int = 1,
-    max_distance_m: Optional[float] = None,
-    workers: Optional[int] = None,
+    workers: int = 4,
     iso_samples: Optional[list] = None,
     exposure_samples: Optional[list] = None,
     temperature_samples: Optional[list] = None,
@@ -209,26 +205,21 @@ def stream_overlay_to_ffmpeg(
     gpx_cad_samples: Optional[list] = None,
     fit_data: Optional[dict[str, list]] = None,
     gps_track: Optional[list] = None,
-    progress_cb: Optional[Callable] = None,
-    cancel_event: Optional[Any] = None,
-    active_process_holder: Optional[dict] = None,
     encoder: str = "nv",
     gpu: int = 0,
+    video_bitrate: str = "40M",
+    render_w: int = 3840,
+    render_h: int = 2160,
     resolution_name: str = "source",
-    video_bitrate: str = "",
     rotation_degrees: int = 0,
     container_rotation: int = 0,
-    overlay_w: int = 1920,
-    overlay_h: int = 1080,
-    render_w: int = 1920,
-    render_h: int = 1080,
+    overlay_w: int = 3840,
+    overlay_h: int = 2160,
+    progress_cb: Optional[Callable] = None,
+    cancel_event: Optional[threading.Event] = None,
+    active_process_holder: Optional[dict] = None,
 ) -> int:
-    """
-    Producer-Consumer pipeline:
-    - Producer: ProcessPoolExecutor renders frames in parallel -> (index, bytes)
-    - Consumer: main thread receives, sorts by index, pipes to FFmpeg
-    """
-    # Pobierz cut_regions z layoutu (przekazane przez kontroler)
+    """Stream rendered overlay frames into an FFmpeg process."""
     cut_regions = layout.get("cut_regions", [])
 
     generation_fps = target_fps / update_rate_step
@@ -242,15 +233,27 @@ def stream_overlay_to_ffmpeg(
     hud_x, hud_y = 0, 0
     stream_w, stream_h = overlay_w, overlay_h
     hud_bbox: tuple[int, int, int, int] | None = None
+    hud_regions: list[tuple[int, int, int, int, int, int]] | None = None
 
     if encoder == "amd" and not is_no_hud:
-        hud_x, hud_y, stream_w, stream_h = get_layout_hud_bbox(layout, overlay_w, overlay_h)
-        hud_bbox = (hud_x, hud_y, stream_w, stream_h)
-        print(
-            f"[STREAM AMD] HUD sub-window: {stream_w}x{stream_h} at ({hud_x},{hud_y}) "
-            f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
-            flush=True,
-        )
+        stream_w, stream_h, hud_regions = get_layout_hud_regions(layout, overlay_w, overlay_h, max_regions=3)
+        if len(hud_regions) == 1:
+            hud_x, hud_y = hud_regions[0][0], hud_regions[0][1]
+            stream_w, stream_h = hud_regions[0][4], hud_regions[0][5]
+            hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+            hud_regions = None
+            print(
+                f"[STREAM AMD] Single HUD sub-window: {stream_w}x{stream_h} at ({hud_x},{hud_y}) "
+                f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
+                flush=True,
+            )
+        else:
+            hud_bbox = None
+            print(
+                f"[STREAM AMD] Multi-Region HUD Atlas: {len(hud_regions)} regions, Atlas {stream_w}x{stream_h} "
+                f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
+                flush=True,
+            )
 
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     init_worker(
@@ -266,6 +269,7 @@ def stream_overlay_to_ffmpeg(
         cut_regions=cut_regions,
         effective_rotation=effective_rotation,
         hud_bbox=hud_bbox,
+        hud_regions=hud_regions,
     )
 
     if cancel_event is not None and cancel_event.is_set():
@@ -274,13 +278,9 @@ def stream_overlay_to_ffmpeg(
     # Build FFmpeg input args
     hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
     # Manual rotation uses CPU filters (vflip/transpose) which cannot take
-    # CUDA frames, so decoded frames must stay in system memory in that case.
+    # hardware frames, so decoded frames must stay in system memory in that case.
     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
-    # AMD APU: d3d11va is ONLY safe in the direct GPU passthrough path (NO HUD).
-    # With a CPU filter graph (overlay, null, scale), using d3d11va alongside
-    # hevc_amf causes D3D11 device contention (-1313558101 / DXGI_ERROR).
-    # For HUD modes, disable hwaccel and let FFmpeg use software decode.
-    if encoder == "amd" and not is_no_hud:
+    if encoder == "amd" and needs_cpu_rotation:
         hwaccel = None
     input_args: list[str] = []
     audio_input_args: list[str] = []
@@ -306,7 +306,7 @@ def stream_overlay_to_ffmpeg(
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
-        stream_w, stream_h, generation_fps,
+        overlay_w, overlay_h, stream_w, stream_h, generation_fps,
         encoder, gpu, video_bitrate,
         render_w, render_h, resolution_name,
         container_rotation, rotation_degrees,
@@ -316,6 +316,7 @@ def stream_overlay_to_ffmpeg(
         hud_x=hud_x,
         hud_y=hud_y,
         is_no_hud=is_no_hud,
+        hud_regions=hud_regions,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
@@ -425,7 +426,7 @@ def stream_overlay_to_ffmpeg(
                 start_dt_utc, tz_offset_hours,
                 speed_samples, track_samples, alt_samples,
                 target_fps, update_rate_step, total_overlay_frames,
-                cut_regions, effective_rotation, hud_bbox,
+                cut_regions, effective_rotation, hud_bbox, hud_regions,
             )
 
             print(

@@ -133,16 +133,20 @@ def render_overlay_frame(
         elapsed_seconds=data["elapsed_seconds"],
         avg_speed_kmh=data["avg_speed_kmh"],
     )
-    rot = WORKER_CACHE.get("effective_rotation", 0) % 360
-    if rot == 180:
-        img = img.transpose(Image.ROTATE_180)
-    elif rot == 90:
-        img = img.transpose(Image.ROTATE_270)
-    elif rot == 270:
-        img = img.transpose(Image.ROTATE_90)
 
+
+    hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")
-    if hud_bbox:
+    if hud_regions and len(hud_regions) > 1:
+        atlas_w = max(r[2] + r[4] for r in hud_regions)
+        atlas_h = max(r[3] + r[5] for r in hud_regions)
+        atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
+        for r in hud_regions:
+            dest_x, dest_y, src_x, src_y, rw, rh = r
+            r_crop = img.crop((dest_x, dest_y, dest_x + rw, dest_y + rh))
+            atlas_img.paste(r_crop, (src_x, src_y))
+        img = atlas_img
+    elif hud_bbox:
         hx, hy, hw, hh = hud_bbox
         img = img.crop((hx, hy, hx + hw, hy + hh))
     return img

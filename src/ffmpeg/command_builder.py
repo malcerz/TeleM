@@ -101,15 +101,144 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
     if w % 2 != 0: w += 1
     if h % 2 != 0: h += 1
 
-    return min_x, min_y, min(canvas_w - min_x, w), min(canvas_h - min_y, h)
+def get_layout_hud_regions(
+    layout: dict[str, Any], canvas_w: int, canvas_h: int, max_regions: int = 3
+) -> tuple[int, int, list[tuple[int, int, int, int, int, int]]]:
+    """Compute compact multi-region atlas bounds for layout.
+
+    Returns:
+        atlas_w, atlas_h, regions
+        where regions is a list of (dest_x, dest_y, src_x, src_y, region_w, region_h)
+    """
+    indicators = layout.get("indicators", {})
+    custom_texts = layout.get("custom_texts", [])
+    enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+
+    if not enabled_indicators and not custom_texts:
+        return 2, 2, [(0, 0, 0, 0, 2, 2)]
+
+    boxes = []
+    for key, cfg in enabled_indicators.items():
+        lx = cfg.get("x", 0.0)
+        ly = cfg.get("y", 0.0)
+        px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
+        py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
+        sz = cfg.get("size", cfg.get("font_size", 10.0))
+        sw = int(round((sz / 100.0) * canvas_w)) if sz <= 100.0 else int(round(sz))
+        sh = int(round((sz / 100.0) * canvas_h)) if sz <= 100.0 else int(round(sz))
+
+        form = cfg.get("form", "text")
+        if form in ("chart", "moving_map", "static_map", "map") or "map" in key or "chart" in key:
+            sw = max(sw, int(canvas_w * 0.45))
+            sh = max(sh, int(canvas_h * 0.45))
+        elif form == "gauge" or "gauge" in key:
+            sw = max(sw, int(canvas_w * 0.35))
+            sh = max(sh, int(canvas_h * 0.50))
+        elif "time" in key or "date" in key or form in ("time", "date"):
+            sw = max(sw, int(canvas_w * 0.25))
+            sh = max(sh, int(canvas_h * 0.15))
+        else:
+            sw = max(sw, int(canvas_w * 0.20))
+            sh = max(sh, int(canvas_h * 0.15))
+
+        is_text = (form == "text") or (key in ("time_block", "time_display"))
+
+        if not is_text:
+            x1 = max(0, px - sw // 2 - 60)
+            y1 = max(0, py - sh // 2 - 60)
+            x2 = min(canvas_w, px + sw // 2 + 60)
+            y2 = min(canvas_h, py + sh // 2 + 60)
+        else:
+            x1 = max(0, px - 40)
+            y1 = max(0, py - 40)
+            x2 = min(canvas_w, px + sw + 60)
+            y2 = min(canvas_h, py + sh + 60)
+
+        boxes.append([x1, y1, x2, y2])
+
+    for ct_cfg in custom_texts:
+        lx = ct_cfg.get("x", 0.0)
+        ly = ct_cfg.get("y", 0.0)
+        px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
+        py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
+        sw = int(canvas_w * 0.25)
+        sh = int(canvas_h * 0.15)
+        boxes.append([max(0, px - sw // 2 - 40), max(0, py - sh // 2 - 40), min(canvas_w, px + sw // 2 + 40), min(canvas_h, py + sh // 2 + 40)])
+
+    clusters = [[b[0], b[1], b[2], b[3]] for b in boxes]
+
+    while len(clusters) > max_regions:
+        best_pair = None
+        best_waste = float("inf")
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                b1, b2 = clusters[i], clusters[j]
+                mb = [min(b1[0], b2[0]), min(b1[1], b2[1]), max(b1[2], b2[2]), max(b1[3], b2[3])]
+                ma = (mb[2] - mb[0]) * (mb[3] - mb[1])
+                a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+                a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+                waste = ma - (a1 + a2)
+                if waste < best_waste:
+                    best_waste = waste
+                    best_pair = (i, j)
+
+        if best_pair is None:
+            break
+        i, j = best_pair
+        b1, b2 = clusters[i], clusters[j]
+        mb = [min(b1[0], b2[0]), min(b1[1], b2[1]), max(b1[2], b2[2]), max(b1[3], b2[3])]
+        clusters.pop(j)
+        clusters.pop(i)
+        clusters.append(mb)
+
+    sorted_clusters = sorted(clusters, key=lambda c: (c[3] - c[1]), reverse=True)
+    regions = []
+    shelf_x = 0
+    shelf_y = 0
+    current_shelf_h = 0
+    atlas_max_x = 0
+    atlas_max_y = 0
+    max_shelf_w = canvas_w
+
+    for c in sorted_clusters:
+        x1, y1, x2, y2 = c
+        w = max(2, x2 - x1)
+        h = max(2, y2 - y1)
+        if x1 % 2 != 0: x1 -= 1
+        if y1 % 2 != 0: y1 -= 1
+        if w % 2 != 0: w += 1
+        if h % 2 != 0: h += 1
+        w = min(canvas_w - x1, w)
+        h = min(canvas_h - y1, h)
+
+        if shelf_x + w > max_shelf_w and shelf_x > 0:
+            shelf_x = 0
+            shelf_y += current_shelf_h
+            current_shelf_h = 0
+
+        regions.append((x1, y1, shelf_x, shelf_y, w, h))
+        shelf_x += w
+        current_shelf_h = max(current_shelf_h, h)
+
+        atlas_max_x = max(atlas_max_x, shelf_x)
+        atlas_max_y = max(atlas_max_y, shelf_y + current_shelf_h)
+
+    atlas_w = max(2, atlas_max_x)
+    atlas_h = max(2, atlas_max_y)
+    if atlas_w % 2 != 0: atlas_w += 1
+    if atlas_h % 2 != 0: atlas_h += 1
+
+    return atlas_w, atlas_h, regions
 
 
 def _build_stream_ffmpeg_cmd(
     ffmpeg_exe: str,
     input_args: list[str],
     output_file: str,
-    overlay_w: int,
-    overlay_h: int,
+    canvas_w: int,
+    canvas_h: int,
+    stream_w: int,
+    stream_h: int,
     generation_fps: float,
     encoder: str,
     gpu: int,
@@ -125,6 +254,7 @@ def _build_stream_ffmpeg_cmd(
     hud_x: int = 0,
     hud_y: int = 0,
     is_no_hud: bool = False,
+    hud_regions: list[tuple[int, int, int, int, int, int]] | None = None,
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command for the streaming pipeline.
 
@@ -140,7 +270,8 @@ def _build_stream_ffmpeg_cmd(
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
 
-    if is_no_hud and encoder == "amd" and not needs_cpu_rotation and not target_res and not has_cuts:
+    no_res_change = not target_res or (render_w == canvas_w and render_h == canvas_h)
+    if is_no_hud and encoder == "amd" and not needs_cpu_rotation and no_res_change and not has_cuts:
         amf_encoder = "hevc_amf" if _test_encoder("hevc_amf") else "h264_amf"
         cmd = [ffmpeg_exe, "-y", *input_args]
         if audio_input_args:
@@ -173,26 +304,96 @@ def _build_stream_ffmpeg_cmd(
                 base_filter = f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
             else:
                 base_filter = "[0:v]hwupload_cuda,scale_cuda=format=yuv420p[base]"
+    elif encoder == "amd" and not needs_cpu_rotation:
+        if effective_rotation == 180:
+            base_filter = "[0:v]format=nv12,vflip,hflip[base]"
+        elif effective_rotation == 90:
+            base_filter = "[0:v]format=nv12,transpose=1[base]"
+        elif effective_rotation == 270:
+            base_filter = "[0:v]format=nv12,transpose=2[base]"
+        else:
+            base_filter = "[0:v]format=nv12[base]"
     elif target_res:
-        base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
+        if effective_rotation == 180:
+            base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,vflip,hflip[base]"
+        elif effective_rotation == 90:
+            base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,transpose=1[base]"
+        elif effective_rotation == 270:
+            base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,transpose=2[base]"
+        else:
+            base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
     else:
-        base_filter = "[0:v]null[base]"
+        if effective_rotation == 180:
+            base_filter = "[0:v]vflip,hflip[base]"
+        elif effective_rotation == 90:
+            base_filter = "[0:v]transpose=1[base]"
+        elif effective_rotation == 270:
+            base_filter = "[0:v]transpose=2[base]"
+        else:
+            base_filter = "[0:v]null[base]"
+
+    scale_x = render_w / canvas_w if canvas_w > 0 else 1.0
+    scale_y = render_h / canvas_h if canvas_h > 0 else 1.0
 
     # ── Overlay stream & operator ───────────────────────────────────────
     if encoder == "nv" and not needs_cpu_rotation:
-        if overlay_w != render_w or overlay_h != render_h:
-            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={overlay_w}:{overlay_h}:flags=bilinear,hwupload_cuda[ov]"
+        if stream_w != render_w or stream_h != render_h:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear,hwupload_cuda[ov]"
         else:
             ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
         ov_op = f"overlay_cuda=x={hud_x}:y={hud_y}"
-    else:
-        ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
-        ov_op = f"overlay={hud_x}:{hud_y}:shortest=1"
+        filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
+    elif hud_regions and len(hud_regions) > 1:
+        n_reg = len(hud_regions)
+        split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
+        if scale_x != 1.0 or scale_y != 1.0:
+            atlas_w = max(r[2] + r[4] for r in hud_regions)
+            atlas_h = max(r[3] + r[5] for r in hud_regions)
+            s_atlas_w = int(round(atlas_w * scale_x))
+            s_atlas_h = int(round(atlas_h * scale_y))
+            if s_atlas_w % 2 != 0: s_atlas_w += 1
+            if s_atlas_h % 2 != 0: s_atlas_h += 1
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={s_atlas_w}:{s_atlas_h}:flags=bilinear,split={n_reg}{split_labels}"
+        else:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
 
-    filter_complex = (
-        f"{base_filter};{ov_input};"
-        f"[base][ov]{ov_op}[vtemp]"
-    )
+        crop_ops = []
+        overlay_ops = []
+        curr_base = "[base]"
+        for i, r in enumerate(hud_regions):
+            dest_x, dest_y, src_x, src_y, rw, rh = r
+            s_dest_x = int(round(dest_x * scale_x))
+            s_dest_y = int(round(dest_y * scale_y))
+            s_src_x = int(round(src_x * scale_x))
+            s_src_y = int(round(src_y * scale_y))
+            s_rw = int(round(rw * scale_x))
+            s_rh = int(round(rh * scale_y))
+            if s_rw % 2 != 0: s_rw += 1
+            if s_rh % 2 != 0: s_rh += 1
+
+            crop_ops.append(f"[ov_raw_{i}]crop={s_rw}:{s_rh}:{s_src_x}:{s_src_y}[ov_{i}]")
+            next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+            overlay_ops.append(
+                f"{curr_base}[ov_{i}]overlay={s_dest_x}:{s_dest_y}{':shortest=1' if i == n_reg - 1 else ''}{next_base}"
+            )
+            curr_base = next_base
+
+        filter_complex = (
+            f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
+        )
+    else:
+        s_hud_x = int(round(hud_x * scale_x))
+        s_hud_y = int(round(hud_y * scale_y))
+        if scale_x != 1.0 or scale_y != 1.0:
+            s_stream_w = int(round(stream_w * scale_x))
+            s_stream_h = int(round(stream_h * scale_y))
+            if s_stream_w % 2 != 0: s_stream_w += 1
+            if s_stream_h % 2 != 0: s_stream_h += 1
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={s_stream_w}:{s_stream_h}:flags=bilinear[ov]"
+        else:
+            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
+        ov_op = f"overlay={s_hud_x}:{s_hud_y}:shortest=1"
+        filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
 
     # ── Cut region drop (select filter) ────────────────────────────────
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
@@ -216,21 +417,13 @@ def _build_stream_ffmpeg_cmd(
         filter_complex += ";[vtemp]null[vtemp2]"
         v_last = "[vtemp2]"
 
-    # ── Manual rotation (rotation_degrees) ─────────────────────────────
-    if rotation_degrees == 180:
-        filter_complex += f";{v_last}vflip,hflip[vout]"
-    elif rotation_degrees == 90:
-        filter_complex += f";{v_last}transpose=1[vout]"
-    elif rotation_degrees == 270:
-        filter_complex += f";{v_last}transpose=2[vout]"
-    else:
-        filter_complex += f";{v_last}null[vout]"
+    filter_complex += f";{v_last}null[vout]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
         *input_args,
         "-f", "rawvideo", "-pix_fmt", "rgba",
-        "-s", f"{overlay_w}x{overlay_h}",
+        "-s", f"{stream_w}x{stream_h}",
         "-r", str(generation_fps),
         "-i", "pipe:0",
     ]
@@ -249,9 +442,10 @@ def _build_stream_ffmpeg_cmd(
         audio_idx = "2" if audio_input_args else "0"
         cmd.extend(["-map", f"{audio_idx}:a?"])
 
-    effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
+    # Metadane obrotu: ponieważ obrót jest fizycznie zaaplikowany w filtrze base_filter,
+    # w metadanych pliku wyjściowego piszemy rotate=0, zapobiegając podwójnemu obrotowi w odtwarzaczach.
     cmd.extend([
-        "-map_metadata", "-1", "-metadata:s:v:0", f"rotate={effective_rotation}",
+        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
     ])
 
     if encoder == "nv":

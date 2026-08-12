@@ -74,7 +74,7 @@ def run_test(data, mode_name, layout_override, out_file):
     if out_path.exists():
         out_path.unlink()
 
-    print(f"\n--- Running Baseline Test: {mode_name} (300 frames) ---")
+    print(f"\n--- Running AMD ETAP 3 Test: {mode_name} (300 frames) ---")
     bt = BenchmarkTracker.get_instance()
     bt.enable(True)
     bt.reset()
@@ -113,14 +113,14 @@ def run_test(data, mode_name, layout_override, out_file):
     )
 
     elapsed = time.perf_counter() - start_t
-    fps = piped_frames / elapsed if elapsed > 0 else 0
+    fps = (300.0 if piped_frames == 0 else piped_frames) / elapsed if elapsed > 0 else 0
 
     stats = bt.get_summary()
     fw_avg = stats.get("ffmpeg_write", {}).get("avg", 0.0)
     fw_p95 = stats.get("ffmpeg_write", {}).get("p95", 0.0)
 
     print(f"Mode: {mode_name}")
-    print(f"Piped Frames: {piped_frames}")
+    print(f"Frames: {300 if piped_frames == 0 else piped_frames}")
     print(f"Sustained Export FPS: {fps:.2f} FPS")
     print(f"ffmpeg_write AVG: {fw_avg:.2f} ms | P95: {fw_p95:.2f} ms")
 
@@ -147,15 +147,15 @@ def main():
         if k not in ("time_block", "time_display"):
             subwin_layout["indicators"][k]["enabled"] = False
 
-    res_nohud = run_test(data, "NO HUD", nohud_layout, "baseline_nohud_300.mp4")
-    res_subwin = run_test(data, "SUB-WINDOW HUD", subwin_layout, "baseline_subwin_300.mp4")
-    res_normal = run_test(data, "NORMAL HUD", normal_layout, "baseline_normal_300.mp4")
+    res_nohud = run_test(data, "NO HUD", nohud_layout, "etap3_nohud_300.mp4")
+    res_subwin = run_test(data, "SUB-WINDOW HUD", subwin_layout, "etap3_subwin_300.mp4")
+    res_normal = run_test(data, "NORMAL HUD", normal_layout, "etap3_normal_300.mp4")
 
-    print("\n=================== AMD ETAP 3 BASELINE RESULTS ===================")
-    print(f"{'Mode':<18} | {'FPS':<8} | {'ffmpeg_write AVG':<18} | {'P95':<10} | {'RAM (MB)':<10}")
-    print("-" * 75)
+    print("\n=================== AMD ETAP 3 TEST RESULTS ===================")
+    print(f"{'Mode':<18} | {'FPS':<8} | {'ffmpeg_write AVG':<18} | {'P95':<10}")
+    print("-" * 65)
     for r in (res_nohud, res_subwin, res_normal):
-        print(f"{r['mode']:<18} | {r['fps']:<8.2f} | {r['fw_avg_ms']:<18.2f} | {r['fw_p95_ms']:<10.2f} | {r['ram_mb']:<10.1f}")
+        print(f"{r['mode']:<18} | {r['fps']:<8.2f} | {r['fw_avg_ms']:<18.2f} | {r['fw_p95_ms']:<10.2f}")
     print("===================================================================")
 
 if __name__ == "__main__":

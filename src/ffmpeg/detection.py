@@ -61,6 +61,9 @@ def detect_gpu_decoder(preferred_encoder: str = "", ffmpeg_exe: str = "ffmpeg") 
         _GPU_DECODER_CACHE = {}
 
     selected_hw = None
+    if preferred_encoder == "cpu":
+        _GPU_DECODER_CACHE[cache_key] = None
+        return None
 
     if preferred_encoder == "amd":
         for hw in ("d3d11va", "dxva2"):
