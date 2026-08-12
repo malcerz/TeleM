@@ -10,7 +10,7 @@ def test_gpu_compositor_availability():
     """GpuCompositor.is_available() should return a boolean based on PyOpenCL environment."""
     is_avail = GpuCompositor.is_available()
     assert isinstance(is_avail, bool)
-    if _CL_AVAILABLE:
+    if is_avail:
         instance = GpuCompositor.get_instance()
         assert instance is not None
         assert instance.device_name != ""

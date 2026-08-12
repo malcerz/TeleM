@@ -49,6 +49,7 @@ def init_worker(
     total_overlay_frames: Optional[int] = None,
     cut_regions: Optional[list[tuple[float, float]]] = None,
     effective_rotation: int = 0,
+    hud_bbox: Optional[tuple[int, int, int, int]] = None,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes."""
     WORKER_CACHE["video_width"] = video_width
@@ -77,6 +78,7 @@ def init_worker(
     WORKER_CACHE["target_fps"] = target_fps
     WORKER_CACHE["update_rate_step"] = update_rate_step
     WORKER_CACHE["total_overlay_frames"] = total_overlay_frames or 1
+    WORKER_CACHE["hud_bbox"] = hud_bbox
 
     # Precompute chart data for workers (identical for every frame)
     WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(

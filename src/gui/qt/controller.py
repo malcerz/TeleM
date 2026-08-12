@@ -218,6 +218,10 @@ class AppController(
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
 
+        # ── Inicjalizacja benchmarka ───────────────────────────────────
+        from src.benchmark import BenchmarkTracker
+        BenchmarkTracker.get_instance().enable(True)
+
     def _clear_caches(self) -> None:
         """Czyszczenie pamięci podręcznej wyliczeń podglądu."""
         self._prepare_cache.clear()

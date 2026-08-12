@@ -48,6 +48,10 @@ class SharedFramePool:
         """Read raw frame bytes from a slot (zero-copy via memoryview)."""
         return bytes(self._shm_blocks[slot].buf[:self.frame_size])
 
+    def get_memview(self, slot: int) -> memoryview:
+        """Return memoryview of the shared memory slot directly without copying."""
+        return self._shm_blocks[slot].buf[:self.frame_size]
+
     def read_into(self, slot: int, dest: Any) -> None:
         """Write slot contents directly to a writable file-like object."""
         dest.write(self._shm_blocks[slot].buf[:self.frame_size])
@@ -122,6 +126,9 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
         speed_samples, track_samples, alt_samples,
         target_fps, update_rate_step,
     )
-    raw = img.tobytes()
-    _SHM_BLOCKS[slot].buf[:_SHM_FRAME_SIZE] = raw
+    import numpy as np
+    shm_buf = _SHM_BLOCKS[slot].buf
+    shm_arr = np.frombuffer(shm_buf[:_SHM_FRAME_SIZE], dtype=np.uint8).reshape((img.height, img.width, 4))
+    img_arr = np.asarray(img)
+    np.copyto(shm_arr, img_arr)
     return index, slot

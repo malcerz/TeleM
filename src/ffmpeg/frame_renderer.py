@@ -140,6 +140,11 @@ def render_overlay_frame(
         img = img.transpose(Image.ROTATE_270)
     elif rot == 270:
         img = img.transpose(Image.ROTATE_90)
+
+    hud_bbox = WORKER_CACHE.get("hud_bbox")
+    if hud_bbox:
+        hx, hy, hw, hh = hud_bbox
+        img = img.crop((hx, hy, hx + hw, hy + hh))
     return img
 
 

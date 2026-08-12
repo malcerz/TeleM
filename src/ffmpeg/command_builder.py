@@ -46,6 +46,64 @@ def append_bitrate_args(cmd: list[str], encoder: str, video_bitrate: str) -> lis
     return cmd
 
 
+def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) -> tuple[int, int, int, int]:
+    """Compute combined bounding box (x, y, w, h) of enabled indicators in layout."""
+    indicators = layout.get("indicators", {})
+    custom_texts = layout.get("custom_texts", [])
+
+    enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+    if not enabled_indicators and not custom_texts:
+        return 0, 0, 2, 2
+
+    min_x, min_y = canvas_w, canvas_h
+    max_x, max_y = 0, 0
+    has_any = False
+
+    for key, cfg in enabled_indicators.items():
+        lx = cfg.get("x", 0.0)
+        ly = cfg.get("y", 0.0)
+        px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
+        py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
+
+        sz = cfg.get("size", cfg.get("font_size", 10.0))
+        sw = int(round((sz / 100.0) * canvas_w)) if sz <= 100.0 else int(round(sz))
+        sh = int(round((sz / 100.0) * canvas_h)) if sz <= 100.0 else int(round(sz))
+
+        form = cfg.get("form", "")
+        if form in ("chart", "moving_map", "static_map"):
+            sw = max(sw, int(canvas_w * 0.45))
+            sh = max(sh, int(canvas_h * 0.35))
+
+        min_x = min(min_x, max(0, px - 40))
+        min_y = min(min_y, max(0, py - 40))
+        max_x = max(max_x, min(canvas_w, px + sw + 60))
+        max_y = max(max_y, min(canvas_h, py + sh + 60))
+        has_any = True
+
+    for ct_cfg in custom_texts:
+        lx = ct_cfg.get("x", 0.0)
+        ly = ct_cfg.get("y", 0.0)
+        px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
+        py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
+        min_x = min(min_x, max(0, px - 40))
+        min_y = min(min_y, max(0, py - 40))
+        max_x = max(max_x, min(canvas_w, px + 500))
+        max_y = max(max_y, min(canvas_h, py + 150))
+        has_any = True
+
+    if not has_any:
+        return 0, 0, 2, 2
+
+    w = max(2, max_x - min_x)
+    h = max(2, max_y - min_y)
+    if min_x % 2 != 0: min_x -= 1
+    if min_y % 2 != 0: min_y -= 1
+    if w % 2 != 0: w += 1
+    if h % 2 != 0: h += 1
+
+    return min_x, min_y, min(canvas_w - min_x, w), min(canvas_h - min_y, h)
+
+
 def _build_stream_ffmpeg_cmd(
     ffmpeg_exe: str,
     input_args: list[str],
@@ -64,38 +122,76 @@ def _build_stream_ffmpeg_cmd(
     hwaccel: str | None = None,
     cut_regions: list[tuple[float, float]] | None = None,
     audio_input_args: list[str] | None = None,
+    hud_x: int = 0,
+    hud_y: int = 0,
+    is_no_hud: bool = False,
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command for the streaming pipeline.
 
     When *hwaccel* is ``"cuda"`` and no rotation is needed, the GPU
     ``overlay_cuda`` filter is used so that compositing runs on the GPU.
-    When rotation is required the caller skips ``-hwaccel`` entirely so
-    that decoding, overlay and rotation all happen on the CPU without
-    format-negotiation issues between ``hflip`` and the encoder.
+    When manual rotation (90/180/270) is required, the whole chain falls
+    back to the CPU (CPU scaling, ``overlay``, CPU rotation filters) so
+    that CUDA hardware frames never reach CPU-only filters like
+    ``vflip``/``transpose``, which cannot convert them.
     """
     target_res = RESOLUTION_MAP.get(resolution_name)
+    needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+    has_cuts = bool(cut_regions and len(cut_regions) > 0)
+    effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
 
-    # ── Base filter (video scaling) ─────────────────────────────────────
-    if target_res and encoder == "nv":
-        # GPU scaling
-        base_filter = (
-            f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}[base]"
-        )
+    if is_no_hud and encoder == "amd" and not needs_cpu_rotation and not target_res and not has_cuts:
+        amf_encoder = "hevc_amf" if _test_encoder("hevc_amf") else "h264_amf"
+        cmd = [ffmpeg_exe, "-y", *input_args]
+        if audio_input_args:
+            cmd.extend(audio_input_args)
+        audio_idx = "2" if audio_input_args else "0"
+        cmd.extend([
+            "-map", "0:v",
+            "-map", f"{audio_idx}:a?",
+            "-map_metadata", "-1",
+            "-metadata:s:v:0", f"rotate={effective_rotation}",
+            "-c:v", amf_encoder,
+            "-usage", "transcoding",
+            "-quality", "speed",
+            "-rc", "cbr",
+            "-pix_fmt", "nv12",
+        ])
+        cmd = append_bitrate_args(cmd, encoder, video_bitrate)
+        cmd.extend(["-c:a", "copy", output_file])
+        return cmd, "direct_gpu_passthrough (zero hwdownload)"
+
+    # ── Base filter (video scaling & format conversion) ───────────────────
+    if encoder == "nv" and not needs_cpu_rotation:
+        if hwaccel == "cuda":
+            if target_res:
+                base_filter = f"[0:v]scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
+            else:
+                base_filter = "[0:v]scale_cuda=format=yuv420p[base]"
+        else:
+            if target_res:
+                base_filter = f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
+            else:
+                base_filter = "[0:v]hwupload_cuda,scale_cuda=format=yuv420p[base]"
     elif target_res:
         base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
     else:
         base_filter = "[0:v]null[base]"
 
     # ── Overlay stream & operator ───────────────────────────────────────
-    if overlay_w != render_w or overlay_h != render_h:
-        ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear[ov]"
+    if encoder == "nv" and not needs_cpu_rotation:
+        if overlay_w != render_w or overlay_h != render_h:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={overlay_w}:{overlay_h}:flags=bilinear,hwupload_cuda[ov]"
+        else:
+            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
+        ov_op = f"overlay_cuda=x={hud_x}:y={hud_y}"
     else:
         ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
-    ov_op = "overlay"
+        ov_op = f"overlay={hud_x}:{hud_y}:shortest=1"
 
     filter_complex = (
         f"{base_filter};{ov_input};"
-        f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
+        f"[base][ov]{ov_op}[vtemp]"
     )
 
     # ── Cut region drop (select filter) ────────────────────────────────
@@ -107,7 +203,7 @@ def _build_stream_ffmpeg_cmd(
             parts.append(f"between(t,{cs},{ce})")
         select_expr = "not(" + "+".join(parts) + ")"
         filter_complex += (
-            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vtemp2]"
         )
         # Audio: aselect – tnie ścieżkę audio tak samo jak wideo
         audio_idx = "2" if audio_input_args else "0"
@@ -115,8 +211,20 @@ def _build_stream_ffmpeg_cmd(
             f";[{audio_idx}:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
         )
         print(f"[CUT] select filter: {select_expr}", flush=True)
+        v_last = "[vtemp2]"
     else:
-        filter_complex += ";[vtemp]null[vout]"
+        filter_complex += ";[vtemp]null[vtemp2]"
+        v_last = "[vtemp2]"
+
+    # ── Manual rotation (rotation_degrees) ─────────────────────────────
+    if rotation_degrees == 180:
+        filter_complex += f";{v_last}vflip,hflip[vout]"
+    elif rotation_degrees == 90:
+        filter_complex += f";{v_last}transpose=1[vout]"
+    elif rotation_degrees == 270:
+        filter_complex += f";{v_last}transpose=2[vout]"
+    else:
+        filter_complex += f";{v_last}null[vout]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
@@ -149,7 +257,9 @@ def _build_stream_ffmpeg_cmd(
     if encoder == "nv":
         cmd.extend([
             "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
-            "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu),
+            "-cq", "24",
+            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else "yuv420p",
+            "-gpu", str(gpu),
         ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])

@@ -47,6 +47,28 @@ def _render_segment_bar_indicator(
     gradient = cfg.get("gradient", ["#00FF00", "#FFFF00", "#FF0000"])
     inactive_color = parse_hex_color(cfg.get("inactive_color", "#404040")) or (64, 64, 64)
 
+    frac = 0
+    if max_value > min_value:
+        frac = max(0, min(1, (value - min_value) / (max_value - min_value)))
+    active_segments = round(frac * segments)
+
+    min_str = f"{min_value:.{decimals}f}" if decimals else f"{min_value:.0f}"
+    max_str = f"{max_value:.{decimals}f}" if decimals else f"{max_value:.0f}"
+    val_str = formatted_val if formatted_val is not None else (f"{value:.{decimals}f}" if decimals else f"{value:.0f}")
+
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+
+    cache_key = _static_cache_key(
+        "segment_bar", canvas_w, canvas_h, font_path, key, active_segments,
+        min_str, max_str, val_str, label_text, outline, fs, ss, bar_w, bar_h,
+        segments, gap, radius_seg, direction, grow_height, inactive_alpha
+    )
+    px_x = s(cfg["x"], canvas_w)
+    px_y = s(cfg["y"], canvas_h)
+    cached = _STATIC_CACHE.get(cache_key)
+    if cached is not None:
+        return cached, px_x, px_y, None
+
     img = Image.new("RGBA", (bar_w, bar_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -66,11 +88,6 @@ def _render_segment_bar_indicator(
         return (int(lerp_color(c1[0], c2[0], local_t)),
                 int(lerp_color(c1[1], c2[1], local_t)),
                 int(lerp_color(c1[2], c2[2], local_t)))
-
-    frac = 0
-    if max_value > min_value:
-        frac = max(0, min(1, (value - min_value) / (max_value - min_value)))
-    active_segments = round(frac * segments)
 
     seg_fs = max(8, int(bar_h * 0.22))
     label_top_space = seg_fs + 4 if (show_label and label_text) else 0
@@ -125,9 +142,7 @@ def _render_segment_bar_indicator(
         draw.text(((bar_w - tw) // 2, 2), label_text, font=seg_font,
                   fill=txt_color, stroke_width=seg_outline, stroke_fill=(0, 0, 0, 255))
 
-    min_str = f"{min_value:.{decimals}f}" if decimals else f"{min_value:.0f}"
-    max_str = f"{max_value:.{decimals}f}" if decimals else f"{max_value:.0f}"
-    val_str = formatted_val if formatted_val is not None else (f"{value:.{decimals}f}" if decimals else f"{value:.0f}")
+    # min_str, max_str, val_str computed early for caching
 
     if show_min:
         draw.text((x_margin, y_bottom), min_str, font=seg_font,
@@ -161,4 +176,5 @@ def _render_segment_bar_indicator(
 
     if ss > 1:
         img = img.resize((int(bar_w / ss), int(bar_h / ss)), Image.LANCZOS)
-    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    _STATIC_CACHE[cache_key] = img
+    return img, px_x, px_y, None

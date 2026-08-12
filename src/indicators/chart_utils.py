@@ -16,6 +16,9 @@ except ImportError:
 from src.indicators.helpers import load_font, load_font_cache_small
 
 
+_CHART_BG_CACHE: dict[tuple, tuple[Image.Image, list[tuple[float, float]], float, float]] = {}
+
+
 def generate_history_chart(
     history_values: list[float],
     width: int,
@@ -41,19 +44,89 @@ def generate_history_chart(
     font_path: Optional[str] = None,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
+    cache_key = (
+        id(history_values) if history_values else None,
+        len(history_values) if history_values else 0,
+        width, height,
+        tuple(line_color), line_thickness, fill_alpha,
+        tuple(fill_color) if fill_color else None,
+        show_axes,
+        tuple(grid_color) if grid_color else None,
+        tuple(time_labels) if time_labels else None,
+        tuple(value_labels) if value_labels else None,
+        supersample, custom_min_val, custom_max_val, label_count,
+        label_units, unit, show_average, label_font_size, font_path
+    )
+
+    bg_data = _CHART_BG_CACHE.get(cache_key)
+    if bg_data is None:
+        bg_data = _build_chart_bg(
+            history_values=history_values, width=width, height=height,
+            line_color=line_color, line_thickness=line_thickness,
+            fill_alpha=fill_alpha, fill_color=fill_color,
+            show_axes=show_axes, grid_color=grid_color,
+            time_labels=time_labels, value_labels=value_labels,
+            supersample=supersample, custom_min_val=custom_min_val,
+            custom_max_val=custom_max_val, label_count=label_count,
+            label_units=label_units, unit=unit, show_average=show_average,
+            label_font_size=label_font_size, font_path=font_path
+        )
+        if len(_CHART_BG_CACHE) > 50:
+            _CHART_BG_CACHE.clear()
+        _CHART_BG_CACHE[cache_key] = bg_data
+
+    bg_img, points, plot_y1, plot_y2, calc_thickness = bg_data
+
+    if current_index is None or not points or not (0 <= current_index < len(points)):
+        return bg_img
+
+    img = bg_img.copy()
+    draw = ImageDraw.Draw(img)
+    cursor_x, py = points[current_index]
+    draw.line(
+        (cursor_x, plot_y1, cursor_x, plot_y2),
+        fill=(cursor_color[0], cursor_color[1], cursor_color[2], 200),
+        width=max(2, calc_thickness),
+    )
+    dot_r = max(3, calc_thickness + 1)
+    draw.ellipse(
+        (cursor_x - dot_r, py - dot_r, cursor_x + dot_r, py + dot_r),
+        fill=(cursor_color[0], cursor_color[1], cursor_color[2], 255),
+        outline=(line_color[0], line_color[1], line_color[2], 255),
+    )
+    return img
+
+
+def _build_chart_bg(
+    history_values: list[float],
+    width: int,
+    height: int,
+    line_color: tuple[int, int, int],
+    line_thickness: int,
+    fill_alpha: int,
+    fill_color: Optional[tuple[int, int, int]],
+    show_axes: bool,
+    grid_color: Optional[tuple[int, int, int, int]],
+    time_labels: Optional[list[str]],
+    value_labels: Optional[list[str]],
+    supersample: int,
+    custom_min_val: Optional[float],
+    custom_max_val: Optional[float],
+    label_count: int,
+    label_units: bool,
+    unit: str,
+    show_average: bool,
+    label_font_size: Optional[float],
+    font_path: Optional[str],
+) -> tuple[Image.Image, list[tuple[float, float]], float, float, int]:
+    """Build and return static chart background (image, points, plot_y1, plot_y2, thickness)."""
     ss = max(1, int(supersample))
     out_w, out_h = width, height
     width *= ss
     height *= ss
-    line_thickness *= ss
-    ss = max(1, int(supersample))
-    out_w, out_h = width, height
-    width *= ss
-    height *= ss
-    line_thickness *= ss
+    calc_line_thickness = line_thickness * ss
     axis_top_margin = 4 * ss
     axis_right_margin = 4 * ss
-    # Bottom margin scales with the chart height (for x-axis tick labels).
     axis_bottom_margin = (int(max(6, height * 0.20)) if show_axes else 0) * ss
 
     has_data = history_values and len(history_values) >= 2
@@ -71,14 +144,11 @@ def generate_history_chart(
         max_val = min_val + 1.0
 
     val_range = max_val - min_val
-
     num_points = len(history_values) if has_data else 0
 
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # ── Y-axis label values (before the left margin, so the margin can fit
-    #    the widest label and proportions hold at any chart size) ─────────
     count = max(2, label_count)
     y_label_values = value_labels if value_labels else [
         f"{min_val + (i / (count - 1)) * val_range:.0f}"
@@ -86,8 +156,6 @@ def generate_history_chart(
         for i in range(count)
     ]
 
-    # Label font scales with the chart (honours explicit label_font_size px,
-    # otherwise proportional to the smaller chart dimension).
     try:
         plot_h_est = max(1, height - axis_top_margin - axis_bottom_margin)
         if label_font_size and label_font_size > 0:
@@ -102,7 +170,6 @@ def generate_history_chart(
     except Exception:
         font_axis = None
 
-    # Left margin sized to the widest Y-axis label so it never clips.
     if show_axes:
         max_label_w = 0
         for lbl in y_label_values:
@@ -119,12 +186,8 @@ def generate_history_chart(
     plot_y1 = axis_top_margin
     plot_x2 = width - axis_right_margin
     plot_y2 = height - axis_bottom_margin
-    plot_w = plot_x2 - plot_x1
-    plot_h = plot_y2 - plot_y1
-    if plot_w <= 0:
-        plot_w = 1
-    if plot_h <= 0:
-        plot_h = 1
+    plot_w = max(1, plot_x2 - plot_x1)
+    plot_h = max(1, plot_y2 - plot_y1)
 
     if show_axes:
         axis_color = (180, 180, 180, 220)
@@ -139,7 +202,6 @@ def generate_history_chart(
             for i in range(len(y_label_values))
         ]
 
-        # ── Horizontal grid lines & Y labels ──
         for lbl, yp in zip(y_label_values, y_positions):
             if grid_color is not None:
                 draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=1)
@@ -174,60 +236,43 @@ def generate_history_chart(
             else:
                 draw.text((tx, ty), lbl, fill=label_color)
 
-    if not has_data:
-        return img
-
-    # Calculate point coordinates — mapped to the FULL plot height so that a
-    # value of min_val/max_val lands exactly on the bottom/top axis label.
     points: list[tuple[float, float]] = []
-    for i, val in enumerate(history_values):
-        x = plot_x1 + (i / (num_points - 1)) * plot_w
-        y = plot_y2 - ((val - min_val) / val_range) * plot_h
-        points.append((x, y))
+    if has_data:
+        for i, val in enumerate(history_values):
+            x = plot_x1 + (i / (num_points - 1)) * plot_w
+            y = plot_y2 - ((val - min_val) / val_range) * plot_h
+            points.append((x, y))
 
-    # Fill under the line
-    fill_polygon: list[tuple[float, float]] = list(points)
-    fill_polygon.append((plot_x2, plot_y2))
-    fill_polygon.append((plot_x1, plot_y2))
-    # Fill under the line — draw directly on the main image
-    actual_fill_rgb = fill_color if fill_color is not None else line_color
-    actual_fill = (actual_fill_rgb[0], actual_fill_rgb[1], actual_fill_rgb[2], fill_alpha)
+        fill_polygon: list[tuple[float, float]] = list(points)
+        fill_polygon.append((plot_x2, plot_y2))
+        fill_polygon.append((plot_x1, plot_y2))
+        actual_fill_rgb = fill_color if fill_color is not None else line_color
+        actual_fill = (actual_fill_rgb[0], actual_fill_rgb[1], actual_fill_rgb[2], fill_alpha)
+        draw.polygon(fill_polygon, fill=actual_fill)
 
-    draw.polygon(fill_polygon, fill=actual_fill)  # type: ignore[arg-type]
+        if show_axes:
+            draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
+            draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
 
-    # Redraw axes on top
-    if show_axes:
-        draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-        draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
+        draw.line(points, fill=(line_color[0], line_color[1], line_color[2], 255), width=calc_line_thickness, joint="round")
 
-    # Draw the line
-    draw.line(points, fill=(line_color[0], line_color[1], line_color[2], 255), width=line_thickness, joint="round")
-
-    # Draw average line
-    if show_average and has_data:
-        avg_val = float(sum(history_values) / len(history_values))
-        if min_val <= avg_val <= max_val:
-            avg_y = plot_y2 - ((avg_val - min_val) / val_range) * plot_h
-            avg_color = (255, 200, 0, 220)
-            for x in range(int(plot_x1), int(plot_x2), 6 * ss):
-                draw.line((x, avg_y, min(x + 3 * ss, plot_x2), avg_y), fill=avg_color, width=max(1, ss))
-
-    # Draw cursor
-    if current_index is not None and 0 <= current_index < num_points:
-        cursor_x = points[current_index][0]
-        draw.line(
-            (cursor_x, plot_y1, cursor_x, plot_y2),
-            fill=(cursor_color[0], cursor_color[1], cursor_color[2], 200),
-            width=max(2, line_thickness),
-        )
-        py = points[current_index][1]
-        dot_r = max(3, line_thickness + 1)
-        draw.ellipse(
-            (cursor_x - dot_r, py - dot_r, cursor_x + dot_r, py + dot_r),
-            fill=(cursor_color[0], cursor_color[1], cursor_color[2], 255),
-            outline=(line_color[0], line_color[1], line_color[2], 255),
-        )
+        if show_average:
+            avg_val = float(sum(history_values) / len(history_values))
+            if min_val <= avg_val <= max_val:
+                avg_y = plot_y2 - ((avg_val - min_val) / val_range) * plot_h
+                avg_color = (255, 200, 0, 220)
+                for x in range(int(plot_x1), int(plot_x2), 6 * ss):
+                    draw.line((x, avg_y, min(x + 3 * ss, plot_x2), avg_y), fill=avg_color, width=max(1, ss))
 
     if ss > 1:
         img = img.resize((out_w, out_h), Image.LANCZOS)
-    return img
+        # Rescale points and margins to output dimensions
+        scale_x = out_w / width
+        scale_y = out_h / height
+        points = [(px * scale_x, py * scale_y) for px, py in points]
+        plot_y1 *= scale_y
+        plot_y2 *= scale_y
+        calc_line_thickness = line_thickness
+
+    return img, points, plot_y1, plot_y2, calc_line_thickness
+

@@ -19,25 +19,28 @@ from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
 from src.ffmpeg.worker_cache import init_worker
-from src.ffmpeg.command_builder import _build_stream_ffmpeg_cmd
+from src.ffmpeg.command_builder import _build_stream_ffmpeg_cmd, get_layout_hud_bbox
 from src.ffmpeg.shared_memory import (
     SharedFramePool,
     _init_worker_with_shm,
     render_frame_shm_job,
 )
 from src.ffmpeg.frame_renderer import render_frame_bytes_job
+from src.benchmark import BenchmarkTracker
 
 
 def _pipe_writer_thread(
     write_queue: queue.Queue,
     stdin_buffer: Any,
     done_event: threading.Event,
+    shm_pool: SharedFramePool | None = None,
 ) -> None:
     """Background thread that drains frame bytes to FFmpeg stdin pipe.
 
-    Receives (bytes_data,) from write_queue and writes to stdin_buffer.
+    Receives bytes or (slot, memoryview) from write_queue and writes to stdin_buffer.
     Terminates when done_event is set and queue is empty, or on None sentinel.
     """
+    bt = BenchmarkTracker.get_instance()
     try:
         while True:
             try:
@@ -48,7 +51,23 @@ def _pipe_writer_thread(
                 continue
             if item is None:  # sentinel
                 break
-            stdin_buffer.write(item)
+            bt.start_timer("ffmpeg_write")
+            try:
+                if isinstance(item, tuple):
+                    slot, memview = item
+                    try:
+                        stdin_buffer.write(memview)
+                    finally:
+                        try:
+                            memview.release()
+                        except Exception:
+                            pass
+                    if shm_pool is not None:
+                        shm_pool.release(slot)
+                else:
+                    stdin_buffer.write(item)
+            finally:
+                bt.stop_timer("ffmpeg_write")
     except (BrokenPipeError, OSError):
         pass
 
@@ -64,6 +83,34 @@ def _report_stream_progress(
     stats = f"Stream: {done}/{total} | fps: {fps:.1f} | elapse: {h:02d}:{m:02d}:{s:02d}"
     if progress_cb:
         progress_cb(done, stats)
+
+
+def _acquire_shm_slot(
+    shm_pool: "SharedFramePool",
+    process: Any,
+    stdout_lines: list[str],
+    timeout: float = 30.0,
+) -> int:
+    """Acquire an SHM slot, failing fast if FFmpeg has already exited.
+
+    If FFmpeg dies (e.g. filter graph error), nothing drains the pipe, so SHM
+    slots would never be released and ``acquire`` would block for the full
+    timeout before raising ``queue.Empty``. Surface the FFmpeg log instead.
+    """
+    if process.poll() is not None:
+        raise RuntimeError(
+            f"FFmpeg exited early (code {process.returncode})\n"
+            f"{chr(10).join(stdout_lines).strip()}"
+        )
+    try:
+        return shm_pool.acquire(timeout=timeout)
+    except queue.Empty:
+        if process.poll() is not None:
+            raise RuntimeError(
+                f"FFmpeg exited early (code {process.returncode})\n"
+                f"{chr(10).join(stdout_lines).strip()}"
+            )
+        raise
 
 
 def run_ffmpeg_with_progress(
@@ -187,6 +234,24 @@ def stream_overlay_to_ffmpeg(
     generation_fps = target_fps / update_rate_step
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
 
+    indicators = layout.get("indicators", {})
+    custom_texts = layout.get("custom_texts", [])
+    enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+    is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
+
+    hud_x, hud_y = 0, 0
+    stream_w, stream_h = overlay_w, overlay_h
+    hud_bbox: tuple[int, int, int, int] | None = None
+
+    if encoder == "amd" and not is_no_hud:
+        hud_x, hud_y, stream_w, stream_h = get_layout_hud_bbox(layout, overlay_w, overlay_h)
+        hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+        print(
+            f"[STREAM AMD] HUD sub-window: {stream_w}x{stream_h} at ({hud_x},{hud_y}) "
+            f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
+            flush=True,
+        )
+
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     init_worker(
         overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
@@ -200,17 +265,29 @@ def stream_overlay_to_ffmpeg(
         target_fps, update_rate_step, total_overlay_frames,
         cut_regions=cut_regions,
         effective_rotation=effective_rotation,
+        hud_bbox=hud_bbox,
     )
 
     if cancel_event is not None and cancel_event.is_set():
         return 0
 
     # Build FFmpeg input args
-    hwaccel = detect_gpu_decoder(encoder)
+    hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
+    # Manual rotation uses CPU filters (vflip/transpose) which cannot take
+    # CUDA frames, so decoded frames must stay in system memory in that case.
+    needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+    # AMD APU: d3d11va is ONLY safe in the direct GPU passthrough path (NO HUD).
+    # With a CPU filter graph (overlay, null, scale), using d3d11va alongside
+    # hevc_amf causes D3D11 device contention (-1313558101 / DXGI_ERROR).
+    # For HUD modes, disable hwaccel and let FFmpeg use software decode.
+    if encoder == "amd" and not is_no_hud:
+        hwaccel = None
     input_args: list[str] = []
     audio_input_args: list[str] = []
     if hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
+        if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
+            input_args.extend(["-hwaccel_output_format", "cuda"])
     if isinstance(input_files, list) and len(input_files) > 1:
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         with open(concat_txt, "w", encoding="utf-8") as f:
@@ -221,28 +298,51 @@ def stream_overlay_to_ffmpeg(
         audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        auto_rot = "-noautorotate" if container_rotation != 0 else "-autorotate"
-        input_args.extend([auto_rot, "-i", str(input_file)])
+        if container_rotation != 0:
+            input_args.extend(["-noautorotate", "-i", str(input_file)])
+        else:
+            input_args.extend(["-i", str(input_file)])
         audio_input_args.extend(["-i", str(input_file)])
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
-        overlay_w, overlay_h, generation_fps,
+        stream_w, stream_h, generation_fps,
         encoder, gpu, video_bitrate,
         render_w, render_h, resolution_name,
         container_rotation, rotation_degrees,
         hwaccel=hwaccel,
         cut_regions=cut_regions,
         audio_input_args=audio_input_args,
+        hud_x=hud_x,
+        hud_y=hud_y,
+        is_no_hud=is_no_hud,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
     print(
-        f"[STREAM] overlay={overlay_w}x{overlay_h}  render={render_w}x{render_h}  "
+        f"[STREAM] overlay={stream_w}x{stream_h} at ({hud_x},{hud_y})  render={render_w}x{render_h}  "
         f"gen_fps={generation_fps}  frames={total_overlay_frames}",
         flush=True,
     )
     print(f"[STREAM] filter: {filter_complex}", flush=True)
+
+    if filter_complex.startswith("direct_gpu_passthrough"):
+        print(f"[STREAM AMD] Direct GPU-resident passthrough (NO HUD mode, zero hwdownload, zero pipe write)", flush=True)
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            universal_newlines=True, startupinfo=startupinfo
+        )
+        if active_process_holder is not None:
+            active_process_holder["process"] = process
+
+        for line in process.stdout:
+            pass
+        process.wait()
+        return total_overlay_frames
 
     # Start FFmpeg
     startupinfo = None
@@ -277,19 +377,27 @@ def stream_overlay_to_ffmpeg(
     n_workers = min(workers, total_overlay_frames)
 
     # Frame size in bytes: RGBA = 4 bytes per pixel
-    frame_size = overlay_w * overlay_h * 4
+    frame_size = stream_w * stream_h * 4
+
+    shm_pool: SharedFramePool | None = None
+    if n_workers > 1:
+        # Number of SHM slots: enough to keep workers busy + reorder buffer
+        MAX_IN_FLIGHT = max(4, n_workers * 2)
+        n_shm_slots = MAX_IN_FLIGHT
+        shm_pool = SharedFramePool(n_shm_slots, frame_size)
+    else:
+        MAX_IN_FLIGHT = 1
+        n_shm_slots = 1
 
     # ── Async pipe writer (background thread) ───────────────────────────
     pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
     pipe_done = threading.Event()
     writer_t = threading.Thread(
         target=_pipe_writer_thread,
-        args=(pipe_queue, process.stdin.buffer, pipe_done),
+        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool),
         daemon=True,
     )
     writer_t.start()
-
-    shm_pool: SharedFramePool | None = None
 
     try:
         if n_workers <= 1:
@@ -305,11 +413,6 @@ def stream_overlay_to_ffmpeg(
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
-            # ── Shared Memory pool ──────────────────────────────────────
-            # Number of SHM slots: enough to keep workers busy + reorder buffer
-            MAX_IN_FLIGHT = max(4, n_workers * 2)
-            n_shm_slots = MAX_IN_FLIGHT
-            shm_pool = SharedFramePool(n_shm_slots, frame_size)
             shm_names = shm_pool.shm_names()
 
             init_args = (
@@ -322,7 +425,7 @@ def stream_overlay_to_ffmpeg(
                 start_dt_utc, tz_offset_hours,
                 speed_samples, track_samples, alt_samples,
                 target_fps, update_rate_step, total_overlay_frames,
-                cut_regions, effective_rotation,
+                cut_regions, effective_rotation, hud_bbox,
             )
 
             print(
@@ -344,7 +447,7 @@ def stream_overlay_to_ffmpeg(
 
                 # Fill initial window — acquire SHM slots and submit jobs
                 for _ in range(min(MAX_IN_FLIGHT, total_overlay_frames)):
-                    slot = shm_pool.acquire(timeout=30.0)
+                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
                     pending.add(ex.submit(render_frame_shm_job, (submitted, slot)))
                     submitted += 1
 
@@ -357,12 +460,11 @@ def stream_overlay_to_ffmpeg(
                         idx, slot = fut.result()
                         reorder_buf[idx] = slot
 
-                    # Drain consecutive frames to pipe writer queue
+                    # Drain consecutive frames to pipe writer queue (zero-copy)
                     while next_idx in reorder_buf:
                         slot = reorder_buf.pop(next_idx)
-                        frame_bytes = shm_pool.read(slot)
-                        shm_pool.release(slot)
-                        pipe_queue.put(frame_bytes)
+                        memview = shm_pool.get_memview(slot)
+                        pipe_queue.put((slot, memview))
                         total_piped += 1
                         next_idx += 1
                         if total_piped % 50 == 0 or total_piped == total_overlay_frames:
@@ -376,7 +478,7 @@ def stream_overlay_to_ffmpeg(
                         submitted < total_overlay_frames
                         and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
                     ):
-                        slot = shm_pool.acquire(timeout=30.0)
+                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
                         pending.add(
                             ex.submit(render_frame_shm_job, (submitted, slot))
                         )
@@ -387,12 +489,11 @@ def stream_overlay_to_ffmpeg(
                         f.cancel()
                     ex.shutdown(wait=False, cancel_futures=True)
 
-                # Drain final reorder buffer
+                # Drain final reorder buffer (zero-copy)
                 while next_idx in reorder_buf:
                     slot = reorder_buf.pop(next_idx)
-                    frame_bytes = shm_pool.read(slot)
-                    shm_pool.release(slot)
-                    pipe_queue.put(frame_bytes)
+                    memview = shm_pool.get_memview(slot)
+                    pipe_queue.put((slot, memview))
                     total_piped += 1
                     next_idx += 1
                     _report_stream_progress(
@@ -412,6 +513,8 @@ def stream_overlay_to_ffmpeg(
         print("[STREAM] FFmpeg pipe closed unexpectedly.", flush=True)
     except Exception as e:
         print(f"[STREAM] Error: {e}", flush=True)
+        extra = "\n".join(stdout_lines).strip()
+        print(f"[STREAM] FFmpeg Output Log:\n{extra}", flush=True)
         import traceback
         traceback.print_exc()
         pipe_done.set()
@@ -441,5 +544,8 @@ def stream_overlay_to_ffmpeg(
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         if concat_txt.exists():
             concat_txt.unlink()
+
+    # Wydrukuj podsumowanie wydajności renderowania
+    BenchmarkTracker.get_instance().print_summary()
 
     return total_piped

@@ -90,8 +90,6 @@ def _render_chart_indicator(
 
     margin_top = fs + 8 if label else 0
     final_h = chart_h + margin_top + 4
-    final_img = Image.new("RGBA", (chart_w + 8, final_h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(final_img)
 
     text_color_rgb = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
     text_color = (text_color_rgb[0], text_color_rgb[1], text_color_rgb[2], 255)
@@ -99,13 +97,23 @@ def _render_chart_indicator(
     tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
     toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
 
-    if label:
-        draw.text(
-            (4 + tox, toy), label, font=font,
-            fill=text_color,
-            stroke_width=outline, stroke_fill=(0, 0, 0, 255),
-        )
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+    hdr_key = _static_cache_key("chart_hdr", chart_w + 8, final_h, label, font_path, fs, outline, text_color, tox, toy)
+    hdr_img = _STATIC_CACHE.get(hdr_key)
+    if hdr_img is None:
+        hdr_img = Image.new("RGBA", (chart_w + 8, final_h), (0, 0, 0, 0))
+        if label:
+            d_hdr = ImageDraw.Draw(hdr_img)
+            d_hdr.text(
+                (4 + tox, toy), label, font=font,
+                fill=text_color,
+                stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+            )
+        _STATIC_CACHE[hdr_key] = hdr_img
+
+    final_img = hdr_img.copy()
     final_img.paste(chart_img, (4, margin_top), chart_img)
+    draw = ImageDraw.Draw(final_img)
 
     v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
     if v_str:
