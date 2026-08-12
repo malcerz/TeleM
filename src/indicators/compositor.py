@@ -420,12 +420,6 @@ def render_preview(
         avg_speed_kmh=avg_speed_kmh,
         fast_preview=True,
     )
-    try:
-        from src.indicators.gpu_compositor import GpuCompositor
-        gpu = GpuCompositor.get_instance()
-        if gpu:
-            return gpu.alpha_blend_pil(img, overlay, 0, 0)
-    except Exception:
-        pass
+    # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)
     return img
