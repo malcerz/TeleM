@@ -235,19 +235,19 @@ def _build_stream_ffmpeg_cmd(
     ffmpeg_exe: str,
     input_args: list[str],
     output_file: str,
-    canvas_w: int,
-    canvas_h: int,
-    stream_w: int,
-    stream_h: int,
-    generation_fps: float,
-    encoder: str,
-    gpu: int,
-    video_bitrate: str,
-    render_w: int,
-    render_h: int,
-    resolution_name: str,
-    container_rotation: int,
-    rotation_degrees: int,
+    canvas_w: int = 1920,
+    canvas_h: int = 1080,
+    stream_w: int = 1920,
+    stream_h: int = 1080,
+    generation_fps: float = 30.0,
+    encoder: str = "cpu",
+    gpu: int = 0,
+    video_bitrate: str = "25M",
+    render_w: int = 3840,
+    render_h: int = 2160,
+    resolution_name: str = "4k",
+    container_rotation: int = 0,
+    rotation_degrees: int = 0,
     hwaccel: str | None = None,
     cut_regions: list[tuple[float, float]] | None = None,
     audio_input_args: list[str] | None = None,
@@ -255,7 +255,18 @@ def _build_stream_ffmpeg_cmd(
     hud_y: int = 0,
     is_no_hud: bool = False,
     hud_regions: list[tuple[int, int, int, int, int, int]] | None = None,
+    overlay_w: int | None = None,
+    overlay_h: int | None = None,
+    use_gpu_compositor: bool = False,
 ) -> tuple[list[str], str]:
+    if overlay_w is not None:
+        canvas_w = overlay_w
+        if stream_w == 1920 and overlay_w != 1920:
+            stream_w = overlay_w
+    if overlay_h is not None:
+        canvas_h = overlay_h
+        if stream_h == 1080 and overlay_h != 1080:
+            stream_h = overlay_h
     """Build the ffmpeg command for the streaming pipeline.
 
     When *hwaccel* is ``"cuda"`` and no rotation is needed, the GPU
@@ -343,19 +354,29 @@ def _build_stream_ffmpeg_cmd(
             ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
         ov_op = f"overlay_cuda=x={hud_x}:y={hud_y}"
         filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
+    elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
+        if "-init_hw_device" not in input_args:
+            input_args = ["-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl", *input_args]
+
+        if effective_rotation == 180:
+            base_filter = "[0:v]format=nv12,vflip,hflip,hwupload[base]"
+        elif effective_rotation == 90:
+            base_filter = "[0:v]format=nv12,transpose=1,hwupload[base]"
+        elif effective_rotation == 270:
+            base_filter = "[0:v]format=nv12,transpose=2,hwupload[base]"
+        else:
+            base_filter = "[0:v]format=nv12,hwupload[base]"
+
+        if stream_w != render_w or stream_h != render_h:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear,hwupload[ov]"
+        else:
+            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload[ov]"
+
+        filter_complex = f"{base_filter};{ov_input};[base][ov]overlay_opencl[v_ocl];[v_ocl]hwdownload,format=nv12[vtemp]"
     elif hud_regions and len(hud_regions) > 1:
         n_reg = len(hud_regions)
         split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
-        if scale_x != 1.0 or scale_y != 1.0:
-            atlas_w = max(r[2] + r[4] for r in hud_regions)
-            atlas_h = max(r[3] + r[5] for r in hud_regions)
-            s_atlas_w = int(round(atlas_w * scale_x))
-            s_atlas_h = int(round(atlas_h * scale_y))
-            if s_atlas_w % 2 != 0: s_atlas_w += 1
-            if s_atlas_h % 2 != 0: s_atlas_h += 1
-            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={s_atlas_w}:{s_atlas_h}:flags=bilinear,split={n_reg}{split_labels}"
-        else:
-            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
+        ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
 
         crop_ops = []
         overlay_ops = []
@@ -364,14 +385,18 @@ def _build_stream_ffmpeg_cmd(
             dest_x, dest_y, src_x, src_y, rw, rh = r
             s_dest_x = int(round(dest_x * scale_x))
             s_dest_y = int(round(dest_y * scale_y))
-            s_src_x = int(round(src_x * scale_x))
-            s_src_y = int(round(src_y * scale_y))
+            s_src_x = src_x
+            s_src_y = src_y
             s_rw = int(round(rw * scale_x))
             s_rh = int(round(rh * scale_y))
             if s_rw % 2 != 0: s_rw += 1
             if s_rh % 2 != 0: s_rh += 1
 
-            crop_ops.append(f"[ov_raw_{i}]crop={s_rw}:{s_rh}:{s_src_x}:{s_src_y}[ov_{i}]")
+            if scale_x != 1.0 or scale_y != 1.0:
+                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y},scale={s_rw}:{s_rh}:flags=bilinear[ov_{i}]")
+            else:
+                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y}[ov_{i}]")
+
             next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
             overlay_ops.append(
                 f"{curr_base}[ov_{i}]overlay={s_dest_x}:{s_dest_y}{':shortest=1' if i == n_reg - 1 else ''}{next_base}"

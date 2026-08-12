@@ -178,3 +178,46 @@ def detect_best_encoder(ffmpeg_exe: str = "ffmpeg") -> str:
 
     _BEST_ENCODER_CACHE = "cpu"
     return "cpu"
+
+
+def _test_amd_gpu_compositor(ffmpeg_exe: str = "ffmpeg") -> bool:
+    """Test whether AMD GPU hardware compositing (OpenCL/D3D11) initialises safely.
+
+    Runs a 1-frame test command to verify that OpenCL device creation doesn't fail
+    with queue creation errors on AMD APU/iGPU driver contexts.
+    """
+    try:
+        r = subprocess.run(
+            [
+                ffmpeg_exe, "-hide_banner",
+                "-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl",
+                "-f", "lavfi", "-i", "color=c=black:s=320x240:d=0.1",
+                "-f", "lavfi", "-i", "color=c=white:s=100x100:d=0.1",
+                "-filter_complex", "[0:v]format=nv12,hwupload[b];[1:v]hwupload[o];[b][o]overlay_opencl[v];[v]hwdownload,format=nv12[out]",
+                "-map", "[out]", "-c:v", "hevc_amf", "-f", "null", "-",
+            ],
+            capture_output=True, timeout=5,
+            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str = "ffmpeg") -> str:
+    """Select AMD overlay composition backend ('D3D11_GPU' or 'SOFTWARE').
+
+    Supports:
+        AUTO: Tests hardware GPU compositor; falls back to SOFTWARE if unavailable.
+        D3D11_GPU: Force D3D11 GPU compositor if supported.
+        SOFTWARE: Force software Multi-Region compositor.
+    """
+    pref = preferred_backend.upper()
+    if pref == "SOFTWARE":
+        return "SOFTWARE"
+    if pref in ("D3D11_GPU", "AUTO", "GPU"):
+        if _test_amd_gpu_compositor(ffmpeg_exe):
+            return "D3D11_GPU"
+        return "SOFTWARE"
+    return "SOFTWARE"
+

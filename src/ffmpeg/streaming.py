@@ -304,6 +304,8 @@ def stream_overlay_to_ffmpeg(
             input_args.extend(["-i", str(input_file)])
         audio_input_args.extend(["-i", str(input_file)])
 
+    use_gpu_compositor = bool(layout.get("_use_gpu_compositor", False))
+
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
         overlay_w, overlay_h, stream_w, stream_h, generation_fps,
@@ -317,6 +319,7 @@ def stream_overlay_to_ffmpeg(
         hud_y=hud_y,
         is_no_hud=is_no_hud,
         hud_regions=hud_regions,
+        use_gpu_compositor=use_gpu_compositor,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)

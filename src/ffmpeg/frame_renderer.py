@@ -111,45 +111,101 @@ def render_overlay_frame(
         _range_cache=WORKER_CACHE.get("_prep_cache"),
     )
 
-    img = compose_overlay(
-        video_width, video_height, layout, font_path,
-        data["date_text"], data["time_text"],
-        data["speed_value"], data["distance_m"], data["max_distance_m"],
-        data["alt_value"], data["min_alt"], data["max_alt"],
-        data["iso_value"], data["exposure_value"], data["temp_value"],
-        indicator_values=data["indicator_values"],
-        max_speed_kmh=data["max_speed_kmh"],
-        power_value=data["power_value"],
-        atemp_value=data["atemp_value"],
-        hr_value=data["hr_value"],
-        cad_value=data["cad_value"],
-        battery_value=data["battery_value"],
-        chart_data=data["chart_data"],
-        current_position=data["current_position"],
-        extra_indicators=data["extra_indicators"],
-        gps_track=data["gps_track"],
-        target_dt=data["target_dt"],
-        start_dt_utc=data["start_dt_utc"],
-        elapsed_seconds=data["elapsed_seconds"],
-        avg_speed_kmh=data["avg_speed_kmh"],
-    )
-
-
     hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")
+
     if hud_regions and len(hud_regions) > 1:
         atlas_w = max(r[2] + r[4] for r in hud_regions)
         atlas_h = max(r[3] + r[5] for r in hud_regions)
+
+        # ── Dirty check: reuse atlas if formatted values unchanged ──
+        prev_data = WORKER_CACHE.get("_prev_frame_data")
+        prev_atlas = WORKER_CACHE.get("_prev_atlas_img")
+        if prev_data is not None and prev_atlas is not None:
+            is_dirty = False
+            if prev_data.get("date_text") != data.get("date_text") or prev_data.get("time_text") != data.get("time_text"):
+                is_dirty = True
+            elif int(prev_data.get("elapsed_seconds", 0)) != int(data.get("elapsed_seconds", 0)):
+                is_dirty = True
+            else:
+                # Compare formatted speed/alt/dist to 1 decimal place
+                for k in ("speed_value", "distance_m", "alt_value", "iso_value", "exposure_value", "temp_value", "power_value", "hr_value", "cad_value", "battery_value"):
+                    v1 = prev_data.get(k)
+                    v2 = data.get(k)
+                    if v1 is not None and v2 is not None:
+                        if round(v1, 1) != round(v2, 1):
+                            is_dirty = True
+                            break
+            if not is_dirty:
+                ind_val1 = prev_data.get("indicator_values", {})
+                ind_val2 = data.get("indicator_values", {})
+                for k, v in ind_val2.items():
+                    if round(ind_val1.get(k, -999.0), 1) != round(v, 1):
+                        is_dirty = True
+                        break
+
+            if not is_dirty:
+                return prev_atlas
+
+        img = compose_overlay(
+            video_width, video_height, layout, font_path,
+            data["date_text"], data["time_text"],
+            data["speed_value"], data["distance_m"], data["max_distance_m"],
+            data["alt_value"], data["min_alt"], data["max_alt"],
+            data["iso_value"], data["exposure_value"], data["temp_value"],
+            indicator_values=data["indicator_values"],
+            max_speed_kmh=data["max_speed_kmh"],
+            power_value=data["power_value"],
+            atemp_value=data["atemp_value"],
+            hr_value=data["hr_value"],
+            cad_value=data["cad_value"],
+            battery_value=data["battery_value"],
+            chart_data=data["chart_data"],
+            current_position=data["current_position"],
+            extra_indicators=data["extra_indicators"],
+            gps_track=data["gps_track"],
+            target_dt=data["target_dt"],
+            start_dt_utc=data["start_dt_utc"],
+            elapsed_seconds=data["elapsed_seconds"],
+            avg_speed_kmh=data["avg_speed_kmh"],
+        )
+
         atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
         for r in hud_regions:
             dest_x, dest_y, src_x, src_y, rw, rh = r
             r_crop = img.crop((dest_x, dest_y, dest_x + rw, dest_y + rh))
             atlas_img.paste(r_crop, (src_x, src_y))
-        img = atlas_img
-    elif hud_bbox:
-        hx, hy, hw, hh = hud_bbox
-        img = img.crop((hx, hy, hx + hw, hy + hh))
-    return img
+
+        WORKER_CACHE["_prev_frame_data"] = data
+        WORKER_CACHE["_prev_atlas_img"] = atlas_img
+        return atlas_img
+    else:
+        img = compose_overlay(
+            video_width, video_height, layout, font_path,
+            data["date_text"], data["time_text"],
+            data["speed_value"], data["distance_m"], data["max_distance_m"],
+            data["alt_value"], data["min_alt"], data["max_alt"],
+            data["iso_value"], data["exposure_value"], data["temp_value"],
+            indicator_values=data["indicator_values"],
+            max_speed_kmh=data["max_speed_kmh"],
+            power_value=data["power_value"],
+            atemp_value=data["atemp_value"],
+            hr_value=data["hr_value"],
+            cad_value=data["cad_value"],
+            battery_value=data["battery_value"],
+            chart_data=data["chart_data"],
+            current_position=data["current_position"],
+            extra_indicators=data["extra_indicators"],
+            gps_track=data["gps_track"],
+            target_dt=data["target_dt"],
+            start_dt_utc=data["start_dt_utc"],
+            elapsed_seconds=data["elapsed_seconds"],
+            avg_speed_kmh=data["avg_speed_kmh"],
+        )
+        if hud_bbox:
+            hx, hy, hw, hh = hud_bbox
+            img = img.crop((hx, hy, hx + hw, hy + hh))
+        return img
 
 
 def render_overlay_job(job: tuple) -> int:
