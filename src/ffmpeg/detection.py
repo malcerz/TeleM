@@ -204,20 +204,42 @@ def _test_amd_gpu_compositor(ffmpeg_exe: str = "ffmpeg") -> bool:
         return False
 
 
-def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str = "ffmpeg") -> str:
-    """Select AMD overlay composition backend ('D3D11_GPU' or 'SOFTWARE').
+def detect_amd_native_support(ffmpeg_exe: str = "ffmpeg") -> bool:
+    """Test whether native AMD C++ D3D11 + AMF pipeline is supported on this system."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        d3d11 = ctypes.windll.d3d11
+        amf_dll = ctypes.windll.LoadLibrary("amfrt64.dll")
 
-    Supports:
-        AUTO: Tests hardware GPU compositor; falls back to SOFTWARE if unavailable.
-        D3D11_GPU: Force D3D11 GPU compositor if supported.
-        SOFTWARE: Force software Multi-Region compositor.
-    """
+        pDevice = ctypes.c_void_p()
+        featureLevel = ctypes.c_uint()
+        pContext = ctypes.c_void_p()
+
+        hr = d3d11.D3D11CreateDevice(
+            None, 1, None, 0x8, None, 0, 7,
+            ctypes.byref(pDevice), ctypes.byref(featureLevel), ctypes.byref(pContext)
+        )
+        if hr < 0:
+            return False
+
+        return _test_encoder("hevc_amf", ffmpeg_exe) or _test_encoder("h264_amf", ffmpeg_exe)
+    except Exception:
+        return False
+
+
+def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str = "ffmpeg") -> str:
+    """Select AMD overlay composition backend ('AMD_NATIVE_D3D11', 'D3D11_GPU', or 'SOFTWARE')."""
     pref = preferred_backend.upper()
     if pref == "SOFTWARE":
         return "SOFTWARE"
-    if pref in ("D3D11_GPU", "AUTO", "GPU"):
+    if pref in ("AMD_NATIVE_D3D11", "AUTO", "GPU", "NATIVE"):
+        if detect_amd_native_support(ffmpeg_exe):
+            return "AMD_NATIVE_D3D11"
         if _test_amd_gpu_compositor(ffmpeg_exe):
             return "D3D11_GPU"
         return "SOFTWARE"
     return "SOFTWARE"
+
 

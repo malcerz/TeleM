@@ -230,6 +230,49 @@ def stream_overlay_to_ffmpeg(
     enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
     is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
 
+    if encoder in ("amd", "amd_native"):
+        from src.ffmpeg.detection import detect_amd_compose_backend
+        if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
+            from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
+            print("[STREAM AMD] Dispatching to production AMD_NATIVE_D3D11 GPU pipeline...", flush=True)
+            success = export_amd_native_d3d11(
+                ffmpeg_exe=ffmpeg_exe,
+                input_files=input_files,
+                output_file=str(output_file),
+                duration_s=duration_s,
+                video_width=render_w,
+                video_height=render_h,
+                start_dt_utc=start_dt_utc,
+                tz_offset_hours=tz_offset_hours,
+                speed_samples=speed_samples,
+                track_samples=track_samples,
+                alt_samples=alt_samples,
+                font_path=font_path,
+                layout=layout,
+                field_samples=field_samples,
+                target_fps=target_fps,
+                video_bitrate=video_bitrate,
+                max_distance_m=max_distance_m,
+                iso_samples=iso_samples,
+                exposure_samples=exposure_samples,
+                temperature_samples=temperature_samples,
+                gpx_speed_samples=gpx_speed_samples,
+                gpx_track_samples=gpx_track_samples,
+                gpx_alt_samples=gpx_alt_samples,
+                gpx_power_samples=gpx_power_samples,
+                gpx_atemp_samples=gpx_atemp_samples,
+                gpx_hr_samples=gpx_hr_samples,
+                gpx_cad_samples=gpx_cad_samples,
+                fit_data=fit_data,
+                gps_track=gps_track,
+                progress_cb=progress_cb,
+                cancel_event=cancel_event,
+                active_process_holder=active_process_holder,
+            )
+            if success:
+                return total_overlay_frames
+            print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
+
     hud_x, hud_y = 0, 0
     stream_w, stream_h = overlay_w, overlay_h
     hud_bbox: tuple[int, int, int, int] | None = None
