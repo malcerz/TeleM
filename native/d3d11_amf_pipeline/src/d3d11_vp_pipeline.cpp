@@ -102,6 +102,11 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
         return false;
     }
 
+    D3D11_VIDEO_PROCESSOR_CAPS caps = {};
+    if (SUCCEEDED(m_videoEnumerator->GetVideoProcessorCaps(&caps))) {
+        std::cout << "[VP CAPS] MaxInputStreams: " << caps.MaxInputStreams << " MaxStreamStates: " << caps.MaxStreamStates << " FeatureCaps: 0x" << std::hex << caps.FeatureCaps << std::dec << std::endl;
+    }
+
     hr = m_videoDevice->CreateVideoProcessor(m_videoEnumerator, 0, &m_videoProcessor);
     if (FAILED(hr)) {
         std::cerr << "[VP] CreateVideoProcessor failed: 0x" << std::hex << hr << std::dec << std::endl;
@@ -155,24 +160,44 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
 }
 
 bool D3D11VideoProcessorPipeline::CreateHUDTexture(UINT width, UINT height, const std::vector<uint8_t>& rgbaData) {
+    // Convert RGBA to BGRA for D3D11 VideoProcessor compatibility
+    std::vector<uint8_t> bgraData = rgbaData;
+    for (size_t i = 0; i < bgraData.size(); i += 4) {
+        std::swap(bgraData[i + 0], bgraData[i + 2]);
+    }
+
+    if (m_hudTexture && m_hudWidth == width && m_hudHeight == height) {
+        m_context->UpdateSubresource(m_hudTexture, 0, nullptr, bgraData.data(), width * 4, 0);
+        return true;
+    }
+
     m_hudWidth = width;
     m_hudHeight = height;
 
     if (m_hudInputView) { m_hudInputView->Release(); m_hudInputView = nullptr; }
     if (m_hudTexture) { m_hudTexture->Release(); m_hudTexture = nullptr; }
 
+    DXGI_FORMAT hudFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    UINT flags = 0;
+    if (m_videoEnumerator) {
+        m_videoEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_B8G8R8A8_UNORM, &flags);
+        if (!(flags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT)) {
+            hudFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        }
+    }
+
     D3D11_TEXTURE2D_DESC desc = {};
     desc.Width = width;
     desc.Height = height;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = hudFormat;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
     D3D11_SUBRESOURCE_DATA subData = {};
-    subData.pSysMem = rgbaData.data();
+    subData.pSysMem = bgraData.data();
     subData.SysMemPitch = width * 4;
 
     HRESULT hr = m_device->CreateTexture2D(&desc, &subData, &m_hudTexture);
@@ -212,7 +237,10 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     ID3D11Texture2D* outTex = m_outputPool[currentIdx];
     ID3D11VideoProcessorOutputView* outView = m_outputViewPool[currentIdx];
 
-    // Create Input View for P010 Texture
+    // Create Input View for Base Video Texture
+    D3D11_TEXTURE2D_DESC inDesc = {};
+    pP010Texture->GetDesc(&inDesc);
+
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inViewDesc = {};
     inViewDesc.FourCC = 0;
     inViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
@@ -222,7 +250,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     ID3D11VideoProcessorInputView* pP010InputView = nullptr;
     HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(pP010Texture, m_videoEnumerator, &inViewDesc, &pP010InputView);
     if (FAILED(hr)) {
-        std::cerr << "[VP] CreateVideoProcessorInputView for P010 failed: 0x" << std::hex << hr << std::dec << std::endl;
+        std::cerr << "[VP] CreateVideoProcessorInputView failed: 0x" << std::hex << hr << std::dec << " Format: " << inDesc.Format << " ArraySize: " << inDesc.ArraySize << std::endl;
         return false;
     }
 
@@ -234,7 +262,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     UINT activeStreamCount = (enableHUD && m_hudInputView) ? 2 : 1;
     D3D11_VIDEO_PROCESSOR_STREAM streams[2] = {};
 
-    // Stream 0: Base Video (P010)
+    // Stream 0: Base Video
     streams[0].Enable = TRUE;
     streams[0].OutputIndex = 0;
     streams[0].InputFrameOrField = 0;
@@ -247,23 +275,9 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         streams[1].Enable = TRUE;
         streams[1].OutputIndex = 0;
         streams[1].InputFrameOrField = 0;
+        streams[1].PastFrames = 0;
+        streams[1].FutureFrames = 0;
         streams[1].pInputSurface = m_hudInputView;
-
-        // Position HUD centered on video surface
-        RECT destRect;
-        destRect.left = (LONG)((m_width - m_hudWidth) / 2);
-        destRect.top = (LONG)((m_height - m_hudHeight) / 2);
-        destRect.right = destRect.left + m_hudWidth;
-        destRect.bottom = destRect.top + m_hudHeight;
-
-        m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor, 1, TRUE, &destRect);
-        m_videoContext->VideoProcessorSetStreamAlpha(m_videoProcessor, 1, TRUE, 1.0f);
-
-        D3D11_VIDEO_PROCESSOR_COLOR_SPACE csHUD = {};
-        csHUD.Usage = 0;
-        csHUD.RGB_Range = 0; // Full Range (0-255)
-        csHUD.YCbCr_Matrix = 1;
-        m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 1, &csHUD);
     }
 
     // Execute VideoProcessor composition on GPU
@@ -271,7 +285,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     pP010InputView->Release();
 
     if (FAILED(hr)) {
-        std::cerr << "[VP] VideoProcessorBlt failed: 0x" << std::hex << hr << std::dec << std::endl;
+        std::cerr << "[VP] VideoProcessorBlt with " << activeStreamCount << " streams failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
     }
 

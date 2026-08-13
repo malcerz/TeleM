@@ -125,12 +125,7 @@ TELEM_EXPORT void* telem_amd_create(
         return nullptr;
     }
 
-    // Enable Multithread protection
-    ID3D11Multithread* pMultithread = nullptr;
-    if (SUCCEEDED(ctx->pContext->QueryInterface(__uuidof(ID3D11Multithread), (void**)&pMultithread))) {
-        pMultithread->SetMultithreadProtected(TRUE);
-        pMultithread->Release();
-    }
+    // D3D11 Device initialized successfully
 
     // 2. Initialize VideoProcessor Pipeline
     if (!ctx->vpPipeline.Initialize(ctx->pDevice, ctx->pContext, width, height)) {
@@ -246,7 +241,29 @@ TELEM_EXPORT int telem_amd_process_frame(
                     ID3D11Texture2D* pSampleTex = nullptr;
                     pDXGIBuffer->GetResource(__uuidof(ID3D11Texture2D), (void**)&pSampleTex);
                     if (pSampleTex) {
-                        pDecodedTex = pSampleTex;
+                        D3D11_TEXTURE2D_DESC sDesc = {};
+                        pSampleTex->GetDesc(&sDesc);
+
+                        D3D11_TEXTURE2D_DESC bDesc = {};
+                        ctx->pBaseP010Tex->GetDesc(&bDesc);
+                        if (bDesc.Format != sDesc.Format) {
+                            ctx->pBaseP010Tex->Release();
+                            ctx->pBaseP010Tex = nullptr;
+                            bDesc.Format = sDesc.Format;
+                            bDesc.Width = ctx->width;
+                            bDesc.Height = ctx->height;
+                            bDesc.MipLevels = 1;
+                            bDesc.ArraySize = 1;
+                            bDesc.Usage = D3D11_USAGE_DEFAULT;
+                            bDesc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+                            ctx->pDevice->CreateTexture2D(&bDesc, nullptr, &ctx->pBaseP010Tex);
+                        }
+
+                        UINT subIdx = 0;
+                        pDXGIBuffer->GetSubresourceIndex(&subIdx);
+                        ctx->pContext->CopySubresourceRegion(ctx->pBaseP010Tex, 0, 0, 0, 0, pSampleTex, subIdx, nullptr);
+                        pDecodedTex = ctx->pBaseP010Tex;
+                        pSampleTex->Release();
                     }
                     pDXGIBuffer->Release();
                 }
