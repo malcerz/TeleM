@@ -1,0 +1,66 @@
+{
+  "frames_compared": 1131,
+  "fields_compared": [
+    "cadence",
+    "enhanced_speed",
+    "gopro_battery",
+    "heart_rate"
+  ],
+  "values_compared": 4524,
+  "mismatched_values": 0,
+  "first_mismatches": [],
+  "before_resolve_calls": 20358,
+  "before_calls_per_frame": 18.0,
+  "after_resolve_calls": 4524,
+  "after_calls_per_frame": 4.0,
+  "after_calls_per_field": {
+    "cadence": 1131,
+    "enhanced_speed": 1131,
+    "gopro_battery": 1131,
+    "heart_rate": 1131
+  },
+  "fit_field_plan": {
+    "discovered_fit_fields": [
+      "K1",
+      "K2",
+      "alt",
+      "cadence",
+      "curVpower",
+      "distance",
+      "enhanced_altitude",
+      "enhanced_speed",
+      "fractional_cadence",
+      "gopro_battery",
+      "heart_rate",
+      "speed",
+      "temperature",
+      "track"
+    ],
+    "active_fit_fields": [
+      "cadence",
+      "enhanced_speed",
+      "gopro_battery",
+      "heart_rate"
+    ],
+    "inactive_fit_fields": [
+      "K1",
+      "K2",
+      "alt",
+      "curVpower",
+      "distance",
+      "enhanced_altitude",
+      "fractional_cadence",
+      "speed",
+      "temperature",
+      "track"
+    ],
+    "active_fit_fields_missing_samples": [],
+    "active_standard_resolve_fields": [],
+    "unique_resolve_fields": [
+      "cadence",
+      "enhanced_speed",
+      "gopro_battery",
+      "heart_rate"
+    ]
+  }
+}

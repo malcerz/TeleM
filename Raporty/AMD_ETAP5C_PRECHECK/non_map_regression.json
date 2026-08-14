@@ -1,0 +1,104 @@
+{
+  "30": {
+    "regions": {
+      "map": {
+        "mae": 55.354277273162005,
+        "max": 255,
+        "p95": 140.0,
+        "p99": 186.0,
+        "pixels_rgb_diff_gt_3": 476250,
+        "pixel_count": 477481
+      },
+      "outside_map": {
+        "mae": 1.3797582739013499,
+        "max": 242,
+        "p95": 6.0,
+        "p99": 9.0,
+        "pixels_rgb_diff_gt_3": 1810217,
+        "pixel_count": 7816919
+      },
+      "outside_map_plus32": {
+        "mae": 1.369569274752542,
+        "max": 61,
+        "p95": 6.0,
+        "p99": 9.0,
+        "pixels_rgb_diff_gt_3": 1783940,
+        "pixel_count": 7724375
+      }
+    },
+    "changed_bbox_gt3": [
+      0,
+      126,
+      3840,
+      2160
+    ]
+  },
+  "300": {
+    "regions": {
+      "map": {
+        "mae": 55.351221654194966,
+        "max": 255,
+        "p95": 140.0,
+        "p99": 186.0,
+        "pixels_rgb_diff_gt_3": 476183,
+        "pixel_count": 477481
+      },
+      "outside_map": {
+        "mae": 1.3558668063465926,
+        "max": 241,
+        "p95": 5.0,
+        "p99": 9.0,
+        "pixels_rgb_diff_gt_3": 1624923,
+        "pixel_count": 7816919
+      },
+      "outside_map_plus32": {
+        "mae": 1.3450565687623055,
+        "max": 107,
+        "p95": 5.0,
+        "p99": 9.0,
+        "pixels_rgb_diff_gt_3": 1597225,
+        "pixel_count": 7724375
+      }
+    },
+    "changed_bbox_gt3": [
+      0,
+      128,
+      3840,
+      2160
+    ]
+  },
+  "900": {
+    "regions": {
+      "map": {
+        "mae": 55.38747580182946,
+        "max": 255,
+        "p95": 139.0,
+        "p99": 186.0,
+        "pixels_rgb_diff_gt_3": 476248,
+        "pixel_count": 477481
+      },
+      "outside_map": {
+        "mae": 0.9430692152069974,
+        "max": 248,
+        "p95": 4.0,
+        "p99": 7.0,
+        "pixels_rgb_diff_gt_3": 1010261,
+        "pixel_count": 7816919
+      },
+      "outside_map_plus32": {
+        "mae": 0.9299154947811311,
+        "max": 99,
+        "p95": 4.0,
+        "p99": 7.0,
+        "pixels_rgb_diff_gt_3": 990728,
+        "pixel_count": 7724375
+      }
+    },
+    "changed_bbox_gt3": [
+      0,
+      126,
+      3840,
+      2160
+    ]
+  }
+}

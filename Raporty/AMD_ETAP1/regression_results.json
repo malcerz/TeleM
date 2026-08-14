@@ -1,0 +1,81 @@
+{
+  "stage": "AMD_ETAP_1",
+  "hud_on": {
+    "etap0_true_fps": 4.2289039685979715,
+    "etap1_true_fps": 4.1614964703039306,
+    "etap1_wall_clock_s": 271.7772340000083,
+    "production_gpu_wait_ms": 0.0,
+    "gpu_profiled_frames": 0,
+    "frame_accounting": 1131,
+    "golden_frames": {
+      "30": {
+        "pass": true,
+        "exact_equal": true,
+        "mae": 0.0,
+        "max_diff": 0,
+        "sha256": "866fccb3262c78887b48b505243553a7608c3c4099029e8dd03caa70f4d0f9ab"
+      },
+      "300": {
+        "pass": true,
+        "exact_equal": true,
+        "mae": 0.0,
+        "max_diff": 0,
+        "sha256": "018e2db438f806012e6d186237d099326edbb47a8f3ba3ca489f8a5cd4502636"
+      },
+      "900": {
+        "pass": true,
+        "exact_equal": true,
+        "mae": 0.0,
+        "max_diff": 0,
+        "sha256": "cd1141ff4099f07e5bacc6928cb9ed1d9b24be4bce7950886c9c8378d0de7b6a"
+      }
+    },
+    "fit": "PASS",
+    "gpmf": "PASS",
+    "map": "PASS",
+    "date_time": "PASS",
+    "color": "PASS",
+    "audio": {
+      "status": "PASS",
+      "bit_exact": true,
+      "adts_sha256": "e7d3fa3df057f0705bf2f8410b6fde44fac298002a55bdb1b6ec403e642d1ff3"
+    }
+  },
+  "hud_off": {
+    "etap0_controlled_reference": {
+      "method": "Legacy no-HUD work plus ETAP0-style GPU profiling wait, on the same DLL and source material.",
+      "true_fps": 12.26926541235937,
+      "wall_clock_s": 92.18155790001038,
+      "gpu_wait_avg_ms": 9.420,
+      "compose_overlay_calls": 1131,
+      "tobytes_calls": 1131,
+      "update_hud_calls": 1131,
+      "blend_calls": 1131
+    },
+    "etap1_fast_path": {
+      "true_fps": 20.002781748478814,
+      "wall_clock_s": 56.54213570000138,
+      "wall_ms_per_frame": 49.993046595934025,
+      "compose_overlay_calls": 0,
+      "tobytes_calls": 0,
+      "update_hud_calls": 0,
+      "blend_calls": 0,
+      "gpu_profiled_frames": 0,
+      "frame_accounting": 1131,
+      "speedup_x": 1.630316166143829,
+      "fps_gain_percent": 63.0316166143829,
+      "removed_wall_ms_per_frame": 31.511425464198933
+    }
+  },
+  "profiling_validation_31_frames": {
+    "gpu_profiled_frames": 31,
+    "gpu_completion_avg_ms": 7.829254838709677,
+    "gpu_wait_avg_ms": 11.487580645161291
+  },
+  "amf": {
+    "input_full": 0,
+    "retries": 0,
+    "dropped": 0,
+    "ignored": 0
+  }
+}

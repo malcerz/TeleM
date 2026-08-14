@@ -1,0 +1,1044 @@
+{
+  "preview_runtime_canvas": [
+    960,
+    540
+  ],
+  "export_runtime_canvas": [
+    3840,
+    2160
+  ],
+  "configured_zoom": 14,
+  "map_style": "satellite",
+  "layout": {
+    "x_percent": 88.02,
+    "y_percent": 22.31,
+    "width_percent": 18.0,
+    "height_percent": 18.0
+  },
+  "cache_audit": {
+    "renderer_key_before": [
+      "gps_track identity",
+      "configured zoom",
+      "map style"
+    ],
+    "renderer_key_after": [
+      "gps_track identity",
+      "effective zoom",
+      "map style"
+    ],
+    "grid_key": [
+      "tile bounds",
+      "zoom",
+      "style",
+      "draw_track",
+      "track_color",
+      "track_width"
+    ],
+    "preview_grid_can_be_reused_by_export": false,
+    "cache_is_root_cause": false
+  },
+  "frames": {
+    "30": {
+      "pts": 1.001,
+      "map_ts": -13.999000072479248,
+      "canvases": {
+        "960": {
+          "canvas": [
+            960,
+            540
+          ],
+          "layout_xy_px": [
+            845,
+            120
+          ],
+          "widget": [
+            173,
+            173
+          ],
+          "scale_factor_vs_preview": 1.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              570,
+              638,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              87,
+              87
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5028901734104047
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32718583992358,
+              "max_lat": 54.335844039680495,
+              "min_lon": 18.59384536743164,
+              "max_lon": 18.608694076538086
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 1.0,
+              "configured_zoom": 14,
+              "effective_zoom": 14,
+              "zoom_offset": 0,
+              "logical_size": 173,
+              "working_size": 173,
+              "output_size": 173,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              570,
+              638,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              87,
+              87
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5028901734104047
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32718583992358,
+              "max_lat": 54.335844039680495,
+              "min_lon": 18.59384536743164,
+              "max_lon": 18.608694076538086
+            }
+          }
+        },
+        "1920": {
+          "canvas": [
+            1920,
+            1080
+          ],
+          "layout_xy_px": [
+            1690,
+            241
+          ],
+          "widget": [
+            346,
+            346
+          ],
+          "scale_factor_vs_preview": 2.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              484,
+              552,
+              346,
+              346
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              173,
+              173
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.3228310274544,
+              "max_lat": 54.340147437551835,
+              "min_lon": 18.586463928222656,
+              "max_lon": 18.616161346435547
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 2.0,
+              "configured_zoom": 14,
+              "effective_zoom": 15,
+              "zoom_offset": 1,
+              "logical_size": 173,
+              "working_size": 346,
+              "output_size": 346,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              18075,
+              18080,
+              10467,
+              10472
+            ],
+            "crop": [
+              373,
+              509,
+              346,
+              346
+            ],
+            "marker_source": [
+              4627746,
+              2680234
+            ],
+            "marker_grid": [
+              546,
+              682
+            ],
+            "marker_local": [
+              173,
+              173
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.327160813582935,
+              "max_lat": 54.33581901860839,
+              "min_lon": 18.59388828277588,
+              "max_lon": 18.608736991882324
+            }
+          }
+        },
+        "3840": {
+          "canvas": [
+            3840,
+            2160
+          ],
+          "layout_xy_px": [
+            3380,
+            482
+          ],
+          "widget": [
+            691,
+            691
+          ],
+          "scale_factor_vs_preview": 4.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              9035,
+              9042,
+              5231,
+              5238
+            ],
+            "crop": [
+              567,
+              635,
+              691,
+              691
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              913,
+              981
+            ],
+            "marker_local": [
+              346,
+              346
+            ],
+            "marker_local_normalized": [
+              0.5007235890014472,
+              0.5007235890014472
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.31422015632317,
+              "max_lat": 54.34880290841653,
+              "min_lon": 18.57161521911621,
+              "max_lon": 18.630924224853516
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 4.0,
+              "configured_zoom": 14,
+              "effective_zoom": 16,
+              "zoom_offset": 2,
+              "logical_size": 173,
+              "working_size": 692,
+              "output_size": 691,
+              "output_resize_scale": 0.9985549132947977
+            },
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              36151,
+              36158,
+              20936,
+              20943
+            ],
+            "crop": [
+              491,
+              507,
+              692,
+              692
+            ],
+            "marker_source": [
+              9255493,
+              5360469
+            ],
+            "marker_grid": [
+              837,
+              853
+            ],
+            "marker_local": [
+              346,
+              346
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32714830040689,
+              "max_lat": 54.335806508066625,
+              "min_lon": 18.593909740447998,
+              "max_lon": 18.608758449554443
+            }
+          }
+        }
+      },
+      "route_comparison": {
+        "1920": {
+          "max_normalized_coordinate_delta": 0.0028901734104049837,
+          "match_within_one_preview_pixel": true
+        },
+        "3840": {
+          "max_normalized_coordinate_delta": 0.004335260115607031,
+          "match_within_one_preview_pixel": true
+        }
+      }
+    },
+    "300": {
+      "pts": 10.01,
+      "map_ts": -4.990000009536743,
+      "canvases": {
+        "960": {
+          "canvas": [
+            960,
+            540
+          ],
+          "layout_xy_px": [
+            845,
+            120
+          ],
+          "widget": [
+            173,
+            173
+          ],
+          "scale_factor_vs_preview": 1.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              570,
+              638,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              87,
+              87
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5028901734104047
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32718583992358,
+              "max_lat": 54.335844039680495,
+              "min_lon": 18.59384536743164,
+              "max_lon": 18.608694076538086
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 1.0,
+              "configured_zoom": 14,
+              "effective_zoom": 14,
+              "zoom_offset": 0,
+              "logical_size": 173,
+              "working_size": 173,
+              "output_size": 173,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              570,
+              638,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              87,
+              87
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5028901734104047
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32718583992358,
+              "max_lat": 54.335844039680495,
+              "min_lon": 18.59384536743164,
+              "max_lon": 18.608694076538086
+            }
+          }
+        },
+        "1920": {
+          "canvas": [
+            1920,
+            1080
+          ],
+          "layout_xy_px": [
+            1690,
+            241
+          ],
+          "widget": [
+            346,
+            346
+          ],
+          "scale_factor_vs_preview": 2.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              484,
+              552,
+              346,
+              346
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              657,
+              725
+            ],
+            "marker_local": [
+              173,
+              173
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.3228310274544,
+              "max_lat": 54.340147437551835,
+              "min_lon": 18.586463928222656,
+              "max_lon": 18.616161346435547
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 2.0,
+              "configured_zoom": 14,
+              "effective_zoom": 15,
+              "zoom_offset": 1,
+              "logical_size": 173,
+              "working_size": 346,
+              "output_size": 346,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              18075,
+              18080,
+              10467,
+              10472
+            ],
+            "crop": [
+              373,
+              509,
+              346,
+              346
+            ],
+            "marker_source": [
+              4627746,
+              2680234
+            ],
+            "marker_grid": [
+              546,
+              682
+            ],
+            "marker_local": [
+              173,
+              173
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.327160813582935,
+              "max_lat": 54.33581901860839,
+              "min_lon": 18.59388828277588,
+              "max_lon": 18.608736991882324
+            }
+          }
+        },
+        "3840": {
+          "canvas": [
+            3840,
+            2160
+          ],
+          "layout_xy_px": [
+            3380,
+            482
+          ],
+          "widget": [
+            691,
+            691
+          ],
+          "scale_factor_vs_preview": 4.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              9035,
+              9042,
+              5231,
+              5238
+            ],
+            "crop": [
+              567,
+              635,
+              691,
+              691
+            ],
+            "marker_source": [
+              2313873,
+              1340117
+            ],
+            "marker_grid": [
+              913,
+              981
+            ],
+            "marker_local": [
+              346,
+              346
+            ],
+            "marker_local_normalized": [
+              0.5007235890014472,
+              0.5007235890014472
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.31422015632317,
+              "max_lat": 54.34880290841653,
+              "min_lon": 18.57161521911621,
+              "max_lon": 18.630924224853516
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 4.0,
+              "configured_zoom": 14,
+              "effective_zoom": 16,
+              "zoom_offset": 2,
+              "logical_size": 173,
+              "working_size": 692,
+              "output_size": 691,
+              "output_resize_scale": 0.9985549132947977
+            },
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              36151,
+              36158,
+              20936,
+              20943
+            ],
+            "crop": [
+              491,
+              507,
+              692,
+              692
+            ],
+            "marker_source": [
+              9255493,
+              5360469
+            ],
+            "marker_grid": [
+              837,
+              853
+            ],
+            "marker_local": [
+              346,
+              346
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32714830040689,
+              "max_lat": 54.335806508066625,
+              "min_lon": 18.593909740447998,
+              "max_lon": 18.608758449554443
+            }
+          }
+        }
+      },
+      "route_comparison": {
+        "1920": {
+          "max_normalized_coordinate_delta": 0.0028901734104049837,
+          "match_within_one_preview_pixel": true
+        },
+        "3840": {
+          "max_normalized_coordinate_delta": 0.004335260115607031,
+          "match_within_one_preview_pixel": true
+        }
+      }
+    },
+    "900": {
+      "pts": 30.03,
+      "map_ts": 15.02999997138977,
+      "canvases": {
+        "960": {
+          "canvas": [
+            960,
+            540
+          ],
+          "layout_xy_px": [
+            845,
+            120
+          ],
+          "widget": [
+            173,
+            173
+          ],
+          "scale_factor_vs_preview": 1.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              565,
+              640,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313868.0,
+              1340119.0299999714
+            ],
+            "marker_grid": [
+              652.0,
+              727.0299999713898
+            ],
+            "marker_local": [
+              87.0,
+              87.02999997138977
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5030635836496519
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32708573446962,
+              "max_lat": 54.33574395530069,
+              "min_lon": 18.593416213989258,
+              "max_lon": 18.608264923095703
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 1.0,
+              "configured_zoom": 14,
+              "effective_zoom": 14,
+              "zoom_offset": 0,
+              "logical_size": 173,
+              "working_size": 173,
+              "output_size": 173,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              565,
+              640,
+              173,
+              173
+            ],
+            "marker_source": [
+              2313868.0,
+              1340119.0299999714
+            ],
+            "marker_grid": [
+              652.0,
+              727.0299999713898
+            ],
+            "marker_local": [
+              87.0,
+              87.02999997138977
+            ],
+            "marker_local_normalized": [
+              0.5028901734104047,
+              0.5030635836496519
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32708573446962,
+              "max_lat": 54.33574395530069,
+              "min_lon": 18.593416213989258,
+              "max_lon": 18.608264923095703
+            }
+          }
+        },
+        "1920": {
+          "canvas": [
+            1920,
+            1080
+          ],
+          "layout_xy_px": [
+            1690,
+            241
+          ],
+          "widget": [
+            346,
+            346
+          ],
+          "scale_factor_vs_preview": 2.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              9036,
+              9041,
+              5232,
+              5237
+            ],
+            "crop": [
+              479,
+              554,
+              346,
+              346
+            ],
+            "marker_source": [
+              2313868.0,
+              1340119.0299999714
+            ],
+            "marker_grid": [
+              652.0,
+              727.0299999713898
+            ],
+            "marker_local": [
+              173.0,
+              173.02999997138977
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5000867051196236
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32273091140165,
+              "max_lat": 54.34004736364741,
+              "min_lon": 18.586034774780273,
+              "max_lon": 18.615732192993164
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 2.0,
+              "configured_zoom": 14,
+              "effective_zoom": 15,
+              "zoom_offset": 1,
+              "logical_size": 173,
+              "working_size": 346,
+              "output_size": 346,
+              "output_resize_scale": 1.0
+            },
+            "working_grid": [
+              1280,
+              1280
+            ],
+            "tile_range": [
+              18075,
+              18080,
+              10467,
+              10472
+            ],
+            "crop": [
+              363,
+              514,
+              346,
+              346
+            ],
+            "marker_source": [
+              4627736.0,
+              2680239.0299999714
+            ],
+            "marker_grid": [
+              536.0,
+              687.0299999713898
+            ],
+            "marker_local": [
+              173.0,
+              173.02999997138977
+            ],
+            "marker_local_normalized": [
+              0.5,
+              0.5000867051196236
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32703568165129,
+              "max_lat": 54.33569391301945,
+              "min_lon": 18.593459129333496,
+              "max_lon": 18.60830783843994
+            }
+          }
+        },
+        "3840": {
+          "canvas": [
+            3840,
+            2160
+          ],
+          "layout_xy_px": [
+            3380,
+            482
+          ],
+          "widget": [
+            691,
+            691
+          ],
+          "scale_factor_vs_preview": 4.0,
+          "before": {
+            "zoom": 14,
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              9035,
+              9042,
+              5231,
+              5238
+            ],
+            "crop": [
+              562,
+              637,
+              691,
+              691
+            ],
+            "marker_source": [
+              2313868.0,
+              1340119.0299999714
+            ],
+            "marker_grid": [
+              908.0,
+              983.0299999713898
+            ],
+            "marker_local": [
+              346.0,
+              346.02999997138977
+            ],
+            "marker_local_normalized": [
+              0.5007235890014472,
+              0.5007670043001299
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.31412001931489,
+              "max_lat": 54.34870285558303,
+              "min_lon": 18.571186065673828,
+              "max_lon": 18.630495071411133
+            }
+          },
+          "after": {
+            "render_plan": {
+              "canvas_scale": 4.0,
+              "configured_zoom": 14,
+              "effective_zoom": 16,
+              "zoom_offset": 2,
+              "logical_size": 173,
+              "working_size": 692,
+              "output_size": 691,
+              "output_resize_scale": 0.9985549132947977
+            },
+            "working_grid": [
+              1792,
+              1792
+            ],
+            "tile_range": [
+              36151,
+              36158,
+              20936,
+              20943
+            ],
+            "crop": [
+              470,
+              516,
+              692,
+              692
+            ],
+            "marker_source": [
+              9255472.970000029,
+              5360478.089999914
+            ],
+            "marker_grid": [
+              816.9700000286102,
+              862.0899999141693
+            ],
+            "marker_local": [
+              346.97000002861023,
+              346.0899999141693
+            ],
+            "marker_local_normalized": [
+              0.5014017341453905,
+              0.5001300576794354
+            ],
+            "geographic_bounds": {
+              "min_lat": 54.32703568165129,
+              "max_lat": 54.33569391301945,
+              "min_lon": 18.593459129333496,
+              "max_lon": 18.60830783843994
+            }
+          }
+        }
+      },
+      "route_comparison": {
+        "1920": {
+          "max_normalized_coordinate_delta": 0.005780346820809523,
+          "match_within_one_preview_pixel": true
+        },
+        "3840": {
+          "max_normalized_coordinate_delta": 0.005780346820809523,
+          "match_within_one_preview_pixel": true
+        }
+      }
+    }
+  }
+}

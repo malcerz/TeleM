@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 import math
+import time
 from datetime import datetime
 from typing import Any, Optional
 
@@ -21,6 +22,7 @@ from src.indicators.helpers import load_font, s, parse_hex_color
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_block import render_time_block
 from src.indicators.time_display import render_time_display
+from src.indicators.profiling import get_overlay_profiler, indicator_scope
 
 
 import threading
@@ -75,9 +77,11 @@ def compose_overlay(
     reuse_canvas: bool = True,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators."""
+    profiler = get_overlay_profiler()
     if reuse_canvas:
         img, prev_bboxes = _get_reusable_canvas(canvas_w, canvas_h)
         if prev_bboxes:
+            clear_started = time.perf_counter()
             pad = 40
             for bx, by, bw, bh in prev_bboxes.values():
                 x1 = max(0, bx - pad)
@@ -86,8 +90,18 @@ def compose_overlay(
                 y2 = min(canvas_h, by + bh + pad)
                 img.paste((0, 0, 0, 0), (x1, y1, x2, y2))
             prev_bboxes.clear()
+            profiler.record(
+                "canvas.regional_clear",
+                (time.perf_counter() - clear_started) * 1000.0,
+            )
         else:
+            clear_started = time.perf_counter()
             img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
+            profiler.record_full_canvas(
+                "reusable_canvas_clear",
+                (time.perf_counter() - clear_started) * 1000.0,
+                "Initialize the persistent 3840x2160 RGBA HUD to transparent pixels",
+            )
     else:
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         prev_bboxes = None
@@ -97,13 +111,20 @@ def compose_overlay(
 
     # Time block
     if "time_block" in layout.get("indicators", {}):
-        tb, tbx, tby = render_time_block(canvas_w, canvas_h, layout, font_path, date_text, time_text)
+        time_block_started = time.perf_counter()
+        with indicator_scope("time_block"):
+            with profiler.measure("indicator.time_block.render"):
+                tb, tbx, tby = render_time_block(
+                    canvas_w, canvas_h, layout, font_path, date_text, time_text
+                )
         if tb:
             tb_rotation = layout["indicators"]["time_block"].get("rotation", 0)
             # Treść jest wklejana środkiem w (cx, cy); pozycja layout x/y to lewy-górny róg.
             cx = tbx + tb.width // 2
             cy = tby + tb.height // 2
-            rotated_paste(img, tb, cx, cy, tb_rotation)
+            with indicator_scope("time_block"):
+                with profiler.measure("indicator.time_block.paste_composite"):
+                    rotated_paste(img, tb, cx, cy, tb_rotation)
             if tb_rotation in (90, 270):
                 _bboxes["time_block"] = (
                     int(cx - tb.height // 2),
@@ -118,18 +139,33 @@ def compose_overlay(
                     tb.width,
                     tb.height,
                 )
+            profiler.set_indicator_metadata(
+                "time_block", classification="SEMI-DYNAMIC", cacheable="label/date; time changes once per second"
+            )
+            profiler.record_indicator_geometry(
+                "time_block", _bboxes["time_block"], tb.size,
+                (canvas_w, canvas_h), 1, "time_block",
+            )
+        profiler.record(
+            "indicator.time_block.total",
+            (time.perf_counter() - time_block_started) * 1000.0,
+        )
 
     # Time display (multi-line info block)
     if "time_display" in layout.get("indicators", {}):
-        td, tdx, tdy = render_time_display(
-            canvas_w, canvas_h, layout, font_path,
-            date_text, time_text, elapsed_seconds, avg_speed_kmh,
-        )
+        with indicator_scope("time_display"):
+            with profiler.measure("indicator.time_display.render"):
+                td, tdx, tdy = render_time_display(
+                    canvas_w, canvas_h, layout, font_path,
+                    date_text, time_text, elapsed_seconds, avg_speed_kmh,
+                )
         if td:
             td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
             cx = tdx + td.width // 2
             cy = tdy + td.height // 2
-            rotated_paste(img, td, cx, cy, td_rotation)
+            with indicator_scope("time_display"):
+                with profiler.measure("indicator.time_display.paste_composite"):
+                    rotated_paste(img, td, cx, cy, td_rotation)
             if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
                     int(cx - td.height // 2),
@@ -144,6 +180,10 @@ def compose_overlay(
                     td.width,
                     td.height,
                 )
+            profiler.record_indicator_geometry(
+                "time_display", _bboxes["time_display"], td.size,
+                (canvas_w, canvas_h), 1, "time_display",
+            )
 
     if indicator_values is None:
         indicator_values = {}
@@ -187,6 +227,7 @@ def compose_overlay(
             continue
         if not ind_cfg or not ind_cfg.get("enabled", True):
             continue
+        indicator_started = time.perf_counter()
 
         value, default_unit, default_label = known_vals.get(
             key, (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", key))
@@ -245,18 +286,20 @@ def compose_overlay(
         global_ss = 1 if fast_preview else layout.get("global", {}).get("antialiasing", 1)
         ss = 1 if fast_preview else current_cfg.get("supersample", global_ss)
 
-        res, rx, ry, extra = render_value_indicator(
-            canvas_w, canvas_h, layout, font_path,
-            key, value, unit, label,
-            cfg_override=current_cfg,
-            formatted_val=fv,
-            max_distance_m=max_distance_m,
-            history_data=chart_vals,
-            current_position=current_position,
-            gps_track=gps_track,
-            supersample=ss,
-            target_dt=target_dt,
-        )
+        with indicator_scope(key):
+            with profiler.measure(f"indicator.{key}.render"):
+                res, rx, ry, extra = render_value_indicator(
+                    canvas_w, canvas_h, layout, font_path,
+                    key, value, unit, label,
+                    cfg_override=current_cfg,
+                    formatted_val=fv,
+                    max_distance_m=max_distance_m,
+                    history_data=chart_vals,
+                    current_position=current_position,
+                    gps_track=gps_track,
+                    supersample=ss,
+                    target_dt=target_dt,
+                )
 
         if res:
             rotation = int(current_cfg.get("rotation", 0))
@@ -273,7 +316,9 @@ def compose_overlay(
                 center_x = rx
                 center_y = ry
 
-            rotated_paste(img, res, center_x, center_y, rotation)
+            with indicator_scope(key):
+                with profiler.measure(f"indicator.{key}.paste_composite"):
+                    rotated_paste(img, res, center_x, center_y, rotation)
 
             if rotation in (90, 270):
                 bw, bh = res.height, res.width
@@ -281,69 +326,89 @@ def compose_overlay(
                 bw, bh = res.width, res.height
 
             _bboxes[key] = (int(center_x - bw // 2), int(center_y - bh // 2), int(bw), int(bh))
+            profiler.set_indicator_metadata(
+                key,
+                form=current_cfg.get("form", "text"),
+                source=current_cfg.get("source", "gpmf"),
+                rotation=rotation,
+                supersample=int(ss),
+            )
+            profiler.record_indicator_geometry(
+                key, _bboxes[key], res.size, (canvas_w, canvas_h),
+                int(ss), current_cfg.get("form", "text"),
+            )
 
             # Extra text annotations / range labels
-            draw = ImageDraw.Draw(img)
-            cfg = current_cfg
-            fs = max(10, int(s(cfg.get("font_size", cfg.get("size", 0.02)), canvas_h)))
-            font = load_font(font_path, fs)
-            outline = max(1, fs // 12)
+            annotation_started = time.perf_counter()
+            with indicator_scope(key):
+                draw = ImageDraw.Draw(img)
+                cfg = current_cfg
+                fs = max(10, int(s(cfg.get("font_size", cfg.get("size", 0.02)), canvas_h)))
+                font = load_font(font_path, fs)
+                outline = max(1, fs // 12)
+                if extra and extra.get("show_value") and key != "dist_visual":
+                    text = extra["value_text"]
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_w = bbox[2] - bbox[0]
+                    text_h = bbox[3] - bbox[1]
+                    ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
+                    oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
+                    if rotation == 90:
+                        text_x = int(center_x + res.height // 2 + 8 + ox)
+                        text_y = int(center_y - text_h / 2 + oy)
+                    else:
+                        text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox)
+                        text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy)
+                    text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
+                    draw.text(
+                        (text_x, text_y),
+                        text,
+                        font=font,
+                        fill=(text_color[0], text_color[1], text_color[2], 255),
+                        stroke_width=outline,
+                        stroke_fill=(0, 0, 0, 255),
+                    )
 
-            if extra and extra.get("show_value") and key != "dist_visual":
-                text = extra["value_text"]
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_w = bbox[2] - bbox[0]
-                text_h = bbox[3] - bbox[1]
-                ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
-                oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
-                if rotation == 90:
-                    text_x = int(center_x + res.height // 2 + 8 + ox)
-                    text_y = int(center_y - text_h / 2 + oy)
-                else:
-                    text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox)
-                    text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy)
-                text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
-                draw.text(
-                    (text_x, text_y),
-                    text,
-                    font=font,
-                    fill=(text_color[0], text_color[1], text_color[2], 255),
-                    stroke_width=outline,
-                    stroke_fill=(0, 0, 0, 255),
-                )
+                if extra and extra.get("show_range_labels"):
+                    left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
+                    right_text = extra.get("right_text", f"{cfg.get('max_val', 100):.0f}")
+                    rox = int(round(cfg.get("range_label_offset_x", 0.0) * canvas_w))
+                    roy = int(round(cfg.get("range_label_offset_y", 0.0) * canvas_h))
+                    rspreadx = int(round(cfg.get("range_label_spread_x", 0.0) * canvas_w))
 
-            if extra and extra.get("show_range_labels"):
-                left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
-                right_text = extra.get("right_text", f"{cfg.get('max_val', 100):.0f}")
-                rox = int(round(cfg.get("range_label_offset_x", 0.0) * canvas_w))
-                roy = int(round(cfg.get("range_label_offset_y", 0.0) * canvas_h))
-                rspreadx = int(round(cfg.get("range_label_spread_x", 0.0) * canvas_w))
-
-                left_bbox = draw.textbbox((0, 0), left_text, font=font)
-                left_w = left_bbox[2] - left_bbox[0]
-                left_h = left_bbox[3] - left_bbox[1]
-                if right_text:
-                    right_bbox = draw.textbbox((0, 0), right_text, font=font)
-                    right_w = right_bbox[2] - right_bbox[0]
-                    right_h = right_bbox[3] - right_bbox[1]
-                else:
-                    right_w = right_h = 0
-
-                if rotation == 90:
-                    left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
-                    left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
-                    draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                    left_bbox = draw.textbbox((0, 0), left_text, font=font)
+                    left_w = left_bbox[2] - left_bbox[0]
+                    left_h = left_bbox[3] - left_bbox[1]
                     if right_text:
-                        right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
-                        right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
-                        draw.text((right_x, right_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
-                else:
-                    left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
-                    left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
-                    draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
-                    if right_text:
-                        right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
-                        draw.text((right_x, left_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                        right_bbox = draw.textbbox((0, 0), right_text, font=font)
+                        right_w = right_bbox[2] - right_bbox[0]
+                        right_h = right_bbox[3] - right_bbox[1]
+                    else:
+                        right_w = right_h = 0
+
+                    if rotation == 90:
+                        left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
+                        left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
+                        draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                        if right_text:
+                            right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
+                            right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
+                            draw.text((right_x, right_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                    else:
+                        left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
+                        left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
+                        draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                        if right_text:
+                            right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
+                            draw.text((right_x, left_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+            profiler.record(
+                f"indicator.{key}.annotations",
+                (time.perf_counter() - annotation_started) * 1000.0,
+            )
+        profiler.record(
+            f"indicator.{key}.total",
+            (time.perf_counter() - indicator_started) * 1000.0,
+        )
 
     # Custom texts – use resolution-scaled outline
     ct_outline = max(0, int(round(

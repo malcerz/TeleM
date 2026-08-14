@@ -1,0 +1,43 @@
+{
+  "comparison": "decoded RGB pixels from pre-ETAP0 golden versus final ETAP0 export",
+  "frame_indexing": "zero_based",
+  "frames": {
+    "30": {
+      "pass": true,
+      "exact_equal": true,
+      "mean_absolute_error": 0.0,
+      "max_absolute_error": 0,
+      "sha256": "866fccb3262c78887b48b505243553a7608c3c4099029e8dd03caa70f4d0f9ab"
+    },
+    "300": {
+      "pass": true,
+      "exact_equal": true,
+      "mean_absolute_error": 0.0,
+      "max_absolute_error": 0,
+      "sha256": "018e2db438f806012e6d186237d099326edbb47a8f3ba3ca489f8a5cd4502636"
+    },
+    "900": {
+      "pass": true,
+      "exact_equal": true,
+      "mean_absolute_error": 0.0,
+      "max_absolute_error": 0,
+      "sha256": "cd1141ff4099f07e5bacc6928cb9ed1d9b24be4bce7950886c9c8378d0de7b6a"
+    }
+  },
+  "fit": "PASS",
+  "gpmf": "PASS",
+  "map": "PASS",
+  "date_time": "PASS",
+  "color": "PASS",
+  "audio": {
+    "status": "PASS",
+    "bit_exact_adts": true,
+    "sha256": "e7d3fa3df057f0705bf2f8410b6fde44fac298002a55bdb1b6ec403e642d1ff3"
+  },
+  "frame_count": {
+    "status": "PASS_CORRECTNESS_FIX",
+    "pre_etap0": 1130,
+    "post_etap0": 1131,
+    "source": 1131
+  }
+}

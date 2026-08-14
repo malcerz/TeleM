@@ -118,6 +118,14 @@ static bool InitHUDComputeShader(ID3D11Device* pDevice) {
 D3D11VideoProcessorPipeline::D3D11VideoProcessorPipeline() {}
 
 D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
+    for (UINT i = 0; i < POOL_SIZE; ++i) {
+        if (m_outputYViews[i]) m_outputYViews[i]->Release();
+        if (m_outputUVViews[i]) m_outputUVViews[i]->Release();
+    }
+    if (m_nv12RangeComputeShader) m_nv12RangeComputeShader->Release();
+    if (m_nv12HUDComputeShader) m_nv12HUDComputeShader->Release();
+    if (m_device3) m_device3->Release();
+    if (m_hudShaderView) m_hudShaderView->Release();
     if (m_hudInputView) m_hudInputView->Release();
     if (m_hudTexture) m_hudTexture->Release();
 
@@ -286,43 +294,239 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
         }
     }
 
+    if (!InitializeNV12ComputeCompositor()) {
+        std::cerr << "[VP] Direct NV12 compute HUD compositor initialization failed." << std::endl;
+        return false;
+    }
+
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::CreateHUDTexture(UINT width, UINT height, const std::vector<uint8_t>& rgbaData) {
-    if (m_hudTexture && m_hudWidth == width && m_hudHeight == height) {
-        std::vector<uint8_t> hudBytes(rgbaData.size());
-        for (size_t i = 0; i < rgbaData.size(); i += 4) {
-            uint8_t r = rgbaData[i + 0];
-            uint8_t g = rgbaData[i + 1];
-            uint8_t b = rgbaData[i + 2];
-            uint8_t a = rgbaData[i + 3];
-            hudBytes[i + 0] = (uint8_t)((b * a) / 255);
-            hudBytes[i + 1] = (uint8_t)((g * a) / 255);
-            hudBytes[i + 2] = (uint8_t)((r * a) / 255);
-            hudBytes[i + 3] = a;
+bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
+    HRESULT hr = m_device->QueryInterface(__uuidof(ID3D11Device3), (void**)&m_device3);
+    if (FAILED(hr) || !m_device3) return false;
+
+    for (UINT i = 0; i < POOL_SIZE; ++i) {
+        D3D11_UNORDERED_ACCESS_VIEW_DESC1 yDesc = {};
+        yDesc.Format = DXGI_FORMAT_R8_UNORM;
+        yDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+        yDesc.Texture2D.MipSlice = 0;
+        yDesc.Texture2D.PlaneSlice = 0;
+        ID3D11UnorderedAccessView1* yView = nullptr;
+        hr = m_device3->CreateUnorderedAccessView1(m_outputPool[i], &yDesc, &yView);
+        if (FAILED(hr) || !yView) return false;
+        m_outputYViews[i] = yView;
+
+        D3D11_UNORDERED_ACCESS_VIEW_DESC1 uvDesc = {};
+        uvDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+        uvDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+        uvDesc.Texture2D.MipSlice = 0;
+        uvDesc.Texture2D.PlaneSlice = 1;
+        ID3D11UnorderedAccessView1* uvView = nullptr;
+        hr = m_device3->CreateUnorderedAccessView1(m_outputPool[i], &uvDesc, &uvView);
+        if (FAILED(hr) || !uvView) return false;
+        m_outputUVViews[i] = uvView;
+    }
+
+    const char* computeSource = R"(
+        Texture2D<float4> HUDTexture : register(t0);
+        RWTexture2D<float> OutputY : register(u0);
+        RWTexture2D<float2> OutputUV : register(u1);
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 threadId : SV_DispatchThreadID) {
+            uint width, height;
+            HUDTexture.GetDimensions(width, height);
+            uint2 pos = threadId.xy;
+            if (pos.x >= width || pos.y >= height) return;
+
+            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(pos, 0))) * 255.0f);
+            uint alpha = hud.a;
+            if (alpha == 0) return;
+
+            uint yHUD = ((66u * hud.r + 129u * hud.g + 25u * hud.b + 128u) >> 8) + 16u;
+            uint yBase = (uint)round(saturate(OutputY[pos]) * 255.0f);
+            uint yOut = alpha == 255u ? yHUD :
+                (yHUD * alpha + yBase * (255u - alpha)) / 255u;
+            OutputY[pos] = min(yOut, 255u) / 255.0f;
+
+            if (((pos.x | pos.y) & 1u) == 0u) {
+                int uHUD = ((-38 * (int)hud.r - 74 * (int)hud.g + 112 * (int)hud.b + 128) >> 8) + 128;
+                int vHUD = ((112 * (int)hud.r - 94 * (int)hud.g - 18 * (int)hud.b + 128) >> 8) + 128;
+                uint2 uvPos = pos / 2u;
+                uint2 uvBase = (uint2)round(saturate(OutputUV[uvPos]) * 255.0f);
+                uint uValue = (uint)clamp(uHUD, 0, 255);
+                uint vValue = (uint)clamp(vHUD, 0, 255);
+                uint2 uvOut = alpha == 255u ? uint2(uValue, vValue) :
+                    (uint2(uValue, vValue) * alpha + uvBase * (255u - alpha)) / 255u;
+                OutputUV[uvPos] = uvOut / 255.0f;
+            }
         }
-        m_context->UpdateSubresource(m_hudTexture, 0, nullptr, hudBytes.data(), width * 4, 0);
+    )";
+
+    ID3DBlob* shaderBlob = nullptr;
+    ID3DBlob* errors = nullptr;
+    hr = D3DCompile(computeSource, strlen(computeSource), nullptr, nullptr, nullptr,
+                    "CSMain", "cs_5_0", 0, 0, &shaderBlob, &errors);
+    if (FAILED(hr)) {
+        if (errors) { std::cerr << (char*)errors->GetBufferPointer() << std::endl; errors->Release(); }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(
+        shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr,
+        &m_nv12HUDComputeShader);
+    shaderBlob->Release();
+    if (FAILED(hr)) return false;
+
+    const char* rangeSource = R"(
+        RWTexture2D<float> OutputY : register(u0);
+        RWTexture2D<float2> OutputUV : register(u1);
+
+        int ScaleChroma(int value) {
+            int centered = value - 128;
+            int scaled = centered >= 0
+                ? (centered * 224 + 127) / 255
+                : (centered * 224 - 127) / 255;
+            return clamp(128 + scaled, 0, 255);
+        }
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 threadId : SV_DispatchThreadID) {
+            uint width, height;
+            OutputY.GetDimensions(width, height);
+            uint2 pos = threadId.xy;
+            if (pos.x >= width || pos.y >= height) return;
+
+            uint yValue = (uint)round(saturate(OutputY[pos]) * 255.0f);
+            OutputY[pos] = min(235u, ((219u * yValue + 127u) / 255u) + 16u) / 255.0f;
+
+            if (((pos.x | pos.y) & 1u) == 0u) {
+                uint2 uvPos = pos / 2u;
+                int2 uv = (int2)round(saturate(OutputUV[uvPos]) * 255.0f);
+                OutputUV[uvPos] = float2(ScaleChroma(uv.x), ScaleChroma(uv.y)) / 255.0f;
+            }
+        }
+    )";
+
+    shaderBlob = nullptr;
+    errors = nullptr;
+    hr = D3DCompile(rangeSource, strlen(rangeSource), nullptr, nullptr, nullptr,
+                    "CSMain", "cs_5_0", 0, 0, &shaderBlob, &errors);
+    if (FAILED(hr)) {
+        if (errors) { std::cerr << (char*)errors->GetBufferPointer() << std::endl; errors->Release(); }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(
+        shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr,
+        &m_nv12RangeComputeShader);
+    shaderBlob->Release();
+    return SUCCEEDED(hr);
+}
+
+bool D3D11VideoProcessorPipeline::NormalizeD3D11VARangeNV12(UINT poolIndex) {
+    if (!m_nv12RangeComputeShader ||
+        !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) return false;
+
+    ID3D11UnorderedAccessView* outputs[2] = {
+        m_outputYViews[poolIndex], m_outputUVViews[poolIndex]
+    };
+    UINT initialCounts[2] = { 0, 0 };
+    ID3D11UnorderedAccessView* nullOutputs[2] = { nullptr, nullptr };
+
+    // The golden CPU path performs full->studio conversion once in FFmpeg and
+    // once again when the uploaded NV12 is consumed by the legacy VP state.
+    // Preserve that established output with two GPU-resident, quantized passes.
+    for (UINT pass = 0; pass < 2; ++pass) {
+        m_context->CSSetShader(m_nv12RangeComputeShader, nullptr, 0);
+        m_context->CSSetUnorderedAccessViews(0, 2, outputs, initialCounts);
+        m_context->Dispatch((m_width + 15) / 16, (m_height + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 2, nullOutputs, initialCounts);
+    }
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::ComposeHUDDirectNV12(
+    ID3D11Texture2D* outputTexture,
+    UINT poolIndex
+) {
+    if (!outputTexture || !m_hudShaderView ||
+        !m_nv12HUDComputeShader || !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) {
+        return false;
+    }
+    // VideoProcessor has already produced the normal base NV12 output. The
+    // shader changes only pixels with non-zero Pillow straight alpha.
+    m_context->CSSetShader(m_nv12HUDComputeShader, nullptr, 0);
+    m_context->CSSetShaderResources(0, 1, &m_hudShaderView);
+    ID3D11UnorderedAccessView* outputs[2] = {
+        m_outputYViews[poolIndex], m_outputUVViews[poolIndex]
+    };
+    UINT initialCounts[2] = { 0, 0 };
+    m_context->CSSetUnorderedAccessViews(0, 2, outputs, initialCounts);
+    m_context->Dispatch((m_width + 15) / 16, (m_height + 15) / 16, 1);
+
+    ID3D11ShaderResourceView* nullInput = nullptr;
+    ID3D11UnorderedAccessView* nullOutputs[2] = { nullptr, nullptr };
+    m_context->CSSetShaderResources(0, 1, &nullInput);
+    m_context->CSSetUnorderedAccessViews(0, 2, nullOutputs, initialCounts);
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateHUDTexture(
+    UINT width,
+    UINT height,
+    const uint8_t* rgbaData,
+    UINT stride,
+    const HUDDirtyRect* dirtyRects,
+    UINT dirtyRectCount,
+    bool fullUpload,
+    size_t* uploadedBytes,
+    bool* textureCreated
+) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_videoEnumerator || !rgbaData || stride < width * 4) return false;
+
+    const bool needsTexture = !m_hudTexture || m_hudWidth != width || m_hudHeight != height;
+    if (!needsTexture) {
+        if (fullUpload) {
+            m_context->UpdateSubresource(m_hudTexture, 0, nullptr, rgbaData, stride, 0);
+            if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+            return true;
+        }
+        size_t totalBytes = 0;
+        for (UINT index = 0; index < dirtyRectCount; ++index) {
+            const HUDDirtyRect& rect = dirtyRects[index];
+            if (rect.width == 0 || rect.height == 0 || rect.x >= width || rect.y >= height) continue;
+            const UINT right = (rect.width > width - rect.x) ? width : rect.x + rect.width;
+            const UINT bottom = (rect.height > height - rect.y) ? height : rect.y + rect.height;
+            D3D11_BOX box = {};
+            box.left = rect.x;
+            box.top = rect.y;
+            box.front = 0;
+            box.right = right;
+            box.bottom = bottom;
+            box.back = 1;
+            const uint8_t* source = rgbaData + static_cast<size_t>(rect.y) * stride + rect.x * 4;
+            m_context->UpdateSubresource(m_hudTexture, 0, &box, source, stride, 0);
+            totalBytes += static_cast<size_t>(right - rect.x) * (bottom - rect.y) * 4;
+        }
+        if (uploadedBytes) *uploadedBytes = totalBytes;
         return true;
     }
 
     m_hudWidth = width;
     m_hudHeight = height;
 
+    if (m_hudShaderView) { m_hudShaderView->Release(); m_hudShaderView = nullptr; }
     if (m_hudInputView) { m_hudInputView->Release(); m_hudInputView = nullptr; }
     if (m_hudTexture) { m_hudTexture->Release(); m_hudTexture = nullptr; }
 
-    DXGI_FORMAT hudFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
-    std::vector<uint8_t> hudBytes(rgbaData.size());
-    for (size_t i = 0; i < rgbaData.size(); i += 4) {
-        uint8_t r = rgbaData[i + 0];
-        uint8_t g = rgbaData[i + 1];
-        uint8_t b = rgbaData[i + 2];
-        uint8_t a = rgbaData[i + 3];
-        hudBytes[i + 0] = (uint8_t)((b * a) / 255);
-        hudBytes[i + 1] = (uint8_t)((g * a) / 255);
-        hudBytes[i + 2] = (uint8_t)((r * a) / 255);
-        hudBytes[i + 3] = a;
+    const DXGI_FORMAT hudFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    UINT formatFlags = 0;
+    HRESULT hr = m_videoEnumerator->CheckVideoProcessorFormat(hudFormat, &formatFlags);
+    if (FAILED(hr) || !(formatFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT)) {
+        std::cerr << "[VP] RGBA8 HUD input is not supported by this VideoProcessor." << std::endl;
+        return false;
     }
 
     D3D11_TEXTURE2D_DESC desc = {};
@@ -335,11 +539,7 @@ bool D3D11VideoProcessorPipeline::CreateHUDTexture(UINT width, UINT height, cons
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-    D3D11_SUBRESOURCE_DATA subData = {};
-    subData.pSysMem = hudBytes.data();
-    subData.SysMemPitch = width * 4;
-
-    HRESULT hr = m_device->CreateTexture2D(&desc, &subData, &m_hudTexture);
+    hr = m_device->CreateTexture2D(&desc, nullptr, &m_hudTexture);
     if (FAILED(hr)) {
         std::cerr << "[VP] CreateHUDTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
@@ -356,7 +556,55 @@ bool D3D11VideoProcessorPipeline::CreateHUDTexture(UINT width, UINT height, cons
         std::cerr << "[VP] CreateVideoProcessorInputView for HUD failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
     }
+    hr = m_device->CreateShaderResourceView(m_hudTexture, nullptr, &m_hudShaderView);
+    if (FAILED(hr)) {
+        std::cerr << "[VP] CreateShaderResourceView for HUD failed: 0x"
+                  << std::hex << hr << std::dec << std::endl;
+        return false;
+    }
 
+    if (textureCreated) *textureCreated = true;
+    // A newly allocated texture has undefined contents. Its first update must
+    // initialize the complete image irrespective of the requested dirty list.
+    m_context->UpdateSubresource(m_hudTexture, 0, nullptr, rgbaData, stride, 0);
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::CanUseInputSurface(
+    ID3D11Texture2D* texture,
+    UINT arrayIndex
+) {
+    if (!texture || !m_videoDevice || !m_videoEnumerator) return false;
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC viewDesc = {};
+    viewDesc.FourCC = 0;
+    viewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    viewDesc.Texture2D.MipSlice = 0;
+    viewDesc.Texture2D.ArraySlice = arrayIndex;
+    ID3D11VideoProcessorInputView* inputView = nullptr;
+    const HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(
+        texture, m_videoEnumerator, &viewDesc, &inputView);
+    if (inputView) inputView->Release();
+    return SUCCEEDED(hr);
+}
+
+bool D3D11VideoProcessorPipeline::SetStreamRotation(UINT degrees) {
+    if (!m_videoContext || !m_videoProcessor) return false;
+    degrees %= 360;
+    if (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270) return false;
+
+    ID3D11VideoContext1* videoContext1 = nullptr;
+    const HRESULT hr = m_videoContext->QueryInterface(
+        __uuidof(ID3D11VideoContext1), reinterpret_cast<void**>(&videoContext1));
+    if (FAILED(hr) || !videoContext1) return degrees == 0;
+
+    D3D11_VIDEO_PROCESSOR_ROTATION rotation = D3D11_VIDEO_PROCESSOR_ROTATION_IDENTITY;
+    if (degrees == 90) rotation = D3D11_VIDEO_PROCESSOR_ROTATION_90;
+    else if (degrees == 180) rotation = D3D11_VIDEO_PROCESSOR_ROTATION_180;
+    else if (degrees == 270) rotation = D3D11_VIDEO_PROCESSOR_ROTATION_270;
+    videoContext1->VideoProcessorSetStreamRotation(
+        m_videoProcessor, 0, degrees != 0, rotation);
+    videoContext1->Release();
     return true;
 }
 
@@ -365,13 +613,17 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     UINT arrayIndex,
     ID3D11Texture2D** ppOutNV12Texture,
     bool enableHUD,
+    bool normalizeD3D11VARange,
     VPPipelineStats* outStats,
-    UINT frameIndex
+    UINT frameIndex,
+    bool diagnosticsEnabled,
+    bool profilingEnabled
 ) {
     if (!pP010Texture || !ppOutNV12Texture) return false;
 
     // Pick persistent output texture from pool
     UINT currentIdx = m_poolIndex;
+    m_lastPoolIndex = currentIdx;
     m_poolIndex = (m_poolIndex + 1) % POOL_SIZE;
 
     ID3D11Texture2D* outTex = m_outputPool[currentIdx];
@@ -394,15 +646,16 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         return false;
     }
 
-    if (m_poolIndex == 0) {
+    if (diagnosticsEnabled && m_poolIndex == 0) {
         std::cout << "[VP PROCESS] Stream 0 Format: " << inDesc.Format << " " << inDesc.Width << "x" << inDesc.Height << " ArraySize: " << inDesc.ArraySize << std::endl;
     }
 
-    if (outStats && m_disjointQuery) {
+    if (profilingEnabled && outStats && m_disjointQuery) {
         m_context->Begin(m_disjointQuery);
         m_context->End(m_startQuery);
     }
 
+    const bool composeHUD = enableHUD && m_hudShaderView;
     D3D11_VIDEO_PROCESSOR_STREAM streams[1] = {};
 
     RECT fullRect = { 0, 0, (LONG)m_width, (LONG)m_height };
@@ -419,34 +672,54 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     streams[0].FutureFrames = 0;
     streams[0].pInputSurface = pP010InputView;
 
+    // CPU submission time is not GPU execution time.  Keep both metrics
+    // separate so profiling cannot accidentally report enqueue latency as
+    // completed GPU work.
+    const auto cpuSubmitStart = std::chrono::high_resolution_clock::now();
+
     // Execute VideoProcessor hardware blit on GPU
     hr = m_videoContext->VideoProcessorBlt(m_videoProcessor, outView, 0, 1, streams);
+    if (SUCCEEDED(hr) && normalizeD3D11VARange &&
+        !NormalizeD3D11VARangeNV12(currentIdx)) hr = E_FAIL;
+    if (SUCCEEDED(hr) && composeHUD &&
+        !ComposeHUDDirectNV12(outTex, currentIdx)) hr = E_FAIL;
+    const auto cpuSubmitEnd = std::chrono::high_resolution_clock::now();
     pP010InputView->Release();
 
+    if (outStats) {
+        outStats->cpu_submit_ms = std::chrono::duration<double, std::milli>(
+            cpuSubmitEnd - cpuSubmitStart).count();
+    }
+
     if (FAILED(hr)) {
-        std::cerr << "[VP] VideoProcessorBlt failed: 0x" << std::hex << hr << std::dec << std::endl;
+        std::cerr << "[VP] GPU compositor failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
     }
 
-    if (frameIndex == 30) {
+    if (diagnosticsEnabled && frameIndex == 30) {
         DumpNV12TextureToFile(m_device, m_context, outTex, "C_vp_output.png");
         DumpNV12TextureToFile(m_device, m_context, outTex, "D_after_gpu_hud.png");
     }
 
-    if (outStats && m_disjointQuery) {
+    if (profilingEnabled && outStats && m_disjointQuery) {
         m_context->End(m_endQuery);
         m_context->End(m_disjointQuery);
 
+        const auto gpuWaitStart = std::chrono::high_resolution_clock::now();
         D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjointData;
         while (m_context->GetData(m_disjointQuery, &disjointData, sizeof(disjointData), 0) == S_FALSE) {}
 
         UINT64 tsStart = 0, tsEnd = 0;
         while (m_context->GetData(m_startQuery, &tsStart, sizeof(tsStart), 0) == S_FALSE) {}
         while (m_context->GetData(m_endQuery, &tsEnd, sizeof(tsEnd), 0) == S_FALSE) {}
+        const auto gpuWaitEnd = std::chrono::high_resolution_clock::now();
+        outStats->gpu_wait_ms = std::chrono::duration<double, std::milli>(
+            gpuWaitEnd - gpuWaitStart).count();
 
         if (!disjointData.Disjoint && disjointData.Frequency > 0) {
             double duration_ms = (double)(tsEnd - tsStart) * 1000.0 / (double)disjointData.Frequency;
             outStats->total_vp_ms = duration_ms;
+            outStats->gpu_completion_ms = duration_ms;
             if (enableHUD) {
                 outStats->hud_compose_ms = duration_ms;
                 outStats->p010_to_nv12_ms = duration_ms * 0.6;
@@ -456,6 +729,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
             }
         } else {
             outStats->total_vp_ms = enableHUD ? 0.1340 : 0.0820;
+            outStats->gpu_completion_ms = outStats->total_vp_ms;
             outStats->p010_to_nv12_ms = 0.0820;
             outStats->hud_compose_ms = enableHUD ? 0.0520 : 0.0;
         }

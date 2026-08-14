@@ -101,7 +101,18 @@ bool D3D11AMFEncoder::SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, 
 
     // Submit input surface to AMD VCE/VCN hardware encoder engine
     res = m_encoder->SubmitInput(pSurface);
-    if (res != AMF_OK && res != AMF_INPUT_FULL) {
+    if (outStats) {
+        outStats->result = res;
+        outStats->input_full = (res == AMF_INPUT_FULL);
+    }
+    if (res == AMF_INPUT_FULL) {
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        if (outStats) {
+            outStats->submit_ms = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+        }
+        return false;
+    }
+    if (res != AMF_OK) {
         std::cerr << "[AMF] SubmitInput failed: " << res << std::endl;
         return false;
     }
@@ -114,11 +125,23 @@ bool D3D11AMFEncoder::SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, 
     return true;
 }
 
-bool D3D11AMFEncoder::QueryPacket(std::vector<uint8_t>& outData, int64_t& outPts, bool& outIsKeyframe) {
+bool D3D11AMFEncoder::QueryPacket(
+    std::vector<uint8_t>& outData,
+    int64_t& outPts,
+    bool& outIsKeyframe,
+    AMF_RESULT* outResult,
+    double* outQueryMs
+) {
     if (!m_encoder) return false;
 
+    const auto tStart = std::chrono::high_resolution_clock::now();
     amf::AMFDataPtr pData;
     AMF_RESULT res = m_encoder->QueryOutput(&pData);
+    const auto tEnd = std::chrono::high_resolution_clock::now();
+    if (outResult) *outResult = res;
+    if (outQueryMs) {
+        *outQueryMs = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+    }
     if (res == AMF_OK && pData != nullptr) {
         amf::AMFBufferPtr pBuffer(pData);
         if (pBuffer != nullptr) {

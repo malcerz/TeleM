@@ -212,3 +212,38 @@ class TestMapShape:
         renderer = MovingMapRenderer(_fit_track(), zoom=15)
         img = renderer.render(5.0, 200, 200, download_missing=False)
         assert img.size == (200, 200)  # square, nie 200x130
+
+
+class TestMapPreviewExportParity:
+    """Configured map zoom describes one viewport at every render resolution."""
+
+    @pytest.mark.parametrize(
+        ("canvas_w", "widget_size", "effective_zoom", "working_size"),
+        [
+            (960, 173, 14, 173),
+            (1920, 346, 15, 346),
+            (3840, 691, 16, 692),
+        ],
+    )
+    def test_render_plan_preserves_logical_viewport(
+        self, canvas_w, widget_size, effective_zoom, working_size
+    ):
+        from src.indicators.moving_map import _map_render_plan
+
+        plan = _map_render_plan(canvas_w, widget_size, 14)
+        assert plan["effective_zoom"] == effective_zoom
+        assert plan["working_size"] == working_size
+
+        # Geographic span is proportional to crop pixels / world-pixel
+        # density.  It must stay stable after rounding the widget size.
+        span = plan["working_size"] / (2 ** plan["effective_zoom"])
+        reference_span = 173 / (2 ** 14)
+        assert span == pytest.approx(reference_span, rel=0.003)
+
+    def test_non_power_of_two_scale_uses_residual_resize(self):
+        from src.indicators.moving_map import _map_render_plan
+
+        plan = _map_render_plan(1280, 230, 14)
+        assert plan["effective_zoom"] == 14
+        assert plan["working_size"] == pytest.approx(173, abs=1)
+        assert plan["output_resize_scale"] == pytest.approx(4 / 3, rel=0.01)

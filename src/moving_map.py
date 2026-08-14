@@ -23,6 +23,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from src.indicators.profiling import get_overlay_profiler
+
 try:
     from PIL import Image, ImageDraw
 except ImportError:
@@ -250,6 +252,8 @@ class MovingMapRenderer:
                 If False, only cached tiles are used – uncached areas stay grey.
         """
         # Interpolowana pozycja → płynny ruch co klatkę (nie skok co ~1 s)
+        profiler = get_overlay_profiler()
+        position_started = time.perf_counter()
         cpx, cpy = self._interp_pos(ts)
         cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
 
@@ -258,7 +262,12 @@ class MovingMapRenderer:
         half_h = int(math.ceil(h / 2 / TILE_SIZE)) + 1
         tx1, tx2 = cx - half_w, cx + half_w + 1
         ty1, ty2 = cy - half_h, cy + half_h + 1
+        profiler.record(
+            "map.position_lookup",
+            (time.perf_counter() - position_started) * 1000.0,
+        )
 
+        background_started = time.perf_counter()
         grid_key = (tx1, tx2, ty1, ty2, self._zoom, self._style, draw_track, self._trk_color, self._trk_width)
         if getattr(self, "_grid_cache_key", None) == grid_key and hasattr(self, "_grid_cache_img"):
             img = self._grid_cache_img.copy()
@@ -281,28 +290,43 @@ class MovingMapRenderer:
                         img.paste(tile, (dx, dy))
 
             if draw_track and len(self._gps) >= 2:
+                route_started = time.perf_counter()
                 d_grid = ImageDraw.Draw(img)
                 ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
                 pts = [(self._px_x[i] - ox, self._px_y[i] - oy) for i in range(len(self._gps))]
                 d_grid.line(pts, fill=self._trk_color, width=self._trk_width, joint="round")
+                profiler.record(
+                    "map.route_polyline",
+                    (time.perf_counter() - route_started) * 1000.0,
+                )
 
             self._grid_cache_key = grid_key
             self._grid_cache_img = img
             img = img.copy()
+        profiler.record(
+            "map.background_tiles",
+            (time.perf_counter() - background_started) * 1000.0,
+        )
 
         tw = (tx2 - tx1) * TILE_SIZE
         th = (ty2 - ty1) * TILE_SIZE
 
         # Draw marker
         if draw_marker:
+            marker_started = time.perf_counter()
             d = ImageDraw.Draw(img)
             ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
             mx, my = cpx - ox, cpy - oy
             r = self._mkr_radius
             d.ellipse((mx - r, my - r, mx + r, my + r),
                       fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
+            profiler.record(
+                "map.current_marker",
+                (time.perf_counter() - marker_started) * 1000.0,
+            )
 
         # Crop to output size centred on current (interpolated) position
+        crop_started = time.perf_counter()
         scx, scy = cpx - tx1 * TILE_SIZE, cpy - ty1 * TILE_SIZE
         x1 = max(0, int(scx - w / 2))
         y1 = max(0, int(scy - h / 2))
@@ -314,7 +338,15 @@ class MovingMapRenderer:
             pad = Image.new("RGBA", (w, h), (30, 30, 30, 255))
             pad.paste(cropped, ((w - cropped.width) // 2,
                                 (h - cropped.height) // 2))
+            profiler.record(
+                "map.crop_resize",
+                (time.perf_counter() - crop_started) * 1000.0,
+            )
             return pad
+        profiler.record(
+            "map.crop_resize",
+            (time.perf_counter() - crop_started) * 1000.0,
+        )
         return cropped
 
     def _interp_pos(self, ts: float) -> tuple[float, float]:

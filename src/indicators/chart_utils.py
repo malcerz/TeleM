@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 try:
@@ -14,6 +15,7 @@ except ImportError:
     ImageDraw = None  # type: ignore
 
 from src.indicators.helpers import load_font, load_font_cache_small
+from src.indicators.profiling import get_overlay_profiler
 
 
 _CHART_BG_CACHE: dict[tuple, tuple[Image.Image, list[tuple[float, float]], float, float]] = {}
@@ -44,6 +46,8 @@ def generate_history_chart(
     font_path: Optional[str] = None,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
+    profiler = get_overlay_profiler()
+    lookup_started = time.perf_counter()
     cache_key = (
         id(history_values) if history_values else None,
         len(history_values) if history_values else 0,
@@ -59,7 +63,12 @@ def generate_history_chart(
     )
 
     bg_data = _CHART_BG_CACHE.get(cache_key)
+    profiler.record(
+        "graph.background_cache_lookup",
+        (time.perf_counter() - lookup_started) * 1000.0,
+    )
     if bg_data is None:
+        background_started = time.perf_counter()
         bg_data = _build_chart_bg(
             history_values=history_values, width=width, height=height,
             line_color=line_color, line_thickness=line_thickness,
@@ -74,12 +83,17 @@ def generate_history_chart(
         if len(_CHART_BG_CACHE) > 50:
             _CHART_BG_CACHE.clear()
         _CHART_BG_CACHE[cache_key] = bg_data
+        profiler.record(
+            "graph.background_axes_grid_polyline",
+            (time.perf_counter() - background_started) * 1000.0,
+        )
 
     bg_img, points, plot_y1, plot_y2, calc_thickness = bg_data
 
     if current_index is None or not points or not (0 <= current_index < len(points)):
         return bg_img
 
+    cursor_started = time.perf_counter()
     img = bg_img.copy()
     draw = ImageDraw.Draw(img)
     cursor_x, py = points[current_index]
@@ -93,6 +107,10 @@ def generate_history_chart(
         (cursor_x - dot_r, py - dot_r, cursor_x + dot_r, py + dot_r),
         fill=(cursor_color[0], cursor_color[1], cursor_color[2], 255),
         outline=(line_color[0], line_color[1], line_color[2], 255),
+    )
+    profiler.record(
+        "graph.current_cursor",
+        (time.perf_counter() - cursor_started) * 1000.0,
     )
     return img
 
@@ -275,4 +293,3 @@ def _build_chart_bg(
         calc_line_thickness = line_thickness
 
     return img, points, plot_y1, plot_y2, calc_line_thickness
-

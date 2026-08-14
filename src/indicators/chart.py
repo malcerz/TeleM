@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+import time
 try:
     from PIL import Image, ImageDraw
 except ImportError:
@@ -14,6 +15,7 @@ except ImportError:
 from src.indicators.chart_utils import generate_history_chart
 from src.indicators.helpers import parse_hex_color, s
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
+from src.indicators.profiling import get_overlay_profiler
 
 
 def _render_chart_indicator(
@@ -22,6 +24,7 @@ def _render_chart_indicator(
     history_data=None, current_position=None, formatted_val=None,
 ):
     """Render a chart-form indicator."""
+    profiler = get_overlay_profiler()
     time_labels = None
     chart_vals = None
     if isinstance(history_data, dict):
@@ -74,6 +77,7 @@ def _render_chart_indicator(
     else:
         label_fs_px = 0
 
+    graph_started = time.perf_counter()
     chart_img = generate_history_chart(
         chart_vals, chart_w, chart_h,
         line_color=line_clr,
@@ -86,6 +90,10 @@ def _render_chart_indicator(
         label_count=label_count, label_units=label_units, unit=unit,
         show_average=show_average,
         label_font_size=label_fs_px, font_path=font_path,
+    )
+    profiler.record(
+        "graph.history_chart_total",
+        (time.perf_counter() - graph_started) * 1000.0,
     )
 
     margin_top = fs + 8 if label else 0
@@ -111,16 +119,26 @@ def _render_chart_indicator(
             )
         _STATIC_CACHE[hdr_key] = hdr_img
 
+    assembly_started = time.perf_counter()
     final_img = hdr_img.copy()
     final_img.paste(chart_img, (4, margin_top), chart_img)
+    profiler.record(
+        "graph.background_and_chart_composite",
+        (time.perf_counter() - assembly_started) * 1000.0,
+    )
     draw = ImageDraw.Draw(final_img)
 
     v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
     if v_str:
+        labels_started = time.perf_counter()
         vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0
         draw.text(
             (chart_w - vw + tox, toy), v_str, font=font,
             fill=text_color,
             stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+        )
+        profiler.record(
+            "graph.dynamic_labels",
+            (time.perf_counter() - labels_started) * 1000.0,
         )
     return final_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

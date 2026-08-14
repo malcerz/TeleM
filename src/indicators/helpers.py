@@ -6,6 +6,7 @@ indicator modules can import them without circular dependencies.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 try:
@@ -79,15 +80,24 @@ def s(value: float, base: int) -> int:
 
 def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load a font from cache or disk. Falls back to default PIL font on failure."""
+    from src.indicators.profiling import get_overlay_profiler
+    profiler = get_overlay_profiler()
+    lookup_started = time.perf_counter()
     key = (str(font_path), int(size))
     font = FONT_CACHE.get(key)
     if font is not None:
+        profiler.record_operation(
+            "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
+        )
         return font
     try:
         font = ImageFont.truetype(str(font_path), size=int(size))
     except Exception:
         font = ImageFont.load_default()
     FONT_CACHE[key] = font
+    profiler.record_operation(
+        "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
+    )
     return font
 
 

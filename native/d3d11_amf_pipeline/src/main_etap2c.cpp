@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         // Step 1: Process P010 -> NV12 + HUD composition on GPU
         ID3D11Texture2D* pNV12OutputTex = nullptr;
         VPPipelineStats vpStats = {};
-        if (!vpPipeline.ProcessFrame(pP010InputTex, 0, &pNV12OutputTex, enableHUD, &vpStats)) {
+        if (!vpPipeline.ProcessFrame(pP010InputTex, 0, &pNV12OutputTex, enableHUD, false, &vpStats)) {
             std::cerr << "[ERROR] VP ProcessFrame failed on frame " << frameIdx << std::endl;
             break;
         }

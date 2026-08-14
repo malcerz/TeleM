@@ -1,0 +1,61 @@
+{
+  "result": "PASS",
+  "abi": 4,
+  "build_id": "telem-amd-native/1.0.0+42dc5799a538.src0b7f5ae005a6",
+  "dll_sha256": "CE640BB8047B3354ADE3518B90FB4B89DAD932A4E22A4CEEFE890A4B6C0348BD",
+  "decoder": {
+    "api": "Media Foundation SourceReader D3D11VA",
+    "hardware_confirmed": true,
+    "format": "DXGI_FORMAT_P010",
+    "direct_surface_to_vp": true,
+    "additional_gpu_copy_frames": 0,
+    "rawvideo_pipe": false,
+    "cpu_raw_base_bytes_per_frame": 0,
+    "cpu_to_gpu_base_bytes_per_frame": 0,
+    "gpu_to_cpu_base_bytes_per_frame": 0
+  },
+  "base_only_comparison": {
+    "0": {"mae": 2.5104435925, "max": 43, "p95": 7, "p99": 12},
+    "15": {"mae": 3.1236464763, "max": 43, "p95": 9, "p99": 14},
+    "29": {"mae": 3.1083767763, "max": 44, "p95": 10, "p99": 14}
+  },
+  "full_gui": {
+    "frames": 1131,
+    "wall_clock_s": 67.7451627,
+    "true_fps": 16.69491894,
+    "mf_video_samples": 1131,
+    "d3d11_surfaces": 1131,
+    "direct_surface_frames": 1131,
+    "vp_processed": 1131,
+    "gpu_hud_frames": 1131,
+    "amf_submitted": 1131,
+    "amf_output": 1131,
+    "muxed": 1131,
+    "amf_input_full": 0,
+    "amf_retries": 0,
+    "amf_dropped": 0,
+    "audio_sha256": "E7D3FA3DF057F0705BF2F8410B6FDE44FAC298002A55BDB1B6EC403E642D1FF3"
+  },
+  "timestamps_seconds": {
+    "0": 0.0,
+    "30": 1.001,
+    "300": 10.01,
+    "600": 20.02,
+    "900": 30.03
+  },
+  "golden_utc_comparison": {
+    "30": {"mae": 2.7268129501, "max": 66, "p95": 8, "p99": 14, "pass": true},
+    "300": {"mae": 2.3322937564, "max": 105, "p95": 7, "p99": 13, "pass": true},
+    "900": {"mae": 1.9985126913, "max": 246, "p95": 7, "p99": 13, "pass": true}
+  },
+  "regression": {
+    "base_color": "PASS",
+    "fit": "PASS",
+    "gpmf": "PASS",
+    "map": "PASS",
+    "date_time": "PASS",
+    "hud_alpha_color": "PASS",
+    "audio": "PASS"
+  },
+  "tests": {"passed": 164, "skipped": 17}
+}
