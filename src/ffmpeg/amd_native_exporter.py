@@ -14,6 +14,7 @@ import subprocess
 import ctypes
 from ctypes import wintypes, byref, c_void_p, c_uint, c_uint64, c_int, POINTER, Structure
 from datetime import datetime, timedelta
+import numpy as np
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -23,6 +24,7 @@ except ImportError:
     Image = None
 
 from src.indicators.compositor import compose_overlay
+from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CACHE
 
 def export_amd_native_d3d11(
     ffmpeg_exe: str,
@@ -101,8 +103,11 @@ def export_amd_native_d3d11(
     native_dll.telem_amd_update_hud.restype = c_int
     native_dll.telem_amd_update_hud.argtypes = [c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint]
 
+    native_dll.telem_amd_update_video_frame.restype = c_int
+    native_dll.telem_amd_update_video_frame.argtypes = [c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint]
+
     native_dll.telem_amd_process_frame.restype = c_int
-    native_dll.telem_amd_process_frame.argtypes = [c_void_p, c_uint]
+    native_dll.telem_amd_process_frame.argtypes = [c_void_p, c_uint, c_int]
 
     native_dll.telem_amd_dump_checkpoint.restype = c_int
     native_dll.telem_amd_dump_checkpoint.argtypes = [c_void_p, c_uint, ctypes.c_char_p, ctypes.c_wchar_p]
@@ -115,6 +120,49 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_get_stats.restype = None
     native_dll.telem_amd_get_stats.argtypes = [c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64)]
+
+    # 2. Log Telemetry Channel Availability
+    gpmf_count = len(speed_samples) if speed_samples else 0
+    fit_speed_samples = (fit_data or {}).get("speed", [])
+    fit_count = len(fit_speed_samples) if fit_speed_samples else 0
+    gpx_count = len(gpx_speed_samples) if gpx_speed_samples else 0
+
+    print(f"\n[TELEMETRY CHANNELS LOG]", flush=True)
+    print(f"  GPMF records count: {gpmf_count}", flush=True)
+    print(f"  FIT records count:  {fit_count}", flush=True)
+    print(f"  GPX records count:  {gpx_count}", flush=True)
+
+    base_dt = start_dt_utc or datetime.now()
+
+    # 3. Initialize Worker Cache for FIT / GPMF / GPX Resolution
+    init_worker(
+        video_width=video_width,
+        video_height=video_height,
+        font_path=font_path,
+        layout=layout,
+        field_samples=field_samples,
+        max_distance_m=max_distance_m,
+        iso_samples=iso_samples,
+        exposure_samples=exposure_samples,
+        temperature_samples=temperature_samples,
+        gpx_speed_samples=gpx_speed_samples,
+        gpx_track_samples=gpx_track_samples,
+        gpx_alt_samples=gpx_alt_samples,
+        gpx_power_samples=gpx_power_samples,
+        gpx_atemp_samples=gpx_atemp_samples,
+        gpx_hr_samples=gpx_hr_samples,
+        gpx_cad_samples=gpx_cad_samples,
+        fit_data=fit_data,
+        gps_track=gps_track,
+        start_dt_utc=base_dt,
+        tz_offset_hours=tz_offset_hours,
+        speed_samples=speed_samples,
+        track_samples=track_samples,
+        alt_samples=alt_samples,
+        target_fps=target_fps,
+        update_rate_step=1,
+        total_overlay_frames=total_frames,
+    )
 
     fps_num = int(round(target_fps * 1000))
     fps_den = 1000
@@ -140,26 +188,79 @@ def export_amd_native_d3d11(
 
     from src.indicators.frame_data import prepare_overlay_frame_data
 
+    # Launch FFmpeg Video Frame Decoder Pipe
+    cmd_decode = [
+        ffmpeg_exe, "-y",
+        "-i", input_file_str,
+        "-vf", f"scale={video_width}:{video_height},format=nv12",
+        "-f", "rawvideo",
+        "-pix_fmt", "nv12",
+        "pipe:1"
+    ]
+    frame_size = video_width * video_height * 3 // 2
+    try:
+        proc_dec = subprocess.Popen(
+            cmd_decode,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception as e:
+        print(f"[AMD NATIVE D3D11] ERROR: Failed to launch decoder pipe: {e}", flush=True)
+        native_dll.telem_amd_close(h_context)
+        return False
     # Main Frame Processing Loop
     for frame_idx in range(total_frames):
         if cancel_event is not None and cancel_event.is_set():
             print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
+            proc_dec.kill()
             native_dll.telem_amd_close(h_context)
             return False
 
         curr_dt = base_dt + timedelta(seconds=frame_idx / target_fps)
 
+        # Read base video NV12 frame from decoder
+        raw_nv12 = proc_dec.stdout.read(frame_size)
+        if len(raw_nv12) != frame_size:
+            break
+
+        if frame_idx == 0 or frame_idx == 30:
+            y_arr = np.frombuffer(raw_nv12[:video_width * video_height], dtype=np.uint8)
+            print(f"[DECODER PIPE] Frame {frame_idx} NV12 Y-channel: min={y_arr.min()}, max={y_arr.max()}, mean={y_arr.mean():.1f}", flush=True)
+
+        if frame_idx == 30:
+            # Checkpoint A: raw NV12 from FFmpeg before D3D11 upload
+            y_size = video_width * video_height
+            y_p = np.frombuffer(raw_nv12[:y_size], dtype=np.uint8).reshape((video_height, video_width))
+            uv_p = np.frombuffer(raw_nv12[y_size:], dtype=np.uint8).reshape((video_height // 2, video_width // 2, 2))
+            u = np.repeat(np.repeat(uv_p[:, :, 0], 2, axis=0), 2, axis=1).astype(np.float32) - 128.0
+            v = np.repeat(np.repeat(uv_p[:, :, 1], 2, axis=0), 2, axis=1).astype(np.float32) - 128.0
+            y = y_p.astype(np.float32)
+            r = np.clip(y + 1.402 * v, 0, 255).astype(np.uint8)
+            g = np.clip(y - 0.344136 * u - 0.714136 * v, 0, 255).astype(np.uint8)
+            b = np.clip(y + 1.772 * u, 0, 255).astype(np.uint8)
+            rgb = np.dstack([r, g, b])
+            if Image:
+                Image.fromarray(rgb, "RGB").save("A_base_cpu_nv12.png")
+                print("[CHECKPOINT] Saved A_base_cpu_nv12.png", flush=True)
+
+        # Fetch precomputed chart data (it is built by init_worker)
+        chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
+
         frame_kwargs = prepare_overlay_frame_data(
             layout=layout,
             target_dt=curr_dt,
-            tz_offset_hours=tz_offset_hours,
             start_dt_utc=base_dt,
+            tz_offset_hours=tz_offset_hours,
             speed_samples=speed_samples,
             track_samples=track_samples,
             alt_samples=alt_samples,
             iso_samples=iso_samples,
             exposure_samples=exposure_samples,
             temperature_samples=temperature_samples,
+            total_frames=total_frames,
+            current_index=frame_idx,
+            chart_data=chart_data,
+            resolve_cache_value=_resolve_cache_value,
             gpx_speed_samples=gpx_speed_samples,
             gpx_track_samples=gpx_track_samples,
             gpx_alt_samples=gpx_alt_samples,
@@ -169,9 +270,11 @@ def export_amd_native_d3d11(
             gpx_cad_samples=gpx_cad_samples,
             fit_data=fit_data,
             gps_track=gps_track,
-            total_frames=total_frames,
-            current_index=frame_idx,
+            _range_cache=WORKER_CACHE.get("_prep_cache"),
         )
+
+        if frame_idx % 30 == 0:
+            print(f"Frame {frame_idx}: HR={frame_kwargs.get('hr_value')}, CAD={frame_kwargs.get('cad_value')}", flush=True)
 
         _bboxes = {}
         composed_img = compose_overlay(
@@ -183,36 +286,44 @@ def export_amd_native_d3d11(
             **frame_kwargs
         )
 
-        # Handle frame 30 diagnostic dumps & magenta marker
+        # Handle frame 30 diagnostic dumps
         if frame_idx == 30:
             print("\n=== REAL GUI EXPORT TRACE (Frame 30) ===", flush=True)
             if composed_img:
                 composed_img.save("01_python_hud.png")
+                composed_img.save("02_buffer_sent_to_dll.png")
 
-            # Force Magenta Diagnostic Marker (x=50, y=50, w=500, h=250)
-            from PIL import ImageDraw
-            draw = ImageDraw.Draw(composed_img)
-            draw.rectangle([50, 50, 550, 300], fill=(255, 0, 255, 255))
-            composed_img.save("02_buffer_sent_to_dll.png")
+        # Update HUD in DLL
+        if composed_img:
+            rgba_bytes = composed_img.tobytes("raw", "RGBA")
+            native_dll.telem_amd_update_hud(
+                h_context,
+                rgba_bytes,
+                video_width,
+                video_height,
+                video_width * 4
+            )
 
-        # Convert PIL Image to RGBA bytes and send to DLL
-        rgba_bytes = composed_img.tobytes("raw", "RGBA")
-        native_dll.telem_amd_update_hud(
+        # Upload Video Frame (with HUD blend onto staging NV12)
+        native_dll.telem_amd_update_video_frame(
             h_context,
-            rgba_bytes,
+            raw_nv12,
             video_width,
             video_height,
-            video_width * 4
+            video_width
         )
+        if frame_idx == 30:
+            # Checkpoint B: readback of D3D11 texture after upload, before VP
+            native_dll.telem_amd_dump_checkpoint(h_context, 30, b"B_base_d3d11", os.path.abspath("B_base_d3d11.png"))
 
-        # Process frame inside native DLL (D3D11VA decode -> VideoProcessor blend -> AMF encode)
-        ret = native_dll.telem_amd_process_frame(h_context, frame_idx)
+        # Process frame inside native DLL (VideoProcessor blit -> AMF encode)
+        has_hud = 1 if (layout.get("indicators") or layout.get("custom_texts")) else 0
+        ret = native_dll.telem_amd_process_frame(h_context, frame_idx, has_hud)
         if not ret:
             print(f"[AMD NATIVE D3D11] ERROR: telem_amd_process_frame failed on frame {frame_idx}", flush=True)
 
         if frame_idx == 30:
-            native_dll.telem_amd_dump_checkpoint(h_context, 30, b"03_d3d11_hud_texture", os.path.abspath("03_d3d11_hud_texture.png"))
-            native_dll.telem_amd_dump_checkpoint(h_context, 30, b"04_videoprocessor_output", os.path.abspath("04_videoprocessor_output.png"))
+            native_dll.telem_amd_dump_checkpoint(h_context, 30, b"E_amf_input", os.path.abspath("E_amf_input.png"))
 
         # Progress reporting
         if (frame_idx + 1) % progress_interval == 0 or (frame_idx + 1) == total_frames:
@@ -225,6 +336,17 @@ def export_amd_native_d3d11(
             stats_str = f"Render: {pct}% ({frame_idx+1}/{total_frames}) | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             if progress_cb:
                 progress_cb(frame_idx + 1, stats_str)
+
+    if proc_dec:
+        if proc_dec.stdout and hasattr(proc_dec.stdout, "close"):
+            try:
+                proc_dec.stdout.close()
+            except Exception:
+                pass
+        try:
+            proc_dec.wait()
+        except Exception:
+            pass
 
     # 4. Flush and Retrieve Stats
     native_dll.telem_amd_flush(h_context)
@@ -272,15 +394,18 @@ def export_amd_native_d3d11(
         if os.path.exists(temp_h265):
             os.remove(temp_h265)
 
-    # Dump Checkpoint 05 (Frame 30 from final encoded MP4)
+    # Dump Checkpoint F (Frame 30 from final encoded MP4)
     if os.path.exists(output_file_str):
         cmd_thumb = [
             ffmpeg_exe, "-y",
-            "-ss", "1.0",
             "-i", output_file_str,
+            "-vf", "select=eq(n\\,30)",
             "-vframes", "1",
-            "05_final_encoded_frame.png"
+            "F_final_mp4.png"
         ]
         subprocess.run(cmd_thumb, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("[CHECKPOINT] Saved F_final_mp4.png", flush=True)
+
+    return True
 
     return True

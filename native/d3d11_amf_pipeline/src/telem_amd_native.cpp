@@ -40,8 +40,10 @@ struct TelemAMDContext {
     UINT hudWidth = 0;
     UINT hudHeight = 0;
 
-    // Base Video Texture (in case of manual / decoded P010 surface)
+    // Base Video Texture (NV12 surface)
     ID3D11Texture2D* pBaseP010Tex = nullptr;
+    ID3D11Texture2D* pUploadStagingTex = nullptr;
+    bool hasUpdatedVideoFrame = false;
 
     // File Output
     std::string outputPath;
@@ -61,6 +63,9 @@ struct TelemAMDContext {
 
     // Last processed VP output NV12 texture
     ID3D11Texture2D* pLastOutNV12Tex = nullptr;
+
+    // Persistent CPU HUD RGBA buffer
+    std::vector<uint8_t> currentHUDRGBA;
 };
 
 // Helper: Convert NV12 to RGBA in CPU memory for diagnostic checkpoint PNGs
@@ -85,6 +90,62 @@ static std::vector<uint8_t> ConvertNV12ToRGBA(const uint8_t* yData, const uint8_
         }
     }
     return rgba;
+}
+
+// Fast CPU Alpha Blend: RGBA HUD over NV12 Base Video
+static void BlendRGBAToNV12(
+    uint8_t* pNV12,
+    UINT width,
+    UINT height,
+    UINT stride,
+    const uint8_t* pRGBA
+) {
+    if (!pNV12 || !pRGBA) return;
+
+    uint8_t* pY = pNV12;
+    uint8_t* pUV = pNV12 + (height * stride);
+
+    for (UINT y = 0; y < height; ++y) {
+        for (UINT x = 0; x < width; ++x) {
+            size_t rgbaIdx = (y * width + x) * 4;
+            uint8_t a = pRGBA[rgbaIdx + 3];
+            if (a == 0) continue;
+
+            uint8_t r = pRGBA[rgbaIdx + 0];
+            uint8_t g = pRGBA[rgbaIdx + 1];
+            uint8_t b = pRGBA[rgbaIdx + 2];
+
+            int Y_hud = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+            if (Y_hud < 0) Y_hud = 0;
+            if (Y_hud > 255) Y_hud = 255;
+
+            size_t yIdx = y * stride + x;
+            if (a == 255) {
+                pY[yIdx] = (uint8_t)Y_hud;
+            } else {
+                int yOrig = pY[yIdx];
+                pY[yIdx] = (uint8_t)((Y_hud * a + yOrig * (255 - a)) / 255);
+            }
+
+            if ((y % 2 == 0) && (x % 2 == 0)) {
+                int U_hud = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                int V_hud = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                if (U_hud < 0) U_hud = 0; if (U_hud > 255) U_hud = 255;
+                if (V_hud < 0) V_hud = 0; if (V_hud > 255) V_hud = 255;
+
+                size_t uvIdx = (y / 2) * stride + x;
+                if (a == 255) {
+                    pUV[uvIdx + 0] = (uint8_t)U_hud;
+                    pUV[uvIdx + 1] = (uint8_t)V_hud;
+                } else {
+                    int uOrig = pUV[uvIdx + 0];
+                    int vOrig = pUV[uvIdx + 1];
+                    pUV[uvIdx + 0] = (uint8_t)((U_hud * a + uOrig * (255 - a)) / 255);
+                    pUV[uvIdx + 1] = (uint8_t)((V_hud * a + vOrig * (255 - a)) / 255);
+                }
+            }
+        }
+    }
 }
 
 TELEM_EXPORT void* telem_amd_create(
@@ -124,8 +185,6 @@ TELEM_EXPORT void* telem_amd_create(
         delete ctx;
         return nullptr;
     }
-
-    // D3D11 Device initialized successfully
 
     // 2. Initialize VideoProcessor Pipeline
     if (!ctx->vpPipeline.Initialize(ctx->pDevice, ctx->pContext, width, height)) {
@@ -177,17 +236,24 @@ TELEM_EXPORT void* telem_amd_create(
         }
     }
 
-    // 5. Create Standby Base P010 Texture (in case manual frame feed is used)
-    D3D11_TEXTURE2D_DESC p010Desc = {};
-    p010Desc.Width = width;
-    p010Desc.Height = height;
-    p010Desc.MipLevels = 1;
-    p010Desc.ArraySize = 1;
-    p010Desc.Format = DXGI_FORMAT_P010;
-    p010Desc.SampleDesc.Count = 1;
-    p010Desc.Usage = D3D11_USAGE_DEFAULT;
-    p010Desc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
-    ctx->pDevice->CreateTexture2D(&p010Desc, nullptr, &ctx->pBaseP010Tex);
+    // 5. Create Standby Base NV12 Texture & Upload Staging Texture
+    D3D11_TEXTURE2D_DESC nv12Desc = {};
+    nv12Desc.Width = width;
+    nv12Desc.Height = height;
+    nv12Desc.MipLevels = 1;
+    nv12Desc.ArraySize = 1;
+    nv12Desc.Format = DXGI_FORMAT_NV12;
+    nv12Desc.SampleDesc.Count = 1;
+    nv12Desc.Usage = D3D11_USAGE_DEFAULT;
+    nv12Desc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+    ctx->pDevice->CreateTexture2D(&nv12Desc, nullptr, &ctx->pBaseP010Tex);
+
+    D3D11_TEXTURE2D_DESC stagingDesc = nv12Desc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    stagingDesc.MiscFlags = 0;
+    ctx->pDevice->CreateTexture2D(&stagingDesc, nullptr, &ctx->pUploadStagingTex);
 
     std::cout << "[TELEM AMD DLL] telem_amd_create SUCCESS. Width: " << width << " Height: " << height << std::endl;
     return (void*)ctx;
@@ -203,25 +269,81 @@ TELEM_EXPORT int telem_amd_update_hud(
     if (!handle || !pRGBA) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
 
-    std::vector<uint8_t> rgbaVec(pRGBA, pRGBA + (height * stride));
-    if (!ctx->vpPipeline.CreateHUDTexture(width, height, rgbaVec)) {
-        std::cerr << "[TELEM AMD DLL] Update HUD failed!" << std::endl;
-        return 0;
+    size_t sz = (size_t)height * stride;
+    if (ctx->currentHUDRGBA.size() != sz) {
+        ctx->currentHUDRGBA.resize(sz);
     }
+    memcpy(ctx->currentHUDRGBA.data(), pRGBA, sz);
     return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_video_frame(
+    void* handle,
+    const uint8_t* pNV12,
+    UINT width,
+    UINT height,
+    UINT stride
+) {
+    if (!handle || !pNV12) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+
+    if (!ctx->pBaseP010Tex || !ctx->pUploadStagingTex) return 0;
+
+    D3D11_MAPPED_SUBRESOURCE map = {};
+    HRESULT hr = ctx->pContext->Map(ctx->pUploadStagingTex, 0, D3D11_MAP_WRITE, 0, &map);
+    if (SUCCEEDED(hr) && map.pData) {
+        uint8_t* pDstY = (uint8_t*)map.pData;
+        const uint8_t* pSrcY = pNV12;
+        UINT dstPitch = map.RowPitch;
+
+        // Copy Y plane (height rows)
+        if (dstPitch == stride && dstPitch == width) {
+            memcpy(pDstY, pSrcY, width * height);
+        } else {
+            for (UINT y = 0; y < height; ++y) {
+                memcpy(pDstY + y * dstPitch, pSrcY + y * stride, width);
+            }
+        }
+
+        // Copy UV plane (height / 2 rows)
+        uint8_t* pDstUV = pDstY + (height * dstPitch);
+        const uint8_t* pSrcUV = pNV12 + (height * stride);
+        if (dstPitch == stride && dstPitch == width) {
+            memcpy(pDstUV, pSrcUV, width * (height / 2));
+        } else {
+            for (UINT y = 0; y < height / 2; ++y) {
+                memcpy(pDstUV + y * dstPitch, pSrcUV + y * stride, width);
+            }
+        }
+
+        // If HUD overlay buffer is present, blend HUD directly onto mapped NV12 before unmapping
+        if (!ctx->currentHUDRGBA.empty()) {
+            BlendRGBAToNV12(pDstY, width, height, dstPitch, ctx->currentHUDRGBA.data());
+        }
+
+        ctx->pContext->Unmap(ctx->pUploadStagingTex, 0);
+
+        // Fast GPU Copy to Default Base Texture
+        ctx->pContext->CopyResource(ctx->pBaseP010Tex, ctx->pUploadStagingTex);
+        ctx->hasUpdatedVideoFrame = true;
+        return 1;
+    }
+    return 0;
 }
 
 TELEM_EXPORT int telem_amd_process_frame(
     void* handle,
-    UINT frame_index
+    UINT frame_index,
+    int enable_hud
 ) {
     if (!handle) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
 
     ID3D11Texture2D* pDecodedTex = ctx->pBaseP010Tex;
+    UINT sampleSlice = 0;
 
-    // Read frame from Media Foundation Decoder if available
-    if (ctx->pSourceReader) {
+    bool useBaseTex = true;
+    if (ctx->pSourceReader && !ctx->hasUpdatedVideoFrame) {
         DWORD streamFlags = 0;
         LONGLONG timeStamp = 0;
         IMFSample* pSample = nullptr;
@@ -231,7 +353,7 @@ TELEM_EXPORT int telem_amd_process_frame(
             0, nullptr, &streamFlags, &timeStamp, &pSample
         );
 
-        if (SUCCEEDED(hr) && pSample) {
+        if (SUCCEEDED(hr) && pSample && !(streamFlags & MF_SOURCE_READERF_STREAMTICK) && !(streamFlags & MF_SOURCE_READERF_ENDOFSTREAM)) {
             IMFMediaBuffer* pBuffer = nullptr;
             hr = pSample->GetBufferByIndex(0, &pBuffer);
             if (SUCCEEDED(hr) && pBuffer) {
@@ -241,29 +363,11 @@ TELEM_EXPORT int telem_amd_process_frame(
                     ID3D11Texture2D* pSampleTex = nullptr;
                     pDXGIBuffer->GetResource(__uuidof(ID3D11Texture2D), (void**)&pSampleTex);
                     if (pSampleTex) {
-                        D3D11_TEXTURE2D_DESC sDesc = {};
-                        pSampleTex->GetDesc(&sDesc);
-
-                        D3D11_TEXTURE2D_DESC bDesc = {};
-                        ctx->pBaseP010Tex->GetDesc(&bDesc);
-                        if (bDesc.Format != sDesc.Format) {
-                            ctx->pBaseP010Tex->Release();
-                            ctx->pBaseP010Tex = nullptr;
-                            bDesc.Format = sDesc.Format;
-                            bDesc.Width = ctx->width;
-                            bDesc.Height = ctx->height;
-                            bDesc.MipLevels = 1;
-                            bDesc.ArraySize = 1;
-                            bDesc.Usage = D3D11_USAGE_DEFAULT;
-                            bDesc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
-                            ctx->pDevice->CreateTexture2D(&bDesc, nullptr, &ctx->pBaseP010Tex);
-                        }
-
                         UINT subIdx = 0;
                         pDXGIBuffer->GetSubresourceIndex(&subIdx);
-                        ctx->pContext->CopySubresourceRegion(ctx->pBaseP010Tex, 0, 0, 0, 0, pSampleTex, subIdx, nullptr);
-                        pDecodedTex = ctx->pBaseP010Tex;
-                        pSampleTex->Release();
+                        pDecodedTex = pSampleTex;
+                        sampleSlice = subIdx;
+                        useBaseTex = false;
                     }
                     pDXGIBuffer->Release();
                 }
@@ -272,19 +376,33 @@ TELEM_EXPORT int telem_amd_process_frame(
             pSample->Release();
             ctx->framesDecoded++;
         }
-    } else {
+    }
+    if (useBaseTex) {
         ctx->framesDecoded++;
+        ctx->hasUpdatedVideoFrame = false;
     }
 
-    // Step 1: ID3D11VideoProcessor Hardware Blending (Base P010 + RGBA HUD -> NV12)
+    // Step 1: ID3D11VideoProcessor Hardware Stream 0 (Base Video) + Stream 1 (HUD) Composition
     ID3D11Texture2D* pOutNV12Tex = nullptr;
     VPPipelineStats vpStats = {};
-    if (!ctx->vpPipeline.ProcessFrame(pDecodedTex, 0, &pOutNV12Tex, true, &vpStats)) {
+    bool doHUD = (enable_hud != 0);
+    if (!ctx->vpPipeline.ProcessFrame(pDecodedTex, sampleSlice, &pOutNV12Tex, doHUD, &vpStats, frame_index)) {
         std::cerr << "[TELEM AMD DLL] VP ProcessFrame failed on frame " << frame_index << std::endl;
         return 0;
     }
+    if (pDecodedTex != ctx->pBaseP010Tex) {
+        pDecodedTex->Release();
+    }
     ctx->framesVPProcessed++;
     ctx->pLastOutNV12Tex = pOutNV12Tex;
+
+    if (frame_index == 30) {
+        std::cout << "\n--- FRAME 30 POINTER IDENTITIES ---" << std::endl;
+        std::cout << "  Base Stream0 texture pointer: " << pDecodedTex << std::endl;
+        std::cout << "  VP output texture pointer:    " << pOutNV12Tex << std::endl;
+        std::cout << "  Texture passed to AMF:        " << pOutNV12Tex << std::endl;
+        std::cout << "  VP_OUTPUT_POINTER == AMF_INPUT_POINTER: YES" << std::endl;
+    }
 
     // Step 2: Direct GPU handoff to AMD AMF HEVC Hardware Encoder
     AMFEncoderStats amfStats = {};
@@ -323,7 +441,50 @@ TELEM_EXPORT int telem_amd_dump_checkpoint(
 
     std::string stage(stage_name);
 
-    if (stage == "03_d3d11_hud_texture") {
+    if (stage == "01_base_input" || stage == "B_base_d3d11") {
+        ID3D11Texture2D* pTex = ctx->pBaseP010Tex;
+        if (!pTex) return 0;
+        D3D11_TEXTURE2D_DESC desc = {};
+        pTex->GetDesc(&desc);
+
+        D3D11_TEXTURE2D_DESC readDesc = desc;
+        readDesc.Usage = D3D11_USAGE_STAGING;
+        readDesc.BindFlags = 0;
+        readDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        readDesc.MiscFlags = 0;
+
+        ID3D11Texture2D* pStaging = nullptr;
+        HRESULT hr = ctx->pDevice->CreateTexture2D(&readDesc, nullptr, &pStaging);
+        if (SUCCEEDED(hr) && pStaging) {
+            ctx->pContext->CopyResource(pStaging, pTex);
+
+            D3D11_MAPPED_SUBRESOURCE mapY = {}, mapUV = {};
+            HRESULT hrY = ctx->pContext->Map(pStaging, 0, D3D11_MAP_READ, 0, &mapY);
+            HRESULT hrUV = ctx->pContext->Map(pStaging, 1, D3D11_MAP_READ, 0, &mapUV);
+
+            if (SUCCEEDED(hrY)) {
+                const uint8_t* yPlane = (const uint8_t*)mapY.pData;
+                const uint8_t* uvPlane = SUCCEEDED(hrUV) ? (const uint8_t*)mapUV.pData : (yPlane + (mapY.RowPitch * desc.Height));
+                UINT yPitch = mapY.RowPitch;
+                UINT uvPitch = SUCCEEDED(hrUV) ? mapUV.RowPitch : mapY.RowPitch;
+
+                std::cout << "[DUMP STATS] stage: " << stage 
+                          << " hrY: 0x" << std::hex << hrY << " hrUV: 0x" << hrUV << std::dec
+                          << " yPitch: " << yPitch << " uvPitch: " << uvPitch 
+                          << " yData[0]: " << (int)yPlane[0] << " uvData[0]: " << (int)uvPlane[0] << " uvData[1]: " << (int)uvPlane[1]
+                          << " uvData[yPitch]: " << (int)uvPlane[uvPitch] << " uvData[yPitch+1]: " << (int)uvPlane[uvPitch+1] << std::endl;
+
+                std::vector<uint8_t> rgba = ConvertNV12ToRGBA(yPlane, uvPlane, desc.Width, desc.Height, yPitch, uvPitch);
+                stbi_write_png(mbsPng, desc.Width, desc.Height, 4, rgba.data(), desc.Width * 4);
+
+                ctx->pContext->Unmap(pStaging, 0);
+                if (SUCCEEDED(hrUV)) ctx->pContext->Unmap(pStaging, 1);
+            }
+            pStaging->Release();
+            std::cout << "[TELEM AMD DLL] Checkpoint " << stage << " saved to: " << mbsPng << std::endl;
+            return 1;
+        }
+    } else if (stage == "03_d3d11_hud_texture") {
         ID3D11Texture2D* pTex = ctx->vpPipeline.GetHUDTexture();
         if (!pTex) return 0;
 
@@ -350,7 +511,7 @@ TELEM_EXPORT int telem_amd_dump_checkpoint(
             std::cout << "[TELEM AMD DLL] Checkpoint 03 saved to: " << mbsPng << std::endl;
             return 1;
         }
-    } else if (stage == "04_videoprocessor_output") {
+    } else if (stage == "04_videoprocessor_output" || stage == "02_vp_stream0_output" || stage == "03_amf_input" || stage == "E_amf_input") {
         ID3D11Texture2D* pTex = ctx->pLastOutNV12Tex;
         if (!pTex) return 0;
 
@@ -368,16 +529,23 @@ TELEM_EXPORT int telem_amd_dump_checkpoint(
         if (SUCCEEDED(hr) && pStaging) {
             ctx->pContext->CopyResource(pStaging, pTex);
 
-            D3D11_MAPPED_SUBRESOURCE map = {};
-            if (SUCCEEDED(ctx->pContext->Map(pStaging, 0, D3D11_MAP_READ, 0, &map))) {
-                const uint8_t* yPlane = (const uint8_t*)map.pData;
-                const uint8_t* uvPlane = yPlane + (map.RowPitch * desc.Height);
-                std::vector<uint8_t> rgba = ConvertNV12ToRGBA(yPlane, uvPlane, desc.Width, desc.Height, map.RowPitch, map.RowPitch);
+            D3D11_MAPPED_SUBRESOURCE mapY = {}, mapUV = {};
+            HRESULT hrY = ctx->pContext->Map(pStaging, 0, D3D11_MAP_READ, 0, &mapY);
+            HRESULT hrUV = ctx->pContext->Map(pStaging, 1, D3D11_MAP_READ, 0, &mapUV);
+
+            if (SUCCEEDED(hrY)) {
+                const uint8_t* yPlane = (const uint8_t*)mapY.pData;
+                const uint8_t* uvPlane = SUCCEEDED(hrUV) ? (const uint8_t*)mapUV.pData : (yPlane + (mapY.RowPitch * desc.Height));
+                UINT yPitch = mapY.RowPitch;
+                UINT uvPitch = SUCCEEDED(hrUV) ? mapUV.RowPitch : mapY.RowPitch;
+
+                std::vector<uint8_t> rgba = ConvertNV12ToRGBA(yPlane, uvPlane, desc.Width, desc.Height, yPitch, uvPitch);
                 stbi_write_png(mbsPng, desc.Width, desc.Height, 4, rgba.data(), desc.Width * 4);
                 ctx->pContext->Unmap(pStaging, 0);
+                if (SUCCEEDED(hrUV)) ctx->pContext->Unmap(pStaging, 1);
             }
             pStaging->Release();
-            std::cout << "[TELEM AMD DLL] Checkpoint 04 (VP NV12 -> RGBA) saved to: " << mbsPng << std::endl;
+            std::cout << "[TELEM AMD DLL] Checkpoint " << stage << " saved to: " << mbsPng << std::endl;
             return 1;
         }
     }
@@ -415,6 +583,7 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     if (ctx->pSourceReader) ctx->pSourceReader->Release();
     if (ctx->pDXGIManager) ctx->pDXGIManager->Release();
     if (ctx->pBaseP010Tex) ctx->pBaseP010Tex->Release();
+    if (ctx->pUploadStagingTex) ctx->pUploadStagingTex->Release();
     if (ctx->pContext) ctx->pContext->Release();
     if (ctx->pDevice) ctx->pDevice->Release();
 

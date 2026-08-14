@@ -28,7 +28,8 @@ public:
         UINT arrayIndex,
         ID3D11Texture2D** ppOutNV12Texture,
         bool enableHUD,
-        VPPipelineStats* outStats = nullptr
+        VPPipelineStats* outStats = nullptr,
+        UINT frameIndex = 0
     );
 
     ID3D11Texture2D* GetHUDTexture() const { return m_hudTexture; }

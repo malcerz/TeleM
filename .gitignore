@@ -1,6 +1,7 @@
 # Wideo (duże pliki binarne)
 *.mp4
 *.MP4
+*.h265
 *.mov
 *.MOV
 *.lrv
