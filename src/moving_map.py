@@ -270,7 +270,10 @@ class MovingMapRenderer:
         background_started = time.perf_counter()
         grid_key = (tx1, tx2, ty1, ty2, self._zoom, self._style, draw_track, self._trk_color, self._trk_width)
         if getattr(self, "_grid_cache_key", None) == grid_key and hasattr(self, "_grid_cache_img"):
-            img = self._grid_cache_img.copy()
+            # The cached grid is immutable: it contains tiles and the route,
+            # but never the dynamic marker.  Keep it shared and crop the small
+            # working viewport below instead of copying the whole grid.
+            img = self._grid_cache_img
         else:
             tw = (tx2 - tx1) * TILE_SIZE
             th = (ty2 - ty1) * TILE_SIZE
@@ -302,7 +305,6 @@ class MovingMapRenderer:
 
             self._grid_cache_key = grid_key
             self._grid_cache_img = img
-            img = img.copy()
         profiler.record(
             "map.background_tiles",
             (time.perf_counter() - background_started) * 1000.0,
@@ -310,20 +312,6 @@ class MovingMapRenderer:
 
         tw = (tx2 - tx1) * TILE_SIZE
         th = (ty2 - ty1) * TILE_SIZE
-
-        # Draw marker
-        if draw_marker:
-            marker_started = time.perf_counter()
-            d = ImageDraw.Draw(img)
-            ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
-            mx, my = cpx - ox, cpy - oy
-            r = self._mkr_radius
-            d.ellipse((mx - r, my - r, mx + r, my + r),
-                      fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
-            profiler.record(
-                "map.current_marker",
-                (time.perf_counter() - marker_started) * 1000.0,
-            )
 
         # Crop to output size centred on current (interpolated) position
         crop_started = time.perf_counter()
@@ -334,6 +322,22 @@ class MovingMapRenderer:
         if x2 > tw: x2 = tw; x1 = max(0, x2 - w)
         if y2 > th: y2 = th; y1 = max(0, y2 - h)
         cropped = img.crop((x1, y1, x2, y2))
+
+        # Draw the dynamic marker only on the cropped working image.  The
+        # integer crop translation preserves the exact raster coordinates of
+        # the previous full-grid draw-then-crop path.
+        if draw_marker:
+            marker_started = time.perf_counter()
+            d = ImageDraw.Draw(cropped)
+            mx, my = scx - x1, scy - y1
+            r = self._mkr_radius
+            d.ellipse((mx - r, my - r, mx + r, my + r),
+                      fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
+            profiler.record(
+                "map.current_marker",
+                (time.perf_counter() - marker_started) * 1000.0,
+            )
+
         if cropped.size != (w, h):
             pad = Image.new("RGBA", (w, h), (30, 30, 30, 255))
             pad.paste(cropped, ((w - cropped.width) // 2,

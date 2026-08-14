@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+import math
 import time
 try:
     from PIL import Image, ImageDraw
@@ -12,10 +13,57 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.chart_utils import generate_history_chart
+from src.indicators.chart_utils import generate_history_chart, get_history_chart_background
 from src.indicators.helpers import parse_hex_color, s
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
 from src.indicators.profiling import get_overlay_profiler
+
+
+_FINAL_STATIC_CHART_CACHE = {}
+_FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
+
+
+def _draw_post_paste_cursor(
+    image, points, current_index, plot_y1, plot_y2, calc_thickness,
+    cursor_color, line_color, offset_x, offset_y, chart_width, chart_height,
+):
+    """Reproduce the RGBA left by legacy ``paste(chart, mask=chart)``."""
+    if current_index is None or not points or not (0 <= current_index < len(points)):
+        return
+    cursor_x, py = points[current_index]
+    cursor_x += offset_x
+    py += offset_y
+    alpha = 200
+    post_rgb = tuple((channel * alpha + 127) // 255 for channel in cursor_color)
+    post_alpha = (alpha * alpha + 127) // 255
+    draw = ImageDraw.Draw(image)
+    draw.line(
+        (cursor_x, plot_y1 + offset_y, cursor_x, plot_y2 + offset_y),
+        fill=(*post_rgb, post_alpha), width=max(2, calc_thickness),
+    )
+    dot_r = max(3, calc_thickness + 1)
+    # Render the opaque dot in a tiny tile so clipping remains identical to
+    # drawing on the old chart-sized image before it was pasted into the widget.
+    left = math.floor(cursor_x - dot_r)
+    top = math.floor(py - dot_r)
+    right = math.ceil(cursor_x + dot_r) + 1
+    bottom = math.ceil(py + dot_r) + 1
+    tile = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
+    tile_draw = ImageDraw.Draw(tile)
+    tile_draw.ellipse(
+        (cursor_x - dot_r - left, py - dot_r - top,
+         cursor_x + dot_r - left, py + dot_r - top),
+        fill=(*cursor_color, 255), outline=(*line_color, 255),
+    )
+    clip_left, clip_top = offset_x, offset_y
+    clip_right, clip_bottom = offset_x + chart_width, offset_y + chart_height
+    dst_left, dst_top = max(left, clip_left), max(top, clip_top)
+    dst_right, dst_bottom = min(right, clip_right), min(bottom, clip_bottom)
+    if dst_right > dst_left and dst_bottom > dst_top:
+        clipped = tile.crop((
+            dst_left - left, dst_top - top, dst_right - left, dst_bottom - top,
+        ))
+        image.paste(clipped, (dst_left, dst_top), clipped)
 
 
 def _render_chart_indicator(
@@ -77,20 +125,27 @@ def _render_chart_indicator(
     else:
         label_fs_px = 0
 
-    graph_started = time.perf_counter()
-    chart_img = generate_history_chart(
-        chart_vals, chart_w, chart_h,
-        line_color=line_clr,
-        line_thickness=max(1, line_width),
+    graph_kwargs = dict(
+        line_color=line_clr, line_thickness=max(1, line_width),
         fill_alpha=chart_fill_alpha, fill_color=chart_fill_color,
-        current_index=ci, cursor_color=(255, 255, 255),
-        show_axes=True, grid_color=grid_rgba,
-        time_labels=time_labels, supersample=1,
-        custom_min_val=custom_min, custom_max_val=custom_max,
+        show_axes=True, grid_color=grid_rgba, time_labels=time_labels,
+        supersample=1, custom_min_val=custom_min, custom_max_val=custom_max,
         label_count=label_count, label_units=label_units, unit=unit,
-        show_average=show_average,
-        label_font_size=label_fs_px, font_path=font_path,
+        show_average=show_average, label_font_size=label_fs_px,
+        font_path=font_path,
     )
+    optimized_static = key in _FINAL_STATIC_CHART_KEYS
+    graph_started = time.perf_counter()
+    if optimized_static:
+        bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
+            get_history_chart_background(chart_vals, chart_w, chart_h, **graph_kwargs)
+        )
+        chart_img = None
+    else:
+        chart_img = generate_history_chart(
+            chart_vals, chart_w, chart_h, current_index=ci,
+            cursor_color=(255, 255, 255), **graph_kwargs,
+        )
     profiler.record(
         "graph.history_chart_total",
         (time.perf_counter() - graph_started) * 1000.0,
@@ -120,8 +175,36 @@ def _render_chart_indicator(
         _STATIC_CACHE[hdr_key] = hdr_img
 
     assembly_started = time.perf_counter()
-    final_img = hdr_img.copy()
-    final_img.paste(chart_img, (4, margin_top), chart_img)
+    if optimized_static:
+        final_key = (
+            "final_static_chart", bg_key, hdr_key, chart_w + 8, final_h,
+            margin_top,
+        )
+        final_static = _FINAL_STATIC_CHART_CACHE.get(final_key)
+        if final_static is None:
+            static_started = time.perf_counter()
+            final_static = hdr_img.copy()
+            final_static.paste(bg_img, (4, margin_top), bg_img)
+            if len(_FINAL_STATIC_CHART_CACHE) > 50:
+                _FINAL_STATIC_CHART_CACHE.clear()
+            _FINAL_STATIC_CHART_CACHE[final_key] = final_static
+            profiler.record(
+                "graph.final_static_build",
+                (time.perf_counter() - static_started) * 1000.0,
+            )
+        final_img = final_static.copy()
+        cursor_started = time.perf_counter()
+        _draw_post_paste_cursor(
+            final_img, points, ci, plot_y1, plot_y2, calc_thickness,
+            (255, 255, 255), line_clr, 4, margin_top, chart_w, chart_h,
+        )
+        profiler.record(
+            "graph.current_cursor",
+            (time.perf_counter() - cursor_started) * 1000.0,
+        )
+    else:
+        final_img = hdr_img.copy()
+        final_img.paste(chart_img, (4, margin_top), chart_img)
     profiler.record(
         "graph.background_and_chart_composite",
         (time.perf_counter() - assembly_started) * 1000.0,

@@ -11,11 +11,12 @@ Weryfikują:
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 from unittest import mock
 
 import pytest
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 def _fit_track():
@@ -25,6 +26,22 @@ def _fit_track():
     for i in range(60):
         track.append((base + timedelta(seconds=i), 54.0 + i * 0.0001, 18.0 + i * 0.0001))
     return track
+
+
+def _edge_track():
+    """Route large enough to cross every side of a 692 px zoom-16 viewport."""
+    base = datetime(2026, 7, 29, 5, 31, 46)
+    coordinates = [
+        (54.0000, 17.9700),  # west / left
+        (54.0200, 18.0000),  # north / top
+        (54.0000, 18.0300),  # east / right
+        (53.9800, 18.0000),  # south / bottom
+        (54.0000, 18.0000),  # centre
+    ]
+    return [
+        (base + timedelta(seconds=index), lat, lon)
+        for index, (lat, lon) in enumerate(coordinates)
+    ]
 
 
 def _layout():
@@ -247,3 +264,88 @@ class TestMapPreviewExportParity:
         assert plan["effective_zoom"] == 14
         assert plan["working_size"] == pytest.approx(173, abs=1)
         assert plan["output_resize_scale"] == pytest.approx(4 / 3, rel=0.01)
+
+
+class TestMapRegionalCropParity:
+    """Crop-before-marker must be pixel-identical to full-copy-before-crop."""
+
+    @staticmethod
+    def _old_full_copy_result(renderer, ts, w, h):
+        from src.moving_map import TILE_SIZE
+
+        # Populate the immutable route/background grid without a marker.
+        renderer.render(
+            ts, w, h, draw_track=True, draw_marker=False,
+            download_missing=False,
+        )
+        cpx, cpy = renderer._interp_pos(ts)
+        cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
+        half_w = int(math.ceil(w / 2 / TILE_SIZE)) + 1
+        half_h = int(math.ceil(h / 2 / TILE_SIZE)) + 1
+        tx1, tx2 = cx - half_w, cx + half_w + 1
+        ty1, ty2 = cy - half_h, cy + half_h + 1
+        tw = (tx2 - tx1) * TILE_SIZE
+        th = (ty2 - ty1) * TILE_SIZE
+
+        image = renderer._grid_cache_img.copy()
+        ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
+        mx, my = cpx - ox, cpy - oy
+        radius = renderer._mkr_radius
+        ImageDraw.Draw(image).ellipse(
+            (mx - radius, my - radius, mx + radius, my + radius),
+            fill=renderer._mkr_color,
+            outline=(0, 0, 0, 220),
+            width=2,
+        )
+        x1 = max(0, int(mx - w / 2))
+        y1 = max(0, int(my - h / 2))
+        x2, y2 = x1 + w, y1 + h
+        if x2 > tw:
+            x2 = tw
+            x1 = max(0, x2 - w)
+        if y2 > th:
+            y2 = th
+            y1 = max(0, y2 - h)
+        return image.crop((x1, y1, x2, y2))
+
+    @pytest.mark.parametrize("ts", (-50.0, 0.0, 15.5, 30.0, 1e9))
+    @pytest.mark.parametrize("size", (173, 346, 692))
+    def test_start_middle_end_and_viewport_edges_are_exact(self, ts, size):
+        from src.moving_map import MovingMapRenderer
+
+        renderer = MovingMapRenderer(
+            _fit_track(), zoom=16,
+            track_color=(255, 60, 30, 220), track_width=12,
+            marker_color=(255, 255, 255, 255), marker_radius=36,
+        )
+        before = self._old_full_copy_result(renderer, ts, size, size)
+        after = renderer.render(
+            ts, size, size, draw_track=True, draw_marker=True,
+            download_missing=False,
+        )
+        assert after.tobytes() == before.tobytes()
+
+    def test_marker_never_mutates_cached_route_background(self):
+        from src.moving_map import MovingMapRenderer
+
+        renderer = MovingMapRenderer(_fit_track(), zoom=16)
+        first = renderer.render(0.0, 692, 692, download_missing=False)
+        renderer.render(30.0, 692, 692, download_missing=False)
+        repeated = renderer.render(0.0, 692, 692, download_missing=False)
+        assert repeated.tobytes() == first.tobytes()
+
+    @pytest.mark.parametrize("ts", (0.0, 1.0, 2.0, 3.0, 4.0))
+    def test_route_crossing_each_viewport_edge_is_exact(self, ts):
+        from src.moving_map import MovingMapRenderer
+
+        renderer = MovingMapRenderer(
+            _edge_track(), zoom=16,
+            track_color=(255, 60, 30, 220), track_width=12,
+            marker_color=(255, 255, 255, 255), marker_radius=36,
+        )
+        before = self._old_full_copy_result(renderer, ts, 692, 692)
+        after = renderer.render(
+            ts, 692, 692, draw_track=True, draw_marker=True,
+            download_missing=False,
+        )
+        assert after.tobytes() == before.tobytes()
