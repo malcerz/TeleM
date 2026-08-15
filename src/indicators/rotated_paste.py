@@ -65,6 +65,37 @@ def _intersects_any(box: tuple[int, int, int, int], boxes) -> bool:
     return False
 
 
+# ETAP 5I: the plain-paste fast-path is extended to *small* widgets whose
+# fully-transparent pixels are clean (RGB == 0).  Over a fully-transparent
+# destination Pillow's alpha_composite reduces to ``out == src`` for every
+# src_alpha>0 pixel and ``(0,0,0,0)`` for src_alpha==0 — which is exactly what
+# a plain paste produces when the alpha==0 pixels are (0,0,0,0).  Byte-identical.
+# The check is cheap only for small widgets, so large widgets (charts/gauge,
+# which have partial alpha / dirty zeros anyway) keep the exact existing path.
+_SMALL_CLEAN_LIMIT_PX = 200 * 200
+# Toggle for A/B (REFERENCE = pre-5I, OPTIMIZED = 5I).  Default ON.
+_CLEAN_PASTE_ENABLED = os.environ.get("AMD_PIL_CLEAN_PASTE", "1").strip().upper() in {"1", "YES", "ON", "TRUE"}
+
+
+def set_clean_paste(enabled: bool) -> None:
+    """Runtime toggle for the 5I clean-transparency paste fast-path (A/B)."""
+    global _CLEAN_PASTE_ENABLED
+    _CLEAN_PASTE_ENABLED = bool(enabled)
+
+
+def _clean_transparency(overlay: Image.Image) -> bool:
+    """True when every fully-transparent pixel of *overlay* is (0,0,0,0)."""
+    try:
+        import numpy as np
+        arr = np.asarray(overlay, dtype=np.uint8)
+        zero_alpha = arr[..., 3] == 0
+        if not zero_alpha.any():
+            return True
+        return not bool(arr[zero_alpha][..., :3].any())
+    except Exception:
+        return False
+
+
 def composite_final(
     base_img: Image.Image,
     overlay: Image.Image,
@@ -84,6 +115,20 @@ def composite_final(
     bbox = overlay.getbbox()
     if bbox is None:
         # Fully transparent widget — compositing is a no-op on the canvas.
+        return
+
+    # ETAP 5I: small clean-transparency widgets over a fully-transparent
+    # destination composite byte-identically with a plain paste (see
+    # _clean_transparency).  This removes the alpha_composite blend + its
+    # internal dest crop for the small HUD text widgets.
+    if (
+        _CLEAN_PASTE_ENABLED
+        and overlay.width * overlay.height <= _SMALL_CLEAN_LIMIT_PX
+        and prior_bboxes is not None
+        and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes)
+        and (_alpha_min(overlay, cache_key) > 0 or _clean_transparency(overlay))
+    ):
+        base_img.paste(overlay, (x, y))
         return
 
     if bbox != (0, 0, overlay.width, overlay.height):
