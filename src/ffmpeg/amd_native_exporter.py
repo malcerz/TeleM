@@ -27,10 +27,11 @@ except ImportError:
     Image = None
 
 from src.indicators.compositor import compose_overlay
+from src.indicators.moving_map import render_map_working_image
 from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CACHE
 
 
-AMD_NATIVE_ABI_VERSION = 4
+AMD_NATIVE_ABI_VERSION = 5
 
 _AMD_HUD_MODES = {"CPU_REFERENCE": 0, "GPU_HUD": 1}
 _AMD_DECODE_MODES = {
@@ -39,6 +40,29 @@ _AMD_DECODE_MODES = {
     "GPU_HUD_D3D11VA": 1,
     "D3D11VA": 1,
 }
+# ETAP 5G — GPU map resize/composite.  CPU_REFERENCE keeps the map in the
+# Pillow HUD (unchanged); GPU uploads the 692x692 working map and resizes +
+# composites it on the GPU.  Filter: 0=bilinear, 1=bicubic, 2=Lanczos-3.
+_AMD_MAP_FILTERS = {"BILINEAR": 0, "BICUBIC": 1, "LANCZOS": 2}
+
+
+def _map_gpu_layout_safe(layout: dict) -> tuple[bool, str]:
+    """ETAP 5G z-order guard.  The GPU map path blends the map on top of the
+    GPU HUD canvas.  That reproduces the Pillow result only when track_map is
+    the last rendered indicator (drawn on top).  Any other ordering -> the
+    caller must fall back to CPU_REFERENCE."""
+    indicators = layout.get("indicators", {})
+    if "track_map" not in indicators or not indicators["track_map"].get("enabled", True):
+        return True, "no active track_map"
+    enabled_keys = [k for k, cfg in indicators.items() if cfg and cfg.get("enabled", True)]
+    if not enabled_keys:
+        return True, "no active indicators"
+    if enabled_keys[-1] != "track_map":
+        return False, (
+            f"track_map is not the last rendered indicator (last={enabled_keys[-1]}); "
+            "GPU map-on-top would change z-order -> CPU_REFERENCE fallback"
+        )
+    return True, "track_map is the last rendered indicator"
 
 
 class _HUDDirtyRect(ctypes.Structure):
@@ -343,6 +367,17 @@ def export_amd_native_d3d11(
             flush=True,
         )
         return False
+    # ETAP 5H: regional CPU bridge mode.  REFERENCE = original crop -> np.asarray
+    # -> np.copyto chain.  OPTIMIZED = crop -> tobytes -> ctypes.memmove directly
+    # into the persistent backing buffer (no NumPy intermediate, fewer allocations).
+    # Both modes must produce byte-identical backing contents.
+    hud_buffer_mode = os.environ.get("AMD_HUD_BUFFER_MODE", "REFERENCE").strip().upper()
+    if hud_buffer_mode not in {"REFERENCE", "OPTIMIZED"}:
+        print(
+            "[AMD NATIVE D3D11] ERROR: AMD_HUD_BUFFER_MODE must be REFERENCE or OPTIMIZED.",
+            flush=True,
+        )
+        return False
     try:
         dirty_max_rects = int(os.environ.get("AMD_NATIVE_DIRTY_MAX_RECTS", "8"))
     except ValueError:
@@ -353,6 +388,49 @@ def export_amd_native_d3d11(
     hud_enabled = _layout_has_hud(layout)
     legacy_no_hud = not hud_enabled and _env_flag("AMD_NATIVE_LEGACY_NO_HUD", False)
     hud_work_enabled = hud_enabled or legacy_no_hud
+
+    # ── ETAP 5G: GPU map resize/composite ───────────────────────────────
+    # CPU_REFERENCE keeps the map in the Pillow HUD (unchanged).  GPU uploads
+    # the 692x692 working map and resizes + composites it on the GPU.  The
+    # z-order guard falls back to CPU_REFERENCE for unsafe layouts.
+    requested_map_path = os.environ.get("AMD_MAP_PATH", "CPU_REFERENCE").strip().upper()
+    if requested_map_path not in {"CPU_REFERENCE", "GPU"}:
+        print("[AMD NATIVE D3D11] ERROR: AMD_MAP_PATH must be CPU_REFERENCE or GPU.", flush=True)
+        return False
+    map_gpu_safe, map_gpu_reason = _map_gpu_layout_safe(layout)
+    gpu_map_enabled = requested_map_path == "GPU" and map_gpu_safe
+    if requested_map_path == "GPU" and not map_gpu_safe:
+        print(
+            f"[AMD NATIVE D3D11] GPU_MAP_UNSAFE_LAYOUT -> CPU_REFERENCE fallback: {map_gpu_reason}",
+            flush=True,
+        )
+    map_filter_name = os.environ.get("AMD_MAP_FILTER", "LANCZOS").strip().upper()
+    if map_filter_name not in _AMD_MAP_FILTERS:
+        map_filter_name = "LANCZOS"
+    map_filter = _AMD_MAP_FILTERS[map_filter_name]
+    # Diagnostic-only raw 691x691 map A/B (GPU resample vs Pillow LANCZOS).
+    map_ab_readback = _env_flag("AMD_MAP_AB_READBACK", False)
+    # Diagnostic-only native map upload / resize+blend submit timing capture.
+    map_stats_enabled = _env_flag("AMD_MAP_STATS", False)
+    print(
+        f"[AMD NATIVE D3D11] AMD_MAP_PATH: {requested_map_path} "
+        f"({'GPU' if gpu_map_enabled else 'CPU_REFERENCE'} active; reason: {map_gpu_reason})",
+        flush=True,
+    )
+    if gpu_map_enabled:
+        print(
+            f"[AMD NATIVE D3D11] GPU map filter: {map_filter_name} ({map_filter})",
+            flush=True,
+        )
+
+    # ETAP 5G: in GPU map mode the track_map widget leaves the Pillow HUD; the
+    # CPU still renders its 692x692 working image, which is uploaded and
+    # resized/composited on the GPU.  Everything else keeps the 5E path.
+    compose_layout = layout
+    if gpu_map_enabled and "track_map" in layout.get("indicators", {}):
+        compose_layout = copy.deepcopy(layout)
+        del compose_layout["indicators"]["track_map"]
+
     from src.indicators.frame_data import build_active_fit_field_plan
 
     fit_field_plan = build_active_fit_field_plan(layout, (fit_data or {}).keys())
@@ -438,6 +516,7 @@ def export_amd_native_d3d11(
     print(f"AMD Native HUD upload path: {hud_upload_mode}", flush=True)
     if hud_upload_mode == "DIRTY":
         print(f"AMD Native dirty rect target: {dirty_max_rects}", flush=True)
+    print(f"AMD Native HUD buffer mode: {hud_buffer_mode}", flush=True)
 
     # Function Signatures
     native_dll.telem_amd_create.restype = c_void_p
@@ -481,6 +560,33 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_set_hud_mode.restype = c_int
     native_dll.telem_amd_set_hud_mode.argtypes = [c_void_p, c_int]
+
+    # ETAP 5G — GPU map resize/composite
+    native_dll.telem_amd_set_map_mode.restype = c_int
+    native_dll.telem_amd_set_map_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_set_map_filter.restype = c_int
+    native_dll.telem_amd_set_map_filter.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_set_map_geometry.restype = c_int
+    native_dll.telem_amd_set_map_geometry.argtypes = [
+        c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint,
+    ]
+
+    native_dll.telem_amd_update_map.restype = c_int
+    native_dll.telem_amd_update_map.argtypes = [
+        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_get_map_stats.restype = None
+    native_dll.telem_amd_get_map_stats.argtypes = [
+        c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_double), POINTER(c_double), POINTER(c_double),
+    ]
+
+    native_dll.telem_amd_get_map_resample.restype = c_int
+    native_dll.telem_amd_get_map_resample.argtypes = [c_void_p, POINTER(c_uint8), c_uint]
 
     native_dll.telem_amd_set_source_rotation.restype = c_int
     native_dll.telem_amd_set_source_rotation.argtypes = [c_void_p, c_uint]
@@ -547,7 +653,7 @@ def export_amd_native_d3d11(
             video_width=video_width,
             video_height=video_height,
             font_path=font_path,
-            layout=layout,
+            layout=compose_layout,
             field_samples=field_samples,
             max_distance_m=max_distance_m,
             iso_samples=iso_samples,
@@ -610,6 +716,17 @@ def export_amd_native_d3d11(
         native_dll.telem_amd_close(h_context)
         return False
 
+    # ── ETAP 5G: GPU map resize/composite ───────────────────────────────
+    if not native_dll.telem_amd_set_map_mode(h_context, 1 if gpu_map_enabled else 0):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map mode.", flush=True)
+        native_dll.telem_amd_close(h_context)
+        return False
+    if gpu_map_enabled:
+        if not native_dll.telem_amd_set_map_filter(h_context, map_filter):
+            print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map filter.", flush=True)
+            native_dll.telem_amd_close(h_context)
+            return False
+
     if not native_dll.telem_amd_set_source_rotation(h_context, source_rotation):
         print("[AMD NATIVE D3D11] ERROR: failed to configure source rotation.", flush=True)
         native_dll.telem_amd_close(h_context)
@@ -649,6 +766,11 @@ def export_amd_native_d3d11(
         "Decoder surface GPU copy": [],
         "Telemetry/frame_data": [],
         "compose_overlay": [],
+        "map_cpu_upload": [],
+        "GPU map upload (native)": [],
+        "GPU map resize+blend submit": [],
+        "HUD dirty bbox": [],
+        "HUD dirty extract": [],
         "PIL tobytes": [],
         "PIL/buffer preparation": [],
         "Python->native bridge": [],
@@ -685,6 +807,14 @@ def export_amd_native_d3d11(
     previous_bboxes: dict[str, tuple[int, int, int, int]] = {}
     last_hud_call_ms = 0.0
     sample_timestamps: dict[int, dict[str, float | int]] = {}
+    # ETAP 5G — GPU map resize/composite counters
+    map_geometry_set = False
+    map_gpu_frames = 0
+    map_uploaded_bytes_total = 0
+    map_upload_times: list[float] = []
+    last_map_img = None
+    last_map_dst = None
+    map_ab_results: dict[str, list] = {"mae": [], "max": [], "n>1": [], "n>2": [], "n>4": [], "n>8": [], "n>16": []}
 
     # CPU reference keeps the ETAP 3 FFmpeg rawvideo pipe. D3D11VA never
     # starts a video decoder subprocess; samples come from MF as GPU surfaces.
@@ -815,7 +945,7 @@ def export_amd_native_d3d11(
 
             telemetry_start = time.perf_counter()
             frame_kwargs = prepare_overlay_frame_data(
-                layout=layout,
+                layout=compose_layout,
                 target_dt=curr_dt,
                 start_dt_utc=base_dt,
                 tz_offset_hours=tz_offset_hours,
@@ -856,7 +986,7 @@ def export_amd_native_d3d11(
             composed_img = compose_overlay(
                 canvas_w=video_width,
                 canvas_h=video_height,
-                layout=layout,
+                layout=compose_layout,
                 font_path=font_path,
                 _bboxes=_bboxes,
                 **frame_kwargs
@@ -864,12 +994,70 @@ def export_amd_native_d3d11(
             compose_elapsed_ms = (time.perf_counter() - compose_start) * 1000.0
             timing_samples["compose_overlay"].append(compose_elapsed_ms)
             overlay_profiler.record("compose.total", compose_elapsed_ms)
+
+            # ── ETAP 5G: GPU map resize/composite ────────────────────────
+            if gpu_map_enabled:
+                map_start = time.perf_counter()
+                map_img, map_dst = render_map_working_image(
+                    video_width, video_height, layout, "track_map",
+                    gps_track, target_dt=curr_dt, current_position=frame_kwargs.get("current_position"),
+                )
+                if map_img is not None and map_dst is not None:
+                    last_map_img = map_img
+                    last_map_dst = map_dst
+                    if not map_geometry_set:
+                        map_geometry_set = True
+                        dst_x, dst_y, out_w, out_h = map_dst
+                        src_w, src_h = map_img.size
+                        native_dll.telem_amd_set_map_geometry(
+                            h_context, dst_x, dst_y, src_w, src_h, out_w, out_h,
+                        )
+                        print(
+                            f"[AMD NATIVE D3D11] GPU map geometry: dst=({dst_x},{dst_y}) "
+                            f"src={src_w}x{src_h} out={out_w}x{out_h}",
+                            flush=True,
+                        )
+                    map_bytes = map_img.tobytes("raw", "RGBA")
+                    map_upload_bytes = c_uint64(0)
+                    map_tex_created = c_int(0)
+                    upload_start = time.perf_counter()
+                    ok = native_dll.telem_amd_update_map(
+                        h_context, map_bytes, map_img.width, map_img.height,
+                        map_img.width * 4, byref(map_upload_bytes), byref(map_tex_created),
+                    )
+                    map_upload_ms = (time.perf_counter() - upload_start) * 1000.0
+                    if not ok:
+                        print(
+                            f"[AMD NATIVE D3D11] ERROR: telem_amd_update_map failed on frame {frame_idx}",
+                            flush=True,
+                        )
+                    else:
+                        map_uploaded_bytes_total += int(map_upload_bytes.value)
+                        map_upload_times.append(map_upload_ms)
+                        map_gpu_frames += 1
+                map_timing = (time.perf_counter() - map_start) * 1000.0
+                timing_samples["map_cpu_upload"].append(map_timing)
+                if map_stats_enabled and gpu_map_enabled:
+                    _ms_uploads = c_uint64(0)
+                    _ms_bytes = c_uint64(0)
+                    _ms_frames = c_uint64(0)
+                    _ms_upload = c_double(0.0)
+                    _ms_resample = c_double(0.0)
+                    _ms_blend = c_double(0.0)
+                    native_dll.telem_amd_get_map_stats(
+                        h_context, byref(_ms_uploads), byref(_ms_bytes),
+                        byref(_ms_frames), byref(_ms_upload),
+                        byref(_ms_resample), byref(_ms_blend),
+                    )
+                    timing_samples["GPU map upload (native)"].append(float(_ms_upload.value))
+                    timing_samples["GPU map resize+blend submit"].append(float(_ms_resample.value))
             overlay_profiler.finish_frame()
             hud_frames += 1
 
-            if diagnostics_enabled and frame_idx == 30:
-                print("\n=== REAL GUI EXPORT TRACE (Frame 30) ===", flush=True)
-                composed_img.save("01_python_hud.png")
+            if diagnostics_enabled and frame_idx in (30, 300, 900):
+                if frame_idx == 30:
+                    print("\n=== REAL GUI EXPORT TRACE (Frame 30) ===", flush=True)
+                composed_img.save(f"01_python_hud_{frame_idx}.png")
 
             if native_hud_mode == "CPU_REFERENCE":
                 tobytes_start = time.perf_counter()
@@ -902,21 +1090,56 @@ def export_amd_native_d3d11(
                     upload_bytes = hud_frame_bytes
                     rect_count = 1
                 else:
+                    bbox_start = time.perf_counter()
                     dirty_rects = _dirty_rects_from_bboxes(
                         previous_bboxes, _bboxes,
                         video_width, video_height, dirty_max_rects,
                     )
+                    timing_samples["HUD dirty bbox"].append(
+                        (time.perf_counter() - bbox_start) * 1000.0
+                    )
                     intermediate_bytes = 0
                     persistent_copy_bytes = 0
                     upload_bytes = 0
-                    for x, y, rect_w, rect_h in dirty_rects:
-                        region = composed_img.crop((x, y, x + rect_w, y + rect_h))
-                        region_array = np.asarray(region, dtype=np.uint8)
-                        np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], region_array)
-                        region_bytes = rect_w * rect_h * 4
-                        intermediate_bytes += region_bytes
-                        persistent_copy_bytes += region_bytes
-                        upload_bytes += region_bytes
+                    if hud_buffer_mode == "OPTIMIZED":
+                        # ETAP 5H OPTIMIZED: crop -> tobytes -> np.frombuffer
+                        # (zero-copy view) -> np.copyto.  This avoids the extra
+                        # internal copy np.asarray performs through Pillow's
+                        # __array_interface__ (which returns a bytes blob and is
+                        # copied again by numpy).  np.copyto keeps the strided
+                        # backing write correct (a flat ctypes.memmove would
+                        # misplace every row after the first — the row-stride
+                        # trap).  Byte-for-byte identical to REFERENCE.
+                        extract_start = time.perf_counter()
+                        for x, y, rect_w, rect_h in dirty_rects:
+                            region = composed_img.crop((x, y, x + rect_w, y + rect_h))
+                            region_bytes = region.tobytes("raw", "RGBA")
+                            region_array = np.frombuffer(
+                                region_bytes, dtype=np.uint8
+                            ).reshape(rect_h, rect_w, 4)
+                            np.copyto(
+                                hud_backing_view[y:y + rect_h, x:x + rect_w],
+                                region_array,
+                            )
+                            persistent_copy_bytes += rect_w * rect_h * 4
+                            upload_bytes += rect_w * rect_h * 4
+                        timing_samples["HUD dirty extract"].append(
+                            (time.perf_counter() - extract_start) * 1000.0
+                        )
+                    else:
+                        # REFERENCE (original): crop -> np.asarray -> np.copyto.
+                        extract_start = time.perf_counter()
+                        for x, y, rect_w, rect_h in dirty_rects:
+                            region = composed_img.crop((x, y, x + rect_w, y + rect_h))
+                            region_array = np.asarray(region, dtype=np.uint8)
+                            np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], region_array)
+                            region_bytes = rect_w * rect_h * 4
+                            intermediate_bytes += region_bytes
+                            persistent_copy_bytes += region_bytes
+                            upload_bytes += region_bytes
+                        timing_samples["HUD dirty extract"].append(
+                            (time.perf_counter() - extract_start) * 1000.0
+                        )
                     rect_count = len(dirty_rects)
                 timing_samples["PIL/buffer preparation"].append(
                     (time.perf_counter() - buffer_prep_start) * 1000.0
@@ -1000,6 +1223,33 @@ def export_amd_native_d3d11(
                 proc_dec.kill()
             native_dll.telem_amd_close(h_context)
             return False
+
+        # ── ETAP 5G: diagnostic raw 691x691 map A/B (GPU resample vs Pillow) ──
+        if map_ab_readback and gpu_map_enabled and last_map_img is not None and last_map_dst is not None:
+            ab_w, ab_h = int(last_map_dst[2]), int(last_map_dst[3])
+            ab_buf = (c_uint8 * (ab_w * ab_h * 4))()
+            if native_dll.telem_amd_get_map_resample(h_context, ab_buf, ab_w * 4):
+                gpu_map_ab = np.asarray(
+                    Image.frombuffer("RGBA", (ab_w, ab_h), ab_buf, "raw", "RGBA", 0, 1),
+                    dtype=np.int16,
+                )
+                cpu_map_ab = np.asarray(
+                    last_map_img.resize((ab_w, ab_h), Image.Resampling.LANCZOS),
+                    dtype=np.int16,
+                )
+                diff_ab = np.abs(gpu_map_ab - cpu_map_ab)
+                map_ab_results["mae"].append(float(diff_ab.mean()))
+                map_ab_results["max"].append(int(diff_ab.max()))
+                for key, threshold in (("n>1", 1), ("n>2", 2), ("n>4", 4), ("n>8", 8), ("n>16", 16)):
+                    map_ab_results[key].append(float((diff_ab > threshold).mean()))
+                if frame_idx in (30, 300, 900):
+                    Image.fromarray(gpu_map_ab.astype(np.uint8), "RGBA").save(
+                        f"Raporty/AMD_ETAP5G/map_gpu_{map_filter_name.lower()}_frame_{frame_idx}.png")
+                    Image.fromarray(cpu_map_ab.astype(np.uint8), "RGBA").save(
+                        f"Raporty/AMD_ETAP5G/map_cpu_ref_frame_{frame_idx}.png")
+                    ampl = np.clip(diff_ab.max(axis=2).astype(np.float32) * 8.0, 0, 255).astype(np.uint8)
+                    Image.fromarray(ampl, "L").save(
+                        f"Raporty/AMD_ETAP5G/map_diff_{map_filter_name.lower()}_frame_{frame_idx}.png")
 
         native_timing_values = [c_double(0.0) for _ in range(14)]
         native_dll.telem_amd_get_last_frame_timings(
@@ -1280,6 +1530,7 @@ def export_amd_native_d3d11(
         },
         "etap3": {
             "upload_mode": hud_upload_mode if native_hud_mode == "GPU_HUD" else "CPU_REFERENCE_LEGACY",
+            "hud_buffer_mode": hud_buffer_mode,
             "dirty_max_rects": dirty_max_rects,
             "full_pil_tobytes_calls": len(timing_samples["PIL tobytes"]),
             "pillow_buffer_protocol_writable": False,
@@ -1328,6 +1579,26 @@ def export_amd_native_d3d11(
             "direct_decoder_surface_to_vp_frames": c_direct_surface_frames.value,
             "decoder_gpu_copy_frames": c_decoder_gpu_copy_frames.value,
             "selected_timestamps": sample_timestamps,
+        },
+        "etap5g": {
+            "map_path": "GPU" if gpu_map_enabled else "CPU_REFERENCE",
+            "map_path_requested": requested_map_path,
+            "map_path_safe_reason": map_gpu_reason,
+            "map_filter": map_filter_name,
+            "map_filter_index": map_filter,
+            "map_gpu_frames": map_gpu_frames,
+            "map_upload_frames": len(map_upload_times),
+            "map_upload_bytes_total": map_uploaded_bytes_total,
+            "map_upload_mib_per_frame": (
+                (map_uploaded_bytes_total / max(1, map_gpu_frames)) / (1024.0 * 1024.0)
+                if map_gpu_frames else 0.0
+            ),
+            "map_cpu_upload_ms": _value_summary(map_upload_times) if map_upload_times else None,
+            "map_ab_readback": map_ab_readback,
+            "map_ab": (
+                {key: _value_summary(values) for key, values in map_ab_results.items()}
+                if map_ab_readback and map_ab_results["mae"] else None
+            ),
         },
         "etap5a": overlay_profiler.summary(),
         "etap5b": {

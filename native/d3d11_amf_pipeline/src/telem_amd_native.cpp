@@ -124,6 +124,12 @@ struct TelemAMDContext {
     bool hudEnabled = true;
     // 0 = CPU_REFERENCE, 1 = GPU_HUD.
     int hudMode = 0;
+    // ETAP 5G: 0 = CPU_REFERENCE (map stays in Pillow HUD), 1 = GPU (separate
+    // persistent map texture + GPU resample/composite).
+    int mapCompositeMode = 0;
+    UINT64 mapUploads = 0;
+    UINT64 mapUploadedBytes = 0;
+    UINT64 mapResampleFrames = 0;
     TelemAMDFrameTimings lastTimings;
 
     // Last processed VP output NV12 texture
@@ -178,6 +184,82 @@ TELEM_EXPORT int telem_amd_set_hud_mode(void* handle, int mode) {
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
     ctx->hudMode = mode;
     return 1;
+}
+
+// ── ETAP 5G: GPU-resident final map resize + composite ───────────────
+
+TELEM_EXPORT int telem_amd_set_map_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->mapCompositeMode = mode;
+    ctx->vpPipeline.SetMapGpuEnabled(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_set_map_filter(void* handle, int filter) {
+    if (!handle || (filter < 0 || filter > 2)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapFilter(filter);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_set_map_geometry(
+    void* handle, UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH) {
+    if (!handle || srcW == 0 || srcH == 0 || outW == 0 || outH == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapGeometry(dstX, dstY, srcW, srcH, outW, outH);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_map(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->mapCompositeMode != 1) return 0;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateMapTexture(
+            width, height, pRGBA, stride, &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU map upload failed." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    ctx->mapUploads++;
+    ctx->mapUploadedBytes += uploadedBytes;
+    return 1;
+}
+
+// Diagnostic A/B readback of the GPU-resampled 691x691 RGBA map.  Not used by
+// the production export path.
+TELEM_EXPORT int telem_amd_get_map_resample(
+    void* handle, uint8_t* outRGBA, UINT stride) {
+    if (!handle || !outRGBA) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.GetMapResampleReadback(outRGBA, stride) ? 1 : 0;
+}
+
+// Diagnostic: dump the GPU-resampled map texture to a PNG right after the
+// resample dispatch (inside ProcessFrame).  Never used on production.
+TELEM_EXPORT void telem_amd_set_map_dump_path(void* handle, const char* path) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapDumpPath(path);
+}
+
+TELEM_EXPORT void telem_amd_get_map_stats(
+    void* handle,
+    UINT64* outUploads, UINT64* outUploadedBytes, UINT64* outResampleFrames,
+    double* outUploadMs, double* outResampleMs, double* outBlendMs) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outUploads) *outUploads = ctx->mapUploads;
+    if (outUploadedBytes) *outUploadedBytes = ctx->mapUploadedBytes;
+    if (outResampleFrames) *outResampleFrames = ctx->mapResampleFrames;
+    if (outUploadMs) *outUploadMs = ctx->vpPipeline.GetMapUploadMs();
+    if (outResampleMs) *outResampleMs = ctx->vpPipeline.GetMapResampleMs();
+    if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetMapBlendMs();
 }
 
 TELEM_EXPORT int telem_amd_set_source_rotation(void* handle, UINT degrees) {
@@ -871,6 +953,7 @@ TELEM_EXPORT int telem_amd_process_frame(
     ctx->framesDecoded++;
     ctx->framesVPProcessed++;
     if (doHUD) ctx->gpuHUDFrames++;
+    if (ctx->mapCompositeMode == 1) ctx->mapResampleFrames++;
     ctx->pLastOutNV12Tex = pOutNV12Tex;
     ctx->lastTimings.vpCpuSubmitMs = vpStats.cpu_submit_ms;
     ctx->lastTimings.vpGpuCompletionMs = vpStats.gpu_completion_ms;

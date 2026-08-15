@@ -124,7 +124,10 @@ def compose_overlay(
             cy = tby + tb.height // 2
             with indicator_scope("time_block"):
                 with profiler.measure("indicator.time_block.paste_composite"):
-                    rotated_paste(img, tb, cx, cy, tb_rotation)
+                    rotated_paste(
+                        img, tb, cx, cy, tb_rotation,
+                        prior_bboxes=list(_bboxes.values()), cache_key="time_block",
+                    )
             if tb_rotation in (90, 270):
                 _bboxes["time_block"] = (
                     int(cx - tb.height // 2),
@@ -165,7 +168,10 @@ def compose_overlay(
             cy = tdy + td.height // 2
             with indicator_scope("time_display"):
                 with profiler.measure("indicator.time_display.paste_composite"):
-                    rotated_paste(img, td, cx, cy, td_rotation)
+                    rotated_paste(
+                        img, td, cx, cy, td_rotation,
+                        prior_bboxes=list(_bboxes.values()), cache_key="time_display",
+                    )
             if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
                     int(cx - td.height // 2),
@@ -318,7 +324,10 @@ def compose_overlay(
 
             with indicator_scope(key):
                 with profiler.measure(f"indicator.{key}.paste_composite"):
-                    rotated_paste(img, res, center_x, center_y, rotation)
+                    rotated_paste(
+                        img, res, center_x, center_y, rotation,
+                        prior_bboxes=list(_bboxes.values()), cache_key=key,
+                    )
 
             if rotation in (90, 270):
                 bw, bh = res.height, res.width
@@ -418,7 +427,10 @@ def compose_overlay(
         ct_res, ctx, cty = render_custom_text(canvas_w, canvas_h, font_path, ct_cfg, stroke_width=ct_outline)
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
-            rotated_paste(img, ct_res, ctx, cty, ct_rotation)
+            rotated_paste(
+                img, ct_res, ctx, cty, ct_rotation,
+                prior_bboxes=list(_bboxes.values()), cache_key="custom_text",
+            )
 
     if prev_bboxes is not None and _bboxes:
         prev_bboxes.update(_bboxes)

@@ -44,6 +44,32 @@ public:
         bool* textureCreated
     );
 
+    // ── ETAP 5G: GPU-resident final map resize + composite ─────────────
+    // CPU keeps producing the 692x692 RGBA map working image; the GPU
+    // resamples it to the final widget size and blends it into the persistent
+    // HUD canvas texture at the widget's destination bbox, before the existing
+    // NV12 compute compositor consumes the canvas.  CPU_REFERENCE mode leaves
+    // the whole path untouched (map stays in the Pillow canvas).
+    bool UpdateMapTexture(
+        UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+        size_t* uploadedBytes, bool* textureCreated);
+    void SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH);
+    void SetMapFilter(int filter);
+    void SetMapGpuEnabled(bool enabled);
+    // Diagnostic: dump the GPU-resampled 691x691 RGBA map texture to a PNG
+    // right after the resample dispatch (used to debug readback parity).
+    void SetMapDumpPath(const char* path);
+    // Diagnostic A/B readback of the GPU-resampled 691x691 RGBA map.  Used only
+    // by the validation harness; never in the production export.
+    bool GetMapResampleReadback(uint8_t* outRGBA, UINT stride);
+    UINT GetMapResampleWidth() const { return m_mapOutW; }
+    UINT GetMapResampleHeight() const { return m_mapOutH; }
+    double GetMapUploadMs() const { return m_mapUploadMs; }
+    double GetMapResampleMs() const { return m_mapResampleMs; }
+    double GetMapBlendMs() const { return m_mapBlendMs; }
+    UINT64 GetMapUploadedBytes() const { return m_mapUploadedBytes; }
+    UINT64 GetMapUploads() const { return m_mapUploads; }
+
     bool CanUseInputSurface(ID3D11Texture2D* texture, UINT arrayIndex);
     bool SetStreamRotation(UINT degrees);
 
@@ -69,6 +95,9 @@ private:
     bool InitializeNV12ComputeCompositor();
     bool ComposeHUDDirectNV12(ID3D11Texture2D* outputTexture, UINT poolIndex);
     bool NormalizeD3D11VARangeNV12(UINT poolIndex);
+    bool InitializeMapCompositor();
+    bool ResampleAndBlendMap();
+    void ReleaseMapResources();
 
     ID3D11Device* m_device = nullptr;
     ID3D11DeviceContext* m_context = nullptr;
@@ -82,6 +111,34 @@ private:
     ID3D11Texture2D* m_hudTexture = nullptr;
     ID3D11VideoProcessorInputView* m_hudInputView = nullptr;
     ID3D11ShaderResourceView* m_hudShaderView = nullptr;
+    ID3D11UnorderedAccessView* m_hudUAV = nullptr;
+
+    // ETAP 5G — GPU-resident map resize + composite
+    ID3D11Texture2D* m_mapTexture = nullptr;
+    ID3D11ShaderResourceView* m_mapShaderView = nullptr;
+    ID3D11Texture2D* m_mapResampleTexture = nullptr;
+    ID3D11ShaderResourceView* m_mapResampleSRV = nullptr;
+    ID3D11UnorderedAccessView* m_mapResampleUAV = nullptr;
+    ID3D11ComputeShader* m_mapResampleShader = nullptr;
+    ID3D11ComputeShader* m_mapBlendShader = nullptr;
+    ID3D11Buffer* m_mapResampleCB = nullptr;
+    ID3D11Buffer* m_mapBlendCB = nullptr;
+    ID3D11Texture2D* m_mapReadbackStaging = nullptr;
+    bool m_mapGpuEnabled = false;
+    bool m_mapResampleReady = false;
+    UINT m_mapSrcW = 0;
+    UINT m_mapSrcH = 0;
+    UINT m_mapOutW = 0;
+    UINT m_mapOutH = 0;
+    UINT m_mapDstX = 0;
+    UINT m_mapDstY = 0;
+    int m_mapFilter = 2;  // 0=bilinear, 1=bicubic(Catmull-Rom), 2=Lanczos-3
+    UINT64 m_mapUploads = 0;
+    UINT64 m_mapUploadedBytes = 0;
+    double m_mapUploadMs = 0.0;
+    double m_mapResampleMs = 0.0;
+    double m_mapBlendMs = 0.0;
+    char m_mapDumpPath[512] = { 0 };
 
     ID3D11Device3* m_device3 = nullptr;
     ID3D11ComputeShader* m_nv12HUDComputeShader = nullptr;
