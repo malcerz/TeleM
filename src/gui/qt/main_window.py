@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
+    QWidget,
 )
 
 from src.gui.qt.signals import get_signals
@@ -11,6 +12,7 @@ from src.gui.qt.tabs.load_tab import LoadTab
 from src.gui.qt.tabs.project_tab import ProjectTab
 from src.gui.qt.tabs.render_tab import RenderTab
 from src.gui.qt.tabs.settings_tab import SettingsTab
+from src.gui.qt.widgets.video_preview import VideoPreview
 
 
 APP_TITLE = "TeleMGP HUD Tuner"
@@ -18,7 +20,13 @@ APP_VERSION = "0.7.9"
 
 
 class MainWindow(QMainWindow):
-    """Główne okno aplikacji z QTabWidget."""
+    """Główne okno aplikacji z QTabWidget.
+
+    Zakładki Projekt i Rendering WSPÓŁDZIELĄ jedną instancję VideoPreview
+    (``self.preview``). Podgląd jest przenoszony (reparentowany) do aktywnej
+    zakładki — backend wideo wiąże się z podglądem tylko raz, więc nie powstają
+    konfliktujące instancje podczas przełączania zakładek.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -28,14 +36,17 @@ class MainWindow(QMainWindow):
 
         self.signals = get_signals()
 
+        # ── Współdzielony podgląd wideo (Projekt ↔ Rendering) ───────────
+        self.preview = VideoPreview()
+
         # ── Centralny widget: QTabWidget ────────────────────────────────
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
         # ── Zakładki ────────────────────────────────────────────────────
         self._load_tab = LoadTab()
-        self._project_tab = ProjectTab()
-        self._render_tab = RenderTab()
+        self._project_tab = ProjectTab(preview=self.preview)
+        self._render_tab = RenderTab(preview=self.preview)
         self._settings_tab = SettingsTab()
 
         self.tabs.addTab(self._load_tab, "Wczytywanie")
@@ -58,11 +69,76 @@ class MainWindow(QMainWindow):
 
         # ── Podłącz sygnały kontrolera do UI ────────────────────────────
         self._connect_controller_signals()
+        self._connect_preview_signals()
+
+        # Umieść współdzielony podgląd w zakładce Projekt (startowa)
+        self._move_preview_to(self._project_tab.preview_slot)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         # Po załadowaniu danych przełącz na zakładkę Projekt
         self.signals.sig_data_streams_ready.connect(
             lambda _: self.tabs.setCurrentWidget(self._project_tab)
         )
+
+    def set_controller(self, controller: object) -> None:
+        """Bind kontroler do współdzielonego podglądu (jeden raz).
+
+        Wywoływane z application.py po utworzeniu MainWindow.
+        """
+        self.preview.set_controller(controller)
+        self._project_tab.set_controller(controller)
+        self._render_tab.set_controller(controller)
+
+    def check_mpv_availability(self) -> None:
+        """Zgłoś błąd, gdy program nie wykryje bibliotek libmpv.
+
+        Odczytuje wynik detekcji z backendu (playback_mixin._MPV_AVAILABLE) —
+        nie modyfikuje backendu. Wywoływane z application.py po pokazaniu okna.
+        """
+        try:
+            from src.gui.qt._mixins.playback_mixin import _MPV_AVAILABLE
+        except Exception:
+            _MPV_AVAILABLE = False
+        if _MPV_AVAILABLE:
+            return
+        self.signals.sig_error.emit(
+            "Nie wykryto bibliotek libmpv (mpv-2.dll / libmpv-2.dll).\n\n"
+            "Sprzętowy podgląd GPU (MPV) będzie niedostępny — aplikacja "
+            "użyje fallbacku QMediaPlayer.\n\n"
+            "Rozwiązanie: pobierz mpv (np. pakiet mpv-dev) i umieść plik DLL "
+            "libmpv w katalogu programu lub w PATH systemowym."
+        )
+
+    def _connect_preview_signals(self) -> None:
+        """Podłącz sygnały podglądu — dokładnie raz (współdzielona instancja)."""
+        s = self.signals
+        s.sig_preview_frame_ready.connect(self.preview.on_frame_ready)
+        s.sig_bboxes_ready.connect(self.preview.set_bboxes)
+        s.sig_video_duration_ready.connect(self.preview.on_duration_ready)
+        s.sig_seek_position.connect(self.preview._on_seek_position)
+        s.sig_cut_region_added.connect(self.preview._on_cut_region_changed)
+        s.sig_cut_region_removed.connect(self.preview._on_cut_region_changed)
+        s.sig_cut_regions_cleared.connect(self.preview._on_cut_region_changed)
+
+    def _move_preview_to(self, slot: QWidget) -> None:
+        """Przenieś współdzielony podgląd do kontenera aktywnej zakładki."""
+        if self.preview.parentWidget() is slot:
+            return
+        old = self.preview.parentWidget()
+        if old is not None and old.layout() is not None:
+            old.layout().removeWidget(self.preview)
+        self.preview.setParent(slot)
+        slot.layout().addWidget(self.preview)
+        self.preview.show()
+        # Narzędzia wycinania (✂/↩/↩) tylko w Rendering — w Projekcie ukryte
+        self.preview.set_cut_tools_visible(slot is self._render_tab.preview_slot)
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Przy zmianie zakładki przenieś podgląd do zakładki z kontenerem."""
+        current = self.tabs.widget(index)
+        slot = getattr(current, "preview_slot", None)
+        if slot is not None:
+            self._move_preview_to(slot)
 
     def _connect_controller_signals(self) -> None:
         s = self.signals

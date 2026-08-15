@@ -21,8 +21,11 @@ def main() -> None:
     # Inicjalizacja kontrolera (most GUI ↔ logika biznesowa)
     _controller = AppController()
     window = MainWindow()
-    window._project_tab.set_controller(_controller)  # noqa: F841
+    window.set_controller(_controller)  # wiąże współdzielony podgląd (jeden raz)
     window.showMaximized()
+
+    # Zgłoś błąd, jeśli brak bibliotek libmpv (podgląd GPU MPV niedostępny)
+    window.check_mpv_availability()
 
     # ── Tryb testowy: python TeleMGP.py -test / --test ──────────────────
     if "-test" in sys.argv or "--test" in sys.argv:
