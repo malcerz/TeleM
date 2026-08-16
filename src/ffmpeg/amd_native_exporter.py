@@ -31,7 +31,7 @@ from src.indicators.moving_map import render_map_working_image
 from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CACHE
 
 
-AMD_NATIVE_ABI_VERSION = 5
+AMD_NATIVE_ABI_VERSION = 8
 
 _AMD_HUD_MODES = {"CPU_REFERENCE": 0, "GPU_HUD": 1}
 _AMD_DECODE_MODES = {
@@ -44,6 +44,106 @@ _AMD_DECODE_MODES = {
 # Pillow HUD (unchanged); GPU uploads the 692x692 working map and resizes +
 # composites it on the GPU.  Filter: 0=bilinear, 1=bicubic, 2=Lanczos-3.
 _AMD_MAP_FILTERS = {"BILINEAR": 0, "BICUBIC": 1, "LANCZOS": 2}
+
+# ETAP 5J — GPU final compositing for the cadence/HR charts.  CPU_REFERENCE
+# keeps both charts in the Pillow HUD (unchanged).  GPU renders the exact same
+# chart RGBA on the CPU but uploads it to a persistent GPU texture and blends
+# it into the GPU HUD canvas (straight-alpha "over", no resample), so the
+# charts leave the Pillow final HUD AND the CPU dirty HUD upload.  GPU_SPLIT
+# (ETAP 5K) uploads a static 1160x511 layer once per cache invalidation and
+# only small dynamic cursor/value tiles per frame (replaced into the HUD).
+_AMD_CHART_PATHS = {"CPU_REFERENCE": 0, "GPU": 1, "GPU_SPLIT": 2}
+# Native chart texture slot index per indicator key.
+_CHART_GPU_SLOTS = {"fit_cadence_text": 0, "fit_heart_rate_text": 1}
+
+# ETAP 5L — GPU final compositing for the speed gauge.  CPU_REFERENCE keeps the
+# gauge in the Pillow HUD (unchanged).  GPU renders the exact same gauge RGBA
+# on the CPU but uploads it to a persistent GPU texture and blends it into the
+# GPU HUD canvas (straight-alpha "over", no resample), analogous to 5J.
+_AMD_GAUGE_PATHS = {"CPU_REFERENCE": 0, "GPU": 1}
+_GAUGE_KEY = "fit_enhanced_speed_text"
+
+
+def _gauge_gpu_layout_safe(
+    gauge_bbox: Optional[tuple[int, int, int, int]],
+    other_bboxes: dict[str, tuple[int, int, int, int]],
+    chart_capture: dict[str, dict[str, Any]],
+    map_dst: Optional[tuple[int, int, int, int]],
+) -> tuple[bool, str]:
+    """ETAP 5L z-order guard for the GPU gauge composite.
+
+    The GPU gauge blend runs after the CPU HUD uploads and the GPU charts, and
+    before the GPU map.  That reproduces the Pillow result only when the gauge
+    bbox is disjoint from every other active widget bbox (and the GPU map dst),
+    otherwise the GPU composite would change the z-order.  Unsafe layouts fall
+    back to CPU_REFERENCE.
+    """
+    if gauge_bbox is None:
+        return False, "gauge not rendered"
+    boxes: list[tuple[int, int, int, int]] = []
+    for key, bbox in other_bboxes.items():
+        if key == _GAUGE_KEY:
+            continue
+        boxes.append(tuple(int(v) for v in bbox))
+    for cap in chart_capture.values():
+        if "bbox" in cap:
+            boxes.append(tuple(int(v) for v in cap["bbox"]))
+    if map_dst is not None:
+        boxes.append(tuple(int(v) for v in map_dst))
+    gx, gy, gw, gh = tuple(int(v) for v in gauge_bbox)
+    for bx, by, bw, bh in boxes:
+        if gx < bx + bw and bx < gx + gw and gy < by + bh and by < gy + gh:
+            return False, f"gauge overlaps widget bbox=({bx},{by},{bw},{bh})"
+    return True, "gauge z-order disjoint -> GPU safe"
+
+
+def _chart_gpu_layout_safe(
+    bboxes: dict[str, tuple[int, int, int, int]],
+    chart_capture: dict[str, dict[str, Any]],
+    map_dst: Optional[tuple[int, int, int, int]],
+) -> tuple[set[str], str]:
+    """ETAP 5J z-order guard for GPU chart compositing (analogous to the 5G
+    map guard).
+
+    The GPU chart blend runs *after* the CPU dirty HUD uploads and clears its
+    own bbox inside the GPU HUD canvas.  That reproduces the Pillow result only
+    when the chart bbox is disjoint from every other active indicator bbox
+    (and from the GPU map dst).  If any widget overlaps a chart, moving that
+    chart to the GPU would either sit it on top of a later-drawn widget or wipe
+    an earlier-drawn widget's pixels — both change z-order.  Such charts must
+    stay on the CPU path (automatic fallback).
+    """
+    safe: set[str] = set()
+    other_boxes: list[tuple[int, int, int, int]] = list(bboxes.values())
+    if map_dst is not None:
+        other_boxes.append(tuple(int(v) for v in map_dst))
+    reasons: list[str] = []
+    for key, cap in chart_capture.items():
+        if "bbox" not in cap:
+            reasons.append(f"{key}: no bbox (not rendered)")
+            continue
+        if cap.get("rotation", 0) % 360 != 0:
+            # The GPU blend cannot reproduce Pillow's rotation of the widget,
+            # so a rotated chart must stay on the CPU path.
+            reasons.append(f"{key}: non-zero rotation -> CPU_REFERENCE")
+            continue
+        cbox = tuple(int(v) for v in cap["bbox"])
+        cx, cy, cw, ch = cbox
+        overlap = False
+        for bx, by, bw, bh in other_boxes:
+            if cx < bx + bw and bx < cx + cw and cy < by + bh and by < cy + ch:
+                overlap = True
+                reasons.append(f"{key} overlaps widget bbox=({bx},{by},{bw},{bh})")
+                break
+        if not overlap:
+            safe.add(key)
+    if not chart_capture:
+        return set(), "no active chart widgets"
+    if not safe:
+        return set(), "GPU_CHART_UNSAFE_LAYOUT -> all charts CPU_REFERENCE: " + "; ".join(reasons)
+    if len(safe) < len(chart_capture):
+        return safe, "partial fallback -> CPU_REFERENCE: " + "; ".join(reasons)
+    return safe, "all active charts are z-order disjoint -> GPU safe"
 
 
 def _map_gpu_layout_safe(layout: dict) -> tuple[bool, str]:
@@ -85,6 +185,132 @@ def _clip_rect(
     if right <= left or bottom <= top:
         return None
     return left, top, right - left, bottom - top
+
+
+class _FrameAccountant:
+    """ETAP 5P — opt-in per-frame exclusive wall-clock accounting.
+
+    ``AMD_FRAME_ACCOUNTING=1`` partitions each main-loop iteration into exclusive
+    stages via ``perf_counter_ns`` so that
+        frame_total == sum(exclusive stages) + unaccounted.
+    The default (disabled) path only performs a few no-op method calls.
+    """
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+        self.trace: list[dict] = []
+        self.stages: dict[str, int] | None = None
+        self._last = 0
+        self._begin = 0
+        self._frame_idx = 0
+        self.mark_calls = 0
+        self.gc_pauses: list[tuple[int, float]] = []
+        self._gc_start: float | None = None
+        self._gc_cb_ref = None
+        if enabled:
+            import gc
+            self._gc_cb_ref = self._gc_cb
+            gc.callbacks.append(self._gc_cb_ref)
+
+    def _gc_cb(self, phase, info):
+        if phase == "start":
+            self._gc_start = time.perf_counter()
+        elif phase == "stop" and self._gc_start is not None:
+            self.gc_pauses.append((
+                int(info.get("generation", -1)),
+                (time.perf_counter() - self._gc_start) * 1000.0,
+            ))
+            self._gc_start = None
+
+    def begin_frame(self, frame_idx: int) -> None:
+        if not self.enabled:
+            return
+        self._frame_idx = frame_idx
+        self._begin = time.perf_counter_ns()
+        self._last = self._begin
+        self.stages = {}
+
+    def mark(self, name: str) -> None:
+        if not self.enabled or self.stages is None:
+            return
+        now = time.perf_counter_ns()
+        self.stages[name] = self.stages.get(name, 0) + (now - self._last)
+        self._last = now
+        self.mark_calls += 1
+
+    def end_frame(self) -> None:
+        if not self.enabled or self.stages is None:
+            return
+        end_ns = time.perf_counter_ns()
+        total = end_ns - self._begin
+        measured = sum(self.stages.values())
+        self.trace.append({
+            "frame": self._frame_idx,
+            "total_ns": total,
+            "stages": dict(self.stages),
+            "unaccounted_ns": total - measured,
+        })
+        self.stages = None
+
+
+def _pct_sorted(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    x = sorted(values)
+    return x[min(len(x) - 1, int(len(x) * p))]
+
+
+def _frame_accounting_summary(acct: "_FrameAccountant") -> dict:
+    """Median/P95/P99 summaries from the per-frame trace + GC stats."""
+    if not acct.enabled or not acct.trace:
+        return {"enabled": bool(acct.enabled), "frames": 0}
+    frames = acct.trace
+    totals = [f["total_ns"] / 1e6 for f in frames]
+    unacct = [f["unaccounted_ns"] / 1e6 for f in frames]
+    stage_names = sorted({k for f in frames for k in f["stages"]})
+    stages = {}
+    for name in stage_names:
+        vals = [f["stages"].get(name, 0) / 1e6 for f in frames]
+        stages[name] = {
+            "median_ms": _pct_sorted(vals, 0.5),
+            "p95_ms": _pct_sorted(vals, 0.95),
+            "p99_ms": _pct_sorted(vals, 0.99),
+            "avg_ms": sum(vals) / len(vals),
+        }
+    measured_med = sum(s["median_ms"] for s in stages.values())
+    total_med = _pct_sorted(totals, 0.5)
+    unaccounted_med = _pct_sorted(unacct, 0.5)
+    accounted = (1.0 - unaccounted_med / total_med) * 100.0 if total_med > 0 else 0.0
+    pauses = acct.gc_pauses
+    gc_summary = {
+        "collections": len(pauses),
+        "collections_per_frame": len(pauses) / len(frames),
+        "total_pause_ms": sum(p for _, p in pauses),
+        "max_pause_ms": max((p for _, p in pauses), default=0.0),
+        "avg_pause_ms": (sum(p for _, p in pauses) / len(pauses)) if pauses else 0.0,
+    }
+    return {
+        "enabled": True,
+        "frames": len(frames),
+        "frame_total_ms": {
+            "median": total_med,
+            "p95": _pct_sorted(totals, 0.95),
+            "p99": _pct_sorted(totals, 0.99),
+            "avg": sum(totals) / len(totals),
+        },
+        "measured_sum_median_ms": measured_med,
+        "unaccounted_ms": {
+            "median": unaccounted_med,
+            "p95": _pct_sorted(unacct, 0.95),
+            "p99": _pct_sorted(unacct, 0.99),
+            "max": max(unacct),
+            "pct_of_frame": (unaccounted_med / total_med * 100.0) if total_med > 0 else 0.0,
+        },
+        "accounted_pct": accounted,
+        "stages": stages,
+        "gc": gc_summary,
+        "estimated_instrumentation_overhead_us": acct.mark_calls * 0.06,
+    }
 
 
 def _rect_union(
@@ -410,6 +636,14 @@ def export_amd_native_d3d11(
     map_filter = _AMD_MAP_FILTERS[map_filter_name]
     # Diagnostic-only raw 691x691 map A/B (GPU resample vs Pillow LANCZOS).
     map_ab_readback = _env_flag("AMD_MAP_AB_READBACK", False)
+    # Diagnostic-only ETAP 5J chart A/B (GPU-blended chart region read back from
+    # the HUD canvas vs the exact CPU chart RGBA it was built from).
+    chart_ab_readback = _env_flag("AMD_CHART_AB_READBACK", False)
+    chart_static_readback = _env_flag("AMD_CHART_STATIC_READBACK", False)
+    # Diagnostic-only ETAP 5L gauge A/B (GPU-blended gauge bbox read back from
+    # the HUD canvas vs the CPU_REFERENCE result: raw gauge RGBA with dirty
+    # zeros dropped, i.e. Pillow alpha_composite semantics).
+    gauge_ab_readback = _env_flag("AMD_GAUGE_AB_READBACK", False)
     # Diagnostic-only native map upload / resize+blend submit timing capture.
     map_stats_enabled = _env_flag("AMD_MAP_STATS", False)
     print(
@@ -430,6 +664,46 @@ def export_amd_native_d3d11(
     if gpu_map_enabled and "track_map" in layout.get("indicators", {}):
         compose_layout = copy.deepcopy(layout)
         del compose_layout["indicators"]["track_map"]
+
+    # ── ETAP 5J: GPU chart compositing ─────────────────────────────────
+    # CPU_REFERENCE keeps both charts in the Pillow HUD (unchanged).  GPU
+    # renders the exact same chart RGBA on the CPU but blends it into the GPU
+    # HUD canvas instead.  The actual safe-chart set is computed at runtime
+    # from a probe frame by the z-order guard (with automatic fallback for any
+    # chart that overlaps another widget / the GPU map).
+    requested_chart_path = os.environ.get("AMD_CHART_PATH", "CPU_REFERENCE").strip().upper()
+    if requested_chart_path not in _AMD_CHART_PATHS:
+        print("[AMD NATIVE D3D11] ERROR: AMD_CHART_PATH must be CPU_REFERENCE, GPU or GPU_SPLIT.", flush=True)
+        return False
+    gpu_charts_requested = requested_chart_path in ("GPU", "GPU_SPLIT")
+    gpu_charts_split = requested_chart_path == "GPU_SPLIT"
+    chart_mode_value = _AMD_CHART_PATHS[requested_chart_path]
+    print(f"[AMD NATIVE D3D11] AMD_CHART_PATH: {requested_chart_path}", flush=True)
+
+    # ── ETAP 5L: GPU gauge compositing ─────────────────────────────────
+    requested_gauge_path = os.environ.get("AMD_GAUGE_PATH", "CPU_REFERENCE").strip().upper()
+    if requested_gauge_path not in _AMD_GAUGE_PATHS:
+        print("[AMD NATIVE D3D11] ERROR: AMD_GAUGE_PATH must be CPU_REFERENCE or GPU.", flush=True)
+        return False
+    gauge_gpu_requested = requested_gauge_path == "GPU"
+    print(f"[AMD NATIVE D3D11] AMD_GAUGE_PATH: {requested_gauge_path}", flush=True)
+
+    # ── ETAP 5N: telemetry mode (precomputed frame cache) ──────────────
+    telemetry_mode = os.environ.get("AMD_TELEMETRY_MODE", "REFERENCE").strip().upper()
+    if telemetry_mode not in {"REFERENCE", "PRECOMPUTED"}:
+        print("[AMD NATIVE D3D11] ERROR: AMD_TELEMETRY_MODE must be REFERENCE or PRECOMPUTED.", flush=True)
+        return False
+    print(f"[AMD NATIVE D3D11] AMD_TELEMETRY_MODE: {telemetry_mode}", flush=True)
+
+    # ── ETAP 5O/5U: AMF diagnostics (measurement only, no encoder changes) ──
+    amf_mode = os.environ.get("AMD_AMF_MODE", "ENCODE").strip().upper()
+    if amf_mode not in {"ENCODE", "BYPASS", "SUBMIT_NO_MUX"}:
+        print("[AMD NATIVE D3D11] ERROR: AMD_AMF_MODE must be ENCODE, BYPASS or SUBMIT_NO_MUX.", flush=True)
+        return False
+    amf_diag_enabled = _env_flag("AMD_AMF_DIAG", False)
+    print(f"[AMD NATIVE D3D11] AMD_AMF_MODE: {amf_mode}  AMD_AMF_DIAG: {amf_diag_enabled}", flush=True)
+    fa_enabled = _env_flag("AMD_FRAME_ACCOUNTING", False)
+    print(f"[AMD NATIVE D3D11] AMD_FRAME_ACCOUNTING: {'ON' if fa_enabled else 'OFF'}", flush=True)
 
     from src.indicators.frame_data import build_active_fit_field_plan
 
@@ -588,11 +862,76 @@ def export_amd_native_d3d11(
     native_dll.telem_amd_get_map_resample.restype = c_int
     native_dll.telem_amd_get_map_resample.argtypes = [c_void_p, POINTER(c_uint8), c_uint]
 
+    # ── ETAP 5J / 5K — GPU chart compositing ───────────────────────────
+    native_dll.telem_amd_set_chart_mode.restype = c_int
+    native_dll.telem_amd_set_chart_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_update_chart.restype = c_int
+    native_dll.telem_amd_update_chart.argtypes = [
+        c_void_p, c_int, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    # ETAP 5K — GPU_SPLIT static layer (once per cache invalidation).
+    native_dll.telem_amd_update_chart_static.restype = c_int
+    native_dll.telem_amd_update_chart_static.argtypes = [
+        c_void_p, c_int, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    # ETAP 5K — GPU_SPLIT dynamic tile (region: 0 = cursor, 1 = value).
+    native_dll.telem_amd_update_chart_dynamic.restype = c_int
+    native_dll.telem_amd_update_chart_dynamic.argtypes = [
+        c_void_p, c_int, c_int, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64),
+    ]
+
+    native_dll.telem_amd_get_chart_stats.restype = None
+    native_dll.telem_amd_get_chart_stats.argtypes = [
+        c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_double), POINTER(c_double), POINTER(c_uint64),
+        POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_uint64),
+    ]
+
+    # Diagnostic A/B: read back a region of the persistent HUD canvas (never
+    # used on the production export path).
+    native_dll.telem_amd_get_hud_region_readback.restype = c_int
+    native_dll.telem_amd_get_hud_region_readback.argtypes = [
+        c_void_p, c_uint, c_uint, c_uint, c_uint, POINTER(c_uint8), c_uint,
+    ]
+
+    # ETAP 5K diagnostic: read back the persistent static chart texture (never
+    # used on the production export path).
+    native_dll.telem_amd_get_chart_static_readback.restype = c_int
+    native_dll.telem_amd_get_chart_static_readback.argtypes = [
+        c_void_p, c_int, POINTER(c_uint8), c_uint,
+    ]
+
+    # ── ETAP 5L — GPU gauge compositing ────────────────────────────────
+    native_dll.telem_amd_set_gauge_mode.restype = c_int
+    native_dll.telem_amd_set_gauge_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_update_gauge.restype = c_int
+    native_dll.telem_amd_update_gauge.argtypes = [
+        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_get_gauge_stats.restype = None
+    native_dll.telem_amd_get_gauge_stats.argtypes = [
+        c_void_p, POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_double), POINTER(c_double), POINTER(c_uint64),
+    ]
+
     native_dll.telem_amd_set_source_rotation.restype = c_int
     native_dll.telem_amd_set_source_rotation.argtypes = [c_void_p, c_uint]
 
     native_dll.telem_amd_set_decode_mode.restype = c_int
     native_dll.telem_amd_set_decode_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_set_amf_mode.restype = c_int
+    native_dll.telem_amd_set_amf_mode.argtypes = [c_void_p, c_int]
 
     native_dll.telem_amd_read_video_sample.restype = c_int
     native_dll.telem_amd_read_video_sample.argtypes = [
@@ -727,6 +1066,19 @@ def export_amd_native_d3d11(
             native_dll.telem_amd_close(h_context)
             return False
 
+    # ── ETAP 5J / 5K: GPU chart compositing (0 = CPU_REFERENCE, 1 = GPU,
+    # 2 = GPU_SPLIT) ───────────────────────────────────────────────────
+    if not native_dll.telem_amd_set_chart_mode(h_context, chart_mode_value):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure GPU chart mode.", flush=True)
+        native_dll.telem_amd_close(h_context)
+        return False
+
+    # ── ETAP 5L: GPU gauge compositing (1 = GPU, 0 = CPU_REFERENCE) ────
+    if not native_dll.telem_amd_set_gauge_mode(h_context, 1 if gauge_gpu_requested else 0):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure GPU gauge mode.", flush=True)
+        native_dll.telem_amd_close(h_context)
+        return False
+
     if not native_dll.telem_amd_set_source_rotation(h_context, source_rotation):
         print("[AMD NATIVE D3D11] ERROR: failed to configure source rotation.", flush=True)
         native_dll.telem_amd_close(h_context)
@@ -742,6 +1094,15 @@ def export_amd_native_d3d11(
         )
         native_dll.telem_amd_close(h_context)
         return False
+
+    # ── ETAP 5U: AMF mode (0=ENCODE production, 1=BYPASS frontend-only). ──
+    if amf_mode == "BYPASS":
+        if not native_dll.telem_amd_set_amf_mode(h_context, 1):
+            print("[AMD NATIVE D3D11] ERROR: failed to configure AMF BYPASS mode.", flush=True)
+            native_dll.telem_amd_close(h_context)
+            return False
+        print("[AMD NATIVE D3D11] AMF BYPASS active: frontend D3D11/VP/compute only, "
+              "no encode/mux.", flush=True)
 
     base_dt = start_dt_utc or datetime.now()
     start_time = time.time()
@@ -769,6 +1130,16 @@ def export_amd_native_d3d11(
         "map_cpu_upload": [],
         "GPU map upload (native)": [],
         "GPU map resize+blend submit": [],
+        # ETAP 5J / 5K — GPU chart compositing
+        "chart_cpu_tobytes": [],
+        "chart_python_upload": [],
+        "chart_dynamic_tobytes": [],
+        "chart_dynamic_upload": [],
+        # ETAP 5L — GPU gauge compositing
+        "gauge_tobytes": [],
+        "gauge_upload": [],
+        "GPU gauge blend submit": [],
+        "GPU chart blend submit": [],
         "HUD dirty bbox": [],
         "HUD dirty extract": [],
         "PIL tobytes": [],
@@ -812,9 +1183,55 @@ def export_amd_native_d3d11(
     map_gpu_frames = 0
     map_uploaded_bytes_total = 0
     map_upload_times: list[float] = []
+    # ETAP 5O — AMF queue diagnostics (frame_idx, wall_s, submitted, received,
+    # input_full_total, retry_total).  Only collected when AMD_AMF_DIAG=1.
+    amf_diag_samples: list[tuple[int, float, int, int, int, int]] = []
+    amf_preflush_submitted = 0
+    amf_preflush_received = 0
+    amf_drain_ms = 0.0
+    frame_acct = _FrameAccountant(fa_enabled)
+    etap5p = None
     last_map_img = None
     last_map_dst = None
     map_ab_results: dict[str, list] = {"mae": [], "max": [], "n>1": [], "n>2": [], "n>4": [], "n>8": [], "n>16": []}
+    # ETAP 5J — GPU chart compositing counters.  gpu_chart_keys is resolved on
+    # frame 0 by the z-order guard (probe render) and stays fixed afterwards.
+    gpu_chart_keys: set[str] = set()
+    gpu_chart_reason = "disabled"
+    chart_gpu_frames: dict[str, int] = {"fit_cadence_text": 0, "fit_heart_rate_text": 0}
+    chart_uploaded_bytes_total = 0
+    chart_geometry_set: set[str] = set()
+    # ETAP 5K — GPU_SPLIT counters: static uploaded once per cache
+    # invalidation; small dynamic tiles per frame.  The full-size tobytes
+    # counter must stay 0 after the one-time static upload in GPU_SPLIT.
+    chart_static_uploaded: set[str] = set()
+    chart_static_uploads = 0
+    chart_static_bytes_total = 0
+    chart_dynamic_uploads = 0
+    chart_dynamic_bytes_total = 0
+    chart_full_tobytes_total = 0
+    chart_split_frames = 0
+    # ETAP 5L — GPU gauge compositing counters.  gauge_gpu_active is resolved
+    # on frame 0 by the gauge z-order guard (probe render).
+    gauge_gpu_active = False
+    gauge_gpu_reason = "disabled"
+    gauge_gpu_frames = 0
+    gauge_uploaded_bytes_total = 0
+    gauge_static_geometry_set = False
+    # Diagnostic ETAP 5J chart A/B readback results.
+    chart_ab_results: dict[str, dict[str, list]] = {
+        k: {"mae": [], "max": [], "n>1": [], "n>2": [], "n>4": [], "n>8": [], "n>16": []}
+        for k in ("fit_cadence_text", "fit_heart_rate_text")
+    }
+    # ETAP 5K diagnostic: raw static texture A/B (CPU FINAL_STATIC_CHART vs
+    # GPU static texture readback).  Run once on frame 0 when enabled.
+    chart_static_ab_results: dict[str, dict[str, float | int]] = {}
+    # ETAP 5L diagnostic: GPU gauge composite A/B (HUD gauge bbox readback vs
+    # CPU_REFERENCE result), accumulated per frame when enabled.
+    gauge_ab_results: dict[str, list] = {
+        "mae": [], "max": [], "n>0": [], "n>1": [], "n>2": [], "n>4": [], "n>8": [],
+        "dirty_zeros": [], "partial_alpha": [],
+    }
 
     # CPU reference keeps the ETAP 3 FFmpeg rawvideo pipe. D3D11VA never
     # starts a video decoder subprocess; samples come from MF as GPU surfaces.
@@ -844,10 +1261,82 @@ def export_amd_native_d3d11(
     else:
         print("[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF", flush=True)
 
+    # ── ETAP 5N: precomputed telemetry cache (PRECOMPUTED mode) ─────────
+    # Live reference closure (used by REFERENCE mode and as the VFR fallback).
+    def _live_frame_data(frame_idx, curr_dt, chart_data):
+        return prepare_overlay_frame_data(
+            layout=compose_layout,
+            target_dt=curr_dt,
+            start_dt_utc=base_dt,
+            tz_offset_hours=tz_offset_hours,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            total_frames=total_frames,
+            current_index=frame_idx,
+            chart_data=chart_data,
+            resolve_cache_value=_resolve_cache_value,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+            gps_track=gps_track,
+            _range_cache=WORKER_CACHE.get("_prep_cache"),
+            fit_field_plan=fit_field_plan,
+            resolve_stats=fit_resolve_stats,
+        )
+
+    telemetry_cache = None
+    if telemetry_mode == "PRECOMPUTED":
+        from src.telemetry_precompute import build_telemetry_cache
+        _pre_t0 = time.perf_counter()
+        telemetry_cache = build_telemetry_cache(
+            layout=compose_layout,
+            base_dt=base_dt,
+            tz_offset_hours=tz_offset_hours,
+            start_dt_utc=base_dt,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+            gps_track=gps_track,
+            chart_data=WORKER_CACHE.get("_precomputed_chart_data", {}),
+            resolve_cache_value=_resolve_cache_value,
+            _range_cache=WORKER_CACHE.get("_prep_cache"),
+            fit_field_plan=fit_field_plan,
+            total_frames=total_frames,
+            target_fps=target_fps,
+        )
+        print(
+            f"[AMD NATIVE D3D11] AMD_TELEMETRY_MODE=PRECOMPUTED: "
+            f"cache {telemetry_cache.frames} frames, build "
+            f"{telemetry_cache.build_ms:.1f} ms, mem "
+            f"{telemetry_cache.memory_bytes / (1024.0 * 1024.0):.3f} MiB",
+            flush=True,
+        )
+
     # Main Frame Processing Loop
     frame_idx = 0
     expected_progress_frames = source_frames if use_d3d11va and source_frames else total_frames
     while True:
+        frame_acct.begin_frame(frame_idx)
         # Short validation exports may deliberately request fewer frames than
         # the source contains.  The full production export still terminates on
         # the SourceReader EOS event, so no duration-derived synthetic frame is
@@ -861,6 +1350,7 @@ def export_amd_native_d3d11(
             native_dll.telem_amd_close(h_context)
             return False
 
+        frame_acct.mark("loop_guard")
         raw_nv12: bytes | None = None
         sample_time_seconds = frame_idx / target_fps
         if use_d3d11va:
@@ -917,6 +1407,7 @@ def export_amd_native_d3d11(
             timing_samples["Decode/pipe wait"].append(decode_wait_ms)
             decoded_frames_python += 1
 
+        frame_acct.mark("decode_read")
         if diagnostics_enabled and raw_nv12 is not None and (frame_idx == 0 or frame_idx == 30):
             y_arr = np.frombuffer(raw_nv12[:video_width * video_height], dtype=np.uint8)
             print(f"[DECODER PIPE] Frame {frame_idx} NV12 Y-channel: min={y_arr.min()}, max={y_arr.max()}, mean={y_arr.mean():.1f}", flush=True)
@@ -942,46 +1433,91 @@ def export_amd_native_d3d11(
             chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
 
             overlay_profiler.start_frame(frame_idx, video_width, video_height)
-
+            frame_acct.mark("hud_setup")
             telemetry_start = time.perf_counter()
-            frame_kwargs = prepare_overlay_frame_data(
-                layout=compose_layout,
-                target_dt=curr_dt,
-                start_dt_utc=base_dt,
-                tz_offset_hours=tz_offset_hours,
-                speed_samples=speed_samples,
-                track_samples=track_samples,
-                alt_samples=alt_samples,
-                iso_samples=iso_samples,
-                exposure_samples=exposure_samples,
-                temperature_samples=temperature_samples,
-                total_frames=total_frames,
-                current_index=frame_idx,
-                chart_data=chart_data,
-                resolve_cache_value=_resolve_cache_value,
-                gpx_speed_samples=gpx_speed_samples,
-                gpx_track_samples=gpx_track_samples,
-                gpx_alt_samples=gpx_alt_samples,
-                gpx_power_samples=gpx_power_samples,
-                gpx_atemp_samples=gpx_atemp_samples,
-                gpx_hr_samples=gpx_hr_samples,
-                gpx_cad_samples=gpx_cad_samples,
-                fit_data=fit_data,
-                gps_track=gps_track,
-                _range_cache=WORKER_CACHE.get("_prep_cache"),
-                fit_field_plan=fit_field_plan,
-                resolve_stats=fit_resolve_stats,
-            )
+            if (
+                telemetry_mode == "PRECOMPUTED"
+                and telemetry_cache is not None
+                and frame_idx < len(telemetry_cache.records)
+                and abs(sample_time_seconds - frame_idx / target_fps) <= 1e-6
+            ):
+                # ETAP 5N hot path: cache lookup, zero interpolation/resolver.
+                frame_kwargs = telemetry_cache.lookup(frame_idx)
+            else:
+                # REFERENCE mode, or VFR/out-of-range guard -> live path.
+                frame_kwargs = _live_frame_data(frame_idx, curr_dt, chart_data)
             telemetry_elapsed_ms = (time.perf_counter() - telemetry_start) * 1000.0
             timing_samples["Telemetry/frame_data"].append(telemetry_elapsed_ms)
             overlay_profiler.record(
                 "telemetry.prepare_overlay_frame_data", telemetry_elapsed_ms
             )
-
+            frame_acct.mark("telemetry")
             if frame_idx % 30 == 0:
                 print(f"Frame {frame_idx}: HR={frame_kwargs.get('hr_value')}, CAD={frame_kwargs.get('cad_value')}", flush=True)
 
+            # ── ETAP 5J: resolve the GPU-safe chart set on frame 0 via a
+            # single throwaway probe render (real bboxes), then keep it fixed.
+            if frame_idx == 0 and gpu_charts_requested and not gpu_chart_keys:
+                _probe_capture: dict[str, dict[str, Any]] = {}
+                _probe_bboxes: dict[str, tuple[int, int, int, int]] = {}
+                compose_overlay(
+                    canvas_w=video_width, canvas_h=video_height,
+                    layout=compose_layout, font_path=font_path,
+                    _bboxes=_probe_bboxes,
+                    gpu_capture_keys=set(_CHART_GPU_SLOTS.keys()),
+                    gpu_capture=_probe_capture,
+                    split_chart_keys=(
+                        set(_CHART_GPU_SLOTS.keys()) if gpu_charts_split else None
+                    ),
+                    reuse_canvas=False,
+                    **frame_kwargs,
+                )
+                _probe_map_dst = None
+                if gpu_map_enabled:
+                    _p_img, _p_dst = render_map_working_image(
+                        video_width, video_height, layout, "track_map",
+                        gps_track, target_dt=curr_dt,
+                        current_position=frame_kwargs.get("current_position"),
+                    )
+                    _probe_map_dst = _p_dst
+                gpu_chart_keys, gpu_chart_reason = _chart_gpu_layout_safe(
+                    _probe_bboxes, _probe_capture, _probe_map_dst,
+                )
+                if gpu_chart_keys:
+                    print(
+                        f"[AMD NATIVE D3D11] GPU charts active: {sorted(gpu_chart_keys)} "
+                        f"({gpu_chart_reason})",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[AMD NATIVE D3D11] GPU charts fallback -> CPU_REFERENCE "
+                        f"({gpu_chart_reason})",
+                        flush=True,
+                    )
+
+                # ── ETAP 5L: resolve the GPU gauge safety on the same probe
+                # frame (the gauge bbox is in _probe_bboxes since the probe only
+                # captures the charts). ────────────────────────────────
+                if gauge_gpu_requested:
+                    _g_bbox = _probe_bboxes.get(_GAUGE_KEY)
+                    gauge_gpu_active, gauge_gpu_reason = _gauge_gpu_layout_safe(
+                        _g_bbox, _probe_bboxes, _probe_capture, _probe_map_dst,
+                    )
+                    print(
+                        f"[AMD NATIVE D3D11] GPU gauge "
+                        f"{'active' if gauge_gpu_active else 'fallback -> CPU_REFERENCE'} "
+                        f"bbox={_g_bbox} ({gauge_gpu_reason})",
+                        flush=True,
+                    )
+            frame_acct.mark("frame0_probe")
             _bboxes = {}
+            gpu_capture: dict[str, dict[str, Any]] = {}
+            # ETAP 5L: the gauge is captured alongside the charts (it leaves
+            # the Pillow HUD and its CPU dirty upload when GPU-active).
+            capture_keys = set(gpu_chart_keys)
+            if gauge_gpu_active:
+                capture_keys.add(_GAUGE_KEY)
             compose_start = time.perf_counter()
             composed_img = compose_overlay(
                 canvas_w=video_width,
@@ -989,11 +1525,226 @@ def export_amd_native_d3d11(
                 layout=compose_layout,
                 font_path=font_path,
                 _bboxes=_bboxes,
+                gpu_capture_keys=capture_keys,
+                gpu_capture=gpu_capture,
+                split_chart_keys=(gpu_chart_keys if gpu_charts_split else None),
                 **frame_kwargs
             )
             compose_elapsed_ms = (time.perf_counter() - compose_start) * 1000.0
             timing_samples["compose_overlay"].append(compose_elapsed_ms)
             overlay_profiler.record("compose.total", compose_elapsed_ms)
+            frame_acct.mark("compose")
+
+            # ── ETAP 5J / 5K: upload the GPU charts to persistent textures. ──
+            # GPU (5J): full 1160x511 chart RGBA per frame.  GPU_SPLIT (5K):
+            # the static 1160x511 layer once per cache invalidation + small
+            # dynamic cursor/value tiles per frame (no full per-frame upload).
+            if gpu_capture:
+                chart_to_bytes_ms = 0.0
+                chart_upload_ms = 0.0
+                chart_dyn_tobytes_ms = 0.0
+                chart_dyn_upload_ms = 0.0
+                for chart_key in gpu_chart_keys:
+                    cap = gpu_capture.get(chart_key)
+                    if cap is None:
+                        continue
+                    bx, by, bw, bh = cap["bbox"]
+                    slot = _CHART_GPU_SLOTS[chart_key]
+                    if gpu_charts_split and cap.get("split"):
+                        # ── ETAP 5K: static once + dynamic tiles per frame ──
+                        static_img = cap["static"]
+                        if chart_key not in chart_static_uploaded:
+                            tb_start = time.perf_counter()
+                            st_bytes = static_img.tobytes("raw", "RGBA")
+                            chart_full_tobytes_total += 1
+                            chart_to_bytes_ms = max(
+                                chart_to_bytes_ms,
+                                (time.perf_counter() - tb_start) * 1000.0,
+                            )
+                            st_uploaded = c_uint64(0)
+                            st_created = c_int(0)
+                            up_start = time.perf_counter()
+                            ok = native_dll.telem_amd_update_chart_static(
+                                h_context, slot, st_bytes, static_img.width,
+                                static_img.height, static_img.width * 4,
+                                bx, by, byref(st_uploaded), byref(st_created),
+                            )
+                            chart_upload_ms = max(
+                                chart_upload_ms,
+                                (time.perf_counter() - up_start) * 1000.0,
+                            )
+                            if ok:
+                                chart_static_uploaded.add(chart_key)
+                                chart_static_uploads += 1
+                                chart_static_bytes_total += int(st_uploaded.value)
+                                if chart_static_readback and frame_idx == 0:
+                                    sw, sh = static_img.width, static_img.height
+                                    st_buf = (c_uint8 * (sw * sh * 4))()
+                                    if native_dll.telem_amd_get_chart_static_readback(
+                                        h_context, slot, st_buf, sw * 4,
+                                    ):
+                                        gpu_static = np.asarray(
+                                            Image.frombuffer(
+                                                "RGBA", (sw, sh), st_buf,
+                                                "raw", "RGBA", 0, 1,
+                                            ),
+                                            dtype=np.int16,
+                                        )
+                                        cpu_static = np.asarray(
+                                            static_img, dtype=np.int16)
+                                        diff_s = np.abs(gpu_static - cpu_static)
+                                        chart_static_ab_results[chart_key] = {
+                                            "mae": float(diff_s.mean()),
+                                            "max": int(diff_s.max()),
+                                            "diff_px": int((diff_s.max(axis=2) > 0).sum()),
+                                        }
+                                        print(
+                                            f"[AMD NATIVE D3D11] 5K raw static A/B "
+                                            f"{chart_key}: MAE={diff_s.mean():.6f} "
+                                            f"MAX={diff_s.max()} "
+                                            f"diff_px={int((diff_s.max(axis=2) > 0).sum())}",
+                                            flush=True,
+                                        )
+                            else:
+                                print(
+                                    f"[AMD NATIVE D3D11] ERROR: telem_amd_update_chart_static"
+                                    f"({chart_key}) failed on frame {frame_idx}",
+                                    flush=True,
+                                )
+                        # Cursor tile (region 0).
+                        ct = cap["cursor_tile"]
+                        if ct is not None:
+                            c_up = c_uint64(0)
+                            cl = cap["cursor_local"]
+                            dyn_tb_start = time.perf_counter()
+                            cbytes = ct.tobytes("raw", "RGBA")
+                            chart_dyn_tobytes_ms = max(
+                                chart_dyn_tobytes_ms,
+                                (time.perf_counter() - dyn_tb_start) * 1000.0,
+                            )
+                            dyn_up_start = time.perf_counter()
+                            ok = native_dll.telem_amd_update_chart_dynamic(
+                                h_context, slot, 0, cbytes, ct.width, ct.height,
+                                ct.width * 4, cl[0], cl[1], byref(c_up),
+                            )
+                            chart_dyn_upload_ms = max(
+                                chart_dyn_upload_ms,
+                                (time.perf_counter() - dyn_up_start) * 1000.0,
+                            )
+                            if ok:
+                                chart_dynamic_uploads += 1
+                                chart_dynamic_bytes_total += int(c_up.value)
+                        # Value tile (region 1).
+                        vt = cap["value_tile"]
+                        if vt is not None:
+                            v_up = c_uint64(0)
+                            vl = cap["value_local"]
+                            dyn_tb_start = time.perf_counter()
+                            vbytes = vt.tobytes("raw", "RGBA")
+                            chart_dyn_tobytes_ms = max(
+                                chart_dyn_tobytes_ms,
+                                (time.perf_counter() - dyn_tb_start) * 1000.0,
+                            )
+                            dyn_up_start = time.perf_counter()
+                            ok = native_dll.telem_amd_update_chart_dynamic(
+                                h_context, slot, 1, vbytes, vt.width, vt.height,
+                                vt.width * 4, vl[0], vl[1], byref(v_up),
+                            )
+                            chart_dyn_upload_ms = max(
+                                chart_dyn_upload_ms,
+                                (time.perf_counter() - dyn_up_start) * 1000.0,
+                            )
+                            if ok:
+                                chart_dynamic_uploads += 1
+                                chart_dynamic_bytes_total += int(v_up.value)
+                        chart_gpu_frames[chart_key] += 1
+                        chart_split_frames += 1
+                    else:
+                        # ── ETAP 5J: full chart RGBA per frame ──
+                        chart_img = cap.get("image")
+                        if chart_img is None:
+                            continue
+                        tb_start = time.perf_counter()
+                        chart_bytes = chart_img.tobytes("raw", "RGBA")
+                        chart_full_tobytes_total += 1
+                        chart_to_bytes_ms = max(
+                            chart_to_bytes_ms,
+                            (time.perf_counter() - tb_start) * 1000.0,
+                        )
+                        ch_uploaded = c_uint64(0)
+                        ch_created = c_int(0)
+                        up_start = time.perf_counter()
+                        ok = native_dll.telem_amd_update_chart(
+                            h_context, slot, chart_bytes, chart_img.width,
+                            chart_img.height, chart_img.width * 4, bx, by,
+                            byref(ch_uploaded), byref(ch_created),
+                        )
+                        chart_upload_ms = max(
+                            chart_upload_ms,
+                            (time.perf_counter() - up_start) * 1000.0,
+                        )
+                        if not ok:
+                            print(
+                                f"[AMD NATIVE D3D11] ERROR: telem_amd_update_chart({chart_key}) "
+                                f"failed on frame {frame_idx}",
+                                flush=True,
+                            )
+                        else:
+                            chart_gpu_frames[chart_key] += 1
+                            chart_uploaded_bytes_total += int(ch_uploaded.value)
+                timing_samples["chart_cpu_tobytes"].append(chart_to_bytes_ms)
+                timing_samples["chart_python_upload"].append(chart_upload_ms)
+                frame_acct.mark("chart_upload")
+                timing_samples["chart_dynamic_tobytes"].append(chart_dyn_tobytes_ms)
+                timing_samples["chart_dynamic_upload"].append(chart_dyn_upload_ms)
+
+            # ── ETAP 5L: upload the GPU speed gauge (exact CPU RGBA, final
+            # size, 1:1 texel, no resample) to a persistent texture. ─────
+            # The gauge bbox may extend beyond the HUD bounds (the layout
+            # places it near the bottom edge); the CPU Pillow alpha_composite
+            # clips it, so the GPU upload/blend must clip to the HUD too.
+            gauge_ab_bbox = None
+            gauge_ab_img = None
+            if gauge_gpu_active:
+                gauge_cap = gpu_capture.get(_GAUGE_KEY)
+                gauge_tobytes_ms = 0.0
+                gauge_upload_ms = 0.0
+                if gauge_cap is not None and "image" in gauge_cap:
+                    gauge_img = gauge_cap["image"]
+                    gx, gy, gw, gh = gauge_cap["bbox"]
+                    # Clip to the HUD bounds.
+                    cx0, cy0 = max(0, gx), max(0, gy)
+                    cx1, cy1 = min(video_width, gx + gw), min(video_height, gy + gh)
+                    if cx1 > cx0 and cy1 > cy0:
+                        gauge_img = gauge_img.crop((
+                            cx0 - gx, cy0 - gy, cx1 - gx, cy1 - gy))
+                        gx, gy, gw, gh = cx0, cy0, cx1 - cx0, cy1 - cy0
+                        gauge_ab_bbox = (gx, gy, gw, gh)
+                        gauge_ab_img = gauge_img
+                        tb_start = time.perf_counter()
+                        gauge_bytes = gauge_img.tobytes("raw", "RGBA")
+                        gauge_tobytes_ms = (time.perf_counter() - tb_start) * 1000.0
+                        g_uploaded = c_uint64(0)
+                        g_created = c_int(0)
+                        up_start = time.perf_counter()
+                        ok = native_dll.telem_amd_update_gauge(
+                            h_context, gauge_bytes, gauge_img.width, gauge_img.height,
+                            gauge_img.width * 4, gx, gy,
+                            byref(g_uploaded), byref(g_created),
+                        )
+                        gauge_upload_ms = (time.perf_counter() - up_start) * 1000.0
+                        if not ok:
+                            print(
+                                f"[AMD NATIVE D3D11] ERROR: telem_amd_update_gauge "
+                                f"failed on frame {frame_idx}",
+                                flush=True,
+                            )
+                        else:
+                            gauge_gpu_frames += 1
+                            gauge_uploaded_bytes_total += int(g_uploaded.value)
+                timing_samples["gauge_tobytes"].append(gauge_tobytes_ms)
+                timing_samples["gauge_upload"].append(gauge_upload_ms)
+                frame_acct.mark("gauge_upload")
 
             # ── ETAP 5G: GPU map resize/composite ────────────────────────
             if gpu_map_enabled:
@@ -1051,6 +1802,7 @@ def export_amd_native_d3d11(
                     )
                     timing_samples["GPU map upload (native)"].append(float(_ms_upload.value))
                     timing_samples["GPU map resize+blend submit"].append(float(_ms_resample.value))
+            frame_acct.mark("map_upload")
             overlay_profiler.finish_frame()
             hud_frames += 1
 
@@ -1149,6 +1901,7 @@ def export_amd_native_d3d11(
                 requested_upload_bytes.append(upload_bytes)
                 dirty_rect_counts.append(rect_count)
                 previous_bboxes = dict(_bboxes)
+                frame_acct.mark("hud_dirty")
 
                 if dirty_rects:
                     native_rects = (_HUDDirtyRect * len(dirty_rects))(
@@ -1185,6 +1938,7 @@ def export_amd_native_d3d11(
                 )
                 last_hud_call_ms = (time.perf_counter() - update_hud_start) * 1000.0
             timing_samples["update_hud"].append(last_hud_call_ms)
+            frame_acct.mark("update_hud")
             if not hud_update_ok:
                 print(f"[AMD NATIVE D3D11] ERROR: telem_amd_update_hud failed on frame {frame_idx}", flush=True)
                 if proc_dec is not None:
@@ -1223,6 +1977,7 @@ def export_amd_native_d3d11(
                 proc_dec.kill()
             native_dll.telem_amd_close(h_context)
             return False
+        frame_acct.mark("process_frame")
 
         # ── ETAP 5G: diagnostic raw 691x691 map A/B (GPU resample vs Pillow) ──
         if map_ab_readback and gpu_map_enabled and last_map_img is not None and last_map_dst is not None:
@@ -1282,6 +2037,148 @@ def export_amd_native_d3d11(
                 max(0.0, last_hud_call_ms - native_copy_ms - native_upload_ms)
             )
 
+        # ── ETAP 5O: per-frame AMF queue diagnostics (lightweight) ─────
+        if amf_diag_enabled:
+            _dsu = c_uint64(0); _dvp = c_uint64(0); _dsu2 = c_uint64(0); _dre = c_uint64(0)
+            native_dll.telem_amd_get_stats(
+                h_context, byref(_dsu), byref(_dvp), byref(_dsu2), byref(_dre))
+            _hud = c_uint64(0); _vid = c_uint64(0); _if2 = c_uint64(0)
+            _rt2 = c_uint64(0); _dr2 = c_uint64(0); _ig2 = c_uint64(0)
+            native_dll.telem_amd_get_extended_stats(
+                h_context, byref(_hud), byref(_vid), byref(_if2), byref(_rt2),
+                byref(_dr2), byref(_ig2))
+            amf_diag_samples.append((
+                frame_idx, time.perf_counter(), int(_dsu2.value), int(_dre.value),
+                int(_if2.value), int(_rt2.value)))
+
+        # ETAP 5J / 5K: per-frame native GPU chart blend submit time.
+        if gpu_chart_keys:
+            _ch_stats = [c_uint64(0) for _ in range(8)]
+            _ch_blend = c_double(0.0)
+            _ch_clear = c_double(0.0)
+            native_dll.telem_amd_get_chart_stats(
+                h_context,
+                byref(_ch_stats[0]), byref(_ch_stats[1]), byref(_ch_stats[2]),
+                byref(_ch_blend), byref(_ch_clear), byref(_ch_stats[3]),
+                byref(_ch_stats[4]), byref(_ch_stats[5]), byref(_ch_stats[6]),
+                byref(_ch_stats[7]),
+            )
+            timing_samples["GPU chart blend submit"].append(float(_ch_blend.value))
+
+            # ── ETAP 5J: diagnostic chart A/B — read back the GPU-blended
+            # chart region from the HUD canvas and compare with the exact CPU
+            # chart RGBA it was built from (expected: exact, since the chart
+            # blends over a freshly-cleared transparent bbox).  Runs every
+            # frame when enabled (diagnostic-only, never in production). ────
+            if chart_ab_readback:
+                for chart_key in gpu_chart_keys:
+                    cap = gpu_capture.get(chart_key)
+                    if cap is None:
+                        continue
+                    bx, by, bw, bh = cap["bbox"]
+                    if cap.get("split"):
+                        # GPU_SPLIT: the CPU reference chart is the exact GPU
+                        # assembly — static + cursor/value tiles replaced into
+                        # their regions (what the native replace mode writes).
+                        ref = np.asarray(cap["static"], dtype=np.uint8).copy()
+                        ct = cap["cursor_tile"]
+                        if ct is not None:
+                            cl = cap["cursor_local"]
+                            ref[cl[1]:cl[1] + ct.height,
+                                cl[0]:cl[0] + ct.width] = np.asarray(ct, dtype=np.uint8)
+                        vt = cap["value_tile"]
+                        if vt is not None:
+                            vl = cap["value_local"]
+                            ref[vl[1]:vl[1] + vt.height,
+                                vl[0]:vl[0] + vt.width] = np.asarray(vt, dtype=np.uint8)
+                        cpu_chart_ab = ref.astype(np.int16)
+                    else:
+                        chart_img = cap.get("image")
+                        if chart_img is None:
+                            continue
+                        cpu_chart_ab = np.asarray(chart_img, dtype=np.int16)
+                    ab_buf = (c_uint8 * (bw * bh * 4))()
+                    if native_dll.telem_amd_get_hud_region_readback(
+                        h_context, bx, by, bw, bh, ab_buf, bw * 4,
+                    ):
+                        gpu_chart_ab = np.asarray(
+                            Image.frombuffer("RGBA", (bw, bh), ab_buf, "raw", "RGBA", 0, 1),
+                            dtype=np.int16,
+                        )
+                        diff_ab = np.abs(gpu_chart_ab - cpu_chart_ab)
+                        res = chart_ab_results[chart_key]
+                        res["mae"].append(float(diff_ab.mean()))
+                        res["max"].append(int(diff_ab.max()))
+                        for key2, threshold in (("n>1", 1), ("n>2", 2), ("n>4", 4), ("n>8", 8), ("n>16", 16)):
+                            res[key2].append(float((diff_ab > threshold).mean()))
+                        if frame_idx == 30:
+                            Image.fromarray(gpu_chart_ab.astype(np.uint8), "RGBA").save(
+                                f"Raporty/AMD_ETAP5G/chart_gpu_{chart_key}_frame30.png")
+                            Image.fromarray(cpu_chart_ab.astype(np.uint8), "RGBA").save(
+                                f"Raporty/AMD_ETAP5G/chart_cpu_ref_{chart_key}_frame30.png")
+                            ampl = np.clip(diff_ab.max(axis=2).astype(np.float32) * 8.0, 0, 255).astype(np.uint8)
+                            Image.fromarray(ampl, "L").save(
+                                f"Raporty/AMD_ETAP5G/chart_diff_{chart_key}_frame30.png")
+
+        # ETAP 5L: per-frame native GPU gauge blend submit time.
+        if gauge_gpu_active:
+            _g_up = c_uint64(0)
+            _g_bytes = c_uint64(0)
+            _g_blend = c_double(0.0)
+            _g_clear = c_double(0.0)
+            _g_creates = c_uint64(0)
+            native_dll.telem_amd_get_gauge_stats(
+                h_context,
+                byref(_g_up), byref(_g_bytes), byref(_g_blend), byref(_g_clear),
+                byref(_g_creates),
+            )
+            timing_samples["GPU gauge blend submit"].append(float(_g_blend.value))
+
+            # ── ETAP 5L: diagnostic gauge A/B — read back the GPU-blended
+            # gauge bbox from the HUD canvas and compare with the CPU_REFERENCE
+            # result (raw gauge RGBA with dirty zeros dropped, i.e. Pillow
+            # alpha_composite).  Never on the production path. ────────────
+            if gauge_ab_readback:
+                if gauge_ab_bbox is not None and gauge_ab_img is not None:
+                    gx, gy, gw, gh = gauge_ab_bbox
+                    ab_buf = (c_uint8 * (gw * gh * 4))()
+                    if native_dll.telem_amd_get_hud_region_readback(
+                        h_context, gx, gy, gw, gh, ab_buf, gw * 4,
+                    ):
+                        gpu_gauge_ab = np.asarray(
+                            Image.frombuffer("RGBA", (gw, gh), ab_buf,
+                                             "raw", "RGBA", 0, 1),
+                            dtype=np.int16,
+                        )
+                        raw = np.asarray(gauge_ab_img, dtype=np.int16)
+                        # CPU_REFERENCE result: Pillow alpha_composite drops
+                        # RGB where alpha==0 (dirty zeros -> transparent).
+                        cpu_gauge_ab = raw.copy()
+                        cpu_gauge_ab[cpu_gauge_ab[..., 3] == 0, 0:3] = 0
+                        diff = np.abs(gpu_gauge_ab - cpu_gauge_ab)
+                        dmax = diff.max(axis=2)
+                        gauge_ab_results["mae"].append(float(diff.mean()))
+                        gauge_ab_results["max"].append(int(diff.max()))
+                        gauge_ab_results["n>0"].append(int((dmax > 0).sum()))
+                        for key2, thr in (("n>1", 1), ("n>2", 2), ("n>4", 4), ("n>8", 8)):
+                            gauge_ab_results[key2].append(int((dmax > thr).sum()))
+                        # dirty zeros / partial alpha in the raw gauge input.
+                        dz = int(((raw[..., 3] == 0) & (raw[..., 0:3].max(axis=2) != 0)).sum())
+                        pa = int(((raw[..., 3] > 0) & (raw[..., 3] < 255)).sum())
+                        gauge_ab_results["dirty_zeros"].append(dz)
+                        gauge_ab_results["partial_alpha"].append(pa)
+                        if frame_idx in (0, 30, 300, 600, 900, 1130):
+                            outdir = Path("Raporty") / "AMD_ETAP5G"
+                            outdir.mkdir(parents=True, exist_ok=True)
+                            Image.fromarray(gpu_gauge_ab.astype(np.uint8), "RGBA").save(
+                                str(outdir / f"l5_gauge_gpu_{frame_idx}.png"))
+                            Image.fromarray(cpu_gauge_ab.astype(np.uint8), "RGBA").save(
+                                str(outdir / f"l5_gauge_cpu_{frame_idx}.png"))
+                            ampl = np.clip(dmax.astype(np.float32) * 16, 0, 255).astype(np.uint8)
+                            Image.fromarray(ampl, "L").save(
+                                str(outdir / f"l5_gauge_diff_{frame_idx}.png"))
+        frame_acct.mark("native_timings")
+
         if diagnostics_enabled and frame_idx == 30:
             native_dll.telem_amd_dump_checkpoint(h_context, 30, b"E_amf_input", os.path.abspath("E_amf_input.png"))
 
@@ -1296,7 +2193,42 @@ def export_amd_native_d3d11(
             stats_str = f"Render: {pct}% ({frame_idx+1}/{expected_progress_frames}) | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             if progress_cb:
                 progress_cb(frame_idx + 1, stats_str)
+        frame_acct.mark("progress")
+        frame_acct.end_frame()
         frame_idx += 1
+
+    # ── ETAP 5P: dump per-frame accounting trace + summary ─────────────
+    if fa_enabled:
+        etap5p = _frame_accounting_summary(frame_acct)
+        if frame_acct.trace:
+            _fa_path = Path(output_file_str + ".frame_accounting.json")
+            _fa_payload = {
+                "summary": etap5p,
+                "gc_pauses": frame_acct.gc_pauses,
+                "trace": frame_acct.trace,
+            }
+            try:
+                _fa_path.write_text(json.dumps(_fa_payload, indent=1), encoding="utf-8")
+                print(f"[AMD NATIVE D3D11] frame accounting trace: {_fa_path}", flush=True)
+            except Exception as _e:
+                print(f"[AMD NATIVE D3D11] WARNING: frame accounting write failed: {_e}", flush=True)
+        print("[ETAP 5P FRAME ACCOUNTING]", flush=True)
+        print(f"  frame_total med={etap5p['frame_total_ms']['median']:.3f} ms "
+              f"p95={etap5p['frame_total_ms']['p95']:.3f} p99={etap5p['frame_total_ms']['p99']:.3f}",
+              flush=True)
+        print(f"  measured sum med={etap5p['measured_sum_median_ms']:.3f} ms "
+              f"unaccounted med={etap5p['unaccounted_ms']['median']:.3f} ms "
+              f"({etap5p['unaccounted_ms']['pct_of_frame']:.1f}%) "
+              f"accounted={etap5p['accounted_pct']:.1f}%", flush=True)
+        print(f"  GC: collections={etap5p['gc']['collections']} "
+              f"total_pause={etap5p['gc']['total_pause_ms']:.1f} ms "
+              f"max_pause={etap5p['gc']['max_pause_ms']:.2f} ms", flush=True)
+        top = sorted(etap5p["stages"].items(), key=lambda kv: -kv[1]["median_ms"])[:10]
+        for i, (name, s) in enumerate(top, 1):
+            print(f"  TOP{i:2d} {name:20s} med={s['median_ms']:7.3f} p95={s['p95_ms']:7.3f} "
+                  f"{s['median_ms'] / etap5p['frame_total_ms']['median'] * 100:5.1f}%", flush=True)
+    else:
+        etap5p = {"enabled": False}
 
     if proc_dec:
         if proc_dec.stdout and hasattr(proc_dec.stdout, "close"):
@@ -1310,7 +2242,15 @@ def export_amd_native_d3d11(
             pass
 
     # 4. Flush and Retrieve Stats
+    if amf_diag_enabled:
+        _ds0 = c_uint64(0); _vp0 = c_uint64(0); _su0 = c_uint64(0); _re0 = c_uint64(0)
+        native_dll.telem_amd_get_stats(
+            h_context, byref(_ds0), byref(_vp0), byref(_su0), byref(_re0))
+        amf_preflush_submitted = int(_su0.value)
+        amf_preflush_received = int(_re0.value)
+    _drain_t0 = time.perf_counter()
     flush_ok = native_dll.telem_amd_flush(h_context)
+    amf_drain_ms = (time.perf_counter() - _drain_t0) * 1000.0
     if not flush_ok:
         print("[AMD NATIVE D3D11] ERROR: AMF drain/finalize failed.", flush=True)
         native_dll.telem_amd_close(h_context)
@@ -1379,6 +2319,63 @@ def export_amd_native_d3d11(
         104: "DXGI_FORMAT_P010",
     }.get(c_decoder_format.value, f"DXGI_FORMAT_{c_decoder_format.value}")
 
+    # ── ETAP 5O: AMF queue / cadence / drain summary ───────────────────
+    etapa5o = {
+        "amf_mode": amf_mode,
+        "amf_diag": amf_diag_enabled,
+        "submitted_total": int(c_sub.value),
+        "output_total": int(c_rec.value),
+        "input_full_total": int(c_input_full.value),
+        "retry_total": int(c_retries.value),
+        "preflush_submitted": amf_preflush_submitted,
+        "preflush_received": amf_preflush_received,
+        "outstanding_at_final_submit": max(0, amf_preflush_submitted - amf_preflush_received),
+        "drain_ms": amf_drain_ms,
+        "frames_drained_in_flush": max(0, int(c_rec.value) - amf_preflush_received),
+        "queue": None,
+        "cadence": None,
+    }
+    if amf_diag_enabled and amf_diag_samples:
+        outs = [max(0, s[2] - s[3]) for s in amf_diag_samples]
+        def _pct(v, p):
+            x = sorted(v); return x[min(len(x) - 1, int(len(x) * p))]
+        half = len(outs) // 2
+        if half >= 4:
+            first = sum(outs[:half]) / half
+            second = sum(outs[half:]) / max(1, len(outs) - half)
+            trend = ("GROWS" if second > first + 0.5
+                     else ("SHRINKS" if second < first - 0.5 else "STABLE"))
+        else:
+            trend = "STABLE"
+        o_times = [
+            s[1] for i, s in enumerate(amf_diag_samples)
+            if i == 0 or s[3] > amf_diag_samples[i - 1][3]
+        ]
+        intervals = [o_times[i] - o_times[i - 1] for i in range(1, len(o_times))] or [0.0]
+        med_int = _pct(intervals, 0.5)
+        etapa5o["queue"] = {
+            "avg": sum(outs) / len(outs),
+            "median": _pct(outs, 0.5), "p95": _pct(outs, 0.95),
+            "p99": _pct(outs, 0.99), "max": max(outs), "trend": trend,
+        }
+        etapa5o["cadence"] = {
+            "n_output_events": len(o_times),
+            "median_interval_ms": med_int * 1000.0,
+            "p95_interval_ms": _pct(intervals, 0.95) * 1000.0,
+            "equivalent_fps": (1.0 / med_int) if med_int > 0 else 0.0,
+        }
+        print("[ETAP 5O AMF QUEUE]", flush=True)
+        print(f"  outstanding: avg={etapa5o['queue']['avg']:.2f} "
+              f"med={etapa5o['queue']['median']} p95={etapa5o['queue']['p95']} "
+              f"p99={etapa5o['queue']['p99']} max={etapa5o['queue']['max']} "
+              f"trend={trend}", flush=True)
+        print(f"  output cadence: med={etapa5o['cadence']['median_interval_ms']:.2f} ms "
+              f"p95={etapa5o['cadence']['p95_interval_ms']:.2f} ms "
+              f"equivFPS={etapa5o['cadence']['equivalent_fps']:.2f}", flush=True)
+    print(f"  AMF final drain: outstanding_at_final_submit="
+          f"{etapa5o['outstanding_at_final_submit']} drain={amf_drain_ms:.0f} ms "
+          f"frames_drained={etapa5o['frames_drained_in_flush']}", flush=True)
+
     print("\n[AMD NATIVE D3D11 PIPELINE STATS]", flush=True)
     print(f"  Source metadata:  {source_frames}", flush=True)
     print(f"  Source requested: {total_frames}", flush=True)
@@ -1401,6 +2398,34 @@ def export_amd_native_d3d11(
     print(f"  HUD tex uploads:  {c_hud_texture_uploads.value}", flush=True)
     print(f"  HUD upload bytes: {c_hud_uploaded_bytes.value}", flush=True)
     print(f"  HUD upload rects: {c_hud_uploaded_rects.value}", flush=True)
+    print(f"  GPU chart path:   {requested_chart_path} ({gpu_chart_reason})", flush=True)
+    print(f"  Chart GPU frames: CAD={chart_gpu_frames.get('fit_cadence_text', 0)} HR={chart_gpu_frames.get('fit_heart_rate_text', 0)}", flush=True)
+    if gpu_charts_split:
+        print(
+            f"  Chart static uploads: {chart_static_uploads} "
+            f"({chart_static_bytes_total / (1024.0 * 1024.0):.3f} MiB total)",
+            flush=True,
+        )
+        print(
+            f"  Chart dynamic uploads: {chart_dynamic_uploads} "
+            f"({chart_dynamic_bytes_total / (1024.0 * 1024.0):.4f} MiB total, "
+            f"{chart_dynamic_bytes_total / max(1, chart_split_frames) / (1024.0 * 1024.0):.4f} MiB/frame)",
+            flush=True,
+        )
+        print(
+            f"  Chart full 1160x511 tobytes: {chart_full_tobytes_total} total "
+            f"(static-only, {chart_full_tobytes_total - len(chart_static_uploaded)} per-frame)",
+            flush=True,
+        )
+    else:
+        print(f"  Chart upload MiB:{chart_uploaded_bytes_total / (1024.0 * 1024.0):9.2f} total", flush=True)
+    print(f"  GPU gauge path:   {requested_gauge_path} ({gauge_gpu_reason})", flush=True)
+    print(f"  Gauge GPU frames: {gauge_gpu_frames}", flush=True)
+    print(
+        f"  Gauge upload MiB: {gauge_uploaded_bytes_total / (1024.0 * 1024.0):.4f} total, "
+        f"{gauge_uploaded_bytes_total / max(1, gauge_gpu_frames) / (1024.0 * 1024.0):.4f} MiB/frame",
+        flush=True,
+    )
     print(f"  MF ReadSample:    {c_mf_read_calls.value}", flush=True)
     print(f"  MF video samples: {c_mf_video_samples.value}", flush=True)
     print(f"  MF stream ticks:  {c_mf_stream_ticks.value}", flush=True)
@@ -1420,42 +2445,60 @@ def export_amd_native_d3d11(
 
     # 5. Final Fast Remux (Copy Video Stream + Copy Audio Stream - ZERO VIDEO RE-ENCODE)
     temp_h265 = output_file_str + ".h265"
-    if not os.path.exists(temp_h265) or os.path.getsize(temp_h265) == 0:
-        print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
-        return False
-
-    cmd_mux = [
-        ffmpeg_exe, "-y",
-        "-i", temp_h265,
-        "-i", input_file_str,
-        "-map", "0:v",
-        "-map", "1:a?",
-        "-c:v", "copy",
-        "-c:a", "copy",
-        output_file_str
-    ]
-
-    print("[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...", flush=True)
-    mux_start = time.perf_counter()
-    proc = subprocess.run(cmd_mux, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    mux_elapsed_ms = (time.perf_counter() - mux_start) * 1000.0
-    timing_samples["Audio mux"].append(mux_elapsed_ms)
-    if proc.returncode != 0:
-        print(f"[AMD NATIVE D3D11] WARNING: FFmpeg remux failed, renaming raw bitstream.", flush=True)
-        if os.path.exists(output_file_str): os.remove(output_file_str)
-        os.rename(temp_h265, output_file_str)
+    if amf_mode in ("SUBMIT_NO_MUX", "BYPASS"):
+        # ETAP 5O/5U diagnostic: encode+query done (SUBMIT_NO_MUX) or frontend
+        # only with no encoder (BYPASS) — skip mux / file I/O.
+        muxed_frames = int(c_rec.value)
+        audio_present = False
+        final_probe = None
+        print(
+            "[AMD NATIVE D3D11] " + ("SUBMIT_NO_MUX" if amf_mode == "SUBMIT_NO_MUX"
+                                     else "AMF BYPASS")
+            + ": encoded packets counted / frontend only, mux skipped "
+            f"(h265 temp = {temp_h265})",
+            flush=True,
+        )
     else:
-        print(f"[AMD NATIVE D3D11] Remux complete. Final output: {output_file_str}", flush=True)
-        if os.path.exists(temp_h265):
-            os.remove(temp_h265)
+        if not os.path.exists(temp_h265) or os.path.getsize(temp_h265) == 0:
+            print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
+            return False
 
+        cmd_mux = [
+            ffmpeg_exe, "-y",
+            "-i", temp_h265,
+            "-i", input_file_str,
+            "-map", "0:v",
+            "-map", "1:a?",
+            "-c:v", "copy",
+            "-c:a", "copy",
+            output_file_str
+        ]
+
+        print("[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...", flush=True)
+        mux_start = time.perf_counter()
+        proc = subprocess.run(cmd_mux, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        mux_elapsed_ms = (time.perf_counter() - mux_start) * 1000.0
+        timing_samples["Audio mux"].append(mux_elapsed_ms)
+        if proc.returncode != 0:
+            print(f"[AMD NATIVE D3D11] WARNING: FFmpeg remux failed, renaming raw bitstream.", flush=True)
+            if os.path.exists(output_file_str): os.remove(output_file_str)
+            os.rename(temp_h265, output_file_str)
+        else:
+            print(f"[AMD NATIVE D3D11] Remux complete. Final output: {output_file_str}", flush=True)
+            if os.path.exists(temp_h265):
+                os.remove(temp_h265)
+
+        final_probe = _probe_video_summary(ffmpeg_exe, output_file_str)
+        muxed_frames = _stream_frame_count(final_probe, "video")
+        audio_present = any(
+            stream.get("codec_type") == "audio" for stream in final_probe.get("streams", [])
+        )
     end_to_end_elapsed = time.perf_counter() - end_to_end_start
-    final_probe = _probe_video_summary(ffmpeg_exe, output_file_str)
-    muxed_frames = _stream_frame_count(final_probe, "video")
-    audio_present = any(
-        stream.get("codec_type") == "audio" for stream in final_probe.get("streams", [])
-    )
-    true_fps = c_rec.value / end_to_end_elapsed if end_to_end_elapsed > 0 else 0.0
+    if amf_mode == "BYPASS":
+        # ETAP 5U: frontend-only equivalent FPS (no encoder) — use VP frames.
+        true_fps = c_vp.value / end_to_end_elapsed if end_to_end_elapsed > 0 else 0.0
+    else:
+        true_fps = c_rec.value / end_to_end_elapsed if end_to_end_elapsed > 0 else 0.0
     timing_summaries = {
         name: _timing_summary(values) for name, values in timing_samples.items()
     }
@@ -1504,6 +2547,9 @@ def export_amd_native_d3d11(
             "amf_submitted": c_sub.value,
             "amf_output": c_rec.value,
             "muxed_frames": muxed_frames,
+            "cadence_gpu": chart_gpu_frames.get("fit_cadence_text", 0),
+            "hr_gpu": chart_gpu_frames.get("fit_heart_rate_text", 0),
+            "map_gpu": map_gpu_frames,
         },
         "amf": {
             "input_full_count": c_input_full.value,
@@ -1600,7 +2646,87 @@ def export_amd_native_d3d11(
                 if map_ab_readback and map_ab_results["mae"] else None
             ),
         },
+        "etap5j": {
+            "chart_path": requested_chart_path,
+            "chart_path_requested": requested_chart_path,
+            "chart_path_safe_reason": gpu_chart_reason,
+            "active_gpu_charts": sorted(gpu_chart_keys),
+            "chart_gpu_frames_cadence": chart_gpu_frames.get("fit_cadence_text", 0),
+            "chart_gpu_frames_hr": chart_gpu_frames.get("fit_heart_rate_text", 0),
+            "chart_upload_bytes_total": chart_uploaded_bytes_total,
+            "chart_upload_mib_per_frame": (
+                chart_uploaded_bytes_total / max(1, hud_frames) / (1024.0 * 1024.0)
+                if hud_frames else 0.0
+            ),
+            "chart_gpu_to_cpu_readback": 0,
+            "chart_persistent_textures": len(gpu_chart_keys),
+            "chart_ab_readback": chart_ab_readback,
+            "chart_ab": (
+                {key: {k2: _value_summary(v2) for k2, v2 in res.items() if v2}
+                 for key, res in chart_ab_results.items() if res["mae"]}
+                if chart_ab_readback else None
+            ),
+        },
+        "etap5k": {
+            "split": gpu_charts_split,
+            "static_uploads": chart_static_uploads,
+            "static_bytes_total": chart_static_bytes_total,
+            "static_mib_total": chart_static_bytes_total / (1024.0 * 1024.0),
+            "dynamic_uploads": chart_dynamic_uploads,
+            "dynamic_bytes_total": chart_dynamic_bytes_total,
+            "dynamic_mib_per_frame": (
+                chart_dynamic_bytes_total / max(1, chart_split_frames) / (1024.0 * 1024.0)
+                if chart_split_frames else 0.0
+            ),
+            "full_tobytes_total": chart_full_tobytes_total,
+            "full_tobytes_per_frame": (
+                (chart_full_tobytes_total - len(chart_static_uploaded)) / max(1, hud_frames)
+                if hud_frames else 0.0
+            ),
+            "split_frames": chart_split_frames,
+            "static_ab": chart_static_ab_results or None,
+        },
+        "etap5l": {
+            "gauge_path": requested_gauge_path,
+            "gauge_path_safe_reason": gauge_gpu_reason,
+            "gauge_gpu_active": gauge_gpu_active,
+            "gauge_gpu_frames": gauge_gpu_frames,
+            "gauge_upload_bytes_total": gauge_uploaded_bytes_total,
+            "gauge_upload_mib_per_frame": (
+                gauge_uploaded_bytes_total / max(1, gauge_gpu_frames) / (1024.0 * 1024.0)
+                if gauge_gpu_frames else 0.0
+            ),
+            "gauge_gpu_to_cpu_readback": 0,
+            "gauge_ab_readback": gauge_ab_readback,
+            "gauge_ab": (
+                {key: _value_summary(values) for key, values in gauge_ab_results.items() if values}
+                if gauge_ab_readback and gauge_ab_results["mae"] else None
+            ),
+        },
         "etap5a": overlay_profiler.summary(),
+        "etap5o": etapa5o,
+        "etap5p": etap5p if etap5p is not None else {"enabled": fa_enabled},
+        "etap5n": {
+            "telemetry_mode": telemetry_mode,
+            "precomputed": (
+                {
+                    "frames": telemetry_cache.frames,
+                    "build_ms": telemetry_cache.build_ms,
+                    "memory_mib": telemetry_cache.memory_bytes / (1024.0 * 1024.0),
+                    "structure": telemetry_cache.stats()["structure"],
+                    "resolver_calls_per_frame": (
+                        telemetry_cache.resolver_calls / max(1, telemetry_cache.frames)
+                    ),
+                    "interpolation_calls_per_frame": (
+                        telemetry_cache.interpolation_calls / max(1, telemetry_cache.frames)
+                    ),
+                    "gpmf_lookups_per_frame": (
+                        telemetry_cache.gpmf_lookups / max(1, telemetry_cache.frames)
+                    ),
+                }
+                if telemetry_cache is not None else None
+            ),
+        },
         "etap5b": {
             **fit_field_plan,
             "resolve_cache_value_calls": (

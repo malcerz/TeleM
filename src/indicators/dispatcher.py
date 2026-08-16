@@ -41,6 +41,7 @@ def render_value_indicator(
     supersample: int = 1,
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
+    split_chart_keys: Optional[set[str]] = None,
 ) -> tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]:
     """Render a single telemetry indicator – dispatcher to per-form helpers."""
     cfg = cfg_override if cfg_override else layout["indicators"].get(key)
@@ -91,6 +92,9 @@ def render_value_indicator(
             history_data=history_data,
             current_position=current_position,
             formatted_val=formatted_val,
+            split_mode=bool(
+                split_chart_keys is not None and key in split_chart_keys
+            ),
         )
     elif form == "segment_bar":
         return _render_segment_bar_indicator(**_kwargs, formatted_val=formatted_val)

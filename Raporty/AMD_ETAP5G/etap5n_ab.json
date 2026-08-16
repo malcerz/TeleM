@@ -1,0 +1,65 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "mode": "REFERENCE",
+      "wall": 58.403812408447266,
+      "render_wall": 58.403812408447266,
+      "true_fps": 20.002405417472033,
+      "render_fps": 19.36517417887633,
+      "telemetry_med_ms": 3.3849999999802094,
+      "compose_med_ms": 7.425100000546081,
+      "cache_build_ms": 0.0,
+      "drops": 0,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "mode": "PRECOMPUTED",
+      "wall": 72.82688617706299,
+      "render_wall": 68.14611657706337,
+      "true_fps": 16.043649462021932,
+      "render_fps": 16.596690417729132,
+      "telemetry_med_ms": 0.036299999919719994,
+      "compose_med_ms": 8.36640000125044,
+      "cache_build_ms": 4680.769599999621,
+      "drops": 0,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "mode": "REFERENCE",
+      "wall": 63.09746599197388,
+      "render_wall": 63.09746599197388,
+      "true_fps": 18.46117085031972,
+      "render_fps": 17.924650098371075,
+      "telemetry_med_ms": 3.269100001489278,
+      "compose_med_ms": 7.28259999959846,
+      "cache_build_ms": 0.0,
+      "drops": 0,
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "mode": "PRECOMPUTED",
+      "wall": 62.426793813705444,
+      "render_wall": 59.867636213708465,
+      "true_fps": 18.66442112282153,
+      "render_fps": 18.891676229919767,
+      "telemetry_med_ms": 0.03600000127335079,
+      "compose_med_ms": 8.044300000619842,
+      "cache_build_ms": 2559.157599996979,
+      "drops": 0,
+      "valid": true
+    }
+  },
+  "ref_median_total_wall": 60.75063920021057,
+  "pre_median_total_wall": 67.62683999538422,
+  "total_gain_pct": -11.318729951980178,
+  "pre_median_render_wall": 64.00687639538592,
+  "pre_render_loop_fps": 17.669976472739275,
+  "ref_median_fps": 19.231788133895876,
+  "pre_median_fps": 17.35403529242173,
+  "realtime_factor": 0.5580289976629615,
+  "realtime_margin_pct": -44.19710023370384
+}

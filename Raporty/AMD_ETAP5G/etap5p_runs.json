@@ -1,0 +1,371 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "wall": 43.443262815475464,
+      "true_fps": 27.17988407887748,
+      "accounting": {
+        "enabled": false
+      },
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "wall": 43.63867688179016,
+      "true_fps": 27.096020318134027,
+      "accounting": {
+        "enabled": true,
+        "frames": 1131,
+        "frame_total_ms": {
+          "median": 33.8262,
+          "p95": 52.1273,
+          "p99": 64.7505,
+          "avg": 36.03689363395225
+        },
+        "measured_sum_median_ms": 25.3315,
+        "unaccounted_ms": {
+          "median": 0.0016,
+          "p95": 0.0063,
+          "p99": 0.0089,
+          "max": 0.029,
+          "pct_of_frame": 0.004730061313419775
+        },
+        "accounted_pct": 99.99526993868658,
+        "stages": {
+          "chart_upload": {
+            "median_ms": 0.1664,
+            "p95_ms": 0.6041,
+            "p99_ms": 1.3364,
+            "avg_ms": 0.23969893899204242
+          },
+          "compose": {
+            "median_ms": 9.61,
+            "p95_ms": 23.0899,
+            "p99_ms": 29.1837,
+            "avg_ms": 12.01768302387268
+          },
+          "decode_read": {
+            "median_ms": 0.8129,
+            "p95_ms": 4.4414,
+            "p99_ms": 7.5847,
+            "avg_ms": 1.4777867374005305
+          },
+          "frame0_probe": {
+            "median_ms": 0.0041,
+            "p95_ms": 0.0172,
+            "p99_ms": 0.1012,
+            "avg_ms": 0.1401551724137931
+          },
+          "gauge_upload": {
+            "median_ms": 1.9805,
+            "p95_ms": 5.6175,
+            "p99_ms": 8.4786,
+            "avg_ms": 2.418839522546419
+          },
+          "hud_dirty": {
+            "median_ms": 1.2616,
+            "p95_ms": 3.918,
+            "p99_ms": 5.4075,
+            "avg_ms": 1.6096019451812555
+          },
+          "hud_setup": {
+            "median_ms": 0.0333,
+            "p95_ms": 0.1095,
+            "p99_ms": 0.1348,
+            "avg_ms": 0.04325977011494253
+          },
+          "loop_guard": {
+            "median_ms": 0.0016,
+            "p95_ms": 0.0065,
+            "p99_ms": 0.0089,
+            "avg_ms": 0.0020651635720601237
+          },
+          "map_upload": {
+            "median_ms": 3.0101,
+            "p95_ms": 8.0862,
+            "p99_ms": 9.8726,
+            "avg_ms": 3.5549687886825816
+          },
+          "native_timings": {
+            "median_ms": 0.1282,
+            "p95_ms": 0.4955,
+            "p99_ms": 0.6951,
+            "avg_ms": 0.16952944297082229
+          },
+          "process_frame": {
+            "median_ms": 3.8406,
+            "p95_ms": 29.9743,
+            "p99_ms": 34.6004,
+            "avg_ms": 8.139561096374889
+          },
+          "progress": {
+            "median_ms": 0.0033,
+            "p95_ms": 0.0316,
+            "p99_ms": 0.059,
+            "avg_ms": 0.00752157382847038
+          },
+          "telemetry": {
+            "median_ms": 4.1985,
+            "p95_ms": 13.0586,
+            "p99_ms": 15.134,
+            "avg_ms": 5.849205481874447
+          },
+          "update_hud": {
+            "median_ms": 0.2804,
+            "p95_ms": 0.8424,
+            "p99_ms": 1.2767,
+            "avg_ms": 0.36490689655172415
+          }
+        },
+        "gc": {
+          "collections": 11,
+          "collections_per_frame": 0.009725906277630416,
+          "total_pause_ms": 7.073100005072774,
+          "max_pause_ms": 1.882699998532189,
+          "avg_pause_ms": 0.6430090913702522
+        },
+        "estimated_instrumentation_overhead_us": 950.04
+      },
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "wall": 40.869951486587524,
+      "true_fps": 28.960333921714675,
+      "accounting": {
+        "enabled": true,
+        "frames": 1131,
+        "frame_total_ms": {
+          "median": 31.2079,
+          "p95": 50.392,
+          "p99": 67.4716,
+          "avg": 33.763554907161804
+        },
+        "measured_sum_median_ms": 29.3277,
+        "unaccounted_ms": {
+          "median": 0.0023,
+          "p95": 0.0087,
+          "p99": 0.0112,
+          "max": 0.0313,
+          "pct_of_frame": 0.007369928768036298
+        },
+        "accounted_pct": 99.99263007123196,
+        "stages": {
+          "chart_upload": {
+            "median_ms": 0.1623,
+            "p95_ms": 0.5118,
+            "p99_ms": 1.3685,
+            "avg_ms": 0.24321237842617152
+          },
+          "compose": {
+            "median_ms": 10.3705,
+            "p95_ms": 23.8354,
+            "p99_ms": 30.4381,
+            "avg_ms": 12.617220512820513
+          },
+          "decode_read": {
+            "median_ms": 0.9808,
+            "p95_ms": 5.035,
+            "p99_ms": 7.5746,
+            "avg_ms": 1.8170812555260831
+          },
+          "frame0_probe": {
+            "median_ms": 0.0051,
+            "p95_ms": 0.0163,
+            "p99_ms": 0.1029,
+            "avg_ms": 0.14782060123784263
+          },
+          "gauge_upload": {
+            "median_ms": 1.8187,
+            "p95_ms": 5.1634,
+            "p99_ms": 7.6913,
+            "avg_ms": 2.2340173297966404
+          },
+          "hud_dirty": {
+            "median_ms": 0.9518,
+            "p95_ms": 2.8945,
+            "p99_ms": 5.2609,
+            "avg_ms": 1.2996946065428825
+          },
+          "hud_setup": {
+            "median_ms": 0.046,
+            "p95_ms": 0.1223,
+            "p99_ms": 0.1439,
+            "avg_ms": 0.05794297082228117
+          },
+          "loop_guard": {
+            "median_ms": 0.0018,
+            "p95_ms": 0.007,
+            "p99_ms": 0.009,
+            "avg_ms": 0.0025657824933687
+          },
+          "map_upload": {
+            "median_ms": 2.4871,
+            "p95_ms": 6.8703,
+            "p99_ms": 10.0864,
+            "avg_ms": 3.0909714412024756
+          },
+          "native_timings": {
+            "median_ms": 0.1506,
+            "p95_ms": 0.5251,
+            "p99_ms": 0.7405,
+            "avg_ms": 0.20086949602122017
+          },
+          "process_frame": {
+            "median_ms": 2.3609,
+            "p95_ms": 6.1013,
+            "p99_ms": 8.6491,
+            "avg_ms": 2.8546927497789567
+          },
+          "progress": {
+            "median_ms": 0.0043,
+            "p95_ms": 0.0355,
+            "p99_ms": 0.1041,
+            "avg_ms": 0.009460389036251106
+          },
+          "telemetry": {
+            "median_ms": 9.7632,
+            "p95_ms": 13.7567,
+            "p99_ms": 16.0037,
+            "avg_ms": 8.89044809902741
+          },
+          "update_hud": {
+            "median_ms": 0.2246,
+            "p95_ms": 0.6268,
+            "p99_ms": 1.0076,
+            "avg_ms": 0.294432183908046
+          }
+        },
+        "gc": {
+          "collections": 11,
+          "collections_per_frame": 0.009725906277630416,
+          "total_pause_ms": 7.604200000059791,
+          "max_pause_ms": 1.792900002328679,
+          "avg_pause_ms": 0.6912909090963446
+        },
+        "estimated_instrumentation_overhead_us": 950.04
+      },
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "wall": 46.32803821563721,
+      "true_fps": 25.48575763925069,
+      "accounting": {
+        "enabled": true,
+        "frames": 1131,
+        "frame_total_ms": {
+          "median": 34.7788,
+          "p95": 51.3357,
+          "p99": 58.802,
+          "avg": 36.11622970822282
+        },
+        "measured_sum_median_ms": 28.2142,
+        "unaccounted_ms": {
+          "median": 0.0013,
+          "p95": 0.0057,
+          "p99": 0.008,
+          "max": 0.0141,
+          "pct_of_frame": 0.0037379093010684672
+        },
+        "accounted_pct": 99.99626209069893,
+        "stages": {
+          "chart_upload": {
+            "median_ms": 0.1708,
+            "p95_ms": 0.6767,
+            "p99_ms": 1.2818,
+            "avg_ms": 0.24849593280282936
+          },
+          "compose": {
+            "median_ms": 8.9707,
+            "p95_ms": 23.2759,
+            "p99_ms": 28.2064,
+            "avg_ms": 11.796937312113174
+          },
+          "decode_read": {
+            "median_ms": 0.7307,
+            "p95_ms": 4.3199,
+            "p99_ms": 6.8751,
+            "avg_ms": 1.293338726790451
+          },
+          "frame0_probe": {
+            "median_ms": 0.002,
+            "p95_ms": 0.0138,
+            "p99_ms": 0.0709,
+            "avg_ms": 0.17980716180371353
+          },
+          "gauge_upload": {
+            "median_ms": 2.0016,
+            "p95_ms": 5.8388,
+            "p99_ms": 8.2466,
+            "avg_ms": 2.487885764809903
+          },
+          "hud_dirty": {
+            "median_ms": 1.2254,
+            "p95_ms": 3.9498,
+            "p99_ms": 5.8561,
+            "avg_ms": 1.6093671087533157
+          },
+          "hud_setup": {
+            "median_ms": 0.0284,
+            "p95_ms": 0.1017,
+            "p99_ms": 0.1291,
+            "avg_ms": 0.03665481874447392
+          },
+          "loop_guard": {
+            "median_ms": 0.0013,
+            "p95_ms": 0.0059,
+            "p99_ms": 0.0089,
+            "avg_ms": 0.0017902740937223696
+          },
+          "map_upload": {
+            "median_ms": 2.8425,
+            "p95_ms": 8.6191,
+            "p99_ms": 10.5439,
+            "avg_ms": 3.5538757736516358
+          },
+          "native_timings": {
+            "median_ms": 0.1161,
+            "p95_ms": 0.4781,
+            "p99_ms": 0.7202,
+            "avg_ms": 0.15321114058355437
+          },
+          "process_frame": {
+            "median_ms": 11.8048,
+            "p95_ms": 34.6513,
+            "p99_ms": 38.444,
+            "avg_ms": 14.325283377541998
+          },
+          "progress": {
+            "median_ms": 0.003,
+            "p95_ms": 0.0266,
+            "p99_ms": 0.0548,
+            "avg_ms": 0.007025906277630415
+          },
+          "telemetry": {
+            "median_ms": 0.0393,
+            "p95_ms": 0.1516,
+            "p99_ms": 0.2086,
+            "avg_ms": 0.0523499557913351
+          },
+          "update_hud": {
+            "median_ms": 0.2776,
+            "p95_ms": 0.8774,
+            "p99_ms": 1.3814,
+            "avg_ms": 0.36851671087533155
+          }
+        },
+        "gc": {
+          "collections": 13,
+          "collections_per_frame": 0.011494252873563218,
+          "total_pause_ms": 9.522799995465903,
+          "max_pause_ms": 2.136900002369657,
+          "avg_pause_ms": 0.7325230765743002
+        },
+        "estimated_instrumentation_overhead_us": 950.04
+      },
+      "valid": true
+    }
+  },
+  "instrumentation_overhead_pct": 0.4498144330105113
+}

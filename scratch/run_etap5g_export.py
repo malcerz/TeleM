@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -39,10 +40,22 @@ def main() -> int:
     parser.add_argument("--frames", type=int, default=1131)
     parser.add_argument("--map-path", choices=["CPU_REFERENCE", "GPU"], default="GPU")
     parser.add_argument("--filter", choices=["BILINEAR", "BICUBIC", "LANCZOS"], default="LANCZOS")
+    parser.add_argument("--chart-path", choices=["CPU_REFERENCE", "GPU", "GPU_SPLIT"], default=None,
+                        help="ETAP 5J/5K: charts in Pillow HUD (CPU_REFERENCE), GPU blend "
+                             "(GPU), or GPU static+dynamic split (GPU_SPLIT). "
+                             "Overrides AMD_CHART_PATH env var.")
+    parser.add_argument("--gauge-path", choices=["CPU_REFERENCE", "GPU"], default=None,
+                        help="ETAP 5L: speed gauge in Pillow HUD (CPU_REFERENCE) or GPU "
+                             "blend (GPU). Overrides AMD_GAUGE_PATH env var.")
     parser.add_argument("--output", default="Raporty/AMD_ETAP5G/export.mp4")
     parser.add_argument("--input", default="Video/GX020079.mp4")
     parser.add_argument("--profile", action="store_true", default=False)
     args = parser.parse_args()
+
+    if args.chart_path:
+        os.environ["AMD_CHART_PATH"] = args.chart_path
+    if args.gauge_path:
+        os.environ["AMD_GAUGE_PATH"] = args.gauge_path
 
     duration_s = args.frames * (1001.0 / 30000.0)
     root = ROOT

@@ -1,0 +1,90 @@
+{
+  "phase_a": {
+    "raw_frames": 1131,
+    "raw_mismatches": 0,
+    "dz_frames": 1131,
+    "dz_total": 425256,
+    "dz_max": 376,
+    "alpha_min": 0,
+    "alpha_max": 255,
+    "partial_alpha_frames": 1131,
+    "cpu_parity_mismatches": 0,
+    "cpu_parity_max": 0
+  },
+  "phase_b": {
+    "rc": 0,
+    "ab": {
+      "mae": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "max": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "n>0": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "n>1": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "n>2": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "n>4": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "n>8": {
+        "count": 1131,
+        "avg": 0.0,
+        "median": 0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "dirty_zeros": {
+        "count": 1131,
+        "avg": 2913.3430592396107,
+        "median": 2925,
+        "p95": 2926.0,
+        "p99": 2926.0
+      },
+      "partial_alpha": {
+        "count": 1131,
+        "avg": 6243.057471264367,
+        "median": 6225,
+        "p95": 6343.0,
+        "p99": 6369.0
+      }
+    },
+    "profile": "C:\\_DEV\\TeleM\\Raporty\\AMD_ETAP5G\\l5_final_gpu_ab.mp4.amd_profile.json"
+  },
+  "phase_c": {
+    "rc": 0,
+    "cpu_hash": "ff0e8b5c8cca35e9a78a431bf01c5a48257afc46df625fd922e5d737a8202a04",
+    "gpu_hash": "ff0e8b5c8cca35e9a78a431bf01c5a48257afc46df625fd922e5d737a8202a04",
+    "identical": true
+  },
+  "final_status": "PASS-EXACT"
+}

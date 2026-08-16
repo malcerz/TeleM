@@ -1,0 +1,56 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "compose": "REFERENCE",
+      "wall": 45.51275277137756,
+      "true_fps": 27.03586105454715,
+      "compose_overlay_med": 6.592300000193063,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "compose": "OPTIMIZED",
+      "wall": 36.8081419467926,
+      "true_fps": 32.42303888604303,
+      "compose_overlay_med": 4.817999993974809,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "compose": "REFERENCE",
+      "wall": 34.745046615600586,
+      "true_fps": 34.36358344189873,
+      "compose_overlay_med": 9.314399998402223,
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "compose": "OPTIMIZED",
+      "wall": 37.64890098571777,
+      "true_fps": 31.612231080220845,
+      "compose_overlay_med": 4.658300000301097,
+      "valid": true
+    }
+  },
+  "order": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "ref_fps": [
+    27.03586105454715,
+    34.36358344189873
+  ],
+  "opt_fps": [
+    32.42303888604303,
+    31.612231080220845
+  ],
+  "ref_fps_med": 30.69972224822294,
+  "opt_fps_med": 32.01763498313194,
+  "fps_delta": 1.317912734909001,
+  "fps_delta_pct": 4.292914197245835,
+  "ref_wall_med": 40.128899693489075,
+  "opt_wall_med": 37.22852146625519
+}

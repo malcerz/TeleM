@@ -1,0 +1,146 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "mode": "ENCODE",
+      "wall": 45.54645013809204,
+      "true_fps": 25.922951683819164,
+      "valid": true,
+      "queue": {
+        "avg": 5.975243147656941,
+        "median": 6,
+        "p95": 6,
+        "p99": 6,
+        "max": 6,
+        "trend": "STABLE"
+      },
+      "cadence": {
+        "n_output_events": 1126,
+        "median_interval_ms": 35.281899999972666,
+        "p95_interval_ms": 54.01099999653525,
+        "equivalent_fps": 28.343144785308464
+      },
+      "outstanding_at_final_submit": 6,
+      "drain_ms": 39.221199996973155,
+      "frames_drained_in_flush": 6,
+      "input_full_total": 0,
+      "submitted": 1131,
+      "output": 1131
+    },
+    "B": {
+      "tag": "B",
+      "mode": "ENCODE",
+      "wall": 43.68934082984924,
+      "true_fps": 27.195619919141638,
+      "valid": true,
+      "queue": {
+        "avg": 2.9938107869142354,
+        "median": 3,
+        "p95": 3,
+        "p99": 3,
+        "max": 3,
+        "trend": "STABLE"
+      },
+      "cadence": {
+        "n_output_events": 1129,
+        "median_interval_ms": 33.49259999959031,
+        "p95_interval_ms": 51.35970000264933,
+        "equivalent_fps": 29.857341622096587
+      },
+      "outstanding_at_final_submit": 3,
+      "drain_ms": 52.47099999905913,
+      "frames_drained_in_flush": 3,
+      "input_full_total": 0,
+      "submitted": 1131,
+      "output": 1131
+    },
+    "C": {
+      "tag": "C",
+      "mode": "ENCODE",
+      "wall": 41.65261888504028,
+      "true_fps": 28.564927515765802,
+      "valid": true,
+      "queue": {
+        "avg": 3.9876215738284704,
+        "median": 4,
+        "p95": 4,
+        "p99": 4,
+        "max": 4,
+        "trend": "STABLE"
+      },
+      "cadence": {
+        "n_output_events": 1128,
+        "median_interval_ms": 32.61209999982384,
+        "p95_interval_ms": 50.326500000664964,
+        "equivalent_fps": 30.663465401044448
+      },
+      "outstanding_at_final_submit": 4,
+      "drain_ms": 30.032100003154483,
+      "frames_drained_in_flush": 4,
+      "input_full_total": 0,
+      "submitted": 1131,
+      "output": 1131
+    },
+    "D": {
+      "tag": "D",
+      "mode": "ENCODE",
+      "wall": 44.06981587409973,
+      "true_fps": 26.83243089256913,
+      "valid": true,
+      "queue": {
+        "avg": 3.47656940760389,
+        "median": 3,
+        "p95": 5,
+        "p99": 5,
+        "max": 5,
+        "trend": "GROWS"
+      },
+      "cadence": {
+        "n_output_events": 1127,
+        "median_interval_ms": 32.24660000341828,
+        "p95_interval_ms": 66.74570000177482,
+        "equivalent_fps": 31.01102131368875
+      },
+      "outstanding_at_final_submit": 5,
+      "drain_ms": 228.21309999926598,
+      "frames_drained_in_flush": 5,
+      "input_full_total": 0,
+      "submitted": 1131,
+      "output": 1131
+    },
+    "E": {
+      "tag": "E",
+      "mode": "SUBMIT_NO_MUX",
+      "wall": 55.14465355873108,
+      "true_fps": 21.305021598112646,
+      "valid": true,
+      "queue": {
+        "avg": 5.016799292661362,
+        "median": 6,
+        "p95": 6,
+        "p99": 6,
+        "max": 6,
+        "trend": "GROWS"
+      },
+      "cadence": {
+        "n_output_events": 1126,
+        "median_interval_ms": 36.12789999897359,
+        "p95_interval_ms": 99.75839999970049,
+        "equivalent_fps": 27.67943888320136
+      },
+      "outstanding_at_final_submit": 6,
+      "drain_ms": 130.9551999984251,
+      "frames_drained_in_flush": 6,
+      "input_full_total": 0,
+      "submitted": 1131,
+      "output": 1131
+    }
+  },
+  "aggregate": {
+    "median_fps": 27.014025405855385,
+    "min_fps": 25.922951683819164,
+    "max_fps": 28.564927515765802,
+    "median_wall": 43.87957835197449,
+    "realtime_factor": 0.9013688824109238
+  }
+}

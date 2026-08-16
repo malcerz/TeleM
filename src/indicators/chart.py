@@ -14,7 +14,13 @@ except ImportError:
     ImageDraw = None  # type: ignore
 
 from src.indicators.chart_utils import generate_history_chart, get_history_chart_background
-from src.indicators.helpers import parse_hex_color, s
+from src.indicators.helpers import (
+    _STATIC_CACHE,
+    _static_cache_key,
+    compose_5q_optimized,
+    parse_hex_color,
+    s,
+)
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
 from src.indicators.profiling import get_overlay_profiler
 
@@ -23,11 +29,73 @@ _FINAL_STATIC_CHART_CACHE = {}
 _FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
 
 
+class ChartSplit:
+    """ETAP 5K — the split (static + dynamic) representation of a chart.
+
+    Instead of a full 1160x511 RGBA chart built per frame, the chart is split
+    into a *static* layer (uploaded to the GPU once per cache invalidation) and
+    two small *dynamic* layers (cursor + current value) uploaded per frame.
+
+    ``cursor_local`` / ``value_local`` are the tile top-lefts in the chart
+    image coordinate space (0..chart_w+8, 0..final_h) — the exporter adds the
+    chart's HUD bbox top-left to get the GPU blend destination.
+    """
+
+    __slots__ = (
+        "static", "cursor_tile", "cursor_local", "value_tile", "value_local",
+        "width", "height",
+    )
+
+    def __init__(self, static, cursor_tile, cursor_local, value_tile, value_local):
+        self.static = static
+        self.cursor_tile = cursor_tile
+        self.cursor_local = cursor_local
+        self.value_tile = value_tile
+        self.value_local = value_local
+        self.width, self.height = static.size
+
+    @property
+    def size(self):
+        return (self.width, self.height)
+
+
+def _cursor_tile_bbox(
+    points, current_index, plot_y1, plot_y2, calc_thickness,
+    offset_x, offset_y, chart_width, chart_height,
+):
+    """Clipped cursor bbox (line + dot) in chart-image coordinates."""
+    if current_index is None or not points or not (0 <= current_index < len(points)):
+        return None
+    cursor_x, py = points[current_index]
+    cursor_x += offset_x
+    py += offset_y
+    dot_r = max(3, calc_thickness + 1)
+    clip_left, clip_top = offset_x, offset_y
+    clip_right = offset_x + chart_width
+    clip_bottom = offset_y + chart_height
+    left = math.floor(cursor_x - dot_r)
+    top = min(plot_y1 + offset_y, math.floor(py - dot_r))
+    right = math.ceil(cursor_x + dot_r) + 1
+    bottom = max(plot_y2 + offset_y, math.ceil(py + dot_r) + 1)
+    dst_left, dst_top = max(left, clip_left), max(top, clip_top)
+    dst_right, dst_bottom = min(right, clip_right), min(bottom, clip_bottom)
+    if dst_right <= dst_left or dst_bottom <= dst_top:
+        return None
+    return (dst_left, dst_top, dst_right, dst_bottom)
+
+
 def _draw_post_paste_cursor(
     image, points, current_index, plot_y1, plot_y2, calc_thickness,
     cursor_color, line_color, offset_x, offset_y, chart_width, chart_height,
 ):
-    """Reproduce the RGBA left by legacy ``paste(chart, mask=chart)``."""
+    """Reproduce the RGBA left by legacy ``paste(chart, mask=chart)``.
+
+    NOTE: the line is drawn DIRECTLY on the image (Pillow's draw.line blend over
+    the existing pixels) and only the opaque dot is pasted via an RGBA tile.
+    This exact ordering/operation is what 5D/5J validated; do not replace the
+    line draw with a tile paste (Pillow's paste with an RGBA mask pre-multiplies
+    alpha and would change the output).
+    """
     if current_index is None or not points or not (0 <= current_index < len(points)):
         return
     cursor_x, py = points[current_index]
@@ -66,10 +134,86 @@ def _draw_post_paste_cursor(
         image.paste(clipped, (dst_left, dst_top), clipped)
 
 
+def _clip_tile(tile, local, clip_w, clip_h):
+    """Clip a dynamic tile to the chart image bounds ``[0, clip_w) x [0, clip_h)``.
+
+    The value text stroke can extend above the chart top (negative y) or past
+    the right edge; the legacy full-image render clips those pixels away.  The
+    GPU blend (and the CPU reconstruction) must reproduce that clip, so the
+    tile is cropped here and its local offset is re-anchored at the chart
+    origin (never negative).
+    """
+    if tile is None:
+        return None, (0, 0)
+    lx, ly = local
+    x0, y0 = max(0, lx), max(0, ly)
+    x1, y1 = min(clip_w, lx + tile.width), min(clip_h, ly + tile.height)
+    if x1 <= x0 or y1 <= y0:
+        return None, (0, 0)
+    cropped = tile.crop((x0 - lx, y0 - ly, x1 - lx, y1 - ly))
+    return cropped, (x0, y0)
+
+
+def _render_value_text_tile(
+    v_str, font, text_color, outline, chart_w, tox, toy,
+):
+    """Render the dynamic current-value text to a tight transparent tile.
+
+    Returns ``(tile, local_left, local_top)``.  The tile is sized from the
+    stroke-inclusive text bbox; the draw origin is preserved so the glyphs land
+    at the exact chart-image position the full-image render would use.
+    """
+    if not v_str:
+        return None, 0, 0
+    if compose_5q_optimized():
+        # ETAP 5Q: value-keyed tile cache (byte-exact; the tile and the
+        # layout metrics are identical for the same value string).
+        key = _static_cache_key(
+            "value_text_tile", v_str,
+            str(getattr(font, "path", "")), int(getattr(font, "size", 0)),
+            text_color, outline,
+        )
+        cached = _STATIC_CACHE.get(key)
+        if cached is not None:
+            tile, vw, sl, st = cached
+            px = chart_w - vw + tox
+            py = toy
+            return tile, px + sl, py + st
+        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+        vw = probe.textbbox((0, 0), v_str, font=font)[2]
+        sl, st, sr, sb = probe.textbbox((0, 0), v_str, font=font, stroke_width=outline)
+        tile = Image.new("RGBA", (max(1, sr - sl), max(1, sb - st)), (0, 0, 0, 0))
+        tdraw = ImageDraw.Draw(tile)
+        tdraw.text(
+            (-sl, -st), v_str, font=font, fill=text_color,
+            stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+        )
+        _STATIC_CACHE[key] = (tile, vw, sl, st)
+        px = chart_w - vw + tox
+        py = toy
+        return tile, px + sl, py + st
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+    vw = probe.textbbox((0, 0), v_str, font=font)[2]
+    px = chart_w - vw + tox
+    py = toy
+    sl, st, sr, sb = probe.textbbox((0, 0), v_str, font=font, stroke_width=outline)
+    tile = Image.new("RGBA", (max(1, sr - sl), max(1, sb - st)), (0, 0, 0, 0))
+    tdraw = ImageDraw.Draw(tile)
+    # Draw at (-sl, -st) so tile pixel (i, j) reproduces the CPU pixel at the
+    # same absolute layout position (the stroke bbox is relative to the text
+    # origin; drawing at (sl, st) would double-shift the glyphs).
+    tdraw.text(
+        (-sl, -st), v_str, font=font, fill=text_color,
+        stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+    )
+    return tile, px + sl, py + st
+
+
 def _render_chart_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     history_data=None, current_position=None, formatted_val=None,
+    split_mode=False,
 ):
     """Render a chart-form indicator."""
     profiler = get_overlay_profiler()
@@ -159,6 +303,7 @@ def _render_chart_indicator(
 
     tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
     toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
+    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
     hdr_key = _static_cache_key("chart_hdr", chart_w + 8, final_h, label, font_path, fs, outline, text_color, tox, toy)
@@ -192,6 +337,65 @@ def _render_chart_indicator(
                 "graph.final_static_build",
                 (time.perf_counter() - static_started) * 1000.0,
             )
+        v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
+        if split_mode:
+            # ETAP 5K: hand the exporter a static layer + two small dynamic
+            # tiles instead of a full per-frame chart image.  No final_static
+            # copy, no full tobytes, no full 1160x511 texture upload.
+            #
+            # The dynamic tiles are pre-composited over the static on the CPU
+            # (cursor line/dot drawn onto a static crop, value text onto the
+            # transparent header) and the GPU *replaces* their region in the
+            # HUD canvas after blending the static — Pillow's draw/paste blends
+            # are not identical to the GPU's straight-alpha "over", so a
+            # separate transparent overlay could never be pixel-exact.  These
+            # tiles ARE the exact final-chart pixels of their regions.
+            cursor_started = time.perf_counter()
+            cursor_bbox = _cursor_tile_bbox(
+                points, ci, plot_y1, plot_y2, calc_thickness,
+                4, margin_top, chart_w, chart_h,
+            )
+            if cursor_bbox is None:
+                cursor_tile = None
+                cursor_local = (0, 0)
+            else:
+                clx, cly, crx, cry = cursor_bbox
+                cursor_tile = final_static.crop((clx, cly, crx, cry)).copy()
+                _draw_post_paste_cursor(
+                    cursor_tile, points, ci, plot_y1, plot_y2, calc_thickness,
+                    (255, 255, 255), line_clr, 4 - clx, margin_top - cly,
+                    chart_w, chart_h,
+                )
+                cursor_local = (clx, cly)
+            profiler.record(
+                "graph.current_cursor",
+                (time.perf_counter() - cursor_started) * 1000.0,
+            )
+            labels_started = time.perf_counter()
+            value_tile, v_left, v_top = _render_value_text_tile(
+                v_str, font, text_color, outline, chart_w, tox, toy,
+            )
+            profiler.record(
+                "graph.dynamic_labels",
+                (time.perf_counter() - labels_started) * 1000.0,
+            )
+            # Clip dynamic tiles to the chart image bounds so the GPU never
+            # writes outside the chart bbox (the legacy render clips the value
+            # stroke above the chart top).
+            cursor_tile, cursor_local = _clip_tile(
+                cursor_tile, cursor_local, chart_w + 8, final_h)
+            value_tile, (v_left, v_top) = _clip_tile(
+                value_tile, (v_left, v_top), chart_w + 8, final_h)
+            profiler.record(
+                "graph.background_and_chart_composite",
+                (time.perf_counter() - assembly_started) * 1000.0,
+            )
+            split = ChartSplit(
+                final_static,
+                cursor_tile, cursor_local,
+                value_tile, (v_left, v_top),
+            )
+            return split, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
         final_img = final_static.copy()
         cursor_started = time.perf_counter()
         _draw_post_paste_cursor(
@@ -211,7 +415,6 @@ def _render_chart_indicator(
     )
     draw = ImageDraw.Draw(final_img)
 
-    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
     if v_str:
         labels_started = time.perf_counter()
         vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0

@@ -1,0 +1,170 @@
+[FIT] Loaded 1704 points from Morning_Ride.fit
+[FIT] Fields discovered: ['K1', 'K2', 'alt', 'cadence', 'curVpower', 'distance', 'enhanced_altitude', 'enhanced_speed', 'fractional_cadence', 'gopro_battery', 'heart_rate', 'lat', 'lon', 'speed', 'temperature']
+[FIT] Synchro: 14 field(s) – {'speed': 1651, 'track': 1683, 'alt': 1704, 'K1': 1703, 'K2': 1703, 'cadence': 1704, 'curVpower': 1704, 'distance': 1704, 'enhanced_altitude': 1704, 'enhanced_speed': 1698, 'fractional_cadence': 1704, 'gopro_battery': 1704, 'heart_rate': 1704, 'temperature': 1704}
+[TelemetryManager] FIT loaded: keys=['speed', 'track', 'alt', 'K1', 'K2', 'cadence', 'curVpower', 'distance', 'enhanced_altitude', 'enhanced_speed', 'fractional_cadence', 'gopro_battery', 'heart_rate', 'temperature'], gps_track=1677 pts
+[STREAM AMD] Dispatching to production AMD_NATIVE_D3D11 GPU pipeline...
+[AMD NATIVE D3D11] AMD_MAP_PATH: CPU_REFERENCE (CPU_REFERENCE active; reason: track_map is the last rendered indicator)
+[AMD NATIVE D3D11] AMD_CHART_PATH: GPU
+AMD ETAP 5B FIT discovered: K1, K2, alt, cadence, curVpower, distance, enhanced_altitude, enhanced_speed, fractional_cadence, gopro_battery, heart_rate, speed, temperature, track
+AMD ETAP 5B FIT active: cadence, enhanced_speed, gopro_battery, heart_rate
+AMD ETAP 5B FIT skipped: K1, K2, alt, curVpower, distance, enhanced_altitude, fractional_cadence, speed, temperature, track
+AMD Native DLL path: C:\_DEV\TeleM\native\d3d11_amf_pipeline\bin\telem_amd_native.dll
+AMD Native DLL build ID: telem-amd-native/1.0.0+db7608a5a715.srccafb260198f1
+AMD Native DLL build timestamp: 2026-08-15T22:59:46+02:00
+AMD Native DLL file timestamp: 2026-08-16T09:14:01+02:00
+AMD Native DLL ABI: 7
+AMD_NATIVE_DIAGNOSTICS: OFF
+AMD_NATIVE_PROFILING: OFF
+AMD Native HUD: ON
+AMD Native HUD compositor: GPU_HUD
+AMD Native video decode: GPU_HUD_D3D11VA
+AMD Native source rotation: 180
+AMD Native HUD upload path: DIRTY
+AMD Native dirty rect target: 8
+AMD Native HUD buffer mode: REFERENCE
+
+[TELEMETRY CHANNELS LOG]
+  GPMF records count: 378
+  FIT records count:  1651
+  GPX records count:  0
+[AMD NATIVE D3D11] Initializing telem_amd_native context...
+[VP CAPS] MaxInputStreams: 52 MaxStreamStates: 52 FeatureCaps: 0x8e6
+[VP FORMATS] NV12 In: YES BGRA In: YES RGBA In: YES
+[AMF] InitDX11 SUCCESS: Connected to SAME ID3D11Device.
+[AMF] HEVC Hardware Encoder initialized successfully (3840x2160 CQP 28/28 Speed).
+[MF DECODER TYPE] DXGI format=104 size=3840x2160 primaries=0 transfer=0 matrix=0 range=2 rotation=0
+[TELEM AMD DLL] MediaFoundation D3D11VA decoder configured.
+[TELEM AMD DLL] telem_amd_create SUCCESS. Width: 3840 Height: 2160
+[MF DECODER] Active mode=GPU_HUD_D3D11VA rotation=180
+AMD_OVERLAY_PROFILE: OFF
+[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF
+[MF DECODER TYPE] DXGI format=104 size=3840x2160 primaries=9 transfer=16 matrix=0 range=1 rotation=0
+[MF SAMPLE] frame=0 pts100ns=0 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=0 bind=0x208 texture=0x2a66fc09da0
+Frame 0: HR=None, CAD=None
+[AMD NATIVE D3D11] GPU charts active: ['fit_cadence_text', 'fit_heart_rate_text'] (all active charts are z-order disjoint -> GPU safe)
+[MF SAMPLE] frame=1 pts100ns=333666 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=1 bind=0x208 texture=0x2a66fc09da0
+[MF SAMPLE] frame=2 pts100ns=667333 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=2 bind=0x208 texture=0x2a66fc09da0
+[MF SAMPLE] frame=30 pts100ns=10010000 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=0 bind=0x208 texture=0x2a66fc09da0
+Frame 30: HR=None, CAD=None
+Frame 60: HR=None, CAD=None
+Frame 90: HR=None, CAD=None
+Frame 120: HR=None, CAD=None
+Frame 150: HR=None, CAD=None
+Frame 180: HR=None, CAD=None
+Frame 210: HR=None, CAD=None
+Frame 240: HR=None, CAD=None
+Frame 270: HR=None, CAD=None
+[MF SAMPLE] frame=300 pts100ns=100100000 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=0 bind=0x208 texture=0x2a66fc09da0
+Frame 300: HR=None, CAD=None
+Frame 330: HR=None, CAD=None
+Frame 360: HR=None, CAD=None
+Frame 390: HR=None, CAD=None
+Frame 420: HR=None, CAD=None
+Frame 450: HR=None, CAD=None
+Frame 480: HR=None, CAD=None
+Frame 510: HR=None, CAD=None
+Frame 540: HR=None, CAD=None
+Frame 570: HR=None, CAD=None
+[MF SAMPLE] frame=600 pts100ns=200200000 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=0 bind=0x208 texture=0x2a66fc09da0
+Frame 600: HR=None, CAD=None
+Frame 630: HR=None, CAD=None
+Frame 660: HR=None, CAD=None
+Frame 690: HR=None, CAD=None
+Frame 720: HR=None, CAD=None
+Frame 750: HR=None, CAD=None
+Frame 780: HR=None, CAD=None
+Frame 810: HR=None, CAD=None
+Frame 840: HR=None, CAD=None
+Frame 870: HR=None, CAD=None
+[MF SAMPLE] frame=900 pts100ns=300300000 duration100ns=333666 format=104 size=3840x2160 array=11 subresource=0 bind=0x208 texture=0x2a66fc09da0
+Frame 900: HR=None, CAD=None
+Frame 930: HR=None, CAD=None
+Frame 960: HR=None, CAD=None
+Frame 990: HR=None, CAD=None
+Frame 1020: HR=None, CAD=None
+Frame 1050: HR=None, CAD=None
+Frame 1080: HR=None, CAD=None
+Frame 1110: HR=None, CAD=None
+[TELEM AMD DLL] telem_amd_flush completed. Total received: 1131
+
+[AMD NATIVE D3D11 PIPELINE STATS]
+  Source metadata:  1131
+  Source requested: 1131
+  Python decoded:   1131
+  Native processed: 1131
+  HUD frames:       1131
+  HUD updates:      1131
+  Video updates:    0
+  VP processed:     1131
+  AMF submitted:    1131
+  AMF output:       1131
+  AMF_INPUT_FULL:   0
+  AMF retries:      0
+  AMF dropped:      0
+  AMF ignored:      0
+  CPU blend calls:  0
+  GPU profiled:     0
+  GPU HUD frames:   1131
+  HUD tex creates:  1
+  HUD tex uploads:  1131
+  HUD upload bytes: 5579832320
+  HUD upload rects: 4521
+  GPU chart path:   GPU (all active charts are z-order disjoint -> GPU safe)
+  Chart GPU frames: CAD=1131 HR=1131
+  Chart upload MiB:  5114.83 total
+  MF ReadSample:    1131
+  MF video samples: 1131
+  MF stream ticks:  0
+  MF null samples:  0
+  MF D3D surfaces:  1131
+  MF format changes:1
+  MF EOS events:    0
+  Decoder direct VP:1131
+  Decoder GPU copy: 0
+  Decoder format:   DXGI_FORMAT_P010
+  HW decode proof:  YES
+[TELEM AMD DLL] telem_amd_close completed.
+[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...
+[AMD NATIVE D3D11] Remux complete. Final output: C:\_DEV\TeleM\Raporty\AMD_ETAP5G\k5_full_A_gpu.mp4
+
+[AMD NATIVE ETAP 0 TIMINGS]
+Stage                                AVG ms     Median        P95        P99
+----------------------------------------------------------------------------
+Decode/pipe wait                      0.000      0.000      0.000      0.000
+MF ReadSample/decode availability      1.289      0.805      4.303      6.832
+MF decoder surface acquisition        0.015      0.009      0.050      0.068
+Decoder surface GPU copy              0.000      0.000      0.000      0.000
+Telemetry/frame_data                  6.697      4.275     14.178     15.797
+compose_overlay                      32.181     28.518     49.979     73.825
+map_cpu_upload                        0.000      0.000      0.000      0.000
+GPU map upload (native)               0.000      0.000      0.000      0.000
+GPU map resize+blend submit           0.000      0.000      0.000      0.000
+chart_cpu_tobytes                     1.562      1.377      2.173      6.490
+chart_python_upload                   0.344      0.310      0.535      0.852
+GPU chart blend submit                0.142      0.115      0.268      0.631
+HUD dirty bbox                        0.128      0.113      0.161      0.430
+HUD dirty extract                     5.831      5.281      8.482     14.818
+PIL tobytes                           0.000      0.000      0.000      0.000
+PIL/buffer preparation                5.982      5.406      8.847     15.019
+Python->native bridge                 0.033      0.029      0.046      0.086
+update_hud                            0.929      0.841      1.248      1.628
+Native HUD CPU copy                   0.000      0.000      0.000      0.000
+HUD texture upload                    0.897      0.811      1.207      1.552
+NV12 staging memcpy                   0.000      0.000      0.000      0.000
+BlendRGBAToNV12                       0.000      0.000      0.000      0.000
+CopyResource submission               0.000      0.000      0.000      0.000
+VideoProcessor CPU submit             0.371      0.324      0.591      1.080
+VideoProcessor GPU completion         0.000      0.000      0.000      0.000
+GPU wait/synchronization              0.000      0.000      0.000      0.000
+AMF submit/backpressure               0.477      0.430      0.765      1.408
+AMF QueryOutput                       0.168      0.151      0.283      0.611
+Packet write                          0.186      0.141      0.426      0.768
+Audio mux                           657.809    657.809    657.809    657.809
+
+[AMD NATIVE TRUE END-TO-END]
+  Total wall-clock: 61.974 s
+  Encoded frames:   1131
+  TRUE FPS:         18.250
+  Muxed frames:     1131
+  Audio present:    YES
+[AMD NATIVE] Profiling JSON: C:\_DEV\TeleM\Raporty\AMD_ETAP5G\k5_full_A_gpu.mp4.amd_profile.json

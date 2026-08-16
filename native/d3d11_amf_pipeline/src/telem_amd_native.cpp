@@ -41,6 +41,45 @@ struct TelemAMDFrameTimings {
     double packetWriteMs = 0.0;
 };
 
+// ETAP 5R — per-frame native process_frame accounting (opt-in, QPC wall).
+struct NativeFrameRec {
+    UINT64 frame = 0;
+    double surfAcquireMs = 0.0;      // decoder surface acquire / copy before VP
+    double vpTotalMs = 0.0;          // whole VP ProcessFrame wall
+    double vpSetupMs = 0.0;          // entry -> Blt start
+    double vpCreateViewMs = 0.0;
+    double vpSetStreamMs = 0.0;      // CreateView -> Blt (SetStream*)
+    double vpSetterFmtMs = 0.0;      // ETAP 5S: VideoProcessorSetStreamFrameFormat
+    double vpSetterSrcRectMs = 0.0;  // ETAP 5S: VideoProcessorSetStreamSourceRect
+    double vpSetterDstRectMs = 0.0;  // ETAP 5S: VideoProcessorSetStreamDestRect
+    double vpBltMs = 0.0;
+    double vpSubmitWindowMs = 0.0;   // Blt end -> HUD end
+    double vpRangePassMs = 0.0;
+    double vpChartBlendMs = 0.0;
+    double vpGaugeBlendMs = 0.0;
+    double vpMapBlendMs = 0.0;
+    double vpHudComposeMs = 0.0;
+    double vpReleaseViewMs = 0.0;
+    double amfCreateSurfaceMs = 0.0;
+    double amfSubmitInputMs = 0.0;
+    double amfQueryMs = 0.0;
+    double amfPacketWriteMs = 0.0;
+    double processFrameTotalMs = 0.0;
+    UINT poolIndex = 0;
+    UINT amfQueryCalls = 0;      // ETAP 5U: QueryOutput calls this frame
+    UINT amfOutputs = 0;         // ETAP 5U: packets received this frame
+    UINT64 decoderTexId = 0;         // ETAP 5S: decoder input texture pointer (low bits)
+    UINT64 vpOutTexId = 0;           // ETAP 5S: VP output texture pointer (low bits)
+    UINT arrayIndex = 0;             // ETAP 5S: decoder subresource
+    int settersSkipped = 0;          // ETAP 5S: 1 when STATIC_CACHE skipped setters
+    UINT stateSig = 0;               // ETAP 5S: applied stream-state signature
+    UINT64 amfSubmitted = 0;
+    UINT64 amfReceived = 0;
+    int submitResult = 0;
+    int queryResult = 0;
+    int decoderCopy = 0;
+};
+
 struct TelemAMDContext {
     ID3D11Device* pDevice = nullptr;
     ID3D11DeviceContext* pContext = nullptr;
@@ -130,7 +169,26 @@ struct TelemAMDContext {
     UINT64 mapUploads = 0;
     UINT64 mapUploadedBytes = 0;
     UINT64 mapResampleFrames = 0;
+    // ETAP 5J: 0 = CPU_REFERENCE (charts stay in Pillow HUD), 1 = GPU (charts
+    // uploaded to persistent textures + GPU blend into the HUD canvas).
+    int chartCompositeMode = 0;
+    UINT64 chartUploads[2] = { 0, 0 };
+    UINT64 chartUploadedBytes[2] = { 0, 0 };
+    UINT64 chartGpuFramesCadence = 0;
+    UINT64 chartGpuFramesHR = 0;
+    // ETAP 5O diagnostic: 0 = ENCODE (default), 1 = BYPASS (run the whole
+    // frontend to the AMF input point but never submit/encode), 2 = reserved.
+    int amfMode = 0;
+    // ETAP 5U: 0=REFERENCE (one QueryOutput/frame), 1=DRAIN_READY (drain all
+    // immediately-ready packets, stop at first AMF_REPEAT, zero wait).
+    int amfQueryMode = 0;
+    UINT amfQueryCalls = 0;   // QueryOutput calls in the current frame
+    UINT amfOutputsThisFrame = 0;  // packets received in the current frame
     TelemAMDFrameTimings lastTimings;
+
+    // ETAP 5R — native process_frame accounting (AMD_NATIVE_FRAME_ACCOUNTING).
+    bool frameAccountEnabled = false;
+    std::vector<NativeFrameRec> nativeTrace;
 
     // Last processed VP output NV12 texture
     ID3D11Texture2D* pLastOutNV12Tex = nullptr;
@@ -203,6 +261,15 @@ TELEM_EXPORT int telem_amd_set_map_filter(void* handle, int filter) {
     return 1;
 }
 
+// ── ETAP 5O: AMF mode (diagnostic only) ──────────────────────────────
+// 0 = ENCODE (default production), 1 = BYPASS (frontend only, no AMF).
+TELEM_EXPORT int telem_amd_set_amf_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->amfMode = mode;
+    return 1;
+}
+
 TELEM_EXPORT int telem_amd_set_map_geometry(
     void* handle, UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH) {
     if (!handle || srcW == 0 || srcH == 0 || outW == 0 || outH == 0) return 0;
@@ -260,6 +327,178 @@ TELEM_EXPORT void telem_amd_get_map_stats(
     if (outUploadMs) *outUploadMs = ctx->vpPipeline.GetMapUploadMs();
     if (outResampleMs) *outResampleMs = ctx->vpPipeline.GetMapResampleMs();
     if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetMapBlendMs();
+}
+
+// ── ETAP 5J: GPU final compositing for the cadence/HR charts ──────────
+// mode: 0 = CPU_REFERENCE (charts stay in the Pillow HUD), 1 = GPU (5J:
+// full chart texture blended per frame), 2 = GPU_SPLIT (5K: static layer
+// uploaded once + small dynamic cursor/value tiles replaced per frame).
+
+TELEM_EXPORT int telem_amd_set_chart_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1 && mode != 2)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->chartCompositeMode = mode;
+    ctx->vpPipeline.SetChartGpuEnabled(mode != 0);
+    ctx->vpPipeline.SetChartSplitMode(mode == 2);
+    return 1;
+}
+
+// slot: 0 = cadence, 1 = heart-rate.  The CPU still renders the exact same
+// chart RGBA widget (final size, 1:1 texel); the GPU holds a persistent
+// texture per slot and blends it into the HUD canvas inside ProcessFrame.
+TELEM_EXPORT int telem_amd_update_chart(
+    void* handle, int slot, const uint8_t* pRGBA, UINT width, UINT height,
+    UINT stride, UINT dstX, UINT dstY,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || slot < 0 || slot > 1 || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->chartCompositeMode != 1) return 0;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateChartTexture(
+            (UINT)slot, width, height, pRGBA, stride, dstX, dstY,
+            &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU chart upload failed (slot " << slot << ")." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    ctx->chartUploads[slot]++;
+    ctx->chartUploadedBytes[slot] += uploadedBytes;
+    if (slot == 0) ctx->chartGpuFramesCadence++;
+    else ctx->chartGpuFramesHR++;
+    return 1;
+}
+
+// ETAP 5K — static layer upload.  Called once per cache invalidation/export.
+TELEM_EXPORT int telem_amd_update_chart_static(
+    void* handle, int slot, const uint8_t* pRGBA, UINT width, UINT height,
+    UINT stride, UINT dstX, UINT dstY,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || slot < 0 || slot > 1 || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->chartCompositeMode != 2) return 0;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateChartStaticTexture(
+            (UINT)slot, width, height, pRGBA, stride, dstX, dstY,
+            &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU chart static upload failed (slot " << slot << ")." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    return 1;
+}
+
+// ETAP 5K — dynamic tile upload.  region: 0 = cursor, 1 = current value.
+// localX/localY are the tile offset inside the chart image.
+TELEM_EXPORT int telem_amd_update_chart_dynamic(
+    void* handle, int slot, int region, const uint8_t* pRGBA, UINT width,
+    UINT height, UINT stride, UINT localX, UINT localY,
+    UINT64* outUploadedBytes) {
+    if (!handle || slot < 0 || slot > 1 || region < 0 || region > 1 ||
+        !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->chartCompositeMode != 2) return 0;
+    size_t uploadedBytes = 0;
+    if (!ctx->vpPipeline.UpdateChartDynamicTile(
+            (UINT)slot, (UINT)region, width, height, pRGBA, stride, localX, localY,
+            &uploadedBytes)) {
+        std::cerr << "[TELEM AMD DLL] GPU chart dynamic upload failed (slot " << slot << ")." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (slot == 0) ctx->chartGpuFramesCadence++;
+    else ctx->chartGpuFramesHR++;
+    return 1;
+}
+
+// Diagnostic/per-frame stats.  blendMs/clearMs are the last processed frame's
+// GPU chart blend/clear submit times.  Never used on the production path.
+TELEM_EXPORT void telem_amd_get_chart_stats(
+    void* handle,
+    UINT64* outUploads, UINT64* outUploadedBytes, UINT64* outFrames,
+    double* outBlendMs, double* outClearMs, UINT64* outTextureCreates,
+    UINT64* outStaticBytes, UINT64* outDynamicBytes, UINT64* outStaticUploads,
+    UINT64* outDynamicUploads) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outUploads) *outUploads = ctx->chartUploads[0] + ctx->chartUploads[1];
+    if (outUploadedBytes) *outUploadedBytes = ctx->chartUploadedBytes[0] + ctx->chartUploadedBytes[1];
+    if (outFrames) *outFrames = ctx->chartGpuFramesCadence + ctx->chartGpuFramesHR;
+    if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetChartBlendMs();
+    if (outClearMs) *outClearMs = ctx->vpPipeline.GetChartClearMs();
+    if (outTextureCreates) *outTextureCreates = ctx->vpPipeline.GetChartTextureCreates();
+    if (outStaticBytes) *outStaticBytes = ctx->vpPipeline.GetChartStaticUploadedBytes();
+    if (outDynamicBytes) *outDynamicBytes = ctx->vpPipeline.GetChartDynamicUploadedBytes();
+    if (outStaticUploads) *outStaticUploads = ctx->vpPipeline.GetChartStaticUploads();
+    if (outDynamicUploads) *outDynamicUploads = ctx->vpPipeline.GetChartDynamicUploads();
+}
+
+// Diagnostic: read back a region of the persistent HUD canvas (the exact
+// composited pixels the video consumes).  Used only by the 5J A/B harness to
+// validate the GPU chart blend; never on the production path.
+TELEM_EXPORT int telem_amd_get_hud_region_readback(
+    void* handle, UINT x, UINT y, UINT w, UINT h, uint8_t* outRGBA, UINT stride) {
+    if (!handle || !outRGBA) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.GetHUDCanvasRegionReadback(x, y, w, h, outRGBA, stride) ? 1 : 0;
+}
+
+// ETAP 5K diagnostic: read back the persistent static chart texture (the exact
+// bytes uploaded once per cache invalidation).  Used by the 5K raw static
+// A/B harness; never on the production path.
+TELEM_EXPORT int telem_amd_get_chart_static_readback(
+    void* handle, int slot, uint8_t* outRGBA, UINT stride) {
+    if (!handle || slot < 0 || slot > 1 || !outRGBA) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.GetChartStaticReadback((UINT)slot, outRGBA, stride) ? 1 : 0;
+}
+
+// ── ETAP 5L: GPU final compositing for the speed gauge ──────────────
+// mode: 0 = CPU_REFERENCE (gauge stays in the Pillow HUD), 1 = GPU (the CPU
+// still renders the exact same gauge RGBA but the GPU blends it into the HUD).
+
+TELEM_EXPORT int telem_amd_set_gauge_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetGaugeGpuEnabled(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_gauge(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height,
+    UINT stride, UINT dstX, UINT dstY,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateGaugeTexture(
+            width, height, pRGBA, stride, dstX, dstY,
+            &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU gauge upload failed." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    return 1;
+}
+
+// Diagnostic/per-frame stats.  blendMs/clearMs are the last processed frame's
+// GPU gauge blend/clear submit times.  Never used on the production path.
+TELEM_EXPORT void telem_amd_get_gauge_stats(
+    void* handle,
+    UINT64* outUploads, UINT64* outUploadedBytes, double* outBlendMs,
+    double* outClearMs, UINT64* outTextureCreates) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outUploads) *outUploads = ctx->vpPipeline.GetGaugeUploads();
+    if (outUploadedBytes) *outUploadedBytes = ctx->vpPipeline.GetGaugeUploadedBytes();
+    if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetGaugeBlendMs();
+    if (outClearMs) *outClearMs = ctx->vpPipeline.GetGaugeClearMs();
+    if (outTextureCreates) *outTextureCreates = ctx->vpPipeline.GetGaugeTextureCreates();
 }
 
 TELEM_EXPORT int telem_amd_set_source_rotation(void* handle, UINT degrees) {
@@ -595,6 +834,54 @@ TELEM_EXPORT void* telem_amd_create(
     std::string h265Path = ctx->outputPath + ".h265";
     ctx->h265Out.open(h265Path, std::ios::binary);
 
+    // ETAP 5R — opt-in native process_frame accounting.
+    const char* faEnv = getenv("AMD_NATIVE_FRAME_ACCOUNTING");
+    ctx->frameAccountEnabled = (faEnv && faEnv[0] == '1');
+    ctx->vpPipeline.SetFrameAccount(ctx->frameAccountEnabled);
+    if (ctx->frameAccountEnabled) {
+        std::cout << "[TELEM AMD DLL] AMD_NATIVE_FRAME_ACCOUNTING=1: native "
+                     "per-frame process_frame substage trace enabled." << std::endl;
+    }
+    // ETAP 5S — VP stream-state mode (REFERENCE | STATIC_CACHE | REORDER).
+    const char* vpModeEnv = getenv("AMD_VP_STATE_MODE");
+    int vpMode = 0;
+    if (vpModeEnv) {
+        std::string m(vpModeEnv);
+        if (m == "STATIC_CACHE") vpMode = 1;
+        else if (m == "REORDER") vpMode = 2;
+    }
+    ctx->vpPipeline.SetVpStateMode(vpMode);
+    std::cout << "[TELEM AMD DLL] AMD_VP_STATE_MODE="
+              << (vpMode == 1 ? "STATIC_CACHE" : (vpMode == 2 ? "REORDER" : "REFERENCE"))
+              << std::endl;
+    // ETAP 5U — runtime VP output surface pool size (4..8).  Must be set before
+    // vpPipeline.Initialize().  Diagnostic only; default 4 = current behavior.
+    const char* poolEnv = getenv("AMD_VP_POOL_SIZE");
+    UINT poolSize = 4;
+    if (poolEnv && poolEnv[0] >= '4' && poolEnv[0] <= '8') poolSize = (UINT)(poolEnv[0] - '0');
+    ctx->vpPipeline.SetPoolSize(poolSize);
+    std::cout << "[TELEM AMD DLL] AMD_VP_POOL_SIZE=" << poolSize << std::endl;
+    // ETAP 5U — AMF QueryOutput policy (REFERENCE | DRAIN_READY).
+    const char* qmEnv = getenv("AMD_AMF_QUERY_MODE");
+    int qm = 0;
+    if (qmEnv) {
+        std::string m(qmEnv);
+        if (m == "DRAIN_READY") qm = 1;
+    }
+    ctx->amfQueryMode = qm;
+    std::cout << "[TELEM AMD DLL] AMD_AMF_QUERY_MODE="
+              << (qm == 1 ? "DRAIN_READY" : "REFERENCE") << std::endl;
+    // ETAP 5T — async GPU timestamp timeline (enabled after VP init below).
+    const char* gpuTsEnv = getenv("AMD_GPU_TIMESTAMP_PROFILE");
+    const bool gpuTsEnabled = (gpuTsEnv && gpuTsEnv[0] == '1');
+    std::cout << "[TELEM AMD DLL] AMD_GPU_TIMESTAMP_PROFILE="
+              << (gpuTsEnabled ? "ON" : "OFF") << std::endl;
+    // ETAP 5T diagnostic: HUD GPU compositor OFF.
+    const char* hudOffEnv = getenv("AMD_GPU_HUD_OFF");
+    const bool gpuHudOff = (hudOffEnv && hudOffEnv[0] == '1');
+    ctx->vpPipeline.SetGpuHudOff(gpuHudOff);
+    if (gpuHudOff) std::cout << "[TELEM AMD DLL] AMD_GPU_HUD_OFF=1 (diagnostic)" << std::endl;
+
     // 1. Initialize D3D11 Device
     UINT createDeviceFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
@@ -622,6 +909,8 @@ TELEM_EXPORT void* telem_amd_create(
         delete ctx;
         return nullptr;
     }
+    // ETAP 5T: enable the GPU timestamp ring now that the device is ready.
+    ctx->vpPipeline.SetGpuTimestampProfile(gpuTsEnabled);
 
     // 3. Initialize AMF HEVC Encoder on shared D3D11 device
     if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
@@ -899,6 +1188,13 @@ TELEM_EXPORT int telem_amd_process_frame(
     UINT sampleSlice = 0;
     const bool d3d11Decode = ctx->decodeMode == 1;
     const LONGLONG sourceTimestamp100ns = ctx->pendingTimestamp100ns;
+    // ETAP 5R — opt-in per-frame native accounting.
+    const bool fa = ctx->frameAccountEnabled;
+    const auto pfStart = std::chrono::steady_clock::now();
+    NativeFrameRec rec;
+    rec.frame = frame_index;
+    bool decoderCopyHappened = false;
+    const auto tSurfAcq = std::chrono::steady_clock::now();
     if (d3d11Decode) {
         if (!ctx->pPendingDecodedTex) {
             std::cerr << "[MF DECODER] Process requested without a pending D3D11 sample." << std::endl;
@@ -918,6 +1214,7 @@ TELEM_EXPORT int telem_amd_process_frame(
                 ctx->pDecodedCopyTex, 0, 0, 0, 0,
                 pDecodedTex, sampleSlice, nullptr);
             const auto copyEnd = std::chrono::high_resolution_clock::now();
+            decoderCopyHappened = true;
             ctx->lastTimings.baseGpuCopyMs = std::chrono::duration<double, std::milli>(
                 copyEnd - copyStart).count();
             pDecodedTex = ctx->pDecodedCopyTex;
@@ -931,11 +1228,17 @@ TELEM_EXPORT int telem_amd_process_frame(
         }
         ctx->hasUpdatedVideoFrame = false;
     }
+    if (fa) {
+        rec.surfAcquireMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tSurfAcq).count();
+    }
+    rec.decoderCopy = decoderCopyHappened ? 1 : 0;
 
     // Step 1: ID3D11VideoProcessor Hardware Stream 0 (Base Video) + Stream 1 (HUD) Composition
     ID3D11Texture2D* pOutNV12Tex = nullptr;
     VPPipelineStats vpStats = {};
     bool doHUD = ctx->hudEnabled && ctx->hudMode == 1 && (enable_hud != 0);
+    const auto tVpStart = std::chrono::steady_clock::now();
     if (!ctx->vpPipeline.ProcessFrame(
             pDecodedTex, sampleSlice, &pOutNV12Tex, doHUD, d3d11Decode, &vpStats,
             frame_index, ctx->diagnosticsEnabled, ctx->profilingEnabled)) {
@@ -945,6 +1248,30 @@ TELEM_EXPORT int telem_amd_process_frame(
             ctx->pPendingDecodedTex = nullptr;
         }
         return 0;
+    }
+    const auto tVpEnd = std::chrono::steady_clock::now();
+    if (fa) {
+        rec.vpTotalMs = std::chrono::duration<double, std::milli>(tVpEnd - tVpStart).count();
+        rec.vpSetupMs = vpStats.setup_ms;
+        rec.vpCreateViewMs = vpStats.create_view_ms;
+        rec.vpSetStreamMs = vpStats.set_stream_ms;
+        rec.vpSetterFmtMs = vpStats.setter_fmt_ms;
+        rec.vpSetterSrcRectMs = vpStats.setter_src_rect_ms;
+        rec.vpSetterDstRectMs = vpStats.setter_dst_rect_ms;
+        rec.vpBltMs = vpStats.blt_ms;
+        rec.vpSubmitWindowMs = vpStats.submit_window_ms;
+        rec.vpRangePassMs = vpStats.range_pass_ms;
+        rec.vpChartBlendMs = vpStats.chart_blend_ms;
+        rec.vpGaugeBlendMs = vpStats.gauge_blend_ms;
+        rec.vpMapBlendMs = vpStats.map_blend_ms;
+        rec.vpHudComposeMs = vpStats.hud_compute_ms;
+        rec.vpReleaseViewMs = vpStats.release_view_ms;
+        rec.poolIndex = vpStats.pool_index;
+        rec.decoderTexId = vpStats.decoder_tex_id;
+        rec.vpOutTexId = (UINT64)((uintptr_t)pOutNV12Tex & 0xFFFFFFFFu);
+        rec.arrayIndex = vpStats.array_index;
+        rec.settersSkipped = vpStats.setters_skipped;
+        rec.stateSig = vpStats.state_sig;
     }
     if (d3d11Decode && ctx->pPendingDecodedTex) {
         ctx->pPendingDecodedTex->Release();
@@ -973,7 +1300,21 @@ TELEM_EXPORT int telem_amd_process_frame(
     }
 
     // Step 2: Direct GPU handoff to AMD AMF HEVC Hardware Encoder
+    // ETAP 5R build gate: the 5O BYPASS goto must not cross the submit/query
+    // initializations, so that whole section is wrapped in a scope block.  The
+    // default path (amfMode==0) runs the identical code; BYPASS (amfMode==1)
+    // skips the encoder handoff entirely and returns success.
+    if (ctx->amfMode == 1) { goto amf_bypassed; }  // ETAP 5O BYPASS
+    {
     AMFEncoderStats amfStats = {};
+    ctx->amfQueryCalls = 0;
+    ctx->amfOutputsThisFrame = 0;
+    // ETAP 5R — accumulate exclusive AMF substage wall (QPC).
+    double amfCreateSurfaceMs = 0.0;
+    double amfSubmitInputMs = 0.0;
+    double amfQueryMsTot = 0.0;
+    double amfPacketWriteMsTot = 0.0;
+    int submitResult = AMF_OK;
     int64_t pts = d3d11Decode ? sourceTimestamp100ns : (int64_t)frame_index * 3000;
     const auto submitLoopStart = std::chrono::steady_clock::now();
     constexpr auto kMaxInputFullWait = std::chrono::seconds(60);
@@ -982,6 +1323,9 @@ TELEM_EXPORT int telem_amd_process_frame(
     while (!submitted) {
         amfStats = {};
         const bool submitOk = ctx->amfEncoder.SubmitTexture(pOutNV12Tex, pts, &amfStats);
+        amfCreateSurfaceMs += amfStats.create_surface_ms;
+        amfSubmitInputMs += amfStats.submit_input_ms;
+        submitResult = amfStats.result;
         if (submitOk) {
             submitted = true;
             break;
@@ -1004,10 +1348,13 @@ TELEM_EXPORT int telem_amd_process_frame(
         bool backpressureKeyframe = false;
         AMF_RESULT queryResult = AMF_REPEAT;
         double queryMs = 0.0;
+        ctx->amfQueryCalls++;
         if (ctx->amfEncoder.QueryPacket(
                 backpressurePacket, backpressurePts, backpressureKeyframe,
                 &queryResult, &queryMs)) {
             ctx->lastTimings.amfQueryMs += queryMs;
+            amfQueryMsTot += queryMs;
+            ctx->amfOutputsThisFrame++;
             const auto writeStart = std::chrono::high_resolution_clock::now();
             if (ctx->h265Out.is_open() && !backpressurePacket.empty()) {
                 ctx->h265Out.write(
@@ -1015,11 +1362,14 @@ TELEM_EXPORT int telem_amd_process_frame(
                     backpressurePacket.size());
             }
             const auto writeEnd = std::chrono::high_resolution_clock::now();
-            ctx->lastTimings.packetWriteMs += std::chrono::duration<double, std::milli>(
+            const double writeMs = std::chrono::duration<double, std::milli>(
                 writeEnd - writeStart).count();
+            ctx->lastTimings.packetWriteMs += writeMs;
+            amfPacketWriteMsTot += writeMs;
             ctx->framesReceived++;
         } else {
             ctx->lastTimings.amfQueryMs += queryMs;
+            amfQueryMsTot += queryMs;
             std::this_thread::yield();
         }
 
@@ -1040,20 +1390,77 @@ TELEM_EXPORT int telem_amd_process_frame(
     bool isKeyframe = false;
     AMF_RESULT queryResult = AMF_REPEAT;
     double queryMs = 0.0;
+    ctx->amfQueryCalls++;
     if (ctx->amfEncoder.QueryPacket(pktData, outPts, isKeyframe, &queryResult, &queryMs)) {
         ctx->lastTimings.amfQueryMs += queryMs;
+        amfQueryMsTot += queryMs;
         const auto writeStart = std::chrono::high_resolution_clock::now();
         if (ctx->h265Out.is_open() && !pktData.empty()) {
             ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
         }
         const auto writeEnd = std::chrono::high_resolution_clock::now();
-        ctx->lastTimings.packetWriteMs += std::chrono::duration<double, std::milli>(
+        const double writeMs = std::chrono::duration<double, std::milli>(
             writeEnd - writeStart).count();
+        ctx->lastTimings.packetWriteMs += writeMs;
+        amfPacketWriteMsTot += writeMs;
         ctx->framesReceived++;
+        ctx->amfOutputsThisFrame++;
+        // ETAP 5U DRAIN_READY: drain all immediately-ready packets, stop at the
+        // first AMF_REPEAT / not-ready.  Zero wait (no sleep/retry/flush).
+        if (ctx->amfQueryMode == 1) {
+            while (true) {
+                std::vector<uint8_t> more;
+                int64_t mpts = 0;
+                bool mkey = false;
+                AMF_RESULT mres = AMF_REPEAT;
+                double mms = 0.0;
+                ctx->amfQueryCalls++;
+                if (!ctx->amfEncoder.QueryPacket(more, mpts, mkey, &mres, &mms)) {
+                    ctx->lastTimings.amfQueryMs += mms;
+                    amfQueryMsTot += mms;
+                    break;  // first not-ready -> stop immediately
+                }
+                ctx->lastTimings.amfQueryMs += mms;
+                amfQueryMsTot += mms;
+                const auto ws2 = std::chrono::high_resolution_clock::now();
+                if (ctx->h265Out.is_open() && !more.empty()) {
+                    ctx->h265Out.write(reinterpret_cast<const char*>(more.data()), more.size());
+                }
+                const auto we2 = std::chrono::high_resolution_clock::now();
+                const double wms2 = std::chrono::duration<double, std::milli>(
+                    we2 - ws2).count();
+                ctx->lastTimings.packetWriteMs += wms2;
+                amfPacketWriteMsTot += wms2;
+                ctx->framesReceived++;
+                ctx->amfOutputsThisFrame++;
+            }
+        }
     } else {
         ctx->lastTimings.amfQueryMs += queryMs;
+        amfQueryMsTot += queryMs;
+    }
+    if (fa) {
+        rec.amfCreateSurfaceMs = amfCreateSurfaceMs;
+        rec.amfSubmitInputMs = amfSubmitInputMs;
+        rec.amfQueryMs = amfQueryMsTot;
+        rec.amfPacketWriteMs = amfPacketWriteMsTot;
+        rec.submitResult = submitResult;
+        rec.queryResult = (int)queryResult;
+        rec.amfSubmitted = ctx->framesSubmitted;
+        rec.amfReceived = ctx->framesReceived;
+        rec.amfQueryCalls = ctx->amfQueryCalls;
+        rec.amfOutputs = ctx->amfOutputsThisFrame;
+    }
     }
 
+amf_bypassed:
+    if (fa) {
+        rec.processFrameTotalMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - pfStart).count();
+        if (ctx->nativeTrace.size() < 100000) {
+            ctx->nativeTrace.push_back(rec);
+        }
+    }
     return 1;
 }
 
@@ -1186,6 +1593,10 @@ TELEM_EXPORT int telem_amd_flush(void* handle) {
     if (!handle) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
 
+    if (ctx->amfMode == 1) {
+        // ETAP 5O BYPASS: no encoder, nothing to drain.
+        return 1;
+    }
     ctx->amfEncoder.Flush();
 
     // Drain any remaining packets from AMF
@@ -1226,6 +1637,76 @@ TELEM_EXPORT int telem_amd_flush(void* handle) {
 TELEM_EXPORT int telem_amd_close(void* handle) {
     if (!handle) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
+
+    // ETAP 5R — write the native per-frame process_frame trace (CSV).
+    if (ctx->frameAccountEnabled && !ctx->nativeTrace.empty()) {
+        std::string tracePath = ctx->outputPath + ".frame_accounting.csv";
+        std::ofstream trace(tracePath);
+        if (trace.is_open()) {
+            trace << "frame,surf_acquire,vp_total,vp_setup,vp_create_view,vp_set_stream,"
+                     "vp_setter_fmt,vp_setter_src_rect,vp_setter_dst_rect,vp_blt,"
+                     "vp_submit_window,vp_range_pass,"
+                     "vp_chart_blend,vp_gauge_blend,vp_map_blend,vp_hud_compute,"
+                     "vp_release_view,amf_create_surface,amf_submit_input,amf_query,"
+                     "amf_packet_write,process_frame_total,pool_index,decoder_tex_id,"
+                     "vp_out_tex_id,array_index,setters_skipped,state_sig,amf_submitted,"
+                     "amf_received,amf_query_calls,amf_outputs,submit_result,query_result,"
+                     "decoder_copy\n";
+            for (const auto& r : ctx->nativeTrace) {
+                trace << r.frame << ',' << r.surfAcquireMs << ',' << r.vpTotalMs << ','
+                      << r.vpSetupMs << ',' << r.vpCreateViewMs << ',' << r.vpSetStreamMs << ','
+                      << r.vpSetterFmtMs << ',' << r.vpSetterSrcRectMs << ','
+                      << r.vpSetterDstRectMs << ',' << r.vpBltMs << ','
+                      << r.vpSubmitWindowMs << ',' << r.vpRangePassMs << ','
+                      << r.vpChartBlendMs << ',' << r.vpGaugeBlendMs << ',' << r.vpMapBlendMs << ','
+                      << r.vpHudComposeMs << ',' << r.vpReleaseViewMs << ','
+                      << r.amfCreateSurfaceMs << ',' << r.amfSubmitInputMs << ','
+                      << r.amfQueryMs << ',' << r.amfPacketWriteMs << ','
+                      << r.processFrameTotalMs << ',' << r.poolIndex << ','
+                      << r.decoderTexId << ',' << r.vpOutTexId << ','
+                      << r.arrayIndex << ',' << r.settersSkipped << ',' << r.stateSig << ','
+                      << r.amfSubmitted << ',' << r.amfReceived << ','
+                      << r.amfQueryCalls << ',' << r.amfOutputs << ','
+                      << r.submitResult << ',' << r.queryResult << ',' << r.decoderCopy << '\n';
+            }
+            trace.close();
+            std::cout << "[TELEM AMD DLL] Native frame trace: " << tracePath
+                      << " (" << ctx->nativeTrace.size() << " frames)" << std::endl;
+        }
+    }
+
+    // ETAP 5T — write the async GPU timestamp timeline (CSV).
+    if (ctx->vpPipeline.IsGpuTimestampProfile()) {
+        const auto& gtl = ctx->vpPipeline.GetGPUTimeline();
+        std::string gpuPath = ctx->outputPath + ".gpu_timeline.csv";
+        std::ofstream gpu(gpuPath);
+        if (gpu.is_open()) {
+            gpu << "frame,ready,disjoint,freq,begin_ts,blt_ts,range_ts,charts_ts,"
+                   "gauge_ts,map_ts,hud_ts,end_ts,read_latency,span_ms,vp_ms,range_ms,"
+                   "charts_ms,gauge_ms,map_ms,hud_ms\n";
+            for (const auto& r : gtl) {
+                const double f = r.freq > 0 ? r.freq : 1.0;
+                gpu << r.frame << ',' << (r.ready ? 1 : 0) << ',' << (r.disjoint ? 1 : 0)
+                    << ',' << r.freq << ',' << r.beginTs << ',' << r.bltTs << ','
+                    << r.rangeTs << ',' << r.chartsTs << ',' << r.gaugeTs << ','
+                    << r.mapTs << ',' << r.hudTs << ',' << r.endTs << ','
+                    << r.readLatency << ','
+                    << (double)(r.endTs - r.beginTs) / f * 1000.0 << ','
+                    << (double)(r.bltTs - r.beginTs) / f * 1000.0 << ','
+                    << (double)(r.rangeTs - r.bltTs) / f * 1000.0 << ','
+                    << (double)(r.chartsTs - r.rangeTs) / f * 1000.0 << ','
+                    << (double)(r.gaugeTs - r.chartsTs) / f * 1000.0 << ','
+                    << (double)(r.mapTs - r.gaugeTs) / f * 1000.0 << ','
+                    << (double)(r.hudTs - r.mapTs) / f * 1000.0 << '\n';
+            }
+            gpu.close();
+            UINT64 gdCalls = 0, gdNR = 0;
+            ctx->vpPipeline.GetGPUTimelineGetDataStats(&gdCalls, &gdNR);
+            std::cout << "[TELEM AMD DLL] GPU timeline: " << gpuPath << " ("
+                      << gtl.size() << " frames; GetData " << gdCalls
+                      << " not-ready " << gdNR << ")" << std::endl;
+        }
+    }
 
     if (ctx->pSourceReader) ctx->pSourceReader->Release();
     if (ctx->pDXGIManager) ctx->pDXGIManager->Release();

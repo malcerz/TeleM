@@ -13,6 +13,8 @@
 
 struct AMFEncoderStats {
     double submit_ms = 0.0;
+    double create_surface_ms = 0.0;   // ETAP 5R
+    double submit_input_ms = 0.0;     // ETAP 5R
     double query_ms = 0.0;
     size_t output_bytes = 0;
     bool input_full = false;

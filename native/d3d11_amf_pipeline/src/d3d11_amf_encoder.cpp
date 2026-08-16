@@ -91,7 +91,12 @@ bool D3D11AMFEncoder::SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, 
 
     amf::AMFSurfacePtr pSurface;
     // DIRECT GPU HANDOFF: Wraps ID3D11Texture2D directly into AMFSurface without CPU intermediate!
+    const auto tCreate = std::chrono::steady_clock::now();
     AMF_RESULT res = m_context->CreateSurfaceFromDX11Native((void*)pNV12Texture, &pSurface, nullptr);
+    if (outStats) {
+        outStats->create_surface_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tCreate).count();
+    }
     if (res != AMF_OK || !pSurface) {
         std::cerr << "[AMF] CreateSurfaceFromDX11Native failed: " << res << std::endl;
         return false;
@@ -100,7 +105,12 @@ bool D3D11AMFEncoder::SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, 
     pSurface->SetPts(pts);
 
     // Submit input surface to AMD VCE/VCN hardware encoder engine
+    const auto tSubmit = std::chrono::steady_clock::now();
     res = m_encoder->SubmitInput(pSurface);
+    if (outStats) {
+        outStats->submit_input_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tSubmit).count();
+    }
     if (outStats) {
         outStats->result = res;
         outStats->input_full = (res == AMF_INPUT_FULL);

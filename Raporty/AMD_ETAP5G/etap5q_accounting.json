@@ -1,0 +1,68 @@
+{
+  "runs": {
+    "E": {
+      "tag": "E",
+      "compose": "REFERENCE",
+      "wall": 37.54182147979736,
+      "true_fps": 31.687249725357717,
+      "compose_med": 8.2147,
+      "process_frame_med": 4.0479,
+      "frame_total_med": 29.3426,
+      "stages": {
+        "chart_upload": 0.121,
+        "compose": 8.2147,
+        "decode_read": 0.8392,
+        "frame0_probe": 0.0034,
+        "gauge_upload": 1.3972,
+        "hud_dirty": 0.828,
+        "hud_setup": 0.0302,
+        "loop_guard": 0.0014,
+        "map_upload": 2.0741,
+        "native_timings": 0.1048,
+        "process_frame": 4.0479,
+        "progress": 0.0031,
+        "telemetry": 4.2848,
+        "update_hud": 0.1817
+      },
+      "valid": true
+    },
+    "F": {
+      "tag": "F",
+      "compose": "OPTIMIZED",
+      "wall": 37.71025490760803,
+      "true_fps": 31.46727741192867,
+      "compose_med": 4.9854,
+      "process_frame_med": 13.1204,
+      "frame_total_med": 28.0942,
+      "stages": {
+        "chart_upload": 0.1306,
+        "compose": 4.9854,
+        "decode_read": 0.7219,
+        "frame0_probe": 0.0028,
+        "gauge_upload": 1.4436,
+        "hud_dirty": 0.9221,
+        "hud_setup": 0.0236,
+        "loop_guard": 0.0011,
+        "map_upload": 2.1955,
+        "native_timings": 0.0833,
+        "process_frame": 13.1204,
+        "progress": 0.0024,
+        "telemetry": 3.058,
+        "update_hud": 0.2006
+      },
+      "valid": true
+    }
+  },
+  "absorption": {
+    "compose_REF_ms": 8.2147,
+    "compose_OPT_ms": 4.9854,
+    "compose_saved_ms": 3.2293000000000003,
+    "process_frame_REF_ms": 4.0479,
+    "process_frame_OPT_ms": 13.1204,
+    "process_frame_shift_ms": 9.0725,
+    "frame_total_REF_ms": 29.3426,
+    "frame_total_OPT_ms": 28.0942,
+    "frame_saved_ms": 1.2484000000000002,
+    "absorption_pct": 280.943238472734
+  }
+}

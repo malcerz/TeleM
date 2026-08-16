@@ -16,6 +16,7 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
+from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
 from src.indicators.helpers import load_font, s, parse_hex_color
@@ -75,6 +76,16 @@ def compose_overlay(
     avg_speed_kmh: float = 0.0,
     fast_preview: bool = False,
     reuse_canvas: bool = True,
+    # ETAP 5J: GPU final compositing for the cadence/HR charts.  When a key is
+    # in *gpu_capture_keys*, the chart widget is still rendered on the CPU with
+    # the exact same renderer (raw RGBA byte-identical), but it is NOT pasted
+    # into the Pillow HUD canvas.  Instead its raw RGBA + bbox are handed back
+    # through *gpu_capture* so the exporter can upload it to a persistent GPU
+    # texture and alpha-blend it into the GPU HUD canvas.  Keeping the chart
+    # bbox out of _bboxes removes the chart from the CPU dirty HUD upload too.
+    gpu_capture_keys: Optional[set[str]] = None,
+    gpu_capture: Optional[dict[str, dict[str, Any]]] = None,
+    split_chart_keys: Optional[set[str]] = None,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators."""
     profiler = get_overlay_profiler()
@@ -305,6 +316,7 @@ def compose_overlay(
                     gps_track=gps_track,
                     supersample=ss,
                     target_dt=target_dt,
+                    split_chart_keys=split_chart_keys,
                 )
 
         if res:
@@ -322,19 +334,14 @@ def compose_overlay(
                 center_x = rx
                 center_y = ry
 
-            with indicator_scope(key):
-                with profiler.measure(f"indicator.{key}.paste_composite"):
-                    rotated_paste(
-                        img, res, center_x, center_y, rotation,
-                        prior_bboxes=list(_bboxes.values()), cache_key=key,
-                    )
-
             if rotation in (90, 270):
                 bw, bh = res.height, res.width
             else:
                 bw, bh = res.width, res.height
+            widget_bbox = (
+                int(center_x - bw // 2), int(center_y - bh // 2), int(bw), int(bh),
+            )
 
-            _bboxes[key] = (int(center_x - bw // 2), int(center_y - bh // 2), int(bw), int(bh))
             profiler.set_indicator_metadata(
                 key,
                 form=current_cfg.get("form", "text"),
@@ -343,77 +350,130 @@ def compose_overlay(
                 supersample=int(ss),
             )
             profiler.record_indicator_geometry(
-                key, _bboxes[key], res.size, (canvas_w, canvas_h),
+                key, widget_bbox, res.size, (canvas_w, canvas_h),
                 int(ss), current_cfg.get("form", "text"),
             )
 
-            # Extra text annotations / range labels
-            annotation_started = time.perf_counter()
-            with indicator_scope(key):
-                draw = ImageDraw.Draw(img)
-                cfg = current_cfg
-                fs = max(10, int(s(cfg.get("font_size", cfg.get("size", 0.02)), canvas_h)))
-                font = load_font(font_path, fs)
-                outline = max(1, fs // 12)
-                if extra and extra.get("show_value") and key != "dist_visual":
-                    text = extra["value_text"]
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    text_w = bbox[2] - bbox[0]
-                    text_h = bbox[3] - bbox[1]
-                    ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
-                    oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
-                    if rotation == 90:
-                        text_x = int(center_x + res.height // 2 + 8 + ox)
-                        text_y = int(center_y - text_h / 2 + oy)
-                    else:
-                        text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox)
-                        text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy)
-                    text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
-                    draw.text(
-                        (text_x, text_y),
-                        text,
-                        font=font,
-                        fill=(text_color[0], text_color[1], text_color[2], 255),
-                        stroke_width=outline,
-                        stroke_fill=(0, 0, 0, 255),
-                    )
+            # ETAP 5J: GPU chart compositing — render the chart on the CPU (raw
+            # RGBA byte-identical) but hand it to the GPU blend instead of the
+            # Pillow HUD.  The chart bbox deliberately stays out of _bboxes so
+            # it also leaves the CPU dirty HUD upload.
+            if (
+                gpu_capture_keys
+                and key in gpu_capture_keys
+                and gpu_capture is not None
+            ):
+                # The GPU blend must place the chart at the EXACT top-left that
+                # the CPU paste would use (rotated_paste: round(center - size/2),
+                # which can differ by 1 px from the int(center - size//2) bbox).
+                _rot = rotation % 360
+                if _rot in (90, 270):
+                    _disp_w, _disp_h = res.height, res.width
+                else:
+                    _disp_w, _disp_h = res.width, res.height
+                paste_x = int(round(center_x - _disp_w / 2.0))
+                paste_y = int(round(center_y - _disp_h / 2.0))
+                if (split_chart_keys and key in split_chart_keys
+                        and isinstance(res, ChartSplit)):
+                    # ETAP 5K: hand back the static layer + the two small
+                    # dynamic tiles (cursor / current value) with their local
+                    # offsets inside the chart image.  The exporter uploads the
+                    # static layer once and the dynamic tiles per frame.
+                    gpu_capture[key] = {
+                        "split": True,
+                        "static": res.static,
+                        "cursor_tile": res.cursor_tile,
+                        "cursor_local": res.cursor_local,
+                        "value_tile": res.value_tile,
+                        "value_local": res.value_local,
+                        "bbox": (paste_x, paste_y, _disp_w, _disp_h),
+                        "center": (center_x, center_y),
+                        "rotation": rotation,
+                    }
+                else:
+                    gpu_capture[key] = {
+                        "image": res,
+                        "bbox": (paste_x, paste_y, _disp_w, _disp_h),
+                        "center": (center_x, center_y),
+                        "rotation": rotation,
+                    }
+            else:
+                with indicator_scope(key):
+                    with profiler.measure(f"indicator.{key}.paste_composite"):
+                        rotated_paste(
+                            img, res, center_x, center_y, rotation,
+                            prior_bboxes=list(_bboxes.values()), cache_key=key,
+                        )
 
-                if extra and extra.get("show_range_labels"):
-                    left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
-                    right_text = extra.get("right_text", f"{cfg.get('max_val', 100):.0f}")
-                    rox = int(round(cfg.get("range_label_offset_x", 0.0) * canvas_w))
-                    roy = int(round(cfg.get("range_label_offset_y", 0.0) * canvas_h))
-                    rspreadx = int(round(cfg.get("range_label_spread_x", 0.0) * canvas_w))
+                _bboxes[key] = widget_bbox
 
-                    left_bbox = draw.textbbox((0, 0), left_text, font=font)
-                    left_w = left_bbox[2] - left_bbox[0]
-                    left_h = left_bbox[3] - left_bbox[1]
-                    if right_text:
-                        right_bbox = draw.textbbox((0, 0), right_text, font=font)
-                        right_w = right_bbox[2] - right_bbox[0]
-                        right_h = right_bbox[3] - right_bbox[1]
-                    else:
-                        right_w = right_h = 0
+                # Extra text annotations / range labels
+                annotation_started = time.perf_counter()
+                with indicator_scope(key):
+                    draw = ImageDraw.Draw(img)
+                    cfg = current_cfg
+                    fs = max(10, int(s(cfg.get("font_size", cfg.get("size", 0.02)), canvas_h)))
+                    font = load_font(font_path, fs)
+                    outline = max(1, fs // 12)
+                    if extra and extra.get("show_value") and key != "dist_visual":
+                        text = extra["value_text"]
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        text_w = bbox[2] - bbox[0]
+                        text_h = bbox[3] - bbox[1]
+                        ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
+                        oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
+                        if rotation == 90:
+                            text_x = int(center_x + res.height // 2 + 8 + ox)
+                            text_y = int(center_y - text_h / 2 + oy)
+                        else:
+                            text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox)
+                            text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy)
+                        text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
+                        draw.text(
+                            (text_x, text_y),
+                            text,
+                            font=font,
+                            fill=(text_color[0], text_color[1], text_color[2], 255),
+                            stroke_width=outline,
+                            stroke_fill=(0, 0, 0, 255),
+                        )
 
-                    if rotation == 90:
-                        left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
-                        left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
-                        draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                    if extra and extra.get("show_range_labels"):
+                        left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
+                        right_text = extra.get("right_text", f"{cfg.get('max_val', 100):.0f}")
+                        rox = int(round(cfg.get("range_label_offset_x", 0.0) * canvas_w))
+                        roy = int(round(cfg.get("range_label_offset_y", 0.0) * canvas_h))
+                        rspreadx = int(round(cfg.get("range_label_spread_x", 0.0) * canvas_w))
+
+                        left_bbox = draw.textbbox((0, 0), left_text, font=font)
+                        left_w = left_bbox[2] - left_bbox[0]
+                        left_h = left_bbox[3] - left_bbox[1]
                         if right_text:
-                            right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
-                            right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
-                            draw.text((right_x, right_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
-                    else:
-                        left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
-                        left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
-                        draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
-                        if right_text:
-                            right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
-                            draw.text((right_x, left_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
-            profiler.record(
-                f"indicator.{key}.annotations",
-                (time.perf_counter() - annotation_started) * 1000.0,
-            )
+                            right_bbox = draw.textbbox((0, 0), right_text, font=font)
+                            right_w = right_bbox[2] - right_bbox[0]
+                            right_h = right_bbox[3] - right_bbox[1]
+                        else:
+                            right_w = right_h = 0
+
+                        if rotation == 90:
+                            left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
+                            left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
+                            draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                            if right_text:
+                                right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
+                                right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
+                                draw.text((right_x, right_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                        else:
+                            left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
+                            left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
+                            draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                            if right_text:
+                                right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
+                                draw.text((right_x, left_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                profiler.record(
+                    f"indicator.{key}.annotations",
+                    (time.perf_counter() - annotation_started) * 1000.0,
+                )
         profiler.record(
             f"indicator.{key}.total",
             (time.perf_counter() - indicator_started) * 1000.0,

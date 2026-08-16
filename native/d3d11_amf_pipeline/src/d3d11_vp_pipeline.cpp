@@ -147,8 +147,19 @@ static bool InitHUDComputeShader(ID3D11Device* pDevice) {
 
 D3D11VideoProcessorPipeline::D3D11VideoProcessorPipeline() {}
 
+void D3D11VideoProcessorPipeline::SetPoolSize(UINT n) {
+    if (n < 4) n = 4;
+    if (n > 8) n = 8;
+    m_poolSize = n;
+    m_outputYViews.resize(n, nullptr);
+    m_outputUVViews.resize(n, nullptr);
+    m_outputPool.resize(n, nullptr);
+    m_outputViewPool.resize(n, nullptr);
+    m_slotLastFrame.assign(n, 0);
+}
+
 D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
-    for (UINT i = 0; i < POOL_SIZE; ++i) {
+    for (UINT i = 0; i < (UINT)m_outputYViews.size(); ++i) {
         if (m_outputYViews[i]) m_outputYViews[i]->Release();
         if (m_outputUVViews[i]) m_outputUVViews[i]->Release();
     }
@@ -156,11 +167,13 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_nv12HUDComputeShader) m_nv12HUDComputeShader->Release();
     if (m_device3) m_device3->Release();
     ReleaseMapResources();
+    ReleaseChartResources();
+    ReleaseGaugeResources();
     if (m_hudShaderView) m_hudShaderView->Release();
     if (m_hudInputView) m_hudInputView->Release();
     if (m_hudTexture) m_hudTexture->Release();
 
-    for (UINT i = 0; i < POOL_SIZE; ++i) {
+    for (UINT i = 0; i < (UINT)m_outputViewPool.size(); ++i) {
         if (m_outputViewPool[i]) m_outputViewPool[i]->Release();
         if (m_outputPool[i]) m_outputPool[i]->Release();
     }
@@ -168,6 +181,7 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_disjointQuery) m_disjointQuery->Release();
     if (m_startQuery) m_startQuery->Release();
     if (m_endQuery) m_endQuery->Release();
+    ReleaseGPUTimestampRing();
 
     if (m_videoProcessor) m_videoProcessor->Release();
     if (m_videoEnumerator) m_videoEnumerator->Release();
@@ -177,6 +191,102 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_ownsDevice) {
         if (m_context) m_context->Release();
         if (m_device) m_device->Release();
+    }
+}
+
+// ── ETAP 5T: asynchronous GPU timestamp query ring ───────────────────────
+// Persistent D3D11_QUERY_TIMESTAMP ring.  Queries are ENDed into the command
+// stream at each GPU-pass boundary; results are READ with a fixed delay
+// (GPU_TS_READ_DELAY frames) using D3D11_ASYNC_GETDATA_DONOTFLUSH — never a
+// blocking GetData, never a spin.  One status check per query per frame.
+bool D3D11VideoProcessorPipeline::InitGPUTimestampRing() {
+    if (m_gpuTsInitialized) return true;
+    if (!m_device) return false;
+    D3D11_QUERY_DESC tsDesc = {};
+    tsDesc.Query = D3D11_QUERY_TIMESTAMP;
+    D3D11_QUERY_DESC djDesc = {};
+    djDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+    for (int s = 0; s < GPU_TS_RING; ++s) {
+        if (FAILED(m_device->CreateQuery(&djDesc, &m_tsDisjoint[s]))) {
+            ReleaseGPUTimestampRing();
+            return false;
+        }
+        for (int q = 0; q < GPU_TS_NUM_QUERIES; ++q) {
+            if (FAILED(m_device->CreateQuery(&tsDesc, &m_tsQueries[s][q]))) {
+                ReleaseGPUTimestampRing();
+                return false;
+            }
+        }
+    }
+    m_gpuTimeline.clear();
+    m_gpuTsNextRead = 0;
+    m_gpuTsGetDataCalls = 0;
+    m_gpuTsGetDataNotReady = 0;
+    m_gpuTsInitialized = true;
+    std::cout << "[VP] GPU timestamp ring: " << GPU_TS_RING << " slots x "
+              << (GPU_TS_NUM_QUERIES + 1) << " queries (read delay "
+              << GPU_TS_READ_DELAY << " frames)" << std::endl;
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseGPUTimestampRing() {
+    if (!m_gpuTsInitialized) return;
+    for (int s = 0; s < GPU_TS_RING; ++s) {
+        if (m_tsDisjoint[s]) { m_tsDisjoint[s]->Release(); m_tsDisjoint[s] = nullptr; }
+        for (int q = 0; q < GPU_TS_NUM_QUERIES; ++q) {
+            if (m_tsQueries[s][q]) { m_tsQueries[s][q]->Release(); m_tsQueries[s][q] = nullptr; }
+        }
+    }
+    m_gpuTsInitialized = false;
+}
+
+void D3D11VideoProcessorPipeline::SetGpuTimestampProfile(bool enabled) {
+    m_gpuTsEnabled = enabled;
+    if (enabled && !m_gpuTsInitialized) {
+        if (!InitGPUTimestampRing()) {
+            std::cerr << "[VP] GPU timestamp ring init FAILED; profiling disabled."
+                      << std::endl;
+            m_gpuTsEnabled = false;
+        }
+    }
+}
+
+void D3D11VideoProcessorPipeline::ReadFrameTimestamps(UINT frameIndex) {
+    // FIFO: read the oldest unread frame once it is at least READ_DELAY behind.
+    while (m_gpuTsNextRead + (UINT64)GPU_TS_READ_DELAY <= (UINT64)frameIndex) {
+        UINT64 R = m_gpuTsNextRead;
+        UINT slot = (UINT)(R % (UINT64)GPU_TS_RING);
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj = {};
+        UINT64 ts[GPU_TS_NUM_QUERIES] = { 0 };
+        bool ready = true;
+        m_gpuTsGetDataCalls++;
+        if (m_context->GetData(m_tsDisjoint[slot], &dj, sizeof(dj),
+                               D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) ready = false;
+        for (int i = 0; i < GPU_TS_NUM_QUERIES && ready; ++i) {
+            m_gpuTsGetDataCalls++;
+            if (m_context->GetData(m_tsQueries[slot][i], &ts[i], sizeof(ts[i]),
+                                   D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) {
+                m_gpuTsGetDataNotReady++;
+                ready = false;
+            }
+        }
+        // Safety: the slot is about to be overwritten -> force-advance.
+        const bool force = ((UINT64)frameIndex - R >= (UINT64)GPU_TS_RING - 1);
+        if (!ready && !force) break;  // try again next frame (no spin)
+
+        GPUFrameTimeline rec;
+        rec.frame = R;
+        rec.ready = ready && !dj.Disjoint;
+        rec.disjoint = dj.Disjoint;
+        rec.freq = (dj.Frequency > 0) ? (double)dj.Frequency : 1.0;
+        if (ready) {
+            rec.beginTs = ts[0]; rec.bltTs = ts[1]; rec.rangeTs = ts[2];
+            rec.chartsTs = ts[3]; rec.gaugeTs = ts[4]; rec.mapTs = ts[5];
+            rec.hudTs = ts[6]; rec.endTs = ts[7];
+        }
+        rec.readLatency = (UINT)((UINT64)frameIndex - R);
+        m_gpuTimeline.push_back(rec);
+        m_gpuTsNextRead++;
     }
 }
 
@@ -298,6 +408,16 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
 
     // Create Persistent Output Texture Pool (DXGI_FORMAT_NV12)
     D3D11_TEXTURE2D_DESC texDesc = {};
+    // ETAP 5U — defensively size the output surface pool (SetPoolSize may not
+    // have been called; default 4).
+    if (m_outputPool.size() != m_poolSize) {
+        m_outputPool.resize(m_poolSize, nullptr);
+        m_outputViewPool.resize(m_poolSize, nullptr);
+        m_outputYViews.resize(m_poolSize, nullptr);
+        m_outputUVViews.resize(m_poolSize, nullptr);
+        m_slotLastFrame.assign(m_poolSize, 0);
+    }
+
     texDesc.Width = m_width;
     texDesc.Height = m_height;
     texDesc.MipLevels = 1;
@@ -312,7 +432,7 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     outViewDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
     outViewDesc.Texture2D.MipSlice = 0;
 
-    for (UINT i = 0; i < POOL_SIZE; ++i) {
+    for (UINT i = 0; i < m_poolSize; ++i) {
         hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_outputPool[i]);
         if (FAILED(hr)) {
             std::cerr << "[VP] Failed to create output NV12 texture " << i << ": 0x" << std::hex << hr << std::dec << std::endl;
@@ -337,7 +457,7 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
     HRESULT hr = m_device->QueryInterface(__uuidof(ID3D11Device3), (void**)&m_device3);
     if (FAILED(hr) || !m_device3) return false;
 
-    for (UINT i = 0; i < POOL_SIZE; ++i) {
+    for (UINT i = 0; i < m_poolSize; ++i) {
         D3D11_UNORDERED_ACCESS_VIEW_DESC1 yDesc = {};
         yDesc.Format = DXGI_FORMAT_R8_UNORM;
         yDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
@@ -942,6 +1062,533 @@ void D3D11VideoProcessorPipeline::ReleaseMapResources() {
     if (m_hudUAV) { m_hudUAV->Release(); m_hudUAV = nullptr; }
 }
 
+// ── ETAP 5J: GPU final compositing for the cadence/HR charts ────────────
+
+bool D3D11VideoProcessorPipeline::InitializeChartCompositor() {
+    if (m_chartBlendShader && m_chartBlendCB) return true;
+
+    // One compute shader, three modes (selected via cbuffer):
+    //   mode 0 = clear the chart bbox in the persistent HUD canvas to
+    //            transparent (removes the previous frame's chart — dynamic
+    //            cursor/value would otherwise ghost).
+    //   mode 1 = straight-alpha "over" of the chart texture into the bbox,
+    //            using exactly the same uint8 rounding as the validated GPU
+    //            map/HUD blend (over a cleared dest this reduces to the raw
+    //            chart, matching Pillow alpha_composite over transparency).
+    //   mode 2 = REPLACE (ETAP 5K): straight copy of the source tile — used
+    //            for the pre-composited dynamic cursor/value tiles.
+    // No resample: the chart texture is already at its final widget size.
+    const char* chartSource = R"(
+        Texture2D<float4> ChartTex : register(t0);
+        RWTexture2D<float4> HUDCanvas : register(u0);
+        cbuffer ChartCB : register(b0) {
+            uint dstX; uint dstY;
+            uint chartW; uint chartH;
+            uint mode; uint pad;
+        };
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 tid : SV_DispatchThreadID) {
+            if (tid.x >= chartW || tid.y >= chartH) return;
+            uint2 canvasPos = uint2(dstX + tid.x, dstY + tid.y);
+            if (mode == 0) {
+                HUDCanvas[canvasPos] = float4(0, 0, 0, 0);
+                return;
+            }
+            float4 srcF = saturate(ChartTex.Load(int3(tid.xy, 0)));
+            if (mode == 2) {
+                // ETAP 5K REPLACE: the dynamic tiles are pre-composited over
+                // the static on the CPU and ARE the exact final-chart pixels
+                // of their regions, so a straight copy reproduces the CPU
+                // chart byte-for-byte (Pillow draw/paste blends differ from
+                // straight-alpha "over", hence the replace instead of a blend).
+                HUDCanvas[canvasPos] = srcF;
+                return;
+            }
+            uint4 src = (uint4)round(srcF * 255.0);
+            if (src.a == 0) {
+                if (mode == 3) {
+                    // ETAP 5L gauge blend: DROP dirty zeros (alpha==0 -> fully
+                    // transparent), matching Pillow alpha_composite which
+                    // clears RGB when the output alpha is 0.
+                    HUDCanvas[canvasPos] = float4(0, 0, 0, 0);
+                } else {
+                    // Pillow alpha_composite over a freshly-cleared transparent
+                    // dest PRESERVES the source RGB (dirty zeros, RGB != 0 with
+                    // alpha 0) — verified empirically.  Reproduce that exactly so
+                    // the final HUD canvas is byte-identical to the CPU path.
+                    HUDCanvas[canvasPos] = float4(float3(src.rgb), 0.0) / 255.0;
+                }
+                return;
+            }
+            uint4 dst = (uint4)round(saturate(HUDCanvas.Load(int3(canvasPos, 0))) * 255.0);
+            // Straight-alpha "over" (Pillow alpha_composite float-equivalent).
+            float invA = (255.0 - float(src.a)) / 255.0;
+            float outAF = float(src.a) + float(dst.a) * invA;
+            uint outA = (uint)round(outAF);
+            if (outA == 0) { HUDCanvas[canvasPos] = float4(0, 0, 0, 0); return; }
+            uint3 outC;
+            outC.x = (uint)round((float(src.x) * src.a + float(dst.x) * dst.a * invA) / outAF);
+            outC.y = (uint)round((float(src.y) * src.a + float(dst.y) * dst.a * invA) / outAF);
+            outC.z = (uint)round((float(src.z) * src.a + float(dst.z) * dst.a * invA) / outAF);
+            HUDCanvas[canvasPos] = float4(float3(min(outC, 255)), outA) / 255.0;
+        }
+    )";
+
+    ID3DBlob* blob = nullptr;
+    ID3DBlob* errors = nullptr;
+    HRESULT hr = D3DCompile(chartSource, strlen(chartSource), nullptr, nullptr, nullptr,
+                            "CSMain", "cs_5_0", 0, 0, &blob, &errors);
+    if (FAILED(hr)) {
+        if (errors) { std::cerr << "[CHART] blend shader compile: " << (char*)errors->GetBufferPointer() << std::endl; errors->Release(); }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, &m_chartBlendShader);
+    blob->Release();
+    if (FAILED(hr)) return false;
+
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 32;  // ChartCB: 6 uint32
+    cbDesc.Usage = D3D11_USAGE_DEFAULT;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = m_device->CreateBuffer(&cbDesc, nullptr, &m_chartBlendCB);
+    if (FAILED(hr)) return false;
+
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::SetChartGpuEnabled(bool enabled) {
+    m_chartGpuEnabled = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+bool D3D11VideoProcessorPipeline::UpdateChartTexture(
+    UINT slot, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_chartGpuEnabled || slot >= CHART_SLOT_COUNT || !rgbaData ||
+        stride < width * 4 || !m_device || !m_context) return false;
+
+    // Persistent texture per chart slot — (re)created only when the widget
+    // dimensions change, never per frame (0 texture allocations/frame).
+    if (!m_chartTexture[slot] || m_chartW[slot] != width || m_chartH[slot] != height) {
+        if (m_chartTexture[slot]) { m_chartTexture[slot]->Release(); m_chartTexture[slot] = nullptr; }
+        if (m_chartSRV[slot]) { m_chartSRV[slot]->Release(); m_chartSRV[slot] = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_chartTexture[slot]);
+        if (FAILED(hr)) {
+            std::cerr << "[CHART] CreateChartTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_chartTexture[slot], nullptr, &m_chartSRV[slot]);
+        if (FAILED(hr) || !m_chartSRV[slot]) return false;
+        m_chartW[slot] = width;
+        m_chartH[slot] = height;
+        m_chartTextureCreates++;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    m_chartDstX[slot] = dstX;
+    m_chartDstY[slot] = dstY;
+    m_context->UpdateSubresource(m_chartTexture[slot], 0, nullptr, rgbaData, stride, 0);
+    m_chartActive[slot] = true;
+    m_chartUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_chartUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::SetChartSplitMode(bool enabled) {
+    m_chartSplitMode = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+// ── ETAP 5K: GPU_SPLIT chart layers ─────────────────────────────────────
+// The static 1160x511 layer is uploaded once per cache invalidation; the two
+// dynamic tiles (cursor / current value) are uploaded per frame.  The dynamic
+// tiles are pre-composited over the static on the CPU, so they are stored raw
+// and REPLACED (mode 2) into the HUD canvas after the static blend — this is
+// what makes GPU_SPLIT pixel-exact (see BlendCharts).
+
+bool D3D11VideoProcessorPipeline::UpdateChartStaticTexture(
+    UINT slot, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_chartGpuEnabled || !m_chartSplitMode || slot >= CHART_SLOT_COUNT ||
+        !rgbaData || stride < width * 4 || !m_device || !m_context) return false;
+
+    if (!m_chartStaticTexture[slot] || m_chartW[slot] != width || m_chartH[slot] != height) {
+        if (m_chartStaticTexture[slot]) { m_chartStaticTexture[slot]->Release(); m_chartStaticTexture[slot] = nullptr; }
+        if (m_chartStaticSRV[slot]) { m_chartStaticSRV[slot]->Release(); m_chartStaticSRV[slot] = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_chartStaticTexture[slot]);
+        if (FAILED(hr)) {
+            std::cerr << "[CHART] CreateChartStaticTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_chartStaticTexture[slot], nullptr, &m_chartStaticSRV[slot]);
+        if (FAILED(hr) || !m_chartStaticSRV[slot]) return false;
+        m_chartW[slot] = width;
+        m_chartH[slot] = height;
+        m_chartTextureCreates++;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    m_chartDstX[slot] = dstX;
+    m_chartDstY[slot] = dstY;
+    m_context->UpdateSubresource(m_chartStaticTexture[slot], 0, nullptr, rgbaData, stride, 0);
+    m_chartActive[slot] = true;
+    m_chartStaticUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_chartStaticUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateChartDynamicTile(
+    UINT slot, UINT region, UINT width, UINT height, const uint8_t* rgbaData,
+    UINT stride, UINT localX, UINT localY, size_t* uploadedBytes) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (!m_chartGpuEnabled || !m_chartSplitMode || slot >= CHART_SLOT_COUNT ||
+        region > 1 || !rgbaData || stride < width * 4 || !m_device || !m_context ||
+        width == 0 || height == 0) return false;
+
+    ID3D11Texture2D** tex = (region == 0) ? &m_chartCursorTexture[slot] : &m_chartValueTexture[slot];
+    ID3D11ShaderResourceView** srv = (region == 0) ? &m_chartCursorSRV[slot] : &m_chartValueSRV[slot];
+    UINT& tw = (region == 0) ? m_chartCursorW[slot] : m_chartValueW[slot];
+    UINT& th = (region == 0) ? m_chartCursorH[slot] : m_chartValueH[slot];
+    UINT& tx = (region == 0) ? m_chartCursorX[slot] : m_chartValueX[slot];
+    UINT& ty = (region == 0) ? m_chartCursorY[slot] : m_chartValueY[slot];
+
+    if (!*tex || tw != width || th != height) {
+        if (*tex) { (*tex)->Release(); *tex = nullptr; }
+        if (*srv) { (*srv)->Release(); *srv = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, tex);
+        if (FAILED(hr)) {
+            std::cerr << "[CHART] CreateChartDynamicTile failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(*tex, nullptr, srv);
+        if (FAILED(hr) || !*srv) return false;
+        tw = width;
+        th = height;
+        m_chartTextureCreates++;
+    }
+
+    tx = localX;
+    ty = localY;
+    m_context->UpdateSubresource(*tex, 0, nullptr, rgbaData, stride, 0);
+    m_chartDynamicUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_chartDynamicUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::BlendCharts() {
+    if (!m_chartGpuEnabled || !m_chartBlendShader || !m_chartBlendCB ||
+        !m_hudUAV) {
+        return true;  // nothing to do — not an error
+    }
+
+    const auto blendStart = std::chrono::high_resolution_clock::now();
+    struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    UINT zeroCounts[1] = { 0 };
+    double clearMs = 0.0;
+
+    // One dispatch helper: sets the cbuffer (dst/size/mode), binds the shader,
+    // UAV and optional SRV, dispatches a grid covering the region, then
+    // unbinds.  Used for every chart pass (clear / static blend / replace).
+    auto dispatch = [&](UINT dstX, UINT dstY, UINT w, UINT h, UINT mode,
+                        ID3D11ShaderResourceView* srv) {
+        cb = { dstX, dstY, w, h, mode, 0 };
+        ID3D11Buffer* cbs[1] = { m_chartBlendCB };
+        ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+        m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+        m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, cbs);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        if (srv) m_context->CSSetShaderResources(0, 1, &srv);
+        m_context->Dispatch((w + 15) / 16, (h + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        if (srv) m_context->CSSetShaderResources(0, 1, &nullSRV);
+    };
+
+    for (UINT slot = 0; slot < CHART_SLOT_COUNT; ++slot) {
+        if (!m_chartActive[slot] || m_chartW[slot] == 0 || m_chartH[slot] == 0) {
+            continue;
+        }
+        const UINT cx = m_chartDstX[slot], cy = m_chartDstY[slot];
+        const UINT cw = m_chartW[slot], ch = m_chartH[slot];
+
+        if (m_chartSplitMode) {
+            // ETAP 5K: clear bbox -> blend static -> replace cursor -> replace
+            // value.  The dynamic tiles are pre-composited over the static on
+            // the CPU, so a straight copy (mode 2) reproduces the CPU chart
+            // byte-for-byte; blending them would double-apply the static.
+            const auto clearStart = std::chrono::high_resolution_clock::now();
+            dispatch(cx, cy, cw, ch, 0, nullptr);  // clear chart bbox
+            clearMs += std::chrono::duration<double, std::milli>(
+                std::chrono::high_resolution_clock::now() - clearStart).count();
+            if (m_chartStaticTexture[slot] && m_chartStaticSRV[slot]) {
+                dispatch(cx, cy, cw, ch, 1, m_chartStaticSRV[slot]);
+            }
+            if (m_chartCursorTexture[slot] && m_chartCursorSRV[slot] &&
+                m_chartCursorW[slot] > 0 && m_chartCursorH[slot] > 0) {
+                dispatch(cx + m_chartCursorX[slot], cy + m_chartCursorY[slot],
+                         m_chartCursorW[slot], m_chartCursorH[slot], 2,
+                         m_chartCursorSRV[slot]);
+            }
+            if (m_chartValueTexture[slot] && m_chartValueSRV[slot] &&
+                m_chartValueW[slot] > 0 && m_chartValueH[slot] > 0) {
+                dispatch(cx + m_chartValueX[slot], cy + m_chartValueY[slot],
+                         m_chartValueW[slot], m_chartValueH[slot], 2,
+                         m_chartValueSRV[slot]);
+            }
+        } else {
+            // ETAP 5J: clear bbox + straight-alpha "over" of the full chart.
+            if (!m_chartTexture[slot] || !m_chartSRV[slot]) continue;
+            const auto clearStart = std::chrono::high_resolution_clock::now();
+            dispatch(cx, cy, cw, ch, 0, nullptr);
+            clearMs += std::chrono::duration<double, std::milli>(
+                std::chrono::high_resolution_clock::now() - clearStart).count();
+            dispatch(cx, cy, cw, ch, 1, m_chartSRV[slot]);
+        }
+    }
+    // UAV->SRV hazard barrier before ComposeHUDDirectNV12 reads the HUD canvas
+    // as an SRV (required even when the GPU map blend is disabled).
+    m_context->Flush();
+    m_chartBlendMs = std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - blendStart).count();
+    m_chartClearMs = clearMs;
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseChartResources() {
+    for (UINT slot = 0; slot < CHART_SLOT_COUNT; ++slot) {
+        if (m_chartSRV[slot]) { m_chartSRV[slot]->Release(); m_chartSRV[slot] = nullptr; }
+        if (m_chartTexture[slot]) { m_chartTexture[slot]->Release(); m_chartTexture[slot] = nullptr; }
+        if (m_chartStaticSRV[slot]) { m_chartStaticSRV[slot]->Release(); m_chartStaticSRV[slot] = nullptr; }
+        if (m_chartStaticTexture[slot]) { m_chartStaticTexture[slot]->Release(); m_chartStaticTexture[slot] = nullptr; }
+        if (m_chartCursorSRV[slot]) { m_chartCursorSRV[slot]->Release(); m_chartCursorSRV[slot] = nullptr; }
+        if (m_chartCursorTexture[slot]) { m_chartCursorTexture[slot]->Release(); m_chartCursorTexture[slot] = nullptr; }
+        if (m_chartValueSRV[slot]) { m_chartValueSRV[slot]->Release(); m_chartValueSRV[slot] = nullptr; }
+        if (m_chartValueTexture[slot]) { m_chartValueTexture[slot]->Release(); m_chartValueTexture[slot] = nullptr; }
+        m_chartW[slot] = 0;
+        m_chartH[slot] = 0;
+        m_chartCursorW[slot] = m_chartCursorH[slot] = 0;
+        m_chartValueW[slot] = m_chartValueH[slot] = 0;
+        m_chartActive[slot] = false;
+    }
+    if (m_chartBlendCB) { m_chartBlendCB->Release(); m_chartBlendCB = nullptr; }
+    if (m_chartBlendShader) { m_chartBlendShader->Release(); m_chartBlendShader = nullptr; }
+}
+
+bool D3D11VideoProcessorPipeline::GetHUDCanvasRegionReadback(
+    UINT x, UINT y, UINT w, UINT h, uint8_t* outRGBA, UINT stride) {
+    // Diagnostic A/B readback of a region of the persistent HUD canvas (the
+    // exact composited pixels the video consumes).  Never called on the
+    // production export path.
+    if (!outRGBA || !m_hudTexture || w == 0 || h == 0 || stride < w * 4) return false;
+    if (x + w > m_hudWidth || y + h > m_hudHeight) return false;
+    ID3D11Texture2D* staging = nullptr;
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = w;
+    desc.Height = h;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if (FAILED(m_device->CreateTexture2D(&desc, nullptr, &staging))) return false;
+    D3D11_BOX box = {};
+    box.left = x;
+    box.top = y;
+    box.front = 0;
+    box.right = x + w;
+    box.bottom = y + h;
+    box.back = 1;
+    m_context->CopySubresourceRegion(staging, 0, 0, 0, 0, m_hudTexture, 0, &box);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    bool ok = false;
+    if (SUCCEEDED(m_context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) {
+        const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
+        for (UINT row = 0; row < h; ++row) {
+            memcpy(outRGBA + static_cast<size_t>(row) * stride,
+                   src + static_cast<size_t>(row) * mapped.RowPitch, w * 4);
+        }
+        m_context->Unmap(staging, 0);
+        ok = true;
+    }
+    staging->Release();
+    return ok;
+}
+
+bool D3D11VideoProcessorPipeline::GetChartStaticReadback(
+    UINT slot, uint8_t* outRGBA, UINT stride) {
+    if (!outRGBA || slot >= CHART_SLOT_COUNT || !m_chartStaticTexture[slot] ||
+        m_chartW[slot] == 0 || m_chartH[slot] == 0 || stride < m_chartW[slot] * 4)
+        return false;
+    ID3D11Texture2D* staging = nullptr;
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = m_chartW[slot];
+    desc.Height = m_chartH[slot];
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if (FAILED(m_device->CreateTexture2D(&desc, nullptr, &staging))) return false;
+    m_context->CopyResource(staging, m_chartStaticTexture[slot]);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    bool ok = false;
+    if (SUCCEEDED(m_context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) {
+        const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
+        for (UINT row = 0; row < m_chartH[slot]; ++row) {
+            memcpy(outRGBA + static_cast<size_t>(row) * stride,
+                   src + static_cast<size_t>(row) * mapped.RowPitch,
+                   m_chartW[slot] * 4);
+        }
+        m_context->Unmap(staging, 0);
+        ok = true;
+    }
+    staging->Release();
+    return ok;
+}
+
+// ── ETAP 5L: GPU final compositing for the speed gauge ────────────────
+// Reuses the validated 5J chart blend shader (clear + straight-alpha "over",
+// no resample) for a single persistent gauge texture.
+
+void D3D11VideoProcessorPipeline::SetGaugeGpuEnabled(bool enabled) {
+    m_gaugeGpuEnabled = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+bool D3D11VideoProcessorPipeline::UpdateGaugeTexture(
+    UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_gaugeGpuEnabled || !rgbaData || stride < width * 4 ||
+        width == 0 || height == 0 || !m_device || !m_context) return false;
+
+    if (!m_gaugeTexture || m_gaugeW != width || m_gaugeH != height) {
+        if (m_gaugeTexture) { m_gaugeTexture->Release(); m_gaugeTexture = nullptr; }
+        if (m_gaugeSRV) { m_gaugeSRV->Release(); m_gaugeSRV = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_gaugeTexture);
+        if (FAILED(hr)) {
+            std::cerr << "[GAUGE] CreateGaugeTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_gaugeTexture, nullptr, &m_gaugeSRV);
+        if (FAILED(hr) || !m_gaugeSRV) return false;
+        m_gaugeW = width;
+        m_gaugeH = height;
+        m_gaugeTextureCreates++;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    m_gaugeDstX = dstX;
+    m_gaugeDstY = dstY;
+    m_context->UpdateSubresource(m_gaugeTexture, 0, nullptr, rgbaData, stride, 0);
+    m_gaugeActive = true;
+    m_gaugeUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_gaugeUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::BlendGauge() {
+    if (!m_gaugeGpuEnabled || !m_gaugeActive || !m_gaugeTexture || !m_gaugeSRV ||
+        m_gaugeW == 0 || m_gaugeH == 0 || !m_chartBlendShader || !m_chartBlendCB ||
+        !m_hudUAV) {
+        return true;  // nothing to do — not an error
+    }
+
+    const auto blendStart = std::chrono::high_resolution_clock::now();
+    struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    UINT zeroCounts[1] = { 0 };
+    ID3D11Buffer* cbs[1] = { m_chartBlendCB };
+    ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+
+    // Pass A: clear the gauge bbox (removes last frame's gauge).
+    const auto clearStart = std::chrono::high_resolution_clock::now();
+    cb = { m_gaugeDstX, m_gaugeDstY, m_gaugeW, m_gaugeH, 0, 0 };
+    m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+    m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, cbs);
+    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+    m_context->Dispatch((m_gaugeW + 15) / 16, (m_gaugeH + 15) / 16, 1);
+    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    m_gaugeClearMs = std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - clearStart).count();
+
+    // Pass B: straight-alpha "over" of the gauge texture into the bbox
+    // (mode 3: drop dirty zeros to match Pillow alpha_composite).
+    cb.mode = 3;
+    m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+    m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+    m_context->CSSetShaderResources(0, 1, &m_gaugeSRV);
+    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+    m_context->Dispatch((m_gaugeW + 15) / 16, (m_gaugeH + 15) / 16, 1);
+    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    m_context->Flush();
+    m_gaugeBlendMs = std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - blendStart).count();
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseGaugeResources() {
+    if (m_gaugeSRV) { m_gaugeSRV->Release(); m_gaugeSRV = nullptr; }
+    if (m_gaugeTexture) { m_gaugeTexture->Release(); m_gaugeTexture = nullptr; }
+    m_gaugeW = 0;
+    m_gaugeH = 0;
+    m_gaugeActive = false;
+}
+
 bool D3D11VideoProcessorPipeline::CanUseInputSurface(
     ID3D11Texture2D* texture,
     UINT arrayIndex
@@ -963,6 +1610,8 @@ bool D3D11VideoProcessorPipeline::SetStreamRotation(UINT degrees) {
     if (!m_videoContext || !m_videoProcessor) return false;
     degrees %= 360;
     if (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270) return false;
+
+    m_streamRotation = degrees;  // ETAP 5S: cache for the state signature.
 
     ID3D11VideoContext1* videoContext1 = nullptr;
     const HRESULT hr = m_videoContext->QueryInterface(
@@ -992,13 +1641,23 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
 ) {
     if (!pP010Texture || !ppOutNV12Texture) return false;
 
+    const bool fa = m_frameAccount;
+    const auto pf0 = std::chrono::steady_clock::now();
+
     // Pick persistent output texture from pool
     UINT currentIdx = m_poolIndex;
     m_lastPoolIndex = currentIdx;
-    m_poolIndex = (m_poolIndex + 1) % POOL_SIZE;
+    m_poolIndex = (m_poolIndex + 1) % m_poolSize;
+
+    // ETAP 5U — lifecycle diagnostic: detect reuse of a slot that was handed to
+    // the encoder but whose query may not have consumed it yet (count only).
+    if (m_slotLastFrame.size() == m_poolSize) {
+        m_slotLastFrame[currentIdx] = frameIndex;
+    }
 
     ID3D11Texture2D* outTex = m_outputPool[currentIdx];
     ID3D11VideoProcessorOutputView* outView = m_outputViewPool[currentIdx];
+    if (fa && outStats) outStats->pool_index = currentIdx;
 
     // Create Input View for Base Video Texture
     D3D11_TEXTURE2D_DESC inDesc = {};
@@ -1011,7 +1670,12 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     inViewDesc.Texture2D.ArraySlice = arrayIndex;
 
     ID3D11VideoProcessorInputView* pP010InputView = nullptr;
+    const auto tCreateView = std::chrono::steady_clock::now();
     HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(pP010Texture, m_videoEnumerator, &inViewDesc, &pP010InputView);
+    if (fa && outStats) {
+        outStats->create_view_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tCreateView).count();
+    }
     if (FAILED(hr)) {
         std::cerr << "[VP] CreateVideoProcessorInputView failed: 0x" << std::hex << hr << std::dec << " Format: " << inDesc.Format << " ArraySize: " << inDesc.ArraySize << std::endl;
         return false;
@@ -1026,15 +1690,80 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         m_context->End(m_startQuery);
     }
 
-    const bool composeHUD = enableHUD && m_hudShaderView;
+    const bool composeHUD = enableHUD && m_hudShaderView && !m_gpuHudOff;
     D3D11_VIDEO_PROCESSOR_STREAM streams[1] = {};
 
     RECT fullRect = { 0, 0, (LONG)m_width, (LONG)m_height };
 
-    // Stream 0: Base Video
-    m_videoContext->VideoProcessorSetStreamFrameFormat(m_videoProcessor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
-    m_videoContext->VideoProcessorSetStreamSourceRect(m_videoProcessor, 0, TRUE, &fullRect);
-    m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor, 0, TRUE, &fullRect);
+    // ETAP 5S — stream-state signature (frame format + source/dest rect +
+    // input format + rotation).  Used to prove the setters are constant per
+    // pipeline and to drive the STATIC_CACHE skip / cache invalidation.
+    UINT stateSig = (UINT)D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    stateSig = stateSig * 31u + (UINT)fullRect.left;
+    stateSig = stateSig * 31u + (UINT)fullRect.top;
+    stateSig = stateSig * 31u + (UINT)fullRect.right;
+    stateSig = stateSig * 31u + (UINT)fullRect.bottom;
+    stateSig = stateSig * 31u + (UINT)inDesc.Format;
+    stateSig = stateSig * 31u + m_streamRotation;
+
+    if (fa && outStats) {
+        outStats->decoder_tex_id = (UINT64)((uintptr_t)pP010Texture & 0xFFFFFFFFu);
+        outStats->array_index = arrayIndex;
+        outStats->state_sig = stateSig;
+        outStats->setters_skipped = 0;
+    }
+
+    // Stream 0: Base Video — the three per-frame setters.  REFERENCE applies
+    // them every frame (current behavior).  STATIC_CACHE applies them once per
+    // state signature and skips while unchanged (all current values are
+    // constant).  REORDER (diagnostic) applies SourceRect before FrameFormat to
+    // test whether the wait follows the FIRST D3D11 VP call of the frame.
+    const bool cacheHit = (m_vpStateMode == 1) && m_vpStateApplied
+        && m_appliedStateSig == stateSig;
+    if (cacheHit) {
+        if (fa && outStats) outStats->setters_skipped = 1;
+    } else {
+        if (m_vpStateMode == 2) {
+            // REORDER diagnostic: SourceRect is the first D3D11 VP call.
+            const auto tSrc = std::chrono::steady_clock::now();
+            m_videoContext->VideoProcessorSetStreamSourceRect(
+                m_videoProcessor, 0, TRUE, &fullRect);
+            if (fa && outStats) {
+                outStats->setter_src_rect_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tSrc).count();
+            }
+            const auto tFmt = std::chrono::steady_clock::now();
+            m_videoContext->VideoProcessorSetStreamFrameFormat(
+                m_videoProcessor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
+            if (fa && outStats) {
+                outStats->setter_fmt_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tFmt).count();
+            }
+        } else {
+            const auto tFmt = std::chrono::steady_clock::now();
+            m_videoContext->VideoProcessorSetStreamFrameFormat(
+                m_videoProcessor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
+            if (fa && outStats) {
+                outStats->setter_fmt_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tFmt).count();
+            }
+            const auto tSrc = std::chrono::steady_clock::now();
+            m_videoContext->VideoProcessorSetStreamSourceRect(
+                m_videoProcessor, 0, TRUE, &fullRect);
+            if (fa && outStats) {
+                outStats->setter_src_rect_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tSrc).count();
+            }
+        }
+        const auto tDst = std::chrono::steady_clock::now();
+        m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor, 0, TRUE, &fullRect);
+        if (fa && outStats) {
+            outStats->setter_dst_rect_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - tDst).count();
+        }
+        m_vpStateApplied = true;
+        m_appliedStateSig = stateSig;
+    }
 
     streams[0].Enable = TRUE;
     streams[0].OutputIndex = 0;
@@ -1043,28 +1772,103 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     streams[0].FutureFrames = 0;
     streams[0].pInputSurface = pP010InputView;
 
+    // ETAP 5T: GPU timestamp issue (async, persistent ring).
+    const bool tsOn = m_gpuTsEnabled && m_gpuTsInitialized;
+    const UINT tsSlot = frameIndex % GPU_TS_RING;
+
     // CPU submission time is not GPU execution time.  Keep both metrics
     // separate so profiling cannot accidentally report enqueue latency as
     // completed GPU work.
+    // ETAP 5R: setup window = function entry -> Blt start (pool+GetDesc+
+    // CreateView+SetStream*) so an implicit sync in the setup path is not hidden.
     const auto cpuSubmitStart = std::chrono::high_resolution_clock::now();
 
     // Execute VideoProcessor hardware blit on GPU
+    const auto tBlt = std::chrono::steady_clock::now();
+    if (tsOn) {
+        m_context->Begin(m_tsDisjoint[tsSlot]);
+        m_context->End(m_tsQueries[tsSlot][0]);  // GPU_FRAME_BEGIN
+    }
     hr = m_videoContext->VideoProcessorBlt(m_videoProcessor, outView, 0, 1, streams);
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][1]);  // after VP blit
+    if (fa && outStats) {
+        outStats->blt_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tBlt).count();
+    }
+    const auto tRange = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && normalizeD3D11VARange &&
         !NormalizeD3D11VARangeNV12(currentIdx)) { hr = E_FAIL; std::cerr << "[VP] normalize FAILED" << std::endl; }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][2]);  // after range normalize
+    if (fa && outStats) {
+        outStats->range_pass_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tRange).count();
+    }
     // Diagnostic: capture the raw VP output BEFORE any HUD/map compositing so
     // we can isolate whether the base video already contains the map.
     if (diagnosticsEnabled && frameIndex == 30) {
         DumpNV12TextureToFile(m_device, m_context, outTex, "G_base_vp_raw.png");
     }
+    // ETAP 5J: GPU chart blend (clear bbox + straight-alpha "over") into the
+    // HUD canvas.  Runs before the map blend so the map (last in Pillow
+    // z-order) stays on top; the z-order guard guarantees the charts are
+    // disjoint from every other widget, so this is exact.
+    const auto tChart = std::chrono::steady_clock::now();
+    if (SUCCEEDED(hr) && m_chartGpuEnabled &&
+        !BlendCharts()) { hr = E_FAIL; std::cerr << "[VP] chart blend FAILED" << std::endl; }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][3]);  // after charts blend
+    if (fa && outStats) {
+        outStats->chart_blend_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tChart).count();
+    }
+    // ETAP 5L: GPU gauge blend (clear bbox + straight-alpha "over") into the
+    // HUD canvas.  Runs after the charts and before the map; the gauge guard
+    // verifies the gauge is disjoint from every other widget and the map, so
+    // the relative order does not change the final image.
+    const auto tGauge = std::chrono::steady_clock::now();
+    if (SUCCEEDED(hr) && m_gaugeGpuEnabled &&
+        !BlendGauge()) { hr = E_FAIL; std::cerr << "[VP] gauge blend FAILED" << std::endl; }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][4]);  // after gauge blend
+    if (fa && outStats) {
+        outStats->gauge_blend_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tGauge).count();
+    }
     // ETAP 5G: GPU-resident map 692->691 resize + blend into the HUD canvas
     // before the NV12 compositor consumes it (map stays out of the Pillow HUD).
+    const auto tMap = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && m_mapGpuEnabled &&
         !ResampleAndBlendMap()) { hr = E_FAIL; std::cerr << "[VP] map blend FAILED" << std::endl; }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][5]);  // after map resize+blend
+    if (fa && outStats) {
+        outStats->map_blend_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tMap).count();
+    }
+    const auto tHud = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && composeHUD &&
         !ComposeHUDDirectNV12(outTex, currentIdx)) { hr = E_FAIL; std::cerr << "[VP] HUD compositor FAILED" << std::endl; }
+    if (tsOn) {
+        m_context->End(m_tsQueries[tsSlot][6]);  // after HUD/NV12 compute
+        m_context->End(m_tsQueries[tsSlot][7]);  // GPU_FRAME_END
+        m_context->End(m_tsDisjoint[tsSlot]);   // close the disjoint window
+    }
+    if (fa && outStats) {
+        outStats->hud_compute_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tHud).count();
+    }
     const auto cpuSubmitEnd = std::chrono::high_resolution_clock::now();
+    const auto tRelease = std::chrono::steady_clock::now();
     pP010InputView->Release();
+    if (fa && outStats) {
+        outStats->release_view_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tRelease).count();
+        outStats->pool_acquire_ms = std::chrono::duration<double, std::milli>(
+            tCreateView - pf0).count();
+        outStats->setup_ms = std::chrono::duration<double, std::milli>(
+            tBlt - pf0).count();
+        outStats->set_stream_ms = std::chrono::duration<double, std::milli>(
+            tBlt - tCreateView).count() - outStats->create_view_ms;
+        outStats->submit_window_ms = std::chrono::duration<double, std::milli>(
+            cpuSubmitEnd - cpuSubmitStart).count();
+    }
 
     if (outStats) {
         outStats->cpu_submit_ms = std::chrono::duration<double, std::milli>(
@@ -1127,6 +1931,9 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
             outStats->hud_compose_ms = enableHUD ? 0.0520 : 0.0;
         }
     }
+
+    // ETAP 5T: read the delayed GPU timeline (zero-wait, FIFO).
+    if (tsOn) ReadFrameTimestamps(frameIndex);
 
     *ppOutNV12Texture = outTex;
     return true;

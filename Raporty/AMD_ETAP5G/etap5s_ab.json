@@ -1,0 +1,51 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "vp_mode": "REFERENCE",
+      "wall": 36.38840866088867,
+      "true_fps": 32.57228595199874,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "vp_mode": "STATIC_CACHE",
+      "wall": 37.14318037033081,
+      "true_fps": 31.931900656522004,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "vp_mode": "REFERENCE",
+      "wall": 36.77253222465515,
+      "true_fps": 32.49562392263932,
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "vp_mode": "STATIC_CACHE",
+      "wall": 35.809441328048706,
+      "true_fps": 33.25957109368507,
+      "valid": true
+    }
+  },
+  "order": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "ref_fps": [
+    32.57228595199874,
+    32.49562392263932
+  ],
+  "cache_fps": [
+    31.931900656522004,
+    33.25957109368507
+  ],
+  "ref_fps_med": 32.533954937319024,
+  "cache_fps_med": 32.595735875103536,
+  "fps_delta": 0.06178093778451199,
+  "ref_wall_med": 36.58047044277191,
+  "cache_wall_med": 36.47631084918976
+}

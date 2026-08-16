@@ -1,0 +1,52 @@
+{
+  "runs": {
+    "full": {
+      "tag": "full",
+      "overrides": {},
+      "wall": 37.42132878303528,
+      "true_fps": 32.311671976980435,
+      "gpu_span_med": 27.1449,
+      "gpu_cadence_med": 27.430104999999998
+    },
+    "map_off": {
+      "tag": "map_off",
+      "overrides": {
+        "AMD_MAP_PATH": "CPU_REFERENCE"
+      },
+      "wall": 46.546507120132446,
+      "true_fps": 25.21975335777034,
+      "gpu_span_med": 11.4438,
+      "gpu_cadence_med": 35.566395
+    },
+    "gauge_off": {
+      "tag": "gauge_off",
+      "overrides": {
+        "AMD_GAUGE_PATH": "CPU_REFERENCE"
+      },
+      "wall": 35.42777729034424,
+      "true_fps": 33.72916521729442,
+      "gpu_span_med": 25.3976,
+      "gpu_cadence_med": 26.722135
+    },
+    "charts_off": {
+      "tag": "charts_off",
+      "overrides": {
+        "AMD_CHART_PATH": "CPU_REFERENCE"
+      },
+      "wall": 36.65380883216858,
+      "true_fps": 32.38938837723283,
+      "gpu_span_med": 27.01,
+      "gpu_cadence_med": 27.31351
+    },
+    "hud_off": {
+      "tag": "hud_off",
+      "overrides": {
+        "AMD_GPU_HUD_OFF": "1"
+      },
+      "wall": 35.461641788482666,
+      "true_fps": 33.718559980650156,
+      "gpu_span_med": 25.1907,
+      "gpu_cadence_med": 27.424419999999998
+    }
+  }
+}

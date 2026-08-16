@@ -114,6 +114,26 @@ def _static_cache_key(*args) -> tuple:
     return args
 
 
+# ── ETAP 5Q compose optimization toggle ────────────────────────────────────
+_COMPOSE_5Q: Optional[bool] = None
+
+
+def compose_5q_optimized() -> bool:
+    """ETAP 5Q: are the CPU compose optimizations enabled?
+
+    Reads ``AMD_COMPOSE_5Q`` once per process (REFERENCE = current code,
+    OPTIMIZED = value-keyed text-tile caches).  Default REFERENCE so the
+    production path is unchanged unless the env is explicitly set.
+    """
+    global _COMPOSE_5Q
+    if _COMPOSE_5Q is None:
+        import os
+        _COMPOSE_5Q = os.environ.get(
+            "AMD_COMPOSE_5Q", "REFERENCE"
+        ).strip().upper() == "OPTIMIZED"
+    return _COMPOSE_5Q
+
+
 _MAP_MASK_CACHE: dict[tuple[int, int], Image.Image] = {}
 
 
