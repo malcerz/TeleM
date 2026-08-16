@@ -552,6 +552,7 @@ def export_amd_native_d3d11(
     fit_data: Optional[dict[str, list]] = None,
     gps_track: Optional[list] = None,
     progress_cb: Optional[Callable[[int, str], None]] = None,
+    on_render_progress: Optional[Callable[[int, int, float, float, Optional[dict]], None]] = None,
     cancel_event: Optional[Any] = None,
     active_process_holder: Optional[dict] = None,
 ) -> bool:
@@ -1351,6 +1352,8 @@ def export_amd_native_d3d11(
     # Main Frame Processing Loop
     frame_idx = 0
     expected_progress_frames = source_frames if use_d3d11va and source_frames else total_frames
+    # ETAP GUI: throttle HUD-state snapshot delivery to 1 Hz (latest-state).
+    last_hud_report = 0.0
     while True:
         frame_acct.begin_frame(frame_idx)
         # Short validation exports may deliberately request fewer frames than
@@ -2209,6 +2212,25 @@ def export_amd_native_d3d11(
             stats_str = f"Render: {pct}% ({frame_idx+1}/{expected_progress_frames}) | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             if progress_cb:
                 progress_cb(frame_idx + 1, stats_str)
+            # ETAP GUI: backend-agnostic render progress contract.  hud_state is
+            # the lightweight latest-state snapshot (frame index + timestamp)
+            # delivered at most 1 Hz; the GUI renders the HUD preview from it.
+            if on_render_progress:
+                hud_state = None
+                now = time.monotonic()
+                if now - last_hud_report >= 1.0:
+                    last_hud_report = now
+                    hud_state = {
+                        "frame": int(frame_idx + 1),
+                        "ts": frame_idx / target_fps if target_fps > 0 else 0.0,
+                    }
+                on_render_progress(
+                    int(frame_idx + 1),
+                    int(expected_progress_frames),
+                    elapsed,
+                    fps,
+                    hud_state,
+                )
         frame_acct.mark("progress")
         frame_acct.end_frame()
         frame_idx += 1

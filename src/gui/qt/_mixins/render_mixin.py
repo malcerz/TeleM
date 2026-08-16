@@ -161,6 +161,7 @@ class RenderMixin:
                 .get("track_map", {}).get("source", "fit")
             ),
             progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
+            on_render_progress=lambda c, t, e, f, h: self.signals.sig_render_progress.emit(c, t, e, f, h),
             cancel_event=self.render_cancel_event,
             encoder=encoder,
             gpu=0,

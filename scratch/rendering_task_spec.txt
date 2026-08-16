@@ -1,0 +1,868 @@
+# TeleM — Rendering GUI: realny progress + HUD Preview 1 Hz + uporządkowanie layoutu
+# DeepSeek v4
+#
+# Wykonaj CAŁE zadanie w jednym etapie,
+# ale przestrzegaj kolejnych BRAMEK.
+#
+# NIE optymalizuj pipeline'u renderowania.
+# NIE zmieniaj AMD native / AMF / D3D11VA / shaderów / pool8.
+# NIE zmieniaj jakości finalnego renderingu.
+# NIE ruszaj NVIDIA/Intel poza zachowaniem kompatybilności istniejącego GUI.
+#
+# Główny backend testowy: aktualny AMD production path.
+
+============================================================
+CEL
+============================================================
+
+Przebudować zakładkę Rendering w TeleM tak, aby:
+
+1. podczas renderowania wyświetlała podgląd SAMEGO HUD,
+   bez filmu,
+
+2. HUD Preview był aktualizowany tylko raz na 1 sekundę,
+
+3. podgląd nie powodował istotnego spadku wydajności renderingu,
+
+4. pasek postępu pokazywał RZECZYWISTY przebieg renderingu,
+
+5. statystyki renderowania znajdowały się pod HUD Preview,
+
+6. przycisk rozpoczęcia eksportu został przeniesiony
+   na prawą stronę, bezpośrednio pod ustawienia eksportu.
+
+============================================================
+WAŻNY STAN OBECNY
+============================================================
+
+Aktualnie:
+
+- przycisk eksportu znajduje się na samym dole
+  i zajmuje całą szerokość okna,
+
+- ma zostać przeniesiony na prawą stronę,
+  pod panel ustawień eksportu,
+
+- pasek postępu obecnie jest błędny:
+  dochodzi do 100% już po kilku sekundach,
+  mimo że faktyczny rendering nadal trwa,
+
+- progress NIE może być oparty na timerze GUI,
+  szybkości odczytu źródła ani wartości,
+  która wyprzedza faktyczne renderowanie/encoding,
+
+- finalny AMD pipeline działa obecnie poprawnie
+  i osiąga >34 FPS.
+
+NIE WPROWADZAJ REGRESJI tego pipeline'u.
+
+============================================================
+BRAMKA 1 — AUDYT
+============================================================
+
+PRZED jakąkolwiek zmianą kodu:
+
+znajdź dokładnie:
+
+1. klasę/widget zakładki Rendering,
+2. layout tej zakładki,
+3. przycisk Export/Render,
+4. progress bar,
+5. etykiety/statystyki,
+6. miejsce uruchamiające exporter,
+7. callback/signal aktualnego progressu,
+8. źródło aktualnej wartości procentowej,
+9. istniejące callbacki frame/progress z:
+   - streaming.py,
+   - amd_native_exporter.py,
+   - innych aktywnych backendów,
+10. aktualny mechanizm renderowania preview/HUD
+    używany w zakładce Projekt, jeśli taki istnieje.
+
+Najpierw napisz krótki AUDIT:
+
+CURRENT PROGRESS SOURCE:
+...
+
+WHY IT REACHES 100% TOO EARLY:
+...
+
+EXISTING FRAME COUNTER:
+...
+
+EXISTING HUD/PREVIEW RENDERER:
+...
+
+GUI FILES TO MODIFY:
+...
+
+Dopiero potem implementacja.
+
+============================================================
+CZĘŚĆ A — NOWY LAYOUT ZAKŁADKI RENDERING
+============================================================
+
+Docelowy układ:
+
+┌────────────────────────────────┬──────────────────────┐
+│                                │                      │
+│       HUD PREVIEW              │ USTAWIENIA EKSPORTU │
+│       bez filmu                │                      │
+│                                │                      │
+│                                │                      │
+│                                │ [ EKSPORTUJ ]        │
+│                                │                      │
+├────────────────────────────────┴──────────────────────┤
+│ Progress bar                                           │
+│ Frame / FPS / elapsed / ETA / status                  │
+└────────────────────────────────────────────────────────┘
+
+Dokładniej:
+
+LEWA STRONA:
+- duży obszar HUD Preview,
+- czarne lub przezroczyste tło,
+- bez odtwarzania filmu.
+
+PRAWA STRONA:
+- obecne ustawienia eksportu,
+- pod nimi przycisk rozpoczęcia eksportu.
+
+DÓŁ POD HUD/PANELEM:
+- rzeczywisty progress bar,
+- statystyki renderowania.
+
+Nie umieszczaj już przycisku eksportu
+na całej szerokości u dołu.
+
+Nie przebudowuj innych zakładek.
+
+============================================================
+CZĘŚĆ B — PRAWDZIWY PROGRESS
+============================================================
+
+Obecny progress jest błędny.
+
+USUŃ jako źródło procentu wszystko,
+co bazuje na:
+
+- timerze GUI,
+- czasie odtwarzania,
+- szybkości dekodowania wejścia,
+- samym czasie źródłowym,
+- duration × fps,
+- przewidywanym czasie,
+- callbacku wyprzedzającym faktyczny renderer.
+
+Progress ma pochodzić z rzeczywistych
+ukończonych klatek pipeline'u.
+
+============================================================
+AUTORYTATYWNY LICZNIK
+============================================================
+
+Najpierw znajdź najlepszy istniejący licznik.
+
+Dla AMD preferuj licznik oznaczający,
+że klatka faktycznie przeszła production pipeline.
+
+Może to być np.:
+
+processed
+encoded
+AMF submitted/output
+muxed
+
+ale wybierz właściwy na podstawie kodu.
+
+Nie zgaduj.
+
+Progress podczas głównego renderowania:
+
+completed_frames / total_frames.
+
+============================================================
+TOTAL FRAMES
+============================================================
+
+Ustal rzeczywistą liczbę klatek źródła.
+
+NIE używaj bezwarunkowo:
+
+ceil(duration * fps)
+
+ponieważ dla materiałów takich jak GoPro
+może dawać błędny wynik.
+
+Jeżeli projekt posiada wiarygodny
+exact frame count:
+
+użyj go.
+
+Jeżeli dokładny total nie jest dostępny:
+
+progress powinien być indeterminate
+do czasu uzyskania poprawnego total,
+
+zamiast prezentować fałszywy procent.
+
+============================================================
+100 PROCENT
+============================================================
+
+Pasek NIE może pokazać 100%,
+dopóki eksport faktycznie nie jest zakończony.
+
+Podczas ostatniego flush/drain/mux:
+
+można pozostawić:
+
+99%
+
+i status:
+
+"Finalizacja..."
+
+Dopiero po sukcesie:
+
+100%
+"Gotowe"
+
+============================================================
+STATYSTYKI
+============================================================
+
+Pod progress barem pokaż minimum:
+
+Frame:
+645 / 1131
+
+Progress:
+57.0 %
+
+Rendering FPS:
+34.2
+
+Elapsed:
+00:18
+
+ETA:
+00:14
+
+Status:
+Rendering / Finalizacja / Gotowe / Błąd.
+
+Może być jedna lub dwie linie,
+zależnie od istniejącego GUI.
+
+============================================================
+FPS
+============================================================
+
+FPS ma być REAL throughput:
+
+completed_frames / elapsed_render_time
+
+lub istniejąca poprawna metryka TRUE FPS.
+
+Nie używaj source FPS jako render FPS.
+
+============================================================
+ETA
+============================================================
+
+ETA:
+
+remaining_frames / measured_render_fps.
+
+Można zastosować lekko wygładzoną średnią,
+żeby ETA nie skakało.
+
+Nie komplikuj tego.
+
+Jeżeli FPS nie jest jeszcze wiarygodny:
+
+ETA = "--:--".
+
+============================================================
+CZĘŚĆ C — HUD PREVIEW
+============================================================
+
+Podczas finalnego renderowania pokaż
+samą aktualną nakładkę HUD.
+
+BEZ filmu.
+
+Tło:
+
+czarne
+lub istniejący checker/transparent background,
+jeśli GUI już taki stosuje.
+
+============================================================
+CZĘSTOTLIWOŚĆ
+============================================================
+
+HUD Preview aktualizuj:
+
+MAKSYMALNIE RAZ NA 1 SEKUNDĘ.
+
+Nie co klatkę.
+
+Użyj:
+
+time.monotonic()
+
+lub istniejącego mechanizmu timerowego GUI.
+
+============================================================
+KRYTYCZNE — BRAK GPU READBACK
+============================================================
+
+ABSOLUTNIE NIE RÓB:
+
+final 4K GPU HUD
+→ GPU readback
+→ CPU
+→ Qt.
+
+NIE używaj:
+
+staging texture readback
+Map()
+CopyResource do staging
+forced GPU sync
+GetData wait
+
+dla HUD Preview.
+
+Finalny renderer NIE może czekać na preview.
+
+============================================================
+ARCHITEKTURA PREVIEW
+============================================================
+
+Renderer eksportu powinien jedynie
+udostępniać snapshot aktualnego stanu HUD.
+
+Np.:
+
+frame index
+timestamp
+telemetry/current frame data
+active indicators
+layout/configuration.
+
+GUI lub osobny lekki preview worker
+renderuje z tego HUD w małej rozdzielczości.
+
+============================================================
+LATEST-STATE / SINGLE SLOT
+============================================================
+
+Nie stosuj kolejki wszystkich preview frames.
+
+Ma istnieć tylko:
+
+LATEST HUD STATE.
+
+Jeżeli:
+
+renderer jest przy frame 640
+
+a GUI nadal renderuje preview frame 610,
+
+610 ma zostać porzucone.
+
+Następne preview:
+640 lub nowsze.
+
+PREVIEW NIGDY NIE MOŻE TWORZYĆ BACKPRESSURE.
+
+============================================================
+PREVIEW RESOLUTION
+============================================================
+
+Nie renderuj 3840×2160 tylko po to,
+żeby wyświetlić mały widget.
+
+Użyj rozdzielczości odpowiadającej
+rzeczywistemu widgetowi.
+
+Preferowane np.:
+
+960×540
+
+lub dynamicznie wg aktualnego rozmiaru widgetu.
+
+Zachowaj proporcje 16:9.
+
+============================================================
+HUD STATE
+============================================================
+
+Preview powinien pokazywać aktualny stan:
+
+- speed,
+- cadence,
+- HR,
+- map,
+- gauge,
+- ISO,
+- exposure,
+- temperature,
+- time,
+- battery,
+- wszystkie pozostałe aktywne wskaźniki.
+
+Wartości muszą odpowiadać
+aktualnemu punktowi renderowanego materiału.
+
+============================================================
+WIZUALNA ZGODNOŚĆ
+============================================================
+
+HUD Preview NIE musi być pixel-identical
+z finalnym 4K GPU output.
+
+Ma być wizualnie zgodnym podglądem:
+
+- ten sam layout,
+- te same wartości,
+- te same pozycje,
+- proporcjonalne skalowanie,
+- właściwa mapa,
+- właściwe wykresy.
+
+Nie próbuj dla preview kopiować
+GPU map/chart/gauge textures z produkcji.
+
+============================================================
+THREADING
+============================================================
+
+Final render worker:
+
+NIGDY nie może czekać na GUI.
+
+Do GUI przesyłaj:
+
+lekki immutable snapshot stanu.
+
+Jeżeli renderowanie preview wymaga CPU:
+
+wykonaj je poza krytyczną pętlą exportera.
+
+Preferowane:
+
+dedykowany lightweight preview worker
+
+lub istniejący bezpieczny mechanizm preview.
+
+QPixmap/QWidget update:
+tylko GUI thread.
+
+============================================================
+WYŁĄCZANIE PREVIEW
+============================================================
+
+Jeżeli istnieje prosty sposób,
+dodaj checkbox:
+
+[✓] Podgląd HUD podczas renderowania
+
+Default:
+ON.
+
+Jeżeli dodanie checkboxa nie pasuje
+do obecnego UI:
+
+preview może być zawsze ON,
+ponieważ odświeża się tylko 1 Hz.
+
+Nie komplikuj GUI wyłącznie dla checkboxa.
+
+============================================================
+START RENDERING
+============================================================
+
+Po kliknięciu Export:
+
+- disable Export button,
+- progress = 0,
+- elapsed reset,
+- ETA "--:--",
+- HUD Preview może pokazać pierwszą dostępną klatkę.
+
+============================================================
+PODCZAS RENDERINGU
+============================================================
+
+Aktualizacje GUI:
+
+progress/stats:
+mogą być np. 4–10 razy/s
+
+HUD image:
+MAKSYMALNIE 1 raz/s.
+
+Nie ma potrzeby aktualizować progress
+tylko raz/s — progress może być płynniejszy.
+
+============================================================
+KONIEC
+============================================================
+
+Po poprawnym zakończeniu:
+
+progress = 100%
+
+status = Gotowe
+
+elapsed = final
+
+ETA = 00:00
+
+HUD Preview:
+zostaw ostatnią klatkę HUD.
+
+Export button:
+enable.
+
+============================================================
+ERROR / CANCEL
+============================================================
+
+Przy błędzie:
+
+NIE ustawiaj 100%.
+
+Status:
+Błąd
+
+zachowaj faktyczny procent.
+
+Przy cancel:
+
+Status:
+Anulowano
+
+zachowaj faktyczny procent.
+
+Nie pokazuj "Gotowe".
+
+============================================================
+BACKEND CONTRACT
+============================================================
+
+Jeżeli trzeba rozszerzyć callback exportera,
+utwórz minimalny backend-agnostic contract,
+np.:
+
+on_render_progress(
+    completed_frames,
+    total_frames,
+    elapsed,
+    fps,
+    hud_state
+)
+
+HUD state nie musi być wysyłany
+w każdym callbacku.
+
+Może być aktualizowany 1 Hz.
+
+Nie przebudowuj encoderów.
+
+AMD jest głównym acceptance backendem.
+
+NVIDIA/Intel:
+nie zmieniaj ich pipeline'u.
+
+============================================================
+BRAMKA 2 — PROGRESS TEST
+============================================================
+
+Uruchom aktualny testowy materiał:
+
+GX020079.MP4
+
+actual:
+1131 frames.
+
+Sprawdź:
+
+około 25%:
+~283 frames
+
+50%:
+~566 frames
+
+75%:
+~848 frames
+
+100%:
+dopiero 1131 + zakończenie finalizacji.
+
+Progress NIE może osiągnąć 100%
+po kilku sekundach.
+
+Zapisz log:
+
+wall time
+frame
+percent
+
+np. co 10%.
+
+============================================================
+BRAMKA 3 — HUD PREVIEW PERFORMANCE
+============================================================
+
+Wykonaj pełny 1131-frame A/B.
+
+A:
+HUD Preview OFF
+
+B:
+HUD Preview ON, 1 Hz.
+
+Ten sam:
+
+AMD production path
+pool8
+5Q OPT
+GPU map
+GPU_SPLIT charts
+GPU gauge
+AMF
+profiling OFF.
+
+Raportuj:
+
+A TRUE FPS
+A wall
+
+B TRUE FPS
+B wall
+
+preview updates count.
+
+============================================================
+PERFORMANCE GATE
+============================================================
+
+Docelowo:
+
+spadek TRUE FPS <1%.
+
+Akceptowalne:
+<=2% jeśli wariancja termiczna.
+
+Jeżeli >2%:
+
+NIE uznawaj implementacji za PASS.
+
+Znajdź przyczynę:
+
+- preview render wykonywany w render thread,
+- kopiowanie za dużych obrazów,
+- blokujące sygnały,
+- zbyt częste update,
+- GPU readback,
+- queue buildup.
+
+============================================================
+GUI RESPONSIVENESS
+============================================================
+
+Podczas export:
+
+okno musi pozostawać responsywne.
+
+Przesuwanie okna / repaint
+nie może zatrzymywać renderera.
+
+Preview może pominąć aktualizację.
+
+============================================================
+CORRECTNESS
+============================================================
+
+Finalny eksport z HUD Preview ON:
+
+musi być identyczny z OFF.
+
+Wymagane:
+
+1131/1131
+drops=0
+
+brak green/magenta
+brak brakujących widgetów
+audio obecne.
+
+Jeżeli deterministic path pozwala:
+
+framemd5 OFF == ON.
+
+============================================================
+NIE RUSZAJ
+============================================================
+
+NIE zmieniaj:
+
+AMD VP pool8
+D3D11VA
+AMF
+NV12
+GPU map
+GPU chart
+GPU gauge
+HUD shaders
+5Q caches
+telemetry calculations
+encoding quality.
+
+To jest zadanie GUI/progress/monitoring.
+
+============================================================
+RAPORT
+============================================================
+
+STATUS:
+PASS / PARTIAL / FAIL
+
+------------------------------------------------------------
+
+AUDIT:
+
+old progress source:
+...
+
+reason 100% too early:
+...
+
+new authoritative counter:
+...
+
+total frame source:
+...
+
+------------------------------------------------------------
+
+LAYOUT:
+
+Export button:
+old ...
+new ...
+
+HUD preview:
+...
+
+Progress:
+...
+
+Stats:
+...
+
+------------------------------------------------------------
+
+PROGRESS TEST:
+
+0%:
+frame ...
+
+25%:
+frame ...
+
+50%:
+frame ...
+
+75%:
+frame ...
+
+99%:
+frame ...
+
+100%:
+frame ...
+
+finalization handling:
+...
+
+------------------------------------------------------------
+
+HUD PREVIEW:
+
+refresh interval:
+...
+
+resolution:
+...
+
+render thread blocked:
+YES / NO
+
+GPU readback:
+YES / NO
+
+queue:
+latest-state / other
+
+preview updates:
+...
+
+------------------------------------------------------------
+
+PERFORMANCE:
+
+OFF:
+FPS ...
+wall ...
+
+ON:
+FPS ...
+wall ...
+
+delta:
+... %
+
+------------------------------------------------------------
+
+CORRECTNESS:
+
+frames:
+1131/1131
+
+drops:
+...
+
+audio:
+...
+
+framemd5:
+...
+
+------------------------------------------------------------
+
+ODPOWIEDZ WPROST:
+
+1. Dlaczego stary progress osiągał 100% za szybko?
+2. Jaki licznik jest teraz źródłem progressu?
+3. Czy 100% pojawia się dopiero po faktycznym końcu?
+4. Gdzie znajduje się teraz przycisk Export?
+5. Gdzie znajduje się progress i statystyki?
+6. Jak często aktualizowany jest HUD Preview?
+7. Czy Preview korzysta z GPU→CPU readback?
+8. Czy renderer może czekać na Preview?
+9. Ile kosztuje Preview w FPS?
+10. Czy finalny rendering pozostaje identyczny?
+11. Czy GUI pozostaje responsywne?
+12. Czy zadanie można uznać za zakończone?
+
+============================================================
+STOP
+============================================================
+
+Nie wykonuj żadnej dalszej optymalizacji.

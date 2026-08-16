@@ -24,12 +24,16 @@ from src.gui.layout_manager import resolve_font_path  # noqa: E402
 
 class _Signals:
     class _Sig:
+        def __init__(self) -> None:
+            self.calls = []
+
         def emit(self, *a, **k):
-            pass
+            self.calls.append(a)
 
     sig_progress = _Sig()
     sig_error = _Sig()
     sig_render_finished = _Sig()
+    sig_render_progress = _Sig()
 
 
 class _Stub:
@@ -95,6 +99,30 @@ def main() -> int:
     stats = RenderMixin._render_pipeline(stub, options)
     wall = time.time() - t0
     print(f"\nREAL GUI render wall = {wall:.3f} s", flush=True)
+
+    # ── BRAMKA 2: real progress contract (sig_render_progress) ─────────
+    rp = stub.signals.sig_render_progress.calls
+    print("\n=== BRAMKA 2: PROGRESS CONTRACT ===", flush=True)
+    print(f"sig_render_progress events: {len(rp)}", flush=True)
+    if rp:
+        last = rp[-1]
+        total = last[1]
+        print(f"LAST  event: completed={last[0]} total={total} elapsed={last[2]:.2f}s "
+              f"fps={last[3]:.1f} hud={last[4] is not None}", flush=True)
+        for target in (25, 50, 75, 100):
+            tgt = total * target / 100.0
+            ev = next((e for e in rp if e[0] >= tgt), None)
+            if ev:
+                print(f"  ~{target}% hit at completed={ev[0]} ({100.0*ev[0]/total:.1f}%) "
+                      f"fps={ev[3]:.1f} elapsed={ev[2]:.1f}s", flush=True)
+        hud_updates = sum(1 for e in rp if e[4] is not None)
+        print(f"hud_state snapshots (1Hz): {hud_updates}", flush=True)
+        max_pct = max(100.0 * e[0] / total for e in rp) if total else 0.0
+        print(f"max completed pct observed (before finish): {max_pct:.1f}%", flush=True)
+        progress_ok = (total == 1131 and last[0] == 1131 and hud_updates > 0)
+    else:
+        progress_ok = False
+    print(f"BRAMKA 2 progress_ok = {progress_ok}", flush=True)
 
     profile = out.with_suffix(out.suffix + ".amd_profile.json")
     if not profile.exists():

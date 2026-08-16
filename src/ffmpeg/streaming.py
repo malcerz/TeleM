@@ -77,7 +77,8 @@ def _pipe_writer_thread(
 
 
 def _report_stream_progress(
-    done: int, total: int, start_time: float, progress_cb: Optional[Callable]
+    done: int, total: int, start_time: float, progress_cb: Optional[Callable],
+    on_render_progress: Optional[Callable] = None,
 ) -> None:
     """Report streaming progress."""
     elapsed = time.time() - start_time
@@ -87,6 +88,8 @@ def _report_stream_progress(
     stats = f"Stream: {done}/{total} | fps: {fps:.1f} | elapse: {h:02d}:{m:02d}:{s:02d}"
     if progress_cb:
         progress_cb(done, stats)
+    if on_render_progress:
+        on_render_progress(done, total, elapsed, fps, None)
 
 
 def _acquire_shm_slot(
@@ -216,6 +219,7 @@ def stream_overlay_to_ffmpeg(
     overlay_w: int = 3840,
     overlay_h: int = 2160,
     progress_cb: Optional[Callable] = None,
+    on_render_progress: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
 ) -> int:
@@ -266,6 +270,7 @@ def stream_overlay_to_ffmpeg(
                 fit_data=fit_data,
                 gps_track=gps_track,
                 progress_cb=progress_cb,
+                on_render_progress=on_render_progress,
                 cancel_event=cancel_event,
                 active_process_holder=active_process_holder,
             )
@@ -456,7 +461,7 @@ def stream_overlay_to_ffmpeg(
                 pipe_queue.put(raw_bytes)
                 total_piped += 1
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb)
+                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
@@ -517,7 +522,7 @@ def stream_overlay_to_ffmpeg(
                         if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                             _report_stream_progress(
                                 total_piped, total_overlay_frames,
-                                start_time, progress_cb,
+                                start_time, progress_cb, on_render_progress,
                             )
 
                     # Aggressive top-up: fill ALL available slots in the window
@@ -545,7 +550,7 @@ def stream_overlay_to_ffmpeg(
                     next_idx += 1
                     _report_stream_progress(
                         total_piped, total_overlay_frames,
-                        start_time, progress_cb,
+                        start_time, progress_cb, on_render_progress,
                     )
 
         # Signal pipe writer to finish and close stdin
