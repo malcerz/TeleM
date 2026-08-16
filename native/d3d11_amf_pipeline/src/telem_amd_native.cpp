@@ -854,13 +854,20 @@ TELEM_EXPORT void* telem_amd_create(
     std::cout << "[TELEM AMD DLL] AMD_VP_STATE_MODE="
               << (vpMode == 1 ? "STATIC_CACHE" : (vpMode == 2 ? "REORDER" : "REFERENCE"))
               << std::endl;
-    // ETAP 5U — runtime VP output surface pool size (4..8).  Must be set before
-    // vpPipeline.Initialize().  Diagnostic only; default 4 = current behavior.
+    // ETAP 5U/5V — runtime VP output surface pool size (4..8).  Must be set
+    // before vpPipeline.Initialize().  Production default is 8 (ETAP 5V);
+    // AMD_VP_POOL_SIZE override honored.  Safe fallback 8->6->4 inside
+    // SetupVideoProcessor on allocation/resource-creation failure only.
     const char* poolEnv = getenv("AMD_VP_POOL_SIZE");
-    UINT poolSize = 4;
+    UINT poolSize = 8;
     if (poolEnv && poolEnv[0] >= '4' && poolEnv[0] <= '8') poolSize = (UINT)(poolEnv[0] - '0');
     ctx->vpPipeline.SetPoolSize(poolSize);
     std::cout << "[TELEM AMD DLL] AMD_VP_POOL_SIZE=" << poolSize << std::endl;
+    // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
+    const char* plsEnv = getenv("AMD_POOL_LIFECYCLE_STATS");
+    const bool poolLs = (plsEnv && plsEnv[0] == '1');
+    ctx->vpPipeline.SetPoolLifecycleStats(poolLs);
+    if (poolLs) std::cout << "[TELEM AMD DLL] AMD_POOL_LIFECYCLE_STATS=1" << std::endl;
     // ETAP 5U — AMF QueryOutput policy (REFERENCE | DRAIN_READY).
     const char* qmEnv = getenv("AMD_AMF_QUERY_MODE");
     int qm = 0;
@@ -899,28 +906,54 @@ TELEM_EXPORT void* telem_amd_create(
     }
 
     // 2. Initialize VideoProcessor Pipeline
-    if (!ctx->vpPipeline.Initialize(ctx->pDevice, ctx->pContext, width, height)) {
-        std::cerr << "[TELEM AMD DLL] VP Pipeline Initialize failed!" << std::endl;
-        delete ctx;
-        return nullptr;
+    // ETAP 5W debug: AMD_DEBUG_NO_VP=1 skips the VP pipeline (device-ref leak
+    // isolation).  For create/close refcount tests only (no frames).
+    const bool skipVp = (getenv("AMD_DEBUG_NO_VP") != nullptr);
+    if (skipVp) {
+        std::cout << "[TELEM AMD DLL] AMD_DEBUG_NO_VP=1 (diagnostic skip)" << std::endl;
     }
-    if (!ctx->vpPipeline.SetupVideoProcessor(DXGI_FORMAT_P010, DXGI_FORMAT_NV12)) {
-        std::cerr << "[TELEM AMD DLL] VP Setup failed!" << std::endl;
-        delete ctx;
-        return nullptr;
+    if (!skipVp) {
+        if (!ctx->vpPipeline.Initialize(ctx->pDevice, ctx->pContext, width, height)) {
+            std::cerr << "[TELEM AMD DLL] VP Pipeline Initialize failed!" << std::endl;
+            delete ctx;
+            return nullptr;
+        }
+        if (!ctx->vpPipeline.SetupVideoProcessor(DXGI_FORMAT_P010, DXGI_FORMAT_NV12)) {
+            std::cerr << "[TELEM AMD DLL] VP Setup failed!" << std::endl;
+            delete ctx;
+            return nullptr;
+        }
+        // ETAP 5V — report the effective pool size (fallback may have reduced it).
+        if (ctx->vpPipeline.GetPoolSize() != poolSize) {
+            std::cout << "[TELEM AMD DLL] VP pool effective size = "
+                      << ctx->vpPipeline.GetPoolSize() << " (requested " << poolSize
+                      << ")" << std::endl;
+        }
+        // ETAP 5T: enable the GPU timestamp ring now that the device is ready.
+        ctx->vpPipeline.SetGpuTimestampProfile(gpuTsEnabled);
     }
-    // ETAP 5T: enable the GPU timestamp ring now that the device is ready.
-    ctx->vpPipeline.SetGpuTimestampProfile(gpuTsEnabled);
 
     // 3. Initialize AMF HEVC Encoder on shared D3D11 device
-    if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
-        std::cerr << "[TELEM AMD DLL] AMF Encoder Initialize failed!" << std::endl;
-        delete ctx;
-        return nullptr;
+    // ETAP 5W debug: AMD_DEBUG_NO_AMF=1 skips AMF init (device-ref leak isolation).
+    const bool skipAmf = (getenv("AMD_DEBUG_NO_AMF") != nullptr);
+    if (!skipAmf) {
+        if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
+            std::cerr << "[TELEM AMD DLL] AMF Encoder Initialize failed!" << std::endl;
+            delete ctx;
+            return nullptr;
+        }
+    } else {
+        std::cout << "[TELEM AMD DLL] AMD_DEBUG_NO_AMF=1 (diagnostic skip)" << std::endl;
     }
 
     // 4. Initialize Media Foundation Decoder for Input Video File
-    if (input_path && wcslen(input_path) > 0) {
+    // ETAP 5W debug: AMD_DEBUG_NO_MF=1 skips the MF source reader (device-ref
+    // leak isolation).
+    const bool skipMf = (getenv("AMD_DEBUG_NO_MF") != nullptr);
+    if (skipMf) {
+        std::cout << "[TELEM AMD DLL] AMD_DEBUG_NO_MF=1 (diagnostic skip)" << std::endl;
+    }
+    if (input_path && wcslen(input_path) > 0 && !skipMf) {
         hr = MFCreateDXGIDeviceManager(&ctx->dxgiResetToken, &ctx->pDXGIManager);
         if (SUCCEEDED(hr)) {
             ctx->pDXGIManager->ResetDevice(ctx->pDevice, ctx->dxgiResetToken);
@@ -1714,11 +1747,30 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     if (ctx->pUploadStagingTex) ctx->pUploadStagingTex->Release();
     if (ctx->pDecodedCopyTex) ctx->pDecodedCopyTex->Release();
     if (ctx->pPendingDecodedTex) ctx->pPendingDecodedTex->Release();
-    if (ctx->pContext) ctx->pContext->Release();
-    if (ctx->pDevice) ctx->pDevice->Release();
+    // ETAP 5W — release the D3D11 device/context AFTER the VP/AMF destructors
+    // (inside delete ctx) have torn down all GPU resources.  Releasing the
+    // device first can strand driver-side kernel objects (events/mutants/
+    // sections) when child resources are released against a destroyed device.
+    ID3D11Device* dev = ctx->pDevice;
+    ID3D11DeviceContext* cctx = ctx->pContext;
+    ctx->pDevice = nullptr;
+    ctx->pContext = nullptr;
+    // ETAP 5W — device/context liveness diagnostic (AMD_POOL_LIFECYCLE_STATS=1).
+    const bool poolDbg = ctx->vpPipeline.IsPoolLifecycleStats();
 
     delete ctx;
+    if (cctx) cctx->Release();
     MFShutdown();
+    // ETAP 5W — remaining refcount after teardown + MFShutdown.  1 = only ours
+    // (device destroyed by our Release below); >1 = a leaked reference keeps
+    // the device alive and strands driver-side kernel objects.
+    if (poolDbg) {
+        ULONG devRef = dev ? (dev->AddRef() - 1) : 0;
+        if (dev) dev->Release();
+        std::cout << "[TELEM AMD DLL] close: D3D11 device refcount=" << devRef
+                  << " after teardown+MFShutdown (1=clean)" << std::endl;
+    }
+    if (dev) dev->Release();
     std::cout << "[TELEM AMD DLL] telem_amd_close completed." << std::endl;
     return 1;
 }

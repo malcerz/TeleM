@@ -619,7 +619,8 @@ def export_amd_native_d3d11(
     # CPU_REFERENCE keeps the map in the Pillow HUD (unchanged).  GPU uploads
     # the 692x692 working map and resizes + composites it on the GPU.  The
     # z-order guard falls back to CPU_REFERENCE for unsafe layouts.
-    requested_map_path = os.environ.get("AMD_MAP_PATH", "CPU_REFERENCE").strip().upper()
+    # ETAP (GUI integration): production default is GPU (approved 5G+ path).
+    requested_map_path = os.environ.get("AMD_MAP_PATH", "GPU").strip().upper()
     if requested_map_path not in {"CPU_REFERENCE", "GPU"}:
         print("[AMD NATIVE D3D11] ERROR: AMD_MAP_PATH must be CPU_REFERENCE or GPU.", flush=True)
         return False
@@ -671,7 +672,9 @@ def export_amd_native_d3d11(
     # HUD canvas instead.  The actual safe-chart set is computed at runtime
     # from a probe frame by the z-order guard (with automatic fallback for any
     # chart that overlaps another widget / the GPU map).
-    requested_chart_path = os.environ.get("AMD_CHART_PATH", "CPU_REFERENCE").strip().upper()
+    # ETAP (GUI integration): production default is GPU_SPLIT (approved 5J/5K
+    # path); unsafe charts still fall back to CPU_REFERENCE.
+    requested_chart_path = os.environ.get("AMD_CHART_PATH", "GPU_SPLIT").strip().upper()
     if requested_chart_path not in _AMD_CHART_PATHS:
         print("[AMD NATIVE D3D11] ERROR: AMD_CHART_PATH must be CPU_REFERENCE, GPU or GPU_SPLIT.", flush=True)
         return False
@@ -681,7 +684,9 @@ def export_amd_native_d3d11(
     print(f"[AMD NATIVE D3D11] AMD_CHART_PATH: {requested_chart_path}", flush=True)
 
     # ── ETAP 5L: GPU gauge compositing ─────────────────────────────────
-    requested_gauge_path = os.environ.get("AMD_GAUGE_PATH", "CPU_REFERENCE").strip().upper()
+    # ETAP (GUI integration): production default is GPU (approved 5L path);
+    # unsafe layouts fall back to CPU_REFERENCE.
+    requested_gauge_path = os.environ.get("AMD_GAUGE_PATH", "GPU").strip().upper()
     if requested_gauge_path not in _AMD_GAUGE_PATHS:
         print("[AMD NATIVE D3D11] ERROR: AMD_GAUGE_PATH must be CPU_REFERENCE or GPU.", flush=True)
         return False
@@ -1021,6 +1026,17 @@ def export_amd_native_d3d11(
     fps_den = 1000
 
     print("[AMD NATIVE D3D11] Initializing telem_amd_native context...", flush=True)
+    # ── REAL GUI production configuration summary (integration fix) ───────
+    print("[AMD NATIVE D3D11] === REAL PRODUCTION CONFIG ===", flush=True)
+    print(f"  AMD_MAP_PATH effective:   {'GPU' if gpu_map_enabled else 'CPU_REFERENCE'}", flush=True)
+    print(f"  AMD_CHART_PATH effective: {requested_chart_path if gpu_charts_requested else 'CPU_REFERENCE'}", flush=True)
+    print(f"  AMD_GAUGE_PATH effective: {'GPU' if gauge_gpu_requested else 'CPU_REFERENCE'}", flush=True)
+    print(f"  AMD_COMPOSE_5Q:           {os.environ.get('AMD_COMPOSE_5Q', 'OPTIMIZED').strip().upper()}", flush=True)
+    print(f"  AMD_NATIVE_DECODE_MODE:   {native_decode_mode}", flush=True)
+    print(f"  AMD_NATIVE_HUD_MODE:      {native_hud_mode}", flush=True)
+    print(f"  AMD_NATIVE_HUD_UPLOAD:    {hud_upload_mode}", flush=True)
+    print(f"  AMD_VP_POOL_SIZE:         {os.environ.get('AMD_VP_POOL_SIZE', '8 (native default)')}", flush=True)
+    print("[AMD NATIVE D3D11] ===================================", flush=True)
     h_context = native_dll.telem_amd_create(
         input_file_str,
         output_file_str,

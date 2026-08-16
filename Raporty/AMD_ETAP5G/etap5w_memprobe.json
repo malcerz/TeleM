@@ -1,0 +1,301 @@
+{
+  "base_metrics": {
+    "ws_rss": 53112832,
+    "pws_uss": 37953536,
+    "private_bytes": 411164672,
+    "commit_vms": 411164672,
+    "handles": 173,
+    "threads": 15
+  },
+  "results": [
+    {
+      "export": 1,
+      "wall": 32.61672759056091,
+      "before": {
+        "ws_rss": 53673984,
+        "pws_uss": 38371328,
+        "private_bytes": 411717632,
+        "commit_vms": 411717632,
+        "handles": 173,
+        "threads": 15
+      },
+      "after": {
+        "ws_rss": 510517248,
+        "pws_uss": 466694144,
+        "private_bytes": 1095471104,
+        "commit_vms": 1095471104,
+        "handles": 738,
+        "threads": 30
+      },
+      "delta": {
+        "ws_rss": 456843264,
+        "pws_uss": 428322816,
+        "private_bytes": 683753472,
+        "commit_vms": 683753472,
+        "handles": 565,
+        "threads": 15
+      }
+    },
+    {
+      "export": 2,
+      "wall": 31.029364347457886,
+      "before": {
+        "ws_rss": 510763008,
+        "pws_uss": 466939904,
+        "private_bytes": 1095585792,
+        "commit_vms": 1095585792,
+        "handles": 738,
+        "threads": 30
+      },
+      "after": {
+        "ws_rss": 801718272,
+        "pws_uss": 759771136,
+        "private_bytes": 1308426240,
+        "commit_vms": 1308426240,
+        "handles": 913,
+        "threads": 30
+      },
+      "delta": {
+        "ws_rss": 290955264,
+        "pws_uss": 292831232,
+        "private_bytes": 212840448,
+        "commit_vms": 212840448,
+        "handles": 175,
+        "threads": 0
+      }
+    },
+    {
+      "export": 3,
+      "wall": 30.879432201385498,
+      "before": {
+        "ws_rss": 805851136,
+        "pws_uss": 763031552,
+        "private_bytes": 1312591872,
+        "commit_vms": 1312591872,
+        "handles": 913,
+        "threads": 30
+      },
+      "after": {
+        "ws_rss": 1059176448,
+        "pws_uss": 1016868864,
+        "private_bytes": 1505456128,
+        "commit_vms": 1505456128,
+        "handles": 1097,
+        "threads": 35
+      },
+      "delta": {
+        "ws_rss": 253325312,
+        "pws_uss": 253837312,
+        "private_bytes": 192864256,
+        "commit_vms": 192864256,
+        "handles": 184,
+        "threads": 5
+      }
+    },
+    {
+      "export": 4,
+      "wall": 31.385111570358276,
+      "before": {
+        "ws_rss": 1060610048,
+        "pws_uss": 1017753600,
+        "private_bytes": 1506414592,
+        "commit_vms": 1506414592,
+        "handles": 1097,
+        "threads": 35
+      },
+      "after": {
+        "ws_rss": 1241735168,
+        "pws_uss": 1201483776,
+        "private_bytes": 1681186816,
+        "commit_vms": 1681186816,
+        "handles": 1273,
+        "threads": 38
+      },
+      "delta": {
+        "ws_rss": 181125120,
+        "pws_uss": 183730176,
+        "private_bytes": 174772224,
+        "commit_vms": 174772224,
+        "handles": 176,
+        "threads": 3
+      }
+    },
+    {
+      "export": 5,
+      "wall": 30.96345019340515,
+      "before": {
+        "ws_rss": 1243328512,
+        "pws_uss": 1202524160,
+        "private_bytes": 1683034112,
+        "commit_vms": 1683034112,
+        "handles": 1273,
+        "threads": 38
+      },
+      "after": {
+        "ws_rss": 1424506880,
+        "pws_uss": 1383948288,
+        "private_bytes": 1864937472,
+        "commit_vms": 1864937472,
+        "handles": 1450,
+        "threads": 43
+      },
+      "delta": {
+        "ws_rss": 181178368,
+        "pws_uss": 181424128,
+        "private_bytes": 181903360,
+        "commit_vms": 181903360,
+        "handles": 177,
+        "threads": 5
+      }
+    }
+  ],
+  "first_export_type_deltas": {
+    "function": 1577,
+    "dict": 2609,
+    "list": 210,
+    "builtin_function_or_method": 34,
+    "wrapper_descriptor": 60,
+    "method_descriptor": 123,
+    "classmethod_descriptor": 1,
+    "getset_descriptor": 182,
+    "member_descriptor": 18,
+    "ReferenceType": 252,
+    "staticmethod": 20,
+    "type": 200,
+    "tuple": 2008,
+    "module": 53,
+    "frozenset": 25,
+    "slice": 63,
+    "ModuleSpec": 53,
+    "FileFinder": 5,
+    "set": 24,
+    "classmethod": 31,
+    "cell": 136,
+    "method": 1,
+    "SourceFileLoader": 48,
+    "ABCMeta": 5,
+    "_abc_data": 6,
+    "property": 91,
+    "EnumType": 16,
+    "_lru_cache_wrapper": 6,
+    "Pattern": 23,
+    "builtin_method": 4,
+    "ExtensionFileLoader": 3,
+    "lock": 2,
+    "WindowsPath": 1,
+    "_ProtocolMeta": 1,
+    "defaultdict": 1,
+    "partial": 1,
+    "_tuplegetter": 36,
+    "GenericAlias": 1,
+    "Union": 1,
+    "Logger": 2,
+    "ForwardRef": 13,
+    "PyCStructType": 1,
+    "PyCPointerType": 7,
+    "PyCSimpleType": 2,
+    "PyCFuncPtrType": 1,
+    "Struct": 2,
+    "_FuncPtr": 1,
+    "WinDLL": 1,
+    "cached_property": 5,
+    "Counter": 1,
+    "CField": 4,
+    "FreeTypeFont": 7,
+    "Image": 1783,
+    "ModeDescriptor": 1,
+    "Charset": 2,
+    "HTTPStatus": 62,
+    "HTTPMethod": 9,
+    "IPv4Network": 21,
+    "IPv4Address": 31,
+    "IPv6Network": 35,
+    "_QByteMap": 1,
+    "IPv6Address": 52,
+    "Disposal": 3,
+    "Blend": 2,
+    "Compat32": 1,
+    "_SSLMethod": 6,
+    "Options": 15,
+    "AlertDescription": 27,
+    "SSLErrorNumber": 9,
+    "VerifyFlags": 7,
+    "VerifyMode": 3,
+    "MovingMapRenderer": 1,
+    "LoadingStrategy": 3,
+    "TileCache": 1,
+    "TLSVersion": 7,
+    "_TLSContentType": 6,
+    "_TLSAlertType": 34,
+    "_TLSMessageType": 22,
+    "Purpose": 2,
+    "_ASN1Object": 2
+  },
+  "steady_type_deltas": {
+    "dict": 32,
+    "list": 8,
+    "tuple": 8,
+    "Counter": 4,
+    "Image": 16
+  },
+  "referrers": {
+    "dict": [
+      [
+        "builtins.list",
+        21
+      ],
+      [
+        "builtins.dict",
+        1
+      ]
+    ],
+    "Image": [
+      [
+        "builtins.list",
+        20
+      ],
+      [
+        "builtins.dict",
+        7
+      ],
+      [
+        "builtins.tuple",
+        3
+      ]
+    ],
+    "list": [
+      [
+        "builtins.list",
+        20
+      ],
+      [
+        "builtins.dict",
+        6
+      ],
+      [
+        "_frozen_importlib.ModuleSpec",
+        2
+      ],
+      [
+        "builtins.list_iterator",
+        1
+      ]
+    ],
+    "tuple": [
+      [
+        "builtins.list",
+        20
+      ],
+      [
+        "builtins.type",
+        9
+      ]
+    ],
+    "Counter": [
+      [
+        "builtins.list",
+        17
+      ]
+    ]
+  }
+}

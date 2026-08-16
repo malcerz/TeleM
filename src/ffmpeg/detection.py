@@ -208,14 +208,33 @@ def detect_amd_native_support(ffmpeg_exe: str = "ffmpeg") -> bool:
     """Test whether native AMD C++ D3D11 + AMF pipeline is supported on this system."""
     if os.name != "nt":
         return False
+
+    def _release_com(ptr) -> None:
+        """Release an IUnknown COM pointer (ID3D11Device / ID3D11DeviceContext).
+
+        D3D11CreateDevice returns refcounted COM interfaces; every created
+        device/context must be Released or the device leaks driver-side kernel
+        objects.  Release is vtable slot 2 (IUnknown::Release).
+        """
+        if not ptr or not ptr.value:
+            return
+        try:
+            vtbl = ctypes.cast(ptr.value, ctypes.POINTER(ctypes.c_void_p))
+            release = ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_void_p)(vtbl[2])
+            release(ptr.value)
+        except Exception:
+            pass
+
+    pDevice = None
+    pContext = None
     try:
         import ctypes
         d3d11 = ctypes.windll.d3d11
         amf_dll = ctypes.windll.LoadLibrary("amfrt64.dll")
 
         pDevice = ctypes.c_void_p()
-        featureLevel = ctypes.c_uint()
         pContext = ctypes.c_void_p()
+        featureLevel = ctypes.c_uint()
 
         hr = d3d11.D3D11CreateDevice(
             None, 1, None, 0x8, None, 0, 7,
@@ -227,6 +246,10 @@ def detect_amd_native_support(ffmpeg_exe: str = "ffmpeg") -> bool:
         return _test_encoder("hevc_amf", ffmpeg_exe) or _test_encoder("h264_amf", ffmpeg_exe)
     except Exception:
         return False
+    finally:
+        # Always release the COM interfaces on success, failure and exception.
+        _release_com(pContext)
+        _release_com(pDevice)
 
 
 def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str = "ffmpeg") -> str:

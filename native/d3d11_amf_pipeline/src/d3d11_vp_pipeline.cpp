@@ -160,8 +160,8 @@ void D3D11VideoProcessorPipeline::SetPoolSize(UINT n) {
 
 D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     for (UINT i = 0; i < (UINT)m_outputYViews.size(); ++i) {
-        if (m_outputYViews[i]) m_outputYViews[i]->Release();
-        if (m_outputUVViews[i]) m_outputUVViews[i]->Release();
+        if (m_outputYViews[i]) { m_outputYViews[i]->Release(); m_poolViewsReleased++; }
+        if (m_outputUVViews[i]) { m_outputUVViews[i]->Release(); m_poolViewsReleased++; }
     }
     if (m_nv12RangeComputeShader) m_nv12RangeComputeShader->Release();
     if (m_nv12HUDComputeShader) m_nv12HUDComputeShader->Release();
@@ -174,8 +174,8 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_hudTexture) m_hudTexture->Release();
 
     for (UINT i = 0; i < (UINT)m_outputViewPool.size(); ++i) {
-        if (m_outputViewPool[i]) m_outputViewPool[i]->Release();
-        if (m_outputPool[i]) m_outputPool[i]->Release();
+        if (m_outputViewPool[i]) { m_outputViewPool[i]->Release(); m_poolViewsReleased++; }
+        if (m_outputPool[i]) { m_outputPool[i]->Release(); m_poolTexturesReleased++; }
     }
 
     if (m_disjointQuery) m_disjointQuery->Release();
@@ -188,9 +188,25 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_videoContext) m_videoContext->Release();
     if (m_videoDevice) m_videoDevice->Release();
 
-    if (m_ownsDevice) {
-        if (m_context) m_context->Release();
-        if (m_device) m_device->Release();
+    // ETAP 5W — release the device/context references taken in Initialize().
+    // Initialize ALWAYS AddRefs m_device/m_context (both for a borrowed device
+    // and for one it created itself), so the destructor must Release them
+    // unconditionally.  The previous `if (m_ownsDevice)` guard leaked +1 device
+    // and +1 context reference per context when the device was borrowed, which
+    // kept the D3D11 device alive forever and leaked driver-side kernel objects
+    // (events/mutants/threads/sections) on every create/close cycle.
+    if (m_context) m_context->Release();
+    if (m_device) m_device->Release();
+
+    // ETAP 5V — debug-only pool lifecycle summary (AMD_POOL_LIFECYCLE_STATS=1).
+    if (m_poolLifecycleStats) {
+        std::cout << "[VP POOL] lifecycle: textures created=" << m_poolTexturesCreated
+                  << " released=" << m_poolTexturesReleased
+                  << " live=" << (m_poolTexturesCreated - m_poolTexturesReleased)
+                  << " | views created=" << m_poolViewsCreated
+                  << " released=" << m_poolViewsReleased
+                  << " live=" << (m_poolViewsCreated - m_poolViewsReleased)
+                  << std::endl;
     }
 }
 
@@ -432,17 +448,60 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     outViewDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
     outViewDesc.Texture2D.MipSlice = 0;
 
-    for (UINT i = 0; i < m_poolSize; ++i) {
-        hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_outputPool[i]);
-        if (FAILED(hr)) {
-            std::cerr << "[VP] Failed to create output NV12 texture " << i << ": 0x" << std::hex << hr << std::dec << std::endl;
-            return false;
+    // ETAP 5V — pool size with a safe fallback (requested -> 6 -> 4) on
+    // allocation / resource-creation failure ONLY.  Nothing else is masked.
+    const UINT requestedPool = m_poolSize;
+    const UINT kPoolCandidates[3] = { 8, 6, 4 };
+    bool poolCreated = false;
+    for (UINT ci = 0; ci < 3; ++ci) {
+        const UINT cand = kPoolCandidates[ci];
+        if (cand > requestedPool) continue;
+        if (cand < requestedPool) {
+            std::cout << "[VP POOL] requested pool " << requestedPool
+                      << " -> fallback to " << cand
+                      << " (allocation/resource creation only)" << std::endl;
         }
-        hr = m_videoDevice->CreateVideoProcessorOutputView(m_outputPool[i], m_videoEnumerator, &outViewDesc, &m_outputViewPool[i]);
-        if (FAILED(hr)) {
-            std::cerr << "[VP] Failed to create output view " << i << ": 0x" << std::hex << hr << std::dec << std::endl;
-            return false;
+        // Release any partial pool from a previous (failed) attempt.
+        for (UINT i = 0; i < (UINT)m_outputPool.size(); ++i) {
+            if (m_outputViewPool[i]) {
+                m_outputViewPool[i]->Release();
+                m_outputViewPool[i] = nullptr;
+                m_poolViewsReleased++;
+            }
+            if (m_outputPool[i]) {
+                m_outputPool[i]->Release();
+                m_outputPool[i] = nullptr;
+                m_poolTexturesReleased++;
+            }
         }
+        m_poolSize = cand;
+        m_outputPool.resize(cand, nullptr);
+        m_outputViewPool.resize(cand, nullptr);
+        m_outputYViews.resize(cand, nullptr);
+        m_outputUVViews.resize(cand, nullptr);
+        m_slotLastFrame.assign(cand, 0);
+        bool attemptOk = true;
+        for (UINT i = 0; i < cand; ++i) {
+            hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_outputPool[i]);
+            if (FAILED(hr)) { attemptOk = false; break; }
+            m_poolTexturesCreated++;
+            hr = m_videoDevice->CreateVideoProcessorOutputView(
+                m_outputPool[i], m_videoEnumerator, &outViewDesc, &m_outputViewPool[i]);
+            if (FAILED(hr)) { attemptOk = false; break; }
+            m_poolViewsCreated++;
+        }
+        if (attemptOk) { poolCreated = true; break; }
+        std::cerr << "[VP] Failed to create output NV12 texture pool size " << cand
+                  << ": 0x" << std::hex << hr << std::dec << std::endl;
+    }
+    if (!poolCreated) {
+        std::cerr << "[VP] Failed to create output NV12 texture pool (tried "
+                  << requestedPool << "/6/4)" << std::endl;
+        return false;
+    }
+    if (m_poolSize != requestedPool) {
+        std::cout << "[VP POOL] effective pool size = " << m_poolSize
+                  << " (requested " << requestedPool << ")" << std::endl;
     }
 
     if (!InitializeNV12ComputeCompositor()) {
@@ -467,6 +526,7 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
         hr = m_device3->CreateUnorderedAccessView1(m_outputPool[i], &yDesc, &yView);
         if (FAILED(hr) || !yView) return false;
         m_outputYViews[i] = yView;
+        m_poolViewsCreated++;
 
         D3D11_UNORDERED_ACCESS_VIEW_DESC1 uvDesc = {};
         uvDesc.Format = DXGI_FORMAT_R8G8_UNORM;
@@ -477,6 +537,7 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
         hr = m_device3->CreateUnorderedAccessView1(m_outputPool[i], &uvDesc, &uvView);
         if (FAILED(hr) || !uvView) return false;
         m_outputUVViews[i] = uvView;
+        m_poolViewsCreated++;
     }
 
     const char* computeSource = R"(

@@ -213,13 +213,24 @@ public:
     }
     // ETAP 5T diagnostic: skip the HUD/NV12 compute compositor (AMD_GPU_HUD_OFF).
     void SetGpuHudOff(bool off) { m_gpuHudOff = off; }
-    // ETAP 5U — runtime VP output surface pool size (4..8, default 4).
+    // ETAP 5U/5V — runtime VP output surface pool size (4..8).  Production
+    // default is 8 (ETAP 5V); AMD_VP_POOL_SIZE override still honored.
     // Must be called before Initialize().
     void SetPoolSize(UINT n);
     UINT GetPoolSize() const { return m_poolSize; }
+    // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
+    void SetPoolLifecycleStats(bool on) { m_poolLifecycleStats = on; }
+    bool IsPoolLifecycleStats() const { return m_poolLifecycleStats; }
+    void GetPoolLifecycleStats(UINT64* texCreated, UINT64* texReleased,
+                               UINT64* viewsCreated, UINT64* viewsReleased) const {
+        if (texCreated) *texCreated = m_poolTexturesCreated;
+        if (texReleased) *texReleased = m_poolTexturesReleased;
+        if (viewsCreated) *viewsCreated = m_poolViewsCreated;
+        if (viewsReleased) *viewsReleased = m_poolViewsReleased;
+    }
 
 private:
-    static const UINT POOL_SIZE_DEFAULT = 4;
+    static const UINT POOL_SIZE_DEFAULT = 8;
     bool InitializeNV12ComputeCompositor();
     bool ComposeHUDDirectNV12(ID3D11Texture2D* outputTexture, UINT poolIndex);
     bool NormalizeD3D11VARangeNV12(UINT poolIndex);
@@ -334,10 +345,16 @@ private:
     std::vector<ID3D11VideoProcessorOutputView*> m_outputViewPool;
     UINT m_poolIndex = 0;
     UINT m_lastPoolIndex = 0;
-    UINT m_poolSize = 4;
+    UINT m_poolSize = 8;
     // ETAP 5U — per-slot lifecycle tracking: last frame index submitted into
     // each pool slot, for detecting reuse-before-encoder-consumed.
     std::vector<UINT64> m_slotLastFrame;
+    // ETAP 5V — debug-only pool resource accounting (created/released).
+    UINT64 m_poolTexturesCreated = 0;
+    UINT64 m_poolTexturesReleased = 0;
+    UINT64 m_poolViewsCreated = 0;
+    UINT64 m_poolViewsReleased = 0;
+    bool m_poolLifecycleStats = false;
 
     ID3D11Query* m_disjointQuery = nullptr;
     ID3D11Query* m_startQuery = nullptr;

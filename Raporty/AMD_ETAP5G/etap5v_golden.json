@@ -1,0 +1,82 @@
+{
+  "short": {
+    "p4": {
+      "tag": "s31_p4",
+      "pool": 4,
+      "frames": 31,
+      "valid": true,
+      "vp_processed": 31,
+      "amf_submitted": 31,
+      "amf_output": 31,
+      "muxed": 31,
+      "cadence_gpu": 31,
+      "hr_gpu": 31,
+      "map_gpu": 31,
+      "dropped": 0,
+      "input_full": 0,
+      "lifecycle": "textures created=4 released=4 live=0 | views created=12 released=12 live=0"
+    },
+    "p8": {
+      "tag": "s31_p8",
+      "pool": 8,
+      "frames": 31,
+      "valid": true,
+      "vp_processed": 31,
+      "amf_submitted": 31,
+      "amf_output": 31,
+      "muxed": 31,
+      "cadence_gpu": 31,
+      "hr_gpu": 31,
+      "map_gpu": 31,
+      "dropped": 0,
+      "input_full": 0,
+      "lifecycle": "textures created=8 released=8 live=0 | views created=24 released=24 live=0"
+    }
+  },
+  "full": {
+    "p4": {
+      "tag": "f1131_p4",
+      "pool": 4,
+      "frames": 1131,
+      "valid": true,
+      "vp_processed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "muxed": 1131,
+      "cadence_gpu": 1131,
+      "hr_gpu": 1131,
+      "map_gpu": 1131,
+      "dropped": 0,
+      "input_full": 0,
+      "lifecycle": "textures created=4 released=4 live=0 | views created=12 released=12 live=0"
+    },
+    "p8": {
+      "tag": "f1131_p8",
+      "pool": 8,
+      "frames": 1131,
+      "valid": true,
+      "vp_processed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "muxed": 1131,
+      "cadence_gpu": 1131,
+      "hr_gpu": 1131,
+      "map_gpu": 1131,
+      "dropped": 0,
+      "input_full": 0,
+      "lifecycle": "textures created=8 released=8 live=0 | views created=24 released=24 live=0"
+    }
+  },
+  "compare_31": {
+    "frames": 31,
+    "identical": 31,
+    "total": 31,
+    "pass": true
+  },
+  "compare_1131": {
+    "frames": 1131,
+    "identical": 1131,
+    "total": 1131,
+    "pass": true
+  }
+}
