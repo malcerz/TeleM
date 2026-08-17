@@ -305,17 +305,35 @@ def build_telemetry_cache(
         if "alt_visual" not in indicator_values:
             interpolation_calls += 1
 
-        iso_value = interpolate_iso(iso_s, target_dt)
-        exposure_value = interpolate_exposure(exposure_s, target_dt)
-        temp_value = interpolate_temperature(temp_s, target_dt)
+        def _resolve_aux(field: str, key: str, fallback: Callable):
+            cfg = layout.get("indicators", {}).get(key, {})
+            source = cfg.get("source", "gpmf")
+            if resolve_cache_value is not None:
+                value = resolve_cache_value(field, source, target_dt, key)
+                if value is not None:
+                    return value
+            return fallback(
+                {"iso": iso_s, "exposure": exposure_s, "temperature": temp_s}[field],
+                target_dt,
+            ) if source == "gpmf" else None
+
+        iso_value = _resolve_aux("iso", "iso_text", interpolate_iso)
+        exposure_value = _resolve_aux("exposure", "exposure_text", interpolate_exposure)
+        temp_value = _resolve_aux("temperature", "temp_text", interpolate_temperature)
         interpolation_calls += 3
         gpmf_lookups += 3
 
         # standard resolve fields (power/atemp/hr/cad/battery)
         std_vals: list = []
+        std_keys = {
+            "power": "power_text", "atemp": "atemp_text", "hr": "hr_text",
+            "cad": "cad_text", "battery": "battery_text",
+        }
         for f in ("power", "atemp", "hr", "cad", "battery"):
             if f in std_names and resolve_cache_value is not None:
-                std_vals.append(resolve_cache_value(f, target_dt))
+                cfg = layout.get("indicators", {}).get(std_keys[f], {})
+                source = cfg.get("source", "gpx")
+                std_vals.append(resolve_cache_value(f, source, target_dt, std_keys[f]))
                 resolver_calls += 1
             else:
                 std_vals.append(None)
@@ -326,7 +344,9 @@ def build_telemetry_cache(
             if resolve_cache_value is None:
                 v = 0.0
             else:
-                v = resolve_cache_value(name, target_dt) or 0.0
+                v = resolve_cache_value(name, "fit", target_dt, f"fit_{name}_text")
+                if v is None:
+                    v = 0.0
                 resolver_calls += 1
             fit_vals.append(v)
 

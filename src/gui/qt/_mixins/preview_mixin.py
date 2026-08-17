@@ -283,7 +283,9 @@ class PreviewMixin:
                         self._chart_data_cache = build_chart_data(
                             self.layout,
                             self.telemetry.get_samples_for_source,
-                            self.telemetry.resolve_samples,
+                            lambda field, src, key=None: self.telemetry.resolve_samples(
+                                field, src, indicator_key=key
+                            ),
                         )
                     chart_data = self._chart_data_cache
 
@@ -321,7 +323,9 @@ class PreviewMixin:
                                 current_index=int(current_ts) if current_ts else 0,
                                 chart_data=chart_data,
                                 extra_field_keys=getattr(self, "fit_ext_fields", None),
-                                resolve_cache_value=lambda k, dt: self.telemetry.resolve_value(k, dt),
+                                resolve_cache_value=lambda k, src, dt, indicator_key=None: self.telemetry.resolve_value(
+                                    k, dt, source=src, indicator_key=indicator_key
+                                ),
                                 _range_cache=self._prepare_cache,
                             )
                         finally:

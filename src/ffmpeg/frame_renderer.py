@@ -205,6 +205,11 @@ def render_overlay_frame(
         if hud_bbox:
             hx, hy, hw, hh = hud_bbox
             img = img.crop((hx, hy, hx + hw, hy + hh))
+        # NVIDIA ROT180: rotate the whole final HUD canvas 180 deg (pixel-exact,
+        # no resampling) BEFORE handing it to FFmpeg, so that after the output's
+        # display-matrix rotation the HUD is displayed in its logical orientation.
+        if WORKER_CACHE.get("hud_rotate_180"):
+            img = img.transpose(Image.Transpose.ROTATE_180)
         return img
 
 
@@ -242,13 +247,9 @@ def render_overlay_job(job: tuple) -> int:
         fit_trk = WORKER_CACHE.get("fit_data", {}).get("track", [])
         fit_alt = WORKER_CACHE.get("fit_data", {}).get("alt", [])
         if src == "gpx":
-            spd_s = gpx_spd or speed_samples
-            trk_s = gpx_trk or track_samples
-            alt_s = gpx_alt or alt_samples
+            spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
         elif src == "fit":
-            spd_s = fit_spd or speed_samples
-            trk_s = fit_trk or track_samples
-            alt_s = fit_alt or alt_samples
+            spd_s, trk_s, alt_s = fit_spd, fit_trk, fit_alt
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
@@ -262,11 +263,14 @@ def render_overlay_job(job: tuple) -> int:
     exposure_value = interpolate_exposure(exposure_samples, current_dt_utc)
     temp_value = interpolate_temperature(temperature_samples, current_dt_utc)
 
-    power_value = _resolve_cache_value("power", current_dt_utc)
-    atemp_value = _resolve_cache_value("atemp", current_dt_utc)
-    hr_value = _resolve_cache_value("hr", current_dt_utc)
-    cad_value = _resolve_cache_value("cad", current_dt_utc)
-    battery_value = _resolve_cache_value("battery", current_dt_utc)
+    def _source_for(key: str) -> str:
+        return layout.get("indicators", {}).get(key, {}).get("source", "gpmf")
+
+    power_value = _resolve_cache_value("power", _source_for("power_text"), current_dt_utc, "power_text")
+    atemp_value = _resolve_cache_value("atemp", _source_for("atemp_text"), current_dt_utc, "atemp_text")
+    hr_value = _resolve_cache_value("hr", _source_for("hr_text"), current_dt_utc, "hr_text")
+    cad_value = _resolve_cache_value("cad", _source_for("cad_text"), current_dt_utc, "cad_text")
+    battery_value = _resolve_cache_value("battery", _source_for("battery_text"), current_dt_utc, "battery_text")
 
     speed_value = indicator_values.get("speed_visual", interpolate_speed(speed_samples, current_dt_utc))
     distance_m = indicator_values.get("dist_visual", interpolate_distance(track_samples, current_dt_utc))
@@ -286,10 +290,10 @@ def render_overlay_job(job: tuple) -> int:
     spd_src = layout["indicators"].get("speed_visual", {}).get("source", "gpmf")
     if spd_src == "gpx":
         gpx_spd_w = WORKER_CACHE.get("gpx_speed_samples", [])
-        spd_for_range = gpx_spd_w or speed_samples
+        spd_for_range = gpx_spd_w
     elif spd_src == "fit":
         fit_spd_w = WORKER_CACHE.get("fit_data", {}).get("speed", [])
-        spd_for_range = fit_spd_w or speed_samples
+        spd_for_range = fit_spd_w
     else:
         spd_for_range = speed_samples
     if spd_for_range:
@@ -302,10 +306,10 @@ def render_overlay_job(job: tuple) -> int:
     alt_src = layout["indicators"].get("alt_visual", {}).get("source", "gpmf")
     if alt_src == "gpx":
         gpx_alt_w = WORKER_CACHE.get("gpx_alt_samples", [])
-        alt_for_range = gpx_alt_w or alt_samples
+        alt_for_range = gpx_alt_w
     elif alt_src == "fit":
         fit_alt_w = WORKER_CACHE.get("fit_data", {}).get("alt", [])
-        alt_for_range = fit_alt_w or alt_samples
+        alt_for_range = fit_alt_w
     else:
         alt_for_range = alt_samples
     if alt_for_range:
@@ -333,7 +337,9 @@ def render_overlay_job(job: tuple) -> int:
     for ind_key, ind_cfg in layout.get("indicators", {}).items():
         if ind_key.startswith("fit_") and ind_key.endswith("_text"):
             field_name = ind_key[4:-5]
-            fit_val = _resolve_cache_value(field_name, current_dt_utc) or 0.0
+            fit_val = _resolve_cache_value(field_name, "fit", current_dt_utc, ind_key)
+            if fit_val is None:
+                fit_val = 0.0
             extra_indicators[ind_key] = (fit_val, ind_cfg.get("unit", ""), ind_cfg.get("label", field_name))
     # 2) All remaining dynamic indicators (non-hardcoded, not already captured)
     for ind_key in list(layout.get("indicators", {}).keys()):

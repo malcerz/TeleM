@@ -657,7 +657,9 @@ class RenderTab(QWidget):
                 current_index=int(self._hud_ts) if self._hud_ts else 0,
                 chart_data=self._hud_chart_data,
                 extra_field_keys=getattr(ctrl, "fit_ext_fields", None),
-                resolve_cache_value=lambda k, dt: telemetry.resolve_value(k, dt),
+                resolve_cache_value=lambda k, src, dt, indicator_key=None: telemetry.resolve_value(
+                    k, dt, source=src, indicator_key=indicator_key
+                ),
                 _range_cache=self._hud_prepare_cache,
             )
             if not overlay_data:

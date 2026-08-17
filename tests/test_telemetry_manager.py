@@ -109,13 +109,15 @@ class TestTelemetryDataManager:
         assert trk == samples
         assert alt == samples
 
-    def test_get_samples_for_source_fit_fallback(
+    def test_get_samples_for_source_fit_has_no_implicit_gpmf_fallback(
         self, manager: TelemetryDataManager, samples: list[Sample]
     ) -> None:
-        """get_samples_for_source('fit') should fall back to GPMF when no FIT data."""
+        """An explicit FIT request must not silently return GPMF samples."""
         manager.load_gpmf_records([{"dummy": True}])
         spd, trk, alt = manager.get_samples_for_source("fit")
-        assert spd == samples  # falls back to GPMF
+        assert spd == []
+        assert trk == []
+        assert alt == []
 
     def test_get_samples_for_source_gpx(
         self, manager: TelemetryDataManager, samples: list[Sample]
@@ -131,7 +133,7 @@ class TestTelemetryDataManager:
     ) -> None:
         """resolve_value('speed') should use linear interpolation (not the step mock)."""
         manager.load_gpmf_records([{"dummy": True}])
-        val = manager.resolve_value("speed", dt)
+        val = manager.resolve_value("speed", dt, source="gpmf")
         # samples = [(dt, 50.0), (dt+1s, 55.0)]; target == dt → 50.0
         assert val == 50.0
 
@@ -147,7 +149,7 @@ class TestTelemetryDataManager:
     ) -> None:
         """resolve_samples() should return raw sample list."""
         manager.load_gpmf_records([{"dummy": True}])
-        result = manager.resolve_samples("speed")
+        result = manager.resolve_samples("speed", "gpmf")
         assert result == samples
 
     def test_clear_source(self, manager: TelemetryDataManager) -> None:

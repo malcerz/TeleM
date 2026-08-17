@@ -91,8 +91,11 @@ def test_duplicate_consumers_resolve_exact_field_once_per_frame() -> None:
     )
 
     assert plan["unique_resolve_fields"] == ["power"]
-    assert calls == ["power"]
-    assert stats == {"calls": 1, "per_field": {"power": 1}}
+    # The two indicators explicitly select different sources (default GPX
+    # for power_text and FIT for fit_power_text), so they are distinct
+    # resolver requests even though the logical field name is the same.
+    assert calls == ["power", "power"]
+    assert stats == {"calls": 2, "per_field": {"power": 2}}
     assert data["power_value"] == 321.0
     assert data["extra_indicators"]["fit_power_text"][0] == 321.0
 

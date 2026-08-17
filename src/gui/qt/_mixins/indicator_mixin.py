@@ -445,30 +445,30 @@ class IndicatorMixin:
             return self._window_average(alt_s, target_dt, window)
         if "power" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("power"), target_dt, window)
+                self.telemetry.resolve_samples("power", source, indicator_key=ind_key), target_dt, window)
         if "hr" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("hr"), target_dt, window)
+                self.telemetry.resolve_samples("hr", source, indicator_key=ind_key), target_dt, window)
         if "cad" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("cad"), target_dt, window)
+                self.telemetry.resolve_samples("cad", source, indicator_key=ind_key), target_dt, window)
         if "atemp" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("atemp"), target_dt, window)
+                self.telemetry.resolve_samples("atemp", source, indicator_key=ind_key), target_dt, window)
         if "battery" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("battery"), target_dt, window)
+                self.telemetry.resolve_samples("battery", source, indicator_key=ind_key), target_dt, window)
         if "iso" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("iso"), target_dt, window)
+                self.telemetry.resolve_samples("iso", source, indicator_key=ind_key), target_dt, window)
         if "exposure" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("exposure"), target_dt, window)
+                self.telemetry.resolve_samples("exposure", source, indicator_key=ind_key), target_dt, window)
         if "temp" in ind_key and "atemp" not in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("temperature"), target_dt, window)
+                self.telemetry.resolve_samples("temperature", source, indicator_key=ind_key), target_dt, window)
         if ind_key.startswith("fit_") and ind_key.endswith("_text"):
             field_name = ind_key[4:-5]
             return self._window_average(
-                self.telemetry.resolve_samples(field_name), target_dt, window)
+                self.telemetry.resolve_samples(field_name, "fit", indicator_key=ind_key), target_dt, window)
         return None

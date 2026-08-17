@@ -51,6 +51,7 @@ def init_worker(
     effective_rotation: int = 0,
     hud_bbox: Optional[tuple[int, int, int, int]] = None,
     hud_regions: Optional[list[tuple[int, int, int, int, int, int]]] = None,
+    hud_rotate_180: bool = False,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes."""
     WORKER_CACHE["video_width"] = video_width
@@ -83,6 +84,7 @@ def init_worker(
     WORKER_CACHE["effective_rotation"] = effective_rotation
     WORKER_CACHE["hud_bbox"] = hud_bbox
     WORKER_CACHE["hud_regions"] = hud_regions
+    WORKER_CACHE["hud_rotate_180"] = hud_rotate_180
     if "_font_cache" not in WORKER_CACHE:
         WORKER_CACHE["_font_cache"] = {}
 
@@ -101,9 +103,9 @@ def init_worker(
     fit_trk = fit_data.get("track", []) if fit_data else []
     dist_src = indic.get("dist_visual", {}).get("source", "gpmf")
     if dist_src == "gpx":
-        trk_for_range = gpx_trk or trk
+        trk_for_range = gpx_trk
     elif dist_src == "fit":
-        trk_for_range = fit_trk or trk
+        trk_for_range = fit_trk
     else:
         trk_for_range = trk
     _prep_cache["max_distance_m"] = trk_for_range[-1][1] if trk_for_range else None
@@ -114,9 +116,9 @@ def init_worker(
     fit_spd = fit_data.get("speed", []) if fit_data else []
     spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
     if spd_src == "gpx":
-        spd_for_range = gpx_spd or spd
+        spd_for_range = gpx_spd
     elif spd_src == "fit":
-        spd_for_range = fit_spd or spd
+        spd_for_range = fit_spd
     else:
         spd_for_range = spd
     if spd_for_range:
@@ -131,9 +133,9 @@ def init_worker(
     fit_alt_s = fit_data.get("alt", []) if fit_data else []
     alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
     if alt_src == "gpx":
-        alt_for_range = gpx_alt_s or alt_s
+        alt_for_range = gpx_alt_s
     elif alt_src == "fit":
-        alt_for_range = fit_alt_s or alt_s
+        alt_for_range = fit_alt_s
     else:
         alt_for_range = alt_s
     if alt_for_range:
@@ -152,7 +154,7 @@ def init_worker(
 
 
 def _get_source_samples(source_type: str) -> tuple[list, list, list]:
-    """Return (speed, track, alt) samples for the given source type."""
+    """Return (speed, track, alt) samples for exactly the given source."""
     gpx_spd = WORKER_CACHE.get("gpx_speed_samples", [])
     gpx_trk = WORKER_CACHE.get("gpx_track_samples", [])
     gpx_alt = WORKER_CACHE.get("gpx_alt_samples", [])
@@ -163,50 +165,19 @@ def _get_source_samples(source_type: str) -> tuple[list, list, list]:
     gpmf_trk = WORKER_CACHE.get("field_samples", {}).get("track_samples", [])
     gpmf_alt = WORKER_CACHE.get("field_samples", {}).get("alt_samples", [])
     if source_type == "gpx":
-        return (gpx_spd or gpmf_spd, gpx_trk or gpmf_trk, gpx_alt or gpmf_alt)
+        return (gpx_spd, gpx_trk, gpx_alt)
     if source_type == "fit":
-        return (fit_spd or gpmf_spd, fit_trk or gpmf_trk, fit_alt or gpmf_alt)
+        return (fit_spd, fit_trk, fit_alt)
     return (gpmf_spd, gpmf_trk, gpmf_alt)
 
 
 def _resolve_cache_value(
-    field_name: str, target_dt: datetime, prefer: str = "fit"
+    field_name: str, source: str, target_dt: datetime,
+    indicator_key: str | None = None,
 ) -> Any:
-    """Return interpolated telemetry value from WORKER_CACHE with FIT > GPX > GPMF priority."""
-    alt_prefix = "gpx" if prefer == "fit" else "fit"
-    pref = WORKER_CACHE.get(f"{prefer}_{field_name}_samples", []) or []
-    alt = WORKER_CACHE.get(f"{alt_prefix}_{field_name}_samples", []) or []
-    samples = pref or alt
-
-    # Also check fit_data dict (stored as WORKER_CACHE["fit_data"])
-    if not samples and prefer == "fit":
-        samples = WORKER_CACHE.get("fit_data", {}).get(field_name, []) or []
-    if not samples and alt_prefix == "fit":
-        samples = WORKER_CACHE.get("fit_data", {}).get(field_name, []) or []
-
-    if not samples and field_name in (
-        "speed", "alt", "dist", "track", "iso", "exposure", "temperature"
-    ):
-        if field_name in ("iso", "exposure", "temperature"):
-            samples = WORKER_CACHE.get(f"{field_name}_samples", []) or []
-        else:
-            gpmf_key = "track_samples" if field_name in ("dist", "track") else f"{field_name}_samples"
-            samples = WORKER_CACHE.get("field_samples", {}).get(gpmf_key, []) or []
-
-    # FIT field-name alias fallback (e.g. "power" -> "curVpower")
-    if not samples and prefer == "fit":
-        _FIT_LOOKUP = {
-            "power": ("curVpower",),
-            "hr": ("heart_rate",),
-            "cad": ("cadence",),
-            "atemp": ("temperature",),
-            "battery": ("battery_soc",),
-        }
-        for alias in _FIT_LOOKUP.get(field_name, ()):
-            samples = WORKER_CACHE.get("fit_data", {}).get(alias, []) or []
-            if samples:
-                break
-
+    """Resolve one field from one explicit source using the shared contract."""
+    del indicator_key
+    samples = _resolve_cache_samples(field_name, source)
     if not samples:
         return None
     # Linear interpolation for speed/distance/altitude fields (smooth per frame),
@@ -221,42 +192,35 @@ def _resolve_cache_value(
 
 
 def _resolve_cache_samples(
-    field_name: str, prefer: str = "fit"
+    field_name: str, source: str = "fit", indicator_key: str | None = None
 ) -> list:
-    """Return raw sample list from WORKER_CACHE with FIT > GPX > GPMF priority."""
-    alt_prefix = "gpx" if prefer == "fit" else "fit"
-    pref = WORKER_CACHE.get(f"{prefer}_{field_name}_samples", []) or []
-    alt = WORKER_CACHE.get(f"{alt_prefix}_{field_name}_samples", []) or []
-    samples = pref or alt
-
-    # Also check fit_data dict (stored as WORKER_CACHE["fit_data"])
-    if not samples and prefer == "fit":
-        samples = WORKER_CACHE.get("fit_data", {}).get(field_name, []) or []
-    if not samples and alt_prefix == "fit":
-        samples = WORKER_CACHE.get("fit_data", {}).get(field_name, []) or []
-
-    if not samples and field_name in (
-        "speed", "alt", "dist", "track", "iso", "exposure", "temperature"
-    ):
-        if field_name in ("iso", "exposure", "temperature"):
-            samples = WORKER_CACHE.get(f"{field_name}_samples", []) or []
-        else:
-            gpmf_key = "track_samples" if field_name in ("dist", "track") else f"{field_name}_samples"
-            samples = WORKER_CACHE.get("field_samples", {}).get(gpmf_key, []) or []
-
-    # FIT field-name alias fallback (e.g. "power" -> "curVpower")
-    if prefer == "fit":
-        _FIT_LOOKUP = {
-            "power": ("curVpower",),
-            "hr": ("heart_rate",),
-            "cad": ("cadence",),
-            "atemp": ("temperature",),
-            "battery": ("battery_soc",),
-        }
-        for alias in _FIT_LOOKUP.get(field_name, ()):
-            candidate = WORKER_CACHE.get("fit_data", {}).get(alias, []) or []
-            if candidate:
-                samples = candidate
-                break
-
-    return samples
+    """Return raw samples from exactly ``source``; no cross-source fallback."""
+    del indicator_key
+    field_samples = WORKER_CACHE.get("field_samples", {})
+    gpmf_map = {
+        "speed": "speed_samples", "alt": "alt_samples", "altitude": "alt_samples",
+        "dist": "track_samples", "track": "track_samples", "iso": "iso_samples",
+        "exposure": "exposure_samples", "temperature": "temperature_samples",
+    }
+    gpx_map = {
+        "speed": "gpx_speed_samples", "alt": "gpx_alt_samples", "altitude": "gpx_alt_samples",
+        "dist": "gpx_track_samples", "track": "gpx_track_samples", "power": "gpx_power_samples",
+        "atemp": "gpx_atemp_samples", "hr": "gpx_hr_samples", "cad": "gpx_cad_samples",
+        "battery": "gpx_battery_samples",
+    }
+    if source == "gpmf":
+        return list(field_samples.get(gpmf_map.get(field_name, ""), []) or [])
+    if source == "gpx":
+        return list(WORKER_CACHE.get(gpx_map.get(field_name, ""), []) or [])
+    if source == "fit":
+        fit_data = WORKER_CACHE.get("fit_data", {})
+        aliases = {
+            "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
+            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
+            "battery": ("battery", "battery_soc"),
+        }.get(field_name, (field_name,))
+        for name in aliases:
+            if fit_data.get(name):
+                return list(fit_data[name])
+        return []
+    return []

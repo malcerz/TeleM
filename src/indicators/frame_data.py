@@ -132,13 +132,9 @@ def prepare_overlay_frame_data(
         fit_trk = (fit_data or {}).get("track", [])
         fit_alt = (fit_data or {}).get("alt", [])
         if src == "gpx":
-            spd_s = gpx_spd or speed_samples
-            trk_s = gpx_trk or track_samples
-            alt_s = gpx_alt or alt_samples
+            spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
         elif src == "fit":
-            spd_s = fit_spd or speed_samples
-            trk_s = fit_trk or track_samples
-            alt_s = fit_alt or alt_samples
+            spd_s, trk_s, alt_s = fit_spd, fit_trk, fit_alt
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
@@ -156,9 +152,29 @@ def prepare_overlay_frame_data(
     alt_value = indicator_values.get(
         "alt_visual", interpolate_altitude(alt_samples, target_dt))
 
-    iso_value = interpolate_iso(iso_samples or [], target_dt)
-    exposure_value = interpolate_exposure(exposure_samples or [], target_dt)
-    temp_value = interpolate_temperature(temperature_samples or [], target_dt)
+    def direct_resolve(field_name: str, source: str, indicator_key: str):
+        cfg = layout.get("indicators", {}).get(indicator_key)
+        if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+            return None
+        if not resolve_cache_value:
+            return None
+        try:
+            return resolve_cache_value(field_name, source, target_dt, indicator_key)
+        except TypeError:
+            return resolve_cache_value(field_name, target_dt)
+
+    iso_source = layout.get("indicators", {}).get("iso_text", {}).get("source", "gpmf")
+    exposure_source = layout.get("indicators", {}).get("exposure_text", {}).get("source", "gpmf")
+    temp_source = layout.get("indicators", {}).get("temp_text", {}).get("source", "gpmf")
+    iso_value = direct_resolve("iso", iso_source, "iso_text")
+    exposure_value = direct_resolve("exposure", exposure_source, "exposure_text")
+    temp_value = direct_resolve("temperature", temp_source, "temp_text")
+    if iso_value is None and iso_source == "gpmf":
+        iso_value = interpolate_iso(iso_samples or [], target_dt)
+    if exposure_value is None and exposure_source == "gpmf":
+        exposure_value = interpolate_exposure(exposure_samples or [], target_dt)
+    if temp_value is None and temp_source == "gpmf":
+        temp_value = interpolate_temperature(temperature_samples or [], target_dt)
     profiler.record(
         "telemetry.interpolation_lookups",
         (time.perf_counter() - section_started) * 1000.0,
@@ -179,7 +195,7 @@ def prepare_overlay_frame_data(
             fit_trk_l = (fit_data or {}).get("track", [])
             if fit_trk_l:
                 max_distance_m = fit_trk_l[-1][1]
-        if max_distance_m is None and track_samples:
+        if dist_src == "gpmf" and track_samples:
             max_distance_m = track_samples[-1][1]
 
     # ── max_speed_kmh (per source) ────────────────────────────────────
@@ -189,9 +205,9 @@ def prepare_overlay_frame_data(
         max_speed_kmh = None
         spd_src = layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
         if spd_src == "gpx":
-            spd_for_range = (gpx_speed_samples or []) or speed_samples
+            spd_for_range = gpx_speed_samples or []
         elif spd_src == "fit":
-            spd_for_range = (fit_data or {}).get("speed", []) or speed_samples
+            spd_for_range = (fit_data or {}).get("speed", [])
         else:
             spd_for_range = speed_samples
         if spd_for_range:
@@ -208,9 +224,9 @@ def prepare_overlay_frame_data(
         max_alt = None
         alt_src = layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
         if alt_src == "gpx":
-            alt_for_range = (gpx_alt_samples or []) or alt_samples
+            alt_for_range = gpx_alt_samples or []
         elif alt_src == "fit":
-            alt_for_range = (fit_data or {}).get("alt", []) or alt_samples
+            alt_for_range = (fit_data or {}).get("alt", [])
         else:
             alt_for_range = alt_samples
         if alt_for_range:
@@ -228,19 +244,25 @@ def prepare_overlay_frame_data(
 
     resolved_this_frame: dict[str, Any] = {}
 
-    def profiled_resolve(field_name: str):
-        if field_name in resolved_this_frame:
-            return resolved_this_frame[field_name]
+    def profiled_resolve(field_name: str, source: str, indicator_key: str | None = None):
+        cache_key = (field_name, source, indicator_key)
+        if cache_key in resolved_this_frame:
+            return resolved_this_frame[cache_key]
         if not resolve_cache_value:
-            resolved_this_frame[field_name] = 0.0
-            return 0.0
+            resolved_this_frame[cache_key] = None
+            return None
         resolve_started = time.perf_counter()
-        value = resolve_cache_value(field_name, target_dt)
+        try:
+            value = resolve_cache_value(field_name, source, target_dt, indicator_key)
+        except TypeError:
+            # Compatibility adapter for third-party callers using the old
+            # callback shape.  Production preview/final paths use the new one.
+            value = resolve_cache_value(field_name, target_dt)
         profiler.record(
             "telemetry.resolve_cache_value",
             (time.perf_counter() - resolve_started) * 1000.0,
         )
-        resolved_this_frame[field_name] = value
+        resolved_this_frame[cache_key] = value
         if resolve_stats is not None:
             resolve_stats["calls"] = int(resolve_stats.get("calls", 0)) + 1
             per_field = resolve_stats.setdefault("per_field", {})
@@ -256,11 +278,14 @@ def prepare_overlay_frame_data(
             fit_field_plan.get("active_standard_resolve_fields", [])
         )
 
-    power_value = profiled_resolve("power") if "power" in standard_resolve_fields else None
-    atemp_value = profiled_resolve("atemp") if "atemp" in standard_resolve_fields else None
-    hr_value = profiled_resolve("hr") if "hr" in standard_resolve_fields else None
-    cad_value = profiled_resolve("cad") if "cad" in standard_resolve_fields else None
-    battery_value = profiled_resolve("battery") if "battery" in standard_resolve_fields else None
+    def configured_source(indicator_key: str) -> str:
+        return layout.get("indicators", {}).get(indicator_key, {}).get("source", "gpx")
+
+    power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
+    atemp_value = profiled_resolve("atemp", configured_source("atemp_text"), "atemp_text") if "atemp" in standard_resolve_fields else None
+    hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None
+    cad_value = profiled_resolve("cad", configured_source("cad_text"), "cad_text") if "cad" in standard_resolve_fields else None
+    battery_value = profiled_resolve("battery", configured_source("battery_text"), "battery_text") if "battery" in standard_resolve_fields else None
 
     # ── Elapsed time & average speed (for time_display) ───────────────
     elapsed_seconds = 0.0
@@ -308,11 +333,11 @@ def prepare_overlay_frame_data(
 
     for key in fit_keys:
         field_name = key[4:-5]
-        val = profiled_resolve(field_name) or 0.0
+        val = profiled_resolve(field_name, "fit", key)
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
-        extra_indicators[key] = (val, unit, label)
+        extra_indicators[key] = (0.0 if val is None else val, unit, label)
 
     profiler.record(
         "telemetry.dynamic_fit_fields",

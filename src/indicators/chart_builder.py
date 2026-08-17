@@ -11,7 +11,7 @@ from typing import Any, Callable
 def build_chart_data(
     layout: dict[str, Any],
     get_samples_fn: Callable[[str], tuple[list, list, list]],
-    resolve_samples_fn: Callable[[str], list],
+    resolve_samples_fn: Callable[[str, str, str | None], list],
 ) -> dict[str, list[float]]:
     """Build chart history data for all chart-type indicators in a layout.
 
@@ -42,27 +42,27 @@ def build_chart_data(
             _, _, alt_s = get_samples_fn(src)
             vals = [v for _, v in alt_s] if alt_s else []
         elif "power" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("power")]
+            vals = [v for _, v in resolve_samples_fn("power", src, ind_key)]
         elif "hr" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("hr")]
+            vals = [v for _, v in resolve_samples_fn("hr", src, ind_key)]
         elif "cad" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("cad")]
+            vals = [v for _, v in resolve_samples_fn("cad", src, ind_key)]
         elif "atemp" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("atemp")]
+            vals = [v for _, v in resolve_samples_fn("atemp", src, ind_key)]
         elif "battery" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("battery")]
+            vals = [v for _, v in resolve_samples_fn("battery", src, ind_key)]
         elif "iso" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("iso")]
+            vals = [v for _, v in resolve_samples_fn("iso", src, ind_key)]
         elif "exposure" in ind_key:
-            vals = [v for _, v in resolve_samples_fn("exposure")]
+            vals = [v for _, v in resolve_samples_fn("exposure", src, ind_key)]
         elif "temp" in ind_key and "atemp" not in ind_key:
-            vals = [v for _, v in resolve_samples_fn("temperature")]
+            vals = [v for _, v in resolve_samples_fn("temperature", src, ind_key)]
         else:
             # Dla kluczy typu fit_{field_name}_text — wyciągnij field_name
             # i rozwiąż przez resolve_samples_fn
             if ind_key.startswith("fit_") and ind_key.endswith("_text"):
                 field_name = ind_key[4:-5]
-                vals = [v for _, v in resolve_samples_fn(field_name)]
+                vals = [v for _, v in resolve_samples_fn(field_name, "fit", ind_key)]
             else:
                 vals = []
         if vals and len(vals) >= 2:

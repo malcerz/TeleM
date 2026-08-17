@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from src.telemetry_resolver import resolve_samples_from_sources
+
 # Import telemetry modules (with fallback stubs)
 try:
     from telemetry_gpx import (
@@ -216,7 +218,7 @@ class TelemetryDataManager:
     """Manages all telemetry data loading, caching, and source-resolution.
 
     Holds sample data from GPMF (GoPro), GPX, and FIT sources and provides
-    methods to resolve values with configurable priority (FIT > GPX > GPMF).
+    methods to resolve values from an explicitly requested source.
     """
 
     def __init__(
@@ -261,6 +263,7 @@ class TelemetryDataManager:
         self.gpx_atemp_samples: SampleList = []
         self.gpx_hr_samples: SampleList = []
         self.gpx_cad_samples: SampleList = []
+        self.gpx_battery_samples: SampleList = []
 
         # GPS track for map rendering (lat/lon points per source)
         self.gps_track: list[tuple[datetime, float, float]] = []
@@ -599,6 +602,7 @@ class TelemetryDataManager:
             self.gpx_atemp_samples.clear()
             self.gpx_hr_samples.clear()
             self.gpx_cad_samples.clear()
+            self.gpx_battery_samples.clear()
             self.gpx_gps_track.clear()
             self.gpx_path = None
         elif source == "fit":
@@ -642,38 +646,39 @@ class TelemetryDataManager:
             self.gps_track = self._extract_gps_track(records)
 
     def get_gps_track_for_source(self, source_type: str) -> list[tuple[datetime, float, float]]:
-        """Return GPS track (lat/lon) for the given source, falling back to GPMF."""
+        """Return GPS track (lat/lon) for exactly the requested source."""
         if source_type == "gpx":
-            return self.gpx_gps_track or self.gps_track
+            return self.gpx_gps_track
         if source_type == "fit":
-            return self.fit_gps_track or self.gps_track
-        return self.gps_track
+            return self.fit_gps_track
+        if source_type == "gpmf":
+            return self.gps_track
+        return []
 
     # ------------------------------------------------------------------
     # Source resolution (per-indicator source selection)
     # ------------------------------------------------------------------
 
     def get_samples_for_source(self, source_type: str) -> tuple[SampleList, SampleList, SampleList]:
-        """Return (speed, track, alt) for *source_type*, falling back to GPMF."""
-        if source_type == "gpx":
-            return (
-                self.gpx_speed_samples or self.speed_samples,
-                self.gpx_track_samples or self.track_samples,
-                self.gpx_alt_samples or self.alt_samples,
-            )
-        if source_type == "fit":
-            return (
-                self.fit_data.get("speed") or self.speed_samples,
-                self.fit_data.get("track") or self.track_samples,
-                self.fit_data.get("alt") or self.alt_samples,
-            )
-        return (self.speed_samples, self.track_samples, self.alt_samples)
+        """Return (speed, track, alt) for exactly *source_type*."""
+        return (
+            resolve_samples_from_sources("speed", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+            resolve_samples_from_sources("track", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+            resolve_samples_from_sources("alt", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+        )
 
     def resolve_value(
-        self, field_name: str, target_dt: datetime, prefer: str = "fit"
+        self, field_name: str, target_dt: datetime, prefer: str = "fit",
+        source: Optional[str] = None, indicator_key: Optional[str] = None,
     ) -> Optional[float]:
-        """Interpolated value with FIT > GPX > GPMF priority."""
-        samples = self._resolve_samples(field_name, prefer)
+        """Resolve an interpolated value from one explicit source.
+
+        ``prefer`` remains as a compatibility parameter for old external
+        callers; it is treated as the requested source and never as a
+        priority chain.
+        """
+        del indicator_key
+        samples = self.resolve_samples(field_name, source or prefer)
         if not samples:
             return None
         return self._interpolate_field(samples, target_dt, field_name)
@@ -703,41 +708,19 @@ class TelemetryDataManager:
             return interpolate_altitude(samples, target_dt)
         return self._interpolate(samples, target_dt)
 
-    def resolve_samples(self, field_name: str, prefer: str = "fit") -> SampleList:
-        """Raw sample list with FIT > GPX > GPMF priority."""
-        return self._resolve_samples(field_name, prefer)
+    def resolve_samples(
+        self, field_name: str, source: str = "fit",
+        indicator_key: Optional[str] = None,
+    ) -> SampleList:
+        """Return raw samples from exactly ``source``; never cross-fallback."""
+        del indicator_key
+        return resolve_samples_from_sources(
+            field_name, source, gpmf=self, fit_data=self.fit_data, gpx=self
+        )
 
     def _resolve_samples(self, field_name: str, prefer: str) -> SampleList:
-        """Internal resolver with priority: prefer > alt source > GPMF fallback."""
-        alt_prefix = "gpx" if prefer == "fit" else "fit"
-
-        # Preferred source
-        if prefer == "fit":
-            pref = self.fit_data.get(field_name, [])
-        else:
-            pref = getattr(self, f"gpx_{field_name}_samples", []) or []
-
-        # Alternative source
-        if alt_prefix == "fit":
-            alt = self.fit_data.get(field_name, [])
-        else:
-            alt = getattr(self, f"gpx_{field_name}_samples", []) or []
-
-        samples: SampleList = pref or alt
-
-        # FIT field-name fallback (e.g. "power" -> "curVpower")
-        if not samples and prefer == "fit":
-            for alias in _FIT_LOOKUP.get(field_name, ()):
-                samples = self.fit_data.get(alias, [])
-                if samples:
-                    break
-
-        # GPMF fallback
-        if not samples and field_name in _GPMF_NATIVE:
-            gpmf_attr = "track_samples" if field_name in ("dist", "track") else f"{field_name}_samples"
-            samples = getattr(self, gpmf_attr, []) or []
-
-        return samples
+        """Compatibility adapter for legacy internal callers."""
+        return self.resolve_samples(field_name, prefer)
 
     def _interpolate(self, samples: SampleList, target_dt: datetime) -> Optional[float]:
         if self._interpolate_fn:

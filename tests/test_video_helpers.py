@@ -142,10 +142,13 @@ def test_smart_canvas_scaling_filter_cmd():
     assert "scale=3840:2160" in filter_complex
 
 
-def test_nv_cuda_rotation_uses_cpu_chain():
-    """NVIDIA + CUDA + manual rotation must NOT use GPU filters: vflip/hflip are
-    CPU-only and cannot consume CUDA frames (see 'Impossible to convert between
-    the formats supported by the filter Parsed_vflip...')."""
+def test_nv_cuda_rotation_uses_cpu_chain(monkeypatch):
+    """NVIDIA + CUDA + manual rotation (180 forced to CPU fallback) must NOT use
+    GPU filters: vflip/hflip are CPU-only and cannot consume CUDA frames (see
+    'Impossible to convert between the formats supported by the filter
+    Parsed_vflip...'). This is the legacy CPU fallback path, forced via
+    TELEM_NV_ROT180_CPU_FALLBACK."""
+    monkeypatch.setenv("TELEM_NV_ROT180_CPU_FALLBACK", "1")
     from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe="ffmpeg",
@@ -164,7 +167,7 @@ def test_nv_cuda_rotation_uses_cpu_chain():
         rotation_degrees=180,
         hwaccel="cuda",
     )
-    # GPU compositing must be bypassed for rotation
+    # GPU compositing must be bypassed for the CPU fallback
     assert "overlay_cuda" not in filter_complex
     assert "hwupload_cuda" not in filter_complex
     # CPU rotation must still be applied
@@ -251,5 +254,230 @@ def test_intel_and_cpu_pipeline_unchanged():
     assert _encoder_args(cpu_cmd) == _encoder_args(cpu_cmd_r)
     assert "overlay_cuda" not in cpu_fc_r
     assert "vflip,hflip" in cpu_fc_r
+
+
+# ── NVIDIA ROT180 CUDA fast-path (production default) ────────────────────────
+
+def _nv_cmd(rotation_degrees=180, container_rotation=0, hwaccel="cuda",
+            render_w=3840, render_h=2160, resolution_name="4k"):
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+    input_args = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i", "test.mp4"]
+    if container_rotation != 0:
+        input_args.insert(0, "-noautorotate")
+    return _build_stream_ffmpeg_cmd(
+        ffmpeg_exe="ffmpeg",
+        input_args=input_args,
+        output_file="out.mp4",
+        overlay_w=1920,
+        overlay_h=1080,
+        generation_fps=30.0,
+        encoder="nv",
+        gpu=0,
+        video_bitrate="40M",
+        render_w=render_w,
+        render_h=render_h,
+        resolution_name=resolution_name,
+        container_rotation=container_rotation,
+        rotation_degrees=rotation_degrees,
+        hwaccel=hwaccel,
+    )
+
+
+def test_nv_rotation0_cuda_normal(monkeypatch):
+    """rotation=0 keeps the plain NVIDIA CUDA path (unchanged)."""
+    monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    cmd, filter_complex = _nv_cmd(rotation_degrees=0, container_rotation=0,
+                                  render_w=1920, render_h=1080, resolution_name="source")
+    assert "scale_cuda" in filter_complex
+    assert "overlay_cuda" in filter_complex
+    assert "vflip,hflip" not in filter_complex
+    assert "transpose" not in filter_complex
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "cuda"
+    assert cmd[cmd.index("-metadata:s:v:0") + 1] == "rotate=0"
+
+
+def test_nv_rotation180_cuda_default(monkeypatch):
+    """rotation=180 uses the CUDA ROT180 fast-path by DEFAULT (no env needed)."""
+    monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    cmd, filter_complex = _nv_cmd(rotation_degrees=180, container_rotation=180)
+    assert "vflip,hflip" not in filter_complex
+    assert "scale_cuda" in filter_complex
+    assert "overlay_cuda" in filter_complex
+    assert "hwupload_cuda" in filter_complex
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "cuda"
+    assert cmd[cmd.index("-metadata:s:v:0") + 1] == "rotate=180"
+
+
+@pytest.mark.parametrize("env_value", ["1", "true", "yes", "on", "TRUE", " On "])
+def test_nv_rotation180_cpu_fallback(monkeypatch, env_value):
+    """TELEM_NV_ROT180_CPU_FALLBACK truthy forces the old CPU path for 180."""
+    monkeypatch.setenv("TELEM_NV_ROT180_CPU_FALLBACK", env_value)
+    cmd, filter_complex = _nv_cmd(rotation_degrees=180, container_rotation=180)
+    assert "overlay_cuda" not in filter_complex
+    assert "hwupload_cuda" not in filter_complex
+    assert "scale_cuda" not in filter_complex
+    assert "vflip,hflip" in filter_complex
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "yuv420p"
+    assert cmd[cmd.index("-metadata:s:v:0") + 1] == "rotate=0"
+
+
+@pytest.mark.parametrize("env_value", [None, "", "0", "false", "no"])
+def test_nv_rotation180_fallback_off_stays_cuda(monkeypatch, env_value):
+    """Fallback env unset/empty/0/false/no keeps CUDA ROT180 (default ON)."""
+    from src.ffmpeg.command_builder import is_nv_rot180_cuda
+    if env_value is None:
+        monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    else:
+        monkeypatch.setenv("TELEM_NV_ROT180_CPU_FALLBACK", env_value)
+    assert is_nv_rot180_cuda("nv", 180, 180) is True
+    cmd, filter_complex = _nv_cmd(rotation_degrees=180, container_rotation=180)
+    assert "scale_cuda" in filter_complex
+    assert "overlay_cuda" in filter_complex
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "cuda"
+
+
+@pytest.mark.parametrize("rot", [90, 270])
+def test_nv_rotation90_270_cpu_fallback(monkeypatch, rot):
+    """90/270 remain on the CPU fallback regardless of the ROT180 switch."""
+    monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    cmd, filter_complex = _nv_cmd(rotation_degrees=rot, container_rotation=0,
+                                  render_w=1920, render_h=1080, resolution_name="source")
+    assert "overlay_cuda" not in filter_complex
+    assert "transpose" in filter_complex
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "yuv420p"
+
+
+def test_amd_rotation180_no_nv2(monkeypatch):
+    """AMD rotation=180 keeps its CPU chain (no CUDA fast-path)."""
+    monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+    cmd, filter_complex = _build_stream_ffmpeg_cmd(
+        ffmpeg_exe="ffmpeg",
+        input_args=["-i", "test.mp4"],
+        output_file="out.mp4",
+        overlay_w=1920, overlay_h=1080, generation_fps=30.0,
+        encoder="amd", gpu=0, video_bitrate="40M",
+        render_w=1920, render_h=1080, resolution_name="source",
+        container_rotation=0, rotation_degrees=180,
+    )
+    assert "overlay_cuda" not in filter_complex
+    assert "vflip,hflip" in filter_complex
+
+
+def test_intel_rotation180_no_nv2(monkeypatch):
+    """Intel rotation=180 keeps its CPU chain (no CUDA fast-path)."""
+    monkeypatch.delenv("TELEM_NV_ROT180_CPU_FALLBACK", raising=False)
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+    cmd, filter_complex = _build_stream_ffmpeg_cmd(
+        ffmpeg_exe="ffmpeg",
+        input_args=["-i", "test.mp4"],
+        output_file="out.mp4",
+        overlay_w=1920, overlay_h=1080, generation_fps=30.0,
+        encoder="intel", gpu=0, video_bitrate="40M",
+        render_w=1920, render_h=1080, resolution_name="source",
+        container_rotation=0, rotation_degrees=180,
+    )
+    assert "overlay_cuda" not in filter_complex
+    assert "vflip,hflip" in filter_complex
+    assert "hevc_qsv" in cmd
+
+
+# ── displaymatrix writer hardening ───────────────────────────────────────────
+
+def _make_mini_mp4() -> bytes:
+    """Minimal moov/trak/tkhd/hdlr(vide) MP4 shell for the displaymatrix writer."""
+    import struct
+
+    def box(typ: str, payload: bytes) -> bytes:
+        return struct.pack(">I", 8 + len(payload)) + typ.encode() + payload
+
+    # tkhd v0: version(1)+flags(3) + 8 header fields (32B) + matrix(36B)
+    tkhd_payload = bytes([0, 0, 0, 0]) + b"\x00" * 32 + b"\x00" * 36
+    hdlr_payload = bytes(4) + b"\x00\x00\x00\x00" + b"vide" + b"\x00" * 12
+    mdia = box("mdia", box("hdlr", hdlr_payload))
+    trak = box("trak", box("tkhd", tkhd_payload) + mdia)
+    moov = box("moov", trak)
+    ftyp = box("ftyp", b"isom" + b"\x00\x00\x00\x00" + b"isom")
+    return ftyp + moov
+
+
+def _make_mini_mp4_no_video_track() -> bytes:
+    """MP4 shell with only an audio (soun) track — no video track at all."""
+    import struct
+
+    def box(typ: str, payload: bytes) -> bytes:
+        return struct.pack(">I", 8 + len(payload)) + typ.encode() + payload
+
+    tkhd_payload = bytes([0, 0, 0, 0]) + b"\x00" * 32 + b"\x00" * 36
+    hdlr_payload = bytes(4) + b"\x00\x00\x00\x00" + b"soun" + b"\x00" * 12
+    mdia = box("mdia", box("hdlr", hdlr_payload))
+    trak = box("trak", box("tkhd", tkhd_payload) + mdia)
+    moov = box("moov", trak)
+    ftyp = box("ftyp", b"isom" + b"\x00\x00\x00\x00" + b"isom")
+    return ftyp + moov
+
+
+def test_displaymatrix_valid_mp4_pass(tmp_path):
+    """Valid MP4: writes + verifies the exact rotation-180 matrix, no temp left."""
+    from src.ffmpeg.displaymatrix import (
+        find_video_tkhd_matrix,
+        verify_rotation_180_displaymatrix,
+        write_rotation_180_displaymatrix,
+    )
+    p = tmp_path / "valid.mp4"
+    p.write_bytes(_make_mini_mp4())
+    assert write_rotation_180_displaymatrix(p, 3840, 2160) is True
+    assert verify_rotation_180_displaymatrix(p, 3840, 2160) is True
+    data = p.read_bytes()
+    mo, me = find_video_tkhd_matrix(data)
+    matrix = data[mo:me]
+    expected = (
+        b"\x00\x00\x00\x00" + b"\xff\xff\x00\x00" + b"\x00\x00\x00\x00" +
+        b"\x00\x00\x00\x00" + b"\x00\x00\x00\x00" + b"\xff\xff\x00\x00" +
+        b"\x00\x00\x00\x00" +
+        (3840 << 16).to_bytes(4, "big") + (2160 << 16).to_bytes(4, "big")
+    )
+    assert matrix == expected
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_displaymatrix_truncated_mp4_controlled_failure(tmp_path):
+    """Truncated/invalid MP4 must fail cleanly without modifying the file."""
+    from src.ffmpeg.displaymatrix import write_rotation_180_displaymatrix
+    p = tmp_path / "trunc.mp4"
+    good = _make_mini_mp4()
+    p.write_bytes(good[: len(good) // 2])  # cut inside moov
+    before = p.read_bytes()
+    assert write_rotation_180_displaymatrix(p, 3840, 2160) is False
+    assert p.read_bytes() == before  # untouched
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_displaymatrix_no_video_track_controlled_failure(tmp_path):
+    """A file with no video track must fail cleanly without modifying the file."""
+    from src.ffmpeg.displaymatrix import write_rotation_180_displaymatrix
+    p = tmp_path / "novideo.mp4"
+    p.write_bytes(_make_mini_mp4_no_video_track())
+    before = p.read_bytes()
+    assert write_rotation_180_displaymatrix(p, 3840, 2160) is False
+    assert p.read_bytes() == before
+
+
+def test_rot180_injection_failure_is_controlled_error():
+    """When the displaymatrix writer cannot write/verify, the export path must
+    raise a controlled error (never report success)."""
+    from unittest.mock import patch
+    import src.ffmpeg.displaymatrix as dm
+    from src.ffmpeg.streaming import _inject_rot180_displaymatrix
+
+    with patch.object(dm, "write_rotation_180_displaymatrix") as m:
+        m.return_value = True
+        assert _inject_rot180_displaymatrix("out.mp4", 3840, 2160) is True
+        m.assert_called_once_with("out.mp4", 3840, 2160)
+        # writer returns False (structural problem) -> controlled RuntimeError
+        m.return_value = False
+        with pytest.raises(RuntimeError):
+            _inject_rot180_displaymatrix("out.mp4", 3840, 2160)
+
 
 

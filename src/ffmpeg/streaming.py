@@ -23,6 +23,7 @@ from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
     get_layout_hud_bbox,
     get_layout_hud_regions,
+    is_nv_rot180_cuda,
 )
 from src.ffmpeg.shared_memory import (
     SharedFramePool,
@@ -304,6 +305,7 @@ def stream_overlay_to_ffmpeg(
             )
 
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
+    nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
     init_worker(
         overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
         iso_samples, exposure_samples, temperature_samples,
@@ -318,6 +320,7 @@ def stream_overlay_to_ffmpeg(
         effective_rotation=effective_rotation,
         hud_bbox=hud_bbox,
         hud_regions=hud_regions,
+        hud_rotate_180=nv_rot180_cuda,
     )
 
     if cancel_event is not None and cancel_event.is_set():
@@ -328,6 +331,10 @@ def stream_overlay_to_ffmpeg(
     # Manual rotation uses CPU filters (vflip/transpose) which cannot take
     # hardware frames, so decoded frames must stay in system memory in that case.
     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+    if nv_rot180_cuda:
+        # NVIDIA rotation=180: handled on the CUDA fast-path (HUD rotated in
+        # Python), so the NVIDIA branch is not forced back to the CPU chain.
+        needs_cpu_rotation = False
     if encoder == "amd" and needs_cpu_rotation:
         hwaccel = None
     input_args: list[str] = []
@@ -353,6 +360,13 @@ def stream_overlay_to_ffmpeg(
         audio_input_args.extend(["-i", str(input_file)])
 
     use_gpu_compositor = bool(layout.get("_use_gpu_compositor", False))
+
+    # NVIDIA rotation=180 production log — exactly one readable line.
+    if encoder == "nv" and effective_rotation == 180:
+        if nv_rot180_cuda:
+            print("[NVIDIA] ROT180 CUDA FAST PATH", flush=True)
+        else:
+            print("[NVIDIA] ROT180 CPU FALLBACK", flush=True)
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
@@ -478,6 +492,7 @@ def stream_overlay_to_ffmpeg(
                 speed_samples, track_samples, alt_samples,
                 target_fps, update_rate_step, total_overlay_frames,
                 cut_regions, effective_rotation, hud_bbox, hud_regions,
+                nv_rot180_cuda,
             )
 
             print(
@@ -597,7 +612,44 @@ def stream_overlay_to_ffmpeg(
         if concat_txt.exists():
             concat_txt.unlink()
 
+    if nv_rot180_cuda:
+        # The local FFmpeg drops the display-matrix through overlay_cuda and
+        # cannot write one via -metadata/-display_rotation, so inject the
+        # rotation=180 display matrix into the video track's tkhd and verify it.
+        # Raises on failure so the export is never reported as successful with a
+        # physically-rotated file that is missing the rotation metadata.
+        _inject_rot180_displaymatrix(output_file, render_w, render_h)
+
     # Wydrukuj podsumowanie wydajności renderowania
     BenchmarkTracker.get_instance().print_summary()
 
     return total_piped
+
+
+def _inject_rot180_displaymatrix(
+    output_file: str,
+    render_w: int,
+    render_h: int,
+) -> bool:
+    """Inject and verify the rotation=180 display matrix into the output MP4.
+
+    Runs only in NVIDIA ROT180 CUDA mode (the caller guards with nv_rot180_cuda).
+    Raises RuntimeError if the displaymatrix cannot be written or verified, so the
+    export is reported as an error instead of silently producing a physically
+    rotated file marked as done.
+    """
+    try:
+        from src.ffmpeg.displaymatrix import write_rotation_180_displaymatrix
+
+        ok = write_rotation_180_displaymatrix(output_file, render_w, render_h)
+        if not ok:
+            raise RuntimeError(
+                "displaymatrix rotate=180 could not be written/verified "
+                "(unexpected MP4 structure)"
+            )
+        print("[NVIDIA] displaymatrix rotate=180 injected and verified", flush=True)
+        return True
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"displaymatrix rotate=180 injection failed: {e}") from e

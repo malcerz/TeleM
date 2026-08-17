@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 from src.ffmpeg.detection import _test_encoder
 
@@ -15,6 +16,45 @@ RESOLUTION_MAP: dict[str, tuple[int, int] | None] = {
     "720p": (1280, 720),
     "480p": (854, 480),
 }
+
+# NVIDIA rotation=180 CUDA fast-path (production default).
+#
+# For encoder == "nv" and effective rotation == 180 the CUDA fast-path
+# (scale_cuda / overlay_cuda / -pix_fmt cuda, HUD canvas rotated 180 deg in
+# Python, displaymatrix rotate=180 injected into the container) is the DEFAULT
+# production path. It is NOT gated by an enable flag.
+#
+# Legacy opt-out (forces the old CPU path: vflip,hflip + software scale/overlay
+# + hevc_nvenc yuv420p): TELEM_NV_ROT180_CPU_FALLBACK=1 (truthy, case/whitespace-
+# insensitive). Unset/""/"0"/"false"/"no" → CUDA fast-path stays active.
+# rotation 0 / 90 / 270 and non-NVIDIA encoders are unaffected.
+NV_ROT180_CPU_FALLBACK_ENV = "TELEM_NV_ROT180_CPU_FALLBACK"
+_NV_ROT180_ON_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_flag_on(name: str) -> bool:
+    """True only when the env var is explicitly in the ON set (default OFF)."""
+    return os.environ.get(name, "").strip().lower() in _NV_ROT180_ON_VALUES
+
+
+def is_nv_rot180_cuda(
+    encoder: str,
+    rotation_degrees: int,
+    container_rotation: int = 0,
+) -> bool:
+    """Return True when NVIDIA rotation=180 uses the CUDA fast-path.
+
+    Default ON for encoder == "nv" and effective rotation == 180.
+    Opt-out: TELEM_NV_ROT180_CPU_FALLBACK truthy forces the legacy CPU path.
+    rotation 0 / 90 / 270 and non-NVIDIA encoders are unaffected.
+    """
+    if encoder != "nv":
+        return False
+    effective = container_rotation if container_rotation != 0 else rotation_degrees
+    if effective != 180:
+        return False
+    return not _env_flag_on(NV_ROT180_CPU_FALLBACK_ENV)
+
 
 
 def scale_filter_for_resolution(resolution_name: str) -> str:
@@ -277,7 +317,12 @@ def _build_stream_ffmpeg_cmd(
     ``vflip``/``transpose``, which cannot convert them.
     """
     target_res = RESOLUTION_MAP.get(resolution_name)
+    nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+    if nv_rot180_cuda:
+        # NVIDIA rotation=180: handled on the CUDA path (HUD canvas rotated in
+        # Python), so it is NOT treated as a CPU-rotation case for the NVIDIA branch.
+        needs_cpu_rotation = False
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
 
@@ -454,6 +499,23 @@ def _build_stream_ffmpeg_cmd(
     ]
     if audio_input_args:
         cmd.extend(audio_input_args)
+    # NV1: NVIDIA-only filter_complex_threads override.
+    # Set TELEM_NV_FILTER_COMPLEX_THREADS=2 or =4 to A/B test.
+    # Has NO effect for encoder != "nv".
+    _nv_fct_raw = os.environ.get("TELEM_NV_FILTER_COMPLEX_THREADS", "").strip()
+    _nv_fct: int | None = None
+    if encoder == "nv" and _nv_fct_raw:
+        try:
+            _nv_fct = int(_nv_fct_raw)
+            if _nv_fct < 1:
+                _nv_fct = None
+        except ValueError:
+            _nv_fct = None
+
+    if _nv_fct is not None:
+        cmd.extend(["-filter_complex_threads", str(_nv_fct)])
+        print(f"[NV1] filter_complex_threads={_nv_fct}", flush=True)
+
     cmd.extend([
         "-filter_complex", filter_complex,
         "-map", "[vout]",
@@ -467,10 +529,15 @@ def _build_stream_ffmpeg_cmd(
         audio_idx = "2" if audio_input_args else "0"
         cmd.extend(["-map", f"{audio_idx}:a?"])
 
-    # Metadane obrotu: ponieważ obrót jest fizycznie zaaplikowany w filtrze base_filter,
-    # w metadanych pliku wyjściowego piszemy rotate=0, zapobiegając podwójnemu obrotowi w odtwarzaczach.
+    # Metadane obrotu: normalnie obrót jest fizycznie zaaplikowany w base_filter,
+    # więc w metadanych piszemy rotate=0. W CUDA ROT180 (NVIDIA rotation=180)
+    # obraz pozostaje fizycznie nieobrócony (base video + HUD obrócony 180 w
+    # Pythonie), a poprawny displaymatrix rotate=180 jest wstrzykiwany do
+    # kontenera po zakończeniu (src.ffmpeg.displaymatrix) — tag rotate=180 pełni
+    # rolę zapasową.
+    out_rotation = 180 if nv_rot180_cuda else 0
     cmd.extend([
-        "-map_metadata", "-1", "-metadata:s:v:0", "rotate=0",
+        "-map_metadata", "-1", "-metadata:s:v:0", f"rotate={out_rotation}",
     ])
 
     if encoder == "nv":

@@ -1,0 +1,10 @@
+{
+  "test": "base_cuda_nvenc_no_hud",
+  "input": "F:\\_DEV\\TeleM\\Video\\GX020079.MP4",
+  "output": "F:\\_DEV\\TeleM\\Raporty\\NVIDIA_NV0\\nv0_base_cuda_nvenc.mp4",
+  "target_frames": 1131,
+  "wall_s": 20.158687599992845,
+  "true_fps": 56.10484285695272,
+  "full_pipeline_fps": 27.15,
+  "overhead_factor": 2.066476716646509
+}
