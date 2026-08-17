@@ -86,13 +86,10 @@ def render_time_display(
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
 
-    td_cfg_str = str(sorted(cfg.items()))
-    global_cfg_str = str(sorted(layout.get("global", {}).items()))
-
     cache_key = _static_cache_key(
         "time_display", canvas_w, canvas_h, font_path,
         date_text, time_text, elapsed_str, avg_speed_str,
-        td_cfg_str, global_cfg_str
+        show_date, show_time, show_elapsed, show_avg_speed
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)

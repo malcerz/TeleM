@@ -19,7 +19,7 @@ from concurrent.futures import ProcessPoolExecutor
 from src.ffmpeg.detection import detect_gpu_decoder, _test_encoder
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.frame_renderer import render_overlay_job
-from src.ffmpeg.command_builder import scale_filter_for_resolution, append_bitrate_args
+from src.ffmpeg.command_builder import scale_filter_for_resolution, append_bitrate_args, RESOLUTION_MAP
 from src.ffmpeg.streaming import run_ffmpeg_with_progress
 
 
@@ -188,24 +188,34 @@ def apply_overlay_video(
     active_process_holder: Optional[dict] = None,
 ) -> None:
     """Apply a pre-rendered overlay video onto the source video."""
-    base_chain = scale_filter_for_resolution(resolution_name)
-
-    hwaccel = detect_gpu_decoder(encoder)
+    hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
+    # Manual rotation uses CPU filters (vflip/transpose) which cannot take
+    # CUDA frames, so fall back to the CPU chain when rotation is required.
+    needs_cpu_rotation = rotation_degrees in (90, 180, 270)
 
     # Hardware acceleration works natively with rotation metadata in container
-    if hwaccel == "cuda":
-        ov_op = "overlay_cuda"
+    if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
+        ov_op = "overlay_cuda=x=0:y=0"
         ov_fps = f"[1:v]fps={target_fps},format=rgba,hwupload_cuda"
+        target = RESOLUTION_MAP.get(resolution_name)
+        if target:
+            w_tgt, h_tgt = target
+            base_chain = f"[0:v]scale_cuda={w_tgt}:{h_tgt}:format=yuv420p[base]"
+        else:
+            base_chain = "[0:v]scale_cuda=format=yuv420p[base]"
     else:
         ov_op = "overlay"
         ov_fps = f"[1:v]fps={target_fps}"
+        base_chain = scale_filter_for_resolution(resolution_name)
 
     ov_chain = f"{ov_fps}[ov]"
 
     input_args: list[str] = []
     if hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
-        if hwaccel == "qsv":
+        if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
+            input_args.extend(["-hwaccel_output_format", "cuda"])
+        elif hwaccel == "qsv":
             input_args.extend(["-hwaccel_output_format", "nv12"])
     if isinstance(input_files, list) and len(input_files) > 1:
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
@@ -216,8 +226,10 @@ def apply_overlay_video(
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        auto_rot = "-noautorotate" if container_rotation != 0 else "-autorotate"
-        input_args.extend([auto_rot, "-i", str(input_file)])
+        if container_rotation != 0:
+            input_args.extend(["-noautorotate", "-i", str(input_file)])
+        else:
+            input_args.extend(["-i", str(input_file)])
 
     if rotation_degrees == 180:
         filter_complex = (

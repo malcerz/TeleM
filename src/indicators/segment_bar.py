@@ -58,12 +58,10 @@ def _render_segment_bar_indicator(
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
 
-    cfg_str = str(sorted(cfg.items()))
-    global_cfg_str = str(sorted(layout.get("global", {}).items()))
-
     cache_key = _static_cache_key(
         "segment_bar", canvas_w, canvas_h, font_path, key, active_segments,
-        min_str, max_str, val_str, label_text, cfg_str, global_cfg_str, ss
+        min_str, max_str, val_str, label_text, outline, fs, ss, bar_w, bar_h,
+        segments, gap, radius_seg, direction, grow_height, inactive_alpha
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)

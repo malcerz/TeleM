@@ -104,6 +104,9 @@ def _static_cache_key(*args) -> tuple:
     return args
 
 
+_MAP_MASK_CACHE: dict[tuple[int, int], Image.Image] = {}
+
+
 def apply_map_shape(img, shape: str):
     """Apply the configured map shape to a rendered map image.
 
@@ -120,9 +123,13 @@ def apply_map_shape(img, shape: str):
         from PIL import ImageDraw
 
         w, h = img.size
-        mask = Image.new("L", (w, h), 0)
-        d = ImageDraw.Draw(mask)
-        d.ellipse((0, 0, w - 1, h - 1), fill=255)
+        mask_key = (w, h)
+        mask = _MAP_MASK_CACHE.get(mask_key)
+        if mask is None:
+            mask = Image.new("L", (w, h), 0)
+            d = ImageDraw.Draw(mask)
+            d.ellipse((0, 0, w - 1, h - 1), fill=255)
+            _MAP_MASK_CACHE[mask_key] = mask
         img = img.copy()
         img.putalpha(mask)
     except Exception:

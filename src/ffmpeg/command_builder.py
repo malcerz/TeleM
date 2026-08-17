@@ -69,33 +69,48 @@ def _build_stream_ffmpeg_cmd(
 
     When *hwaccel* is ``"cuda"`` and no rotation is needed, the GPU
     ``overlay_cuda`` filter is used so that compositing runs on the GPU.
-    When rotation is required the caller skips ``-hwaccel`` entirely so
-    that decoding, overlay and rotation all happen on the CPU without
-    format-negotiation issues between ``hflip`` and the encoder.
+    When manual rotation (90/180/270) is required, the whole chain falls
+    back to the CPU (CPU scaling, ``overlay``, CPU rotation filters) so
+    that CUDA hardware frames never reach CPU-only filters like
+    ``vflip``/``transpose``, which cannot convert them.
     """
     target_res = RESOLUTION_MAP.get(resolution_name)
+    needs_cpu_rotation = rotation_degrees in (90, 180, 270)
 
-    # ── Base filter (video scaling) ─────────────────────────────────────
-    if target_res and encoder == "nv":
-        # GPU scaling
-        base_filter = (
-            f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}[base]"
-        )
+    # ── Base filter (video scaling & format conversion) ───────────────────
+    if encoder == "nv" and not needs_cpu_rotation:
+        if hwaccel == "cuda":
+            if target_res:
+                base_filter = f"[0:v]scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
+            else:
+                base_filter = "[0:v]scale_cuda=format=yuv420p[base]"
+        else:
+            if target_res:
+                base_filter = f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
+            else:
+                base_filter = "[0:v]hwupload_cuda,scale_cuda=format=yuv420p[base]"
     elif target_res:
         base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
     else:
         base_filter = "[0:v]null[base]"
 
     # ── Overlay stream & operator ───────────────────────────────────────
-    if overlay_w != render_w or overlay_h != render_h:
-        ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear[ov]"
+    if encoder == "nv" and not needs_cpu_rotation:
+        if overlay_w != render_w or overlay_h != render_h:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear,hwupload_cuda[ov]"
+        else:
+            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
+        ov_op = "overlay_cuda=x=0:y=0"
     else:
-        ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
-    ov_op = "overlay"
+        if overlay_w != render_w or overlay_h != render_h:
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear[ov]"
+        else:
+            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
+        ov_op = "overlay=0:0:shortest=1"
 
     filter_complex = (
         f"{base_filter};{ov_input};"
-        f"[base][ov]{ov_op}=0:0:shortest=1[vtemp]"
+        f"[base][ov]{ov_op}[vtemp]"
     )
 
     # ── Cut region drop (select filter) ────────────────────────────────
@@ -107,7 +122,7 @@ def _build_stream_ffmpeg_cmd(
             parts.append(f"between(t,{cs},{ce})")
         select_expr = "not(" + "+".join(parts) + ")"
         filter_complex += (
-            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
+            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vtemp2]"
         )
         # Audio: aselect – tnie ścieżkę audio tak samo jak wideo
         audio_idx = "2" if audio_input_args else "0"
@@ -115,8 +130,20 @@ def _build_stream_ffmpeg_cmd(
             f";[{audio_idx}:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
         )
         print(f"[CUT] select filter: {select_expr}", flush=True)
+        v_last = "[vtemp2]"
     else:
-        filter_complex += ";[vtemp]null[vout]"
+        filter_complex += ";[vtemp]null[vtemp2]"
+        v_last = "[vtemp2]"
+
+    # ── Manual rotation (rotation_degrees) ─────────────────────────────
+    if rotation_degrees == 180:
+        filter_complex += f";{v_last}vflip,hflip[vout]"
+    elif rotation_degrees == 90:
+        filter_complex += f";{v_last}transpose=1[vout]"
+    elif rotation_degrees == 270:
+        filter_complex += f";{v_last}transpose=2[vout]"
+    else:
+        filter_complex += f";{v_last}null[vout]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
@@ -149,7 +176,9 @@ def _build_stream_ffmpeg_cmd(
     if encoder == "nv":
         cmd.extend([
             "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
-            "-cq", "24", "-pix_fmt", "yuv420p", "-gpu", str(gpu),
+            "-cq", "24",
+            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else "yuv420p",
+            "-gpu", str(gpu),
         ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])

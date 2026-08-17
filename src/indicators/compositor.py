@@ -23,6 +23,22 @@ from src.indicators.time_block import render_time_block
 from src.indicators.time_display import render_time_display
 
 
+import threading
+
+_THREAD_CANVAS = threading.local()
+
+
+def _get_reusable_canvas(canvas_w: int, canvas_h: int) -> tuple[Image.Image, dict[str, tuple[int, int, int, int]]]:
+    if not hasattr(_THREAD_CANVAS, "cache"):
+        _THREAD_CANVAS.cache = {}
+    key = (canvas_w, canvas_h)
+    if key not in _THREAD_CANVAS.cache:
+        img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        prev_bboxes: dict[str, tuple[int, int, int, int]] = {}
+        _THREAD_CANVAS.cache[key] = (img, prev_bboxes)
+    return _THREAD_CANVAS.cache[key]
+
+
 def compose_overlay(
     canvas_w: int,
     canvas_h: int,
@@ -56,29 +72,26 @@ def compose_overlay(
     elapsed_seconds: float = 0.0,
     avg_speed_kmh: float = 0.0,
     fast_preview: bool = False,
+    reuse_canvas: bool = True,
 ) -> Image.Image:
-    """Compose the complete HUD overlay image from all indicators.
+    """Compose the complete HUD overlay image from all indicators."""
+    if reuse_canvas:
+        img, prev_bboxes = _get_reusable_canvas(canvas_w, canvas_h)
+        if prev_bboxes:
+            pad = 40
+            for bx, by, bw, bh in prev_bboxes.values():
+                x1 = max(0, bx - pad)
+                y1 = max(0, by - pad)
+                x2 = min(canvas_w, bx + bw + pad)
+                y2 = min(canvas_h, by + bh + pad)
+                img.paste((0, 0, 0, 0), (x1, y1, x2, y2))
+            prev_bboxes.clear()
+        else:
+            img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
+    else:
+        img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        prev_bboxes = None
 
-    Each indicator is rendered according to its layout config and blended
-    onto a transparent RGBA canvas.
-
-    Args:
-        canvas_w, canvas_h: Output image dimensions.
-        layout: Full HUD layout dict.
-        font_path: Path to TrueType font.
-        date_text, time_text: Formatted date/time strings.
-        speed_value, distance_m, alt_value: Primary telemetry values.
-        indicator_values: Optional per-indicator value overrides (metres for dist).
-        _bboxes: Optional dict to populate with indicator bounding boxes.
-        chart_data: Optional dict of chart history {key: [values]}.
-        current_position: 0.0-1.0 playback position for chart cursors.
-        extra_indicators: Optional dict of dynamically discovered indicators
-            {key: (value, unit, label)} (e.g. FIT fields).
-
-    Returns:
-        RGBA PIL.Image with all indicators composited.
-    """
-    img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     if _bboxes is None:
         _bboxes = {}
 
@@ -341,6 +354,9 @@ def compose_overlay(
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
             rotated_paste(img, ct_res, ctx, cty, ct_rotation)
+
+    if prev_bboxes is not None and _bboxes:
+        prev_bboxes.update(_bboxes)
 
     return img
 

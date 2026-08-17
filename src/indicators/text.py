@@ -36,12 +36,8 @@ def _render_text_indicator(
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
 
-    cfg_str = str(sorted(cfg.items()))
-    global_cfg_str = str(sorted(layout.get("global", {}).items()))
-
     cache_key = _static_cache_key(
-        "text_indicator", canvas_w, canvas_h, font_path, key, txt, text_color,
-        cfg_str, global_cfg_str, outline, fs
+        "text_indicator", canvas_w, canvas_h, font_path, key, txt, text_color, outline, fs
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)

@@ -17,6 +17,7 @@ from typing import Any
 # Cached result of GPU decoder detection (None = CPU fallback)
 # False = not yet checked; dict[str, str|None] = checked per preferred_encoder
 _GPU_DECODER_CACHE: str | None | bool | dict = False
+_BEST_ENCODER_CACHE: str | None = None
 
 
 def _nt_startupinfo() -> Any:
@@ -26,7 +27,7 @@ def _nt_startupinfo() -> Any:
     return si
 
 
-def _test_hwaccel(hwaccel: str) -> bool:
+def _test_hwaccel(hwaccel: str, ffmpeg_exe: str = "ffmpeg") -> bool:
     """Test whether a given ``-hwaccel`` actually works by running a quick FFmpeg command.
 
     Returns ``True`` if the device can be initialised, ``False`` otherwise.
@@ -34,7 +35,7 @@ def _test_hwaccel(hwaccel: str) -> bool:
     try:
         r = subprocess.run(
             [
-                "ffmpeg", "-hide_banner", "-hwaccel", hwaccel,
+                ffmpeg_exe, "-hide_banner", "-hwaccel", hwaccel,
                 "-f", "lavfi", "-i", "color=c=black:s=352x288:d=0.1",
                 "-f", "null", "-",
             ],
@@ -46,7 +47,7 @@ def _test_hwaccel(hwaccel: str) -> bool:
         return False
 
 
-def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
+def detect_gpu_decoder(preferred_encoder: str = "", ffmpeg_exe: str = "ffmpeg") -> str | None:
     """Return the best ``-hwaccel`` flag for this system, or ``None`` for CPU.
 
     If *preferred_encoder* is 'intel', prefers 'qsv' or 'd3d11va'.
@@ -67,14 +68,14 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
 
     if preferred_encoder == "amd":
         for hw in ("d3d11va", "dxva2", "vulkan", "vaapi"):
-            if _test_hwaccel(hw):
+            if _test_hwaccel(hw, ffmpeg_exe):
                 selected_hw = hw
                 break
     elif preferred_encoder == "intel":
         # On dual GPU systems (NVIDIA + Intel), '-hwaccel qsv' often locks up FFmpeg
         # when decoding input video in a pipe. 'd3d11va' / 'dxva2' work reliably on Intel GPU.
         for hw in ("d3d11va", "dxva2", "vulkan"):
-            if _test_hwaccel(hw):
+            if _test_hwaccel(hw, ffmpeg_exe):
                 selected_hw = hw
                 break
     elif preferred_encoder == "nv":
@@ -83,7 +84,7 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
                 ["nvidia-smi"], capture_output=True, timeout=5,
                 **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
             )
-            if r.returncode == 0 and _test_hwaccel("cuda"):
+            if r.returncode == 0 and _test_hwaccel("cuda", ffmpeg_exe):
                 selected_hw = "cuda"
         except Exception:
             pass
@@ -91,7 +92,7 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
     if selected_hw is None:
         # Fallback priority check
         for hw in ("cuda", "d3d11va", "dxva2", "qsv", "vaapi", "vulkan"):
-            if _test_hwaccel(hw):
+            if _test_hwaccel(hw, ffmpeg_exe):
                 selected_hw = hw
                 break
 
@@ -99,7 +100,7 @@ def detect_gpu_decoder(preferred_encoder: str = "") -> str | None:
     return selected_hw
 
 
-def _test_encoder(encoder_name: str) -> bool:
+def _test_encoder(encoder_name: str, ffmpeg_exe: str = "ffmpeg") -> bool:
     """Test whether a given encoder actually works by running a quick encode.
 
     Returns ``True`` if the encoder initialises successfully, ``False`` otherwise.
@@ -107,7 +108,7 @@ def _test_encoder(encoder_name: str) -> bool:
     try:
         r = subprocess.run(
             [
-                "ffmpeg", "-hide_banner",
+                ffmpeg_exe, "-hide_banner",
                 "-f", "lavfi", "-i", "color=c=black:s=352x288:d=0.1",
                 "-c:v", encoder_name,
                 "-f", "null", "-",
@@ -120,35 +121,43 @@ def _test_encoder(encoder_name: str) -> bool:
         return False
 
 
-def detect_best_encoder() -> str:
+def detect_best_encoder(ffmpeg_exe: str = "ffmpeg") -> str:
     """Detect the best available hardware encoder on this system.
 
     Returns one of ``'nv'`` (NVIDIA NVENC), ``'amd'`` (AMD AMF),
     ``'intel'`` (Intel QSV) or ``'cpu'`` (libx265 software).
     Result is cached for subsequent calls.
     """
+    global _BEST_ENCODER_CACHE
+    if _BEST_ENCODER_CACHE is not None:
+        return _BEST_ENCODER_CACHE
+
     # Force detection if not yet done (do not use its result for encoding
     # decisions – we need a separate validation)
-    detect_gpu_decoder()
+    detect_gpu_decoder(ffmpeg_exe=ffmpeg_exe)
 
     # Primary source of truth: check which encoders FFmpeg actually supports
     # and test each one to make sure the device is usable.
     try:
         r = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [ffmpeg_exe, "-hide_banner", "-encoders"],
             capture_output=True, text=True, timeout=5,
             **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
         )
         if r.returncode == 0:
             encoders = r.stdout
             # Prefer NVIDIA NVENC, then AMD AMF, then Intel QSV
-            if "hevc_nvenc" in encoders and _test_encoder("hevc_nvenc"):
+            if "hevc_nvenc" in encoders and _test_encoder("hevc_nvenc", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "nv"
                 return "nv"
-            if "hevc_amf" in encoders and _test_encoder("hevc_amf"):
+            if "hevc_amf" in encoders and _test_encoder("hevc_amf", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "amd"
                 return "amd"
-            if "h264_amf" in encoders and _test_encoder("h264_amf"):
+            if "h264_amf" in encoders and _test_encoder("h264_amf", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "amd"
                 return "amd"
-            if "hevc_qsv" in encoders and _test_encoder("hevc_qsv"):
+            if "hevc_qsv" in encoders and _test_encoder("hevc_qsv", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "intel"
                 return "intel"
     except Exception:
         pass
@@ -160,9 +169,11 @@ def detect_best_encoder() -> str:
             ["nvidia-smi"], capture_output=True, timeout=5,
             **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
         )
-        if r.returncode == 0 and _test_encoder("hevc_nvenc"):
+        if r.returncode == 0 and _test_encoder("hevc_nvenc", ffmpeg_exe):
+            _BEST_ENCODER_CACHE = "nv"
             return "nv"
     except Exception:
         pass
 
+    _BEST_ENCODER_CACHE = "cpu"
     return "cpu"

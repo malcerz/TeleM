@@ -259,39 +259,48 @@ class MovingMapRenderer:
         tx1, tx2 = cx - half_w, cx + half_w + 1
         ty1, ty2 = cy - half_h, cy + half_h + 1
 
+        grid_key = (tx1, tx2, ty1, ty2, self._zoom, self._style, draw_track, self._trk_color, self._trk_width)
+        if getattr(self, "_grid_cache_key", None) == grid_key and hasattr(self, "_grid_cache_img"):
+            img = self._grid_cache_img.copy()
+        else:
+            tw = (tx2 - tx1) * TILE_SIZE
+            th = (ty2 - ty1) * TILE_SIZE
+            img = Image.new("RGBA", (tw, th), (30, 30, 30, 255))
+
+            # Fetch & paste tiles
+            for ty in range(ty1, ty2):
+                for tx in range(tx1, tx2):
+                    tile = self._cache.get(self._zoom, tx, ty, self._style)
+                    if tile is None and download_missing:
+                        d = _download_tile_raw(self._zoom, tx, ty, self._style)
+                        if d:
+                            self._cache.put(self._zoom, tx, ty, self._style, d)
+                            tile = self._cache.get(self._zoom, tx, ty, self._style)
+                    if tile:
+                        dx, dy = (tx - tx1) * TILE_SIZE, (ty - ty1) * TILE_SIZE
+                        img.paste(tile, (dx, dy))
+
+            if draw_track and len(self._gps) >= 2:
+                d_grid = ImageDraw.Draw(img)
+                ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
+                pts = [(self._px_x[i] - ox, self._px_y[i] - oy) for i in range(len(self._gps))]
+                d_grid.line(pts, fill=self._trk_color, width=self._trk_width, joint="round")
+
+            self._grid_cache_key = grid_key
+            self._grid_cache_img = img
+            img = img.copy()
+
         tw = (tx2 - tx1) * TILE_SIZE
         th = (ty2 - ty1) * TILE_SIZE
-        img = Image.new("RGBA", (tw, th), (30, 30, 30, 255))
 
-        # Fetch & paste tiles
-        for ty in range(ty1, ty2):
-            for tx in range(tx1, tx2):
-                tile = self._cache.get(self._zoom, tx, ty, self._style)
-                if tile is None and download_missing:
-                    d = _download_tile_raw(self._zoom, tx, ty, self._style)
-                    if d:
-                        self._cache.put(self._zoom, tx, ty, self._style, d)
-                        tile = self._cache.get(self._zoom, tx, ty, self._style)
-                if tile:
-                    dx, dy = (tx - tx1) * TILE_SIZE, (ty - ty1) * TILE_SIZE
-                    img.paste(tile, (dx, dy))
-
-        # Draw track + marker
-        if draw_track or draw_marker:
+        # Draw marker
+        if draw_marker:
             d = ImageDraw.Draw(img)
             ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
-            if draw_track and len(self._gps) >= 2:
-                # CAŁA trasa narysowana od razu (nie tylko przejechany fragment)
-                pts = [(self._px_x[i] - ox, self._px_y[i] - oy)
-                       for i in range(len(self._gps))]
-                d.line(pts, fill=self._trk_color, width=self._trk_width,
-                       joint="round")
-            if draw_marker:
-                # Kropka (marker) na interpolowanej pozycji — środek mapy
-                mx, my = cpx - ox, cpy - oy
-                r = self._mkr_radius
-                d.ellipse((mx - r, my - r, mx + r, my + r),
-                          fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
+            mx, my = cpx - ox, cpy - oy
+            r = self._mkr_radius
+            d.ellipse((mx - r, my - r, mx + r, my + r),
+                      fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
 
         # Crop to output size centred on current (interpolated) position
         scx, scy = cpx - tx1 * TILE_SIZE, cpy - ty1 * TILE_SIZE

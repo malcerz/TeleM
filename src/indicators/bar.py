@@ -31,11 +31,8 @@ def _render_bar_indicator(
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
 
-    cfg_str = str(sorted(cfg.items()))
-    global_cfg_str = str(sorted(layout.get("global", {}).items()))
-
     bg_key = _static_cache_key(
-        "bar_bg", w, h, label, font_path, ticks, thickness, cfg_str, global_cfg_str, ss
+        "bar_bg", w, h, label, font_path, ticks, thickness, outline, text_color, ss
     )
     bg = _STATIC_CACHE.get(bg_key)
     if bg is None:

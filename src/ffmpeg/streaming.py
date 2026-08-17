@@ -33,10 +33,11 @@ def _pipe_writer_thread(
     write_queue: queue.Queue,
     stdin_buffer: Any,
     done_event: threading.Event,
+    shm_pool: SharedFramePool | None = None,
 ) -> None:
     """Background thread that drains frame bytes to FFmpeg stdin pipe.
 
-    Receives (bytes_data,) from write_queue and writes to stdin_buffer.
+    Receives bytes or (slot, memoryview) from write_queue and writes to stdin_buffer.
     Terminates when done_event is set and queue is empty, or on None sentinel.
     """
     bt = BenchmarkTracker.get_instance()
@@ -52,7 +53,19 @@ def _pipe_writer_thread(
                 break
             bt.start_timer("ffmpeg_write")
             try:
-                stdin_buffer.write(item)
+                if isinstance(item, tuple):
+                    slot, memview = item
+                    try:
+                        stdin_buffer.write(memview)
+                    finally:
+                        try:
+                            memview.release()
+                        except Exception:
+                            pass
+                    if shm_pool is not None:
+                        shm_pool.release(slot)
+                else:
+                    stdin_buffer.write(item)
             finally:
                 bt.stop_timer("ffmpeg_write")
     except (BrokenPipeError, OSError):
@@ -70,6 +83,34 @@ def _report_stream_progress(
     stats = f"Stream: {done}/{total} | fps: {fps:.1f} | elapse: {h:02d}:{m:02d}:{s:02d}"
     if progress_cb:
         progress_cb(done, stats)
+
+
+def _acquire_shm_slot(
+    shm_pool: "SharedFramePool",
+    process: Any,
+    stdout_lines: list[str],
+    timeout: float = 30.0,
+) -> int:
+    """Acquire an SHM slot, failing fast if FFmpeg has already exited.
+
+    If FFmpeg dies (e.g. filter graph error), nothing drains the pipe, so SHM
+    slots would never be released and ``acquire`` would block for the full
+    timeout before raising ``queue.Empty``. Surface the FFmpeg log instead.
+    """
+    if process.poll() is not None:
+        raise RuntimeError(
+            f"FFmpeg exited early (code {process.returncode})\n"
+            f"{chr(10).join(stdout_lines).strip()}"
+        )
+    try:
+        return shm_pool.acquire(timeout=timeout)
+    except queue.Empty:
+        if process.poll() is not None:
+            raise RuntimeError(
+                f"FFmpeg exited early (code {process.returncode})\n"
+                f"{chr(10).join(stdout_lines).strip()}"
+            )
+        raise
 
 
 def run_ffmpeg_with_progress(
@@ -212,11 +253,16 @@ def stream_overlay_to_ffmpeg(
         return 0
 
     # Build FFmpeg input args
-    hwaccel = detect_gpu_decoder(encoder)
+    hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
+    # Manual rotation uses CPU filters (vflip/transpose) which cannot take
+    # CUDA frames, so decoded frames must stay in system memory in that case.
+    needs_cpu_rotation = rotation_degrees in (90, 180, 270)
     input_args: list[str] = []
     audio_input_args: list[str] = []
     if hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
+        if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
+            input_args.extend(["-hwaccel_output_format", "cuda"])
     if isinstance(input_files, list) and len(input_files) > 1:
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         with open(concat_txt, "w", encoding="utf-8") as f:
@@ -227,8 +273,10 @@ def stream_overlay_to_ffmpeg(
         audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        auto_rot = "-noautorotate" if container_rotation != 0 else "-autorotate"
-        input_args.extend([auto_rot, "-i", str(input_file)])
+        if container_rotation != 0:
+            input_args.extend(["-noautorotate", "-i", str(input_file)])
+        else:
+            input_args.extend(["-i", str(input_file)])
         audio_input_args.extend(["-i", str(input_file)])
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
@@ -353,7 +401,7 @@ def stream_overlay_to_ffmpeg(
 
                 # Fill initial window — acquire SHM slots and submit jobs
                 for _ in range(min(MAX_IN_FLIGHT, total_overlay_frames)):
-                    slot = shm_pool.acquire(timeout=30.0)
+                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
                     pending.add(ex.submit(render_frame_shm_job, (submitted, slot)))
                     submitted += 1
 
@@ -384,7 +432,7 @@ def stream_overlay_to_ffmpeg(
                         submitted < total_overlay_frames
                         and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
                     ):
-                        slot = shm_pool.acquire(timeout=30.0)
+                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
                         pending.add(
                             ex.submit(render_frame_shm_job, (submitted, slot))
                         )
@@ -419,6 +467,8 @@ def stream_overlay_to_ffmpeg(
         print("[STREAM] FFmpeg pipe closed unexpectedly.", flush=True)
     except Exception as e:
         print(f"[STREAM] Error: {e}", flush=True)
+        extra = "\n".join(stdout_lines).strip()
+        print(f"[STREAM] FFmpeg Output Log:\n{extra}", flush=True)
         import traceback
         traceback.print_exc()
         pipe_done.set()

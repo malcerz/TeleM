@@ -35,12 +35,10 @@ def render_time_block(
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
     
-    tb_cfg_str = str(sorted(cfg.items()))
-    global_cfg_str = str(sorted(layout.get("global", {}).items()))
-    
     cache_key = _static_cache_key(
         "time_block", canvas_w, canvas_h, font_path,
-        date_text, time_text, tb_cfg_str, global_cfg_str
+        date_text, time_text, cfg.get("label", "Czas"),
+        cfg.get("font_label"), cfg.get("font_date"), cfg.get("font_time")
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)
