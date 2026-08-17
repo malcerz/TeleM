@@ -197,11 +197,23 @@ class RenderTab(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setVisible(False)
+        # Grubszy, czytelny pasek (tylko prezentacja; logika bez zmian)
+        self.progress.setMinimumHeight(10)
+        self.progress.setStyleSheet(
+            "QProgressBar { min-height: 10px; border: 1px solid #999; "
+            "border-radius: 5px; background: #eee; text-align: center; }"
+            "QProgressBar::chunk { background-color: #2e8b57; "
+            "border-radius: 5px; }"
+        )
         vbox.addWidget(self.progress)
 
+        # Statystyki: tworzone RAZ, jedna linia, czarny tekst, stała
+        # wysokość (bez re-layoutu / migania podczas aktualizacji).
         self.lbl_stats = QLabel("Gotowy")
-        self.lbl_stats.setStyleSheet("color: #ddd; font-size: 12px;")
-        self.lbl_stats.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.lbl_stats.setStyleSheet("QLabel { color: black; font-size: 12px; }")
+        self.lbl_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_stats.setWordWrap(False)
+        self.lbl_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         vbox.addWidget(self.lbl_stats)
 
     def _build_inout_bar(self) -> QHBoxLayout:
@@ -443,13 +455,12 @@ class RenderTab(QWidget):
         )
         self._end_render()
 
-    def _on_progress(self, _percent: int, text: str) -> None:
-        # Legacy progress_cb (kontrakt: pierwszy arg to LICZBA KLATEK, nie
-        # procent — pasek jest sterowany przez sig_render_progress). Tutaj
-        # tylko propagujemy tekst statusu, bez ustawiania paska (unika to
-        # fałszywego 100% już po ~100 klatkach).
-        if self._rendering:
-            self.lbl_stats.setText(text)
+    def _on_progress(self, _percent: int, _text: str) -> None:
+        # Legacy progress_cb — NIE ustawia już tekstu statystyk.
+        # Jedyny źródło tekstu to _set_stats (przez sig_render_progress);
+        # ustawianie go tutaj dawało 2× setText na event (tekst eksportera
+        # 1-liniowy + 6-liniowy format) → miganie QLabel / reflow layoutu.
+        return
 
     def _on_render_progress(self, completed: int, total: int, elapsed: float,
                             fps: float, hud_state) -> None:
@@ -478,7 +489,7 @@ class RenderTab(QWidget):
         if total and completed >= 0:
             pct = (completed / total) * 100.0
             frame_txt = f"{completed} / {total}"
-            pct_txt = f"{pct:.1f} %"
+            pct_txt = f"{pct:.1f}%"
         else:
             frame_txt = "--"
             pct_txt = "--"
@@ -491,13 +502,12 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if elapsed > 0 else "--:--"
         fps_txt = f"{fps:.1f}" if fps > 0 else "--"
+        # Jedna linia — bez newline, bez łamania; stała wysokość labela
+        # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
-            f"Frame:    {frame_txt}\n"
-            f"Progress: {pct_txt}\n"
-            f"FPS:      {fps_txt}\n"
-            f"Elapsed:  {elapsed_txt}\n"
-            f"ETA:      {eta_txt}\n"
-            f"Status:   {status}"
+            f"Frame: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
+            f"   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+            f"   |   {status}"
         )
 
     def _on_finished(self, _stats: dict, output: str) -> None:
