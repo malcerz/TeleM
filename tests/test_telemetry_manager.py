@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import pytest
@@ -400,8 +401,8 @@ class TestSmartTimeOffsetTrackAlignment:
         assert _align_offset_by_track(None, None) is None
         assert _align_offset_by_track([], []) is None
 
-    def test_align_offset_by_track_negative_offset(self) -> None:
-        """Video clock 1h AHEAD of FIT -> positive offset to apply."""
+    def test_align_offset_by_track_requires_absolute_overlap(self) -> None:
+        """Track scoring does not invent a file-start offset without overlap."""
         video_start = datetime(2026, 7, 29, 6, 27, 54)
         fit_start = video_start - timedelta(hours=1)  # Garmin clock 1h behind
 
@@ -409,4 +410,78 @@ class TestSmartTimeOffsetTrackAlignment:
         records = self._fit_records(fit_start)
 
         offset = _align_offset_by_track(records, gpmf)
-        assert offset == timedelta(hours=1)
+        assert offset is None
+
+    def test_absolute_trajectory_refinement_preserves_sign_convention(self) -> None:
+        """FIT shifted by +1.2 s requires offset -1.2 s to align it."""
+        start = datetime(2026, 7, 29, 6, 27, 54)
+        gpmf = self._gpmf_track(start)
+        records = [
+            {"timestamp": dt + timedelta(seconds=1.2), "lat": lat, "lon": lon}
+            for dt, lat, lon in gpmf
+        ]
+
+        offset = _compute_smart_time_offset(
+            records[0]["timestamp"], records[-1]["timestamp"], start,
+            records=records, gpmf_track=gpmf,
+        )
+        assert offset.total_seconds() == pytest.approx(-1.2, abs=0.2)
+
+
+    def test_absolute_anchor_wins_over_later_repeated_segment(self) -> None:
+        """A later spatially identical segment must not replace the time anchor."""
+        start = datetime(2026, 7, 29, 6, 0, 0)
+        route = [(54.0, 18.0), (54.001, 18.0), (54.002, 18.001)]
+        gpmf = [(start + timedelta(seconds=i), *pos) for i, pos in enumerate(route)]
+        records = [
+            {"timestamp": start + timedelta(seconds=i), "lat": lat, "lon": lon}
+            for i, (lat, lon) in enumerate(route)
+        ]
+        records += [
+            {"timestamp": start + timedelta(seconds=600 + i), "lat": lat, "lon": lon}
+            for i, (lat, lon) in enumerate(route)
+        ]
+        assert _compute_smart_time_offset(
+            records[0]["timestamp"], records[-1]["timestamp"], start,
+            records=records, gpmf_track=gpmf,
+        ) == timedelta(0)
+
+    def test_short_gpmf_long_fit_uses_temporal_overlap(self) -> None:
+        """A short clip is aligned without requiring FIT and GPMF to have equal length."""
+        start = datetime(2026, 7, 29, 6, 0, 0)
+        route = [(54.0 + i * 0.001, 18.0 + i * 0.001) for i in range(12)]
+        gpmf = [(start + timedelta(seconds=i), *pos) for i, pos in enumerate(route)]
+        records = [
+            {"timestamp": start + timedelta(seconds=i), "lat": lat, "lon": lon}
+            for i, (lat, lon) in enumerate(route)
+        ]
+        records.extend(
+            {"timestamp": start + timedelta(seconds=60 + i), "lat": 55.0, "lon": 19.0}
+            for i in range(600)
+        )
+        assert _compute_smart_time_offset(
+            records[0]["timestamp"], records[-1]["timestamp"], start,
+            records=records, gpmf_track=gpmf,
+        ) == timedelta(0)
+
+
+@pytest.mark.skipif(
+    not (Path("Video/GX020079.json").exists() and Path("Video/Morning_Ride.fit").exists()),
+    reason="real SmartSync fixtures not present",
+)
+def test_real_gx020079_morning_ride_prefers_absolute_anchor() -> None:
+    """Regression: the real case must not select the old -27:45 segment."""
+    import json
+
+    from src.telemetry_extract import extract_gps_track, find_gps_anchor
+    from telemetry_fit import parse_fit
+
+    with open("Video/GX020079.json", encoding="utf-8") as handle:
+        records = json.load(handle)
+    gpmf_track = extract_gps_track(records)
+    fit_records = parse_fit("Video/Morning_Ride.fit")
+    offset = _compute_smart_time_offset(
+        fit_records[0]["timestamp"], fit_records[-1]["timestamp"],
+        find_gps_anchor(records), fit_records, gpmf_track,
+    )
+    assert offset.total_seconds() == pytest.approx(-1.0, abs=2.0)

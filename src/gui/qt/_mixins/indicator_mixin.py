@@ -55,7 +55,7 @@ class IndicatorMixin:
         defaults: dict[str, Any] = {
             "enabled": True, "label": key, "x": 50.0, "y": 50.0,
             "rotation": 0, "form": "text", "font_size": 2.5,
-            "size": 10.0, "thickness": 3, "min_val": 0, "max_val": 100,
+            "size": 2.5, "thickness": 3, "min_val": 0, "max_val": 100,
             "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
             # Text
             "text_offset_x": 0.0, "text_offset_y": 0.0,
@@ -115,6 +115,8 @@ class IndicatorMixin:
         _form, _form_overrides = get_form_for_key(key)
         defaults["form"] = _form
         defaults.update(_form_overrides)
+        if defaults.get("form") == "text":
+            defaults["size"] = defaults["font_size"]
 
         # time_display – własna forma, po get_form_for_key (jak track_map)
         if key == "time_display":
@@ -178,6 +180,11 @@ class IndicatorMixin:
             samples = self.telemetry.exposure_samples
         elif key in ("temp_text",):
             samples = self.telemetry.temperature_samples
+        elif key in {
+            "accel_x_text", "accel_y_text", "accel_z_text", "accel_magnitude_text",
+            "gyro_x_text", "gyro_y_text", "gyro_z_text", "gyro_magnitude_text",
+        }:
+            samples = getattr(self.telemetry, key[:-5] + "_samples", [])
 
         if not samples:
             return None, None
@@ -333,6 +340,27 @@ class IndicatorMixin:
             ))
 
         # ── GPX ───────────────────────────────────────────────────────
+        imu_streams = (
+            ("accel_x", "Accelerometer X", "m/s"),
+            ("accel_y", "Accelerometer Y", "m/s"),
+            ("accel_z", "Accelerometer Z", "m/s"),
+            ("accel_magnitude", "Accelerometer Magnitude", "m/s"),
+            ("gyro_x", "Gyroscope X", "rad/s"),
+            ("gyro_y", "Gyroscope Y", "rad/s"),
+            ("gyro_z", "Gyroscope Z", "rad/s"),
+            ("gyro_magnitude", "Gyroscope Magnitude", "rad/s"),
+        )
+        for field_name, display_name, unit in imu_streams:
+            samples = getattr(tm, f"{field_name}_samples", [])
+            if samples:
+                vals = [v for _, v in samples]
+                streams.append(DataStream(
+                    key=f"{field_name}_text", display_name=display_name,
+                    source="gpmf", category="sensor", unit=unit,
+                    suggested_form="chart", sample_count=len(samples),
+                    value_range=(min(vals), max(vals)),
+                ))
+
         if tm.gpx_speed_samples:
             vals = [v for _, v in tm.gpx_speed_samples]
             streams.append(DataStream(
@@ -471,4 +499,14 @@ class IndicatorMixin:
             field_name = ind_key[4:-5]
             return self._window_average(
                 self.telemetry.resolve_samples(field_name, "fit", indicator_key=ind_key), target_dt, window)
+        imu_field = {
+            "accel_x_text": "accel_x", "accel_y_text": "accel_y",
+            "accel_z_text": "accel_z", "accel_magnitude_text": "accel_magnitude",
+            "gyro_x_text": "gyro_x", "gyro_y_text": "gyro_y",
+            "gyro_z_text": "gyro_z", "gyro_magnitude_text": "gyro_magnitude",
+        }.get(ind_key)
+        if imu_field:
+            return self._window_average(
+                self.telemetry.resolve_samples(imu_field, source, indicator_key=ind_key),
+                target_dt, window)
         return None

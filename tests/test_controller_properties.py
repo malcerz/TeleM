@@ -2,7 +2,8 @@
 
 Regression: "Size" on the Text tab (font_size) must affect only the label font
 for gauge/chart/bar — it must NOT resize the whole widget (which `size` does).
-For the text form the two stay in sync (unchanged behaviour).
+For the text form ``font_size`` is canonical; legacy ``size`` events must not
+overwrite it.
 
 The logic lives in the dependency-free ``_sync_size_font_fields`` helper
 (``src.gui.qt.models``), so these tests stay fast without importing the full
@@ -50,11 +51,10 @@ def test_text_font_size_still_syncs_size():
     assert cfg["size"] == 3.0
 
 
-def test_text_size_still_syncs_font_size():
-    """Changing "Rozmiar" on a text indicator still updates font_size."""
+def test_legacy_text_size_event_does_not_jump_font_size():
+    """An old size event must not turn a legacy 2px font into a 7px font."""
     cfg = {"enabled": True, "form": "text", "size": 10.0, "font_size": 2.0}
     cfg["size"] = 7.0
     _sync_size_font_fields(cfg, "size")
     assert cfg["size"] == 7.0
-    assert cfg["font_size"] == 7.0
-
+    assert cfg["font_size"] == 2.0

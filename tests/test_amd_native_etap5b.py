@@ -39,7 +39,7 @@ def test_current_layout_uses_only_four_dynamic_fit_fields() -> None:
     plan = build_active_fit_field_plan(layout, DISCOVERED)
 
     assert plan["active_fit_fields"] == [
-        "cadence", "enhanced_speed", "gopro_battery", "heart_rate"
+        "cadence", "enhanced_speed", "heart_rate", "temperature"
     ]
     assert plan["active_standard_resolve_fields"] == []
     assert set(plan["inactive_fit_fields"]) == DISCOVERED - set(
@@ -114,6 +114,5 @@ def test_disabled_fit_indicator_is_not_resolved() -> None:
     assert plan["active_fit_fields"] == []
     assert plan["inactive_fit_fields"] == ["K1"]
     assert calls == []
-    # Existing compatibility behaviour keeps a zero-valued placeholder for
-    # non-hardcoded layout keys; the disabled compositor entry is not rendered.
-    assert data["extra_indicators"]["fit_K1_text"][0] == 0.0
+    # Disabled/missing dynamic fields do not become synthetic zeroes.
+    assert data["extra_indicators"]["fit_K1_text"][0] is None

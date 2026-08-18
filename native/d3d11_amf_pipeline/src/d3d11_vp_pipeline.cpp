@@ -940,6 +940,37 @@ void D3D11VideoProcessorPipeline::SetMapGpuEnabled(bool enabled) {
     if (enabled) InitializeMapCompositor();
 }
 
+void D3D11VideoProcessorPipeline::SetAboveMapGpuEnabled(bool enabled) {
+    m_aboveMapGpuEnabled = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+bool D3D11VideoProcessorPipeline::UpdateAboveMapTexture(
+    UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, bool active) {
+    if (!rgbaData || width == 0 || height == 0 || stride < width * 4 ||
+        !m_device || !m_context) return false;
+    m_aboveMapActive = active;
+    if (!active) return true;
+    if (!m_aboveMapTexture || m_aboveMapW != width || m_aboveMapH != height) {
+        if (m_aboveMapSRV) { m_aboveMapSRV->Release(); m_aboveMapSRV = nullptr; }
+        if (m_aboveMapTexture) { m_aboveMapTexture->Release(); m_aboveMapTexture = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width; desc.Height = height; desc.MipLevels = 1;
+        desc.ArraySize = 1; desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_aboveMapTexture);
+        if (FAILED(hr)) return false;
+        hr = m_device->CreateShaderResourceView(m_aboveMapTexture, nullptr, &m_aboveMapSRV);
+        if (FAILED(hr) || !m_aboveMapSRV) return false;
+        m_aboveMapW = width; m_aboveMapH = height;
+    }
+    m_aboveMapDstX = dstX; m_aboveMapDstY = dstY;
+    m_context->UpdateSubresource(m_aboveMapTexture, 0, nullptr, rgbaData, stride, 0);
+    return true;
+}
+
 void D3D11VideoProcessorPipeline::SetMapDumpPath(const char* path) {
     m_mapDumpPath[0] = 0;
     if (path) {
@@ -1120,6 +1151,8 @@ void D3D11VideoProcessorPipeline::ReleaseMapResources() {
     if (m_mapShaderView) { m_mapShaderView->Release(); m_mapShaderView = nullptr; }
     if (m_mapTexture) { m_mapTexture->Release(); m_mapTexture = nullptr; }
     if (m_mapReadbackStaging) { m_mapReadbackStaging->Release(); m_mapReadbackStaging = nullptr; }
+    if (m_aboveMapSRV) { m_aboveMapSRV->Release(); m_aboveMapSRV = nullptr; }
+    if (m_aboveMapTexture) { m_aboveMapTexture->Release(); m_aboveMapTexture = nullptr; }
     if (m_hudUAV) { m_hudUAV->Release(); m_hudUAV = nullptr; }
 }
 
@@ -1642,6 +1675,69 @@ bool D3D11VideoProcessorPipeline::BlendGauge() {
     return true;
 }
 
+bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap() {
+    if (!m_aboveMapGpuEnabled || !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
+        return true;
+    if (!m_aboveMapActive && m_aboveMapPrevW == 0) return true;
+
+    struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    UINT zeroCounts[1] = { 0 };
+    ID3D11Buffer* cbs[1] = { m_chartBlendCB };
+    ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+
+    auto dispatch = [&](UINT x, UINT y, UINT w, UINT h, UINT mode,
+                        ID3D11ShaderResourceView* srv) {
+        if (w == 0 || h == 0) return;
+        cb = { x, y, w, h, mode, 0 };
+        m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+        m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, cbs);
+        if (srv) m_context->CSSetShaderResources(0, 1, &srv);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        m_context->Dispatch((w + 15) / 16, (h + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        if (srv) m_context->CSSetShaderResources(0, 1, &nullSRV);
+    };
+
+    // Remove the previous compact layer before any current-frame chart/gauge/
+    // map pass touches the shared HUD canvas.  This is deliberately before
+    // those layers: clearing after GPU_MAP would erase pixels underneath an
+    // old ABOVE bbox.
+    dispatch(m_aboveMapPrevX, m_aboveMapPrevY,
+             m_aboveMapPrevW, m_aboveMapPrevH, 0, nullptr);
+    m_aboveMapPrevW = m_aboveMapPrevH = 0;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::BlendAboveMap() {
+    if (!m_aboveMapGpuEnabled || !m_aboveMapActive || !m_aboveMapSRV ||
+        !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
+        return true;
+
+    struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    UINT zeroCounts[1] = { 0 };
+    ID3D11Buffer* cbs[1] = { m_chartBlendCB };
+    ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+
+    cb = { m_aboveMapDstX, m_aboveMapDstY, m_aboveMapW, m_aboveMapH, 1, 0 };
+    m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+    m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, cbs);
+    m_context->CSSetShaderResources(0, 1, &m_aboveMapSRV);
+    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+    m_context->Dispatch((m_aboveMapW + 15) / 16, (m_aboveMapH + 15) / 16, 1);
+    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    m_context->CSSetShaderResources(0, 1, &nullSRV);
+    m_context->Flush();
+    m_aboveMapPrevX = m_aboveMapDstX; m_aboveMapPrevY = m_aboveMapDstY;
+    m_aboveMapPrevW = m_aboveMapW; m_aboveMapPrevH = m_aboveMapH;
+    return true;
+}
+
 void D3D11VideoProcessorPipeline::ReleaseGaugeResources() {
     if (m_gaugeSRV) { m_gaugeSRV->Release(); m_gaugeSRV = nullptr; }
     if (m_gaugeTexture) { m_gaugeTexture->Release(); m_gaugeTexture = nullptr; }
@@ -1869,6 +1965,10 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     if (diagnosticsEnabled && frameIndex == 30) {
         DumpNV12TextureToFile(m_device, m_context, outTex, "G_base_vp_raw.png");
     }
+    // ETAP 7D: remove the previous ABOVE contribution before any current
+    // chart/gauge/map layer is written to the shared HUD canvas.
+    if (SUCCEEDED(hr) && m_aboveMapGpuEnabled &&
+        !ClearPreviousAboveMap()) { hr = E_FAIL; std::cerr << "[VP] previous map-above clear FAILED" << std::endl; }
     // ETAP 5J: GPU chart blend (clear bbox + straight-alpha "over") into the
     // HUD canvas.  Runs before the map blend so the map (last in Pillow
     // z-order) stays on top; the z-order guard guarantees the charts are
@@ -1903,6 +2003,10 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         outStats->map_blend_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tMap).count();
     }
+    // ETAP 7D: blend only the current compact CPU_ABOVE_MAP layer after
+    // GPU_MAP.  Its previous bbox was cleared at the start of this frame.
+    if (SUCCEEDED(hr) && m_aboveMapGpuEnabled &&
+        !BlendAboveMap()) { hr = E_FAIL; std::cerr << "[VP] map-above blend FAILED" << std::endl; }
     const auto tHud = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && composeHUD &&
         !ComposeHUDDirectNV12(outTex, currentIdx)) { hr = E_FAIL; std::cerr << "[VP] HUD compositor FAILED" << std::endl; }

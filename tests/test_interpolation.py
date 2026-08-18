@@ -47,18 +47,18 @@ class TestInterpolateValueStep:
         samples = _samples(BASE, [100.0, 120.0, 140.0])
         assert interpolate_value(samples, BASE + timedelta(seconds=0.99)) == 100.0
 
-    def test_before_first_clamps_to_first(self):
-        """Przed pierwszą próbką → wartość pierwszej próbki."""
+    def test_before_first_returns_none(self):
+        """Przed pierwszą próbką → brak wartości."""
         samples = _samples(BASE, [100.0, 120.0])
-        assert interpolate_value(samples, BASE - timedelta(seconds=5)) == 100.0
+        assert interpolate_value(samples, BASE - timedelta(seconds=5)) is None
 
     def test_after_last_clamps_to_last(self):
         """Po ostatniej próbce → wartość ostatniej próbki."""
         samples = _samples(BASE, [100.0, 120.0])
         assert interpolate_value(samples, BASE + timedelta(seconds=99)) == 120.0
 
-    def test_empty_returns_zero(self):
-        assert interpolate_value([], BASE) == 0.0
+    def test_empty_returns_none(self):
+        assert interpolate_value([], BASE) is None
 
     def test_negative_values_preserved(self):
         """Temperatura ujemna nie jest przycinana do 0."""

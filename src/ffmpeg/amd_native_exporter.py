@@ -147,22 +147,48 @@ def _chart_gpu_layout_safe(
 
 
 def _map_gpu_layout_safe(layout: dict) -> tuple[bool, str]:
-    """ETAP 5G z-order guard.  The GPU map path blends the map on top of the
-    GPU HUD canvas.  That reproduces the Pillow result only when track_map is
-    the last rendered indicator (drawn on top).  Any other ordering -> the
-    caller must fall back to CPU_REFERENCE."""
+    """Return whether the single canonical map can use the ordered GPU path."""
     indicators = layout.get("indicators", {})
     if "track_map" not in indicators or not indicators["track_map"].get("enabled", True):
         return True, "no active track_map"
-    enabled_keys = [k for k, cfg in indicators.items() if cfg and cfg.get("enabled", True)]
-    if not enabled_keys:
-        return True, "no active indicators"
-    if enabled_keys[-1] != "track_map":
-        return False, (
-            f"track_map is not the last rendered indicator (last={enabled_keys[-1]}); "
-            "GPU map-on-top would change z-order -> CPU_REFERENCE fallback"
-        )
-    return True, "track_map is the last rendered indicator"
+    map_count = sum(1 for key, cfg in indicators.items()
+                    if cfg and cfg.get("enabled", True) and key == "track_map")
+    if map_count != 1:
+        return False, f"canonical track_map count={map_count}; ordered GPU path requires exactly one"
+    return True, "single canonical track_map -> ordered CPU_BELOW_MAP/GPU_MAP/CPU_ABOVE_MAP"
+
+
+def _ordered_map_layout_parts(layout: dict) -> tuple[dict, dict, list[str]]:
+    """Split one map layout while preserving indicator insertion order."""
+    below = copy.deepcopy(layout)
+    above = copy.deepcopy(layout)
+    below_indicators = {}
+    above_indicators = {}
+    before_map = True
+    after_keys: list[str] = []
+    for key, cfg in layout.get("indicators", {}).items():
+        # compose_overlay renders these before the normal indicator loop even
+        # if a legacy JSON preset places them later in the dict.
+        if key in {"time_block", "time_display"}:
+            below_indicators[key] = copy.deepcopy(cfg)
+            continue
+        if key == "track_map":
+            before_map = False
+            continue
+        if before_map:
+            below_indicators[key] = copy.deepcopy(cfg)
+        else:
+            above_indicators[key] = copy.deepcopy(cfg)
+            after_keys.append(key)
+    below["indicators"] = below_indicators
+    above["indicators"] = {
+        key: cfg for key, cfg in above_indicators.items()
+        if key not in {"time_block", "time_display"}
+    }
+    # custom_texts are rendered after all indicators by Pillow.
+    below["custom_texts"] = []
+    above["custom_texts"] = copy.deepcopy(layout.get("custom_texts", []))
+    return below, above, after_keys
 
 
 class _HUDDirtyRect(ctypes.Structure):
@@ -185,6 +211,43 @@ def _clip_rect(
     if right <= left or bottom <= top:
         return None
     return left, top, right - left, bottom - top
+
+
+def _rendered_bbox_union(
+    bboxes: dict[str, tuple[int, int, int, int]],
+    width: int,
+    height: int,
+    pad: int = 64,
+) -> tuple[int, int, int, int] | None:
+    """Build a conservative crop from actually rendered compositor bboxes."""
+    valid = [
+        tuple(int(v) for v in box)
+        for box in bboxes.values()
+        if box and int(box[2]) > 0 and int(box[3]) > 0
+    ]
+    if not valid:
+        return None
+    left = min(x for x, _y, _w, _h in valid)
+    top = min(y for _x, y, _w, _h in valid)
+    right = max(x + w for x, _y, w, _h in valid)
+    bottom = max(y + h for _x, y, _w, h in valid)
+    return _clip_rect((left, top, right - left, bottom - top), width, height, pad)
+
+
+def _tight_alpha_bbox_from_candidate(
+    image: "Image.Image",
+    candidate: tuple[int, int, int, int] | None,
+) -> tuple[tuple[int, int, int, int] | None, int]:
+    """Find the tight global alpha bbox while scanning only *candidate*."""
+    if candidate is None:
+        return None, 0
+    x, y, width, height = candidate
+    local = image.crop((x, y, x + width, y + height))
+    local_bbox = local.getchannel("A").getbbox()
+    if local_bbox is None:
+        return None, width * height
+    lx, ly, rx, by = local_bbox
+    return (x + lx, y + ly, rx - lx, by - ly), width * height
 
 
 class _FrameAccountant:
@@ -663,9 +726,16 @@ def export_amd_native_d3d11(
     # CPU still renders its 692x692 working image, which is uploaded and
     # resized/composited on the GPU.  Everything else keeps the 5E path.
     compose_layout = layout
+    map_above_layout = None
+    map_after_keys: list[str] = []
     if gpu_map_enabled and "track_map" in layout.get("indicators", {}):
-        compose_layout = copy.deepcopy(layout)
-        del compose_layout["indicators"]["track_map"]
+        compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(layout)
+        print(
+            "[AMD NATIVE D3D11] AMD_MAP_ORDER: "
+            "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP "
+            f"(after={map_after_keys or 'empty'})",
+            flush=True,
+        )
 
     # ── ETAP 5J: GPU chart compositing ─────────────────────────────────
     # CPU_REFERENCE keeps both charts in the Pillow HUD (unchanged).  GPU
@@ -857,6 +927,14 @@ def export_amd_native_d3d11(
     native_dll.telem_amd_update_map.argtypes = [
         c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
         POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_set_above_map_mode.restype = c_int
+    native_dll.telem_amd_set_above_map_mode.argtypes = [c_void_p, c_int]
+    native_dll.telem_amd_update_above_map.restype = c_int
+    native_dll.telem_amd_update_above_map.argtypes = [
+        c_void_p, POINTER(c_uint8), c_uint, c_uint, c_uint,
+        c_uint, c_uint, c_int,
     ]
 
     native_dll.telem_amd_get_map_stats.restype = None
@@ -1077,6 +1155,10 @@ def export_amd_native_d3d11(
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map mode.", flush=True)
         native_dll.telem_amd_close(h_context)
         return False
+    if not native_dll.telem_amd_set_above_map_mode(h_context, 1 if gpu_map_enabled else 0):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure ordered map-above mode.", flush=True)
+        native_dll.telem_amd_close(h_context)
+        return False
     if gpu_map_enabled:
         if not native_dll.telem_amd_set_map_filter(h_context, map_filter):
             print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map filter.", flush=True)
@@ -1157,6 +1239,19 @@ def export_amd_native_d3d11(
         "gauge_upload": [],
         "GPU gauge blend submit": [],
         "GPU chart blend submit": [],
+        # ETAP 8B diagnostic decomposition of the former chart_upload bucket.
+        "chart_plan": [],
+        "chart_rgba_conversion": [],
+        "chart_upload_call": [],
+        "chart_native_submit": [],
+        "chart_gpu_submit": [],
+        "chart_other": [],
+        "above_compose": [],
+        "above_bbox_crop": [],
+        "above_bbox_tracking": [],
+        "above_candidate_crop": [],
+        "above_local_alpha_scan": [],
+        "above_final_crop": [],
         "HUD dirty bbox": [],
         "HUD dirty extract": [],
         "PIL tobytes": [],
@@ -1198,6 +1293,16 @@ def export_amd_native_d3d11(
     # ETAP 5G — GPU map resize/composite counters
     map_geometry_set = False
     map_gpu_frames = 0
+    above_map_frames = 0
+    above_map_visible_frames = 0
+    above_map_uploaded_bytes_total = 0
+    above_candidate_pixels_samples: list[int] = []
+    above_candidate_bbox_samples: list[tuple[int, int, int, int] | None] = []
+    above_final_bbox_samples: list[tuple[int, int, int, int] | None] = []
+    above_candidate_widths: list[float] = []
+    above_candidate_heights: list[float] = []
+    above_final_widths: list[float] = []
+    above_final_heights: list[float] = []
     map_uploaded_bytes_total = 0
     map_upload_times: list[float] = []
     # ETAP 5O — AMF queue diagnostics (frame_idx, wall_s, submitted, received,
@@ -1554,10 +1659,95 @@ def export_amd_native_d3d11(
             overlay_profiler.record("compose.total", compose_elapsed_ms)
             frame_acct.mark("compose")
 
+            # ETAP 7B: render the post-map portion separately.  It is kept as
+            # a compact RGBA crop and is blended by native D3D11 after the map
+            # pass, so an actual overlapping widget remains above the map.
+            above_map_img = None
+            above_map_bbox = None
+            above_compose_ms = 0.0
+            above_bbox_crop_ms = 0.0
+            above_bbox_tracking_ms = 0.0
+            above_candidate_crop_ms = 0.0
+            above_local_alpha_scan_ms = 0.0
+            above_final_crop_ms = 0.0
+            above_candidate_pixels = 0
+            if map_above_layout is not None:
+                above_bboxes: dict[str, tuple[int, int, int, int]] = {}
+                above_compose_start = time.perf_counter()
+                above_full = compose_overlay(
+                    canvas_w=video_width,
+                    canvas_h=video_height,
+                    layout=map_above_layout,
+                    font_path=font_path,
+                    _bboxes=above_bboxes,
+                    gpu_capture_keys=set(),
+                    split_chart_keys=None,
+                    **frame_kwargs,
+                )
+                above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
+                frame_acct.mark("above_compose")
+                tracking_start = time.perf_counter()
+                candidate = _rendered_bbox_union(
+                    above_bboxes, video_width, video_height, pad=64
+                )
+                above_bbox_tracking_ms = (time.perf_counter() - tracking_start) * 1000.0
+                if candidate is not None:
+                    candidate_crop_start = time.perf_counter()
+                    candidate_image = above_full.crop(
+                        (candidate[0], candidate[1],
+                         candidate[0] + candidate[2], candidate[1] + candidate[3])
+                    )
+                    above_candidate_crop_ms = (
+                        time.perf_counter() - candidate_crop_start
+                    ) * 1000.0
+                    alpha_start = time.perf_counter()
+                    local_alpha_bbox = candidate_image.getchannel("A").getbbox()
+                    above_local_alpha_scan_ms = (
+                        time.perf_counter() - alpha_start
+                    ) * 1000.0
+                    above_candidate_pixels = candidate[2] * candidate[3]
+                    if local_alpha_bbox is not None:
+                        lx, ly, rx, by = local_alpha_bbox
+                        above_map_bbox = (
+                            candidate[0] + lx, candidate[1] + ly,
+                            rx - lx, by - ly,
+                        )
+                        final_crop_start = time.perf_counter()
+                        above_map_img = candidate_image.crop(local_alpha_bbox)
+                        above_final_crop_ms = (
+                            time.perf_counter() - final_crop_start
+                        ) * 1000.0
+                above_bbox_crop_ms = (
+                    above_bbox_tracking_ms + above_candidate_crop_ms
+                    + above_local_alpha_scan_ms + above_final_crop_ms
+                )
+            timing_samples["above_compose"].append(above_compose_ms)
+            timing_samples["above_bbox_crop"].append(above_bbox_crop_ms)
+            timing_samples["above_bbox_tracking"].append(above_bbox_tracking_ms)
+            timing_samples["above_candidate_crop"].append(above_candidate_crop_ms)
+            timing_samples["above_local_alpha_scan"].append(above_local_alpha_scan_ms)
+            timing_samples["above_final_crop"].append(above_final_crop_ms)
+            above_candidate_pixels_samples.append(above_candidate_pixels)
+            above_candidate_bbox_samples.append(candidate if map_above_layout is not None else None)
+            above_final_bbox_samples.append(above_map_bbox)
+            if candidate is not None:
+                above_candidate_widths.append(float(candidate[2]))
+                above_candidate_heights.append(float(candidate[3]))
+            if above_map_bbox is not None:
+                above_final_widths.append(float(above_map_bbox[2]))
+                above_final_heights.append(float(above_map_bbox[3]))
+            frame_acct.mark("above_bbox_crop")
+
             # ── ETAP 5J / 5K: upload the GPU charts to persistent textures. ──
             # GPU (5J): full 1160x511 chart RGBA per frame.  GPU_SPLIT (5K):
             # the static 1160x511 layer once per cache invalidation + small
             # dynamic cursor/value tiles per frame (no full per-frame upload).
+            chart_plan_start = time.perf_counter()
+            frame_acct.mark("chart_plan")
+            chart_plan_ms = (time.perf_counter() - chart_plan_start) * 1000.0
+            chart_block_start = time.perf_counter()
+            chart_rgba_conversion_ms = 0.0
+            chart_upload_call_ms = 0.0
             if gpu_capture:
                 chart_to_bytes_ms = 0.0
                 chart_upload_ms = 0.0
@@ -1713,9 +1903,32 @@ def export_amd_native_d3d11(
                             chart_uploaded_bytes_total += int(ch_uploaded.value)
                 timing_samples["chart_cpu_tobytes"].append(chart_to_bytes_ms)
                 timing_samples["chart_python_upload"].append(chart_upload_ms)
-                frame_acct.mark("chart_upload")
                 timing_samples["chart_dynamic_tobytes"].append(chart_dyn_tobytes_ms)
                 timing_samples["chart_dynamic_upload"].append(chart_dyn_upload_ms)
+                chart_rgba_conversion_ms = chart_to_bytes_ms + chart_dyn_tobytes_ms
+                chart_upload_call_ms = chart_upload_ms + chart_dyn_upload_ms
+            else:
+                timing_samples["chart_cpu_tobytes"].append(0.0)
+                timing_samples["chart_python_upload"].append(0.0)
+                timing_samples["chart_dynamic_tobytes"].append(0.0)
+                timing_samples["chart_dynamic_upload"].append(0.0)
+            chart_block_ms = (time.perf_counter() - chart_block_start) * 1000.0
+            timing_samples["chart_plan"].append(chart_plan_ms)
+            timing_samples["chart_rgba_conversion"].append(chart_rgba_conversion_ms)
+            timing_samples["chart_upload_call"].append(chart_upload_call_ms)
+            timing_samples["chart_native_submit"].append(chart_upload_call_ms)
+            timing_samples["chart_gpu_submit"].append(0.0)
+            timing_samples["chart_other"].append(
+                max(0.0, chart_block_ms - chart_rgba_conversion_ms - chart_upload_call_ms)
+            )
+            # ETAP 8B: the old marker covered everything since compose,
+            # including CPU_ABOVE_MAP.  Keep the frame accountant exclusive,
+            # but split the chart block into diagnostic stages.
+            # The per-operation values above are nested timing samples.  The
+            # exclusive frame-accounting remainder is the whole chart block;
+            # keep it under chart_other so it cannot be mistaken for a single
+            # upload call.
+            frame_acct.mark("chart_other")
 
             # ── ETAP 5L: upload the GPU speed gauge (exact CPU RGBA, final
             # size, 1:1 texel, no resample) to a persistent texture. ─────
@@ -1766,6 +1979,38 @@ def export_amd_native_d3d11(
                 frame_acct.mark("gauge_upload")
 
             # ── ETAP 5G: GPU map resize/composite ────────────────────────
+            if map_above_layout is not None:
+                if above_map_img is not None and above_map_bbox is not None:
+                    ax, ay, _aw, _ah = above_map_bbox
+                    above_bytes = above_map_img.tobytes("raw", "RGBA")
+                    above_ptr = (c_uint8 * len(above_bytes)).from_buffer_copy(above_bytes)
+                    above_ok = native_dll.telem_amd_update_above_map(
+                        h_context, above_ptr, above_map_img.width, above_map_img.height,
+                        above_map_img.width * 4, ax, ay, 1,
+                    )
+                else:
+                    empty = (c_uint8 * 4)(0, 0, 0, 0)
+                    above_ok = native_dll.telem_amd_update_above_map(
+                        h_context, empty, 1, 1, 4, 0, 0, 0,
+                    )
+                if not above_ok:
+                    print(
+                        f"[AMD NATIVE D3D11] ERROR: ordered CPU_ABOVE_MAP update failed on frame {frame_idx}",
+                        flush=True,
+                    )
+                else:
+                    above_map_frames += 1
+                    if above_map_img is not None:
+                        above_map_visible_frames += 1
+                        above_map_uploaded_bytes_total += above_map_img.width * above_map_img.height * 4
+                    if frame_idx == 0:
+                        print(
+                            f"[AMD NATIVE D3D11] AMD_MAP_ORDER above layer: "
+                            f"{'VISIBLE' if above_map_img is not None else 'EMPTY'} "
+                            f"bbox={above_map_bbox}",
+                            flush=True,
+                        )
+
             if gpu_map_enabled:
                 map_start = time.perf_counter()
                 map_img, map_dst = render_map_working_image(
@@ -2671,6 +2916,10 @@ def export_amd_native_d3d11(
             "map_filter": map_filter_name,
             "map_filter_index": map_filter,
             "map_gpu_frames": map_gpu_frames,
+            "map_order": "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP" if gpu_map_enabled else "CPU_REFERENCE",
+            "map_above_update_frames": above_map_frames,
+            "map_above_visible_frames": above_map_visible_frames,
+            "map_above_uploaded_bytes_total": above_map_uploaded_bytes_total,
             "map_upload_frames": len(map_upload_times),
             "map_upload_bytes_total": map_uploaded_bytes_total,
             "map_upload_mib_per_frame": (
@@ -2682,6 +2931,25 @@ def export_amd_native_d3d11(
             "map_ab": (
                 {key: _value_summary(values) for key, values in map_ab_results.items()}
                 if map_ab_readback and map_ab_results["mae"] else None
+            ),
+        },
+        "etap8c": {
+            "architecture": "rendered bbox union -> candidate crop -> local alpha scan -> compact crop",
+            "full_frame_alpha_scan": False,
+            "full_frame_alpha_pixels_scanned_per_frame": 0,
+            "candidate_pixels": _value_summary(
+                [float(v) for v in above_candidate_pixels_samples]
+            ) if above_candidate_pixels_samples else None,
+            "candidate_width": _value_summary(above_candidate_widths) if above_candidate_widths else None,
+            "candidate_height": _value_summary(above_candidate_heights) if above_candidate_heights else None,
+            "final_width": _value_summary(above_final_widths) if above_final_widths else None,
+            "final_height": _value_summary(above_final_heights) if above_final_heights else None,
+            "candidate_bbox_count": sum(1 for v in above_candidate_bbox_samples if v),
+            "final_bbox_count": sum(1 for v in above_final_bbox_samples if v),
+            "above_upload_bytes_total": above_map_uploaded_bytes_total,
+            "above_upload_bytes_per_frame": (
+                above_map_uploaded_bytes_total / max(1, above_map_frames)
+                if above_map_frames else 0.0
             ),
         },
         "etap5j": {

@@ -116,6 +116,14 @@ class RenderMixin:
             "speed_samples": speed,
             "track_samples": track,
             "alt_samples": alt,
+            "accel_x_samples": self.telemetry.accel_x_samples,
+            "accel_y_samples": self.telemetry.accel_y_samples,
+            "accel_z_samples": self.telemetry.accel_z_samples,
+            "accel_magnitude_samples": self.telemetry.accel_magnitude_samples,
+            "gyro_x_samples": self.telemetry.gyro_x_samples,
+            "gyro_y_samples": self.telemetry.gyro_y_samples,
+            "gyro_z_samples": self.telemetry.gyro_z_samples,
+            "gyro_magnitude_samples": self.telemetry.gyro_magnitude_samples,
         }
 
         # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)

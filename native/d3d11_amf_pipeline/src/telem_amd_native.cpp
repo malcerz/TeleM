@@ -298,6 +298,24 @@ TELEM_EXPORT int telem_amd_update_map(
     return 1;
 }
 
+// ETAP 7B: compact CPU_ABOVE_MAP layer.  It is intentionally a single
+// ordered layer, not a generalized compositor or a second map path.
+TELEM_EXPORT int telem_amd_set_above_map_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetAboveMapGpuEnabled(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_above_map(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT dstX, UINT dstY, int active) {
+    if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveMapTexture(
+        width, height, pRGBA, stride, dstX, dstY, active != 0) ? 1 : 0;
+}
+
 // Diagnostic A/B readback of the GPU-resampled 691x691 RGBA map.  Not used by
 // the production export path.
 TELEM_EXPORT int telem_amd_get_map_resample(

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +48,96 @@ try:
     _QT_MULTIMEDIA_AVAILABLE = True
 except ImportError:
     _QT_MULTIMEDIA_AVAILABLE = False
+
+
+GPMF_CACHE_VERSION = 5
+
+
+def _gpmf_cache_metadata_path(cache_path: Path) -> Path:
+    """Return the sidecar path kept separate from telemetry JSON consumers."""
+    return cache_path.with_name(f"{cache_path.name}.meta.json")
+
+
+def _atomic_write_json(path: Path, value: object) -> None:
+    """Write JSON and replace the destination atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(value, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+
+
+def _write_gpmf_cache(
+    cache_path: Path,
+    source_path: Path,
+    data: object,
+    generator: str,
+) -> None:
+    """Atomically write telemetry JSON and its source/version contract."""
+    source_stat = source_path.stat()
+    metadata = {
+        "_telem_cache": {
+            "version": GPMF_CACHE_VERSION,
+            "source_file": str(source_path),
+            "source_size": source_stat.st_size,
+            "source_mtime_ns": source_stat.st_mtime_ns,
+            "generator": generator.lower(),
+        }
+    }
+    _atomic_write_json(cache_path, data)
+    _atomic_write_json(_gpmf_cache_metadata_path(cache_path), metadata)
+
+
+def _load_valid_gpmf_cache(
+    source_path: Path,
+    cache_path: Path,
+) -> tuple[object | None, str | None]:
+    """Load cache only when its version and source fingerprint are proven."""
+    if not cache_path.exists():
+        return None, "cache_missing"
+
+    metadata_path = _gpmf_cache_metadata_path(cache_path)
+    if not metadata_path.exists():
+        return None, "legacy_cache_no_version"
+
+    try:
+        metadata = load_json_with_fallback(metadata_path)
+    except Exception:
+        return None, "invalid_metadata"
+
+    contract = metadata.get("_telem_cache") if isinstance(metadata, dict) else None
+    required = ("version", "source_size", "source_mtime_ns", "generator")
+    if not isinstance(contract, dict) or any(key not in contract for key in required):
+        return None, "missing_metadata"
+    if contract["version"] != GPMF_CACHE_VERSION:
+        return None, "cache_version_mismatch"
+
+    try:
+        source_stat = source_path.stat()
+    except OSError:
+        return None, "source_missing"
+    if contract["source_size"] != source_stat.st_size:
+        return None, "source_size_changed"
+    if contract["source_mtime_ns"] != source_stat.st_mtime_ns:
+        return None, "source_mtime_changed"
+
+    try:
+        data = load_json_with_fallback(cache_path)
+    except Exception:
+        return None, "invalid_json"
+    if not data:
+        return None, "invalid_payload"
+    return data, None
 
 
 class ProjectMixin:
@@ -160,7 +252,9 @@ class ProjectMixin:
                 else:
                     self._cut_regions = []
 
-                # Zarejestruj pola FIT
+                # Zarejestruj pola FIT; clear dynamic availability when the
+                # newly selected file has no FIT data.
+                self.fit_ext_fields = []
                 if self.telemetry.fit_data:
                     fit_keys = self.telemetry.register_fit_fields(
                         self.layout, BUILTIN_FIELDS,
@@ -223,18 +317,18 @@ class ProjectMixin:
             return
 
         meta = self.video_path.with_suffix(".json")
-        if meta.exists():
-            records = None
+        data, cache_reason = _load_valid_gpmf_cache(self.video_path, meta)
+        if data is not None:
             try:
-                data = load_json_with_fallback(meta)
-                if isinstance(data, dict) and ("indicators" in data or "version" in data):
-                    print("[Telemetry] Wykryto plik JSON będący presetem układu, a nie cache telemetrii. Ignoruję.", flush=True)
-                else:
-                    records = ensure_records_list(data)
-            except Exception as e:
-                print(f"[Telemetry] Błąd odczytu JSON cache: {e}", flush=True)
-
+                records = ensure_records_list(data)
+            except Exception:
+                records = None
+                cache_reason = "invalid_payload"
             if records:
+                print(
+                    f"[Telemetry Cache] HIT file={meta.name} "
+                    f"version={GPMF_CACHE_VERSION}", flush=True,
+                )
                 self.signals.sig_progress.emit(45, "Wczytywanie JSON...")
                 self.telemetry.records = records
                 self.telemetry.load_gpmf_from_exiftool(self.video_path)
@@ -242,7 +336,10 @@ class ProjectMixin:
                 self.telemetry.load_gps_track(records)
                 self.meta_path = meta
                 return
-
+        print(
+            f"[Telemetry Cache] MISS reason={cache_reason or 'invalid_cache'}",
+            flush=True,
+        )
         # ── JSON nie istnieje → generuj synchronicznie (blokada) ──────
         self.signals.sig_progress.emit(45, "Generowanie metadanych...")
 
@@ -286,8 +383,11 @@ class ProjectMixin:
         if data:
             flat = data[0] if isinstance(data, list) else data
             json_path = self.video_path.with_suffix(".json")
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(flat, f, indent=2, ensure_ascii=False)
+            _write_gpmf_cache(json_path, self.video_path, flat, method)
+            print(
+                f"[Telemetry Cache] REGENERATED file={json_path.name}",
+                flush=True,
+            )
             self.meta_path = json_path
 
             self.signals.sig_progress.emit(65, f"Parsowanie danych ({method})...")
@@ -331,6 +431,7 @@ class ProjectMixin:
         def worker() -> None:
             try:
                 data = None
+                method = ""
                 # Próbuj GPMF
                 if _GPMF_AVAILABLE and self.ffmpeg_exe and self.ffprobe_exe:
                     try:
@@ -338,6 +439,8 @@ class ProjectMixin:
                             str(self.video_paths[0]),
                             self.ffmpeg_exe, self.ffprobe_exe,
                         )
+                        if data:
+                            method = "GPMF"
                     except Exception:
                         pass
 
@@ -357,12 +460,16 @@ class ProjectMixin:
                     if proc.returncode != 0:
                         raise RuntimeError(proc.stderr or "ExifTool error")
                     data = json.loads(proc.stdout)
+                    method = "ExifTool"
 
                 if data:
                     flat = data[0] if isinstance(data, list) else data
                     json_path = self.video_path.with_suffix(".json")
-                    with open(json_path, "w", encoding="utf-8") as f:
-                        json.dump(flat, f, indent=2, ensure_ascii=False)
+                    _write_gpmf_cache(json_path, self.video_path, flat, method)
+                    print(
+                        f"[Telemetry Cache] REGENERATED file={json_path.name}",
+                        flush=True,
+                    )
                     self.meta_path = json_path
 
                     records = ensure_records_list([flat])

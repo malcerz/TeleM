@@ -90,6 +90,11 @@ public:
     void SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH);
     void SetMapFilter(int filter);
     void SetMapGpuEnabled(bool enabled);
+    // ETAP 7B: one compact CPU layer blended after the GPU map.
+    bool UpdateAboveMapTexture(
+        UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+        UINT dstX, UINT dstY, bool active);
+    void SetAboveMapGpuEnabled(bool enabled);
     // Diagnostic: dump the GPU-resampled 691x691 RGBA map texture to a PNG
     // right after the resample dispatch (used to debug readback parity).
     void SetMapDumpPath(const char* path);
@@ -236,6 +241,8 @@ private:
     bool NormalizeD3D11VARangeNV12(UINT poolIndex);
     bool InitializeMapCompositor();
     bool ResampleAndBlendMap();
+    bool ClearPreviousAboveMap();
+    bool BlendAboveMap();
     void ReleaseMapResources();
     // ETAP 5J — GPU chart compositor
     bool InitializeChartCompositor();
@@ -282,6 +289,15 @@ private:
     double m_mapResampleMs = 0.0;
     double m_mapBlendMs = 0.0;
     char m_mapDumpPath[512] = { 0 };
+
+    ID3D11Texture2D* m_aboveMapTexture = nullptr;
+    ID3D11ShaderResourceView* m_aboveMapSRV = nullptr;
+    UINT m_aboveMapDstX = 0, m_aboveMapDstY = 0;
+    UINT m_aboveMapW = 0, m_aboveMapH = 0;
+    UINT m_aboveMapPrevX = 0, m_aboveMapPrevY = 0;
+    UINT m_aboveMapPrevW = 0, m_aboveMapPrevH = 0;
+    bool m_aboveMapActive = false;
+    bool m_aboveMapGpuEnabled = false;
 
     // ── ETAP 5J: GPU chart compositor resources ─────────────────────────
     ID3D11Texture2D* m_chartTexture[CHART_SLOT_COUNT] = { nullptr, nullptr };

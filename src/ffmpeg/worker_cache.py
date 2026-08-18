@@ -201,6 +201,10 @@ def _resolve_cache_samples(
         "speed": "speed_samples", "alt": "alt_samples", "altitude": "alt_samples",
         "dist": "track_samples", "track": "track_samples", "iso": "iso_samples",
         "exposure": "exposure_samples", "temperature": "temperature_samples",
+        "accel_x": "accel_x_samples", "accel_y": "accel_y_samples",
+        "accel_z": "accel_z_samples", "accel_magnitude": "accel_magnitude_samples",
+        "gyro_x": "gyro_x_samples", "gyro_y": "gyro_y_samples",
+        "gyro_z": "gyro_z_samples", "gyro_magnitude": "gyro_magnitude_samples",
     }
     gpx_map = {
         "speed": "gpx_speed_samples", "alt": "gpx_alt_samples", "altitude": "gpx_alt_samples",

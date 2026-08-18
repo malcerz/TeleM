@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.profiling import get_overlay_profiler
+from src.indicators.chart_builder import clip_chart_data
 
 
 _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
@@ -36,7 +37,7 @@ def build_active_fit_field_plan(
     consumers can never cause duplicate per-frame resolution.
     """
     discovered = {str(field) for field in (discovered_fit_fields or [])}
-    active_fit: set[str] = set()
+    configured_fit: set[str] = set()
     active_standard: set[str] = set()
 
     for key, config in layout.get("indicators", {}).items():
@@ -45,7 +46,7 @@ def build_active_fit_field_plan(
         if key.startswith("fit_") and key.endswith("_text"):
             field_name = key[4:-5]
             if field_name:
-                active_fit.add(field_name)
+                configured_fit.add(field_name)
             continue
         standard_field = _STANDARD_RESOLVE_CONSUMERS.get(key)
         if standard_field:
@@ -53,11 +54,11 @@ def build_active_fit_field_plan(
 
     return {
         "discovered_fit_fields": sorted(discovered),
-        "active_fit_fields": sorted(active_fit),
-        "inactive_fit_fields": sorted(discovered - active_fit),
-        "active_fit_fields_missing_samples": sorted(active_fit - discovered),
+        "active_fit_fields": sorted(configured_fit & discovered),
+        "inactive_fit_fields": sorted(discovered - configured_fit),
+        "active_fit_fields_missing_samples": sorted(configured_fit - discovered),
         "active_standard_resolve_fields": sorted(active_standard),
-        "unique_resolve_fields": sorted(active_fit | active_standard),
+        "unique_resolve_fields": sorted((configured_fit & discovered) | active_standard),
     }
 
 
@@ -121,6 +122,8 @@ def prepare_overlay_frame_data(
     indicator_values: dict[str, float] = {}
     for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
                     "alt_visual", "alt_text"):
+        if ind_key not in layout.get("indicators", {}):
+            continue
         ind_cfg = layout.get("indicators", {}).get(ind_key, {})
         if not ind_cfg.get("enabled", True):
             continue
@@ -138,19 +141,25 @@ def prepare_overlay_frame_data(
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
-            indicator_values[ind_key] = interpolate_speed(spd_s, target_dt)
+            indicator_values[ind_key] = interpolate_speed(spd_s, target_dt) if spd_s else None
         elif ind_key in ("dist_visual", "dist_text"):
-            indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
+            indicator_values[ind_key] = interpolate_distance(trk_s, target_dt) if trk_s else None
         elif ind_key in ("alt_visual", "alt_text"):
-            indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
+            indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt) if alt_s else None
 
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
-        "speed_visual", interpolate_speed(speed_samples, target_dt))
+        "speed_visual",
+        indicator_values.get("speed_text", interpolate_speed(speed_samples, target_dt) if speed_samples else None),
+    )
     distance_m = indicator_values.get(
-        "dist_visual", interpolate_distance(track_samples, target_dt))
+        "dist_visual",
+        indicator_values.get("dist_text", interpolate_distance(track_samples, target_dt) if track_samples else None),
+    )
     alt_value = indicator_values.get(
-        "alt_visual", interpolate_altitude(alt_samples, target_dt))
+        "alt_visual",
+        indicator_values.get("alt_text", interpolate_altitude(alt_samples, target_dt) if alt_samples else None),
+    )
 
     def direct_resolve(field_name: str, source: str, indicator_key: str):
         cfg = layout.get("indicators", {}).get(indicator_key)
@@ -170,11 +179,11 @@ def prepare_overlay_frame_data(
     exposure_value = direct_resolve("exposure", exposure_source, "exposure_text")
     temp_value = direct_resolve("temperature", temp_source, "temp_text")
     if iso_value is None and iso_source == "gpmf":
-        iso_value = interpolate_iso(iso_samples or [], target_dt)
+        iso_value = interpolate_iso(iso_samples or [], target_dt) if iso_samples else None
     if exposure_value is None and exposure_source == "gpmf":
-        exposure_value = interpolate_exposure(exposure_samples or [], target_dt)
+        exposure_value = interpolate_exposure(exposure_samples or [], target_dt) if exposure_samples else None
     if temp_value is None and temp_source == "gpmf":
-        temp_value = interpolate_temperature(temperature_samples or [], target_dt)
+        temp_value = interpolate_temperature(temperature_samples or [], target_dt) if temperature_samples else None
     profiler.record(
         "telemetry.interpolation_lookups",
         (time.perf_counter() - section_started) * 1000.0,
@@ -293,7 +302,7 @@ def prepare_overlay_frame_data(
         elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
 
     avg_speed_kmh = 0.0
-    if elapsed_seconds > 0 and distance_m > 0:
+    if elapsed_seconds > 0 and distance_m is not None and distance_m > 0:
         # average speed = total distance / total time * 3.6 (m/s → km/h)
         avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
 
@@ -308,6 +317,16 @@ def prepare_overlay_frame_data(
         "heart_rate": "BPM", "cadence": "rpm", "power": "W",
         "temperature": "\u00b0C", "torque_effectiveness": "%",
         "vertical_oscillation": "mm", "stance_time": "ms",
+    }
+    GPMF_IMU_FIELDS = {
+        "accel_x_text": ("accel_x", "m/s", "Accelerometer X"),
+        "accel_y_text": ("accel_y", "m/s", "Accelerometer Y"),
+        "accel_z_text": ("accel_z", "m/s", "Accelerometer Z"),
+        "accel_magnitude_text": ("accel_magnitude", "m/s", "Accelerometer Magnitude"),
+        "gyro_x_text": ("gyro_x", "rad/s", "Gyroscope X"),
+        "gyro_y_text": ("gyro_y", "rad/s", "Gyroscope Y"),
+        "gyro_z_text": ("gyro_z", "rad/s", "Gyroscope Z"),
+        "gyro_magnitude_text": ("gyro_magnitude", "rad/s", "Gyroscope Magnitude"),
     }
 
     extra_indicators: dict[str, tuple[float, str, str]] = {}
@@ -337,7 +356,20 @@ def prepare_overlay_frame_data(
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
-        extra_indicators[key] = (0.0 if val is None else val, unit, label)
+        extra_indicators[key] = (val, unit, label)
+
+    # Keep configured-but-unavailable FIT indicators represented as None so
+    # presentation can hide them without deleting the user's layout config.
+    configured_fit_keys = {
+        k for k, cfg in layout.get("indicators", {}).items()
+        if isinstance(cfg, dict) and cfg.get("enabled", True)
+        and k.startswith("fit_") and k.endswith("_text")
+    }
+    available_fit_keys = set(fit_keys)
+    for key in sorted(configured_fit_keys - available_fit_keys):
+        field_name = key[4:-5]
+        cfg = layout.get("indicators", {}).get(key, {})
+        extra_indicators[key] = (None, cfg.get("unit", ""), cfg.get("label", field_name))
 
     profiler.record(
         "telemetry.dynamic_fit_fields",
@@ -349,7 +381,16 @@ def prepare_overlay_frame_data(
         if key in HARDCODED_KEYS or key in extra_indicators:
             continue
         cfg = layout["indicators"][key]
-        val = 0.0
+        if key in GPMF_IMU_FIELDS:
+            field_name, default_unit, default_label = GPMF_IMU_FIELDS[key]
+            value = profiled_resolve(field_name, cfg.get("source", "gpmf"), key)
+            extra_indicators[key] = (
+                value,
+                cfg.get("unit") or default_unit,
+                cfg.get("label") or default_label,
+            )
+            continue
+        val = None
         unit = cfg.get("unit", "")
         label = cfg.get("label", key)
         extra_indicators[key] = (val, unit, label)
@@ -392,7 +433,7 @@ def prepare_overlay_frame_data(
         "hr_value": hr_value,
         "cad_value": cad_value,
         "battery_value": battery_value,
-        "chart_data": chart_data or {},
+        "chart_data": clip_chart_data(chart_data or {}, target_dt, start_dt_utc),
         "current_position": current_position,
         "extra_indicators": extra_indicators,
         "gps_track": gps_trk,

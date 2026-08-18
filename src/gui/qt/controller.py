@@ -26,8 +26,10 @@ from src.gui.telemetry_manager import TelemetryDataManager
 from src.telemetry_extract import (
     ensure_records_list,
     extract_altitude_samples,
+    extract_accelerometer_samples,
     extract_exposure_samples,
     extract_gps_track,
+    extract_gyroscope_samples,
     extract_iso_samples,
     extract_speed_samples,
     extract_temperature_samples,
@@ -162,6 +164,8 @@ class AppController(
             extract_gps_track_fn=extract_gps_track,
             find_gps_anchor_fn=lambda r: None,
             smooth_values_fn=smooth_speed_values,
+            extract_accelerometer_fn=extract_accelerometer_samples,
+            extract_gyroscope_fn=extract_gyroscope_samples,
         )
 
         self.layout_mgr = LayoutManager(

@@ -209,18 +209,18 @@ def compose_overlay(
     known_vals: dict[str, tuple[float, str, str]] = {
         "speed_visual": (speed_value, "km/h", ""),
         "speed_text": (speed_value, "km/h", ""),
-        "dist_visual": (distance_m / 1000.0, "km", ""),
-        "dist_text": (distance_m / 1000.0, "km", ""),
+        "dist_visual": (None if distance_m is None else distance_m / 1000.0, "km", ""),
+        "dist_text": (None if distance_m is None else distance_m / 1000.0, "km", ""),
         "alt_visual": (alt_value, "m", "Alt"),
         "alt_text": (alt_value, "m", "Alt"),
-        "iso_text": (iso_value if iso_value is not None else 0.0, "ISO", "ISO"),
-        "exposure_text": (exposure_value if exposure_value is not None else 0.0, "", "Exp"),
-        "temp_text": (temp_value if temp_value is not None else 0.0, "\u00b0C", "Temp"),
-        "power_text": (power_value if power_value is not None else 0.0, "W", "Moc"),
-        "atemp_text": (atemp_value if atemp_value is not None else 0.0, "\u00b0C", "ATemp"),
-        "hr_text": (hr_value if hr_value is not None else 0.0, "BPM", "HR"),
-        "cad_text": (cad_value if cad_value is not None else 0.0, "RPM", "Cad"),
-        "battery_text": (battery_value if battery_value is not None else 0.0, "%", "Bat"),
+        "iso_text": (iso_value, "ISO", "ISO"),
+        "exposure_text": (exposure_value, "", "Exp"),
+        "temp_text": (temp_value, "\u00b0C", "Temp"),
+        "power_text": (power_value, "W", "Moc"),
+        "atemp_text": (atemp_value, "\u00b0C", "ATemp"),
+        "hr_text": (hr_value, "BPM", "HR"),
+        "cad_text": (cad_value, "RPM", "Cad"),
+        "battery_text": (battery_value, "%", "Bat"),
         "track_map": (0.0, "", "Mapa"),
     }
 
@@ -249,6 +249,10 @@ def compose_overlay(
         value, default_unit, default_label = known_vals.get(
             key, (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", key))
         )
+        if value is None:
+            # Missing telemetry is not a numeric zero. Keep the configured
+            # indicator in the layout, but render it as unavailable/hidden.
+            continue
         # An empty string in the layout must not suppress a sensible unit —
         # fall back to the default unit for the data source.
         unit = ind_cfg.get("unit") or default_unit
@@ -483,13 +487,26 @@ def compose_overlay(
     ct_outline = max(0, int(round(
         int(layout.get("global", {}).get("text_outline", 3)) * min(canvas_w, canvas_h) / 1000
     )))
-    for ct_cfg in layout.get("custom_texts", []):
+    for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
         ct_res, ctx, cty = render_custom_text(canvas_w, canvas_h, font_path, ct_cfg, stroke_width=ct_outline)
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
             rotated_paste(
                 img, ct_res, ctx, cty, ct_rotation,
                 prior_bboxes=list(_bboxes.values()), cache_key="custom_text",
+            )
+            # Keep the same conservative rendered geometry used by regular
+            # indicators.  This lets CPU_ABOVE_MAP reuse actual custom-text
+            # output without scanning the full canvas for alpha.
+            if ct_rotation in (90, 270):
+                ct_w, ct_h = ct_res.height, ct_res.width
+            else:
+                ct_w, ct_h = ct_res.width, ct_res.height
+            _bboxes[f"custom_text:{custom_index}"] = (
+                int(round(ctx - ct_w / 2)),
+                int(round(cty - ct_h / 2)),
+                int(ct_w),
+                int(ct_h),
             )
 
     if prev_bboxes is not None and _bboxes:

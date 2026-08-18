@@ -57,6 +57,7 @@ class PresetMixin:
             self.indicator_bboxes.clear()
             # Odśwież strumienie danych – DataStreamBar musi się zaktualizować
             if self.telemetry:
+                self.fit_ext_fields = []
                 if self.telemetry.fit_data:
                     fit_keys = self.telemetry.register_fit_fields(
                         self.layout, BUILTIN_FIELDS,

@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.registry import HARDCODED_KEYS
+from src.indicators.chart_builder import clip_chart_data
 
 
 # Sensible default units for known FIT field names (identical to the reference
@@ -38,14 +39,15 @@ class _FrameRec:
     """Lightweight per-frame telemetry record (one per exported frame)."""
     date_text: str
     time_text: str
-    speed_value: float
-    distance_m: float
-    alt_value: float
+    speed_value: Optional[float]
+    distance_m: Optional[float]
+    alt_value: Optional[float]
     iso_value: float
     exposure_value: float
     temp_value: float
     indicator_values: dict[str, float]
     fit_vals: tuple
+    dynamic_vals: tuple
     std_vals: tuple
     current_position: float
     elapsed_seconds: float
@@ -67,6 +69,8 @@ class _Static:
     fit_units: dict[str, str]
     fit_labels: dict[str, str]
     remaining_extra: dict[str, tuple]
+    dynamic_keys: tuple
+    dynamic_meta: dict[str, tuple]
     std_names: tuple
 
 
@@ -100,6 +104,9 @@ class TelemetryFrameCache:
             )
         if st.remaining_extra:
             extra_indicators.update(st.remaining_extra)
+        for i, key in enumerate(st.dynamic_keys):
+            unit, label = st.dynamic_meta[key]
+            extra_indicators[key] = (rec.dynamic_vals[i], unit, label)
         std = rec.std_vals
         return {
             "date_text": rec.date_text,
@@ -120,7 +127,9 @@ class TelemetryFrameCache:
             "hr_value": std[2],
             "cad_value": std[3],
             "battery_value": std[4],
-            "chart_data": st.chart_data,
+            "chart_data": clip_chart_data(
+                st.chart_data, rec.target_dt, st.start_dt_utc
+            ),
             "current_position": rec.current_position,
             "extra_indicators": extra_indicators,
             "gps_track": st.gps_track,
@@ -222,7 +231,7 @@ def build_telemetry_cache(
         for k, cfg in indicators.items():
             if k.startswith("fit_") and k.endswith("_text") and cfg.get("enabled", True):
                 field_name = k[4:-5]
-                if field_name and field_name not in active_fit:
+                if field_name and field_name in fit and field_name not in active_fit:
                     active_fit.append(field_name)
         # legacy standard consumers (mirrors frame_data default)
         std_consumers = ("power", "atemp", "hr", "cad", "battery")
@@ -238,15 +247,41 @@ def build_telemetry_cache(
         fit_units[key] = cfg.get("unit") or FIT_UNIT_HINTS.get(name, "")
         fit_labels[key] = cfg.get("label", name)
 
-    # remaining dynamic indicators (non-hardcoded, not fit keys) — val 0.0
+    imu_fields = {
+        "accel_x_text": ("accel_x", "m/s", "Accelerometer X"),
+        "accel_y_text": ("accel_y", "m/s", "Accelerometer Y"),
+        "accel_z_text": ("accel_z", "m/s", "Accelerometer Z"),
+        "accel_magnitude_text": ("accel_magnitude", "m/s", "Accelerometer Magnitude"),
+        "gyro_x_text": ("gyro_x", "rad/s", "Gyroscope X"),
+        "gyro_y_text": ("gyro_y", "rad/s", "Gyroscope Y"),
+        "gyro_z_text": ("gyro_z", "rad/s", "Gyroscope Z"),
+        "gyro_magnitude_text": ("gyro_magnitude", "rad/s", "Gyroscope Magnitude"),
+    }
+    dynamic_keys = tuple(
+        key for key, cfg in indicators.items()
+        if key in imu_fields and isinstance(cfg, dict) and cfg.get("enabled", True)
+    )
+    dynamic_meta = {
+        key: (indicators[key].get("unit") or imu_fields[key][1],
+              indicators[key].get("label") or imu_fields[key][2])
+        for key in dynamic_keys
+    }
+
+    # Keep configured dynamic indicators in the runtime layout, but preserve
+    # unavailable values as None. The compositor hides those entries.
     remaining_extra: dict[str, tuple] = {}
     for key, cfg in indicators.items():
-        if key in HARDCODED_KEYS or key in fit_keys:
+        if key in HARDCODED_KEYS or key in fit_keys or key in dynamic_keys:
             continue
         if not isinstance(cfg, dict):
             continue
+        if key.startswith("fit_") and key.endswith("_text"):
+            remaining_extra[key] = (
+                None, cfg.get("unit", ""), cfg.get("label", key),
+            )
+            continue
         remaining_extra[key] = (
-            0.0, cfg.get("unit", ""), cfg.get("label", key),
+            None, cfg.get("unit", ""), cfg.get("label", key),
         )
 
     gps_trk: list = gps_track or []
@@ -268,36 +303,40 @@ def build_telemetry_cache(
         indicator_values: dict[str, float] = {}
         for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
                         "alt_visual", "alt_text"):
+            if ind_key not in indicators:
+                continue
             ind_cfg = indicators.get(ind_key, {})
             if not ind_cfg.get("enabled", True):
                 continue
             src = ind_cfg.get("source", "gpmf")
             if src == "gpx":
-                spd_s = gpx_spd or speed_samples
-                trk_s = gpx_trk or track_samples
-                alt_s = gpx_alt or alt_samples
+                spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
             elif src == "fit":
-                spd_s = fit_spd or speed_samples
-                trk_s = fit_trk or track_samples
-                alt_s = fit_alt or alt_samples
+                spd_s, trk_s, alt_s = fit_spd, fit_trk, fit_alt
             else:
                 spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
             if ind_key in ("speed_visual", "speed_text"):
-                indicator_values[ind_key] = interpolate_speed(spd_s, target_dt)
+                indicator_values[ind_key] = interpolate_speed(spd_s, target_dt) if spd_s else None
                 interpolation_calls += 1
             elif ind_key in ("dist_visual", "dist_text"):
-                indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
+                indicator_values[ind_key] = interpolate_distance(trk_s, target_dt) if trk_s else None
                 interpolation_calls += 1
             elif ind_key in ("alt_visual", "alt_text"):
-                indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
+                indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt) if alt_s else None
                 interpolation_calls += 1
 
         speed_value = indicator_values.get(
-            "speed_visual", interpolate_speed(speed_samples, target_dt))
+            "speed_visual",
+            indicator_values.get("speed_text", interpolate_speed(speed_samples, target_dt) if speed_samples else None),
+        )
         distance_m = indicator_values.get(
-            "dist_visual", interpolate_distance(track_samples, target_dt))
+            "dist_visual",
+            indicator_values.get("dist_text", interpolate_distance(track_samples, target_dt) if track_samples else None),
+        )
         alt_value = indicator_values.get(
-            "alt_visual", interpolate_altitude(alt_samples, target_dt))
+            "alt_visual",
+            indicator_values.get("alt_text", interpolate_altitude(alt_samples, target_dt) if alt_samples else None),
+        )
         if "speed_visual" not in indicator_values:
             interpolation_calls += 1
         if "dist_visual" not in indicator_values:
@@ -315,7 +354,7 @@ def build_telemetry_cache(
             return fallback(
                 {"iso": iso_s, "exposure": exposure_s, "temperature": temp_s}[field],
                 target_dt,
-            ) if source == "gpmf" else None
+            ) if source == "gpmf" and {"iso": iso_s, "exposure": exposure_s, "temperature": temp_s}[field] else None
 
         iso_value = _resolve_aux("iso", "iso_text", interpolate_iso)
         exposure_value = _resolve_aux("exposure", "exposure_text", interpolate_exposure)
@@ -342,19 +381,29 @@ def build_telemetry_cache(
         fit_vals: list = []
         for name in active_fit:
             if resolve_cache_value is None:
-                v = 0.0
+                v = None
             else:
                 v = resolve_cache_value(name, "fit", target_dt, f"fit_{name}_text")
-                if v is None:
-                    v = 0.0
                 resolver_calls += 1
             fit_vals.append(v)
+
+        dynamic_vals: list = []
+        for key in dynamic_keys:
+            field_name = imu_fields[key][0]
+            cfg = indicators.get(key, {})
+            value = None
+            if resolve_cache_value is not None:
+                value = resolve_cache_value(
+                    field_name, cfg.get("source", "gpmf"), target_dt, key,
+                )
+                resolver_calls += 1
+            dynamic_vals.append(value)
 
         elapsed_seconds = 0.0
         if start_dt_utc is not None and target_dt is not None:
             elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
         avg_speed_kmh = 0.0
-        if elapsed_seconds > 0 and distance_m > 0:
+        if elapsed_seconds > 0 and distance_m is not None and distance_m > 0:
             avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
 
         current_position = (
@@ -367,7 +416,8 @@ def build_telemetry_cache(
             speed_value=speed_value, distance_m=distance_m, alt_value=alt_value,
             iso_value=iso_value, exposure_value=exposure_value,
             temp_value=temp_value, indicator_values=indicator_values,
-            fit_vals=tuple(fit_vals), std_vals=tuple(std_vals),
+            fit_vals=tuple(fit_vals), dynamic_vals=tuple(dynamic_vals),
+            std_vals=tuple(std_vals),
             current_position=current_position, elapsed_seconds=elapsed_seconds,
             avg_speed_kmh=avg_speed_kmh, target_dt=target_dt,
         ))
@@ -383,7 +433,8 @@ def build_telemetry_cache(
         min_alt=min_alt, max_alt=max_alt, chart_data=chart_data or {},
         gps_track=gps_trk, start_dt_utc=start_dt_utc, fit_keys=fit_keys,
         fit_units=fit_units, fit_labels=fit_labels,
-        remaining_extra=remaining_extra, std_names=std_names,
+        remaining_extra=remaining_extra, dynamic_keys=dynamic_keys,
+        dynamic_meta=dynamic_meta, std_names=std_names,
     )
     return TelemetryFrameCache(
         records, static, build_ms, memory_bytes,

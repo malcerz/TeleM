@@ -55,11 +55,15 @@ class FieldSchema:
 
 # ── Fabryki pól per-zakładka ────────────────────────────────────────────────
 
-def _header_fields(with_source: bool = True) -> list[FieldSchema]:
+def _header_fields(with_source: bool = True, text_size: bool = False) -> list[FieldSchema]:
     """Pola zawsze widoczne nad zakładkami (pozycja, etykieta, rotacja)."""
     fields = [
-        FieldSchema("size", "float", "Rozmiar", tab="",
-                    min_val=1.0, max_val=50.0, step=0.1),
+        FieldSchema(
+            "font_size" if text_size else "size", "float", "Rozmiar", tab="",
+            min_val=0.5 if text_size else 1.0,
+            max_val=10.0 if text_size else 50.0,
+            step=0.1,
+        ),
         FieldSchema("label", "text", "Etykieta", tab=""),
         FieldSchema("unit", "text", "Jednostka", tab=""),
         FieldSchema("x", "float", "Pozycja X", tab="",
@@ -89,13 +93,15 @@ def _form_field(choices: list[str] | None = None) -> list[FieldSchema]:
 def _text_tab_fields(
     font_range=(0.5, 10.0), repo_range=(-0.5, 0.5),
     with_color: bool = True, with_distance: bool = False,
+    include_font_size: bool = True,
 ) -> list[FieldSchema]:
     """Zakładka Text – wygląd tekstu wartości i jego pozycja."""
-    fields: list[FieldSchema] = [
-        FieldSchema("font_size", "float", "Size",
-                    tab="Text",
-                    min_val=font_range[0], max_val=font_range[1], step=0.1),
-        FieldSchema("decimals", "int", "Decimals",
+    fields: list[FieldSchema] = []
+    if include_font_size:
+        fields.append(FieldSchema("font_size", "float", "Size",
+                                   tab="Text",
+                                   min_val=font_range[0], max_val=font_range[1], step=0.1))
+    fields += [FieldSchema("decimals", "int", "Decimals",
                     tab="Text", min_val=0, max_val=3, step=1),
         FieldSchema("show_value", "bool", "Value", tab="Text"),
         FieldSchema("show_units", "bool", "Units", tab="Text"),
@@ -213,9 +219,10 @@ def _shape_tab_fields() -> list[FieldSchema]:
 # ── Schematy per-typ wskaźnika ─────────────────────────────────────────────
 
 def text_indicator_fields() -> list[FieldSchema]:
-    """Text: Header + Text."""
+    """Text: one canonical size control in the header + Text settings."""
     return (
-        _header_fields() + _form_field() + _text_tab_fields()
+        _header_fields(text_size=True) + _form_field()
+        + _text_tab_fields(include_font_size=False)
     )
 
 
@@ -419,14 +426,14 @@ def get_schema_for_form(form: str) -> list[FieldSchema]:
 def _sync_size_font_fields(cfg: dict, field_name: str) -> None:
     """Synchronizuje size/font_size tylko dla formy "text".
 
-    Dla formy "text" oba pola sterują rozmiarem tekstu — trzymamy je w zgodzie.
+    Dla formy "text" ``font_size`` jest kanonicznym źródłem geometrii.
+    Legacy ``size`` jest aktualizowane wyłącznie jako kompatybilna kopia po
+    edycji kanonicznego pola; stare eventy ``size`` nie mogą nadpisywać fontu.
     Dla gauge/chart/bar/segment_bar/map pole ``size`` ustawia wymiary wskaźnika,
     a ``font_size`` rozmiar czcionki etykiety — muszą pozostać niezależne, inaczej
     "Size" z zakładki Text zmieniałby rozmiar całego wskaźnika.
     """
     if cfg.get("form", "text") != "text":
         return
-    if field_name == "size":
-        cfg["font_size"] = cfg["size"]
-    elif field_name == "font_size":
+    if field_name == "font_size":
         cfg["size"] = cfg["font_size"]

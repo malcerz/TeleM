@@ -17,19 +17,19 @@ FourCC reference used for this implementation:
 https://github.com/gopro/gpmf-parser (official GoPro GPMF spec)
 https://gopro.github.io/gpmf-parser/ (rendered FourCC + type tables)
 
-IMPORTANT NOTE ON GPS9 SAMPLE LAYOUT:
-This module uses an 8-field-per-sample layout for GPS9
-(lat, lon, alt, speed2d, speed3d, t1, t2, t3), verified against raw byte
-dumps from actual footage. This differs from the 9-field layout described
-in some general GoPro GPMF documentation. If you encounter footage from a
-different camera/firmware where GPS9 blocks are NOT evenly divisible by 8,
-re-verify the sample layout via raw byte inspection before assuming 9 fields.
+GPS9 timing note:
+The active flat export path supports the observed GPS9 layout
+``lllllllSS``: latitude, longitude, altitude, 2D speed, 3D speed, days,
+seconds, DOP and fix. The two final ``S`` values occupy one 32-bit payload
+unit, so the raw payload is 32 bytes per sample.
 """
 
 from __future__ import annotations
 
 import ast
 import json
+import logging
+import math
 import os
 import shlex
 import struct
@@ -56,6 +56,9 @@ _STRUCT_SIZE = {
     "l": 4, "L": 4, "f": 4, "d": 8,
     "Q": 8, "J": 8, "j": 8, "q": 4, "F": 4, "c": 1, "U": 1, "G": 1,
 }
+
+GPS_EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
+LOGGER = logging.getLogger(__name__)
 
 
 def find_gpmf_stream_index(video_path: str | Path, ffprobe_exe: str = "ffprobe") -> Optional[int]:
@@ -433,6 +436,67 @@ def _parse_int32_values(val: Any) -> list[int]:
     return []
 
 
+def _decode_imu_vectors(payload: Any, scale: Any) -> list[list[float]]:
+    """Decode the observed 3-axis signed-short IMU payload without reordering."""
+    if not isinstance(payload, bytes) or len(payload) % 6:
+        return []
+    try:
+        values = struct.unpack(f">{len(payload) // 2}h", payload)
+    except struct.error:
+        return []
+    divisor = float(scale) if scale not in (None, 0) else 1.0
+    return [
+        [values[index] / divisor, values[index + 1] / divisor, values[index + 2] / divisor]
+        for index in range(0, len(values), 3)
+    ]
+
+
+def _decode_gps9_real_samples(
+    payload: Any,
+    type_str: Any,
+    scal: Any,
+) -> list[tuple[float, float, float, float, float, float, float, float, float]]:
+    """Decode GPS9 samples, including the embedded absolute GPS time.
+
+    The supported GPS9 layout is described by the stream TYPE metadata as
+    ``lllllllSS``.  ``decode_complex_type`` preserves the two 16-bit trailing
+    fields, unlike the legacy flat int32 path which only retained the first
+    five GPS values.
+    """
+    if not isinstance(payload, bytes) or type_str != "lllllllSS":
+        return []
+    if not isinstance(scal, (list, tuple)) or len(scal) < 9:
+        return []
+    try:
+        decoded = decode_complex_type(type_str, payload)
+        scales = [float(value) for value in scal[:9]]
+        if any(not math.isfinite(value) or value == 0.0 for value in scales):
+            return []
+        samples = []
+        for row in decoded:
+            if not isinstance(row, (list, tuple)) or len(row) != 9:
+                continue
+            samples.append(tuple(
+                float(value) / scales[index]
+                for index, value in enumerate(row)
+            ))
+        return samples
+    except (TypeError, ValueError, OverflowError, struct.error):
+        return []
+
+
+def _gps9_datetime(days: float, seconds: float) -> Optional[datetime]:
+    """Return a validated UTC datetime from GPS9 days/secs fields."""
+    if not math.isfinite(days) or not math.isfinite(seconds):
+        return None
+    if days < 0.0 or seconds < 0.0 or seconds >= 86400.0:
+        return None
+    try:
+        return GPS_EPOCH + timedelta(days=days, seconds=seconds)
+    except (OverflowError, ValueError):
+        return None
+
+
 def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
                       start_dt: Optional[datetime] = None) -> list[dict[str, Any]]:
     """Convert a flat list of parsed GPMF (key, value) tuples into an
@@ -446,8 +510,18 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
     out: dict[str, Any] = {"SourceFile": source_file}
     doc = 1
     scal = None
+    type_str = None
     last_gpsu_dt: Optional[datetime] = None
     current_block_start_dt: Optional[datetime] = None
+    real_gps_times: list[datetime] = []
+    creation_time_fallback = start_dt is not None
+    pending_stmp: Any = None
+    pending_tsmp: Any = None
+    pending_stnm: str = ""
+    pending_orin: Any = None
+    pending_orio: Any = None
+    pending_siun: Any = None
+    pending_unit: Any = None
 
     # Jeśli nie ma GPSU, użyj start_dt jako podstawy czasu (z metadanych wideo)
     if start_dt is not None and current_block_start_dt is None:
@@ -460,18 +534,78 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
         if key == "SCAL":
             scal = val
 
+        elif key == "TYPE":
+            if isinstance(val, bytes):
+                type_str = val.decode("ascii", errors="ignore").rstrip("\x00")
+            else:
+                type_str = str(val)
+
         elif key == "GPSU":
             try:
                 if isinstance(val, (list, tuple)) and len(val) >= 7:
                     year, month, day, hour, minute, sec, ms = (int(x) for x in val[:7])
                     last_gpsu_dt = datetime(year, month, day, hour, minute, sec, ms * 1000, tzinfo=timezone.utc)
                     current_block_start_dt = last_gpsu_dt
+                    creation_time_fallback = False
                     out[f"Doc{doc}:GPSDateTime"] = _fmt_dt(last_gpsu_dt)
                     out[f"Doc{doc}:SampleTime"] = "0.000"
             except Exception:
                 pass
 
         elif key in ("GPS5", "GPS9"):
+            gps9_samples = _decode_gps9_real_samples(val, type_str, scal)
+            if key == "GPS9" and gps9_samples:
+                block_doc = doc
+                real_times: list[datetime] = []
+                for sample_idx, fields in enumerate(gps9_samples):
+                    lat, lon, alt, s2d, s3d, days, seconds, dop, fix = fields
+                    try:
+                        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                            continue
+                        if lat == 0.0 and lon == 0.0:
+                            continue
+
+                        if not (0.0 <= s2d <= 500.0):
+                            s2d = None
+                        if not (0.0 <= s3d <= 500.0):
+                            s3d = None
+
+                        prefix = f"Doc{block_doc}" if sample_idx == 0 else f"Doc{block_doc}-{sample_idx}"
+                        out[f"{prefix}:GPSLatitude"] = lat
+                        out[f"{prefix}:GPSLongitude"] = lon
+                        out[f"{prefix}:GPSAltitude"] = f"{alt} m"
+                        out[f"{prefix}:GPSDays"] = days
+                        out[f"{prefix}:GPSSecs"] = seconds
+                        out[f"{prefix}:GPSDOP"] = dop
+                        out[f"{prefix}:GPSFix"] = fix
+                        if s2d is not None:
+                            out[f"{prefix}:GPSSpeed"] = s2d * 3.6
+                        if s3d is not None:
+                            out[f"{prefix}:GPSSpeed3D"] = s3d * 3.6
+
+                        gps_dt = _gps9_datetime(days, seconds)
+                        if gps_dt is not None:
+                            real_times.append(gps_dt)
+                            real_gps_times.append(gps_dt)
+                            sample_dt = gps_dt
+                        elif current_block_start_dt is not None:
+                            sample_dt = current_block_start_dt + timedelta(seconds=sample_idx * 0.1)
+                        else:
+                            sample_dt = None
+
+                        if sample_dt is not None:
+                            out[f"{prefix}:GPSDateTime"] = _fmt_dt(sample_dt)
+                            out[f"{prefix}:SampleTime"] = f"{sample_idx * 0.1:.3f}"
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+
+                if real_times:
+                    current_block_start_dt = real_times[-1] + timedelta(seconds=0.1)
+                elif current_block_start_dt is not None:
+                    current_block_start_dt += timedelta(seconds=len(gps9_samples) * 0.1)
+                doc += 1
+                continue
+
             values = _parse_int32_values(val)
             step = 5 if key == "GPS5" else 8
             if len(values) < step:
@@ -542,8 +676,53 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
                 v = str(val)
             out[f"Doc{doc}:GPSAltitudeSystem"] = v
 
+        elif key == "STNM":
+            pending_stnm = str(val)
+
+        elif key == "ORIN":
+            pending_orin = val
+
+        elif key == "ORIO":
+            pending_orio = val
+
+        elif key == "SIUN":
+            pending_siun = val
+
+        elif key == "UNIT":
+            pending_unit = val
+
+        elif key in ("ACCL", "GYRO") and pending_stnm in ("Accelerometer", "Gyroscope"):
+            vectors = _decode_imu_vectors(val, scal)
+            if vectors and pending_stmp is not None and pending_tsmp is not None:
+                prefix = f"Doc{doc}:{key}"
+                out[prefix] = vectors
+                out[f"{prefix}_STMP"] = pending_stmp
+                out[f"{prefix}_TSMP"] = pending_tsmp
+                out[f"{prefix}_SampleCount"] = len(vectors)
+                out[f"{prefix}_Components"] = 3
+                out[f"{prefix}_ORIN"] = pending_orin
+                out[f"{prefix}_ORIO"] = pending_orio
+                out[f"{prefix}_Unit"] = pending_siun or pending_unit
+
         elif key == "TMPC":
-            out[f"Doc{doc}:CameraTemperature"] = f"{val} C"
+            stream_code = {
+                "Accelerometer": "ACCL",
+                "Gyroscope": "GYRO",
+            }.get(pending_stnm)
+            if stream_code is None:
+                continue
+            prefix = f"Doc{doc}:TMPC_{stream_code}"
+            out[f"{prefix}_Value"] = val
+            if pending_stmp is not None:
+                out[f"{prefix}_STMP"] = pending_stmp
+            if pending_tsmp is not None:
+                out[f"{prefix}_TSMP"] = pending_tsmp
+            # ACCL is the canonical copy of the shared sensor sample.
+            if stream_code == "ACCL":
+                out[f"Doc{doc}:CameraTemperature"] = f"{val} C"
+                out[f"Doc{doc}:TMPC_STMP"] = pending_stmp
+                out[f"Doc{doc}:TMPC_TSMP"] = pending_tsmp
+                out[f"Doc{doc}:TMPC_SourceStream"] = stream_code
 
         elif key == "SHUT":
             if isinstance(val, (list, tuple)):
@@ -551,9 +730,19 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
             else:
                 exp = str(val)
             out[f"Doc{doc}:ExposureTimes"] = exp
+            if pending_stmp is not None:
+                out[f"Doc{doc}:SHUT_STMP"] = pending_stmp
+            if pending_tsmp is not None:
+                out[f"Doc{doc}:SHUT_TSMP"] = pending_tsmp
+            out[f"Doc{doc}:SHUT_SampleCount"] = len(val) if isinstance(val, (list, tuple)) else 1
 
         elif key == "ISOE":
             out[f"Doc{doc}:ISO"] = val
+            if pending_stmp is not None:
+                out[f"Doc{doc}:ISO_STMP"] = pending_stmp
+            if pending_tsmp is not None:
+                out[f"Doc{doc}:ISO_TSMP"] = pending_tsmp
+            out[f"Doc{doc}:ISO_SampleCount"] = len(val) if isinstance(val, (list, tuple)) else 1
 
         elif key == "STMP":
             sample_time = val
@@ -565,6 +754,7 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
                         sample_time = float(ast.literal_eval(val.decode("ascii", errors="ignore")))
                     except Exception:
                         sample_time = try_decode_8byte_stmp(val)
+            pending_stmp = sample_time
             out[f"Doc{doc}:SampleTime"] = sample_time if sample_time is None else str(sample_time)
 
         elif key == "TSMP":
@@ -577,7 +767,21 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
                         timestamp = float(ast.literal_eval(val.decode("ascii", errors="ignore")))
                     except Exception:
                         timestamp = None
+            pending_tsmp = timestamp
             out[f"Doc{doc}:TimeStamp"] = timestamp
+
+    if real_gps_times:
+        LOGGER.info(
+            "[GPMF GPS] source=GPS9_REAL_TIME first=%s last=%s samples=%d",
+            real_gps_times[0].isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            real_gps_times[-1].isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            len(real_gps_times),
+        )
+    elif creation_time_fallback:
+        LOGGER.info(
+            "[GPMF GPS] source=CREATION_TIME_FALLBACK "
+            "reason=no_valid_absolute_gps_time"
+        )
 
     return [out]
 
