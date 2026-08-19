@@ -1,0 +1,3077 @@
+{
+ "summary": {
+  "enabled": true,
+  "frames": 91,
+  "frame_total_ms": {
+   "median": 35.0967,
+   "p95": 55.64,
+   "p99": 628.4931,
+   "avg": 42.80542527472527
+  },
+  "measured_sum_median_ms": 32.4998,
+  "unaccounted_ms": {
+   "median": 0.0019,
+   "p95": 0.0092,
+   "p99": 0.0173,
+   "max": 0.0173,
+   "pct_of_frame": 0.005413614385398058
+  },
+  "accounted_pct": 99.99458638561461,
+  "stages": {
+   "above_bbox_crop": {
+    "median_ms": 0.1919,
+    "p95_ms": 0.4966,
+    "p99_ms": 1.0946,
+    "avg_ms": 0.2333769230769231
+   },
+   "above_compose": {
+    "median_ms": 0.7114,
+    "p95_ms": 2.7478,
+    "p99_ms": 5.0752,
+    "avg_ms": 0.9140032967032967
+   },
+   "chart_other": {
+    "median_ms": 0.1405,
+    "p95_ms": 0.4368,
+    "p99_ms": 8.6744,
+    "avg_ms": 0.26805274725274725
+   },
+   "chart_plan": {
+    "median_ms": 0.0012,
+    "p95_ms": 0.0038,
+    "p99_ms": 0.0085,
+    "avg_ms": 0.0015505494505494506
+   },
+   "compose": {
+    "median_ms": 6.63,
+    "p95_ms": 18.9224,
+    "p99_ms": 35.3302,
+    "avg_ms": 8.435020879120879
+   },
+   "decode_read": {
+    "median_ms": 1.5222,
+    "p95_ms": 7.3126,
+    "p99_ms": 99.357,
+    "avg_ms": 3.535532967032967
+   },
+   "frame0_probe": {
+    "median_ms": 0.0041,
+    "p95_ms": 0.019,
+    "p99_ms": 310.4667,
+    "avg_ms": 3.4191098901098904
+   },
+   "gauge_upload": {
+    "median_ms": 1.7586,
+    "p95_ms": 3.7448,
+    "p99_ms": 9.5608,
+    "avg_ms": 2.0714901098901097
+   },
+   "hud_dirty": {
+    "median_ms": 0.7546,
+    "p95_ms": 1.8487,
+    "p99_ms": 93.8137,
+    "avg_ms": 1.96629010989011
+   },
+   "hud_setup": {
+    "median_ms": 0.0633,
+    "p95_ms": 0.1462,
+    "p99_ms": 0.2386,
+    "avg_ms": 0.07267032967032966
+   },
+   "loop_guard": {
+    "median_ms": 0.0015,
+    "p95_ms": 0.0073,
+    "p99_ms": 0.0656,
+    "avg_ms": 0.0027659340659340658
+   },
+   "map_upload": {
+    "median_ms": 3.0377,
+    "p95_ms": 9.4861,
+    "p99_ms": 20.777,
+    "avg_ms": 3.760106593406593
+   },
+   "native_timings": {
+    "median_ms": 0.1503,
+    "p95_ms": 0.4911,
+    "p99_ms": 0.9985,
+    "avg_ms": 0.19086153846153847
+   },
+   "process_frame": {
+    "median_ms": 2.4409,
+    "p95_ms": 9.3149,
+    "p99_ms": 24.6242,
+    "avg_ms": 3.440356043956044
+   },
+   "progress": {
+    "median_ms": 0.037,
+    "p95_ms": 0.122,
+    "p99_ms": 0.17,
+    "avg_ms": 0.0464032967032967
+   },
+   "telemetry": {
+    "median_ms": 14.8454,
+    "p95_ms": 19.2625,
+    "p99_ms": 48.808,
+    "avg_ms": 13.94304835164835
+   },
+   "update_hud": {
+    "median_ms": 0.2092,
+    "p95_ms": 0.5845,
+    "p99_ms": 20.7728,
+    "avg_ms": 0.5020164835164835
+   }
+  },
+  "gc": {
+   "collections": 189,
+   "collections_per_frame": 2.076923076923077,
+   "total_pause_ms": 50.56600001989864,
+   "max_pause_ms": 31.11509999143891,
+   "avg_pause_ms": 0.26754497365025737
+  },
+  "estimated_instrumentation_overhead_us": 92.82
+ },
+ "gc_pauses": [
+  [
+   0,
+   0.16170000890269876
+  ],
+  [
+   0,
+   0.028499984182417393
+  ],
+  [
+   0,
+   0.028600014047697186
+  ],
+  [
+   1,
+   1.1571000213734806
+  ],
+  [
+   0,
+   1.0202999983448535
+  ],
+  [
+   0,
+   0.42100000428035855
+  ],
+  [
+   0,
+   0.21430000197142363
+  ],
+  [
+   0,
+   1.9165999838151038
+  ],
+  [
+   0,
+   0.046699977247044444
+  ],
+  [
+   0,
+   0.001300009898841381
+  ],
+  [
+   0,
+   0.014599994756281376
+  ],
+  [
+   0,
+   0.15350000467151403
+  ],
+  [
+   0,
+   0.055500015150755644
+  ],
+  [
+   0,
+   0.11729999096132815
+  ],
+  [
+   0,
+   0.054100004490464926
+  ],
+  [
+   1,
+   1.0965999972540885
+  ],
+  [
+   0,
+   0.023600005079060793
+  ],
+  [
+   0,
+   0.08460000390186906
+  ],
+  [
+   0,
+   0.0467000063508749
+  ],
+  [
+   0,
+   0.13380000018514693
+  ],
+  [
+   0,
+   0.27520000003278255
+  ],
+  [
+   0,
+   0.09750001481734216
+  ],
+  [
+   0,
+   0.055800017435103655
+  ],
+  [
+   0,
+   0.0737000082153827
+  ],
+  [
+   0,
+   0.05859998054802418
+  ],
+  [
+   0,
+   0.16120000509545207
+  ],
+  [
+   0,
+   0.05059997783973813
+  ],
+  [
+   1,
+   0.10649999603629112
+  ],
+  [
+   0,
+   0.04019998596049845
+  ],
+  [
+   0,
+   0.04889999399892986
+  ],
+  [
+   0,
+   0.016000005416572094
+  ],
+  [
+   0,
+   0.09849999332800508
+  ],
+  [
+   0,
+   0.028799986466765404
+  ],
+  [
+   0,
+   0.08679999154992402
+  ],
+  [
+   0,
+   0.060900027165189385
+  ],
+  [
+   0,
+   0.09039998985826969
+  ],
+  [
+   0,
+   0.030499999411404133
+  ],
+  [
+   0,
+   0.06089999806135893
+  ],
+  [
+   0,
+   0.020800012862309813
+  ],
+  [
+   1,
+   0.10870001278817654
+  ],
+  [
+   2,
+   31.11509999143891
+  ],
+  [
+   0,
+   0.08440000237897038
+  ],
+  [
+   0,
+   0.04740001168102026
+  ],
+  [
+   0,
+   0.1221999991685152
+  ],
+  [
+   0,
+   0.039799982914701104
+  ],
+  [
+   0,
+   0.10299999848939478
+  ],
+  [
+   0,
+   0.06980000762268901
+  ],
+  [
+   0,
+   0.05500001134350896
+  ],
+  [
+   0,
+   0.015099998563528061
+  ],
+  [
+   0,
+   0.05829997826367617
+  ],
+  [
+   0,
+   0.015500001609325409
+  ],
+  [
+   0,
+   0.05740000051446259
+  ],
+  [
+   1,
+   0.07849998655728996
+  ],
+  [
+   0,
+   0.0788999896030873
+  ],
+  [
+   0,
+   0.02579999272711575
+  ],
+  [
+   0,
+   0.12320000678300858
+  ],
+  [
+   0,
+   0.0261999957729131
+  ],
+  [
+   0,
+   0.10539998766034842
+  ],
+  [
+   0,
+   0.04430001717992127
+  ],
+  [
+   0,
+   0.05809997674077749
+  ],
+  [
+   0,
+   0.01680001150816679
+  ],
+  [
+   0,
+   0.13329999637790024
+  ],
+  [
+   0,
+   0.04959999932907522
+  ],
+  [
+   0,
+   0.09429999045096338
+  ],
+  [
+   1,
+   0.0675999908708036
+  ],
+  [
+   0,
+   0.09390001650899649
+  ],
+  [
+   0,
+   0.039300008211284876
+  ],
+  [
+   0,
+   0.1328999933321029
+  ],
+  [
+   0,
+   0.06429999484680593
+  ],
+  [
+   0,
+   0.09109999518841505
+  ],
+  [
+   0,
+   0.045199994929134846
+  ],
+  [
+   0,
+   0.08629998774267733
+  ],
+  [
+   0,
+   0.035299977753311396
+  ],
+  [
+   0,
+   0.10269999620504677
+  ],
+  [
+   0,
+   0.02710000262595713
+  ],
+  [
+   0,
+   0.09389998740516603
+  ],
+  [
+   1,
+   0.08450000314041972
+  ],
+  [
+   0,
+   0.08659999002702534
+  ],
+  [
+   0,
+   0.03950000973418355
+  ],
+  [
+   0,
+   0.09240000508725643
+  ],
+  [
+   0,
+   0.029399991035461426
+  ],
+  [
+   0,
+   0.11719999019987881
+  ],
+  [
+   0,
+   0.037699996028095484
+  ],
+  [
+   0,
+   0.05299999611452222
+  ],
+  [
+   0,
+   0.01780001912266016
+  ],
+  [
+   0,
+   0.06290001329034567
+  ],
+  [
+   0,
+   0.016000005416572094
+  ],
+  [
+   0,
+   0.06229997961781919
+  ],
+  [
+   1,
+   0.03460000152699649
+  ],
+  [
+   0,
+   0.07340000593103468
+  ],
+  [
+   0,
+   0.01819999306462705
+  ],
+  [
+   0,
+   0.046900007873773575
+  ],
+  [
+   0,
+   0.015300000086426735
+  ],
+  [
+   0,
+   0.07850001566112041
+  ],
+  [
+   0,
+   0.020100007532164454
+  ],
+  [
+   0,
+   0.08019999950192869
+  ],
+  [
+   0,
+   0.31480001052841544
+  ],
+  [
+   0,
+   0.12119999155402184
+  ],
+  [
+   0,
+   0.069500005338341
+  ],
+  [
+   0,
+   0.053099996875971556
+  ],
+  [
+   1,
+   0.033899996196851134
+  ],
+  [
+   0,
+   0.5568999913521111
+  ],
+  [
+   0,
+   0.04859999171458185
+  ],
+  [
+   0,
+   0.0974999857135117
+  ],
+  [
+   0,
+   0.04149999585933983
+  ],
+  [
+   0,
+   0.09079999290406704
+  ],
+  [
+   0,
+   0.037999998312443495
+  ],
+  [
+   0,
+   0.12099999003112316
+  ],
+  [
+   0,
+   0.026699999580159783
+  ],
+  [
+   0,
+   0.055800017435103655
+  ],
+  [
+   0,
+   0.03090000245720148
+  ],
+  [
+   0,
+   0.09780001710169017
+  ],
+  [
+   1,
+   0.08930001058615744
+  ],
+  [
+   0,
+   0.050700007705017924
+  ],
+  [
+   0,
+   0.015300000086426735
+  ],
+  [
+   0,
+   0.09419998968951404
+  ],
+  [
+   0,
+   0.03309999010525644
+  ],
+  [
+   0,
+   0.09450002107769251
+  ],
+  [
+   0,
+   0.0425000034738332
+  ],
+  [
+   0,
+   0.14180000289343297
+  ],
+  [
+   0,
+   0.034999975468963385
+  ],
+  [
+   0,
+   0.07559999357908964
+  ],
+  [
+   0,
+   0.038700003642588854
+  ],
+  [
+   0,
+   0.08450000314041972
+  ],
+  [
+   1,
+   0.0686999992467463
+  ],
+  [
+   0,
+   0.10980002116411924
+  ],
+  [
+   0,
+   0.057600002037361264
+  ],
+  [
+   0,
+   0.10839998139999807
+  ],
+  [
+   0,
+   0.04129999433644116
+  ],
+  [
+   0,
+   0.08550001075491309
+  ],
+  [
+   0,
+   0.048600020818412304
+  ],
+  [
+   0,
+   0.13890000991523266
+  ],
+  [
+   0,
+   0.020800012862309813
+  ],
+  [
+   0,
+   0.12760001118294895
+  ],
+  [
+   0,
+   0.040000013541430235
+  ],
+  [
+   0,
+   0.09689998114481568
+  ],
+  [
+   1,
+   0.034500000765547156
+  ],
+  [
+   0,
+   0.14720001490786672
+  ],
+  [
+   0,
+   0.035299977753311396
+  ],
+  [
+   0,
+   0.09250000584870577
+  ],
+  [
+   0,
+   0.03500000457279384
+  ],
+  [
+   0,
+   0.096399977337569
+  ],
+  [
+   0,
+   0.03640001523308456
+  ],
+  [
+   0,
+   0.10049997945316136
+  ],
+  [
+   0,
+   0.03440000000409782
+  ],
+  [
+   0,
+   0.13679999392479658
+  ],
+  [
+   0,
+   0.032899988582357764
+  ],
+  [
+   0,
+   0.08399999933317304
+  ],
+  [
+   1,
+   0.07330000516958535
+  ],
+  [
+   0,
+   0.10269999620504677
+  ],
+  [
+   0,
+   0.03060000017285347
+  ],
+  [
+   0,
+   0.10369997471570969
+  ],
+  [
+   0,
+   0.03229998401366174
+  ],
+  [
+   0,
+   0.13989998842589557
+  ],
+  [
+   0,
+   0.028400012524798512
+  ],
+  [
+   0,
+   0.08060000254772604
+  ],
+  [
+   0,
+   0.026699999580159783
+  ],
+  [
+   0,
+   0.08739999611862004
+  ],
+  [
+   0,
+   0.039700011257082224
+  ],
+  [
+   0,
+   0.09349998435936868
+  ],
+  [
+   1,
+   0.07929999264888465
+  ],
+  [
+   0,
+   0.16620001406408846
+  ],
+  [
+   0,
+   0.04710000939667225
+  ],
+  [
+   0,
+   0.08679999154992402
+  ],
+  [
+   0,
+   0.03680001827888191
+  ],
+  [
+   0,
+   0.09850002243183553
+  ],
+  [
+   0,
+   0.0371999922208488
+  ],
+  [
+   0,
+   0.17340001068077981
+  ],
+  [
+   0,
+   0.030199997127056122
+  ],
+  [
+   0,
+   0.12879999121651053
+  ],
+  [
+   0,
+   0.03130000550299883
+  ],
+  [
+   0,
+   0.16160000814124942
+  ],
+  [
+   1,
+   0.11319998884573579
+  ],
+  [
+   0,
+   0.09940000018104911
+  ],
+  [
+   0,
+   0.03890000516548753
+  ],
+  [
+   0,
+   0.12290000449866056
+  ],
+  [
+   0,
+   0.03290001768618822
+  ],
+  [
+   0,
+   0.07700000423938036
+  ],
+  [
+   0,
+   0.030499999411404133
+  ],
+  [
+   0,
+   0.1033000007737428
+  ],
+  [
+   0,
+   0.03260001540184021
+  ],
+  [
+   0,
+   0.09159999899566174
+  ],
+  [
+   0,
+   0.037299992982298136
+  ],
+  [
+   0,
+   0.1469000126235187
+  ],
+  [
+   1,
+   0.06350001785904169
+  ],
+  [
+   0,
+   0.21520000882446766
+  ],
+  [
+   0,
+   0.05360000068321824
+  ],
+  [
+   0,
+   0.051000009989365935
+  ],
+  [
+   0,
+   0.026599998818710446
+  ]
+ ],
+ "trace": [
+  {
+   "frame": 0,
+   "total_ns": 628493100,
+   "stages": {
+    "loop_guard": 3300,
+    "decode_read": 99357000,
+    "hud_setup": 29900,
+    "telemetry": 6720400,
+    "frame0_probe": 310466700,
+    "compose": 35330200,
+    "above_compose": 2968800,
+    "above_bbox_crop": 256400,
+    "chart_plan": 1400,
+    "chart_other": 8674400,
+    "gauge_upload": 4507900,
+    "map_upload": 20777000,
+    "hud_dirty": 93813700,
+    "update_hud": 20772800,
+    "process_frame": 24624200,
+    "native_timings": 155700,
+    "progress": 28900
+   },
+   "unaccounted_ns": 4400
+  },
+  {
+   "frame": 1,
+   "total_ns": 48087200,
+   "stages": {
+    "loop_guard": 2200,
+    "decode_read": 807200,
+    "hud_setup": 43800,
+    "telemetry": 6249700,
+    "frame0_probe": 3600,
+    "compose": 8189500,
+    "above_compose": 950800,
+    "above_bbox_crop": 383900,
+    "chart_plan": 2500,
+    "chart_other": 268800,
+    "gauge_upload": 3383400,
+    "map_upload": 5969200,
+    "hud_dirty": 1848700,
+    "update_hud": 1003800,
+    "process_frame": 18838700,
+    "native_timings": 114600,
+    "progress": 24500
+   },
+   "unaccounted_ns": 2300
+  },
+  {
+   "frame": 2,
+   "total_ns": 36889100,
+   "stages": {
+    "loop_guard": 800,
+    "decode_read": 992900,
+    "hud_setup": 26100,
+    "telemetry": 17400300,
+    "frame0_probe": 3700,
+    "compose": 6859700,
+    "above_compose": 866600,
+    "above_bbox_crop": 243000,
+    "chart_plan": 2600,
+    "chart_other": 200800,
+    "gauge_upload": 2425700,
+    "map_upload": 3388500,
+    "hud_dirty": 1066800,
+    "update_hud": 393100,
+    "process_frame": 2815800,
+    "native_timings": 167900,
+    "progress": 32200
+   },
+   "unaccounted_ns": 2600
+  },
+  {
+   "frame": 3,
+   "total_ns": 43395400,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 5966600,
+    "hud_setup": 112900,
+    "telemetry": 16462700,
+    "frame0_probe": 7800,
+    "compose": 9236300,
+    "above_compose": 771300,
+    "above_bbox_crop": 223500,
+    "chart_plan": 1300,
+    "chart_other": 174900,
+    "gauge_upload": 1928900,
+    "map_upload": 3877300,
+    "hud_dirty": 1171900,
+    "update_hud": 472000,
+    "process_frame": 2863300,
+    "native_timings": 98700,
+    "progress": 23400
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 4,
+   "total_ns": 41403200,
+   "stages": {
+    "loop_guard": 900,
+    "decode_read": 696400,
+    "hud_setup": 21800,
+    "telemetry": 7230900,
+    "frame0_probe": 4100,
+    "compose": 6392300,
+    "above_compose": 779400,
+    "above_bbox_crop": 209400,
+    "chart_plan": 1400,
+    "chart_other": 152900,
+    "gauge_upload": 1547100,
+    "map_upload": 2423900,
+    "hud_dirty": 922400,
+    "update_hud": 227400,
+    "process_frame": 20528100,
+    "native_timings": 214800,
+    "progress": 47300
+   },
+   "unaccounted_ns": 2700
+  },
+  {
+   "frame": 5,
+   "total_ns": 54474600,
+   "stages": {
+    "loop_guard": 1700,
+    "decode_read": 1232300,
+    "hud_setup": 41800,
+    "telemetry": 11256600,
+    "frame0_probe": 19000,
+    "compose": 20123600,
+    "above_compose": 1118100,
+    "above_bbox_crop": 320100,
+    "chart_plan": 2300,
+    "chart_other": 209700,
+    "gauge_upload": 3425700,
+    "map_upload": 10861400,
+    "hud_dirty": 1464500,
+    "update_hud": 482200,
+    "process_frame": 3725500,
+    "native_timings": 150300,
+    "progress": 37800
+   },
+   "unaccounted_ns": 2000
+  },
+  {
+   "frame": 6,
+   "total_ns": 64259000,
+   "stages": {
+    "loop_guard": 1700,
+    "decode_read": 1097500,
+    "hud_setup": 38400,
+    "telemetry": 18731600,
+    "frame0_probe": 6000,
+    "compose": 10750700,
+    "above_compose": 1254400,
+    "above_bbox_crop": 307100,
+    "chart_plan": 2700,
+    "chart_other": 1046900,
+    "gauge_upload": 9560800,
+    "map_upload": 7369800,
+    "hud_dirty": 2221200,
+    "update_hud": 1354200,
+    "process_frame": 10046900,
+    "native_timings": 388800,
+    "progress": 74500
+   },
+   "unaccounted_ns": 5800
+  },
+  {
+   "frame": 7,
+   "total_ns": 56961100,
+   "stages": {
+    "loop_guard": 3100,
+    "decode_read": 2562500,
+    "hud_setup": 41100,
+    "telemetry": 12608600,
+    "frame0_probe": 4000,
+    "compose": 22926400,
+    "above_compose": 994100,
+    "above_bbox_crop": 273600,
+    "chart_plan": 1700,
+    "chart_other": 188300,
+    "gauge_upload": 1866000,
+    "map_upload": 4040300,
+    "hud_dirty": 4860800,
+    "update_hud": 1624700,
+    "process_frame": 4725100,
+    "native_timings": 200000,
+    "progress": 37800
+   },
+   "unaccounted_ns": 3000
+  },
+  {
+   "frame": 8,
+   "total_ns": 54224800,
+   "stages": {
+    "loop_guard": 1900,
+    "decode_read": 1522200,
+    "hud_setup": 38000,
+    "telemetry": 10037000,
+    "frame0_probe": 2900,
+    "compose": 18922400,
+    "above_compose": 1310100,
+    "above_bbox_crop": 496600,
+    "chart_plan": 2400,
+    "chart_other": 436800,
+    "gauge_upload": 3744800,
+    "map_upload": 9907800,
+    "hud_dirty": 2720900,
+    "update_hud": 584500,
+    "process_frame": 4185800,
+    "native_timings": 237200,
+    "progress": 70100
+   },
+   "unaccounted_ns": 3400
+  },
+  {
+   "frame": 9,
+   "total_ns": 55640000,
+   "stages": {
+    "loop_guard": 2500,
+    "decode_read": 1599800,
+    "hud_setup": 57500,
+    "telemetry": 18085200,
+    "frame0_probe": 13200,
+    "compose": 16003000,
+    "above_compose": 762600,
+    "above_bbox_crop": 204800,
+    "chart_plan": 1300,
+    "chart_other": 161700,
+    "gauge_upload": 2412500,
+    "map_upload": 10638700,
+    "hud_dirty": 1553200,
+    "update_hud": 410400,
+    "process_frame": 3478400,
+    "native_timings": 207900,
+    "progress": 44800
+   },
+   "unaccounted_ns": 2500
+  },
+  {
+   "frame": 10,
+   "total_ns": 41670100,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 1429400,
+    "hud_setup": 36900,
+    "telemetry": 10202500,
+    "frame0_probe": 17900,
+    "compose": 19781600,
+    "above_compose": 870600,
+    "above_bbox_crop": 257400,
+    "chart_plan": 1600,
+    "chart_other": 166700,
+    "gauge_upload": 1663000,
+    "map_upload": 3080400,
+    "hud_dirty": 1101500,
+    "update_hud": 394300,
+    "process_frame": 2440900,
+    "native_timings": 170100,
+    "progress": 52400
+   },
+   "unaccounted_ns": 1600
+  },
+  {
+   "frame": 11,
+   "total_ns": 43075500,
+   "stages": {
+    "loop_guard": 1000,
+    "decode_read": 783300,
+    "hud_setup": 48500,
+    "telemetry": 6889900,
+    "frame0_probe": 6500,
+    "compose": 17196000,
+    "above_compose": 1468700,
+    "above_bbox_crop": 488300,
+    "chart_plan": 2400,
+    "chart_other": 303700,
+    "gauge_upload": 2382200,
+    "map_upload": 4230500,
+    "hud_dirty": 1015900,
+    "update_hud": 306400,
+    "process_frame": 7421900,
+    "native_timings": 433100,
+    "progress": 91500
+   },
+   "unaccounted_ns": 5700
+  },
+  {
+   "frame": 12,
+   "total_ns": 33055600,
+   "stages": {
+    "loop_guard": 4200,
+    "decode_read": 2864300,
+    "hud_setup": 46700,
+    "telemetry": 11653000,
+    "frame0_probe": 3900,
+    "compose": 8005500,
+    "above_compose": 861200,
+    "above_bbox_crop": 237600,
+    "chart_plan": 1400,
+    "chart_other": 160400,
+    "gauge_upload": 1975100,
+    "map_upload": 3172100,
+    "hud_dirty": 843300,
+    "update_hud": 254300,
+    "process_frame": 2465200,
+    "native_timings": 379900,
+    "progress": 119900
+   },
+   "unaccounted_ns": 7600
+  },
+  {
+   "frame": 13,
+   "total_ns": 47740700,
+   "stages": {
+    "loop_guard": 6300,
+    "decode_read": 5335500,
+    "hud_setup": 92900,
+    "telemetry": 14684200,
+    "frame0_probe": 7400,
+    "compose": 7245100,
+    "above_compose": 979700,
+    "above_bbox_crop": 241100,
+    "chart_plan": 1600,
+    "chart_other": 211700,
+    "gauge_upload": 4279400,
+    "map_upload": 9486100,
+    "hud_dirty": 1161600,
+    "update_hud": 345400,
+    "process_frame": 3447100,
+    "native_timings": 176000,
+    "progress": 36600
+   },
+   "unaccounted_ns": 3000
+  },
+  {
+   "frame": 14,
+   "total_ns": 52128000,
+   "stages": {
+    "loop_guard": 1600,
+    "decode_read": 937500,
+    "hud_setup": 29000,
+    "telemetry": 15383600,
+    "frame0_probe": 9700,
+    "compose": 15432900,
+    "above_compose": 860500,
+    "above_bbox_crop": 244700,
+    "chart_plan": 1500,
+    "chart_other": 173800,
+    "gauge_upload": 4408200,
+    "map_upload": 9323200,
+    "hud_dirty": 1357400,
+    "update_hud": 297900,
+    "process_frame": 3438400,
+    "native_timings": 189300,
+    "progress": 37300
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 15,
+   "total_ns": 36012100,
+   "stages": {
+    "loop_guard": 2200,
+    "decode_read": 1130500,
+    "hud_setup": 35500,
+    "telemetry": 13180700,
+    "frame0_probe": 14500,
+    "compose": 12462600,
+    "above_compose": 746200,
+    "above_bbox_crop": 194800,
+    "chart_plan": 1100,
+    "chart_other": 136300,
+    "gauge_upload": 1609500,
+    "map_upload": 2874800,
+    "hud_dirty": 866800,
+    "update_hud": 309200,
+    "process_frame": 2302800,
+    "native_timings": 115200,
+    "progress": 28500
+   },
+   "unaccounted_ns": 900
+  },
+  {
+   "frame": 16,
+   "total_ns": 66027300,
+   "stages": {
+    "loop_guard": 800,
+    "decode_read": 553100,
+    "hud_setup": 24000,
+    "telemetry": 48808000,
+    "frame0_probe": 3400,
+    "compose": 9279900,
+    "above_compose": 605700,
+    "above_bbox_crop": 157800,
+    "chart_plan": 1000,
+    "chart_other": 113400,
+    "gauge_upload": 1293200,
+    "map_upload": 2081600,
+    "hud_dirty": 685300,
+    "update_hud": 192900,
+    "process_frame": 2067600,
+    "native_timings": 129200,
+    "progress": 29300
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 17,
+   "total_ns": 35501600,
+   "stages": {
+    "loop_guard": 800,
+    "decode_read": 1967700,
+    "hud_setup": 146200,
+    "telemetry": 17266200,
+    "frame0_probe": 6800,
+    "compose": 6444700,
+    "above_compose": 697100,
+    "above_bbox_crop": 215700,
+    "chart_plan": 1900,
+    "chart_other": 166800,
+    "gauge_upload": 1658500,
+    "map_upload": 2928600,
+    "hud_dirty": 862500,
+    "update_hud": 258500,
+    "process_frame": 2736400,
+    "native_timings": 114200,
+    "progress": 26900
+   },
+   "unaccounted_ns": 2100
+  },
+  {
+   "frame": 18,
+   "total_ns": 39253300,
+   "stages": {
+    "loop_guard": 2700,
+    "decode_read": 8539300,
+    "hud_setup": 78200,
+    "telemetry": 13097000,
+    "frame0_probe": 3900,
+    "compose": 7498800,
+    "above_compose": 857700,
+    "above_bbox_crop": 209100,
+    "chart_plan": 1200,
+    "chart_other": 138000,
+    "gauge_upload": 1360600,
+    "map_upload": 2475300,
+    "hud_dirty": 747600,
+    "update_hud": 203900,
+    "process_frame": 2874300,
+    "native_timings": 998500,
+    "progress": 156600
+   },
+   "unaccounted_ns": 10600
+  },
+  {
+   "frame": 19,
+   "total_ns": 36687400,
+   "stages": {
+    "loop_guard": 7600,
+    "decode_read": 7672700,
+    "hud_setup": 64600,
+    "telemetry": 13142800,
+    "frame0_probe": 2300,
+    "compose": 5939700,
+    "above_compose": 513400,
+    "above_bbox_crop": 144000,
+    "chart_plan": 800,
+    "chart_other": 102500,
+    "gauge_upload": 1314400,
+    "map_upload": 2829900,
+    "hud_dirty": 729500,
+    "update_hud": 200700,
+    "process_frame": 3835500,
+    "native_timings": 150700,
+    "progress": 33600
+   },
+   "unaccounted_ns": 2700
+  },
+  {
+   "frame": 20,
+   "total_ns": 22640700,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 695100,
+    "hud_setup": 16700,
+    "telemetry": 6033800,
+    "frame0_probe": 7300,
+    "compose": 6236700,
+    "above_compose": 728400,
+    "above_bbox_crop": 169600,
+    "chart_plan": 900,
+    "chart_other": 116800,
+    "gauge_upload": 1561900,
+    "map_upload": 3144400,
+    "hud_dirty": 929300,
+    "update_hud": 246200,
+    "process_frame": 2531800,
+    "native_timings": 175300,
+    "progress": 43200
+   },
+   "unaccounted_ns": 1800
+  },
+  {
+   "frame": 21,
+   "total_ns": 22611800,
+   "stages": {
+    "loop_guard": 1400,
+    "decode_read": 579500,
+    "hud_setup": 32900,
+    "telemetry": 7047500,
+    "frame0_probe": 3100,
+    "compose": 6944200,
+    "above_compose": 566500,
+    "above_bbox_crop": 191900,
+    "chart_plan": 1100,
+    "chart_other": 140500,
+    "gauge_upload": 1301100,
+    "map_upload": 2446000,
+    "hud_dirty": 761400,
+    "update_hud": 239700,
+    "process_frame": 2219700,
+    "native_timings": 107900,
+    "progress": 26300
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 22,
+   "total_ns": 23692500,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 891000,
+    "hud_setup": 40100,
+    "telemetry": 7655400,
+    "frame0_probe": 3500,
+    "compose": 6493000,
+    "above_compose": 663600,
+    "above_bbox_crop": 167100,
+    "chart_plan": 1000,
+    "chart_other": 139100,
+    "gauge_upload": 1428400,
+    "map_upload": 2456000,
+    "hud_dirty": 733900,
+    "update_hud": 219600,
+    "process_frame": 2541700,
+    "native_timings": 203600,
+    "progress": 51100
+   },
+   "unaccounted_ns": 3200
+  },
+  {
+   "frame": 23,
+   "total_ns": 35227200,
+   "stages": {
+    "loop_guard": 1900,
+    "decode_read": 6235000,
+    "hud_setup": 73300,
+    "telemetry": 11557000,
+    "frame0_probe": 4100,
+    "compose": 6626900,
+    "above_compose": 564400,
+    "above_bbox_crop": 158400,
+    "chart_plan": 1000,
+    "chart_other": 156900,
+    "gauge_upload": 1601400,
+    "map_upload": 3037700,
+    "hud_dirty": 850900,
+    "update_hud": 243700,
+    "process_frame": 3594500,
+    "native_timings": 342700,
+    "progress": 167500
+   },
+   "unaccounted_ns": 9900
+  },
+  {
+   "frame": 24,
+   "total_ns": 37588200,
+   "stages": {
+    "loop_guard": 7300,
+    "decode_read": 5913700,
+    "hud_setup": 87400,
+    "telemetry": 13960600,
+    "frame0_probe": 3700,
+    "compose": 7761100,
+    "above_compose": 531700,
+    "above_bbox_crop": 169900,
+    "chart_plan": 900,
+    "chart_other": 191500,
+    "gauge_upload": 1449600,
+    "map_upload": 3007000,
+    "hud_dirty": 752500,
+    "update_hud": 207400,
+    "process_frame": 2948400,
+    "native_timings": 474000,
+    "progress": 112600
+   },
+   "unaccounted_ns": 8900
+  },
+  {
+   "frame": 25,
+   "total_ns": 36753700,
+   "stages": {
+    "loop_guard": 6700,
+    "decode_read": 7782000,
+    "hud_setup": 57400,
+    "telemetry": 11879600,
+    "frame0_probe": 3500,
+    "compose": 6493000,
+    "above_compose": 588200,
+    "above_bbox_crop": 163800,
+    "chart_plan": 1100,
+    "chart_other": 144100,
+    "gauge_upload": 1516300,
+    "map_upload": 4369100,
+    "hud_dirty": 1096700,
+    "update_hud": 243200,
+    "process_frame": 2249000,
+    "native_timings": 123800,
+    "progress": 34500
+   },
+   "unaccounted_ns": 1700
+  },
+  {
+   "frame": 26,
+   "total_ns": 23704800,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 665000,
+    "hud_setup": 38100,
+    "telemetry": 6768200,
+    "frame0_probe": 3000,
+    "compose": 5623300,
+    "above_compose": 498500,
+    "above_bbox_crop": 139800,
+    "chart_plan": 800,
+    "chart_other": 103500,
+    "gauge_upload": 1802400,
+    "map_upload": 3619900,
+    "hud_dirty": 726700,
+    "update_hud": 199700,
+    "process_frame": 3287900,
+    "native_timings": 180100,
+    "progress": 44700
+   },
+   "unaccounted_ns": 2000
+  },
+  {
+   "frame": 27,
+   "total_ns": 35443900,
+   "stages": {
+    "loop_guard": 65600,
+    "decode_read": 1219800,
+    "hud_setup": 177900,
+    "telemetry": 17541800,
+    "frame0_probe": 3100,
+    "compose": 6393900,
+    "above_compose": 535200,
+    "above_bbox_crop": 201700,
+    "chart_plan": 1400,
+    "chart_other": 147900,
+    "gauge_upload": 2121200,
+    "map_upload": 3511200,
+    "hud_dirty": 726600,
+    "update_hud": 205700,
+    "process_frame": 2407500,
+    "native_timings": 144200,
+    "progress": 36900
+   },
+   "unaccounted_ns": 2300
+  },
+  {
+   "frame": 28,
+   "total_ns": 35297100,
+   "stages": {
+    "loop_guard": 1700,
+    "decode_read": 1198700,
+    "hud_setup": 115200,
+    "telemetry": 17514300,
+    "frame0_probe": 5400,
+    "compose": 7157700,
+    "above_compose": 630500,
+    "above_bbox_crop": 180700,
+    "chart_plan": 1600,
+    "chart_other": 159400,
+    "gauge_upload": 1989400,
+    "map_upload": 2847400,
+    "hud_dirty": 728800,
+    "update_hud": 201500,
+    "process_frame": 2447200,
+    "native_timings": 93700,
+    "progress": 22200
+   },
+   "unaccounted_ns": 1700
+  },
+  {
+   "frame": 29,
+   "total_ns": 37014300,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 3768600,
+    "hud_setup": 120700,
+    "telemetry": 15161100,
+    "frame0_probe": 3000,
+    "compose": 7476300,
+    "above_compose": 934400,
+    "above_bbox_crop": 175700,
+    "chart_plan": 1100,
+    "chart_other": 122300,
+    "gauge_upload": 1981600,
+    "map_upload": 2976100,
+    "hud_dirty": 732500,
+    "update_hud": 204500,
+    "process_frame": 2493800,
+    "native_timings": 682300,
+    "progress": 170000
+   },
+   "unaccounted_ns": 9200
+  },
+  {
+   "frame": 30,
+   "total_ns": 41547200,
+   "stages": {
+    "loop_guard": 7300,
+    "decode_read": 6414100,
+    "hud_setup": 83900,
+    "telemetry": 16053500,
+    "frame0_probe": 70600,
+    "compose": 8860000,
+    "above_compose": 669500,
+    "above_bbox_crop": 266500,
+    "chart_plan": 1000,
+    "chart_other": 125800,
+    "gauge_upload": 2269900,
+    "map_upload": 3013100,
+    "hud_dirty": 794200,
+    "update_hud": 191700,
+    "process_frame": 2592100,
+    "native_timings": 107700,
+    "progress": 25200
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 31,
+   "total_ns": 33715500,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 2605600,
+    "hud_setup": 100300,
+    "telemetry": 16356000,
+    "frame0_probe": 4600,
+    "compose": 6630000,
+    "above_compose": 491200,
+    "above_bbox_crop": 138600,
+    "chart_plan": 800,
+    "chart_other": 100100,
+    "gauge_upload": 1466400,
+    "map_upload": 2741200,
+    "hud_dirty": 700200,
+    "update_hud": 193600,
+    "process_frame": 2057700,
+    "native_timings": 102600,
+    "progress": 24000
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 32,
+   "total_ns": 34850500,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 627800,
+    "hud_setup": 32500,
+    "telemetry": 19939300,
+    "frame0_probe": 3800,
+    "compose": 5724900,
+    "above_compose": 493700,
+    "above_bbox_crop": 137600,
+    "chart_plan": 900,
+    "chart_other": 100300,
+    "gauge_upload": 1584100,
+    "map_upload": 2789000,
+    "hud_dirty": 722900,
+    "update_hud": 219000,
+    "process_frame": 2326200,
+    "native_timings": 120100,
+    "progress": 25700
+   },
+   "unaccounted_ns": 1600
+  },
+  {
+   "frame": 33,
+   "total_ns": 34478700,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 3340400,
+    "hud_setup": 185600,
+    "telemetry": 15512000,
+    "frame0_probe": 4700,
+    "compose": 6460100,
+    "above_compose": 661300,
+    "above_bbox_crop": 206900,
+    "chart_plan": 800,
+    "chart_other": 121500,
+    "gauge_upload": 1421200,
+    "map_upload": 2640500,
+    "hud_dirty": 748500,
+    "update_hud": 203800,
+    "process_frame": 2821600,
+    "native_timings": 114000,
+    "progress": 33400
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 34,
+   "total_ns": 34134700,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 2701300,
+    "hud_setup": 100600,
+    "telemetry": 16737500,
+    "frame0_probe": 3600,
+    "compose": 5569300,
+    "above_compose": 838200,
+    "above_bbox_crop": 205100,
+    "chart_plan": 1700,
+    "chart_other": 227500,
+    "gauge_upload": 1706000,
+    "map_upload": 2583000,
+    "hud_dirty": 726200,
+    "update_hud": 201500,
+    "process_frame": 2319500,
+    "native_timings": 170100,
+    "progress": 39500
+   },
+   "unaccounted_ns": 2900
+  },
+  {
+   "frame": 35,
+   "total_ns": 34416300,
+   "stages": {
+    "loop_guard": 1000,
+    "decode_read": 2814600,
+    "hud_setup": 91600,
+    "telemetry": 15282700,
+    "frame0_probe": 3700,
+    "compose": 7173700,
+    "above_compose": 714200,
+    "above_bbox_crop": 239100,
+    "chart_plan": 1900,
+    "chart_other": 142700,
+    "gauge_upload": 1703700,
+    "map_upload": 2700600,
+    "hud_dirty": 731000,
+    "update_hud": 216200,
+    "process_frame": 2437400,
+    "native_timings": 131200,
+    "progress": 29300
+   },
+   "unaccounted_ns": 1700
+  },
+  {
+   "frame": 36,
+   "total_ns": 34989200,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 2303500,
+    "hud_setup": 112100,
+    "telemetry": 17057000,
+    "frame0_probe": 6500,
+    "compose": 5979400,
+    "above_compose": 542800,
+    "above_bbox_crop": 147000,
+    "chart_plan": 800,
+    "chart_other": 107100,
+    "gauge_upload": 1959100,
+    "map_upload": 3576600,
+    "hud_dirty": 713000,
+    "update_hud": 201200,
+    "process_frame": 2094700,
+    "native_timings": 144500,
+    "progress": 40900
+   },
+   "unaccounted_ns": 1700
+  },
+  {
+   "frame": 37,
+   "total_ns": 33407600,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 1529600,
+    "hud_setup": 115600,
+    "telemetry": 16510200,
+    "frame0_probe": 3600,
+    "compose": 6343700,
+    "above_compose": 531200,
+    "above_bbox_crop": 149900,
+    "chart_plan": 1000,
+    "chart_other": 109600,
+    "gauge_upload": 1462200,
+    "map_upload": 3150900,
+    "hud_dirty": 708100,
+    "update_hud": 211600,
+    "process_frame": 2375800,
+    "native_timings": 166900,
+    "progress": 34800
+   },
+   "unaccounted_ns": 1800
+  },
+  {
+   "frame": 38,
+   "total_ns": 33042700,
+   "stages": {
+    "loop_guard": 1600,
+    "decode_read": 736400,
+    "hud_setup": 28900,
+    "telemetry": 6648200,
+    "frame0_probe": 3600,
+    "compose": 6388900,
+    "above_compose": 4896600,
+    "above_bbox_crop": 1094600,
+    "chart_plan": 8500,
+    "chart_other": 669900,
+    "gauge_upload": 3706400,
+    "map_upload": 4310500,
+    "hud_dirty": 1104700,
+    "update_hud": 306000,
+    "process_frame": 2921700,
+    "native_timings": 172600,
+    "progress": 41500
+   },
+   "unaccounted_ns": 2100
+  },
+  {
+   "frame": 39,
+   "total_ns": 36759600,
+   "stages": {
+    "loop_guard": 1900,
+    "decode_read": 779200,
+    "hud_setup": 38000,
+    "telemetry": 6755700,
+    "frame0_probe": 3200,
+    "compose": 11398400,
+    "above_compose": 4805400,
+    "above_bbox_crop": 638000,
+    "chart_plan": 4400,
+    "chart_other": 422300,
+    "gauge_upload": 3547600,
+    "map_upload": 4307800,
+    "hud_dirty": 1204900,
+    "update_hud": 323600,
+    "process_frame": 2349100,
+    "native_timings": 143300,
+    "progress": 35300
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 40,
+   "total_ns": 34605700,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 790800,
+    "hud_setup": 31500,
+    "telemetry": 12283700,
+    "frame0_probe": 11600,
+    "compose": 11392200,
+    "above_compose": 705000,
+    "above_bbox_crop": 185200,
+    "chart_plan": 1300,
+    "chart_other": 133400,
+    "gauge_upload": 1720200,
+    "map_upload": 3243200,
+    "hud_dirty": 978600,
+    "update_hud": 276300,
+    "process_frame": 2674300,
+    "native_timings": 145100,
+    "progress": 30600
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 41,
+   "total_ns": 21763500,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 683700,
+    "hud_setup": 23500,
+    "telemetry": 6129300,
+    "frame0_probe": 4000,
+    "compose": 5724600,
+    "above_compose": 830100,
+    "above_bbox_crop": 172400,
+    "chart_plan": 1100,
+    "chart_other": 125100,
+    "gauge_upload": 1771700,
+    "map_upload": 2724400,
+    "hud_dirty": 918200,
+    "update_hud": 208400,
+    "process_frame": 2329900,
+    "native_timings": 93000,
+    "progress": 21400
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 42,
+   "total_ns": 33170200,
+   "stages": {
+    "loop_guard": 1000,
+    "decode_read": 886400,
+    "hud_setup": 28900,
+    "telemetry": 6073000,
+    "frame0_probe": 2700,
+    "compose": 5907600,
+    "above_compose": 5075200,
+    "above_bbox_crop": 1088300,
+    "chart_plan": 8200,
+    "chart_other": 574500,
+    "gauge_upload": 3662200,
+    "map_upload": 5027500,
+    "hud_dirty": 1138500,
+    "update_hud": 268000,
+    "process_frame": 3206400,
+    "native_timings": 182600,
+    "progress": 37800
+   },
+   "unaccounted_ns": 1400
+  },
+  {
+   "frame": 43,
+   "total_ns": 24158500,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 776100,
+    "hud_setup": 32800,
+    "telemetry": 6616300,
+    "frame0_probe": 2700,
+    "compose": 6751100,
+    "above_compose": 800300,
+    "above_bbox_crop": 221600,
+    "chart_plan": 1400,
+    "chart_other": 143100,
+    "gauge_upload": 1956100,
+    "map_upload": 3486700,
+    "hud_dirty": 987200,
+    "update_hud": 206000,
+    "process_frame": 2053000,
+    "native_timings": 99500,
+    "progress": 22200
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 44,
+   "total_ns": 34260000,
+   "stages": {
+    "loop_guard": 1000,
+    "decode_read": 564400,
+    "hud_setup": 22100,
+    "telemetry": 14845400,
+    "frame0_probe": 5300,
+    "compose": 9195100,
+    "above_compose": 871700,
+    "above_bbox_crop": 183300,
+    "chart_plan": 1100,
+    "chart_other": 130900,
+    "gauge_upload": 1689800,
+    "map_upload": 2798600,
+    "hud_dirty": 754600,
+    "update_hud": 198900,
+    "process_frame": 2794400,
+    "native_timings": 164900,
+    "progress": 37000
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 45,
+   "total_ns": 36844400,
+   "stages": {
+    "loop_guard": 1600,
+    "decode_read": 2548900,
+    "hud_setup": 120000,
+    "telemetry": 19259900,
+    "frame0_probe": 3100,
+    "compose": 5945700,
+    "above_compose": 611000,
+    "above_bbox_crop": 155500,
+    "chart_plan": 900,
+    "chart_other": 111200,
+    "gauge_upload": 1561200,
+    "map_upload": 3134200,
+    "hud_dirty": 721100,
+    "update_hud": 207000,
+    "process_frame": 2329700,
+    "native_timings": 110500,
+    "progress": 21800
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 46,
+   "total_ns": 23066100,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 616100,
+    "hud_setup": 27100,
+    "telemetry": 7303400,
+    "frame0_probe": 4000,
+    "compose": 6302300,
+    "above_compose": 555900,
+    "above_bbox_crop": 153000,
+    "chart_plan": 900,
+    "chart_other": 109900,
+    "gauge_upload": 1490300,
+    "map_upload": 2572800,
+    "hud_dirty": 717700,
+    "update_hud": 204800,
+    "process_frame": 2766200,
+    "native_timings": 189300,
+    "progress": 47700
+   },
+   "unaccounted_ns": 3200
+  },
+  {
+   "frame": 47,
+   "total_ns": 34672500,
+   "stages": {
+    "loop_guard": 1000,
+    "decode_read": 1475900,
+    "hud_setup": 29200,
+    "telemetry": 15778300,
+    "frame0_probe": 3600,
+    "compose": 8221000,
+    "above_compose": 572300,
+    "above_bbox_crop": 150300,
+    "chart_plan": 900,
+    "chart_other": 112000,
+    "gauge_upload": 1549200,
+    "map_upload": 2686600,
+    "hud_dirty": 735300,
+    "update_hud": 207300,
+    "process_frame": 2831000,
+    "native_timings": 248300,
+    "progress": 67000
+   },
+   "unaccounted_ns": 3300
+  },
+  {
+   "frame": 48,
+   "total_ns": 36608700,
+   "stages": {
+    "loop_guard": 3900,
+    "decode_read": 6328100,
+    "hud_setup": 76400,
+    "telemetry": 12610700,
+    "frame0_probe": 4400,
+    "compose": 7200200,
+    "above_compose": 799800,
+    "above_bbox_crop": 219000,
+    "chart_plan": 1600,
+    "chart_other": 165100,
+    "gauge_upload": 1945200,
+    "map_upload": 3450500,
+    "hud_dirty": 1045500,
+    "update_hud": 268900,
+    "process_frame": 2318900,
+    "native_timings": 133100,
+    "progress": 36100
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 49,
+   "total_ns": 34404800,
+   "stages": {
+    "loop_guard": 1900,
+    "decode_read": 2466900,
+    "hud_setup": 117300,
+    "telemetry": 15363200,
+    "frame0_probe": 3400,
+    "compose": 5815900,
+    "above_compose": 569900,
+    "above_bbox_crop": 153700,
+    "chart_plan": 1000,
+    "chart_other": 114200,
+    "gauge_upload": 1689500,
+    "map_upload": 3215500,
+    "hud_dirty": 954700,
+    "update_hud": 276000,
+    "process_frame": 2826100,
+    "native_timings": 689400,
+    "progress": 135600
+   },
+   "unaccounted_ns": 10600
+  },
+  {
+   "frame": 50,
+   "total_ns": 47306900,
+   "stages": {
+    "loop_guard": 8000,
+    "decode_read": 4725300,
+    "hud_setup": 97900,
+    "telemetry": 13091700,
+    "frame0_probe": 4800,
+    "compose": 14733000,
+    "above_compose": 2747800,
+    "above_bbox_crop": 593800,
+    "chart_plan": 6500,
+    "chart_other": 290100,
+    "gauge_upload": 3204800,
+    "map_upload": 4467800,
+    "hud_dirty": 991300,
+    "update_hud": 261300,
+    "process_frame": 1955100,
+    "native_timings": 102700,
+    "progress": 23800
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 51,
+   "total_ns": 37134600,
+   "stages": {
+    "loop_guard": 1400,
+    "decode_read": 656100,
+    "hud_setup": 36100,
+    "telemetry": 7348800,
+    "frame0_probe": 5000,
+    "compose": 16078900,
+    "above_compose": 1987100,
+    "above_bbox_crop": 416500,
+    "chart_plan": 3800,
+    "chart_other": 291500,
+    "gauge_upload": 2664800,
+    "map_upload": 3421700,
+    "hud_dirty": 1828100,
+    "update_hud": 213400,
+    "process_frame": 2041800,
+    "native_timings": 105400,
+    "progress": 33000
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 52,
+   "total_ns": 35176300,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 686800,
+    "hud_setup": 34100,
+    "telemetry": 18457000,
+    "frame0_probe": 3600,
+    "compose": 6956000,
+    "above_compose": 745600,
+    "above_bbox_crop": 257000,
+    "chart_plan": 900,
+    "chart_other": 127900,
+    "gauge_upload": 1605600,
+    "map_upload": 2697500,
+    "hud_dirty": 968400,
+    "update_hud": 244200,
+    "process_frame": 2251900,
+    "native_timings": 107700,
+    "progress": 28900
+   },
+   "unaccounted_ns": 2000
+  },
+  {
+   "frame": 53,
+   "total_ns": 22443100,
+   "stages": {
+    "loop_guard": 900,
+    "decode_read": 647200,
+    "hud_setup": 30100,
+    "telemetry": 7565900,
+    "frame0_probe": 9400,
+    "compose": 5595000,
+    "above_compose": 569000,
+    "above_bbox_crop": 155700,
+    "chart_plan": 900,
+    "chart_other": 115100,
+    "gauge_upload": 1637100,
+    "map_upload": 2793300,
+    "hud_dirty": 724500,
+    "update_hud": 206100,
+    "process_frame": 2183500,
+    "native_timings": 162500,
+    "progress": 44400
+   },
+   "unaccounted_ns": 2500
+  },
+  {
+   "frame": 54,
+   "total_ns": 35642200,
+   "stages": {
+    "loop_guard": 2100,
+    "decode_read": 1130800,
+    "hud_setup": 98900,
+    "telemetry": 19262500,
+    "frame0_probe": 6500,
+    "compose": 6372200,
+    "above_compose": 562700,
+    "above_bbox_crop": 145400,
+    "chart_plan": 900,
+    "chart_other": 174700,
+    "gauge_upload": 1512800,
+    "map_upload": 2715200,
+    "hud_dirty": 752400,
+    "update_hud": 205600,
+    "process_frame": 2347600,
+    "native_timings": 226800,
+    "progress": 107800
+   },
+   "unaccounted_ns": 17300
+  },
+  {
+   "frame": 55,
+   "total_ns": 33260700,
+   "stages": {
+    "loop_guard": 7700,
+    "decode_read": 6546100,
+    "hud_setup": 74500,
+    "telemetry": 11370000,
+    "frame0_probe": 14000,
+    "compose": 6864600,
+    "above_compose": 522400,
+    "above_bbox_crop": 146400,
+    "chart_plan": 1000,
+    "chart_other": 103100,
+    "gauge_upload": 1546100,
+    "map_upload": 2700700,
+    "hud_dirty": 1020300,
+    "update_hud": 196900,
+    "process_frame": 1984800,
+    "native_timings": 129200,
+    "progress": 31800
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 56,
+   "total_ns": 34296100,
+   "stages": {
+    "loop_guard": 1900,
+    "decode_read": 942400,
+    "hud_setup": 102300,
+    "telemetry": 17256600,
+    "frame0_probe": 3300,
+    "compose": 6839800,
+    "above_compose": 527000,
+    "above_bbox_crop": 143100,
+    "chart_plan": 900,
+    "chart_other": 109100,
+    "gauge_upload": 1538000,
+    "map_upload": 2996200,
+    "hud_dirty": 745100,
+    "update_hud": 193900,
+    "process_frame": 2650600,
+    "native_timings": 194000,
+    "progress": 49500
+   },
+   "unaccounted_ns": 2400
+  },
+  {
+   "frame": 57,
+   "total_ns": 21574200,
+   "stages": {
+    "loop_guard": 2600,
+    "decode_read": 755100,
+    "hud_setup": 29300,
+    "telemetry": 7193000,
+    "frame0_probe": 6700,
+    "compose": 5451900,
+    "above_compose": 501800,
+    "above_bbox_crop": 142300,
+    "chart_plan": 900,
+    "chart_other": 105800,
+    "gauge_upload": 1533300,
+    "map_upload": 2783800,
+    "hud_dirty": 728600,
+    "update_hud": 214900,
+    "process_frame": 1946600,
+    "native_timings": 131600,
+    "progress": 43900
+   },
+   "unaccounted_ns": 2100
+  },
+  {
+   "frame": 58,
+   "total_ns": 33352300,
+   "stages": {
+    "loop_guard": 1400,
+    "decode_read": 3806700,
+    "hud_setup": 125900,
+    "telemetry": 13973200,
+    "frame0_probe": 3100,
+    "compose": 6495200,
+    "above_compose": 545500,
+    "above_bbox_crop": 141600,
+    "chart_plan": 900,
+    "chart_other": 106500,
+    "gauge_upload": 1606000,
+    "map_upload": 2730500,
+    "hud_dirty": 737500,
+    "update_hud": 201200,
+    "process_frame": 2670200,
+    "native_timings": 162500,
+    "progress": 42200
+   },
+   "unaccounted_ns": 2200
+  },
+  {
+   "frame": 59,
+   "total_ns": 36963900,
+   "stages": {
+    "loop_guard": 800,
+    "decode_read": 1136700,
+    "hud_setup": 26800,
+    "telemetry": 19841700,
+    "frame0_probe": 3800,
+    "compose": 6524600,
+    "above_compose": 628100,
+    "above_bbox_crop": 152200,
+    "chart_plan": 1100,
+    "chart_other": 110200,
+    "gauge_upload": 1803100,
+    "map_upload": 3031900,
+    "hud_dirty": 1013700,
+    "update_hud": 304700,
+    "process_frame": 2182800,
+    "native_timings": 162000,
+    "progress": 37800
+   },
+   "unaccounted_ns": 1900
+  },
+  {
+   "frame": 60,
+   "total_ns": 37573400,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 4858800,
+    "hud_setup": 117300,
+    "telemetry": 15604600,
+    "frame0_probe": 72300,
+    "compose": 7712400,
+    "above_compose": 755400,
+    "above_bbox_crop": 193200,
+    "chart_plan": 1000,
+    "chart_other": 123600,
+    "gauge_upload": 1793700,
+    "map_upload": 3154400,
+    "hud_dirty": 755900,
+    "update_hud": 211000,
+    "process_frame": 2104900,
+    "native_timings": 89700,
+    "progress": 22500
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 61,
+   "total_ns": 34495800,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 4090200,
+    "hud_setup": 238600,
+    "telemetry": 15348200,
+    "frame0_probe": 5100,
+    "compose": 6056400,
+    "above_compose": 541000,
+    "above_bbox_crop": 145100,
+    "chart_plan": 1100,
+    "chart_other": 105700,
+    "gauge_upload": 1590900,
+    "map_upload": 2779300,
+    "hud_dirty": 671000,
+    "update_hud": 191100,
+    "process_frame": 2554300,
+    "native_timings": 138000,
+    "progress": 37100
+   },
+   "unaccounted_ns": 1600
+  },
+  {
+   "frame": 62,
+   "total_ns": 25061000,
+   "stages": {
+    "loop_guard": 1800,
+    "decode_read": 793800,
+    "hud_setup": 38200,
+    "telemetry": 9315200,
+    "frame0_probe": 2300,
+    "compose": 5511600,
+    "above_compose": 512900,
+    "above_bbox_crop": 139900,
+    "chart_plan": 1100,
+    "chart_other": 107200,
+    "gauge_upload": 2273400,
+    "map_upload": 3291900,
+    "hud_dirty": 713400,
+    "update_hud": 197300,
+    "process_frame": 1995400,
+    "native_timings": 129200,
+    "progress": 34600
+   },
+   "unaccounted_ns": 1800
+  },
+  {
+   "frame": 63,
+   "total_ns": 34242200,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 1967500,
+    "hud_setup": 98200,
+    "telemetry": 15811500,
+    "frame0_probe": 6400,
+    "compose": 6401100,
+    "above_compose": 711400,
+    "above_bbox_crop": 152300,
+    "chart_plan": 900,
+    "chart_other": 111900,
+    "gauge_upload": 1612600,
+    "map_upload": 3315000,
+    "hud_dirty": 830600,
+    "update_hud": 222900,
+    "process_frame": 2814500,
+    "native_timings": 148800,
+    "progress": 33600
+   },
+   "unaccounted_ns": 1700
+  },
+  {
+   "frame": 64,
+   "total_ns": 22140200,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 637900,
+    "hud_setup": 17400,
+    "telemetry": 6651300,
+    "frame0_probe": 3800,
+    "compose": 5702600,
+    "above_compose": 635500,
+    "above_bbox_crop": 174100,
+    "chart_plan": 1200,
+    "chart_other": 151300,
+    "gauge_upload": 1737900,
+    "map_upload": 2929600,
+    "hud_dirty": 773600,
+    "update_hud": 202100,
+    "process_frame": 2351000,
+    "native_timings": 138500,
+    "progress": 29100
+   },
+   "unaccounted_ns": 1800
+  },
+  {
+   "frame": 65,
+   "total_ns": 35973500,
+   "stages": {
+    "loop_guard": 1400,
+    "decode_read": 818700,
+    "hud_setup": 53500,
+    "telemetry": 19153300,
+    "frame0_probe": 4200,
+    "compose": 6196600,
+    "above_compose": 834300,
+    "above_bbox_crop": 176900,
+    "chart_plan": 1300,
+    "chart_other": 176800,
+    "gauge_upload": 1915500,
+    "map_upload": 3043100,
+    "hud_dirty": 712400,
+    "update_hud": 199100,
+    "process_frame": 2440900,
+    "native_timings": 196700,
+    "progress": 46600
+   },
+   "unaccounted_ns": 2200
+  },
+  {
+   "frame": 66,
+   "total_ns": 34506800,
+   "stages": {
+    "loop_guard": 1800,
+    "decode_read": 1435200,
+    "hud_setup": 95400,
+    "telemetry": 16966700,
+    "frame0_probe": 4700,
+    "compose": 6288000,
+    "above_compose": 906000,
+    "above_bbox_crop": 246500,
+    "chart_plan": 1700,
+    "chart_other": 165700,
+    "gauge_upload": 1907000,
+    "map_upload": 3039500,
+    "hud_dirty": 689000,
+    "update_hud": 197000,
+    "process_frame": 2335500,
+    "native_timings": 185800,
+    "progress": 40000
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 67,
+   "total_ns": 34788900,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 5190000,
+    "hud_setup": 79300,
+    "telemetry": 14005600,
+    "frame0_probe": 3400,
+    "compose": 6429500,
+    "above_compose": 835100,
+    "above_bbox_crop": 213600,
+    "chart_plan": 1300,
+    "chart_other": 126600,
+    "gauge_upload": 1864700,
+    "map_upload": 2986100,
+    "hud_dirty": 703300,
+    "update_hud": 201000,
+    "process_frame": 1977600,
+    "native_timings": 135600,
+    "progress": 32600
+   },
+   "unaccounted_ns": 2100
+  },
+  {
+   "frame": 68,
+   "total_ns": 33131800,
+   "stages": {
+    "loop_guard": 1300,
+    "decode_read": 2860400,
+    "hud_setup": 86900,
+    "telemetry": 15162800,
+    "frame0_probe": 5500,
+    "compose": 5530600,
+    "above_compose": 539600,
+    "above_bbox_crop": 149800,
+    "chart_plan": 900,
+    "chart_other": 108500,
+    "gauge_upload": 1758600,
+    "map_upload": 3521800,
+    "hud_dirty": 739600,
+    "update_hud": 205400,
+    "process_frame": 2327300,
+    "native_timings": 104400,
+    "progress": 27100
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 69,
+   "total_ns": 39529800,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 1644200,
+    "hud_setup": 137400,
+    "telemetry": 18027000,
+    "frame0_probe": 3600,
+    "compose": 9483400,
+    "above_compose": 788200,
+    "above_bbox_crop": 169700,
+    "chart_plan": 1100,
+    "chart_other": 127600,
+    "gauge_upload": 2063300,
+    "map_upload": 3159100,
+    "hud_dirty": 662100,
+    "update_hud": 183000,
+    "process_frame": 2893400,
+    "native_timings": 145600,
+    "progress": 38100
+   },
+   "unaccounted_ns": 1900
+  },
+  {
+   "frame": 70,
+   "total_ns": 36304900,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 652400,
+    "hud_setup": 20500,
+    "telemetry": 19215100,
+    "frame0_probe": 3100,
+    "compose": 7020100,
+    "above_compose": 701500,
+    "above_bbox_crop": 270200,
+    "chart_plan": 1500,
+    "chart_other": 185700,
+    "gauge_upload": 1741000,
+    "map_upload": 3056900,
+    "hud_dirty": 724600,
+    "update_hud": 209200,
+    "process_frame": 2338600,
+    "native_timings": 133500,
+    "progress": 27900
+   },
+   "unaccounted_ns": 1900
+  },
+  {
+   "frame": 71,
+   "total_ns": 34919100,
+   "stages": {
+    "loop_guard": 1500,
+    "decode_read": 1116600,
+    "hud_setup": 99000,
+    "telemetry": 17260900,
+    "frame0_probe": 5400,
+    "compose": 7738400,
+    "above_compose": 614900,
+    "above_bbox_crop": 161100,
+    "chart_plan": 1800,
+    "chart_other": 155600,
+    "gauge_upload": 1748200,
+    "map_upload": 2822700,
+    "hud_dirty": 746800,
+    "update_hud": 213200,
+    "process_frame": 2059800,
+    "native_timings": 136200,
+    "progress": 35400
+   },
+   "unaccounted_ns": 1600
+  },
+  {
+   "frame": 72,
+   "total_ns": 40483600,
+   "stages": {
+    "loop_guard": 1800,
+    "decode_read": 3484800,
+    "hud_setup": 102900,
+    "telemetry": 14656100,
+    "frame0_probe": 7500,
+    "compose": 7271200,
+    "above_compose": 732100,
+    "above_bbox_crop": 166700,
+    "chart_plan": 800,
+    "chart_other": 115400,
+    "gauge_upload": 1834500,
+    "map_upload": 3031100,
+    "hud_dirty": 679400,
+    "update_hud": 241900,
+    "process_frame": 7533000,
+    "native_timings": 494900,
+    "progress": 122000
+   },
+   "unaccounted_ns": 7500
+  },
+  {
+   "frame": 73,
+   "total_ns": 30628000,
+   "stages": {
+    "loop_guard": 6100,
+    "decode_read": 3001500,
+    "hud_setup": 50500,
+    "telemetry": 10823300,
+    "frame0_probe": 3900,
+    "compose": 5533700,
+    "above_compose": 627400,
+    "above_bbox_crop": 225300,
+    "chart_plan": 1200,
+    "chart_other": 166700,
+    "gauge_upload": 2085600,
+    "map_upload": 3046600,
+    "hud_dirty": 692700,
+    "update_hud": 210700,
+    "process_frame": 3548500,
+    "native_timings": 491100,
+    "progress": 106000
+   },
+   "unaccounted_ns": 7200
+  },
+  {
+   "frame": 74,
+   "total_ns": 35096700,
+   "stages": {
+    "loop_guard": 6200,
+    "decode_read": 4968300,
+    "hud_setup": 62900,
+    "telemetry": 12473700,
+    "frame0_probe": 3100,
+    "compose": 7625200,
+    "above_compose": 745500,
+    "above_bbox_crop": 217600,
+    "chart_plan": 1000,
+    "chart_other": 125300,
+    "gauge_upload": 2141900,
+    "map_upload": 3058200,
+    "hud_dirty": 781800,
+    "update_hud": 206100,
+    "process_frame": 2466500,
+    "native_timings": 164400,
+    "progress": 45500
+   },
+   "unaccounted_ns": 3500
+  },
+  {
+   "frame": 75,
+   "total_ns": 34479100,
+   "stages": {
+    "loop_guard": 3300,
+    "decode_read": 6111100,
+    "hud_setup": 105500,
+    "telemetry": 12470700,
+    "frame0_probe": 4600,
+    "compose": 6604100,
+    "above_compose": 882000,
+    "above_bbox_crop": 187300,
+    "chart_plan": 1200,
+    "chart_other": 138700,
+    "gauge_upload": 1852300,
+    "map_upload": 2787800,
+    "hud_dirty": 710700,
+    "update_hud": 197700,
+    "process_frame": 2271900,
+    "native_timings": 121600,
+    "progress": 26700
+   },
+   "unaccounted_ns": 1900
+  },
+  {
+   "frame": 76,
+   "total_ns": 34686000,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 3180900,
+    "hud_setup": 130500,
+    "telemetry": 15711300,
+    "frame0_probe": 4600,
+    "compose": 6453200,
+    "above_compose": 634700,
+    "above_bbox_crop": 229100,
+    "chart_plan": 1500,
+    "chart_other": 204200,
+    "gauge_upload": 1910700,
+    "map_upload": 2860500,
+    "hud_dirty": 954700,
+    "update_hud": 236700,
+    "process_frame": 1981600,
+    "native_timings": 153400,
+    "progress": 35700
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 77,
+   "total_ns": 34348900,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 836200,
+    "hud_setup": 103000,
+    "telemetry": 18517500,
+    "frame0_probe": 3800,
+    "compose": 5719600,
+    "above_compose": 528300,
+    "above_bbox_crop": 190400,
+    "chart_plan": 1600,
+    "chart_other": 159700,
+    "gauge_upload": 2146300,
+    "map_upload": 2978800,
+    "hud_dirty": 743300,
+    "update_hud": 206000,
+    "process_frame": 2084200,
+    "native_timings": 104300,
+    "progress": 23600
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 78,
+   "total_ns": 26415100,
+   "stages": {
+    "loop_guard": 1100,
+    "decode_read": 882200,
+    "hud_setup": 45700,
+    "telemetry": 9173400,
+    "frame0_probe": 3200,
+    "compose": 7142500,
+    "above_compose": 758200,
+    "above_bbox_crop": 215700,
+    "chart_plan": 1300,
+    "chart_other": 136100,
+    "gauge_upload": 1715300,
+    "map_upload": 3224400,
+    "hud_dirty": 669700,
+    "update_hud": 193900,
+    "process_frame": 2089200,
+    "native_timings": 131700,
+    "progress": 30200
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 79,
+   "total_ns": 33939300,
+   "stages": {
+    "loop_guard": 900,
+    "decode_read": 2902200,
+    "hud_setup": 123700,
+    "telemetry": 15362000,
+    "frame0_probe": 4500,
+    "compose": 7214200,
+    "above_compose": 507300,
+    "above_bbox_crop": 159000,
+    "chart_plan": 1200,
+    "chart_other": 121100,
+    "gauge_upload": 1532800,
+    "map_upload": 2849500,
+    "hud_dirty": 676100,
+    "update_hud": 185600,
+    "process_frame": 2113500,
+    "native_timings": 146500,
+    "progress": 37400
+   },
+   "unaccounted_ns": 1800
+  },
+  {
+   "frame": 80,
+   "total_ns": 35835300,
+   "stages": {
+    "loop_guard": 1400,
+    "decode_read": 1785100,
+    "hud_setup": 81300,
+    "telemetry": 19109500,
+    "frame0_probe": 5700,
+    "compose": 6177900,
+    "above_compose": 604200,
+    "above_bbox_crop": 232500,
+    "chart_plan": 1500,
+    "chart_other": 132500,
+    "gauge_upload": 1483400,
+    "map_upload": 2765300,
+    "hud_dirty": 711300,
+    "update_hud": 196800,
+    "process_frame": 2338200,
+    "native_timings": 161900,
+    "progress": 44400
+   },
+   "unaccounted_ns": 2400
+  },
+  {
+   "frame": 81,
+   "total_ns": 34286800,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 3820300,
+    "hud_setup": 98800,
+    "telemetry": 15169700,
+    "frame0_probe": 3800,
+    "compose": 6283400,
+    "above_compose": 566300,
+    "above_bbox_crop": 143900,
+    "chart_plan": 800,
+    "chart_other": 146700,
+    "gauge_upload": 1486600,
+    "map_upload": 2652800,
+    "hud_dirty": 691800,
+    "update_hud": 192500,
+    "process_frame": 2829400,
+    "native_timings": 159300,
+    "progress": 38100
+   },
+   "unaccounted_ns": 1400
+  },
+  {
+   "frame": 82,
+   "total_ns": 35602900,
+   "stages": {
+    "loop_guard": 700,
+    "decode_read": 2299800,
+    "hud_setup": 119000,
+    "telemetry": 18254000,
+    "frame0_probe": 5400,
+    "compose": 7024300,
+    "above_compose": 517000,
+    "above_bbox_crop": 136300,
+    "chart_plan": 800,
+    "chart_other": 108100,
+    "gauge_upload": 1510200,
+    "map_upload": 2640300,
+    "hud_dirty": 690600,
+    "update_hud": 200700,
+    "process_frame": 1944200,
+    "native_timings": 119600,
+    "progress": 30600
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 83,
+   "total_ns": 34471800,
+   "stages": {
+    "loop_guard": 1200,
+    "decode_read": 7054000,
+    "hud_setup": 63300,
+    "telemetry": 12378600,
+    "frame0_probe": 4400,
+    "compose": 5377200,
+    "above_compose": 859500,
+    "above_bbox_crop": 309600,
+    "chart_plan": 1400,
+    "chart_other": 187600,
+    "gauge_upload": 1885400,
+    "map_upload": 2733400,
+    "hud_dirty": 708700,
+    "update_hud": 196600,
+    "process_frame": 2551900,
+    "native_timings": 116300,
+    "progress": 41600
+   },
+   "unaccounted_ns": 1100
+  },
+  {
+   "frame": 84,
+   "total_ns": 35687900,
+   "stages": {
+    "loop_guard": 700,
+    "decode_read": 7312600,
+    "hud_setup": 60700,
+    "telemetry": 12412500,
+    "frame0_probe": 4100,
+    "compose": 5842800,
+    "above_compose": 582600,
+    "above_bbox_crop": 223500,
+    "chart_plan": 2200,
+    "chart_other": 194200,
+    "gauge_upload": 1864000,
+    "map_upload": 3592300,
+    "hud_dirty": 1030300,
+    "update_hud": 195000,
+    "process_frame": 2223600,
+    "native_timings": 115000,
+    "progress": 30500
+   },
+   "unaccounted_ns": 1300
+  },
+  {
+   "frame": 85,
+   "total_ns": 36170700,
+   "stages": {
+    "loop_guard": 700,
+    "decode_read": 2396900,
+    "hud_setup": 146200,
+    "telemetry": 17126700,
+    "frame0_probe": 4200,
+    "compose": 7323200,
+    "above_compose": 726400,
+    "above_bbox_crop": 143000,
+    "chart_plan": 900,
+    "chart_other": 110100,
+    "gauge_upload": 1604600,
+    "map_upload": 2771100,
+    "hud_dirty": 686500,
+    "update_hud": 195400,
+    "process_frame": 2691600,
+    "native_timings": 196000,
+    "progress": 44400
+   },
+   "unaccounted_ns": 2800
+  },
+  {
+   "frame": 86,
+   "total_ns": 34870600,
+   "stages": {
+    "loop_guard": 1600,
+    "decode_read": 1004700,
+    "hud_setup": 102000,
+    "telemetry": 19186300,
+    "frame0_probe": 3400,
+    "compose": 5087200,
+    "above_compose": 727100,
+    "above_bbox_crop": 242700,
+    "chart_plan": 900,
+    "chart_other": 158800,
+    "gauge_upload": 1830300,
+    "map_upload": 2928900,
+    "hud_dirty": 721100,
+    "update_hud": 201400,
+    "process_frame": 2420100,
+    "native_timings": 202000,
+    "progress": 49700
+   },
+   "unaccounted_ns": 2400
+  },
+  {
+   "frame": 87,
+   "total_ns": 34333100,
+   "stages": {
+    "loop_guard": 2100,
+    "decode_read": 3034000,
+    "hud_setup": 114900,
+    "telemetry": 16185900,
+    "frame0_probe": 4900,
+    "compose": 5865400,
+    "above_compose": 712100,
+    "above_bbox_crop": 244400,
+    "chart_plan": 1500,
+    "chart_other": 163800,
+    "gauge_upload": 2019400,
+    "map_upload": 2813700,
+    "hud_dirty": 871800,
+    "update_hud": 193600,
+    "process_frame": 1985800,
+    "native_timings": 94900,
+    "progress": 23400
+   },
+   "unaccounted_ns": 1500
+  },
+  {
+   "frame": 88,
+   "total_ns": 33126600,
+   "stages": {
+    "loop_guard": 800,
+    "decode_read": 1398900,
+    "hud_setup": 84500,
+    "telemetry": 17248200,
+    "frame0_probe": 3700,
+    "compose": 5328800,
+    "above_compose": 562700,
+    "above_bbox_crop": 154600,
+    "chart_plan": 1000,
+    "chart_other": 120000,
+    "gauge_upload": 1603500,
+    "map_upload": 3504100,
+    "hud_dirty": 846200,
+    "update_hud": 211500,
+    "process_frame": 1942900,
+    "native_timings": 90900,
+    "progress": 23100
+   },
+   "unaccounted_ns": 1200
+  },
+  {
+   "frame": 89,
+   "total_ns": 36826900,
+   "stages": {
+    "loop_guard": 600,
+    "decode_read": 964800,
+    "hud_setup": 37000,
+    "telemetry": 20007500,
+    "frame0_probe": 5700,
+    "compose": 6402000,
+    "above_compose": 570200,
+    "above_bbox_crop": 155500,
+    "chart_plan": 900,
+    "chart_other": 103100,
+    "gauge_upload": 1702100,
+    "map_upload": 3317100,
+    "hud_dirty": 760100,
+    "update_hud": 215900,
+    "process_frame": 2324200,
+    "native_timings": 207200,
+    "progress": 51000
+   },
+   "unaccounted_ns": 2000
+  },
+  {
+   "frame": 90,
+   "total_ns": 44337000,
+   "stages": {
+    "loop_guard": 1600,
+    "decode_read": 1210400,
+    "hud_setup": 31600,
+    "telemetry": 7342400,
+    "frame0_probe": 78800,
+    "compose": 17118000,
+    "above_compose": 1104200,
+    "above_bbox_crop": 240700,
+    "chart_plan": 1500,
+    "chart_other": 163800,
+    "gauge_upload": 2276100,
+    "map_upload": 3871400,
+    "hud_dirty": 913500,
+    "update_hud": 441400,
+    "process_frame": 9314900,
+    "native_timings": 182600,
+    "progress": 41400
+   },
+   "unaccounted_ns": 2700
+  }
+ ]
+}

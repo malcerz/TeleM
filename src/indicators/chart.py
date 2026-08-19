@@ -59,14 +59,26 @@ class ChartSplit:
         return (self.width, self.height)
 
 
+def _resolve_cursor_coords(points, current_index):
+    """Resolve cursor (x, y) coordinates from either a (cursor_x, py) tuple or an index."""
+    if current_index is None or not points:
+        return None
+    if isinstance(current_index, (tuple, list)) and len(current_index) == 2:
+        return float(current_index[0]), float(current_index[1])
+    if isinstance(current_index, int) and 0 <= current_index < len(points):
+        return points[current_index]
+    return None
+
+
 def _cursor_tile_bbox(
     points, current_index, plot_y1, plot_y2, calc_thickness,
     offset_x, offset_y, chart_width, chart_height,
 ):
     """Clipped cursor bbox (line + dot) in chart-image coordinates."""
-    if current_index is None or not points or not (0 <= current_index < len(points)):
+    coords = _resolve_cursor_coords(points, current_index)
+    if coords is None:
         return None
-    cursor_x, py = points[current_index]
+    cursor_x, py = coords
     cursor_x += offset_x
     py += offset_y
     dot_r = max(3, calc_thickness + 1)
@@ -96,9 +108,10 @@ def _draw_post_paste_cursor(
     line draw with a tile paste (Pillow's paste with an RGBA mask pre-multiplies
     alpha and would change the output).
     """
-    if current_index is None or not points or not (0 <= current_index < len(points)):
+    coords = _resolve_cursor_coords(points, current_index)
+    if coords is None:
         return
-    cursor_x, py = points[current_index]
+    cursor_x, py = coords
     cursor_x += offset_x
     py += offset_y
     alpha = 200
@@ -213,25 +226,23 @@ def _render_chart_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     history_data=None, current_position=None, formatted_val=None,
-    split_mode=False,
+    split_mode=False, target_dt=None,
 ):
     """Render a chart-form indicator."""
     profiler = get_overlay_profiler()
     time_labels = None
     chart_vals = None
+    timestamps = None
     if isinstance(history_data, dict):
         chart_vals = history_data.get("values", [])
         time_labels = history_data.get("time_labels")
+        timestamps = history_data.get("timestamps")
     elif isinstance(history_data, list):
         chart_vals = history_data
+        timestamps = getattr(history_data, "timestamps", None)
 
     if not chart_vals or len(chart_vals) < 2:
         chart_vals = [value, value]
-
-    ci = None
-    if current_position is not None:
-        ci = int(round(current_position * (len(chart_vals) - 1)))
-        ci = max(0, min(len(chart_vals) - 1, ci))
 
     chart_w = size_px
     chart_h = max(40, int(chart_w * 0.4))
@@ -280,16 +291,103 @@ def _render_chart_indicator(
     )
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
     graph_started = time.perf_counter()
-    if optimized_static:
-        bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
-            get_history_chart_background(chart_vals, chart_w, chart_h, **graph_kwargs)
-        )
-        chart_img = None
-    else:
+    bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
+        get_history_chart_background(chart_vals, chart_w, chart_h, **graph_kwargs)
+    )
+
+    ci = None
+    chart_start_dt = getattr(history_data, "chart_start_dt", None)
+    chart_end_dt = getattr(history_data, "chart_end_dt", None)
+    t_start = chart_start_dt or (timestamps[0] if timestamps else None)
+    t_end = chart_end_dt or (timestamps[-1] if timestamps else None)
+
+    pos = None
+    align_start = t_start
+    align_end = t_end
+    if timestamps and len(timestamps) >= 1 and target_dt is not None and t_start is not None and t_end is not None:
+        sample_tz = timestamps[0].tzinfo
+        aligned_target = target_dt
+        if sample_tz is None and target_dt.tzinfo is not None:
+            aligned_target = target_dt.replace(tzinfo=None)
+        elif sample_tz is not None and target_dt.tzinfo is None:
+            from datetime import timezone
+            aligned_target = target_dt.replace(tzinfo=timezone.utc)
+
+        if sample_tz is None:
+            if align_start.tzinfo is not None:
+                align_start = align_start.replace(tzinfo=None)
+            if align_end.tzinfo is not None:
+                align_end = align_end.replace(tzinfo=None)
+        else:
+            if align_start.tzinfo is None:
+                align_start = align_start.replace(tzinfo=timezone.utc)
+            if align_end.tzinfo is None:
+                align_end = align_end.replace(tzinfo=timezone.utc)
+
+        if align_end > align_start:
+            pos = (aligned_target - align_start).total_seconds() / (align_end - align_start).total_seconds()
+            pos = max(0.0, min(1.0, pos))
+    elif current_position is not None:
+        pos = max(0.0, min(1.0, current_position))
+
+    if pos is not None and points:
+        if (
+            timestamps
+            and len(timestamps) == len(points)
+            and align_start is not None
+            and align_end is not None
+            and align_end > align_start
+        ):
+            norm_0 = max(0.0, min(1.0, (timestamps[0] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
+            norm_last = max(0.0, min(1.0, (timestamps[-1] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
+            if norm_last > norm_0:
+                plot_w_span = (points[-1][0] - points[0][0]) / (norm_last - norm_0)
+                plot_x1_base = points[0][0] - norm_0 * plot_w_span
+                cursor_x = plot_x1_base + pos * plot_w_span
+            else:
+                cursor_x = points[0][0]
+        else:
+            cursor_x = points[0][0] + pos * (points[-1][0] - points[0][0])
+
+        if timestamps and len(timestamps) == len(points) and target_dt is not None:
+            from bisect import bisect_right
+            idx = bisect_right(timestamps, aligned_target) - 1
+            if idx < 0:
+                py = points[0][1]
+            elif idx >= len(points) - 1:
+                py = points[-1][1]
+            else:
+                dt0, dt1 = timestamps[idx], timestamps[idx + 1]
+                if sample_tz is None:
+                    if dt0.tzinfo is not None:
+                        dt0 = dt0.replace(tzinfo=None)
+                    if dt1.tzinfo is not None:
+                        dt1 = dt1.replace(tzinfo=None)
+                else:
+                    if dt0.tzinfo is None:
+                        dt0 = dt0.replace(tzinfo=timezone.utc)
+                    if dt1.tzinfo is None:
+                        dt1 = dt1.replace(tzinfo=timezone.utc)
+                dt_span = (dt1 - dt0).total_seconds()
+                if dt_span > 0:
+                    frac = max(0.0, min(1.0, (aligned_target - dt0).total_seconds() / dt_span))
+                    py = points[idx][1] + frac * (points[idx + 1][1] - points[idx][1])
+                else:
+                    py = points[idx][1]
+        else:
+            idx = int(round(pos * (len(points) - 1)))
+            idx = max(0, min(len(points) - 1, idx))
+            py = points[idx][1]
+
+        ci = (cursor_x, py)
+
+    if not optimized_static:
         chart_img = generate_history_chart(
             chart_vals, chart_w, chart_h, current_index=ci,
             cursor_color=(255, 255, 255), **graph_kwargs,
         )
+    else:
+        chart_img = None
     profiler.record(
         "graph.history_chart_total",
         (time.perf_counter() - graph_started) * 1000.0,

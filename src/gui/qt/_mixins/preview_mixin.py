@@ -280,12 +280,25 @@ class PreviewMixin:
                         target_dt = target_dt.replace(tzinfo=timezone.utc)
 
                     if self._chart_data_cache is None:
+                        duration_s = getattr(self.telemetry, "video_duration", None) or getattr(self, "total_duration_seconds", None)
+                        end_dt_utc = (self.telemetry.start_dt_utc + timedelta(seconds=duration_s)) if (self.telemetry.start_dt_utc and duration_s) else None
+                        source_ranges = {}
+                        if self.telemetry.fit_data:
+                            all_fit_pts = [s for s in self.telemetry.fit_data.values() if s]
+                            if all_fit_pts:
+                                source_ranges["fit"] = (
+                                    min(s[0][0] for s in all_fit_pts),
+                                    max(s[-1][0] for s in all_fit_pts),
+                                )
                         self._chart_data_cache = build_chart_data(
                             self.layout,
                             self.telemetry.get_samples_for_source,
                             lambda field, src, key=None: self.telemetry.resolve_samples(
                                 field, src, indicator_key=key
                             ),
+                            start_dt_utc=self.telemetry.start_dt_utc,
+                            end_dt_utc=end_dt_utc,
+                            source_activity_ranges=source_ranges,
                         )
                     chart_data = self._chart_data_cache
 

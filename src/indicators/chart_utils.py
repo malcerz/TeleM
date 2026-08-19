@@ -18,6 +18,9 @@ from src.indicators.helpers import load_font, load_font_cache_small
 from src.indicators.profiling import get_overlay_profiler
 
 
+from datetime import timezone
+
+
 _CHART_BG_CACHE: dict[tuple, tuple[Image.Image, list[tuple[float, float]], float, float]] = {}
 
 
@@ -27,9 +30,13 @@ def _history_chart_cache_key(
     custom_min_val, custom_max_val, label_count, label_units, unit,
     show_average, label_font_size, font_path,
 ) -> tuple:
+    chart_start_dt = getattr(history_values, "chart_start_dt", None)
+    chart_end_dt = getattr(history_values, "chart_end_dt", None)
+    time_scope = getattr(history_values, "time_scope", "activity")
     return (
         id(history_values) if history_values else None,
         len(history_values) if history_values else 0,
+        chart_start_dt, chart_end_dt, time_scope,
         width, height, tuple(line_color), line_thickness, fill_alpha,
         tuple(fill_color) if fill_color else None, show_axes,
         tuple(grid_color) if grid_color else None,
@@ -48,7 +55,7 @@ def generate_history_chart(
     line_thickness: int = 3,
     fill_alpha: int = 50,
     fill_color: Optional[tuple[int, int, int]] = None,
-    current_index: Optional[int] = None,
+    current_index: Optional[int | tuple[float, float]] = None,
     cursor_color: tuple[int, int, int] = (255, 255, 255),
     show_axes: bool = True,
     grid_color: Optional[tuple[int, int, int, int]] = None,
@@ -102,13 +109,19 @@ def generate_history_chart(
 
     bg_img, points, plot_y1, plot_y2, calc_thickness = bg_data
 
-    if current_index is None or not points or not (0 <= current_index < len(points)):
+    if current_index is None or not points:
+        return bg_img
+
+    if isinstance(current_index, (tuple, list)) and len(current_index) == 2:
+        cursor_x, py = float(current_index[0]), float(current_index[1])
+    elif isinstance(current_index, int) and 0 <= current_index < len(points):
+        cursor_x, py = points[current_index]
+    else:
         return bg_img
 
     cursor_started = time.perf_counter()
     img = bg_img.copy()
     draw = ImageDraw.Draw(img)
-    cursor_x, py = points[current_index]
     draw.line(
         (cursor_x, plot_y1, cursor_x, plot_y2),
         fill=(cursor_color[0], cursor_color[1], cursor_color[2], 200),
@@ -298,23 +311,62 @@ def _build_chart_bg(
 
     points: list[tuple[float, float]] = []
     if has_data:
-        for i, val in enumerate(history_values):
-            x = plot_x1 + (i / (num_points - 1)) * plot_w
-            y = plot_y2 - ((val - min_val) / val_range) * plot_h
-            points.append((x, y))
+        timestamps = getattr(history_values, "timestamps", None)
+        chart_start_dt = getattr(history_values, "chart_start_dt", None)
+        chart_end_dt = getattr(history_values, "chart_end_dt", None)
+        t_start = chart_start_dt or (timestamps[0] if timestamps else None)
+        t_end = chart_end_dt or (timestamps[-1] if timestamps else None)
 
-        fill_polygon: list[tuple[float, float]] = list(points)
-        fill_polygon.append((plot_x2, plot_y2))
-        fill_polygon.append((plot_x1, plot_y2))
-        actual_fill_rgb = fill_color if fill_color is not None else line_color
-        actual_fill = (actual_fill_rgb[0], actual_fill_rgb[1], actual_fill_rgb[2], fill_alpha)
-        draw.polygon(fill_polygon, fill=actual_fill)
+        if (
+            timestamps
+            and len(timestamps) == len(history_values)
+            and t_start is not None
+            and t_end is not None
+            and t_end > t_start
+        ):
+            tz = timestamps[0].tzinfo
+            if tz is None:
+                if t_start.tzinfo is not None:
+                    t_start = t_start.replace(tzinfo=None)
+                if t_end.tzinfo is not None:
+                    t_end = t_end.replace(tzinfo=None)
+            else:
+                if t_start.tzinfo is None:
+                    t_start = t_start.replace(tzinfo=timezone.utc)
+                if t_end.tzinfo is None:
+                    t_end = t_end.replace(tzinfo=timezone.utc)
 
-        if show_axes:
-            draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-            draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
+            total_sec = (t_end - t_start).total_seconds()
+            for ts, val in zip(timestamps, history_values):
+                st = ts
+                if tz is None and st.tzinfo is not None:
+                    st = st.replace(tzinfo=None)
+                elif tz is not None and st.tzinfo is None:
+                    st = st.replace(tzinfo=timezone.utc)
+                norm_x = (st - t_start).total_seconds() / total_sec
+                norm_x = max(0.0, min(1.0, norm_x))
+                x = plot_x1 + norm_x * plot_w
+                y = plot_y2 - ((val - min_val) / val_range) * plot_h
+                points.append((x, y))
+        else:
+            for i, val in enumerate(history_values):
+                x = plot_x1 + (i / (num_points - 1)) * plot_w
+                y = plot_y2 - ((val - min_val) / val_range) * plot_h
+                points.append((x, y))
 
-        draw.line(points, fill=(line_color[0], line_color[1], line_color[2], 255), width=calc_line_thickness, joint="round")
+        if points:
+            fill_polygon: list[tuple[float, float]] = list(points)
+            fill_polygon.append((points[-1][0], plot_y2))
+            fill_polygon.append((points[0][0], plot_y2))
+            actual_fill_rgb = fill_color if fill_color is not None else line_color
+            actual_fill = (actual_fill_rgb[0], actual_fill_rgb[1], actual_fill_rgb[2], fill_alpha)
+            draw.polygon(fill_polygon, fill=actual_fill)
+
+            if show_axes:
+                draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
+                draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
+
+            draw.line(points, fill=(line_color[0], line_color[1], line_color[2], 255), width=calc_line_thickness, joint="round")
 
         if show_average:
             avg_val = float(sum(history_values) / len(history_values))

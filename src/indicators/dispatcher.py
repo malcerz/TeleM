@@ -62,10 +62,13 @@ def render_value_indicator(
     val_max = float(cfg.get("max_val", 100))
     ticks = int(cfg.get("ticks", 0))
     _thickness_raw = float(cfg.get("thickness", 1))
-    if _thickness_raw >= 1:
-        _thickness_rel = _thickness_raw / 200.0
+    if _thickness_raw < 1:
+        # Legacy relative format (e.g. 0.007 for arc width) -> percentage of min_dim
+        _thickness_rel = _thickness_raw * 100.0
     else:
-        _thickness_rel = _thickness_raw
+        # Modern integer format 1..10 from GUI / def_layout.json
+        # 1 -> 0.6% min_dim, 2 -> 0.8% min_dim, ..., 10 -> 2.4% min_dim
+        _thickness_rel = 0.6 + (_thickness_raw - 1) * 0.2
     thickness = max(1, s(_thickness_rel, min_dim))
     size_px = s(cfg.get("size", 0.1), min_dim if form == "gauge" else canvas_w)
     ss = max(1, supersample)
@@ -95,6 +98,7 @@ def render_value_indicator(
             split_mode=bool(
                 split_chart_keys is not None and key in split_chart_keys
             ),
+            target_dt=target_dt,
         )
     elif form == "segment_bar":
         return _render_segment_bar_indicator(**_kwargs, formatted_val=formatted_val)

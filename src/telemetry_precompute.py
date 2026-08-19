@@ -127,9 +127,7 @@ class TelemetryFrameCache:
             "hr_value": std[2],
             "cad_value": std[3],
             "battery_value": std[4],
-            "chart_data": clip_chart_data(
-                st.chart_data, rec.target_dt, st.start_dt_utc
-            ),
+            "chart_data": st.chart_data or {},
             "current_position": rec.current_position,
             "extra_indicators": extra_indicators,
             "gps_track": st.gps_track,

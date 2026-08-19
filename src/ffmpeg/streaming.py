@@ -239,14 +239,17 @@ def stream_overlay_to_ffmpeg(
         from src.ffmpeg.detection import detect_amd_compose_backend
         if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
             from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
+            from src.ffmpeg.command_builder import RESOLUTION_MAP
+            target_res = RESOLUTION_MAP.get(resolution_name)
+            out_w, out_h = target_res if target_res is not None else (render_w, render_h)
             print("[STREAM AMD] Dispatching to production AMD_NATIVE_D3D11 GPU pipeline...", flush=True)
             success = export_amd_native_d3d11(
                 ffmpeg_exe=ffmpeg_exe,
                 input_files=input_files,
                 output_file=str(output_file),
                 duration_s=duration_s,
-                video_width=render_w,
-                video_height=render_h,
+                video_width=out_w,
+                video_height=out_h,
                 start_dt_utc=start_dt_utc,
                 tz_offset_hours=tz_offset_hours,
                 speed_samples=speed_samples,

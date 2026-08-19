@@ -47,7 +47,7 @@ def render_time_block(
         return cached, px_x, px_y
 
     min_dim = min(canvas_w, canvas_h)
-    outline_raw = int(layout["global"].get("text_outline", 3))
+    outline_raw = int(layout.get("global", {}).get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
 
     label_px = max(12, s(cfg["font_label"], min_dim))

@@ -82,8 +82,15 @@ class RenderMixin:
             streams[0].get("avg_frame_rate")
             or streams[0].get("r_frame_rate")
         ) if streams else 30.0
-        w = int(streams[0].get("width", 1920)) if streams else 1920
-        h = int(streams[0].get("height", 1080)) if streams else 1080
+        src_w = int(streams[0].get("width", 1920)) if streams else 1920
+        src_h = int(streams[0].get("height", 1080)) if streams else 1080
+
+        from src.ffmpeg.command_builder import RESOLUTION_MAP
+        target_res = RESOLUTION_MAP.get(resolution)
+        if target_res is not None:
+            render_w, render_h = target_res
+        else:
+            render_w, render_h = src_w, src_h
 
         layout = dict(self.layout, cut_regions=list(self._cut_regions))
         records = ensure_records_list(load_json_with_fallback(meta))
@@ -116,6 +123,9 @@ class RenderMixin:
             "speed_samples": speed,
             "track_samples": track,
             "alt_samples": alt,
+            "iso_samples": self.telemetry.iso_samples,
+            "exposure_samples": self.telemetry.exposure_samples,
+            "temperature_samples": self.telemetry.temperature_samples,
             "accel_x_samples": self.telemetry.accel_x_samples,
             "accel_y_samples": self.telemetry.accel_y_samples,
             "accel_z_samples": self.telemetry.accel_z_samples,
@@ -129,12 +139,12 @@ class RenderMixin:
         # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)
         # FFmpeg will automatically scale the overlay to render_w/render_h
         max_overlay_w = 1920
-        if w > max_overlay_w:
+        if render_w > max_overlay_w:
             ov_w = max_overlay_w
-            ov_h = int(max_overlay_w * h / w) if w > 0 else 1080
+            ov_h = int(max_overlay_w * render_h / render_w) if render_w > 0 else 1080
         else:
-            ov_w = w
-            ov_h = h
+            ov_w = render_w
+            ov_h = render_h
 
         stream_overlay_to_ffmpeg(
             ffmpeg_exe=ffmpeg_exe,
@@ -179,8 +189,8 @@ class RenderMixin:
             container_rotation=container_rotation_arg,
             overlay_w=ov_w,
             overlay_h=ov_h,
-            render_w=w,
-            render_h=h,
+            render_w=render_w,
+            render_h=render_h,
         )
 
         return {"total_overlay_frames": 0, "png_duration": 0}

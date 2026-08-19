@@ -49,6 +49,7 @@ def get_value_schema() -> list[tuple]:
         ("chart_color", "color", None, None, None),
         ("fill_color", "color", None, None, None),
         ("fill_alpha", "int", 0, 255, 5),
+        ("chart_time_scope", "choice", ["activity", "video"], None, None),
         # Gauge-specific
         ("start_angle", "int", 0, 360, 5),
         ("sweep_angle", "int", 30, 360, 5),

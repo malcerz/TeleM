@@ -1114,7 +1114,21 @@ def export_amd_native_d3d11(
     print(f"  AMD_NATIVE_DECODE_MODE:   {native_decode_mode}", flush=True)
     print(f"  AMD_NATIVE_HUD_MODE:      {native_hud_mode}", flush=True)
     print(f"  AMD_NATIVE_HUD_UPLOAD:    {hud_upload_mode}", flush=True)
+    fused_mode = os.environ.get('AMD_FUSED_COMPOSITOR', '1').strip()
+    print(f"  AMD_NV12_COMPOSITOR:      {'FUSED (production single-range)' if fused_mode == '1' else 'LEGACY_SEPARATE (diagnostic)'}", flush=True)
+    print(f"  AMD_NORMALIZE_PASSES:     {0 if fused_mode == '1' else os.environ.get('AMD_NORMALIZE_PASSES', '1')}", flush=True)
     print(f"  AMD_VP_POOL_SIZE:         {os.environ.get('AMD_VP_POOL_SIZE', '8 (native default)')}", flush=True)
+    try:
+        from src.video_helpers import ffprobe_resolution
+        src_w_h = ffprobe_resolution(input_file_str, ffmpeg_exe.replace("ffmpeg.exe", "ffprobe.exe") if ffmpeg_exe else "ffprobe")
+        src_w_log = src_w_h[0] if src_w_h else video_width
+        src_h_log = src_w_h[1] if src_w_h else video_height
+    except Exception:
+        src_w_log, src_h_log = video_width, video_height
+    print(f"[AMD NATIVE D3D11] SOURCE VIDEO:      {src_w_log}x{src_h_log}", flush=True)
+    print(f"[AMD NATIVE D3D11] REQUESTED OUTPUT:  {video_width}x{video_height}", flush=True)
+    print(f"[AMD NATIVE D3D11] VP OUTPUT:          {video_width}x{video_height}", flush=True)
+    print(f"[AMD NATIVE D3D11] AMF OUTPUT:         {video_width}x{video_height}", flush=True)
     print("[AMD NATIVE D3D11] ===================================", flush=True)
     h_context = native_dll.telem_amd_create(
         input_file_str,
@@ -1682,6 +1696,7 @@ def export_amd_native_d3d11(
                     _bboxes=above_bboxes,
                     gpu_capture_keys=set(),
                     split_chart_keys=None,
+                    reuse_canvas=False,
                     **frame_kwargs,
                 )
                 above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0

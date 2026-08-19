@@ -1,6 +1,7 @@
 #include "d3d11_vp_pipeline.h"
 #include <d3dcompiler.h>
 #include "stb_image_write.h"
+#include <fstream>
 
 static std::vector<uint8_t> ConvertNV12ToRGBA_VP(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);
@@ -62,6 +63,59 @@ static bool DumpNV12TextureToFile(ID3D11Device* pDevice, ID3D11DeviceContext* pC
     pStaging->Release();
     return true;
 }
+
+static bool DumpNV12RawToFile(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, ID3D11Texture2D* pTex, const char* outPath) {
+    if (!pDevice || !pContext || !pTex || !outPath) return false;
+    D3D11_TEXTURE2D_DESC desc = {};
+    pTex->GetDesc(&desc);
+
+    D3D11_TEXTURE2D_DESC readDesc = desc;
+    readDesc.Usage = D3D11_USAGE_STAGING;
+    readDesc.BindFlags = 0;
+    readDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    readDesc.MiscFlags = 0;
+
+    ID3D11Texture2D* pStaging = nullptr;
+    HRESULT hr = pDevice->CreateTexture2D(&readDesc, nullptr, &pStaging);
+    if (FAILED(hr) || !pStaging) return false;
+
+    pContext->CopyResource(pStaging, pTex);
+
+    D3D11_MAPPED_SUBRESOURCE mapY = {};
+    HRESULT hrY = pContext->Map(pStaging, 0, D3D11_MAP_READ, 0, &mapY);
+
+    if (SUCCEEDED(hrY)) {
+        std::ofstream ofs(outPath, std::ios::binary);
+        if (ofs) {
+            const uint8_t* yPlane = (const uint8_t*)mapY.pData;
+            for (UINT r = 0; r < desc.Height; ++r) {
+                ofs.write((const char*)(yPlane + r * mapY.RowPitch), desc.Width);
+            }
+            const uint8_t* uvPlane = yPlane + (mapY.RowPitch * desc.Height);
+            for (UINT r = 0; r < desc.Height / 2; ++r) {
+                ofs.write((const char*)(uvPlane + r * mapY.RowPitch), desc.Width);
+            }
+        }
+        pContext->Unmap(pStaging, 0);
+    }
+    pStaging->Release();
+    return true;
+}
+
+static int GetFusedCompositorMode() {
+    const char* env = getenv("AMD_FUSED_COMPOSITOR");
+    return env ? atoi(env) : 1; // ETAP 8K Production Default: 1 (Fused Single-Range Compositor active)
+}
+
+static int GetNormalizePassCount() {
+    const int fusedMode = GetFusedCompositorMode();
+    if (fusedMode == 1) {
+        return 0; // Production fused path: 0 Normalize dispatches
+    }
+    const char* env = getenv("AMD_NORMALIZE_PASSES");
+    return env ? atoi(env) : 1; // Diagnostic legacy override default: 1 pass (ONE_PASS_REFERENCE)
+}
+
 
 // Diagnostic: dump a R8G8B8A8_UNORM DEFAULT texture to a PNG (with proper
 // staging copy + sync).  Used to inspect the GPU-resampled map texture.
@@ -165,6 +219,7 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     }
     if (m_nv12RangeComputeShader) m_nv12RangeComputeShader->Release();
     if (m_nv12HUDComputeShader) m_nv12HUDComputeShader->Release();
+    if (m_nv12FusedComputeShader) m_nv12FusedComputeShader->Release();
     if (m_device3) m_device3->Release();
     ReleaseMapResources();
     ReleaseChartResources();
@@ -361,8 +416,8 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     contentDesc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     contentDesc.InputFrameRate.Numerator = 30000;
     contentDesc.InputFrameRate.Denominator = 1001;
-    contentDesc.InputWidth = m_width;
-    contentDesc.InputHeight = m_height;
+    contentDesc.InputWidth = (m_width > 3840u) ? m_width : 3840u;
+    contentDesc.InputHeight = (m_height > 2160u) ? m_height : 2160u;
     contentDesc.OutputFrameRate.Numerator = 30000;
     contentDesc.OutputFrameRate.Denominator = 1001;
     contentDesc.OutputWidth = m_width;
@@ -402,25 +457,48 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     }
 
     // Set Color Spaces
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE csIn = {};
-    csIn.Usage = 0; // Playback
-    csIn.RGB_Range = 1; // Studio (16-235)
-    csIn.YCbCr_Matrix = 1; // BT.709
-    csIn.YCbCr_xvYCC = 0;
-    m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 0, &csIn);
+    const char* envCsMode = getenv("AMD_VP_COLORSPACE_MODE");
+    int csMode = envCsMode ? atoi(envCsMode) : 0; // Safe production default: Mode 0 (legacy VP flags)
 
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE csHUD = {};
-    csHUD.Usage = 0; // Playback
-    csHUD.RGB_Range = 0; // Full range 0-255 RGB
-    csHUD.YCbCr_Matrix = 0;
-    csHUD.YCbCr_xvYCC = 0;
-    m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 1, &csHUD);
+    if (csMode == 2 || csMode == 3) {
+        ID3D11VideoContext1* videoContext1 = nullptr;
+        HRESULT hrVc1 = m_videoContext->QueryInterface(
+            __uuidof(ID3D11VideoContext1), reinterpret_cast<void**>(&videoContext1));
+        if (SUCCEEDED(hrVc1) && videoContext1) {
+            DXGI_COLOR_SPACE_TYPE inSpace = (csMode == 3)
+                ? DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P2020
+                : DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P709;
+            DXGI_COLOR_SPACE_TYPE outSpace = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+            videoContext1->VideoProcessorSetStreamColorSpace1(m_videoProcessor, 0, inSpace);
+            videoContext1->VideoProcessorSetStreamColorSpace1(m_videoProcessor, 1, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+            videoContext1->VideoProcessorSetOutputColorSpace1(m_videoProcessor, outSpace);
+            videoContext1->Release();
+            std::cout << "[VP COLORSPACE1] in=" << inSpace << " out=" << outSpace << std::endl;
+        }
+    } else {
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE csIn = {};
+        csIn.Usage = 0; // Playback
+        csIn.RGB_Range = (csMode == 0) ? 1 : 0;
+        csIn.YCbCr_Matrix = 1; // BT.709
+        csIn.YCbCr_xvYCC = 0;
+        csIn.Nominal_Range = (csMode == 1) ? D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255 : 0;
+        m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 0, &csIn);
 
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE csOut = {};
-    csOut.Usage = 0;
-    csOut.RGB_Range = 1; // Studio
-    csOut.YCbCr_Matrix = 1; // BT.709
-    m_videoContext->VideoProcessorSetOutputColorSpace(m_videoProcessor, &csOut);
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE csHUD = {};
+        csHUD.Usage = 0; // Playback
+        csHUD.RGB_Range = 0; // Full range 0-255 RGB
+        csHUD.YCbCr_Matrix = 0;
+        csHUD.YCbCr_xvYCC = 0;
+        m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 1, &csHUD);
+
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE csOut = {};
+        csOut.Usage = 0;
+        csOut.RGB_Range = 1; // Studio
+        csOut.YCbCr_Matrix = 1; // BT.709
+        csOut.Nominal_Range = (csMode == 1) ? D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235 : 0;
+        m_videoContext->VideoProcessorSetOutputColorSpace(m_videoProcessor, &csOut);
+        std::cout << "[VP COLORSPACE] mode=" << csMode << " inNominal=" << csIn.Nominal_Range << " outNominal=" << csOut.Nominal_Range << std::endl;
+    }
 
     // Create Persistent Output Texture Pool (DXGI_FORMAT_NV12)
     D3D11_TEXTURE2D_DESC texDesc = {};
@@ -632,12 +710,88 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
         shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr,
         &m_nv12RangeComputeShader);
     shaderBlob->Release();
+    if (FAILED(hr)) return false;
+
+    // ETAP 8J: Fused Compute Shader — Unified Range Normalize + Direct HUD NV12 Compositor
+    const char* fusedSource = R"(
+        Texture2D<float4> HUDTexture : register(t0);
+        RWTexture2D<float> OutputY : register(u0);
+        RWTexture2D<float2> OutputUV : register(u1);
+
+        int ScaleChroma(int value) {
+            int centered = value - 128;
+            int scaled = centered >= 0
+                ? (centered * 224 + 127) / 255
+                : (centered * 224 - 127) / 255;
+            return clamp(128 + scaled, 0, 255);
+        }
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 threadId : SV_DispatchThreadID) {
+            uint width, height;
+            HUDTexture.GetDimensions(width, height);
+            uint2 pos = threadId.xy;
+            if (pos.x >= width || pos.y >= height) return;
+
+            // 1. Normalize Base Y (Full 0..255 -> Studio 16..235)
+            uint yBaseFull = (uint)round(saturate(OutputY[pos]) * 255.0f);
+            uint yBaseLimited = min(235u, ((219u * yBaseFull + 127u) / 255u) + 16u);
+
+            // 2. Read HUD RGBA
+            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(pos, 0))) * 255.0f);
+            uint alpha = hud.a;
+
+            if (alpha == 0u) {
+                OutputY[pos] = yBaseLimited / 255.0f;
+            } else {
+                uint yHUD = ((66u * hud.r + 129u * hud.g + 25u * hud.b + 128u) >> 8) + 16u;
+                uint yOut = alpha == 255u ? yHUD :
+                    (yHUD * alpha + yBaseLimited * (255u - alpha)) / 255u;
+                OutputY[pos] = min(yOut, 255u) / 255.0f;
+            }
+
+            if (((pos.x | pos.y) & 1u) == 0u) {
+                uint2 uvPos = pos / 2u;
+                int2 uvBaseFull = (int2)round(saturate(OutputUV[uvPos]) * 255.0f);
+                uint uBaseLimited = (uint)ScaleChroma(uvBaseFull.x);
+                uint vBaseLimited = (uint)ScaleChroma(uvBaseFull.y);
+
+                if (alpha == 0u) {
+                    OutputUV[uvPos] = float2(uBaseLimited, vBaseLimited) / 255.0f;
+                } else {
+                    int uHUD = ((-38 * (int)hud.r - 74 * (int)hud.g + 112 * (int)hud.b + 128) >> 8) + 128;
+                    int vHUD = ((112 * (int)hud.r - 94 * (int)hud.g - 18 * (int)hud.b + 128) >> 8) + 128;
+                    uint uValue = (uint)clamp(uHUD, 0, 255);
+                    uint vValue = (uint)clamp(vHUD, 0, 255);
+                    uint2 uvOut = alpha == 255u ? uint2(uValue, vValue) :
+                        (uint2(uValue, vValue) * alpha + uint2(uBaseLimited, vBaseLimited) * (255u - alpha)) / 255u;
+                    OutputUV[uvPos] = uvOut / 255.0f;
+                }
+            }
+        }
+    )";
+
+    shaderBlob = nullptr;
+    errors = nullptr;
+    hr = D3DCompile(fusedSource, strlen(fusedSource), nullptr, nullptr, nullptr,
+                    "CSMain", "cs_5_0", 0, 0, &shaderBlob, &errors);
+    if (FAILED(hr)) {
+        if (errors) { std::cerr << (char*)errors->GetBufferPointer() << std::endl; errors->Release(); }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(
+        shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr,
+        &m_nv12FusedComputeShader);
+    shaderBlob->Release();
     return SUCCEEDED(hr);
 }
 
 bool D3D11VideoProcessorPipeline::NormalizeD3D11VARangeNV12(UINT poolIndex) {
     if (!m_nv12RangeComputeShader ||
         !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) return false;
+
+    const int passCount = GetNormalizePassCount();
+    if (passCount <= 0) return true; // bypass
 
     ID3D11UnorderedAccessView* outputs[2] = {
         m_outputYViews[poolIndex], m_outputUVViews[poolIndex]
@@ -647,8 +801,8 @@ bool D3D11VideoProcessorPipeline::NormalizeD3D11VARangeNV12(UINT poolIndex) {
 
     // The golden CPU path performs full->studio conversion once in FFmpeg and
     // once again when the uploaded NV12 is consumed by the legacy VP state.
-    // Preserve that established output with two GPU-resident, quantized passes.
-    for (UINT pass = 0; pass < 2; ++pass) {
+    // Preserve that established output with two GPU-resident, quantized passes: for (UINT pass = 0; pass < 2; ++pass).
+    for (UINT pass = 0; pass < (UINT)passCount; ++pass) {
         m_context->CSSetShader(m_nv12RangeComputeShader, nullptr, 0);
         m_context->CSSetUnorderedAccessViews(0, 2, outputs, initialCounts);
         m_context->Dispatch((m_width + 15) / 16, (m_height + 15) / 16, 1);
@@ -656,6 +810,8 @@ bool D3D11VideoProcessorPipeline::NormalizeD3D11VARangeNV12(UINT poolIndex) {
     }
     return true;
 }
+
+
 
 bool D3D11VideoProcessorPipeline::ComposeHUDDirectNV12(
     ID3D11Texture2D* outputTexture,
@@ -665,9 +821,13 @@ bool D3D11VideoProcessorPipeline::ComposeHUDDirectNV12(
         !m_nv12HUDComputeShader || !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) {
         return false;
     }
+    const int fusedMode = GetFusedCompositorMode();
+    ID3D11ComputeShader* targetShader = (fusedMode == 1 && m_nv12FusedComputeShader)
+        ? m_nv12FusedComputeShader : m_nv12HUDComputeShader;
+
     // VideoProcessor has already produced the normal base NV12 output. The
     // shader changes only pixels with non-zero Pillow straight alpha.
-    m_context->CSSetShader(m_nv12HUDComputeShader, nullptr, 0);
+    m_context->CSSetShader(targetShader, nullptr, 0);
     m_context->CSSetShaderResources(0, 1, &m_hudShaderView);
     ID3D11UnorderedAccessView* outputs[2] = {
         m_outputYViews[poolIndex], m_outputUVViews[poolIndex]
@@ -1032,7 +1192,14 @@ bool D3D11VideoProcessorPipeline::UpdateMapTexture(
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::ResampleAndBlendMap() {
+bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
+    double* outResampleMs, double* outFlush1Ms, double* outBlendMs, double* outFlush2Ms
+) {
+    if (outResampleMs) *outResampleMs = 0.0;
+    if (outFlush1Ms) *outFlush1Ms = 0.0;
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlush2Ms) *outFlush2Ms = 0.0;
+
     if (!m_mapGpuEnabled || !m_mapTexture || !m_mapShaderView ||
         !m_mapResampleShader || !m_mapBlendShader || !m_mapResampleCB || !m_mapBlendCB ||
         !m_hudUAV || m_mapSrcW == 0 || m_mapOutW == 0) {
@@ -1074,10 +1241,22 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap() {
     m_context->Dispatch((m_mapOutW + 15) / 16, (m_mapOutH + 15) / 16, 1);
     ID3D11UnorderedAccessView* nullUAV = nullptr;
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+
+    const auto pass1End = std::chrono::high_resolution_clock::now();
+    if (outResampleMs) {
+        *outResampleMs = std::chrono::duration<double, std::milli>(pass1End - resampleStart).count();
+    }
+
     // UAV->SRV hazard barrier before the next pass reads this texture as SRV.
+    const auto flush1Start = std::chrono::high_resolution_clock::now();
     m_context->Flush();
+    const auto flush1End = std::chrono::high_resolution_clock::now();
+    if (outFlush1Ms) {
+        *outFlush1Ms = std::chrono::duration<double, std::milli>(flush1End - flush1Start).count();
+    }
 
     // Pass 2: blend resampled 691 map into the persistent HUD canvas at bbox
+    const auto blendStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, mapW, mapH; } blendCB = {
         m_mapDstX, m_mapDstY, m_mapOutW, m_mapOutH };
     m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &blendCB, 0, 0);
@@ -1092,11 +1271,22 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap() {
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
     ID3D11ShaderResourceView* nullSRV = nullptr;
     m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    const auto pass2End = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(pass2End - blendStart).count();
+    }
+
     // UAV->SRV hazard barrier before ComposeHUDDirectNV12 reads the HUD as SRV.
+    const auto flush2Start = std::chrono::high_resolution_clock::now();
     m_context->Flush();
+    const auto flush2End = std::chrono::high_resolution_clock::now();
+    if (outFlush2Ms) {
+        *outFlush2Ms = std::chrono::duration<double, std::milli>(flush2End - flush2Start).count();
+    }
 
     m_mapResampleMs = std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - resampleStart).count();
+        flush2End - resampleStart).count();
     m_mapResampleReady = true;
     return true;
 }
@@ -1201,18 +1391,6 @@ bool D3D11VideoProcessorPipeline::InitializeChartCompositor() {
             }
             uint4 src = (uint4)round(srcF * 255.0);
             if (src.a == 0) {
-                if (mode == 3) {
-                    // ETAP 5L gauge blend: DROP dirty zeros (alpha==0 -> fully
-                    // transparent), matching Pillow alpha_composite which
-                    // clears RGB when the output alpha is 0.
-                    HUDCanvas[canvasPos] = float4(0, 0, 0, 0);
-                } else {
-                    // Pillow alpha_composite over a freshly-cleared transparent
-                    // dest PRESERVES the source RGB (dirty zeros, RGB != 0 with
-                    // alpha 0) — verified empirically.  Reproduce that exactly so
-                    // the final HUD canvas is byte-identical to the CPU path.
-                    HUDCanvas[canvasPos] = float4(float3(src.rgb), 0.0) / 255.0;
-                }
                 return;
             }
             uint4 dst = (uint4)round(saturate(HUDCanvas.Load(int3(canvasPos, 0))) * 255.0);
@@ -1404,7 +1582,10 @@ bool D3D11VideoProcessorPipeline::UpdateChartDynamicTile(
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::BlendCharts() {
+bool D3D11VideoProcessorPipeline::BlendCharts(double* outBlendMs, double* outFlushMs) {
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlushMs) *outFlushMs = 0.0;
+
     if (!m_chartGpuEnabled || !m_chartBlendShader || !m_chartBlendCB ||
         !m_hudUAV) {
         return true;  // nothing to do — not an error
@@ -1476,11 +1657,22 @@ bool D3D11VideoProcessorPipeline::BlendCharts() {
             dispatch(cx, cy, cw, ch, 1, m_chartSRV[slot]);
         }
     }
+    const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(dispatchesEnd - blendStart).count();
+    }
+
     // UAV->SRV hazard barrier before ComposeHUDDirectNV12 reads the HUD canvas
     // as an SRV (required even when the GPU map blend is disabled).
+    const auto flushStart = std::chrono::high_resolution_clock::now();
     m_context->Flush();
+    const auto flushEnd = std::chrono::high_resolution_clock::now();
+    if (outFlushMs) {
+        *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
+    }
+
     m_chartBlendMs = std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - blendStart).count();
+        flushEnd - blendStart).count();
     m_chartClearMs = clearMs;
     return true;
 }
@@ -1631,7 +1823,10 @@ bool D3D11VideoProcessorPipeline::UpdateGaugeTexture(
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::BlendGauge() {
+bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlushMs) {
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlushMs) *outFlushMs = 0.0;
+
     if (!m_gaugeGpuEnabled || !m_gaugeActive || !m_gaugeTexture || !m_gaugeSRV ||
         m_gaugeW == 0 || m_gaugeH == 0 || !m_chartBlendShader || !m_chartBlendCB ||
         !m_hudUAV) {
@@ -1669,17 +1864,31 @@ bool D3D11VideoProcessorPipeline::BlendGauge() {
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
     m_context->CSSetShaderResources(0, 1, &nullSRV);
 
+    const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(dispatchesEnd - blendStart).count();
+    }
+
+    const auto flushStart = std::chrono::high_resolution_clock::now();
     m_context->Flush();
+    const auto flushEnd = std::chrono::high_resolution_clock::now();
+    if (outFlushMs) {
+        *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
+    }
+
     m_gaugeBlendMs = std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - blendStart).count();
+        flushEnd - blendStart).count();
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap() {
+bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap(double* outClearMs) {
+    if (outClearMs) *outClearMs = 0.0;
+
     if (!m_aboveMapGpuEnabled || !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
         return true;
     if (!m_aboveMapActive && m_aboveMapPrevW == 0) return true;
 
+    const auto clearStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
     ID3D11ShaderResourceView* nullSRV = nullptr;
     ID3D11UnorderedAccessView* nullUAV = nullptr;
@@ -1708,14 +1917,23 @@ bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap() {
     dispatch(m_aboveMapPrevX, m_aboveMapPrevY,
              m_aboveMapPrevW, m_aboveMapPrevH, 0, nullptr);
     m_aboveMapPrevW = m_aboveMapPrevH = 0;
+
+    const auto clearEnd = std::chrono::high_resolution_clock::now();
+    if (outClearMs) {
+        *outClearMs = std::chrono::duration<double, std::milli>(clearEnd - clearStart).count();
+    }
     return true;
 }
 
-bool D3D11VideoProcessorPipeline::BlendAboveMap() {
+bool D3D11VideoProcessorPipeline::BlendAboveMap(double* outBlendMs, double* outFlushMs) {
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlushMs) *outFlushMs = 0.0;
+
     if (!m_aboveMapGpuEnabled || !m_aboveMapActive || !m_aboveMapSRV ||
         !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
         return true;
 
+    const auto blendStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
     ID3D11ShaderResourceView* nullSRV = nullptr;
     ID3D11UnorderedAccessView* nullUAV = nullptr;
@@ -1732,7 +1950,19 @@ bool D3D11VideoProcessorPipeline::BlendAboveMap() {
     m_context->Dispatch((m_aboveMapW + 15) / 16, (m_aboveMapH + 15) / 16, 1);
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
     m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(dispatchesEnd - blendStart).count();
+    }
+
+    const auto flushStart = std::chrono::high_resolution_clock::now();
     m_context->Flush();
+    const auto flushEnd = std::chrono::high_resolution_clock::now();
+    if (outFlushMs) {
+        *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
+    }
+
     m_aboveMapPrevX = m_aboveMapDstX; m_aboveMapPrevY = m_aboveMapDstY;
     m_aboveMapPrevW = m_aboveMapW; m_aboveMapPrevH = m_aboveMapH;
     return true;
@@ -1850,16 +2080,17 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     const bool composeHUD = enableHUD && m_hudShaderView && !m_gpuHudOff;
     D3D11_VIDEO_PROCESSOR_STREAM streams[1] = {};
 
-    RECT fullRect = { 0, 0, (LONG)m_width, (LONG)m_height };
+    RECT srcRect = { 0, 0, (LONG)inDesc.Width, (LONG)inDesc.Height };
+    RECT dstRect = { 0, 0, (LONG)m_width, (LONG)m_height };
 
     // ETAP 5S — stream-state signature (frame format + source/dest rect +
     // input format + rotation).  Used to prove the setters are constant per
     // pipeline and to drive the STATIC_CACHE skip / cache invalidation.
     UINT stateSig = (UINT)D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-    stateSig = stateSig * 31u + (UINT)fullRect.left;
-    stateSig = stateSig * 31u + (UINT)fullRect.top;
-    stateSig = stateSig * 31u + (UINT)fullRect.right;
-    stateSig = stateSig * 31u + (UINT)fullRect.bottom;
+    stateSig = stateSig * 31u + (UINT)srcRect.right;
+    stateSig = stateSig * 31u + (UINT)srcRect.bottom;
+    stateSig = stateSig * 31u + (UINT)dstRect.right;
+    stateSig = stateSig * 31u + (UINT)dstRect.bottom;
     stateSig = stateSig * 31u + (UINT)inDesc.Format;
     stateSig = stateSig * 31u + m_streamRotation;
 
@@ -1884,7 +2115,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
             // REORDER diagnostic: SourceRect is the first D3D11 VP call.
             const auto tSrc = std::chrono::steady_clock::now();
             m_videoContext->VideoProcessorSetStreamSourceRect(
-                m_videoProcessor, 0, TRUE, &fullRect);
+                m_videoProcessor, 0, TRUE, &srcRect);
             if (fa && outStats) {
                 outStats->setter_src_rect_ms = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - tSrc).count();
@@ -1906,14 +2137,14 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
             }
             const auto tSrc = std::chrono::steady_clock::now();
             m_videoContext->VideoProcessorSetStreamSourceRect(
-                m_videoProcessor, 0, TRUE, &fullRect);
+                m_videoProcessor, 0, TRUE, &srcRect);
             if (fa && outStats) {
                 outStats->setter_src_rect_ms = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - tSrc).count();
             }
         }
         const auto tDst = std::chrono::steady_clock::now();
-        m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor, 0, TRUE, &fullRect);
+        m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor, 0, TRUE, &dstRect);
         if (fa && outStats) {
             outStats->setter_dst_rect_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - tDst).count();
@@ -1952,13 +2183,34 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         outStats->blt_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tBlt).count();
     }
+    // Diagnostic: check if frame dumping is requested
+    const char* envDump = getenv("AMD_DUMP_RANGE_FRAMES");
+    bool shouldDump = false;
+    if (envDump) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%u", frameIndex);
+        if (strstr(envDump, buf) != nullptr) shouldDump = true;
+    }
+    if (shouldDump) {
+        char pRaw[128], pNorm[128];
+        snprintf(pRaw, sizeof(pRaw), "scratch/diag_vp_raw_frame_%u.yuv", frameIndex);
+        snprintf(pNorm, sizeof(pNorm), "scratch/diag_post_norm_frame_%u.yuv", frameIndex);
+        DumpNV12RawToFile(m_device, m_context, outTex, pRaw);
+    }
+
     const auto tRange = std::chrono::steady_clock::now();
-    if (SUCCEEDED(hr) && normalizeD3D11VARange &&
+    const bool skipNormalize = (GetFusedCompositorMode() == 1);
+    if (SUCCEEDED(hr) && normalizeD3D11VARange && !skipNormalize &&
         !NormalizeD3D11VARangeNV12(currentIdx)) { hr = E_FAIL; std::cerr << "[VP] normalize FAILED" << std::endl; }
     if (tsOn) m_context->End(m_tsQueries[tsSlot][2]);  // after range normalize
     if (fa && outStats) {
         outStats->range_pass_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tRange).count();
+    }
+    if (shouldDump) {
+        char pNorm[128];
+        snprintf(pNorm, sizeof(pNorm), "scratch/diag_post_norm_frame_%u.yuv", frameIndex);
+        DumpNV12RawToFile(m_device, m_context, outTex, pNorm);
     }
     // Diagnostic: capture the raw VP output BEFORE any HUD/map compositing so
     // we can isolate whether the base video already contains the map.
@@ -1968,45 +2220,54 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     // ETAP 7D: remove the previous ABOVE contribution before any current
     // chart/gauge/map layer is written to the shared HUD canvas.
     if (SUCCEEDED(hr) && m_aboveMapGpuEnabled &&
-        !ClearPreviousAboveMap()) { hr = E_FAIL; std::cerr << "[VP] previous map-above clear FAILED" << std::endl; }
+        !ClearPreviousAboveMap(fa && outStats ? &outStats->clear_prev_above_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] previous map-above clear FAILED" << std::endl;
+    }
     // ETAP 5J: GPU chart blend (clear bbox + straight-alpha "over") into the
     // HUD canvas.  Runs before the map blend so the map (last in Pillow
     // z-order) stays on top; the z-order guard guarantees the charts are
     // disjoint from every other widget, so this is exact.
-    const auto tChart = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && m_chartGpuEnabled &&
-        !BlendCharts()) { hr = E_FAIL; std::cerr << "[VP] chart blend FAILED" << std::endl; }
-    if (tsOn) m_context->End(m_tsQueries[tsSlot][3]);  // after charts blend
-    if (fa && outStats) {
-        outStats->chart_blend_ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - tChart).count();
+        !BlendCharts(fa && outStats ? &outStats->chart_blend_ms : nullptr,
+                     fa && outStats ? &outStats->chart_flush_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] chart blend FAILED" << std::endl;
     }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][3]);  // after charts blend
+
     // ETAP 5L: GPU gauge blend (clear bbox + straight-alpha "over") into the
     // HUD canvas.  Runs after the charts and before the map; the gauge guard
     // verifies the gauge is disjoint from every other widget and the map, so
     // the relative order does not change the final image.
-    const auto tGauge = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && m_gaugeGpuEnabled &&
-        !BlendGauge()) { hr = E_FAIL; std::cerr << "[VP] gauge blend FAILED" << std::endl; }
-    if (tsOn) m_context->End(m_tsQueries[tsSlot][4]);  // after gauge blend
-    if (fa && outStats) {
-        outStats->gauge_blend_ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - tGauge).count();
+        !BlendGauge(fa && outStats ? &outStats->gauge_blend_ms : nullptr,
+                    fa && outStats ? &outStats->gauge_flush_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] gauge blend FAILED" << std::endl;
     }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][4]);  // after gauge blend
+
     // ETAP 5G: GPU-resident map 692->691 resize + blend into the HUD canvas
     // before the NV12 compositor consumes it (map stays out of the Pillow HUD).
-    const auto tMap = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && m_mapGpuEnabled &&
-        !ResampleAndBlendMap()) { hr = E_FAIL; std::cerr << "[VP] map blend FAILED" << std::endl; }
-    if (tsOn) m_context->End(m_tsQueries[tsSlot][5]);  // after map resize+blend
-    if (fa && outStats) {
-        outStats->map_blend_ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - tMap).count();
+        !ResampleAndBlendMap(fa && outStats ? &outStats->map_resample_ms : nullptr,
+                             fa && outStats ? &outStats->map_flush1_ms : nullptr,
+                             fa && outStats ? &outStats->map_blend_ms : nullptr,
+                             fa && outStats ? &outStats->map_flush2_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] map blend FAILED" << std::endl;
     }
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][5]);  // after map resize+blend
+
     // ETAP 7D: blend only the current compact CPU_ABOVE_MAP layer after
     // GPU_MAP.  Its previous bbox was cleared at the start of this frame.
     if (SUCCEEDED(hr) && m_aboveMapGpuEnabled &&
-        !BlendAboveMap()) { hr = E_FAIL; std::cerr << "[VP] map-above blend FAILED" << std::endl; }
+        !BlendAboveMap(fa && outStats ? &outStats->above_blend_ms : nullptr,
+                       fa && outStats ? &outStats->above_flush_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] map-above blend FAILED" << std::endl;
+    }
+    if (fa && outStats) {
+        outStats->flush_total_ms = outStats->chart_flush_ms + outStats->gauge_flush_ms +
+                                   outStats->map_flush1_ms + outStats->map_flush2_ms +
+                                   outStats->above_flush_ms;
+    }
     const auto tHud = std::chrono::steady_clock::now();
     if (SUCCEEDED(hr) && composeHUD &&
         !ComposeHUDDirectNV12(outTex, currentIdx)) { hr = E_FAIL; std::cerr << "[VP] HUD compositor FAILED" << std::endl; }
@@ -2018,6 +2279,11 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     if (fa && outStats) {
         outStats->hud_compute_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tHud).count();
+    }
+    if (shouldDump) {
+        char pFinal[128];
+        snprintf(pFinal, sizeof(pFinal), "scratch/diag_final_amf_frame_%u.yuv", frameIndex);
+        DumpNV12RawToFile(m_device, m_context, outTex, pFinal);
     }
     const auto cpuSubmitEnd = std::chrono::high_resolution_clock::now();
     const auto tRelease = std::chrono::steady_clock::now();

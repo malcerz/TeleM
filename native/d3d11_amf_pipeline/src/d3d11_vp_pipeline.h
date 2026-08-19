@@ -28,9 +28,18 @@ struct VPPipelineStats {
     double blt_ms = 0.0;
     double submit_window_ms = 0.0;  // Blt end -> HUD end (whole enqueue window)
     double range_pass_ms = 0.0;
+    double clear_prev_above_ms = 0.0;
     double chart_blend_ms = 0.0;
+    double chart_flush_ms = 0.0;
     double gauge_blend_ms = 0.0;
+    double gauge_flush_ms = 0.0;
+    double map_resample_ms = 0.0;
     double map_blend_ms = 0.0;
+    double map_flush1_ms = 0.0;
+    double map_flush2_ms = 0.0;
+    double above_blend_ms = 0.0;
+    double above_flush_ms = 0.0;
+    double flush_total_ms = 0.0;
     double hud_compute_ms = 0.0;
     double release_view_ms = 0.0;
     UINT pool_index = 0;
@@ -240,13 +249,14 @@ private:
     bool ComposeHUDDirectNV12(ID3D11Texture2D* outputTexture, UINT poolIndex);
     bool NormalizeD3D11VARangeNV12(UINT poolIndex);
     bool InitializeMapCompositor();
-    bool ResampleAndBlendMap();
-    bool ClearPreviousAboveMap();
-    bool BlendAboveMap();
+    bool ResampleAndBlendMap(double* outResampleMs = nullptr, double* outFlush1Ms = nullptr, double* outBlendMs = nullptr, double* outFlush2Ms = nullptr);
+    bool ClearPreviousAboveMap(double* outClearMs = nullptr);
+    bool BlendAboveMap(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
     void ReleaseMapResources();
     // ETAP 5J — GPU chart compositor
     bool InitializeChartCompositor();
-    bool BlendCharts();
+    bool BlendCharts(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
+    bool BlendGauge(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
     void ReleaseChartResources();
 
     ID3D11Device* m_device = nullptr;
@@ -354,6 +364,7 @@ private:
     ID3D11Device3* m_device3 = nullptr;
     ID3D11ComputeShader* m_nv12HUDComputeShader = nullptr;
     ID3D11ComputeShader* m_nv12RangeComputeShader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedComputeShader = nullptr;
     std::vector<ID3D11UnorderedAccessView*> m_outputYViews;
     std::vector<ID3D11UnorderedAccessView*> m_outputUVViews;
 

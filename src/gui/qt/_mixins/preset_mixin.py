@@ -100,8 +100,8 @@ class PresetMixin:
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout
 
-        # Inwalidacja cache przygotowania — gdy zmieni się form/source zmieniają dane statyczne
-        if field_name in ("source", "form", "min_val", "max_val"):
+        # Inwalidacja cache przygotowania — gdy zmieni się form/source/scope/ticks/thickness zmieniają dane statyczne
+        if field_name in ("source", "form", "min_val", "max_val", "chart_time_scope", "ticks", "thickness"):
             self._clear_caches()
 
         # Odśwież podgląd

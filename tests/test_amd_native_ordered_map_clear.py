@@ -12,17 +12,17 @@ VP = ROOT / "native" / "d3d11_amf_pipeline" / "src" / "d3d11_vp_pipeline.cpp"
 def test_clear_previous_above_is_before_current_gpu_layers():
     source = VP.read_text(encoding="utf-8")
     process = source[source.index("bool D3D11VideoProcessorPipeline::ProcessFrame("):]
-    clear_call = process.index("ClearPreviousAboveMap()")
-    chart_call = process.index("BlendCharts()", clear_call)
-    gauge_call = process.index("BlendGauge()", chart_call)
-    map_call = process.index("ResampleAndBlendMap()", gauge_call)
-    above_call = process.index("BlendAboveMap()", map_call)
+    clear_call = process.index("ClearPreviousAboveMap(")
+    chart_call = process.index("BlendCharts(", clear_call)
+    gauge_call = process.index("BlendGauge(", chart_call)
+    map_call = process.index("ResampleAndBlendMap(", gauge_call)
+    above_call = process.index("BlendAboveMap(", map_call)
     assert clear_call < chart_call < gauge_call < map_call < above_call
 
 
 def test_blend_above_has_no_destructive_previous_bbox_clear():
     source = VP.read_text(encoding="utf-8")
-    start = source.index("bool D3D11VideoProcessorPipeline::BlendAboveMap()")
+    start = source.index("bool D3D11VideoProcessorPipeline::BlendAboveMap(")
     end = source.index("void D3D11VideoProcessorPipeline::ReleaseGaugeResources()", start)
     body = source[start:end]
     assert "dispatch(m_aboveMapPrev" not in body

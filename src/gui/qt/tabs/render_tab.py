@@ -618,8 +618,21 @@ class RenderTab(QWidget):
             if telemetry is None or layout is None or not getattr(telemetry, "start_dt_utc", None):
                 return
             if self._hud_chart_data is None:
+                video_dur_tmp = float(getattr(ctrl, "video_duration_s", 0.0) or 0.0)
+                end_dt_tmp = (telemetry.start_dt_utc + timedelta(seconds=video_dur_tmp)) if (telemetry.start_dt_utc and video_dur_tmp > 0) else None
+                source_ranges_tmp = {}
+                if getattr(telemetry, "fit_data", None):
+                    all_fit_pts = [s for s in telemetry.fit_data.values() if s]
+                    if all_fit_pts:
+                        source_ranges_tmp["fit"] = (
+                            min(s[0][0] for s in all_fit_pts),
+                            max(s[-1][0] for s in all_fit_pts),
+                        )
                 self._hud_chart_data = build_chart_data(
-                    layout, telemetry.get_samples_for_source, telemetry.resolve_samples)
+                    layout, telemetry.get_samples_for_source, telemetry.resolve_samples,
+                    start_dt_utc=telemetry.start_dt_utc, end_dt_utc=end_dt_tmp,
+                    source_activity_ranges=source_ranges_tmp,
+                )
             if self._hud_prepare_cache is None:
                 self._build_hud_prepare_cache()
             # Rozmiar preview — proporcje layoutu, szerokość ograniczona

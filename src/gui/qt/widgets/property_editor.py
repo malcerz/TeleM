@@ -103,7 +103,11 @@ class PropertyEditor(QWidget):
                 elif isinstance(w, QCheckBox):
                     w.setChecked(bool(val))
                 elif isinstance(w, QComboBox):
-                    w.setCurrentText(str(val))
+                    idx = w.findData(val)
+                    if idx >= 0:
+                        w.setCurrentIndex(idx)
+                    else:
+                        w.setCurrentText(str(val))
                 elif isinstance(w, QLineEdit):
                     w.setText(str(val))
             if "smoothing" in values and hasattr(self, "_smoothing_spin") and self._smoothing_spin:
@@ -264,11 +268,20 @@ class PropertyEditor(QWidget):
         elif field.field_type == "choice":
             cmb = QComboBox()
             if field.choices:
-                cmb.addItems([str(c) for c in field.choices])
+                for c in field.choices:
+                    if isinstance(c, (tuple, list)) and len(c) == 2:
+                        val, label = c
+                        cmb.addItem(str(label), val)
+                    else:
+                        cmb.addItem(str(c), c)
             if value is not None:
-                cmb.setCurrentText(str(value))
-            cmb.currentTextChanged.connect(
-                lambda txt, n=name: self._emit_change(n, txt)
+                idx = cmb.findData(value)
+                if idx >= 0:
+                    cmb.setCurrentIndex(idx)
+                else:
+                    cmb.setCurrentText(str(value))
+            cmb.currentIndexChanged.connect(
+                lambda idx, n=name, c=cmb: self._emit_change(n, c.itemData(idx) if c.itemData(idx) is not None else c.currentText())
             )
             res_widget = cmb
 

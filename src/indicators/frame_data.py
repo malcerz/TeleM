@@ -109,9 +109,13 @@ def prepare_overlay_frame_data(
 
     # ── Time strings ──────────────────────────────────────────────────
     section_started = time.perf_counter()
-    local_dt = target_dt + timedelta(hours=tz_offset_hours)
-    date_text = local_dt.strftime("%Y-%m-%d")
-    time_text = local_dt.strftime("%H:%M:%S")
+    if target_dt is not None:
+        local_dt = target_dt + timedelta(hours=tz_offset_hours)
+        date_text = local_dt.strftime("%Y-%m-%d")
+        time_text = local_dt.strftime("%H:%M:%S")
+    else:
+        date_text = ""
+        time_text = ""
     profiler.record(
         "telemetry.date_time",
         (time.perf_counter() - section_started) * 1000.0,
@@ -433,7 +437,7 @@ def prepare_overlay_frame_data(
         "hr_value": hr_value,
         "cad_value": cad_value,
         "battery_value": battery_value,
-        "chart_data": clip_chart_data(chart_data or {}, target_dt, start_dt_utc),
+        "chart_data": chart_data or {},
         "current_position": current_position,
         "extra_indicators": extra_indicators,
         "gps_track": gps_trk,

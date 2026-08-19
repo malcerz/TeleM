@@ -140,9 +140,9 @@ def _ticks_tab_fields(with_range: bool = True, with_ticks: bool = True) -> list[
     """Zakładka Ticks – podziałki i zakres wartości."""
     fields: list[FieldSchema] = []
     if with_ticks:
-        fields.append(FieldSchema("ticks", "int", "Tick",
+        fields.append(FieldSchema("ticks", "int", "Liczba podziałek",
                                   tab="Ticks", min_val=0, max_val=20, step=1))
-    fields.append(FieldSchema("thickness", "int", "Width",
+    fields.append(FieldSchema("thickness", "int", "Grubość podziałek",
                               tab="Ticks", min_val=1, max_val=10, step=1))
     if with_range:
         fields += [
@@ -176,6 +176,10 @@ def _gauge_tab_fields() -> list[FieldSchema]:
 def _chart_tab_fields() -> list[FieldSchema]:
     """Zakładka Chart – wygląd wykresu."""
     return [
+        FieldSchema(
+            "chart_time_scope", "choice", "Zakres czasu wykresu", tab="Chart",
+            choices=[("activity", "Cała aktywność"), ("video", "Zakres filmu")],
+        ),
         FieldSchema("chart_color", "color", "Linia", tab="Chart"),
         FieldSchema("fill_color", "color", "Wypełnienie", tab="Chart"),
         FieldSchema("fill_alpha", "int", "Alfa", tab="Chart",

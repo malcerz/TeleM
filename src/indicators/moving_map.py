@@ -77,6 +77,7 @@ def render_map_working_image(
             )
             renderers[cache_key] = renderer
             renderer._is_first_render = True
+            renderer.background_precache(margin=2, zooms=[effective_zoom])
 
         if target_dt is not None:
             gps0 = gps_track[0][0]
@@ -94,9 +95,10 @@ def render_map_working_image(
             dur = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp())
             ts = (current_position if current_position is not None else 0.0) * dur
 
+        dl_missing = getattr(renderer, '_is_first_render', False)
         map_img = renderer.render(
             ts, working_size, working_size,
-            download_missing=False,
+            download_missing=dl_missing,
             draw_track=not bool(cfg.get("hide_track", False)),
             draw_marker=not bool(cfg.get("hide_marker", False)),
         )

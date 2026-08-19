@@ -89,8 +89,20 @@ def init_worker(
         WORKER_CACHE["_font_cache"] = {}
 
     # Precompute chart data for workers (identical for every frame)
+    duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
+    end_dt_utc = (start_dt_utc + timedelta(seconds=duration_s)) if (start_dt_utc and duration_s) else None
+    source_ranges = {}
+    if fit_data:
+        all_fit_pts = [s for s in fit_data.values() if s]
+        if all_fit_pts:
+            source_ranges["fit"] = (
+                min(s[0][0] for s in all_fit_pts),
+                max(s[-1][0] for s in all_fit_pts),
+            )
     WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(
         layout, _get_source_samples, _resolve_cache_samples,
+        start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
+        source_activity_ranges=source_ranges,
     )
 
     # ── Precompute static ranges (max_distance_m, max_speed_kmh, min/max_alt) ──
@@ -196,7 +208,7 @@ def _resolve_cache_samples(
 ) -> list:
     """Return raw samples from exactly ``source``; no cross-source fallback."""
     del indicator_key
-    field_samples = WORKER_CACHE.get("field_samples", {})
+    field_samples = WORKER_CACHE.get("field_samples", {}) or {}
     gpmf_map = {
         "speed": "speed_samples", "alt": "alt_samples", "altitude": "alt_samples",
         "dist": "track_samples", "track": "track_samples", "iso": "iso_samples",
@@ -213,7 +225,10 @@ def _resolve_cache_samples(
         "battery": "gpx_battery_samples",
     }
     if source == "gpmf":
-        return list(field_samples.get(gpmf_map.get(field_name, ""), []) or [])
+        key = gpmf_map.get(field_name, "")
+        if key and key in WORKER_CACHE and WORKER_CACHE[key]:
+            return list(WORKER_CACHE[key])
+        return list(field_samples.get(key, []) or [])
     if source == "gpx":
         return list(WORKER_CACHE.get(gpx_map.get(field_name, ""), []) or [])
     if source == "fit":
