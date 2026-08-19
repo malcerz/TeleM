@@ -102,4 +102,4 @@ final_img = Image.open(frame_png)
 gx, gy, gw, gh = 772, 816, 324, 264
 stage5_crop = final_img.crop((gx, gy, gx + gw, gy + gh))
 stage5_crop.save(out_dir / "05_final_gauge_crop.png")
-print("Saved 05_final_gauge_crop.png success
+print("Saved 05_final_gauge_crop.png successfully.")
