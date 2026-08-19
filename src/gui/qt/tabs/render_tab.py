@@ -15,8 +15,9 @@ bez backpressure) — renderowany w wątku GUI, poza pętlą eksportera.
 
 from __future__ import annotations
 
+import threading
 import time
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -44,13 +45,15 @@ class RenderTab(QWidget):
         self._in_orig: float | None = None
         self._out_orig: float | None = None
         self._boundary_regions: list[tuple[float, float]] = []
-        # Stan renderingu / HUD preview (latest-state, 1 Hz)
+        # Stan renderingu / HUD preview (latest-state, ~5 Hz)
         self._rendering = False
         self._render_start = 0.0
         self._render_total = 0
         self._hud_ts: float | None = None
         self._hud_chart_data = None
         self._hud_prepare_cache: dict | None = None
+        self._last_preview_time = 0.0
+        self._preview_busy = False
         self._build_ui()
         self._connect_signals()
         if self._owns_preview:
@@ -263,6 +266,7 @@ class RenderTab(QWidget):
         s = self.signals
         s.sig_progress.connect(self._on_progress)
         s.sig_render_progress.connect(self._on_render_progress)
+        s.sig_export_preview_ready.connect(self._on_export_preview_ready)
         s.sig_render_finished.connect(self._on_finished)
         s.sig_error.connect(self._on_error)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
@@ -478,10 +482,13 @@ class RenderTab(QWidget):
         self.progress.setValue(int(pct))
         self._set_stats(completed, total, elapsed, fps, status)
 
-        # HUD Preview — latest-state, tylko gdy backend dostarczył snapshot
+        # HUD Preview — latest-state, z wideo, tylko gdy backend dostarczył snapshot
         if hud_state is not None and isinstance(hud_state, dict) and self.chk_hud_preview.isChecked():
             self._hud_ts = hud_state.get("ts")
-            self._render_hud_preview()
+            now = time.monotonic()
+            if now - self._last_preview_time >= 0.2:  # ~5 Hz
+                self._last_preview_time = now
+                self._trigger_async_preview(self._hud_ts)
 
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
                    status: str, final_eta: str | None = None) -> None:
@@ -541,6 +548,8 @@ class RenderTab(QWidget):
         self.hud_preview_label.setVisible(False)
         self.preview_slot.setVisible(True)
         self._update_preview_size()
+        self._hud_ts = None
+        self._last_preview_time = 0.0
 
     def _update_preview_size(self) -> None:
         """Ustaw wspólny rozmiar 16:9 dla podglądu wideo i HUD Preview."""
@@ -606,17 +615,49 @@ class RenderTab(QWidget):
             "max_alt": max_a,
         }
 
-    def _render_hud_preview(self) -> None:
-        """Renderuje aktualny stan HUD na czarnym tle (GUI thread, ~1 Hz)."""
-        if not self._rendering or self._controller is None or self._hud_ts is None:
+    def _on_export_preview_ready(self, qimg: QImage) -> None:
+        """Odbiera wyrenderowaną klatkę podglądu w głównym wątku GUI."""
+        if not self._rendering or qimg is None:
             return
+        pix = QPixmap.fromImage(qimg)
+        self.hud_preview_label.setPixmap(
+            pix.scaled(self.hud_preview_label.size(),
+                       Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+
+    def _trigger_async_preview(self, ts: float) -> None:
+        """Uruchamia asynchroniczny render klatki podglądu w tle (zero backpressure)."""
+        if not self._rendering or self._controller is None:
+            return
+        if self._preview_busy:
+            return
+        self._preview_busy = True
+
+        tw = self.hud_preview_label.width() if self.hud_preview_label.width() > 100 else 640
+        layout = getattr(self._controller, "layout", None) or {}
+        lw = int(layout.get("width", 1920) or 1920)
+        lh = int(layout.get("height", 1080) or 1080)
+        th = max(1, int(tw * lh / lw)) if lw > 0 else int(tw * 9 / 16)
+
+        def worker():
+            try:
+                qimg = self._build_preview_qimage(ts, tw, th)
+                if qimg is not None and self._rendering:
+                    self.signals.sig_export_preview_ready.emit(qimg)
+            finally:
+                self._preview_busy = False
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _build_preview_qimage(self, ts: float, tw: int, th: int) -> QImage | None:
+        """Renderuje klatkę wideo + HUD overlay do QImage (background thread)."""
         try:
             from src.overlay_renderer import prepare_overlay_frame_data, build_chart_data, render_preview
             ctrl = self._controller
             telemetry = getattr(ctrl, "telemetry", None)
             layout = getattr(ctrl, "layout", None)
             if telemetry is None or layout is None or not getattr(telemetry, "start_dt_utc", None):
-                return
+                return None
             if self._hud_chart_data is None:
                 video_dur_tmp = float(getattr(ctrl, "video_duration_s", 0.0) or 0.0)
                 end_dt_tmp = (telemetry.start_dt_utc + timedelta(seconds=video_dur_tmp)) if (telemetry.start_dt_utc and video_dur_tmp > 0) else None
@@ -635,15 +676,46 @@ class RenderTab(QWidget):
                 )
             if self._hud_prepare_cache is None:
                 self._build_hud_prepare_cache()
-            # Rozmiar preview — proporcje layoutu, szerokość ograniczona
-            lw = int(layout.get("width", 1920) or 1920)
-            lh = int(layout.get("height", 1080) or 1080)
-            tw = self.hud_preview_label.width() if self.hud_preview_label.width() > 100 else 960
-            th = max(1, int(tw * lh / lw)) if lw > 0 else int(tw * 9 / 16)
-            base = Image.new("RGBA", (tw, th), (0, 0, 0, 255))
-            target_dt = telemetry.start_dt_utc + timedelta(seconds=self._hud_ts)
-            if target_dt.tzinfo is None:
-                target_dt = target_dt.replace(tzinfo=timezone.utc)
+
+            # Wczytaj klatkę wideo odpowiadającą aktualnemu czasowi eksportu
+            base = None
+            last_src = getattr(ctrl, "last_src_pil", None) or getattr(ctrl, "src_img", None)
+            if last_src is not None:
+                try:
+                    base = last_src.convert("RGBA").resize((tw, th), Image.Resampling.BILINEAR)
+                except Exception:
+                    base = None
+
+            if base is None:
+                try:
+                    from src.video_helpers import extract_frame
+                    v_paths = getattr(ctrl, "video_paths", None) or [getattr(ctrl, "video_path", None)]
+                    if v_paths and v_paths[0]:
+                        frame = extract_frame(
+                            v_paths,
+                            ts,
+                            ffmpeg_exe=getattr(ctrl, "ffmpeg_exe", "ffmpeg") or "ffmpeg",
+                            ffprobe_exe=getattr(ctrl, "ffprobe_exe", "ffprobe") or "ffprobe",
+                            target_w=tw,
+                        )
+                        if frame:
+                            base = frame.convert("RGBA").resize((tw, th), Image.Resampling.BILINEAR)
+                except Exception:
+                    base = None
+
+            if base is None:
+                base = Image.new("RGBA", (tw, th), (0, 0, 0, 255))
+
+            start_dt = telemetry.start_dt_utc
+            if isinstance(start_dt, datetime):
+                target_dt = start_dt + timedelta(seconds=ts)
+                if target_dt.tzinfo is None:
+                    target_dt = target_dt.replace(tzinfo=timezone.utc)
+            elif isinstance(start_dt, (int, float)):
+                target_dt = datetime.fromtimestamp(float(start_dt) + ts, tz=timezone.utc)
+            else:
+                target_dt = datetime.now(timezone.utc)
+
             video_dur = float(getattr(ctrl, "video_duration_s", 0.0) or 0.0)
             overlay_data = prepare_overlay_frame_data(
                 layout=layout,
@@ -667,7 +739,7 @@ class RenderTab(QWidget):
                 gps_track=telemetry.get_gps_track_for_source(
                     layout.get("indicators", {}).get("track_map", {}).get("source", "fit")),
                 total_frames=max(1, int(video_dur)),
-                current_index=int(self._hud_ts) if self._hud_ts else 0,
+                current_index=int(ts) if ts else 0,
                 chart_data=self._hud_chart_data,
                 extra_field_keys=getattr(ctrl, "fit_ext_fields", None),
                 resolve_cache_value=lambda k, src, dt, indicator_key=None: telemetry.resolve_value(
@@ -676,7 +748,7 @@ class RenderTab(QWidget):
                 _range_cache=self._hud_prepare_cache,
             )
             if not overlay_data:
-                return
+                return None
             preview = render_preview(
                 base, layout, getattr(ctrl, "font_path", None),
                 overlay_data["date_text"], overlay_data["time_text"],
@@ -699,7 +771,7 @@ class RenderTab(QWidget):
                 _bboxes={},
                 extra_indicators=overlay_data["extra_indicators"],
                 chart_data=overlay_data["chart_data"],
-                current_position=(self._hud_ts / max(1.0, video_dur)) if video_dur > 0 else 0.0,
+                current_position=(ts / max(1.0, video_dur)) if video_dur > 0 else 0.0,
                 gps_track=overlay_data["gps_track"],
                 target_dt=overlay_data["target_dt"],
                 start_dt_utc=overlay_data["start_dt_utc"],
@@ -708,12 +780,9 @@ class RenderTab(QWidget):
                 inplace=False,
             )
             rgba = preview.convert("RGBA")
-            qimg = QImage(rgba.tobytes("raw", "RGBA"), rgba.width, rgba.height,
-                          QImage.Format_RGBA8888).copy()
-            pix = QPixmap.fromImage(qimg)
-            self.hud_preview_label.setPixmap(
-                pix.scaled(self.hud_preview_label.size(),
-                           Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            data = rgba.tobytes("raw", "RGBA")
+            qimg = QImage(data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888).copy()
+            return qimg
         except Exception as exc:  # noqa: BLE001
-            # Preview nigdy nie może blokować renderingu — cichy fallback.
-            print(f"[HUD Preview] {exc}", flush=True)
+            print(f"[Export Preview Async] {exc}", flush=True)
+            return None

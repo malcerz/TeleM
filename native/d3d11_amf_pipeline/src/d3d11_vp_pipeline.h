@@ -99,10 +99,18 @@ public:
     void SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH);
     void SetMapFilter(int filter);
     void SetMapGpuEnabled(bool enabled);
-    // ETAP 7B: one compact CPU layer blended after the GPU map.
+    // ETAP 8U-B: Map GPU Path mode: 0 = DIRECT_AUTO (default), 1 = REFERENCE (two-pass), 2 = DIRECT_1TO1 (direct)
+    void SetMapGpuPath(int path) { m_mapGpuPath = path; }
+    int GetMapGpuPath() const { return m_mapGpuPath; }
+    bool IsMapDirectUsed() const { return m_mapDirectUsed; }
+    // ETAP 7B / 8N: compact CPU layer(s) blended after the GPU map.
     bool UpdateAboveMapTexture(
         UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
         UINT dstX, UINT dstY, bool active);
+    bool UpdateAboveRegionsCount(UINT count);
+    bool UpdateAboveRegion(
+        UINT index, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+        UINT dstX, UINT dstY);
     void SetAboveMapGpuEnabled(bool enabled);
     // Diagnostic: dump the GPU-resampled 691x691 RGBA map texture to a PNG
     // right after the resample dispatch (used to debug readback parity).
@@ -233,6 +241,7 @@ public:
     void SetPoolSize(UINT n);
     UINT GetPoolSize() const { return m_poolSize; }
     // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
+    // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
     void SetPoolLifecycleStats(bool on) { m_poolLifecycleStats = on; }
     bool IsPoolLifecycleStats() const { return m_poolLifecycleStats; }
     void GetPoolLifecycleStats(UINT64* texCreated, UINT64* texReleased,
@@ -242,6 +251,11 @@ public:
         if (viewsCreated) *viewsCreated = m_poolViewsCreated;
         if (viewsReleased) *viewsReleased = m_poolViewsReleased;
     }
+    // ETAP 8S: D3D11 Flush mode
+    //   0 = BATCHED (production default: 0 intermediate Flush calls)
+    //   1 = LEGACY  (5 intermediate Flush calls)
+    void SetFlushMode(int mode) { m_flushMode = mode; }
+    int GetFlushMode() const { return m_flushMode; }
 
 private:
     static const UINT POOL_SIZE_DEFAULT = 8;
@@ -293,6 +307,8 @@ private:
     UINT m_mapDstX = 0;
     UINT m_mapDstY = 0;
     int m_mapFilter = 2;  // 0=bilinear, 1=bicubic(Catmull-Rom), 2=Lanczos-3
+    int m_mapGpuPath = 0; // ETAP 8U-B: 0=DIRECT_AUTO, 1=REFERENCE, 2=DIRECT_1TO1
+    bool m_mapDirectUsed = false;
     UINT64 m_mapUploads = 0;
     UINT64 m_mapUploadedBytes = 0;
     double m_mapUploadMs = 0.0;
@@ -300,13 +316,22 @@ private:
     double m_mapBlendMs = 0.0;
     char m_mapDumpPath[512] = { 0 };
 
-    ID3D11Texture2D* m_aboveMapTexture = nullptr;
-    ID3D11ShaderResourceView* m_aboveMapSRV = nullptr;
-    UINT m_aboveMapDstX = 0, m_aboveMapDstY = 0;
-    UINT m_aboveMapW = 0, m_aboveMapH = 0;
-    UINT m_aboveMapPrevX = 0, m_aboveMapPrevY = 0;
-    UINT m_aboveMapPrevW = 0, m_aboveMapPrevH = 0;
-    bool m_aboveMapActive = false;
+    // ETAP 8N: Multi-Region CPU_ABOVE_MAP structures
+    static constexpr UINT MAX_ABOVE_REGIONS = 16;
+    struct AboveRegion {
+        UINT dstX = 0, dstY = 0;
+        UINT w = 0, h = 0;
+        bool active = false;
+    };
+    UINT m_aboveRegionCount = 0;
+    AboveRegion m_aboveRegions[MAX_ABOVE_REGIONS] = {};
+    ID3D11Texture2D* m_aboveRegionTexture[MAX_ABOVE_REGIONS] = {};
+    ID3D11ShaderResourceView* m_aboveRegionSRV[MAX_ABOVE_REGIONS] = {};
+    UINT m_aboveRegionTexW[MAX_ABOVE_REGIONS] = {};
+    UINT m_aboveRegionTexH[MAX_ABOVE_REGIONS] = {};
+
+    UINT m_abovePrevRegionCount = 0;
+    AboveRegion m_abovePrevRegions[MAX_ABOVE_REGIONS] = {};
     bool m_aboveMapGpuEnabled = false;
 
     // ── ETAP 5J: GPU chart compositor resources ─────────────────────────
@@ -417,4 +442,5 @@ private:
     UINT m_height = 2160;
     UINT m_hudWidth = 1920;
     UINT m_hudHeight = 1264;
+    int m_flushMode = 0;
 };

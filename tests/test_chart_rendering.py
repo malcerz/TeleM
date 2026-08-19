@@ -25,8 +25,13 @@ def _blue_rows(img):
 
 def test_chart_line_aligns_with_axis_labels():
     """A data point at max_val must sit on the top label row, min on the bottom."""
-    # plot geometry for 400x200: left=max(5,48)=48, top=4, bottom=max(6,40)=40, right=4
-    plot_y1, plot_y2 = 4, 200 - 40
+    from src.indicators.chart_utils import get_history_chart_background
+    _, _, plot_y1, plot_y2, _, _ = get_history_chart_background(
+        [0, 100], 400, 200, line_color=(0, 170, 255),
+        line_thickness=2, fill_alpha=40, fill_color=(0, 170, 255),
+        show_axes=True, grid_color=(68, 68, 68, 60), supersample=1,
+        custom_min_val=0.0, custom_max_val=100.0, label_count=2,
+    )
     img = generate_history_chart(
         [0, 100], 400, 200, line_color=(0, 170, 255),
         line_thickness=2, fill_alpha=40, fill_color=(0, 170, 255),

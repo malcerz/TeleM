@@ -1105,30 +1105,53 @@ void D3D11VideoProcessorPipeline::SetAboveMapGpuEnabled(bool enabled) {
     if (enabled) InitializeChartCompositor();
 }
 
-bool D3D11VideoProcessorPipeline::UpdateAboveMapTexture(
-    UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
-    UINT dstX, UINT dstY, bool active) {
-    if (!rgbaData || width == 0 || height == 0 || stride < width * 4 ||
-        !m_device || !m_context) return false;
-    m_aboveMapActive = active;
-    if (!active) return true;
-    if (!m_aboveMapTexture || m_aboveMapW != width || m_aboveMapH != height) {
-        if (m_aboveMapSRV) { m_aboveMapSRV->Release(); m_aboveMapSRV = nullptr; }
-        if (m_aboveMapTexture) { m_aboveMapTexture->Release(); m_aboveMapTexture = nullptr; }
+bool D3D11VideoProcessorPipeline::UpdateAboveRegionsCount(UINT count) {
+    if (count > MAX_ABOVE_REGIONS) count = MAX_ABOVE_REGIONS;
+    m_aboveRegionCount = count;
+    for (UINT i = 0; i < count; ++i) {
+        m_aboveRegions[i].active = false;
+    }
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateAboveRegion(
+    UINT index, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY) {
+    if (index >= MAX_ABOVE_REGIONS || !rgbaData || width == 0 || height == 0 ||
+        stride < width * 4 || !m_device || !m_context) return false;
+
+    if (!m_aboveRegionTexture[index] || m_aboveRegionTexW[index] != width || m_aboveRegionTexH[index] != height) {
+        if (m_aboveRegionSRV[index]) { m_aboveRegionSRV[index]->Release(); m_aboveRegionSRV[index] = nullptr; }
+        if (m_aboveRegionTexture[index]) { m_aboveRegionTexture[index]->Release(); m_aboveRegionTexture[index] = nullptr; }
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = width; desc.Height = height; desc.MipLevels = 1;
         desc.ArraySize = 1; desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_aboveMapTexture);
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_aboveRegionTexture[index]);
         if (FAILED(hr)) return false;
-        hr = m_device->CreateShaderResourceView(m_aboveMapTexture, nullptr, &m_aboveMapSRV);
-        if (FAILED(hr) || !m_aboveMapSRV) return false;
-        m_aboveMapW = width; m_aboveMapH = height;
+        hr = m_device->CreateShaderResourceView(m_aboveRegionTexture[index], nullptr, &m_aboveRegionSRV[index]);
+        if (FAILED(hr) || !m_aboveRegionSRV[index]) return false;
+        m_aboveRegionTexW[index] = width; m_aboveRegionTexH[index] = height;
     }
-    m_aboveMapDstX = dstX; m_aboveMapDstY = dstY;
-    m_context->UpdateSubresource(m_aboveMapTexture, 0, nullptr, rgbaData, stride, 0);
+    m_aboveRegions[index].dstX = dstX;
+    m_aboveRegions[index].dstY = dstY;
+    m_aboveRegions[index].w = width;
+    m_aboveRegions[index].h = height;
+    m_aboveRegions[index].active = true;
+    m_context->UpdateSubresource(m_aboveRegionTexture[index], 0, nullptr, rgbaData, stride, 0);
     return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateAboveMapTexture(
+    UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, bool active) {
+    if (!active) {
+        m_aboveRegionCount = 0;
+        return true;
+    }
+    m_aboveRegionCount = 1;
+    return UpdateAboveRegion(0, width, height, rgbaData, stride, dstX, dstY);
 }
 
 void D3D11VideoProcessorPipeline::SetMapDumpPath(const char* path) {
@@ -1206,6 +1229,43 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         return true;  // nothing to do — not an error
     }
 
+    // ETAP 8U-B: Fast-path Direct 1:1 GPU Blend
+    bool useDirect1to1 = (m_mapGpuPath == 2) ||
+                         (m_mapGpuPath == 0 && m_mapSrcW == m_mapOutW && m_mapSrcH == m_mapOutH);
+    m_mapDirectUsed = useDirect1to1;
+
+    if (useDirect1to1) {
+        // Direct 1:1 GPU Blend: single dispatch, direct bind of m_mapShaderView as t0, write to m_hudUAV.
+        // Zero intermediate texture allocation / write / read!
+        const auto blendStart = std::chrono::high_resolution_clock::now();
+        struct { UINT dstX, dstY, mapW, mapH; } blendCB = {
+            m_mapDstX, m_mapDstY, m_mapOutW, m_mapOutH };
+        m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &blendCB, 0, 0);
+        m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+        ID3D11Buffer* blendCBs[1] = { m_mapBlendCB };
+        m_context->CSSetConstantBuffers(0, 1, blendCBs);
+        ID3D11ShaderResourceView* blendSRV = m_mapShaderView;
+        m_context->CSSetShaderResources(0, 1, &blendSRV);
+        ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+        UINT zeroCounts[1] = { 0 };
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        m_context->Dispatch((m_mapOutW + 15) / 16, (m_mapOutH + 15) / 16, 1);
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+        const auto blendEnd = std::chrono::high_resolution_clock::now();
+        if (outBlendMs) {
+            *outBlendMs = std::chrono::duration<double, std::milli>(blendEnd - blendStart).count();
+        }
+        if (m_flushMode == 1) {
+            m_context->Flush();
+        }
+        m_mapResampleMs = std::chrono::duration<double, std::milli>(blendEnd - blendStart).count();
+        return true;
+    }
+
     if (!m_mapResampleTexture || !m_mapResampleUAV || !m_mapResampleSRV) {
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = m_mapOutW;
@@ -1247,9 +1307,12 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         *outResampleMs = std::chrono::duration<double, std::milli>(pass1End - resampleStart).count();
     }
 
-    // UAV->SRV hazard barrier before the next pass reads this texture as SRV.
+    // ETAP 8S: in BATCHED mode (m_flushMode == 0), sequential CS dispatches with proper
+    // UAV/SRV unbinding do not require intermediate Flush calls.
     const auto flush1Start = std::chrono::high_resolution_clock::now();
-    m_context->Flush();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
     const auto flush1End = std::chrono::high_resolution_clock::now();
     if (outFlush1Ms) {
         *outFlush1Ms = std::chrono::duration<double, std::milli>(flush1End - flush1Start).count();
@@ -1277,9 +1340,10 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         *outBlendMs = std::chrono::duration<double, std::milli>(pass2End - blendStart).count();
     }
 
-    // UAV->SRV hazard barrier before ComposeHUDDirectNV12 reads the HUD as SRV.
     const auto flush2Start = std::chrono::high_resolution_clock::now();
-    m_context->Flush();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
     const auto flush2End = std::chrono::high_resolution_clock::now();
     if (outFlush2Ms) {
         *outFlush2Ms = std::chrono::duration<double, std::milli>(flush2End - flush2Start).count();
@@ -1340,9 +1404,11 @@ void D3D11VideoProcessorPipeline::ReleaseMapResources() {
     if (m_mapResampleTexture) { m_mapResampleTexture->Release(); m_mapResampleTexture = nullptr; }
     if (m_mapShaderView) { m_mapShaderView->Release(); m_mapShaderView = nullptr; }
     if (m_mapTexture) { m_mapTexture->Release(); m_mapTexture = nullptr; }
-    if (m_mapReadbackStaging) { m_mapReadbackStaging->Release(); m_mapReadbackStaging = nullptr; }
-    if (m_aboveMapSRV) { m_aboveMapSRV->Release(); m_aboveMapSRV = nullptr; }
-    if (m_aboveMapTexture) { m_aboveMapTexture->Release(); m_aboveMapTexture = nullptr; }
+    for (UINT i = 0; i < MAX_ABOVE_REGIONS; ++i) {
+        if (m_aboveRegionSRV[i]) { m_aboveRegionSRV[i]->Release(); m_aboveRegionSRV[i] = nullptr; }
+        if (m_aboveRegionTexture[i]) { m_aboveRegionTexture[i]->Release(); m_aboveRegionTexture[i] = nullptr; }
+        m_aboveRegionTexW[i] = m_aboveRegionTexH[i] = 0;
+    }
     if (m_hudUAV) { m_hudUAV->Release(); m_hudUAV = nullptr; }
 }
 
@@ -1662,10 +1728,10 @@ bool D3D11VideoProcessorPipeline::BlendCharts(double* outBlendMs, double* outFlu
         *outBlendMs = std::chrono::duration<double, std::milli>(dispatchesEnd - blendStart).count();
     }
 
-    // UAV->SRV hazard barrier before ComposeHUDDirectNV12 reads the HUD canvas
-    // as an SRV (required even when the GPU map blend is disabled).
     const auto flushStart = std::chrono::high_resolution_clock::now();
-    m_context->Flush();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
     const auto flushEnd = std::chrono::high_resolution_clock::now();
     if (outFlushMs) {
         *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
@@ -1870,7 +1936,9 @@ bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlus
     }
 
     const auto flushStart = std::chrono::high_resolution_clock::now();
-    m_context->Flush();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
     const auto flushEnd = std::chrono::high_resolution_clock::now();
     if (outFlushMs) {
         *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
@@ -1886,7 +1954,7 @@ bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap(double* outClearMs) {
 
     if (!m_aboveMapGpuEnabled || !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
         return true;
-    if (!m_aboveMapActive && m_aboveMapPrevW == 0) return true;
+    if (m_abovePrevRegionCount == 0) return true;
 
     const auto clearStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
@@ -1910,13 +1978,17 @@ bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap(double* outClearMs) {
         if (srv) m_context->CSSetShaderResources(0, 1, &nullSRV);
     };
 
-    // Remove the previous compact layer before any current-frame chart/gauge/
+    // Remove the previous compact layers before any current-frame chart/gauge/
     // map pass touches the shared HUD canvas.  This is deliberately before
     // those layers: clearing after GPU_MAP would erase pixels underneath an
     // old ABOVE bbox.
-    dispatch(m_aboveMapPrevX, m_aboveMapPrevY,
-             m_aboveMapPrevW, m_aboveMapPrevH, 0, nullptr);
-    m_aboveMapPrevW = m_aboveMapPrevH = 0;
+    for (UINT i = 0; i < m_abovePrevRegionCount; ++i) {
+        if (m_abovePrevRegions[i].w > 0 && m_abovePrevRegions[i].h > 0) {
+            dispatch(m_abovePrevRegions[i].dstX, m_abovePrevRegions[i].dstY,
+                     m_abovePrevRegions[i].w, m_abovePrevRegions[i].h, 0, nullptr);
+        }
+    }
+    m_abovePrevRegionCount = 0;
 
     const auto clearEnd = std::chrono::high_resolution_clock::now();
     if (outClearMs) {
@@ -1929,7 +2001,7 @@ bool D3D11VideoProcessorPipeline::BlendAboveMap(double* outBlendMs, double* outF
     if (outBlendMs) *outBlendMs = 0.0;
     if (outFlushMs) *outFlushMs = 0.0;
 
-    if (!m_aboveMapGpuEnabled || !m_aboveMapActive || !m_aboveMapSRV ||
+    if (!m_aboveMapGpuEnabled || m_aboveRegionCount == 0 ||
         !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
         return true;
 
@@ -1941,15 +2013,20 @@ bool D3D11VideoProcessorPipeline::BlendAboveMap(double* outBlendMs, double* outF
     ID3D11Buffer* cbs[1] = { m_chartBlendCB };
     ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
 
-    cb = { m_aboveMapDstX, m_aboveMapDstY, m_aboveMapW, m_aboveMapH, 1, 0 };
-    m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
-    m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
-    m_context->CSSetConstantBuffers(0, 1, cbs);
-    m_context->CSSetShaderResources(0, 1, &m_aboveMapSRV);
-    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
-    m_context->Dispatch((m_aboveMapW + 15) / 16, (m_aboveMapH + 15) / 16, 1);
-    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
-    m_context->CSSetShaderResources(0, 1, &nullSRV);
+    for (UINT i = 0; i < m_aboveRegionCount; ++i) {
+        if (!m_aboveRegions[i].active || !m_aboveRegionSRV[i] ||
+            m_aboveRegions[i].w == 0 || m_aboveRegions[i].h == 0) continue;
+
+        cb = { m_aboveRegions[i].dstX, m_aboveRegions[i].dstY, m_aboveRegions[i].w, m_aboveRegions[i].h, 1, 0 };
+        m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+        m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, cbs);
+        m_context->CSSetShaderResources(0, 1, &m_aboveRegionSRV[i]);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        m_context->Dispatch((m_aboveRegions[i].w + 15) / 16, (m_aboveRegions[i].h + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        m_context->CSSetShaderResources(0, 1, &nullSRV);
+    }
 
     const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
     if (outBlendMs) {
@@ -1957,14 +2034,18 @@ bool D3D11VideoProcessorPipeline::BlendAboveMap(double* outBlendMs, double* outF
     }
 
     const auto flushStart = std::chrono::high_resolution_clock::now();
-    m_context->Flush();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
     const auto flushEnd = std::chrono::high_resolution_clock::now();
     if (outFlushMs) {
         *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
     }
 
-    m_aboveMapPrevX = m_aboveMapDstX; m_aboveMapPrevY = m_aboveMapDstY;
-    m_aboveMapPrevW = m_aboveMapW; m_aboveMapPrevH = m_aboveMapH;
+    m_abovePrevRegionCount = m_aboveRegionCount;
+    for (UINT i = 0; i < m_aboveRegionCount; ++i) {
+        m_abovePrevRegions[i] = m_aboveRegions[i];
+    }
     return true;
 }
 

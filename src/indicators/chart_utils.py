@@ -198,10 +198,6 @@ def _build_chart_bg(
     width *= ss
     height *= ss
     calc_line_thickness = line_thickness * ss
-    axis_top_margin = 4 * ss
-    axis_right_margin = 4 * ss
-    axis_bottom_margin = (int(max(6, height * 0.20)) if show_axes else 0) * ss
-
     has_data = history_values and len(history_values) >= 2
 
     if has_data:
@@ -228,9 +224,11 @@ def _build_chart_bg(
         + (f" {unit}" if (label_units and unit) else "")
         for i in range(count)
     ]
+    x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
 
+    axis_bottom_margin_est = (int(max(6, height * 0.20)) if show_axes else 0) * ss
     try:
-        plot_h_est = max(1, height - axis_top_margin - axis_bottom_margin)
+        plot_h_est = max(1, height - 4 * ss - axis_bottom_margin_est)
         if label_font_size and label_font_size > 0:
             label_fs = int(label_font_size * ss)
         else:
@@ -245,15 +243,43 @@ def _build_chart_bg(
 
     if show_axes:
         max_label_w = 0
+        max_y_bot = 0
+        max_y_top = 0
         for lbl in y_label_values:
             if font_axis:
-                tw = draw.textbbox((0, 0), lbl, font=font_axis)[2]
+                bbox = draw.textbbox((0, 0), lbl, font=font_axis)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+                max_y_bot = max(max_y_bot, bbox[3])
+                max_y_top = max(max_y_top, -bbox[1] if bbox[1] < 0 else 0)
             else:
                 tw = len(lbl) * 6
+                th = 10
+                max_y_bot = max(max_y_bot, 10)
             max_label_w = max(max_label_w, tw)
-        axis_left_margin = int(max_label_w + 10)
+
+        max_x_bot = 0
+        max_x_label_w = 0
+        for lbl in x_labels:
+            if font_axis:
+                bbox = draw.textbbox((0, 0), lbl, font=font_axis)
+                max_x_bot = max(max_x_bot, bbox[3])
+                max_x_label_w = max(max_x_label_w, bbox[2] - bbox[0])
+            else:
+                max_x_bot = max(max_x_bot, 10)
+                max_x_label_w = max(max_x_label_w, len(lbl) * 6)
+
+        import math
+        axis_left_margin = int(math.ceil(max_label_w + 8 * ss + 2 * ss))
+        axis_right_margin = int(math.ceil(max(6 * ss, max_x_label_w // 2 + 4 * ss)))
+        axis_top_margin = int(math.ceil(max(4 * ss, max_y_bot / 2.0 + max_y_top + 4 * ss)))
+        needed_bottom_margin = int(math.ceil(max_x_bot + 10 * ss))
+        axis_bottom_margin = max(axis_bottom_margin_est, needed_bottom_margin)
     else:
         axis_left_margin = 0
+        axis_right_margin = 4 * ss
+        axis_top_margin = 4 * ss
+        axis_bottom_margin = 4 * ss
 
     plot_x1 = axis_left_margin
     plot_y1 = axis_top_margin
@@ -267,8 +293,8 @@ def _build_chart_bg(
         tick_color = (150, 150, 150, 200)
         label_color = (200, 200, 200, 240)
 
-        draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-        draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
+        draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=max(1, ss))
+        draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=max(1, ss))
 
         y_positions = [
             plot_y2 - (i / max(1, len(y_label_values) - 1)) * plot_h
@@ -277,17 +303,22 @@ def _build_chart_bg(
 
         for lbl, yp in zip(y_label_values, y_positions):
             if grid_color is not None:
-                draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=1)
-            draw.line((plot_x1 - 4, yp, plot_x1, yp), fill=tick_color, width=1)
+                draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=max(1, ss))
+            draw.line((plot_x1 - 4 * ss, yp, plot_x1, yp), fill=tick_color, width=max(1, ss))
             if font_axis:
                 bbox = draw.textbbox((0, 0), lbl, font=font_axis)
                 tw = bbox[2] - bbox[0]
                 th = bbox[3] - bbox[1]
+                b_bot = bbox[3]
+                b_top = bbox[1]
             else:
                 tw = len(lbl) * 6
                 th = 10
-            tx = plot_x1 - tw - 5
-            ty = yp - th // 2
+                b_bot = 10
+                b_top = 0
+            tx = max(2 * ss, plot_x1 - tw - 5 * ss)
+            ty = int(round(yp - (b_bot + b_top) / 2.0))
+            ty = max(2 * ss - b_top, min(height - b_bot - 2 * ss, ty))
             if font_axis:
                 draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
             else:
@@ -296,14 +327,26 @@ def _build_chart_bg(
         x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
         for i, lbl in enumerate(x_labels):
             x = plot_x1 + (plot_w * i / max(1, len(x_labels) - 1))
-            draw.line((x, plot_y2, x, plot_y2 + 4), fill=tick_color, width=1)
+            draw.line((x, plot_y2, x, plot_y2 + 4 * ss), fill=tick_color, width=max(1, ss))
             if font_axis:
                 bbox = draw.textbbox((0, 0), lbl, font=font_axis)
                 tw = bbox[2] - bbox[0]
+                b_bot = bbox[3]
             else:
                 tw = len(lbl) * 6
-            tx = x - tw // 2
-            ty = plot_y2 + 5
+                bbox = (0, 0, tw, 10)
+                b_bot = 10
+            
+            if i == 0:
+                tx = max(2 * ss, int(round(x - max(0, bbox[0]))))
+            elif i == len(x_labels) - 1:
+                tx = min(width - tw - 2 * ss, int(round(x - tw)))
+            else:
+                tx = int(round(x - tw / 2.0))
+                tx = max(2 * ss, min(width - tw - 2 * ss, tx))
+            
+            ty = plot_y2 + 5 * ss
+            ty = min(height - b_bot - 2 * ss, ty)
             if font_axis:
                 draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
             else:

@@ -26,7 +26,7 @@ def test_blend_above_has_no_destructive_previous_bbox_clear():
     end = source.index("void D3D11VideoProcessorPipeline::ReleaseGaugeResources()", start)
     body = source[start:end]
     assert "dispatch(m_aboveMapPrev" not in body
-    assert "m_aboveMapDstX" in body and "m_aboveMapSRV" in body
+    assert "m_aboveRegions" in body and "m_aboveRegionSRV" in body
 
 
 def test_clear_order_preserves_underlying_map_and_below_oracle():
@@ -65,5 +65,5 @@ def test_clear_order_preserves_underlying_map_and_below_oracle():
 
 def test_above_texture_reuses_existing_native_resource_and_abi_is_unchanged():
     source = VP.read_text(encoding="utf-8")
-    assert "if (!m_aboveMapTexture || m_aboveMapW != width || m_aboveMapH != height)" in source
+    assert "if (!m_aboveRegionTexture[index] || m_aboveRegionTexW[index] != width || m_aboveRegionTexH[index] != height)" in source
     assert AMD_NATIVE_ABI_VERSION == 8

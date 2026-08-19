@@ -226,6 +226,8 @@ def _resolve_cache_samples(
     }
     if source == "gpmf":
         key = gpmf_map.get(field_name, "")
+        if key and key in field_samples and field_samples[key]:
+            return list(field_samples[key])
         if key and key in WORKER_CACHE and WORKER_CACHE[key]:
             return list(WORKER_CACHE[key])
         return list(field_samples.get(key, []) or [])

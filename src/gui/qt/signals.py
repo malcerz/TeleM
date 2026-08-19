@@ -88,6 +88,10 @@ class AppSignals(QObject):
     sig_preview_frame_ready = Signal(object)
     # (qpixmap: QPixmap)
 
+    # Klatka podglądu podczas eksportu (asynchroniczny update)
+    sig_export_preview_ready = Signal(object)
+    # (qimage: QImage)
+
     # Aktualizacja czasu trwania wideo (do suwaka)
     sig_video_duration_ready = Signal(float)
     # (duration_seconds: float)

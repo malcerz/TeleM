@@ -189,8 +189,8 @@ def _render_value_text_tile(
         cached = _STATIC_CACHE.get(key)
         if cached is not None:
             tile, vw, sl, st = cached
-            px = chart_w - vw + tox
-            py = toy
+            px = chart_w + 4 - vw + tox
+            py = max(0, -st) + toy
             return tile, px + sl, py + st
         probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
         vw = probe.textbbox((0, 0), v_str, font=font)[2]
@@ -202,23 +202,20 @@ def _render_value_text_tile(
             stroke_width=outline, stroke_fill=(0, 0, 0, 255),
         )
         _STATIC_CACHE[key] = (tile, vw, sl, st)
-        px = chart_w - vw + tox
-        py = toy
+        px = chart_w + 4 - vw + tox
+        py = max(0, -st) + toy
         return tile, px + sl, py + st
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
     vw = probe.textbbox((0, 0), v_str, font=font)[2]
-    px = chart_w - vw + tox
-    py = toy
     sl, st, sr, sb = probe.textbbox((0, 0), v_str, font=font, stroke_width=outline)
     tile = Image.new("RGBA", (max(1, sr - sl), max(1, sb - st)), (0, 0, 0, 0))
     tdraw = ImageDraw.Draw(tile)
-    # Draw at (-sl, -st) so tile pixel (i, j) reproduces the CPU pixel at the
-    # same absolute layout position (the stroke bbox is relative to the text
-    # origin; drawing at (sl, st) would double-shift the glyphs).
     tdraw.text(
         (-sl, -st), v_str, font=font, fill=text_color,
         stroke_width=outline, stroke_fill=(0, 0, 0, 255),
     )
+    px = chart_w + 4 - vw + tox
+    py = max(0, -st) + toy
     return tile, px + sl, py + st
 
 
@@ -246,6 +243,18 @@ def _render_chart_indicator(
 
     chart_w = size_px
     chart_h = max(40, int(chart_w * 0.4))
+
+    # ETAP 8M.7: Prevent outer widget from overflowing the canvas bottom/top edges.
+    # Strategy: fixed widget outer geometry + plot area shrink (reduce chart_h).
+    # Center placement: paste_y = round(center_y - final_h / 2), final_h = chart_h + margin_top + 4.
+    import math
+    _margin_top_est = (fs + 8) if label else 0
+    _center_y = s(cfg["y"], canvas_h)
+    _center_x = s(cfg["x"], canvas_w)
+    _max_full_h = 2 * min(_center_y, canvas_h - _center_y)
+    _max_chart_h = max(20, _max_full_h - _margin_top_est - 4)
+    if chart_h > _max_chart_h:
+        chart_h = max(20, _max_chart_h)
 
     custom_color = parse_hex_color(cfg.get("chart_color", ""))
     if custom_color:
@@ -393,7 +402,7 @@ def _render_chart_indicator(
         (time.perf_counter() - graph_started) * 1000.0,
     )
 
-    margin_top = fs + 8 if label else 0
+    margin_top = fs + 8 + outline if label else 0
     final_h = chart_h + margin_top + 4
 
     text_color_rgb = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
@@ -411,7 +420,7 @@ def _render_chart_indicator(
         if label:
             d_hdr = ImageDraw.Draw(hdr_img)
             d_hdr.text(
-                (4 + tox, toy), label, font=font,
+                (4 + tox, outline + toy), label, font=font,
                 fill=text_color,
                 stroke_width=outline, stroke_fill=(0, 0, 0, 255),
             )
@@ -493,7 +502,14 @@ def _render_chart_indicator(
                 cursor_tile, cursor_local,
                 value_tile, (v_left, v_top),
             )
-            return split, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+            _final_w = chart_w + 8
+            _min_ry = int(math.ceil(final_h / 2.0))
+            _max_ry = canvas_h - int(math.ceil(final_h / 2.0))
+            _effective_ry = min(_max_ry, max(_min_ry, _center_y)) if _max_ry >= _min_ry else canvas_h // 2
+            _min_rx = int(math.ceil(_final_w / 2.0))
+            _max_rx = canvas_w - int(math.ceil(_final_w / 2.0))
+            _effective_rx = min(_max_rx, max(_min_rx, _center_x)) if _max_rx >= _min_rx else canvas_w // 2
+            return split, _effective_rx, _effective_ry, None
         final_img = final_static.copy()
         cursor_started = time.perf_counter()
         _draw_post_paste_cursor(
@@ -525,4 +541,12 @@ def _render_chart_indicator(
             "graph.dynamic_labels",
             (time.perf_counter() - labels_started) * 1000.0,
         )
-    return final_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+
+    _final_w = chart_w + 8
+    _min_ry = int(math.ceil(final_h / 2.0))
+    _max_ry = canvas_h - int(math.ceil(final_h / 2.0))
+    _effective_ry = min(_max_ry, max(_min_ry, _center_y)) if _max_ry >= _min_ry else canvas_h // 2
+    _min_rx = int(math.ceil(_final_w / 2.0))
+    _max_rx = canvas_w - int(math.ceil(_final_w / 2.0))
+    _effective_rx = min(_max_rx, max(_min_rx, _center_x)) if _max_rx >= _min_rx else canvas_w // 2
+    return final_img, _effective_rx, _effective_ry, None

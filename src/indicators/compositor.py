@@ -31,15 +31,21 @@ import threading
 _THREAD_CANVAS = threading.local()
 
 
-def _get_reusable_canvas(canvas_w: int, canvas_h: int) -> tuple[Image.Image, dict[str, tuple[int, int, int, int]]]:
-    if not hasattr(_THREAD_CANVAS, "cache"):
-        _THREAD_CANVAS.cache = {}
+def _get_reusable_canvas(
+    canvas_w: int, canvas_h: int, canvas_type: str = "below"
+) -> tuple[Image.Image, dict[str, tuple[int, int, int, int]], dict[str, Any]]:
+    if not hasattr(_THREAD_CANVAS, "below_cache"):
+        _THREAD_CANVAS.below_cache = {}
+        _THREAD_CANVAS.above_cache = {}
+    
+    storage = _THREAD_CANVAS.above_cache if canvas_type == "above" else _THREAD_CANVAS.below_cache
     key = (canvas_w, canvas_h)
-    if key not in _THREAD_CANVAS.cache:
+    if key not in storage:
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         prev_bboxes: dict[str, tuple[int, int, int, int]] = {}
-        _THREAD_CANVAS.cache[key] = (img, prev_bboxes)
-    return _THREAD_CANVAS.cache[key]
+        state = {"is_clean": True}
+        storage[key] = (img, prev_bboxes, state)
+    return storage[key]
 
 
 def compose_overlay(
@@ -75,7 +81,7 @@ def compose_overlay(
     elapsed_seconds: float = 0.0,
     avg_speed_kmh: float = 0.0,
     fast_preview: bool = False,
-    reuse_canvas: bool = True,
+    reuse_canvas: bool | str = True,
     # ETAP 5J: GPU final compositing for the cadence/HR charts.  When a key is
     # in *gpu_capture_keys*, the chart widget is still rendered on the CPU with
     # the exact same renderer (raw RGBA byte-identical), but it is NOT pasted
@@ -90,7 +96,8 @@ def compose_overlay(
     """Compose the complete HUD overlay image from all indicators."""
     profiler = get_overlay_profiler()
     if reuse_canvas:
-        img, prev_bboxes = _get_reusable_canvas(canvas_w, canvas_h)
+        c_type = "above" if (reuse_canvas == "above" or layout.get("_canvas_type") == "above") else "below"
+        img, prev_bboxes, canvas_state = _get_reusable_canvas(canvas_w, canvas_h, canvas_type=c_type)
         if prev_bboxes:
             clear_started = time.perf_counter()
             pad = 40
@@ -101,13 +108,15 @@ def compose_overlay(
                 y2 = min(canvas_h, by + bh + pad)
                 img.paste((0, 0, 0, 0), (x1, y1, x2, y2))
             prev_bboxes.clear()
+            canvas_state["is_clean"] = True
             profiler.record(
                 "canvas.regional_clear",
                 (time.perf_counter() - clear_started) * 1000.0,
             )
-        else:
+        elif not canvas_state.get("is_clean", False):
             clear_started = time.perf_counter()
             img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
+            canvas_state["is_clean"] = True
             profiler.record_full_canvas(
                 "reusable_canvas_clear",
                 (time.perf_counter() - clear_started) * 1000.0,
@@ -116,6 +125,7 @@ def compose_overlay(
     else:
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         prev_bboxes = None
+        canvas_state = None
 
     if _bboxes is None:
         _bboxes = {}
@@ -246,9 +256,13 @@ def compose_overlay(
             continue
         indicator_started = time.perf_counter()
 
-        value, default_unit, default_label = known_vals.get(
-            key, (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", key))
-        )
+        val_entry = known_vals.get(key)
+        if val_entry is None or not isinstance(val_entry, (tuple, list)):
+            value = val_entry
+            default_unit = ind_cfg.get("unit", "")
+            default_label = ind_cfg.get("label", key)
+        else:
+            value, default_unit, default_label = val_entry
         if value is None:
             # Missing telemetry is not a numeric zero. Keep the configured
             # indicator in the layout, but render it as unavailable/hidden.
@@ -511,6 +525,8 @@ def compose_overlay(
 
     if prev_bboxes is not None and _bboxes:
         prev_bboxes.update(_bboxes)
+        if canvas_state is not None:
+            canvas_state["is_clean"] = False
 
     return img
 

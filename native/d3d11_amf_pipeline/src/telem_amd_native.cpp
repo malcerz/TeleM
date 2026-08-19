@@ -271,6 +271,23 @@ TELEM_EXPORT int telem_amd_set_map_filter(void* handle, int filter) {
     return 1;
 }
 
+// ── ETAP 8U-B: Map GPU Path ──────────────────────────────────────────
+// 0 = DIRECT_AUTO (default: 1:1 uses DirectBlend, mismatch uses Reference),
+// 1 = REFERENCE (force two-pass resample + blend),
+// 2 = DIRECT_1TO1 (force direct blend).
+TELEM_EXPORT int telem_amd_set_map_gpu_path(void* handle, int path) {
+    if (!handle || (path < 0 || path > 2)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapGpuPath(path);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_get_map_gpu_path_used(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.IsMapDirectUsed() ? 1 : 0;
+}
+
 // ── ETAP 5O: AMF mode (diagnostic only) ──────────────────────────────
 // 0 = ENCODE (default production), 1 = BYPASS (frontend only, no AMF).
 TELEM_EXPORT int telem_amd_set_amf_mode(void* handle, int mode) {
@@ -315,6 +332,20 @@ TELEM_EXPORT int telem_amd_set_above_map_mode(void* handle, int mode) {
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
     ctx->vpPipeline.SetAboveMapGpuEnabled(mode == 1);
     return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_above_regions_count(void* handle, UINT count) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveRegionsCount(count) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_update_above_region(
+    void* handle, UINT index, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT dstX, UINT dstY) {
+    if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveRegion(index, width, height, pRGBA, stride, dstX, dstY) ? 1 : 0;
 }
 
 TELEM_EXPORT int telem_amd_update_above_map(

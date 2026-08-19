@@ -52,7 +52,7 @@ def render_value_indicator(
     _FORM_MAP = {"TEXT": "text", "SUWAK": "bar", "LICZNIK": "text"}
     form = _FORM_MAP.get(form, form)
     min_dim = min(canvas_w, canvas_h)
-    outline_raw = int(layout["global"].get("text_outline", 3))
+    outline_raw = int(layout.get("global", {}).get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
     fs_val = cfg.get("font_size") if "font_size" in cfg else cfg.get("size", 0.02)
     fs = max(8, s(fs_val, min_dim))

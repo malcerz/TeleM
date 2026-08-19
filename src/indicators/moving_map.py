@@ -134,11 +134,12 @@ def _map_render_plan(canvas_w: int, output_size: int, configured_zoom: int) -> d
     effective_zoom = max(0, min(22, int(configured_zoom) + zoom_offset))
     applied_zoom_offset = effective_zoom - int(configured_zoom)
     tile_density_scale = 2.0 ** applied_zoom_offset
-    # Quantize once in logical Preview pixels, then scale that viewport to the
-    # selected tile density.  This avoids 173 px at 960 becoming 691 px at 4K
-    # (instead of the geometrically exact 692 px) due to independent rounding.
-    logical_size = max(1, int(round(float(output_size) / canvas_scale)))
-    working_size = max(1, int(round(logical_size * tile_density_scale)))
+    # ETAP 8U-C: Universal Exact-Size Map rendering.
+    # For ANY resolution (4K, 1080p, 720p, 480p, etc.) and ANY configured user size (0.08 .. 0.35+),
+    # the CPU raster is rendered directly at output_size (desired_px), so working_size == output_size
+    # and output_resize_scale == 1.0. This achieves 100% Direct 1:1 GPU Blend coverage.
+    working_size = max(1, int(round(output_size)))
+    logical_size = max(1, int(round(float(working_size) / canvas_scale)))
     return {
         "canvas_scale": canvas_scale,
         "configured_zoom": int(configured_zoom),
@@ -147,7 +148,7 @@ def _map_render_plan(canvas_w: int, output_size: int, configured_zoom: int) -> d
         "logical_size": logical_size,
         "working_size": working_size,
         "output_size": int(output_size),
-        "output_resize_scale": float(output_size) / working_size,
+        "output_resize_scale": 1.0,
     }
 
 
