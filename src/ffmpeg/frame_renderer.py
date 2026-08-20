@@ -83,33 +83,37 @@ def render_overlay_frame(
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
 
-    from src.overlay_renderer import prepare_overlay_frame_data
-    data = prepare_overlay_frame_data(
-        layout=layout,
-        target_dt=current_dt_utc,
-        tz_offset_hours=tz_offset_hours,
-        start_dt_utc=start_dt_utc,
-        speed_samples=speed_samples,
-        track_samples=track_samples,
-        alt_samples=alt_samples,
-        iso_samples=iso_samples,
-        exposure_samples=exposure_samples,
-        temperature_samples=temperature_samples,
-        gpx_speed_samples=WORKER_CACHE.get("gpx_speed_samples"),
-        gpx_track_samples=WORKER_CACHE.get("gpx_track_samples"),
-        gpx_alt_samples=WORKER_CACHE.get("gpx_alt_samples"),
-        gpx_power_samples=WORKER_CACHE.get("gpx_power_samples"),
-        gpx_atemp_samples=WORKER_CACHE.get("gpx_atemp_samples"),
-        gpx_hr_samples=WORKER_CACHE.get("gpx_hr_samples"),
-        gpx_cad_samples=WORKER_CACHE.get("gpx_cad_samples"),
-        fit_data=WORKER_CACHE.get("fit_data"),
-        gps_track=WORKER_CACHE.get("gps_track"),
-        total_frames=total_frames,
-        current_index=index,
-        chart_data=chart_data,
-        resolve_cache_value=_resolve_cache_value,
-        _range_cache=WORKER_CACHE.get("_prep_cache"),
-    )
+    telemetry_cache = WORKER_CACHE.get("_telemetry_cache")
+    if telemetry_cache is not None:
+        data = telemetry_cache.lookup(index)
+    else:
+        from src.overlay_renderer import prepare_overlay_frame_data
+        data = prepare_overlay_frame_data(
+            layout=layout,
+            target_dt=current_dt_utc,
+            tz_offset_hours=tz_offset_hours,
+            start_dt_utc=start_dt_utc,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=WORKER_CACHE.get("gpx_speed_samples"),
+            gpx_track_samples=WORKER_CACHE.get("gpx_track_samples"),
+            gpx_alt_samples=WORKER_CACHE.get("gpx_alt_samples"),
+            gpx_power_samples=WORKER_CACHE.get("gpx_power_samples"),
+            gpx_atemp_samples=WORKER_CACHE.get("gpx_atemp_samples"),
+            gpx_hr_samples=WORKER_CACHE.get("gpx_hr_samples"),
+            gpx_cad_samples=WORKER_CACHE.get("gpx_cad_samples"),
+            fit_data=WORKER_CACHE.get("fit_data"),
+            gps_track=WORKER_CACHE.get("gps_track"),
+            total_frames=total_frames,
+            current_index=index,
+            chart_data=chart_data,
+            resolve_cache_value=_resolve_cache_value,
+            _range_cache=WORKER_CACHE.get("_prep_cache"),
+        )
 
     hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")

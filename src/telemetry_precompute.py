@@ -312,9 +312,9 @@ def build_telemetry_cache(
         std_names = tuple()
         fit = fit_data or {}
         for k, cfg in indicators.items():
-            if k.startswith("fit_") and k.endswith("_text") and cfg.get("enabled", True):
+            if k.startswith("fit_") and k.endswith("_text"):
                 field_name = k[4:-5]
-                if field_name and field_name in fit and field_name not in active_fit:
+                if field_name not in active_fit:
                     active_fit.append(field_name)
 
     fit_keys = tuple(f"fit_{name}_text" for name in active_fit)

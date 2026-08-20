@@ -52,12 +52,14 @@ def init_worker(
     hud_bbox: Optional[tuple[int, int, int, int]] = None,
     hud_regions: Optional[list[tuple[int, int, int, int, int, int]]] = None,
     hud_rotate_180: bool = False,
+    telemetry_cache: Optional[Any] = None,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes."""
     WORKER_CACHE["video_width"] = video_width
     WORKER_CACHE["video_height"] = video_height
     WORKER_CACHE["font_path"] = font_path
     WORKER_CACHE["layout"] = layout
+    WORKER_CACHE["_telemetry_cache"] = telemetry_cache
     WORKER_CACHE["field_samples"] = field_samples
     WORKER_CACHE["max_distance_m"] = max_distance_m or 1000.0
     WORKER_CACHE["iso_samples"] = iso_samples or []

@@ -115,7 +115,10 @@ def build_chart_data(
             continue
         src = ind_cfg.get("source", "gpmf")
         scope = ind_cfg.get("chart_time_scope", "activity")
-        if "speed" in ind_key:
+        if ind_key.startswith("fit_") and ind_key.endswith("_text"):
+            field_name = ind_key[4:-5]
+            samples = resolve_samples_fn(field_name, "fit", ind_key)
+        elif "speed" in ind_key:
             spd_s, _, _ = get_samples_fn(src)
             samples = spd_s or []
         elif "dist" in ind_key:
@@ -146,11 +149,7 @@ def build_chart_data(
         }:
             samples = resolve_samples_fn(ind_key[:-5], src, ind_key)
         else:
-            if ind_key.startswith("fit_") and ind_key.endswith("_text"):
-                field_name = ind_key[4:-5]
-                samples = resolve_samples_fn(field_name, "fit", ind_key)
-            else:
-                samples = []
+            samples = []
 
         if samples:
             sample_ts = [sample[0] for sample in samples]

@@ -1,0 +1,1191 @@
+{
+  "layout_indicators": {
+    "time_block": {
+      "center": [
+        31,
+        34
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        11,
+        14,
+        435,
+        183
+      ],
+      "declared_w": 424,
+      "declared_h": 169,
+      "declared_area": 71656
+    },
+    "fit_cadence_text": {
+      "center": [
+        383,
+        922
+      ],
+      "rotation": 0,
+      "form": "chart",
+      "declared_bbox": [
+        45,
+        748,
+        721,
+        1080
+      ],
+      "declared_w": 676,
+      "declared_h": 332,
+      "declared_area": 224432
+    },
+    "fit_enhanced_speed_text": {
+      "center": [
+        934,
+        978
+      ],
+      "rotation": 0,
+      "form": "gauge",
+      "declared_bbox": [
+        742,
+        786,
+        1126,
+        1080
+      ],
+      "declared_w": 384,
+      "declared_h": 294,
+      "declared_area": 112896
+    },
+    "fit_heart_rate_text": {
+      "center": [
+        1529,
+        923
+      ],
+      "rotation": 0,
+      "form": "chart",
+      "declared_bbox": [
+        1191,
+        749,
+        1867,
+        1080
+      ],
+      "declared_w": 676,
+      "declared_h": 331,
+      "declared_area": 223756
+    },
+    "fit_temperature_text": {
+      "center": [
+        1650,
+        423
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        1630,
+        403,
+        1920,
+        544
+      ],
+      "declared_w": 290,
+      "declared_h": 141,
+      "declared_area": 40890
+    },
+    "iso_text": {
+      "center": [
+        33,
+        450
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        13,
+        430,
+        377,
+        571
+      ],
+      "declared_w": 364,
+      "declared_h": 141,
+      "declared_area": 51324
+    },
+    "exposure_text": {
+      "center": [
+        32,
+        493
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        12,
+        473,
+        376,
+        614
+      ],
+      "declared_w": 364,
+      "declared_h": 141,
+      "declared_area": 51324
+    },
+    "temp_text": {
+      "center": [
+        32,
+        534
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        12,
+        514,
+        376,
+        655
+      ],
+      "declared_w": 364,
+      "declared_h": 141,
+      "declared_area": 51324
+    },
+    "track_map": {
+      "center": [
+        1690,
+        241
+      ],
+      "rotation": 0,
+      "form": "map",
+      "declared_bbox": [
+        1467,
+        119,
+        1913,
+        363
+      ],
+      "declared_w": 446,
+      "declared_h": 244,
+      "declared_area": 108824
+    },
+    "fit_battery_text": {
+      "center": [
+        1650,
+        468
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        1630,
+        448,
+        1920,
+        589
+      ],
+      "declared_w": 290,
+      "declared_h": 141,
+      "declared_area": 40890
+    },
+    "fit_battery_pct_text": {
+      "center": [
+        962,
+        144
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        942,
+        124,
+        1306,
+        265
+      ],
+      "declared_w": 364,
+      "declared_h": 141,
+      "declared_area": 51324
+    },
+    "fit_solar_pct_text": {
+      "center": [
+        960,
+        86
+      ],
+      "rotation": 0,
+      "form": "text",
+      "declared_bbox": [
+        940,
+        66,
+        1304,
+        207
+      ],
+      "declared_w": 364,
+      "declared_h": 141,
+      "declared_area": 51324
+    }
+  },
+  "actual_alpha": {
+    "time_block": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        31,
+        34,
+        87,
+        91
+      ],
+      "actual_w": 56,
+      "actual_h": 57,
+      "actual_area": 3192,
+      "waste_area": 68464,
+      "waste_ratio": 22.448621553884713,
+      "checkpoints": [
+        [
+          0,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          539,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          1349,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          2699,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          4049,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          4859,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ],
+        [
+          5399,
+          [
+            31,
+            34,
+            87,
+            91
+          ],
+          3192
+        ]
+      ]
+    },
+    "fit_cadence_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        92,
+        790,
+        669,
+        1019
+      ],
+      "actual_w": 577,
+      "actual_h": 229,
+      "actual_area": 132133,
+      "waste_area": 92299,
+      "waste_ratio": 1.698531025557582,
+      "checkpoints": [
+        [
+          0,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          539,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          1349,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          2699,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          4049,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          4859,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ],
+        [
+          5399,
+          [
+            92,
+            790,
+            669,
+            1019
+          ],
+          132133
+        ]
+      ]
+    },
+    "fit_enhanced_speed_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        786,
+        830,
+        1070,
+        1012
+      ],
+      "actual_w": 284,
+      "actual_h": 182,
+      "actual_area": 51688,
+      "waste_area": 61208,
+      "waste_ratio": 2.1841820151679308,
+      "checkpoints": [
+        [
+          0,
+          [
+            799,
+            843,
+            1070,
+            1012
+          ],
+          45799
+        ],
+        [
+          539,
+          [
+            799,
+            837,
+            1070,
+            1012
+          ],
+          47425
+        ],
+        [
+          1349,
+          [
+            786,
+            843,
+            1070,
+            1012
+          ],
+          47996
+        ],
+        [
+          2699,
+          [
+            799,
+            843,
+            1070,
+            1012
+          ],
+          45799
+        ],
+        [
+          4049,
+          [
+            799,
+            830,
+            1070,
+            1012
+          ],
+          49322
+        ],
+        [
+          4859,
+          [
+            799,
+            838,
+            1070,
+            1012
+          ],
+          47154
+        ],
+        [
+          5399,
+          [
+            799,
+            835,
+            1070,
+            1012
+          ],
+          47967
+        ]
+      ]
+    },
+    "fit_heart_rate_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        1239,
+        791,
+        1815,
+        1051
+      ],
+      "actual_w": 576,
+      "actual_h": 260,
+      "actual_area": 149760,
+      "waste_area": 73996,
+      "waste_ratio": 1.4940972222222222,
+      "checkpoints": [
+        [
+          0,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          539,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          1349,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          2699,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          4049,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          4859,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ],
+        [
+          5399,
+          [
+            1239,
+            791,
+            1815,
+            1051
+          ],
+          149760
+        ]
+      ]
+    },
+    "fit_temperature_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        1650,
+        422,
+        1747,
+        437
+      ],
+      "actual_w": 97,
+      "actual_h": 15,
+      "actual_area": 1455,
+      "waste_area": 39435,
+      "waste_ratio": 28.103092783505154,
+      "checkpoints": [
+        [
+          0,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          539,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          1349,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          2699,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          4049,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          4859,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ],
+        [
+          5399,
+          [
+            1650,
+            422,
+            1747,
+            437
+          ],
+          1455
+        ]
+      ]
+    },
+    "iso_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        33,
+        450,
+        83,
+        463
+      ],
+      "actual_w": 50,
+      "actual_h": 13,
+      "actual_area": 650,
+      "waste_area": 50674,
+      "waste_ratio": 78.96,
+      "checkpoints": [
+        [
+          0,
+          [
+            33,
+            450,
+            77,
+            463
+          ],
+          572
+        ],
+        [
+          539,
+          [
+            33,
+            450,
+            77,
+            463
+          ],
+          572
+        ],
+        [
+          1349,
+          [
+            33,
+            450,
+            77,
+            463
+          ],
+          572
+        ],
+        [
+          2699,
+          [
+            33,
+            450,
+            77,
+            463
+          ],
+          572
+        ],
+        [
+          4049,
+          [
+            33,
+            450,
+            83,
+            463
+          ],
+          650
+        ],
+        [
+          4859,
+          [
+            33,
+            450,
+            83,
+            463
+          ],
+          650
+        ],
+        [
+          5399,
+          [
+            33,
+            450,
+            77,
+            463
+          ],
+          572
+        ]
+      ]
+    },
+    "exposure_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        32,
+        493,
+        81,
+        507
+      ],
+      "actual_w": 49,
+      "actual_h": 14,
+      "actual_area": 686,
+      "waste_area": 50638,
+      "waste_ratio": 74.81632653061224,
+      "checkpoints": [
+        [
+          0,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ],
+        [
+          539,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ],
+        [
+          1349,
+          [
+            32,
+            493,
+            80,
+            507
+          ],
+          672
+        ],
+        [
+          2699,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ],
+        [
+          4049,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ],
+        [
+          4859,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ],
+        [
+          5399,
+          [
+            32,
+            493,
+            81,
+            507
+          ],
+          686
+        ]
+      ]
+    },
+    "temp_text": {
+      "has_alpha": true,
+      "is_phantom": false,
+      "actual_union_bbox": [
+        32,
+        534,
+        92,
+        547
+      ],
+      "actual_w": 60,
+      "actual_h": 13,
+      "actual_area": 780,
+      "waste_area": 50544,
+      "waste_ratio": 65.8,
+      "checkpoints": [
+        [
+          0,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          539,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          1349,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          2699,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          4049,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          4859,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ],
+        [
+          5399,
+          [
+            32,
+            534,
+            92,
+            547
+          ],
+          780
+        ]
+      ]
+    },
+    "track_map": {
+      "has_alpha": false,
+      "is_phantom": true,
+      "actual_union_bbox": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "actual_w": 0,
+      "actual_h": 0,
+      "actual_area": 0,
+      "waste_area": 108824,
+      "waste_ratio": Infinity,
+      "checkpoints": [
+        [
+          0,
+          null,
+          0
+        ],
+        [
+          539,
+          null,
+          0
+        ],
+        [
+          1349,
+          null,
+          0
+        ],
+        [
+          2699,
+          null,
+          0
+        ],
+        [
+          4049,
+          null,
+          0
+        ],
+        [
+          4859,
+          null,
+          0
+        ],
+        [
+          5399,
+          null,
+          0
+        ]
+      ]
+    },
+    "fit_battery_text": {
+      "has_alpha": false,
+      "is_phantom": true,
+      "actual_union_bbox": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "actual_w": 0,
+      "actual_h": 0,
+      "actual_area": 0,
+      "waste_area": 40890,
+      "waste_ratio": Infinity,
+      "checkpoints": [
+        [
+          0,
+          null,
+          0
+        ],
+        [
+          539,
+          null,
+          0
+        ],
+        [
+          1349,
+          null,
+          0
+        ],
+        [
+          2699,
+          null,
+          0
+        ],
+        [
+          4049,
+          null,
+          0
+        ],
+        [
+          4859,
+          null,
+          0
+        ],
+        [
+          5399,
+          null,
+          0
+        ]
+      ]
+    },
+    "fit_battery_pct_text": {
+      "has_alpha": false,
+      "is_phantom": true,
+      "actual_union_bbox": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "actual_w": 0,
+      "actual_h": 0,
+      "actual_area": 0,
+      "waste_area": 51324,
+      "waste_ratio": Infinity,
+      "checkpoints": [
+        [
+          0,
+          null,
+          0
+        ],
+        [
+          539,
+          null,
+          0
+        ],
+        [
+          1349,
+          null,
+          0
+        ],
+        [
+          2699,
+          null,
+          0
+        ],
+        [
+          4049,
+          null,
+          0
+        ],
+        [
+          4859,
+          null,
+          0
+        ],
+        [
+          5399,
+          null,
+          0
+        ]
+      ]
+    },
+    "fit_solar_pct_text": {
+      "has_alpha": false,
+      "is_phantom": true,
+      "actual_union_bbox": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "actual_w": 0,
+      "actual_h": 0,
+      "actual_area": 0,
+      "waste_area": 51324,
+      "waste_ratio": Infinity,
+      "checkpoints": [
+        [
+          0,
+          null,
+          0
+        ],
+        [
+          539,
+          null,
+          0
+        ],
+        [
+          1349,
+          null,
+          0
+        ],
+        [
+          2699,
+          null,
+          0
+        ],
+        [
+          4049,
+          null,
+          0
+        ],
+        [
+          4859,
+          null,
+          0
+        ],
+        [
+          5399,
+          null,
+          0
+        ]
+      ]
+    }
+  },
+  "global_bbox": {
+    "bbox": [
+      11,
+      14,
+      1920,
+      1080
+    ],
+    "area_pct": 98.1382137345679,
+    "left_causes": [
+      "time_block"
+    ],
+    "top_causes": [
+      "time_block"
+    ],
+    "right_causes": [
+      "fit_temperature_text",
+      "fit_battery_text"
+    ],
+    "bottom_causes": [
+      "fit_cadence_text",
+      "fit_enhanced_speed_text",
+      "fit_heart_rate_text"
+    ]
+  },
+  "final_3_regions": [
+    {
+      "region": 0,
+      "bbox": [
+        45,
+        748,
+        1867,
+        1080
+      ],
+      "w": 1822,
+      "h": 332,
+      "indicators": [
+        "fit_heart_rate_text",
+        "fit_cadence_text",
+        "fit_enhanced_speed_text"
+      ]
+    },
+    {
+      "region": 1,
+      "bbox": [
+        11,
+        14,
+        435,
+        655
+      ],
+      "w": 424,
+      "h": 641,
+      "indicators": [
+        "time_block",
+        "iso_text",
+        "exposure_text",
+        "temp_text"
+      ]
+    },
+    {
+      "region": 2,
+      "bbox": [
+        940,
+        66,
+        1920,
+        589
+      ],
+      "w": 980,
+      "h": 523,
+      "indicators": [
+        "fit_battery_pct_text",
+        "fit_solar_pct_text",
+        "track_map",
+        "fit_temperature_text",
+        "fit_battery_text"
+      ]
+    }
+  ]
+}

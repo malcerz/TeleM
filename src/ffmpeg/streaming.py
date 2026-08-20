@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -580,6 +580,148 @@ def stream_overlay_to_ffmpeg(
 
             shm_names = shm_pool.shm_names()
 
+            telemetry_cache = None
+            try:
+                from src.telemetry_precompute import build_telemetry_cache
+                from src.overlay_renderer import build_chart_data
+                from src.ffmpeg.worker_cache import _resolve_cache_value, _resolve_cache_samples
+
+                t_pre_start = time.perf_counter()
+                
+                # Precompute static ranges
+                _range_cache = {}
+                _range_cache["max_distance_m"] = max_distance_m
+                
+                indic = layout.get("indicators", {})
+                spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+                if spd_src == "gpx":
+                    spd_for_range = gpx_speed_samples
+                elif spd_src == "fit":
+                    spd_for_range = fit_data.get("speed", []) if fit_data else []
+                else:
+                    spd_for_range = speed_samples
+                if spd_for_range:
+                    spd_vals = [s for _, s in spd_for_range]
+                    _range_cache["max_speed_kmh"] = max(spd_vals) if spd_vals else None
+                else:
+                    _range_cache["max_speed_kmh"] = None
+
+                alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+                if alt_src == "gpx":
+                    alt_for_range = gpx_alt_samples
+                elif alt_src == "fit":
+                    alt_for_range = fit_data.get("alt", []) if fit_data else []
+                else:
+                    alt_for_range = alt_samples
+                if alt_for_range:
+                    alts = [a for _, a in alt_for_range]
+                    _range_cache["min_alt"] = min(alts) if alts else None
+                    _range_cache["max_alt"] = max(alts) if alts else None
+                else:
+                    _range_cache["min_alt"] = None
+                    _range_cache["max_alt"] = None
+
+                duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
+                end_dt_utc = (start_dt_utc + timedelta(seconds=duration_s)) if (start_dt_utc and duration_s) else None
+                source_ranges = {}
+                if fit_data:
+                    all_fit_pts = [s for s in fit_data.values() if s]
+                    if all_fit_pts:
+                        source_ranges["fit"] = (
+                            min(s[0][0] for s in all_fit_pts),
+                            max(s[-1][0] for s in all_fit_pts),
+                        )
+                
+                def _get_src_samples(src_name: str) -> tuple[list, list, list]:
+                    if src_name == "gpx":
+                        return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
+                    if src_name == "fit":
+                        fit_d = fit_data or {}
+                        return (fit_d.get("speed", []), fit_d.get("track", []), fit_d.get("alt", []))
+                    return (speed_samples or [], track_samples or [], alt_samples or [])
+
+                def _resolve_stream_samples(field_name: str, source: str = "fit", indicator_key: str | None = None) -> list:
+                    if source == "fit":
+                        fit_d = fit_data or {}
+                        aliases = {
+                            "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
+                            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
+                            "battery": ("battery", "battery_soc"),
+                        }.get(field_name, (field_name,))
+                        for name in aliases:
+                            if fit_d.get(name):
+                                return list(fit_d[name])
+                        return []
+                    if source == "gpx":
+                        gpx_map = {
+                            "speed": gpx_speed_samples, "alt": gpx_alt_samples, "altitude": gpx_alt_samples,
+                            "dist": gpx_track_samples, "track": gpx_track_samples, "power": gpx_power_samples,
+                            "atemp": gpx_atemp_samples, "hr": gpx_hr_samples, "cad": gpx_cad_samples,
+                        }
+                        return list(gpx_map.get(field_name, []) or [])
+                    if source == "gpmf":
+                        gpmf_map = {
+                            "speed": speed_samples, "alt": alt_samples, "altitude": alt_samples,
+                            "dist": track_samples, "track": track_samples, "iso": iso_samples,
+                            "exposure": exposure_samples, "temperature": temperature_samples,
+                        }
+                        return list(gpmf_map.get(field_name, []) or [])
+                    return []
+
+                chart_data = build_chart_data(
+                    layout,
+                    _get_src_samples,
+                    _resolve_stream_samples,
+                    start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
+                    source_activity_ranges=source_ranges,
+                )
+
+                telemetry_cache = build_telemetry_cache(
+                    layout=layout,
+                    base_dt=start_dt_utc,
+                    tz_offset_hours=tz_offset_hours or 0.0,
+                    start_dt_utc=start_dt_utc,
+                    speed_samples=speed_samples or [],
+                    track_samples=track_samples or [],
+                    alt_samples=alt_samples or [],
+                    iso_samples=iso_samples or [],
+                    exposure_samples=exposure_samples or [],
+                    temperature_samples=temperature_samples or [],
+                    gpx_speed_samples=gpx_speed_samples or [],
+                    gpx_track_samples=gpx_track_samples or [],
+                    gpx_alt_samples=gpx_alt_samples or [],
+                    gpx_power_samples=gpx_power_samples or [],
+                    gpx_atemp_samples=gpx_atemp_samples or [],
+                    gpx_hr_samples=gpx_hr_samples or [],
+                    gpx_cad_samples=gpx_cad_samples or [],
+                    fit_data=fit_data,
+                    gps_track=gps_track,
+                    chart_data=chart_data,
+                    resolve_cache_value=_resolve_cache_value,
+                    _range_cache=_range_cache,
+                    total_frames=total_overlay_frames,
+                    target_fps=target_fps or 29.97,
+                )
+                t_pre_build = time.perf_counter() - t_pre_start
+                stats = telemetry_cache.stats()
+                cache_mb = stats["memory_mib"]
+                n_fields = len(telemetry_cache.static.fit_keys) + len(telemetry_cache.static.dynamic_keys) + 8
+                if encoder == "nv":
+                    print(f"[NVIDIA] Telemetry mode: PRECOMPUTED", flush=True)
+                    print(f"[NVIDIA] Telemetry frames: {total_overlay_frames}", flush=True)
+                    print(f"[NVIDIA] Telemetry fields: {n_fields}", flush=True)
+                    print(f"[NVIDIA] Telemetry cache: {cache_mb:.2f} MB", flush=True)
+                    print(f"[NVIDIA] Telemetry precompute build: {t_pre_build:.3f} s", flush=True)
+                else:
+                    print(f"[STREAM] Telemetry mode: PRECOMPUTED ({total_overlay_frames} frames, {cache_mb:.2f} MB, {t_pre_build*1000:.1f} ms)", flush=True)
+            except Exception as exc:
+                if encoder == "nv":
+                    print(f"[NVIDIA] Telemetry precompute unavailable: {exc}", flush=True)
+                    print(f"[NVIDIA] Falling back to live telemetry resolver", flush=True)
+                else:
+                    print(f"[STREAM] Telemetry precompute unavailable: {exc} -> live resolver fallback", flush=True)
+                telemetry_cache = None
+
             init_args = (
                 overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
                 iso_samples, exposure_samples, temperature_samples,
@@ -592,6 +734,7 @@ def stream_overlay_to_ffmpeg(
                 target_fps, update_rate_step, total_overlay_frames,
                 cut_regions, effective_rotation, hud_bbox, hud_regions,
                 nv_rot180_cuda,
+                telemetry_cache,
             )
 
             if encoder == "nv":

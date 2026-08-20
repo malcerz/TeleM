@@ -1,0 +1,100 @@
+{
+  "hud_geometry": {
+    "atlas_w": 1112,
+    "atlas_h": 668,
+    "regions": 3,
+    "mb_per_frame": 2.8336181640625,
+    "global_bw": 1920,
+    "global_bh": 1080
+  },
+  "runs_precompute_off": [
+    {
+      "mode": "PRECOMPUTE_OFF",
+      "run": 1,
+      "precompute": false,
+      "total_time_s": 6.212975800001004,
+      "production_fps": 182.19932548261608,
+      "write_avg_ms": 0.8191933333364432,
+      "write_p95_ms": 1.4001199971971803,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    },
+    {
+      "mode": "PRECOMPUTE_OFF",
+      "run": 2,
+      "precompute": false,
+      "total_time_s": 6.351617399999668,
+      "production_fps": 178.22232176643058,
+      "write_avg_ms": 0.9160366665795058,
+      "write_p95_ms": 1.7474349999247352,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    },
+    {
+      "mode": "PRECOMPUTE_OFF",
+      "run": 3,
+      "precompute": false,
+      "total_time_s": 6.085789000000659,
+      "production_fps": 186.0071060629735,
+      "write_avg_ms": 0.7601570000163823,
+      "write_p95_ms": 1.399024997772358,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    }
+  ],
+  "runs_precompute_on": [
+    {
+      "mode": "PRECOMPUTE_ON",
+      "run": 1,
+      "precompute": true,
+      "total_time_s": 5.6197651000002224,
+      "production_fps": 201.43190682470967,
+      "write_avg_ms": 1.8720743334051804,
+      "write_p95_ms": 8.513585001674075,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    },
+    {
+      "mode": "PRECOMPUTE_ON",
+      "run": 2,
+      "precompute": true,
+      "total_time_s": 5.894194699998479,
+      "production_fps": 192.05337753778173,
+      "write_avg_ms": 1.8400436665130353,
+      "write_p95_ms": 7.105184998908955,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    },
+    {
+      "mode": "PRECOMPUTE_ON",
+      "run": 3,
+      "precompute": true,
+      "total_time_s": 5.693052899998293,
+      "production_fps": 198.83883390585385,
+      "write_avg_ms": 1.575884333421224,
+      "write_p95_ms": 4.318769997553323,
+      "atlas_w": 1112,
+      "atlas_h": 668,
+      "regions_count": 3,
+      "mb_per_frame": 2.8336181640625
+    }
+  ],
+  "median_off_fps": 182.19932548261608,
+  "median_off_time": 6.212975800001004,
+  "median_off_write": 0.8191933333364432,
+  "median_off_write_p95": 1.4001199971971803,
+  "median_on_fps": 198.83883390585385,
+  "median_on_time": 5.693052899998293,
+  "median_on_write": 1.8400436665130353,
+  "median_on_write_p95": 7.105184998908955
+}
