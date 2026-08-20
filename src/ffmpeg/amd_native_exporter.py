@@ -1286,6 +1286,7 @@ def export_amd_native_d3d11(
     print(f"[AMD NATIVE D3D11] VP OUTPUT:          {video_width}x{video_height}", flush=True)
     print(f"[AMD NATIVE D3D11] AMF OUTPUT:         {video_width}x{video_height}", flush=True)
     print("[AMD NATIVE D3D11] ===================================", flush=True)
+    proc_dec: subprocess.Popen | None = None
     h_context = native_dll.telem_amd_create(
         input_file_str,
         output_file_str,
@@ -1300,61 +1301,83 @@ def export_amd_native_d3d11(
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
+    def _cleanup_native_resources() -> None:
+        """P1-A FIX: Idempotent cleanup of native D3D11 context and decoder process."""
+        nonlocal h_context, proc_dec
+        if proc_dec is not None:
+            if proc_dec.poll() is None:
+                try:
+                    proc_dec.kill()
+                except Exception:
+                    pass
+            try:
+                proc_dec.wait(timeout=2.0)
+            except Exception:
+                pass
+            proc_dec = None
+        if h_context is not None:
+            ctx_to_close = h_context
+            h_context = None
+            try:
+                native_dll.telem_amd_close(ctx_to_close)
+            except Exception as _ce:
+                print(f"[AMD NATIVE D3D11] telem_amd_close error: {_ce}", flush=True)
+
     if not native_dll.telem_amd_set_diagnostics(h_context, 1 if diagnostics_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure diagnostic mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     if not native_dll.telem_amd_set_profiling(h_context, 1 if profiling_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure profiling mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     if not native_dll.telem_amd_set_hud_enabled(h_context, 1 if hud_work_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure HUD mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     if not native_dll.telem_amd_set_hud_mode(h_context, _AMD_HUD_MODES[native_hud_mode]):
         print("[AMD NATIVE D3D11] ERROR: failed to configure HUD compositor.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     # ── ETAP 5G: GPU map resize/composite ───────────────────────────────
     if not native_dll.telem_amd_set_map_mode(h_context, 1 if gpu_map_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
     if not native_dll.telem_amd_set_above_map_mode(h_context, 1 if gpu_map_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure ordered map-above mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
     if gpu_map_enabled:
         if not native_dll.telem_amd_set_map_filter(h_context, map_filter):
             print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map filter.", flush=True)
-            native_dll.telem_amd_close(h_context)
+            _cleanup_native_resources()
             return False
         if not native_dll.telem_amd_set_map_gpu_path(h_context, map_gpu_path_val):
             print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map path.", flush=True)
-            native_dll.telem_amd_close(h_context)
+            _cleanup_native_resources()
             return False
 
     # ── ETAP 5J / 5K: GPU chart compositing (0 = CPU_REFERENCE, 1 = GPU,
     # 2 = GPU_SPLIT) ───────────────────────────────────────────────────
     if not native_dll.telem_amd_set_chart_mode(h_context, chart_mode_value):
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU chart mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     # ── ETAP 5L: GPU gauge compositing (1 = GPU, 0 = CPU_REFERENCE) ────
     if not native_dll.telem_amd_set_gauge_mode(h_context, 1 if gauge_gpu_requested else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU gauge mode.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     if not native_dll.telem_amd_set_source_rotation(h_context, source_rotation):
         print("[AMD NATIVE D3D11] ERROR: failed to configure source rotation.", flush=True)
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     if not native_dll.telem_amd_set_decode_mode(
@@ -1365,14 +1388,14 @@ def export_amd_native_d3d11(
             "no implicit per-frame fallback is allowed.",
             flush=True,
         )
-        native_dll.telem_amd_close(h_context)
+        _cleanup_native_resources()
         return False
 
     # ── ETAP 5U: AMF mode (0=ENCODE production, 1=BYPASS frontend-only). ──
     if amf_mode == "BYPASS":
         if not native_dll.telem_amd_set_amf_mode(h_context, 1):
             print("[AMD NATIVE D3D11] ERROR: failed to configure AMF BYPASS mode.", flush=True)
-            native_dll.telem_amd_close(h_context)
+            _cleanup_native_resources()
             return False
         print("[AMD NATIVE D3D11] AMF BYPASS active: frontend D3D11/VP/compute only, "
               "no encode/mux.", flush=True)
@@ -1552,7 +1575,6 @@ def export_amd_native_d3d11(
     cmd_decode: list[str] | None = None
     frame_size = video_width * video_height * 3 // 2
     end_to_end_start = time.perf_counter()
-    proc_dec: subprocess.Popen | None = None
     if not use_d3d11va:
         cmd_decode = [
             ffmpeg_exe, "-y",
@@ -1570,7 +1592,7 @@ def export_amd_native_d3d11(
             )
         except Exception as e:
             print(f"[AMD NATIVE D3D11] ERROR: Failed to launch decoder pipe: {e}", flush=True)
-            native_dll.telem_amd_close(h_context)
+            _cleanup_native_resources()
             return False
     else:
         print("[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF", flush=True)
@@ -2375,183 +2397,181 @@ def export_amd_native_d3d11(
         return True
 
     # Main Execution Switch: ASYNC (Producer-Consumer) vs SYNC (Diagnostic)
-    if pipeline_mode == "ASYNC":
-        q_depth = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2")))
-        frame_queue: queue.Queue = queue.Queue(maxsize=q_depth)
-        cancel_evt = cancel_event if cancel_event is not None else threading.Event()
-        producer_error: list[Exception] = []
+    try:
+        if pipeline_mode == "ASYNC":
+            q_depth = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2")))
+            frame_queue: queue.Queue = queue.Queue(maxsize=q_depth)
+            cancel_evt = cancel_event if cancel_event is not None else threading.Event()
+            producer_error: list[Exception] = []
 
-        def producer_worker():
-            try:
-                for f_idx in range(total_frames):
-                    if cancel_evt.is_set():
-                        break
-                    prep = _prepare_frame_cpu(f_idx)
-                    t_put_start = time.perf_counter()
+            def producer_worker():
+                try:
+                    for f_idx in range(total_frames):
+                        if cancel_evt.is_set():
+                            break
+                        prep = _prepare_frame_cpu(f_idx)
+                        t_put_start = time.perf_counter()
+                        while not cancel_evt.is_set():
+                            try:
+                                frame_queue.put(prep, timeout=0.05)
+                                t_put_ms = (time.perf_counter() - t_put_start) * 1000.0
+                                timing_samples["producer_queue_wait"].append(t_put_ms)
+                                break
+                            except queue.Full:
+                                continue
+                except Exception as e:
+                    producer_error.append(e)
+                finally:
                     while not cancel_evt.is_set():
                         try:
-                            frame_queue.put(prep, timeout=0.05)
-                            t_put_ms = (time.perf_counter() - t_put_start) * 1000.0
-                            timing_samples["producer_queue_wait"].append(t_put_ms)
+                            frame_queue.put(_END_OF_STREAM, timeout=0.05)
                             break
                         except queue.Full:
                             continue
-            except Exception as e:
-                producer_error.append(e)
+
+            prod_thread = threading.Thread(target=producer_worker, name="TeleM-CpuProducer", daemon=True)
+            prod_thread.start()
+
+            consumed_count = 0
+            try:
+                while consumed_count < total_frames:
+                    t_get_start = time.perf_counter()
+                    item = None
+                    while not cancel_evt.is_set():
+                        try:
+                            item = frame_queue.get(timeout=0.05)
+                            t_get_ms = (time.perf_counter() - t_get_start) * 1000.0
+                            timing_samples["consumer_queue_wait"].append(t_get_ms)
+                            break
+                        except queue.Empty:
+                            if producer_error:
+                                raise producer_error[0]
+                            continue
+                    if cancel_evt.is_set():
+                        print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
+                        _cleanup_native_resources()
+                        return False
+                    if item is _END_OF_STREAM:
+                        break
+                    assert isinstance(item, PreparedFrame)
+                    assert item.frame_idx == consumed_count, f"Frame order violation: expected {consumed_count}, got {item.frame_idx}"
+                    ok = _consume_prepared_frame(item)
+                    if not ok:
+                        # EOS reached normally from decoder
+                        break
+                    consumed_count += 1
             finally:
-                while not cancel_evt.is_set():
-                    try:
-                        frame_queue.put(_END_OF_STREAM, timeout=0.05)
-                        break
-                    except queue.Full:
-                        continue
-
-        prod_thread = threading.Thread(target=producer_worker, name="TeleM-CpuProducer", daemon=True)
-        prod_thread.start()
-
-        consumed_count = 0
-        try:
-            while consumed_count < total_frames:
-                t_get_start = time.perf_counter()
-                item = None
-                while not cancel_evt.is_set():
-                    try:
-                        item = frame_queue.get(timeout=0.05)
-                        t_get_ms = (time.perf_counter() - t_get_start) * 1000.0
-                        timing_samples["consumer_queue_wait"].append(t_get_ms)
-                        break
-                    except queue.Empty:
-                        if producer_error:
-                            raise producer_error[0]
-                        continue
-                if cancel_evt.is_set():
+                cancel_evt.set()
+                prod_thread.join(timeout=2.0)
+                if prod_thread.is_alive():
+                    print("[AMD NATIVE D3D11] WARNING: producer thread did not exit within 2.0s.", flush=True)
+                if producer_error:
+                    raise producer_error[0]
+        else:
+            # SYNC (Production Default / Diagnostic Reference)
+            for f_idx in range(total_frames):
+                if cancel_event is not None and cancel_event.is_set():
                     print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
-                    if proc_dec is not None:
-                        proc_dec.kill()
-                    native_dll.telem_amd_close(h_context)
+                    _cleanup_native_resources()
                     return False
-                if item is _END_OF_STREAM:
-                    break
-                assert isinstance(item, PreparedFrame)
-                assert item.frame_idx == consumed_count, f"Frame order violation: expected {consumed_count}, got {item.frame_idx}"
-                ok = _consume_prepared_frame(item)
+                prep = _prepare_frame_cpu(f_idx)
+                timing_samples["producer_queue_wait"].append(0.0)
+                timing_samples["consumer_queue_wait"].append(0.0)
+                ok = _consume_prepared_frame(prep)
                 if not ok:
                     # EOS reached normally from decoder
                     break
-                consumed_count += 1
-        finally:
-            cancel_evt.set()
-            prod_thread.join(timeout=2.0)
-            if producer_error:
-                raise producer_error[0]
-    else:
-        # SYNC (Production Default / Diagnostic Reference)
-        for f_idx in range(total_frames):
-            if cancel_event is not None and cancel_event.is_set():
-                print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
-                if proc_dec is not None:
-                    proc_dec.kill()
-                native_dll.telem_amd_close(h_context)
-                return False
-            prep = _prepare_frame_cpu(f_idx)
-            timing_samples["producer_queue_wait"].append(0.0)
-            timing_samples["consumer_queue_wait"].append(0.0)
-            ok = _consume_prepared_frame(prep)
-            if not ok:
-                # EOS reached normally from decoder
-                break
 
-    t_video_render_end = time.perf_counter()
+        t_video_render_end = time.perf_counter()
 
-    # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
-    flush_start = time.perf_counter()
-    flush_ok = native_dll.telem_amd_flush(h_context)
-    flush_ms = (time.perf_counter() - flush_start) * 1000.0
-    if not flush_ok:
-        print("[AMD NATIVE D3D11] ERROR: telem_amd_flush failed during drain!", flush=True)
-        if proc_dec is not None:
-            proc_dec.kill()
-        native_dll.telem_amd_close(h_context)
-        return False
+        # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
+        flush_start = time.perf_counter()
+        flush_ok = native_dll.telem_amd_flush(h_context)
+        flush_ms = (time.perf_counter() - flush_start) * 1000.0
+        if not flush_ok:
+            print("[AMD NATIVE D3D11] ERROR: telem_amd_flush failed during drain!", flush=True)
+            _cleanup_native_resources()
+            return False
 
-    c_decoded = c_uint64(0)
-    c_vp = c_uint64(0)
-    c_sub = c_uint64(0)
-    c_rec = c_uint64(0)
-    native_dll.telem_amd_get_stats(
-        h_context, byref(c_decoded), byref(c_vp), byref(c_sub), byref(c_rec)
-    )
+        c_decoded = c_uint64(0)
+        c_vp = c_uint64(0)
+        c_sub = c_uint64(0)
+        c_rec = c_uint64(0)
+        native_dll.telem_amd_get_stats(
+            h_context, byref(c_decoded), byref(c_vp), byref(c_sub), byref(c_rec)
+        )
 
-    c_hud_updates = c_uint64(0)
-    c_video_updates = c_uint64(0)
-    c_input_full = c_uint64(0)
-    c_retries = c_uint64(0)
-    c_dropped = c_uint64(0)
-    c_ignored = c_uint64(0)
-    native_dll.telem_amd_get_extended_stats(
-        h_context,
-        byref(c_hud_updates),
-        byref(c_video_updates),
-        byref(c_input_full),
-        byref(c_retries),
-        byref(c_dropped),
-        byref(c_ignored),
-    )
+        c_hud_updates = c_uint64(0)
+        c_video_updates = c_uint64(0)
+        c_input_full = c_uint64(0)
+        c_retries = c_uint64(0)
+        c_dropped = c_uint64(0)
+        c_ignored = c_uint64(0)
+        native_dll.telem_amd_get_extended_stats(
+            h_context,
+            byref(c_hud_updates),
+            byref(c_video_updates),
+            byref(c_input_full),
+            byref(c_retries),
+            byref(c_dropped),
+            byref(c_ignored),
+        )
 
-    c_blend_calls = c_uint64(0)
-    c_gpu_profiled_frames = c_uint64(0)
-    native_dll.telem_amd_get_etap1_stats(
-        h_context, byref(c_blend_calls), byref(c_gpu_profiled_frames)
-    )
+        c_blend_calls = c_uint64(0)
+        c_gpu_profiled_frames = c_uint64(0)
+        native_dll.telem_amd_get_etap1_stats(
+            h_context, byref(c_blend_calls), byref(c_gpu_profiled_frames)
+        )
 
-    c_gpu_hud_frames = c_uint64(0)
-    c_hud_texture_creates = c_uint64(0)
-    c_hud_texture_uploads = c_uint64(0)
-    c_native_hud_mode = c_int(0)
-    native_dll.telem_amd_get_etap2_stats(
-        h_context,
-        byref(c_gpu_hud_frames),
-        byref(c_hud_texture_creates),
-        byref(c_hud_texture_uploads),
-        byref(c_native_hud_mode),
-    )
+        c_gpu_hud_frames = c_uint64(0)
+        c_hud_texture_creates = c_uint64(0)
+        c_hud_texture_uploads = c_uint64(0)
+        c_native_hud_mode = c_int(0)
+        native_dll.telem_amd_get_etap2_stats(
+            h_context,
+            byref(c_gpu_hud_frames),
+            byref(c_hud_texture_creates),
+            byref(c_hud_texture_uploads),
+            byref(c_native_hud_mode),
+        )
 
-    c_hud_uploaded_bytes = c_uint64(0)
-    c_hud_uploaded_rects = c_uint64(0)
-    native_dll.telem_amd_get_etap3_stats(
-        h_context, byref(c_hud_uploaded_bytes), byref(c_hud_uploaded_rects)
-    )
+        c_hud_uploaded_bytes = c_uint64(0)
+        c_hud_uploaded_rects = c_uint64(0)
+        native_dll.telem_amd_get_etap3_stats(
+            h_context, byref(c_hud_uploaded_bytes), byref(c_hud_uploaded_rects)
+        )
 
-    c_mf_read_calls = c_uint64(0)
-    c_mf_video_samples = c_uint64(0)
-    c_mf_stream_ticks = c_uint64(0)
-    c_mf_null_samples = c_uint64(0)
-    c_mf_d3d11_surfaces = c_uint64(0)
-    c_mf_format_changes = c_uint64(0)
-    c_mf_eos_events = c_uint64(0)
-    c_direct_surface_frames = c_uint64(0)
-    c_decoder_gpu_copy_frames = c_uint64(0)
-    c_native_decode_mode = c_int(0)
-    c_hardware_decode_confirmed = c_int(0)
-    c_decoder_format = c_uint(0)
-    native_dll.telem_amd_get_etap4_stats(
-        h_context,
-        byref(c_mf_read_calls),
-        byref(c_mf_video_samples),
-        byref(c_mf_stream_ticks),
-        byref(c_mf_null_samples),
-        byref(c_mf_d3d11_surfaces),
-        byref(c_mf_format_changes),
-        byref(c_mf_eos_events),
-        byref(c_direct_surface_frames),
-        byref(c_decoder_gpu_copy_frames),
-        byref(c_native_decode_mode),
-        byref(c_hardware_decode_confirmed),
-        byref(c_decoder_format),
-    )
-    # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
-    native_dll.telem_amd_close(h_context)
-    h_context = None
+        c_mf_read_calls = c_uint64(0)
+        c_mf_video_samples = c_uint64(0)
+        c_mf_stream_ticks = c_uint64(0)
+        c_mf_null_samples = c_uint64(0)
+        c_mf_d3d11_surfaces = c_uint64(0)
+        c_mf_format_changes = c_uint64(0)
+        c_mf_eos_events = c_uint64(0)
+        c_direct_surface_frames = c_uint64(0)
+        c_decoder_gpu_copy_frames = c_uint64(0)
+        c_native_decode_mode = c_int(0)
+        c_hardware_decode_confirmed = c_int(0)
+        c_decoder_format = c_uint(0)
+        native_dll.telem_amd_get_etap4_stats(
+            h_context,
+            byref(c_mf_read_calls),
+            byref(c_mf_video_samples),
+            byref(c_mf_stream_ticks),
+            byref(c_mf_null_samples),
+            byref(c_mf_d3d11_surfaces),
+            byref(c_mf_format_changes),
+            byref(c_mf_eos_events),
+            byref(c_direct_surface_frames),
+            byref(c_decoder_gpu_copy_frames),
+            byref(c_native_decode_mode),
+            byref(c_hardware_decode_confirmed),
+            byref(c_decoder_format),
+        )
+        # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
+        _cleanup_native_resources()
+    finally:
+        _cleanup_native_resources()
 
     # 5. Final Fast Remux (Copy Video Stream + Copy Audio Stream - ZERO VIDEO RE-ENCODE)
     temp_h265 = output_file_str + ".h265"

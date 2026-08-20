@@ -123,9 +123,12 @@ class AppSignals(QObject):
     sig_error = Signal(str)
     # (error_message: str)
 
-    # Renderowanie zakończone
+    # Renderowanie zakończone sukcesem
     sig_render_finished = Signal(dict, str)
     # (stats: dict, output_path: str)
+
+    # Renderowanie zatrzymane / anulowane (potwierdzone zakończenie workera po cancel)
+    sig_render_stopped = Signal()
 
 
 # Singleton dla całej aplikacji

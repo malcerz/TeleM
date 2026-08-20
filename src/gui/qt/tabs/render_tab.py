@@ -47,6 +47,7 @@ class RenderTab(QWidget):
         self._boundary_regions: list[tuple[float, float]] = []
         # Stan renderingu / HUD preview (latest-state, ~5 Hz)
         self._rendering = False
+        self._cancelling = False
         self._render_start = 0.0
         self._render_total = 0
         self._hud_ts: float | None = None
@@ -268,6 +269,7 @@ class RenderTab(QWidget):
         s.sig_render_progress.connect(self._on_render_progress)
         s.sig_export_preview_ready.connect(self._on_export_preview_ready)
         s.sig_render_finished.connect(self._on_finished)
+        s.sig_render_stopped.connect(self._on_stopped)
         s.sig_error.connect(self._on_error)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
 
@@ -419,6 +421,8 @@ class RenderTab(QWidget):
             self.edit_output.setText(path)
 
     def _on_render(self) -> None:
+        if self._rendering or self._cancelling:
+            return
         options = {
             "encoder": self.cmb_encoder.currentText(),
             "resolution": self.cmb_resolution.currentText(),
@@ -432,6 +436,7 @@ class RenderTab(QWidget):
         self._ensure_range_applied()
         # Rozpoczęcie: disable, progress=0, HUD Preview włączony
         self._rendering = True
+        self._cancelling = False
         self._render_start = time.monotonic()
         self._render_total = 0
         self._hud_ts = None
@@ -451,7 +456,22 @@ class RenderTab(QWidget):
         self.signals.sig_render_requested.emit(options)
 
     def _on_cancel(self) -> None:
+        if not self._rendering or self._cancelling:
+            return
+        # P1-B FIX: CANCELLING state. Do NOT call _end_render() here.
+        # Wait for worker thread to confirm exit via sig_render_stopped / sig_error.
+        self._cancelling = True
+        self.btn_render.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
+        self._set_stats(
+            self.progress.value(), self._render_total,
+            time.monotonic() - self._render_start if self._render_start else 0.0,
+            0.0, "Anulowanie...",
+        )
         self.signals.sig_render_cancelled.emit()
+
+    def _on_stopped(self) -> None:
+        """Potwierdzenie zakończenia workera po anulowaniu -> powrót do IDLE."""
         self._set_stats(
             self.progress.value(), self._render_total,
             time.monotonic() - self._render_start if self._render_start else 0.0,
@@ -469,6 +489,8 @@ class RenderTab(QWidget):
     def _on_render_progress(self, completed: int, total: int, elapsed: float,
                             fps: float, hud_state) -> None:
         """Rzeczywisty progress pipeline'u (completed/total, nie timer)."""
+        if self._cancelling:
+            return
         if total > 0:
             self._render_total = total
         total = self._render_total or total or 1
@@ -541,6 +563,7 @@ class RenderTab(QWidget):
     def _end_render(self) -> None:
         """Powrót do stanu idle po zakończeniu / anulowaniu / błędzie."""
         self._rendering = False
+        self._cancelling = False
         self.btn_render.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.progress.setVisible(False)
@@ -617,7 +640,7 @@ class RenderTab(QWidget):
 
     def _on_export_preview_ready(self, qimg: QImage) -> None:
         """Odbiera wyrenderowaną klatkę podglądu w głównym wątku GUI."""
-        if not self._rendering or qimg is None:
+        if not self._rendering or self._cancelling or qimg is None:
             return
         pix = QPixmap.fromImage(qimg)
         self.hud_preview_label.setPixmap(
@@ -627,7 +650,7 @@ class RenderTab(QWidget):
 
     def _trigger_async_preview(self, ts: float) -> None:
         """Uruchamia asynchroniczny render klatki podglądu w tle (zero backpressure)."""
-        if not self._rendering or self._controller is None:
+        if not self._rendering or self._cancelling or self._controller is None:
             return
         if self._preview_busy:
             return
@@ -642,7 +665,7 @@ class RenderTab(QWidget):
         def worker():
             try:
                 qimg = self._build_preview_qimage(ts, tw, th)
-                if qimg is not None and self._rendering:
+                if qimg is not None and self._rendering and not self._cancelling:
                     self.signals.sig_export_preview_ready.emit(qimg)
             finally:
                 self._preview_busy = False

@@ -280,6 +280,8 @@ def stream_overlay_to_ffmpeg(
             )
             if success:
                 return total_overlay_frames
+            if cancel_event is not None and cancel_event.is_set():
+                return 0
             print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
 
     hud_x, hud_y = 0, 0

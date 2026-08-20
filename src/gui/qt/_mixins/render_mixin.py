@@ -47,8 +47,13 @@ class RenderMixin:
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
                     self.signals.sig_render_finished.emit(stats, output)
+                else:
+                    self.signals.sig_render_stopped.emit()
             except Exception as e:
-                self.signals.sig_error.emit(f"Render error: {e}")
+                if not self.render_cancel_event.is_set():
+                    self.signals.sig_error.emit(f"Render error: {e}")
+                else:
+                    self.signals.sig_render_stopped.emit()
 
         threading.Thread(target=worker, daemon=True).start()
 

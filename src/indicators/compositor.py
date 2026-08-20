@@ -241,7 +241,7 @@ def compose_overlay(
 
     # Apply per-indicator value overrides
     for k, raw in indicator_values.items():
-        val = raw / 1000.0 if k in ("dist_visual", "dist_text") else raw
+        val = (raw / 1000.0) if (k in ("dist_visual", "dist_text") and raw is not None) else raw
         if k in known_vals:
             _, u, l = known_vals[k]
             known_vals[k] = (val, u, l)
