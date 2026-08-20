@@ -463,15 +463,6 @@ def _render_chart_indicator(
     elif current_position is not None:
         pos = max(0.0, min(1.0, current_position))
 
-    if prefix_dynamic and target_dt is not None and align_start is not None:
-        # The visible prefix has its own right edge at current time.  At the
-        # exact activity start there is no elapsed interval and therefore no
-        # cursor to draw; after start the cursor is at that prefix edge.
-        if aligned_target <= align_start:
-            pos = None
-        else:
-            pos = 1.0
-
     if pos is not None and points:
         if (
             timestamps
@@ -495,9 +486,10 @@ def _render_chart_indicator(
             from bisect import bisect_right
             idx = bisect_right(timestamps, aligned_target) - 1
             if prefix_dynamic:
-                # The prefix renderer never borrows a value from the first
-                # sample after current time.  Between samples (and inside a
-                # gap) the cursor stays on the last visible sample.
+                # The progressive-reveal renderer never borrows a value from
+                # the first sample after current time. Between samples (and
+                # inside a gap) the marker stays at the fixed timeline X for
+                # current time and uses the last visible sample's Y.
                 if idx < 0:
                     ci = None
                     py = None
@@ -544,23 +536,6 @@ def _render_chart_indicator(
 
         if py is not None:
             ci = (cursor_x, py)
-
-        if prefix_dynamic and py is not None:
-            # In prefix mode the current time is the right edge of the
-            # visible domain.  The full point geometry is retained only for
-            # cursor Y interpolation; no future point is drawn by the prefix
-            # raster itself.
-            if (
-                timestamps and len(timestamps) == len(points)
-                and align_start is not None and align_end is not None
-                and align_end > align_start
-            ):
-                norm_0 = max(0.0, min(1.0, (timestamps[0] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
-                norm_last = max(0.0, min(1.0, (timestamps[-1] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
-                if norm_last > norm_0:
-                    plot_w_span = (points[-1][0] - points[0][0]) / (norm_last - norm_0)
-                    plot_x1_base = points[0][0] - norm_0 * plot_w_span
-                    ci = (plot_x1_base + plot_w_span, py)
 
     if not optimized_static:
         chart_img = generate_history_chart(

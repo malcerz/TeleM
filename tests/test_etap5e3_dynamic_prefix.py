@@ -1,4 +1,4 @@
-"""ETAP 5E.3: repeated FIT states must not freeze Model-A chart geometry."""
+"""Fixed-timeline progressive-reveal chart regression coverage."""
 
 from datetime import datetime, timedelta
 
@@ -53,15 +53,15 @@ def test_repeated_visible_index_keeps_exact_current_time_semantics():
     history = _history([0.0, 80.0, 0.0, 100.0], [0.0, 1.0, 2.0, 10.0])
     first = _render("fit_heart_rate_text", history, BASE + timedelta(seconds=1.1), 80.0)
     second = _render("fit_heart_rate_text", history, BASE + timedelta(seconds=1.8), 80.0)
-    # Both frames have visible index 1, but Model A maps the same history to a
-    # different exact current-time domain.  A cache keyed only by index would
-    # incorrectly freeze one of these rasters.
+    # Both frames expose the same samples, but the marker must still move on
+    # the fixed activity timeline. A cache keyed only by visible index may not
+    # freeze the full dynamic chart image.
     assert not np.array_equal(np.asarray(first), np.asarray(second))
 
 
 def test_repeated_state_matches_naive_correct_prefix_and_preserves_zero_gap():
     history = _history([10.0, 0.0, None, 30.0, 40.0], [0.0, 1.0, 2.0, 10.0, 11.0])
-    cfg = _cfg(show_average=True)
+    cfg = _cfg(show_average=False)
     key = "fit_heart_rate_text"
     layout = {"global": {"text_outline": 3}, "indicators": {key: cfg, "fit_power_text": dict(cfg)}}
     for seconds, count in ((1.1, 2), (5.0, 3), (10.1, 4), (10.8, 4), (11.0, 5)):
@@ -73,7 +73,7 @@ def test_repeated_state_matches_naive_correct_prefix_and_preserves_zero_gap():
         )[0]
         prefix = ChartHistory(
             list(history[:count]), list(history.timestamps[:count]),
-            chart_start_dt=BASE, chart_end_dt=target,
+            chart_start_dt=history.chart_start_dt, chart_end_dt=history.chart_end_dt,
         )
         reference = render_value_indicator(
             640, 360, layout, "", "fit_power_text", 40.0, "BPM", "Heart Rate",

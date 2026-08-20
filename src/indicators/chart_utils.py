@@ -86,6 +86,7 @@ def _get_cached_average_layer(
     visible_index: int,
     plot_x1: float,
     plot_x2: float,
+    visible_x2: float,
     plot_y1: float,
     plot_y2: float,
     data_min: float,
@@ -108,21 +109,24 @@ def _get_cached_average_layer(
     key = (
         "average_layer", _history_cache_token(history_values), int(visible_index),
         int(width), int(height), int(supersample),
-        float(plot_x1), float(plot_x2), float(plot_y1), float(plot_y2),
+        float(plot_x1), float(plot_x2), float(visible_x2), float(plot_y1), float(plot_y2),
         float(data_min), float(data_max),
     )
     cached = state["layers"].get(key)
     if cached is not None:
         state["hits"] += 1
         mask, origin, cached_avg_y = cached
+        if mask is None:
+            return None, (avg_val, cached_avg_y)
         return (mask, origin), (avg_val, cached_avg_y)
 
     state["misses"] += 1
     mask = Image.new("L", (int(width), int(height)), 0)
     draw = ImageDraw.Draw(mask)
-    for x in range(int(plot_x1), int(plot_x2), step):
+    visible_x2 = max(plot_x1, min(plot_x2, visible_x2))
+    for x in range(int(plot_x1), int(visible_x2), step):
         draw.line(
-            (x, avg_y, min(x + 3 * max(1, int(supersample)), plot_x2), avg_y),
+            (x, avg_y, min(x + 3 * max(1, int(supersample)), visible_x2), avg_y),
             fill=255, width=max(1, int(supersample)),
         )
     bbox = mask.getbbox()
@@ -361,10 +365,10 @@ def get_history_chart_prefix_background(
 ):
     """Render only the activity-history prefix ending at ``visible_end_dt``.
 
-    Axes and full-history value geometry are immutable and cached.  The
-    per-frame work maps only the visible prefix into the current-time domain
-    and draws already-cached segment ranges.  The function is stateless and
-    deliberately does not mutate ``history_values``.
+    Axes and full-history geometry use the fixed activity domain and are
+    immutable/cached. Per frame this function only bisects the current time,
+    reveals the corresponding immutable point prefix, and draws its existing
+    segment ranges. It never rescales the past into the current-time domain.
     """
     profiler = get_overlay_profiler()
     timestamps = getattr(history_values, "timestamps", None)
@@ -445,7 +449,6 @@ def get_history_chart_prefix_background(
         metadata = {
             "sample_tz": sample_tz,
             "aligned_timestamps": aligned_timestamps,
-            "elapsed_seconds": tuple((ts - chart_start).total_seconds() for ts in aligned_timestamps),
             "chart_start": chart_start,
             "chart_end": chart_end,
             "full_span": full_span,
@@ -495,30 +498,17 @@ def get_history_chart_prefix_background(
     if visible_count <= 0:
         return axes_img.copy(), full_points, plot_y1, plot_y2, calc_thickness, cache_key
 
-    span_seconds = max(0.0, (current_end - chart_start).total_seconds())
     if not full_points or full_span <= 0:
         return axes_img.copy(), full_points, plot_y1, plot_y2, calc_thickness, cache_key
     plot_x1 = metadata["plot_x1"]
     plot_x2 = metadata["plot_x2"]
 
-    if span_seconds <= 0:
-        img = axes_img.copy()
-        if show_axes:
-            axis_color = (180, 180, 180, 220)
-            draw = ImageDraw.Draw(img)
-            draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-            draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
-        return img, full_points, plot_y1, plot_y2, calc_thickness, cache_key
-
-    visible_span = max(1e-12, span_seconds)
     point_started = time.perf_counter()
-    elapsed_seconds = metadata["elapsed_seconds"]
-    x_scale = (plot_x2 - plot_x1) / visible_span
-    prefix_points = []
-    for index in range(visible_count):
-        x = plot_x1 + elapsed_seconds[index] * x_scale
-        prefix_points.append((x, full_points[index][1]))
-    profiler.record("graph.prefix.x_mapping_points", (time.perf_counter() - point_started) * 1000.0)
+    # ``full_points`` was built once using chart_start -> chart_end.  Slicing
+    # preserves every sample's X coordinate, keeps proportional FIT gaps, and
+    # leaves the future part of the plot transparent.
+    prefix_points = full_points[:visible_count]
+    profiler.record("graph.prefix.point_prefix", (time.perf_counter() - point_started) * 1000.0)
 
     ranges = metadata["ranges"]
     segment_started = time.perf_counter()
@@ -569,7 +559,7 @@ def get_history_chart_prefix_background(
             if _AVERAGE_LAYER_CACHE_ENABLED:
                 average_layer, _average_values = _get_cached_average_layer(
                     history_values, visible_count - 1,
-                    plot_x1, plot_x2, plot_y1, plot_y2,
+                    plot_x1, plot_x2, prefix_points[-1][0], plot_y1, plot_y2,
                     data_min, data_max, visible_sum, visible_count_numeric,
                     width, height, supersample,
                 )
@@ -583,8 +573,9 @@ def get_history_chart_prefix_background(
                 avg_val = visible_sum / visible_count_numeric
                 if data_min <= avg_val <= data_max:
                     avg_y = plot_y2 - ((avg_val - data_min) / (data_max - data_min)) * (plot_y2 - plot_y1)
-                    for x in range(int(plot_x1), int(plot_x2), 6 * max(1, int(supersample))):
-                        draw.line((x, avg_y, min(x + 3 * max(1, int(supersample)), plot_x2), avg_y), fill=(255, 200, 0, 220), width=max(1, int(supersample)))
+                    visible_x2 = max(plot_x1, min(plot_x2, prefix_points[-1][0]))
+                    for x in range(int(plot_x1), int(visible_x2), 6 * max(1, int(supersample))):
+                        draw.line((x, avg_y, min(x + 3 * max(1, int(supersample)), visible_x2), avg_y), fill=(255, 200, 0, 220), width=max(1, int(supersample)))
         profiler.record("graph.prefix.average", (time.perf_counter() - average_started) * 1000.0)
 
     return img, full_points, plot_y1, plot_y2, calc_thickness, cache_key

@@ -42,7 +42,9 @@ def _render_pair(history, current_seconds, key="fit_cadence_text"):
     count = bisect_right(history.timestamps, target)
     prefix = ChartHistory(
         list(history[:count]), list(history.timestamps[:count]),
-        chart_start_dt=BASE, chart_end_dt=target,
+        # Naive reference: only the visible values, but the same immutable
+        # activity domain as the optimized progressive-reveal renderer.
+        chart_start_dt=history.chart_start_dt, chart_end_dt=history.chart_end_dt,
     )
     cfg = _cfg()
     legacy_key = "fit_power_text"
