@@ -167,7 +167,10 @@ class RenderMixin:
             target_fps=fps_stream,
             update_rate_step=1,
             max_distance_m=track[-1][1] if track else 0,
-            workers=self.render_threads,
+            # NVIDIA production is intentionally frozen at the validated
+            # four-worker configuration.  GUI preset values must not
+            # accidentally select a slower unbenchmarked worker count.
+            workers=4 if encoder == "nv" else self.render_threads,
             iso_samples=self.telemetry.iso_samples,
             exposure_samples=self.telemetry.exposure_samples,
             temperature_samples=self.telemetry.temperature_samples,

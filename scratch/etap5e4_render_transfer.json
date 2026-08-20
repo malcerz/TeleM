@@ -1,0 +1,36 @@
+{
+  "fit_cadence_text": {
+    "local_render": {
+      "avg_ms": 0.7520763000866282,
+      "median_ms": 0.7448500000464264,
+      "p95_ms": 0.8938000028138049
+    },
+    "rotated_paste_alpha_transfer": {
+      "avg_ms": 1.1706214999503572,
+      "median_ms": 1.1679499984893482,
+      "p95_ms": 1.3353999966057017
+    },
+    "render_plus_transfer": {
+      "avg_ms": 1.9226978000369854,
+      "median_ms": 1.9266499984951224,
+      "p95_ms": 2.1600000036414713
+    }
+  },
+  "fit_heart_rate_text": {
+    "local_render": {
+      "avg_ms": 0.8778160998481326,
+      "median_ms": 0.8757499999774154,
+      "p95_ms": 0.9731999962241389
+    },
+    "rotated_paste_alpha_transfer": {
+      "avg_ms": 1.1357803000719287,
+      "median_ms": 1.145349997386802,
+      "p95_ms": 1.2858000045525841
+    },
+    "render_plus_transfer": {
+      "avg_ms": 2.0135963999200612,
+      "median_ms": 2.023699998972006,
+      "p95_ms": 2.225900003395509
+    }
+  }
+}

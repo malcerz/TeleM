@@ -1,0 +1,178 @@
+{
+  "samples": [
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8141908212560387,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 14029
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8141908212560387,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 6387
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8141908212560387,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 3916
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8141908212560387,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 13349
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        6,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8127264492753623,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 9171
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        6,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8127264492753623,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 4602
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        6,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8127264492753623,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 3076
+      }
+    },
+    {
+      "size": [
+        576,
+        230
+      ],
+      "alpha_bbox": [
+        6,
+        5,
+        561,
+        199
+      ],
+      "alpha_bbox_area_ratio": 0.8127264492753623,
+      "full_alpha_vs_cropped_alpha": {
+        "max_diff": 0,
+        "different_pixels": 0
+      },
+      "old_masked_paste_vs_full_alpha": {
+        "max_diff": 64,
+        "different_pixels": 12971
+      }
+    }
+  ],
+  "summary": {
+    "max_alpha_bbox_area_ratio": 0.8141908212560387,
+    "min_alpha_bbox_area_ratio": 0.8127264492753623,
+    "max_full_vs_crop_diff": 0,
+    "max_old_paste_vs_full_alpha_diff": 64
+  }
+}

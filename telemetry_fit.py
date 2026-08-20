@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 try:
     import fitparse
@@ -40,7 +40,62 @@ RecordDict = dict[str, Any]
 Sample = tuple[datetime, float]
 
 
-def parse_fit(fit_path: Path | str) -> list[RecordDict] | None:
+class FitRecords(list[RecordDict]):
+    """Parsed FIT records with an activity-wide, generic field catalog."""
+
+    source = "fit"
+
+    def __init__(self, records: list[RecordDict] | None = None) -> None:
+        super().__init__(records or [])
+        catalog: dict[str, dict[str, Any]] = {}
+        for record in self:
+            timestamp = record.get("timestamp")
+            for name, value in record.items():
+                if name == "timestamp" or value is None or timestamp is None:
+                    continue
+                catalog.setdefault(name, {
+                    "name": name,
+                    "source": self.source,
+                    "samples": [],
+                    "occurred": False,
+                })["samples"].append((timestamp, value))
+        for field in catalog.values():
+            field["occurred"] = bool(field["samples"])
+        self.field_catalog = catalog
+        self.available_fit_fields = frozenset(catalog)
+
+
+class FitDataset(dict[str, list[Sample]]):
+    """All synchronized FIT fields plus a generic activity-wide field catalog.
+
+    The mapping remains backward-compatible with the existing ``fit_data``
+    API.  ``available_fit_fields`` and ``field_catalog`` are derived from the
+    complete synchronized sample mapping, never from the first FIT record.
+    """
+
+    source = "fit"
+
+    def __init__(self, fields: Mapping[str, list[Sample]] | None = None) -> None:
+        super().__init__(fields or {})
+        self.available_fit_fields: frozenset[str] = frozenset(
+            name for name, samples in self.items() if samples
+        )
+        self.field_catalog: dict[str, dict[str, Any]] = {
+            name: {
+                "name": name,
+                "source": self.source,
+                "samples": samples,
+                "occurred": bool(samples),
+            }
+            for name, samples in self.items()
+        }
+
+    def catalog(self, field_name: str) -> dict[str, Any] | None:
+        """Return metadata for one field, or ``None`` if it never occurred."""
+        return self.field_catalog.get(field_name)
+
+
+def parse_fit(fit_path: Path | str) -> FitRecords | None:
     """Parse a FIT file and return a list of record dicts.
 
     Each dict contains:
@@ -152,7 +207,7 @@ def parse_fit(fit_path: Path | str) -> list[RecordDict] | None:
     if discovered:
         print(f"[FIT] Fields discovered: {sorted(discovered)}", flush=True)
 
-    return deduped
+    return FitRecords(deduped)
 
 
 def sync_fit_to_video(
@@ -171,7 +226,7 @@ def sync_fit_to_video(
         Dict mapping field-name to list of (datetime, value) pairs.
     """
     if not records:
-        return {}
+        return FitDataset()
 
     if video_start_dt is None:
         video_start_dt = records[0]["timestamp"]
@@ -248,7 +303,7 @@ def sync_fit_to_video(
         flush=True,
     )
 
-    return result
+    return FitDataset(result)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -297,7 +352,7 @@ def find_fit_for_video(video_path: Path | str) -> Path | None:
 def process_fit(
     video_path: Path | str,
     video_start_dt: datetime | None = None,
-) -> dict[str, list[Sample]] | None:
+) -> FitDataset | None:
     """Convenience: find FIT file, parse and synchronise in one call."""
     fit_path = find_fit_for_video(video_path)
     if fit_path is None:

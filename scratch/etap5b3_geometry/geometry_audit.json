@@ -1,0 +1,4985 @@
+{
+  "canvas": [
+    1920,
+    1080
+  ],
+  "frames": 5400,
+  "fps": 29.97002997002997,
+  "sample_indices": [
+    0,
+    540,
+    1350,
+    2700,
+    4050,
+    4860,
+    5399
+  ],
+  "active_indicators": [
+    "time_block",
+    "fit_cadence_text",
+    "fit_enhanced_speed_text",
+    "fit_heart_rate_text",
+    "fit_temperature_text",
+    "iso_text",
+    "exposure_text",
+    "temp_text",
+    "track_map",
+    "fit_battery_text",
+    "fit_battery_pct_text",
+    "fit_solar_pct_text"
+  ],
+  "global_bbox": [
+    0,
+    0,
+    1920,
+    1080
+  ],
+  "global_area_pct": 100.0,
+  "global_edge_attribution": {
+    "left": [
+      "time_block",
+      "iso_text",
+      "exposure_text",
+      "temp_text"
+    ],
+    "top": [
+      "time_block"
+    ],
+    "right": [
+      "fit_heart_rate_text",
+      "fit_temperature_text",
+      "track_map",
+      "fit_battery_text"
+    ],
+    "bottom": [
+      "fit_cadence_text",
+      "fit_enhanced_speed_text",
+      "fit_heart_rate_text"
+    ]
+  },
+  "data_probe": {
+    "gps_track_points": 1641,
+    "current_position": 0.5000926097425449,
+    "chart_data_keys": [
+      "fit_cadence_text",
+      "fit_heart_rate_text"
+    ],
+    "indicator_value_keys": [],
+    "extra_indicator_keys": [
+      "fit_K1_text",
+      "fit_K2_text",
+      "fit_battery_pct_text",
+      "fit_battery_pct_x100_text",
+      "fit_battery_text",
+      "fit_cadence_text",
+      "fit_curVpower_text",
+      "fit_discharge_text",
+      "fit_distance_text",
+      "fit_enhanced_altitude_text",
+      "fit_enhanced_speed_text",
+      "fit_fractional_cadence_text",
+      "fit_gopro_battery_text",
+      "fit_heart_rate_text",
+      "fit_passing_speed_text",
+      "fit_passing_speedabs_text",
+      "fit_radar_current_text",
+      "fit_solar_pct_text",
+      "fit_solar_text",
+      "fit_temperature_text"
+    ]
+  },
+  "chart_raster_sizes": {
+    "fit_cadence_text": [
+      584,
+      264
+    ],
+    "fit_heart_rate_text": [
+      584,
+      264
+    ]
+  },
+  "map_render_probe": {
+    "returned": false,
+    "size": null,
+    "alpha_bbox": null,
+    "dst_origin": [
+      0,
+      0
+    ]
+  },
+  "current_regions": {
+    "atlas_w": 1828,
+    "atlas_h": 978,
+    "area": 1787784,
+    "area_pct": 86.21643518518518,
+    "regions": [
+      [
+        44,
+        748,
+        0,
+        0,
+        1824,
+        332
+      ],
+      [
+        10,
+        14,
+        0,
+        336,
+        426,
+        642
+      ],
+      [
+        940,
+        66,
+        430,
+        336,
+        980,
+        524
+      ]
+    ]
+  },
+  "indicators": {
+    "time_block": {
+      "form": "text",
+      "enabled": true,
+      "x": 1.6139,
+      "y": 3.1024,
+      "size": null,
+      "rotation": 0,
+      "declared_bbox": [
+        11,
+        14,
+        424,
+        169
+      ],
+      "actual_alpha_bbox": [
+        31,
+        34,
+        56,
+        57
+      ],
+      "declared_area": 71656,
+      "actual_alpha_area": 3192,
+      "waste_percent": 95.54538349893937,
+      "phantom": false,
+      "samples": {
+        "0": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "540": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "1350": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "2700": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "4050": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "4860": [
+          31,
+          34,
+          87,
+          91
+        ],
+        "5399": [
+          31,
+          34,
+          87,
+          91
+        ]
+      }
+    },
+    "fit_cadence_text": {
+      "form": "chart",
+      "enabled": true,
+      "x": 19.93,
+      "y": 85.36,
+      "size": 30.0,
+      "rotation": 0,
+      "declared_bbox": [
+        45,
+        748,
+        676,
+        332
+      ],
+      "actual_alpha_bbox": [
+        92,
+        790,
+        577,
+        229
+      ],
+      "declared_area": 224432,
+      "actual_alpha_area": 132133,
+      "waste_percent": 41.125597062807444,
+      "phantom": false,
+      "samples": {
+        "0": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "540": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "1350": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "2700": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "4050": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "4860": [
+          92,
+          790,
+          669,
+          1019
+        ],
+        "5399": [
+          92,
+          790,
+          669,
+          1019
+        ]
+      }
+    },
+    "fit_enhanced_speed_text": {
+      "form": "gauge",
+      "enabled": true,
+      "x": 48.65,
+      "y": 90.56,
+      "size": 12.5,
+      "rotation": 0,
+      "declared_bbox": [
+        742,
+        786,
+        384,
+        294
+      ],
+      "actual_alpha_bbox": [
+        786,
+        830,
+        284,
+        182
+      ],
+      "declared_area": 112896,
+      "actual_alpha_area": 51688,
+      "waste_percent": 54.21626984126984,
+      "phantom": false,
+      "samples": {
+        "0": [
+          799,
+          843,
+          1070,
+          1012
+        ],
+        "540": [
+          799,
+          837,
+          1070,
+          1012
+        ],
+        "1350": [
+          786,
+          843,
+          1070,
+          1012
+        ],
+        "2700": [
+          799,
+          843,
+          1070,
+          1012
+        ],
+        "4050": [
+          799,
+          830,
+          1070,
+          1012
+        ],
+        "4860": [
+          799,
+          838,
+          1070,
+          1012
+        ],
+        "5399": [
+          799,
+          835,
+          1070,
+          1012
+        ]
+      }
+    },
+    "fit_heart_rate_text": {
+      "form": "chart",
+      "enabled": true,
+      "x": 79.61,
+      "y": 85.5,
+      "size": 30.0,
+      "rotation": 0,
+      "declared_bbox": [
+        1191,
+        749,
+        676,
+        331
+      ],
+      "actual_alpha_bbox": [
+        1239,
+        791,
+        576,
+        260
+      ],
+      "declared_area": 223756,
+      "actual_alpha_area": 149760,
+      "waste_percent": 33.06995119683941,
+      "phantom": false,
+      "samples": {
+        "0": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "540": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "1350": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "2700": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "4050": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "4860": [
+          1239,
+          791,
+          1815,
+          1051
+        ],
+        "5399": [
+          1239,
+          791,
+          1815,
+          1051
+        ]
+      }
+    },
+    "fit_temperature_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 85.94,
+      "y": 39.21,
+      "size": 2.5,
+      "rotation": 0,
+      "declared_bbox": [
+        1630,
+        403,
+        290,
+        141
+      ],
+      "actual_alpha_bbox": [
+        1650,
+        422,
+        97,
+        15
+      ],
+      "declared_area": 40890,
+      "actual_alpha_area": 1455,
+      "waste_percent": 96.44167278063097,
+      "phantom": false,
+      "samples": {
+        "0": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "540": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "1350": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "2700": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "4050": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "4860": [
+          1650,
+          422,
+          1747,
+          437
+        ],
+        "5399": [
+          1650,
+          422,
+          1747,
+          437
+        ]
+      }
+    },
+    "iso_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 1.74,
+      "y": 41.71,
+      "size": 10.0,
+      "rotation": 0,
+      "declared_bbox": [
+        13,
+        430,
+        364,
+        141
+      ],
+      "actual_alpha_bbox": [
+        33,
+        450,
+        50,
+        13
+      ],
+      "declared_area": 51324,
+      "actual_alpha_area": 650,
+      "waste_percent": 98.73353596757852,
+      "phantom": false,
+      "samples": {
+        "0": [
+          33,
+          450,
+          77,
+          463
+        ],
+        "540": [
+          33,
+          450,
+          77,
+          463
+        ],
+        "1350": [
+          33,
+          450,
+          77,
+          463
+        ],
+        "2700": [
+          33,
+          450,
+          77,
+          463
+        ],
+        "4050": [
+          33,
+          450,
+          83,
+          463
+        ],
+        "4860": [
+          33,
+          450,
+          83,
+          463
+        ],
+        "5399": [
+          33,
+          450,
+          77,
+          463
+        ]
+      }
+    },
+    "exposure_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 1.69,
+      "y": 45.63,
+      "size": 10.0,
+      "rotation": 0,
+      "declared_bbox": [
+        12,
+        473,
+        364,
+        141
+      ],
+      "actual_alpha_bbox": [
+        32,
+        493,
+        49,
+        14
+      ],
+      "declared_area": 51324,
+      "actual_alpha_area": 686,
+      "waste_percent": 98.66339334424441,
+      "phantom": false,
+      "samples": {
+        "0": [
+          32,
+          493,
+          81,
+          507
+        ],
+        "540": [
+          32,
+          493,
+          81,
+          507
+        ],
+        "1350": [
+          32,
+          493,
+          80,
+          507
+        ],
+        "2700": [
+          32,
+          493,
+          81,
+          507
+        ],
+        "4050": [
+          32,
+          493,
+          81,
+          507
+        ],
+        "4860": [
+          32,
+          493,
+          81,
+          507
+        ],
+        "5399": [
+          32,
+          493,
+          81,
+          507
+        ]
+      }
+    },
+    "temp_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 1.65,
+      "y": 49.48,
+      "size": 10.0,
+      "rotation": 0,
+      "declared_bbox": [
+        12,
+        514,
+        364,
+        141
+      ],
+      "actual_alpha_bbox": [
+        32,
+        534,
+        60,
+        13
+      ],
+      "declared_area": 51324,
+      "actual_alpha_area": 780,
+      "waste_percent": 98.48024316109422,
+      "phantom": false,
+      "samples": {
+        "0": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "540": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "1350": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "2700": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "4050": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "4860": [
+          32,
+          534,
+          92,
+          547
+        ],
+        "5399": [
+          32,
+          534,
+          92,
+          547
+        ]
+      }
+    },
+    "track_map": {
+      "form": "map",
+      "enabled": true,
+      "x": 88.02,
+      "y": 22.31,
+      "size": 18.0,
+      "rotation": 0,
+      "declared_bbox": [
+        1467,
+        119,
+        446,
+        244
+      ],
+      "actual_alpha_bbox": null,
+      "declared_area": 108824,
+      "actual_alpha_area": 0,
+      "waste_percent": 100.0,
+      "phantom": true,
+      "samples": {
+        "0": null,
+        "540": null,
+        "1350": null,
+        "2700": null,
+        "4050": null,
+        "4860": null,
+        "5399": null
+      }
+    },
+    "fit_battery_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 85.96,
+      "y": 43.33,
+      "size": 2.5,
+      "rotation": 0,
+      "declared_bbox": [
+        1630,
+        448,
+        290,
+        141
+      ],
+      "actual_alpha_bbox": null,
+      "declared_area": 40890,
+      "actual_alpha_area": 0,
+      "waste_percent": 100.0,
+      "phantom": true,
+      "samples": {
+        "0": null,
+        "540": null,
+        "1350": null,
+        "2700": null,
+        "4050": null,
+        "4860": null,
+        "5399": null
+      }
+    },
+    "fit_battery_pct_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 50.08,
+      "y": 13.37,
+      "size": 2.5,
+      "rotation": 0,
+      "declared_bbox": [
+        942,
+        124,
+        364,
+        141
+      ],
+      "actual_alpha_bbox": null,
+      "declared_area": 51324,
+      "actual_alpha_area": 0,
+      "waste_percent": 100.0,
+      "phantom": true,
+      "samples": {
+        "0": null,
+        "540": null,
+        "1350": null,
+        "2700": null,
+        "4050": null,
+        "4860": null,
+        "5399": null
+      }
+    },
+    "fit_solar_pct_text": {
+      "form": "text",
+      "enabled": true,
+      "x": 50.0,
+      "y": 8.0,
+      "size": 2.5,
+      "rotation": 0,
+      "declared_bbox": [
+        940,
+        66,
+        364,
+        141
+      ],
+      "actual_alpha_bbox": null,
+      "declared_area": 51324,
+      "actual_alpha_area": 0,
+      "waste_percent": 100.0,
+      "phantom": true,
+      "samples": {
+        "0": null,
+        "540": null,
+        "1350": null,
+        "2700": null,
+        "4050": null,
+        "4860": null,
+        "5399": null
+      }
+    }
+  },
+  "by_max_regions": {
+    "1": {
+      "clusters": [
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text",
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text",
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            10,
+            14,
+            1910,
+            1066
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        },
+        {
+          "a": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "b": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "box_b": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "merged": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "area_a": 72834,
+          "area_b": 212910,
+          "merged_area": 512540,
+          "wasted_area": 226796
+        },
+        {
+          "a": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "b": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "box_b": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "merged": [
+            11,
+            14,
+            1909,
+            641
+          ],
+          "area_a": 271784,
+          "area_b": 512540,
+          "merged_area": 1223669,
+          "wasted_area": 439345
+        },
+        {
+          "a": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "b": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text",
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "box_b": [
+            11,
+            14,
+            1909,
+            641
+          ],
+          "merged": [
+            11,
+            14,
+            1909,
+            1066
+          ],
+          "area_a": 604904,
+          "area_b": 1223669,
+          "merged_area": 2034994,
+          "wasted_area": 206421
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            10,
+            14,
+            1910,
+            1066
+          ],
+          "atlas": [
+            0,
+            0,
+            1910,
+            1066
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text",
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text",
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        }
+      ],
+      "atlas_w": 1914,
+      "atlas_h": 1066,
+      "atlas_area": 2040324,
+      "area_pct": 98.39525462962962,
+      "mb": 7.7832183837890625,
+      "sum_region_area": 2036060,
+      "packing_efficiency": 0.9979101358411703
+    },
+    "2": {
+      "clusters": [
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box": [
+            44,
+            748,
+            1824,
+            332
+          ]
+        },
+        {
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text",
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            10,
+            14,
+            1910,
+            642
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        },
+        {
+          "a": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "b": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "box_b": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "merged": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "area_a": 72834,
+          "area_b": 212910,
+          "merged_area": 512540,
+          "wasted_area": 226796
+        },
+        {
+          "a": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "b": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "box_b": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "merged": [
+            11,
+            14,
+            1909,
+            641
+          ],
+          "area_a": 271784,
+          "area_b": 512540,
+          "merged_area": 1223669,
+          "wasted_area": 439345
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            0,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            1910,
+            642
+          ],
+          "atlas": [
+            0,
+            336,
+            1910,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text",
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        }
+      ],
+      "atlas_w": 1914,
+      "atlas_h": 978,
+      "atlas_area": 1871892,
+      "area_pct": 90.27256944444444,
+      "mb": 7.1407012939453125,
+      "sum_region_area": 1831788,
+      "packing_efficiency": 0.9785756870588688
+    },
+    "3": {
+      "clusters": [
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box": [
+            44,
+            748,
+            1824,
+            332
+          ]
+        },
+        {
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box": [
+            10,
+            14,
+            426,
+            642
+          ]
+        },
+        {
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            940,
+            66,
+            980,
+            524
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        },
+        {
+          "a": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "b": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "box_b": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "merged": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "area_a": 72834,
+          "area_b": 212910,
+          "merged_area": 512540,
+          "wasted_area": 226796
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            0,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            0,
+            336,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            980,
+            524
+          ],
+          "atlas": [
+            430,
+            336,
+            980,
+            524
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        }
+      ],
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "atlas_area": 1787784,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "sum_region_area": 1392580,
+      "packing_efficiency": 0.778941975093188
+    },
+    "4": {
+      "clusters": [
+        {
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "box": [
+            940,
+            66,
+            366,
+            200
+          ]
+        },
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box": [
+            44,
+            748,
+            1824,
+            332
+          ]
+        },
+        {
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            1466,
+            118,
+            454,
+            472
+          ]
+        },
+        {
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box": [
+            10,
+            14,
+            426,
+            642
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            940,
+            66,
+            366,
+            200
+          ],
+          "atlas": [
+            0,
+            0,
+            366,
+            200
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ]
+        },
+        {
+          "dest": [
+            1466,
+            118,
+            454,
+            472
+          ],
+          "atlas": [
+            370,
+            0,
+            454,
+            472
+          ],
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            828,
+            0,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            646,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ],
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "atlas_area": 1787784,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "sum_region_area": 1166548,
+      "packing_efficiency": 0.65251059412099
+    },
+    "5": {
+      "clusters": [
+        {
+          "keys": [
+            "time_block"
+          ],
+          "box": [
+            10,
+            14,
+            426,
+            170
+          ]
+        },
+        {
+          "keys": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box": [
+            12,
+            430,
+            366,
+            226
+          ]
+        },
+        {
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "box": [
+            940,
+            66,
+            366,
+            200
+          ]
+        },
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box": [
+            44,
+            748,
+            1824,
+            332
+          ]
+        },
+        {
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            1466,
+            118,
+            454,
+            472
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            170
+          ],
+          "atlas": [
+            0,
+            0,
+            426,
+            170
+          ],
+          "keys": [
+            "time_block"
+          ]
+        },
+        {
+          "dest": [
+            12,
+            430,
+            366,
+            226
+          ],
+          "atlas": [
+            430,
+            0,
+            366,
+            226
+          ],
+          "keys": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            366,
+            200
+          ],
+          "atlas": [
+            800,
+            0,
+            366,
+            200
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ]
+        },
+        {
+          "dest": [
+            1466,
+            118,
+            454,
+            472
+          ],
+          "atlas": [
+            1170,
+            0,
+            454,
+            472
+          ],
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            476,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ],
+      "atlas_w": 1828,
+      "atlas_h": 808,
+      "atlas_area": 1477024,
+      "area_pct": 71.22993827160494,
+      "mb": 5.6343994140625,
+      "sum_region_area": 1048192,
+      "packing_efficiency": 0.709664839569296
+    },
+    "6": {
+      "clusters": [
+        {
+          "keys": [
+            "time_block"
+          ],
+          "box": [
+            10,
+            14,
+            426,
+            170
+          ]
+        },
+        {
+          "keys": [
+            "track_map"
+          ],
+          "box": [
+            1466,
+            118,
+            448,
+            246
+          ]
+        },
+        {
+          "keys": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box": [
+            12,
+            430,
+            366,
+            226
+          ]
+        },
+        {
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "box": [
+            940,
+            66,
+            366,
+            200
+          ]
+        },
+        {
+          "keys": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box": [
+            1630,
+            402,
+            290,
+            188
+          ]
+        },
+        {
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box": [
+            44,
+            748,
+            1824,
+            332
+          ]
+        }
+      ],
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            170
+          ],
+          "atlas": [
+            0,
+            0,
+            426,
+            170
+          ],
+          "keys": [
+            "time_block"
+          ]
+        },
+        {
+          "dest": [
+            1466,
+            118,
+            448,
+            246
+          ],
+          "atlas": [
+            430,
+            0,
+            448,
+            246
+          ],
+          "keys": [
+            "track_map"
+          ]
+        },
+        {
+          "dest": [
+            12,
+            430,
+            366,
+            226
+          ],
+          "atlas": [
+            882,
+            0,
+            366,
+            226
+          ],
+          "keys": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            366,
+            200
+          ],
+          "atlas": [
+            1252,
+            0,
+            366,
+            200
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ]
+        },
+        {
+          "dest": [
+            1630,
+            402,
+            290,
+            188
+          ],
+          "atlas": [
+            1622,
+            0,
+            290,
+            188
+          ],
+          "keys": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            250,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ],
+      "atlas_w": 1916,
+      "atlas_h": 582,
+      "atlas_area": 1115112,
+      "area_pct": 53.77662037037037,
+      "mb": 4.253814697265625,
+      "sum_region_area": 998632,
+      "packing_efficiency": 0.8955441247157236
+    }
+  },
+  "scenarios": {
+    "A_current": {
+      "regions": 3,
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "transport_reduction_pct": 13.783564814814824,
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        },
+        {
+          "a": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ],
+          "b": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "box_b": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "merged": [
+            940,
+            66,
+            980,
+            523
+          ],
+          "area_a": 72834,
+          "area_b": 212910,
+          "merged_area": 512540,
+          "wasted_area": 226796
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            0,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            0,
+            336,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            980,
+            524
+          ],
+          "atlas": [
+            430,
+            336,
+            980,
+            524
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        }
+      ]
+    },
+    "B_precise_alpha_diagnostic": {
+      "regions": 3,
+      "atlas_w": 1896,
+      "atlas_h": 514,
+      "area_pct": 46.99768518518518,
+      "mb": 3.71759033203125,
+      "transport_reduction_pct": 53.00231481481482,
+      "merge_history": [
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text"
+          ],
+          "box_a": [
+            32,
+            450,
+            52,
+            14
+          ],
+          "box_b": [
+            32,
+            492,
+            50,
+            16
+          ],
+          "merged": [
+            32,
+            450,
+            52,
+            58
+          ],
+          "area_a": 728,
+          "area_b": 800,
+          "merged_area": 3016,
+          "wasted_area": 1488
+        },
+        {
+          "a": [
+            "temp_text"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text"
+          ],
+          "box_a": [
+            32,
+            534,
+            60,
+            14
+          ],
+          "box_b": [
+            32,
+            450,
+            52,
+            58
+          ],
+          "merged": [
+            32,
+            450,
+            60,
+            98
+          ],
+          "area_a": 840,
+          "area_b": 3016,
+          "merged_area": 5880,
+          "wasted_area": 2024
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "temp_text",
+            "iso_text",
+            "exposure_text"
+          ],
+          "box_a": [
+            30,
+            34,
+            58,
+            58
+          ],
+          "box_b": [
+            32,
+            450,
+            60,
+            98
+          ],
+          "merged": [
+            30,
+            34,
+            62,
+            514
+          ],
+          "area_a": 3364,
+          "area_b": 5880,
+          "merged_area": 31868,
+          "wasted_area": 22624
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            92,
+            790,
+            578,
+            230
+          ],
+          "box_b": [
+            786,
+            830,
+            284,
+            182
+          ],
+          "merged": [
+            92,
+            790,
+            978,
+            230
+          ],
+          "area_a": 132940,
+          "area_b": 51688,
+          "merged_area": 224940,
+          "wasted_area": 40312
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1238,
+            790,
+            578,
+            262
+          ],
+          "box_b": [
+            92,
+            790,
+            978,
+            230
+          ],
+          "merged": [
+            92,
+            790,
+            1724,
+            262
+          ],
+          "area_a": 151436,
+          "area_b": 224940,
+          "merged_area": 451688,
+          "wasted_area": 75312
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            1650,
+            422,
+            98,
+            16
+          ],
+          "atlas": [
+            0,
+            0,
+            98,
+            16
+          ],
+          "keys": [
+            "fit_temperature_text"
+          ]
+        },
+        {
+          "dest": [
+            30,
+            34,
+            62,
+            514
+          ],
+          "atlas": [
+            102,
+            0,
+            62,
+            514
+          ],
+          "keys": [
+            "time_block",
+            "temp_text",
+            "iso_text",
+            "exposure_text"
+          ]
+        },
+        {
+          "dest": [
+            92,
+            790,
+            1724,
+            262
+          ],
+          "atlas": [
+            168,
+            0,
+            1724,
+            262
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ]
+    },
+    "C_phantom_elimination_diagnostic": {
+      "regions": 3,
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "transport_reduction_pct": 13.783564814814824,
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            1630,
+            402,
+            290,
+            142
+          ],
+          "atlas": [
+            0,
+            0,
+            290,
+            142
+          ],
+          "keys": [
+            "fit_temperature_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            294,
+            0,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            646,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ]
+    },
+    "C2_exclude_all_not_observed_alpha": {
+      "regions": 3,
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "transport_reduction_pct": 13.783564814814824,
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            1630,
+            402,
+            290,
+            142
+          ],
+          "atlas": [
+            0,
+            0,
+            290,
+            142
+          ],
+          "keys": [
+            "fit_temperature_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            294,
+            0,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            646,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ]
+    },
+    "D_4_regions": {
+      "regions": 4,
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "area_pct": 86.21643518518518,
+      "mb": 6.819854736328125,
+      "transport_reduction_pct": 13.783564814814824,
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        },
+        {
+          "a": [
+            "time_block"
+          ],
+          "b": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            11,
+            14,
+            424,
+            169
+          ],
+          "box_b": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "merged": [
+            11,
+            14,
+            424,
+            641
+          ],
+          "area_a": 71656,
+          "area_b": 82125,
+          "merged_area": 271784,
+          "wasted_area": 118003
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            940,
+            66,
+            366,
+            200
+          ],
+          "atlas": [
+            0,
+            0,
+            366,
+            200
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ]
+        },
+        {
+          "dest": [
+            1466,
+            118,
+            454,
+            472
+          ],
+          "atlas": [
+            370,
+            0,
+            454,
+            472
+          ],
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            828,
+            0,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            646,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ]
+    },
+    "E_5_regions": {
+      "regions": 5,
+      "atlas_w": 1828,
+      "atlas_h": 808,
+      "area_pct": 71.22993827160494,
+      "mb": 5.6343994140625,
+      "transport_reduction_pct": 28.770061728395063,
+      "merge_history": [
+        {
+          "a": [
+            "exposure_text"
+          ],
+          "b": [
+            "temp_text"
+          ],
+          "box_a": [
+            12,
+            473,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            514,
+            364,
+            141
+          ],
+          "merged": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 66248,
+          "wasted_area": -36400
+        },
+        {
+          "a": [
+            "iso_text"
+          ],
+          "b": [
+            "exposure_text",
+            "temp_text"
+          ],
+          "box_a": [
+            13,
+            430,
+            364,
+            141
+          ],
+          "box_b": [
+            12,
+            473,
+            364,
+            182
+          ],
+          "merged": [
+            12,
+            430,
+            365,
+            225
+          ],
+          "area_a": 51324,
+          "area_b": 66248,
+          "merged_area": 82125,
+          "wasted_area": -35447
+        },
+        {
+          "a": [
+            "fit_battery_pct_text"
+          ],
+          "b": [
+            "fit_solar_pct_text"
+          ],
+          "box_a": [
+            942,
+            124,
+            364,
+            141
+          ],
+          "box_b": [
+            940,
+            66,
+            364,
+            141
+          ],
+          "merged": [
+            940,
+            66,
+            366,
+            199
+          ],
+          "area_a": 51324,
+          "area_b": 51324,
+          "merged_area": 72834,
+          "wasted_area": -29814
+        },
+        {
+          "a": [
+            "fit_temperature_text"
+          ],
+          "b": [
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1630,
+            403,
+            290,
+            141
+          ],
+          "box_b": [
+            1630,
+            448,
+            290,
+            141
+          ],
+          "merged": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "area_a": 40890,
+          "area_b": 40890,
+          "merged_area": 53940,
+          "wasted_area": -27840
+        },
+        {
+          "a": [
+            "fit_cadence_text"
+          ],
+          "b": [
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            45,
+            748,
+            676,
+            332
+          ],
+          "box_b": [
+            742,
+            786,
+            384,
+            294
+          ],
+          "merged": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "area_a": 224432,
+          "area_b": 112896,
+          "merged_area": 358892,
+          "wasted_area": 21564
+        },
+        {
+          "a": [
+            "fit_heart_rate_text"
+          ],
+          "b": [
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ],
+          "box_a": [
+            1191,
+            749,
+            676,
+            331
+          ],
+          "box_b": [
+            45,
+            748,
+            1081,
+            332
+          ],
+          "merged": [
+            45,
+            748,
+            1822,
+            332
+          ],
+          "area_a": 223756,
+          "area_b": 358892,
+          "merged_area": 604904,
+          "wasted_area": 22256
+        },
+        {
+          "a": [
+            "track_map"
+          ],
+          "b": [
+            "fit_temperature_text",
+            "fit_battery_text"
+          ],
+          "box_a": [
+            1467,
+            119,
+            446,
+            244
+          ],
+          "box_b": [
+            1630,
+            403,
+            290,
+            186
+          ],
+          "merged": [
+            1467,
+            119,
+            453,
+            470
+          ],
+          "area_a": 108824,
+          "area_b": 53940,
+          "merged_area": 212910,
+          "wasted_area": 50146
+        }
+      ],
+      "packed": [
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            170
+          ],
+          "atlas": [
+            0,
+            0,
+            426,
+            170
+          ],
+          "keys": [
+            "time_block"
+          ]
+        },
+        {
+          "dest": [
+            12,
+            430,
+            366,
+            226
+          ],
+          "atlas": [
+            430,
+            0,
+            366,
+            226
+          ],
+          "keys": [
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            366,
+            200
+          ],
+          "atlas": [
+            800,
+            0,
+            366,
+            200
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text"
+          ]
+        },
+        {
+          "dest": [
+            1466,
+            118,
+            454,
+            472
+          ],
+          "atlas": [
+            1170,
+            0,
+            454,
+            472
+          ],
+          "keys": [
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            476,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        }
+      ]
+    }
+  },
+  "padding_audit": {
+    "region_padding_current": 4,
+    "region_padding_zero_diagnostic": {
+      "atlas_w": 1824,
+      "atlas_h": 974,
+      "area_pct": 85.67592592592592,
+      "mb": 6.777099609375,
+      "packed": [
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            0,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            0,
+            332,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            980,
+            524
+          ],
+          "atlas": [
+            426,
+            332,
+            980,
+            524
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        }
+      ]
+    },
+    "current_atlas_area": 1787784,
+    "current_padding_delta_area": 11208
+  },
+  "packing_variants": {
+    "horizontal_current": {
+      "atlas_w": 1828,
+      "atlas_h": 978,
+      "area": 1787784
+    },
+    "vertical_current": {
+      "atlas_w": 2254,
+      "atlas_h": 860,
+      "area": 1938440,
+      "packed": [
+        {
+          "dest": [
+            44,
+            748,
+            1824,
+            332
+          ],
+          "atlas": [
+            0,
+            0,
+            1824,
+            332
+          ],
+          "keys": [
+            "fit_heart_rate_text",
+            "fit_cadence_text",
+            "fit_enhanced_speed_text"
+          ]
+        },
+        {
+          "dest": [
+            940,
+            66,
+            980,
+            524
+          ],
+          "atlas": [
+            0,
+            336,
+            980,
+            524
+          ],
+          "keys": [
+            "fit_battery_pct_text",
+            "fit_solar_pct_text",
+            "track_map",
+            "fit_temperature_text",
+            "fit_battery_text"
+          ]
+        },
+        {
+          "dest": [
+            10,
+            14,
+            426,
+            642
+          ],
+          "atlas": [
+            1828,
+            0,
+            426,
+            642
+          ],
+          "keys": [
+            "time_block",
+            "iso_text",
+            "exposure_text",
+            "temp_text"
+          ]
+        }
+      ]
+    }
+  }
+}

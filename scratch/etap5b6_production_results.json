@@ -1,0 +1,50 @@
+[
+  {
+    "mode": "off",
+    "run": 1,
+    "wall_s": 25.760326499999792,
+    "real_export_fps": 209.62467226492814,
+    "preview_updates": 0,
+    "preview_fps": 0.0
+  },
+  {
+    "mode": "off",
+    "run": 2,
+    "wall_s": 26.327003200000036,
+    "real_export_fps": 205.11259709194675,
+    "preview_updates": 0,
+    "preview_fps": 0.0
+  },
+  {
+    "mode": "off",
+    "run": 3,
+    "wall_s": 26.42370259999734,
+    "real_export_fps": 204.36197310215502,
+    "preview_updates": 0,
+    "preview_fps": 0.0
+  },
+  {
+    "mode": "on",
+    "run": 1,
+    "wall_s": 25.774881500001356,
+    "real_export_fps": 209.50629782719722,
+    "preview_updates": 108,
+    "preview_fps": 4.190125956543945
+  },
+  {
+    "mode": "on",
+    "run": 2,
+    "wall_s": 25.995906500000274,
+    "real_export_fps": 207.7250123976228,
+    "preview_updates": 108,
+    "preview_fps": 4.154500247952456
+  },
+  {
+    "mode": "on",
+    "run": 3,
+    "wall_s": 26.039415699997335,
+    "real_export_fps": 207.37792515062281,
+    "preview_updates": 108,
+    "preview_fps": 4.147558503012457
+  }
+]

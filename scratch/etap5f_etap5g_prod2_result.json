@@ -1,0 +1,13 @@
+{
+  "label": "etap5g_prod2",
+  "frames": 5400,
+  "workers": 4,
+  "max_in_flight": null,
+  "preview": "on",
+  "wall_s": 21.16840890000458,
+  "real_export_fps": 255.09711313252419,
+  "preview_updates": 108,
+  "preview_fps": 5.101942262650484,
+  "audit_json": "H:\\_Dev\\TeleM\\scratch\\etap5f_etap5g_prod2.json",
+  "cpu_samples": []
+}

@@ -1,0 +1,12 @@
+{
+  "label": "sweep_mif16",
+  "frames": 1200,
+  "workers": 4,
+  "max_in_flight": 16,
+  "preview": "on",
+  "wall_s": 17.336811399996805,
+  "real_export_fps": 69.21688033130597,
+  "preview_updates": 24,
+  "preview_fps": 1.3843376066261195,
+  "audit_json": "H:\\_Dev\\TeleM\\scratch\\etap5f_sweep_mif16.json"
+}

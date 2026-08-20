@@ -1,0 +1,548 @@
+{
+  "fit_cadence_text": {
+    "render_ms": {
+      "avg": 1.0881924999848707,
+      "median": 1.04414999805158,
+      "p95": 1.3300999999046326
+    },
+    "metrics": {
+      "indicator.fit_cadence_text.graph.background_and_chart_composite": {
+        "frames": 1000,
+        "avg_ms": 0.5550419000574038,
+        "median_ms": 0.5619000003207475,
+        "p95_ms": 0.6013200018060161,
+        "p99_ms": 0.6260420009493827,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.background_axes_grid_polyline": {
+        "frames": 1000,
+        "avg_ms": 0.0030379000018001534,
+        "median_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "total_calls": 1,
+        "avg_calls_per_frame": 0.001,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.background_cache_lookup": {
+        "frames": 1000,
+        "avg_ms": 1.0000003385357559e-06,
+        "median_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "total_calls": 1,
+        "avg_calls_per_frame": 0.001,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.current_cursor": {
+        "frames": 1000,
+        "avg_ms": 0.05565450005087769,
+        "median_ms": 0.05490000330610201,
+        "p95_ms": 0.061610003103851334,
+        "p99_ms": 0.08263099596661047,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.dynamic_labels": {
+        "frames": 1000,
+        "avg_ms": 0.12110229999234434,
+        "median_ms": 0.12409999908413738,
+        "p95_ms": 0.16021000446926334,
+        "p99_ms": 0.18084000148519402,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.history_chart_total": {
+        "frames": 1000,
+        "avg_ms": 0.3210821999673499,
+        "median_ms": 0.2241000001959037,
+        "p95_ms": 0.6214249955519335,
+        "p99_ms": 0.6870129997696495,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.bisect_current": {
+        "frames": 1000,
+        "avg_ms": 0.000648099921818357,
+        "median_ms": 0.0005999972927384079,
+        "p95_ms": 0.0008999995770864189,
+        "p99_ms": 0.0020000006770715117,
+        "total_calls": 999,
+        "avg_calls_per_frame": 0.999,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.fill_polygon": {
+        "frames": 1000,
+        "avg_ms": 0.12050860009185271,
+        "median_ms": 0.051700000767596066,
+        "p95_ms": 0.32121999429364223,
+        "p99_ms": 0.36130000080447644,
+        "total_calls": 996,
+        "avg_calls_per_frame": 0.996,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.geometry_cache": {
+        "frames": 1000,
+        "avg_ms": 0.0023890998782007955,
+        "median_ms": 0.0005999972927384079,
+        "p95_ms": 0.0007999988156370819,
+        "p99_ms": 0.0013000026228837669,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.image_copy": {
+        "frames": 1000,
+        "avg_ms": 0.06838430010975571,
+        "median_ms": 0.09059999865712598,
+        "p95_ms": 0.10579999798210338,
+        "p99_ms": 0.11410500294005033,
+        "total_calls": 996,
+        "avg_calls_per_frame": 0.996,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.line_draw": {
+        "frames": 1000,
+        "avg_ms": 0.02583889992820332,
+        "median_ms": 0.011600001016631722,
+        "p95_ms": 0.06650500399700832,
+        "p99_ms": 0.07210300325823482,
+        "total_calls": 996,
+        "avg_calls_per_frame": 0.996,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.segment_selection": {
+        "frames": 1000,
+        "avg_ms": 0.0012806001614080742,
+        "median_ms": 0.0012000018614344299,
+        "p95_ms": 0.001600004907231778,
+        "p99_ms": 0.0021000014385208488,
+        "total_calls": 996,
+        "avg_calls_per_frame": 0.996,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix.x_mapping_points": {
+        "frames": 1000,
+        "avg_ms": 0.049507900068419985,
+        "median_ms": 0.018299997464055195,
+        "p95_ms": 0.14731000119354573,
+        "p99_ms": 0.16690399752405938,
+        "total_calls": 996,
+        "avg_calls_per_frame": 0.996,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.graph.prefix_static_build": {
+        "frames": 1000,
+        "avg_ms": 0.43311869996250607,
+        "median_ms": 0.43169999844394624,
+        "p95_ms": 0.44579999703273643,
+        "p99_ms": 0.4578130006848369,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.Image.new": {
+        "frames": 1000,
+        "avg_ms": 0.004308100025809836,
+        "median_ms": 0.0040000013541430235,
+        "p95_ms": 0.0045000051613897085,
+        "p99_ms": 0.008305004957946945,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 474.415,
+        "p95_pixels_per_frame": 56.0
+      },
+      "indicator.fit_cadence_text.pillow.ImageDraw": {
+        "frames": 1000,
+        "avg_ms": 0.013716700232180301,
+        "median_ms": 0.013499993656296283,
+        "p95_ms": 0.015205005911411712,
+        "p99_ms": 0.020400995272211727,
+        "total_calls": 3993,
+        "avg_calls_per_frame": 3.993,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.ImageDraw primitives": {
+        "frames": 1000,
+        "avg_ms": 0.1456815996716614,
+        "median_ms": 0.06659999780822545,
+        "p95_ms": 0.3789200101891765,
+        "p99_ms": 0.42320300643041264,
+        "total_calls": 6874,
+        "avg_calls_per_frame": 6.874,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.copy": {
+        "frames": 1000,
+        "avg_ms": 0.12294950002251426,
+        "median_ms": 0.15770000027259812,
+        "p95_ms": 0.18850500200642273,
+        "p99_ms": 0.20490100316237658,
+        "total_calls": 2000,
+        "avg_calls_per_frame": 2.0,
+        "avg_pixels_per_frame": 286677.696,
+        "p95_pixels_per_frame": 286656.0
+      },
+      "indicator.fit_cadence_text.pillow.crop": {
+        "frames": 1000,
+        "avg_ms": 0.005213200092839543,
+        "median_ms": 0.005199995939619839,
+        "p95_ms": 0.005599998985417187,
+        "p99_ms": 0.007201003827503881,
+        "total_calls": 997,
+        "avg_calls_per_frame": 0.997,
+        "avg_pixels_per_frame": 55.279,
+        "p95_pixels_per_frame": 56.0
+      },
+      "indicator.fit_cadence_text.pillow.font cache lookup": {
+        "frames": 1000,
+        "avg_ms": 0.001682800160779152,
+        "median_ms": 0.0005999972927384079,
+        "p95_ms": 0.0013050026609562292,
+        "p99_ms": 0.0031000017770566046,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.font lookup/load": {
+        "frames": 1000,
+        "avg_ms": 5.0199996621813625e-05,
+        "median_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "total_calls": 2,
+        "avg_calls_per_frame": 0.002,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.paste": {
+        "frames": 1000,
+        "avg_ms": 0.4270862000557827,
+        "median_ms": 0.4257500004314352,
+        "p95_ms": 0.4383099978440441,
+        "p99_ms": 0.44981500526773743,
+        "total_calls": 2996,
+        "avg_calls_per_frame": 2.996,
+        "avg_pixels_per_frame": 461911.296,
+        "p95_pixels_per_frame": 462528.0
+      },
+      "indicator.fit_cadence_text.pillow.text drawing": {
+        "frames": 1000,
+        "avg_ms": 0.09429010009625927,
+        "median_ms": 0.09565000073052943,
+        "p95_ms": 0.12740500205836724,
+        "p99_ms": 0.1633029992080992,
+        "total_calls": 1015,
+        "avg_calls_per_frame": 1.015,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_cadence_text.pillow.textbbox/getbbox": {
+        "frames": 1000,
+        "avg_ms": 0.036493300045549404,
+        "median_ms": 0.036299999919719994,
+        "p95_ms": 0.04560499801300466,
+        "p99_ms": 0.05271499387163202,
+        "total_calls": 2056,
+        "avg_calls_per_frame": 2.056,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      }
+    }
+  },
+  "fit_heart_rate_text": {
+    "render_ms": {
+      "avg": 1.298629799966875,
+      "median": 1.2788499989255797,
+      "p95": 1.6853999986778945
+    },
+    "metrics": {
+      "indicator.fit_heart_rate_text.graph.background_and_chart_composite": {
+        "frames": 1000,
+        "avg_ms": 0.5442729999995208,
+        "median_ms": 0.5485999972734135,
+        "p95_ms": 0.5960049980785698,
+        "p99_ms": 0.6925350044184596,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.background_axes_grid_polyline": {
+        "frames": 1000,
+        "avg_ms": 0.003288200001406949,
+        "median_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "total_calls": 1,
+        "avg_calls_per_frame": 0.001,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.background_cache_lookup": {
+        "frames": 1000,
+        "avg_ms": 1.1000010999850929e-06,
+        "median_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "total_calls": 1,
+        "avg_calls_per_frame": 0.001,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.current_cursor": {
+        "frames": 1000,
+        "avg_ms": 0.055207199926371686,
+        "median_ms": 0.05394999971031211,
+        "p95_ms": 0.06299999949987978,
+        "p99_ms": 0.08451600311673245,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.dynamic_labels": {
+        "frames": 1000,
+        "avg_ms": 0.13552090001030592,
+        "median_ms": 0.13174999912735075,
+        "p95_ms": 0.16730500028643291,
+        "p99_ms": 0.24734199789236286,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.history_chart_total": {
+        "frames": 1000,
+        "avg_ms": 0.5386610001587542,
+        "median_ms": 0.4758000031870324,
+        "p95_ms": 0.8338450039445888,
+        "p99_ms": 0.964809997822158,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.average": {
+        "frames": 1000,
+        "avg_ms": 0.28241690003778785,
+        "median_ms": 0.28000000020256266,
+        "p95_ms": 0.29560499533545226,
+        "p99_ms": 0.3528060015378287,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.bisect_current": {
+        "frames": 1000,
+        "avg_ms": 0.0006142997954157181,
+        "median_ms": 0.0005999972927384079,
+        "p95_ms": 0.0010000003385357559,
+        "p99_ms": 0.0019009999232366672,
+        "total_calls": 999,
+        "avg_calls_per_frame": 0.999,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.fill_polygon": {
+        "frames": 1000,
+        "avg_ms": 0.06473390014434699,
+        "median_ms": 0.031299998227041215,
+        "p95_ms": 0.16500499805260915,
+        "p99_ms": 0.17450399725930765,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.geometry_cache": {
+        "frames": 1000,
+        "avg_ms": 0.002806299824442249,
+        "median_ms": 0.000500003807246685,
+        "p95_ms": 0.0007999988156370819,
+        "p99_ms": 0.0015999976312741637,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.image_copy": {
+        "frames": 1000,
+        "avg_ms": 0.05486279999604449,
+        "median_ms": 0.026649999199435115,
+        "p95_ms": 0.09851000068010762,
+        "p99_ms": 0.11161699847434646,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.line_draw": {
+        "frames": 1000,
+        "avg_ms": 0.02432029982446693,
+        "median_ms": 0.010700001439545304,
+        "p95_ms": 0.06390499911503866,
+        "p99_ms": 0.07742300003883427,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.segment_selection": {
+        "frames": 1000,
+        "avg_ms": 0.0012717999125015922,
+        "median_ms": 0.0012000018614344299,
+        "p95_ms": 0.001600004907231778,
+        "p99_ms": 0.0024999972811201587,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix.x_mapping_points": {
+        "frames": 1000,
+        "avg_ms": 0.05294670016155578,
+        "median_ms": 0.019350001821294427,
+        "p95_ms": 0.153125001816079,
+        "p99_ms": 0.19691400048031937,
+        "total_calls": 998,
+        "avg_calls_per_frame": 0.998,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.graph.prefix_static_build": {
+        "frames": 1000,
+        "avg_ms": 0.4374621999813826,
+        "median_ms": 0.4335999983595684,
+        "p95_ms": 0.45302500038815197,
+        "p99_ms": 0.5002450026222504,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.pillow.Image.new": {
+        "frames": 1000,
+        "avg_ms": 0.004229599901009351,
+        "median_ms": 0.0037999998312443495,
+        "p95_ms": 0.004599998646881431,
+        "p99_ms": 0.0073069974314421355,
+        "total_calls": 1002,
+        "avg_calls_per_frame": 1.002,
+        "avg_pixels_per_frame": 475.08,
+        "p95_pixels_per_frame": 56.0
+      },
+      "indicator.fit_heart_rate_text.pillow.ImageDraw": {
+        "frames": 1000,
+        "avg_ms": 0.013858699778211303,
+        "median_ms": 0.013499993656296283,
+        "p95_ms": 0.016305000463034954,
+        "p99_ms": 0.024206002271967002,
+        "total_calls": 4000,
+        "avg_calls_per_frame": 4.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.pillow.ImageDraw primitives": {
+        "frames": 1000,
+        "avg_ms": 0.16673290111066308,
+        "median_ms": 0.12424998931237496,
+        "p95_ms": 0.29940000968053937,
+        "p99_ms": 0.3206109892198583,
+        "total_calls": 95797,
+        "avg_calls_per_frame": 95.797,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.pillow.copy": {
+        "frames": 1000,
+        "avg_ms": 0.09440769979846664,
+        "median_ms": 0.04739999712910503,
+        "p95_ms": 0.1718050054478226,
+        "p99_ms": 0.22882200319145338,
+        "total_calls": 2000,
+        "avg_calls_per_frame": 2.0,
+        "avg_pixels_per_frame": 286677.696,
+        "p95_pixels_per_frame": 286656.0
+      },
+      "indicator.fit_heart_rate_text.pillow.crop": {
+        "frames": 1000,
+        "avg_ms": 0.005019299962441437,
+        "median_ms": 0.004900000931229442,
+        "p95_ms": 0.00549999822396785,
+        "p99_ms": 0.007001995109021662,
+        "total_calls": 999,
+        "avg_calls_per_frame": 0.999,
+        "avg_pixels_per_frame": 55.944,
+        "p95_pixels_per_frame": 56.0
+      },
+      "indicator.fit_heart_rate_text.pillow.font cache lookup": {
+        "frames": 1000,
+        "avg_ms": 0.000596299949393142,
+        "median_ms": 0.000500003807246685,
+        "p95_ms": 0.0011999949492746964,
+        "p99_ms": 0.002402003665338268,
+        "total_calls": 1000,
+        "avg_calls_per_frame": 1.0,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.pillow.paste": {
+        "frames": 1000,
+        "avg_ms": 0.4313484004014754,
+        "median_ms": 0.42765000398503616,
+        "p95_ms": 0.44590499710466247,
+        "p99_ms": 0.48101500200573344,
+        "total_calls": 2998,
+        "avg_calls_per_frame": 2.998,
+        "avg_pixels_per_frame": 462219.648,
+        "p95_pixels_per_frame": 462528.0
+      },
+      "indicator.fit_heart_rate_text.pillow.text drawing": {
+        "frames": 1000,
+        "avg_ms": 0.10781739998492412,
+        "median_ms": 0.10309999925084412,
+        "p95_ms": 0.13510499557014555,
+        "p99_ms": 0.23426000072504388,
+        "total_calls": 1015,
+        "avg_calls_per_frame": 1.015,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      },
+      "indicator.fit_heart_rate_text.pillow.textbbox/getbbox": {
+        "frames": 1000,
+        "avg_ms": 0.03827419991284842,
+        "median_ms": 0.036749999708263204,
+        "p95_ms": 0.04749999825435225,
+        "p99_ms": 0.06001199850288685,
+        "total_calls": 2056,
+        "avg_calls_per_frame": 2.056,
+        "avg_pixels_per_frame": 0.0,
+        "p95_pixels_per_frame": 0.0
+      }
+    }
+  }
+}

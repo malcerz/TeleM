@@ -194,8 +194,201 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
         h -= 1
     return min_x, min_y, max(2, w), max(2, h)
 
+def _numeric_sample_values(samples: Any) -> list[float]:
+    values: list[float] = []
+    for sample in samples or []:
+        raw = sample[1] if isinstance(sample, (tuple, list)) and len(sample) >= 2 else sample
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            values.append(float(raw))
+    return values
+
+
+def build_text_bbox_context(
+    layout: dict[str, Any],
+    *,
+    fit_data: dict[str, list] | None = None,
+    speed_samples: list | None = None,
+    track_samples: list | None = None,
+    alt_samples: list | None = None,
+    iso_samples: list | None = None,
+    exposure_samples: list | None = None,
+    temperature_samples: list | None = None,
+    gpx_speed_samples: list | None = None,
+    gpx_track_samples: list | None = None,
+    gpx_alt_samples: list | None = None,
+    gpx_power_samples: list | None = None,
+    gpx_atemp_samples: list | None = None,
+    gpx_hr_samples: list | None = None,
+    gpx_cad_samples: list | None = None,
+) -> dict[str, Any]:
+    """Build one-shot text geometry candidates from the selected source data.
+
+    This is deliberately a planning helper: it does not change telemetry
+    resolution or presentation semantics.  Values are only used to enumerate
+    the maximum string extents that the existing text renderer must support.
+    """
+    fit = fit_data or {}
+    source_samples = {
+        "gpmf": {
+            "speed": speed_samples, "track": track_samples, "alt": alt_samples,
+            "dist": track_samples, "iso": iso_samples, "exposure": exposure_samples,
+            "temperature": temperature_samples,
+        },
+        "gpx": {
+            "speed": gpx_speed_samples, "track": gpx_track_samples, "alt": gpx_alt_samples,
+            "dist": gpx_track_samples, "power": gpx_power_samples, "atemp": gpx_atemp_samples,
+            "hr": gpx_hr_samples, "cad": gpx_cad_samples,
+        },
+    }
+    fit_aliases = {
+        "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
+        "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
+        "battery": ("battery", "battery_soc"),
+    }
+
+    def values_for(key: str, cfg: dict[str, Any]) -> list[float]:
+        source = str(cfg.get("source", "gpmf")).lower()
+        if key.startswith("fit_") and key.endswith("_text"):
+            field = key[4:-5]
+            names = fit_aliases.get(field, (field,))
+            for name in names:
+                values = _numeric_sample_values(fit.get(name))
+                if values:
+                    return values
+            return []
+        field_map = {
+            "speed_text": "speed", "dist_text": "dist", "alt_text": "alt",
+            "iso_text": "iso", "exposure_text": "exposure", "temp_text": "temperature",
+            "power_text": "power", "atemp_text": "atemp", "hr_text": "hr",
+            "cad_text": "cad", "battery_text": "battery",
+        }
+        field = field_map.get(key)
+        if field is None:
+            return []
+        if source == "fit":
+            names = fit_aliases.get(field, (field,))
+            for name in names:
+                values = _numeric_sample_values(fit.get(name))
+                if values:
+                    return values
+            return []
+        return _numeric_sample_values((source_samples.get(source) or {}).get(field))
+
+    unit_hints = {
+        "speed": "km/h", "enhanced_speed": "km/h", "distance": "km",
+        "altitude": "m", "heart_rate": "BPM", "cadence": "rpm",
+        "power": "W", "temperature": "°C",
+    }
+    candidates: dict[str, dict[str, Any]] = {}
+    phantom_keys: set[str] = set()
+    for key, cfg in layout.get("indicators", {}).items():
+        if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+            continue
+        form = cfg.get("form", "text")
+        if form != "text":
+            continue
+        values = values_for(key, cfg)
+        if key.startswith("fit_") and key.endswith("_text") and not values:
+            phantom_keys.add(key)
+        if key in {"iso_text", "exposure_text", "temp_text", "speed_text", "dist_text", "alt_text",
+                   "power_text", "atemp_text", "hr_text", "cad_text", "battery_text"} and not values:
+            source = str(cfg.get("source", "gpmf")).lower()
+            if source in {"fit", "gpx", "gpmf"}:
+                phantom_keys.add(key)
+
+        field = key[4:-5] if key.startswith("fit_") and key.endswith("_text") else key
+        decimals_default = 0 if key in {"iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text"} or key.startswith("fit_") else 1
+        decimals = int(cfg.get("decimals", decimals_default))
+        numbers = list(values)
+        if "min_val" in cfg:
+            try:
+                numbers.extend((float(cfg["min_val"]), float(cfg["max_val"])))
+            except (TypeError, ValueError):
+                pass
+        if numbers:
+            numbers.extend((min(numbers), max(numbers), 0.0))
+        formatted: set[str] = set()
+        for value in numbers:
+            if key == "exposure_text":
+                value_text = f"1/{int(value)}" if value and int(value) > 0 else ""
+            else:
+                value_text = f"{value:.{decimals}f}"
+            if cfg.get("show_units", True):
+                unit = cfg.get("unit") or unit_hints.get(field, "")
+                if key in {"temp_text", "atemp_text"}:
+                    value_text = f"{value_text}°C"
+                elif key == "power_text":
+                    value_text = f"{value_text}W"
+                elif key == "hr_text":
+                    value_text = f"{value_text} BPM"
+                elif key == "cad_text":
+                    value_text = f"{value_text} RPM"
+                elif key == "battery_text":
+                    value_text = f"{value_text}%"
+                elif key != "iso_text" and unit:
+                    value_text = f"{value_text} {unit}"
+            formatted.add(value_text)
+        if not formatted:
+            formatted.add("")
+        candidates[key] = {"formatted_values": sorted(formatted), "phantom": key in phantom_keys}
+    return {"text_candidates": candidates, "phantom_keys": phantom_keys}
+
+
+def _precise_text_box(
+    layout: dict[str, Any], key: str, cfg: dict[str, Any], canvas_w: int, canvas_h: int,
+    text_candidates: dict[str, Any] | None, font_path: str,
+) -> tuple[int, int, int, int] | None:
+    """Measure candidate strings with the existing renderer, once per plan."""
+    if key == "time_block":
+        from src.indicators.time_block import render_time_block
+        images = []
+        for date_text in ("0000-00-00", "8888-88-88", "9999-99-99"):
+            for time_text in ("00:00:00", "88:88:88", "99:99:99"):
+                image, _, _ = render_time_block(canvas_w, canvas_h, layout, font_path, date_text, time_text)
+                if image is not None:
+                    images.append(image)
+        if not images:
+            return None
+        width, height = max(i.width for i in images), max(i.height for i in images)
+        rotation = int(cfg.get("rotation", 0)) % 360
+        if rotation in (90, 270):
+            width, height = height, width
+        px = int(round((cfg.get("x", 0.0) / 100.0) * canvas_w)) if cfg.get("x", 0.0) <= 100.0 else int(round(cfg.get("x", 0.0)))
+        py = int(round((cfg.get("y", 0.0) / 100.0) * canvas_h)) if cfg.get("y", 0.0) <= 100.0 else int(round(cfg.get("y", 0.0)))
+        margin = 2
+        return max(0, px - margin), max(0, py - margin), width + 2 * margin, height + 2 * margin
+
+    from src.indicators.dispatcher import render_value_indicator
+
+    candidates = (text_candidates or {}).get(key, {}).get("formatted_values", [""])
+    unit = cfg.get("unit", "")
+    label = cfg.get("label", key)
+    widths: list[int] = []
+    heights: list[int] = []
+    for formatted in candidates:
+        image, _, _, _ = render_value_indicator(
+            canvas_w, canvas_h, layout, font_path, key, 0.0, unit, label,
+            cfg_override=cfg, formatted_val=formatted, supersample=1,
+        )
+        if image is not None:
+            widths.append(image.width)
+            heights.append(image.height)
+    if not widths:
+        return None
+    margin = 2
+    px = int(round((cfg.get("x", 0.0) / 100.0) * canvas_w)) if cfg.get("x", 0.0) <= 100.0 else int(round(cfg.get("x", 0.0)))
+    py = int(round((cfg.get("y", 0.0) / 100.0) * canvas_h)) if cfg.get("y", 0.0) <= 100.0 else int(round(cfg.get("y", 0.0)))
+    rotation = int(cfg.get("rotation", 0)) % 360
+    width, height = max(widths), max(heights)
+    if rotation in (90, 270):
+        width, height = height, width
+    return max(0, px - margin), max(0, py - margin), width + 2 * margin, height + 2 * margin
+
+
 def get_layout_hud_regions(
-    layout: dict[str, Any], canvas_w: int, canvas_h: int, max_regions: int = 3, padding: int = 4
+    layout: dict[str, Any], canvas_w: int, canvas_h: int, max_regions: int = 3, padding: int = 4,
+    *, text_candidates: dict[str, Any] | None = None, phantom_keys: set[str] | None = None,
+    font_path: str = "",
 ) -> tuple[int, int, list[tuple[int, int, int, int, int, int]]]:
     """Compute compact multi-region atlas bounds for layout with exact geometry.
 
@@ -216,6 +409,8 @@ def get_layout_hud_regions(
     boxes = []
 
     for key, cfg in enabled_indicators.items():
+        if key in (phantom_keys or set()):
+            continue
         lx = cfg.get("x", 0.0)
         ly = cfg.get("y", 0.0)
         px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
@@ -223,7 +418,13 @@ def get_layout_hud_regions(
         rot = int(cfg.get("rotation", 0)) % 360
 
         form = cfg.get("form", "text")
-        if form == "gauge":
+        if form == "text" and text_candidates is not None:
+            precise = _precise_text_box(layout, key, cfg, canvas_w, canvas_h, text_candidates, font_path)
+            if precise is None:
+                continue
+            x1, y1, w_precise, h_precise = precise
+            x2, y2 = x1 + w_precise, y1 + h_precise
+        elif form == "gauge":
             sz = cfg.get("size", 0.1)
             size_px = int(round(sz * min_dim)) if sz <= 1.0 else int(round((sz / 100.0) * min_dim))
             radius = int(size_px * 1.35)

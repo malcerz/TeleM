@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import os
 import queue
+import copy
 import subprocess
 import threading
 import time
@@ -21,6 +22,7 @@ from src.ffmpeg.detection import detect_gpu_decoder
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
+    build_text_bbox_context,
     get_layout_hud_bbox,
     get_layout_hud_regions,
     is_nv_rot180_cuda,
@@ -32,6 +34,35 @@ from src.ffmpeg.shared_memory import (
 )
 from src.ffmpeg.frame_renderer import render_frame_bytes_job
 from src.benchmark import BenchmarkTracker
+from src.ffmpeg.pipeline_audit import PipelineAuditRecorder, env_enabled
+
+
+# ETAP 5B.6: the production layout with valid FIT battery/solar fields needs
+# five natural HUD clusters to stay below the existing 70% atlas fallback.
+# Keep the previous four-region geometry available through benchmark/audit
+# overrides; the transport threshold itself remains unchanged.
+NVIDIA_HUD_MAX_REGIONS = 5
+NVIDIA_HUD_GRID_PX = 16
+
+
+def _snap_nvidia_hud_layout(layout: dict[str, Any], canvas_w: int, canvas_h: int, grid_px: int) -> dict[str, Any]:
+    """Return a runtime-only NVIDIA layout with indicator anchors snapped to a safe grid."""
+    snapped = copy.deepcopy(layout)
+    for cfg in snapped.get("indicators", {}).values():
+        if not cfg or not cfg.get("enabled", True):
+            continue
+        for axis, dimension in (("x", canvas_w), ("y", canvas_h)):
+            value = cfg.get(axis)
+            if not isinstance(value, (int, float)):
+                continue
+            is_percent = value <= 100.0
+            logical_px = (value / 100.0) * dimension if is_percent else value
+            snapped_px = round(logical_px / grid_px) * grid_px
+            if abs(snapped_px - logical_px) > grid_px:
+                continue
+            snapped_px = max(0, min(dimension, snapped_px))
+            cfg[axis] = (snapped_px / dimension) * 100.0 if is_percent else snapped_px
+    return snapped
 
 
 def _pipe_writer_thread(
@@ -40,6 +71,7 @@ def _pipe_writer_thread(
     done_event: threading.Event,
     shm_pool: SharedFramePool | None = None,
     writer_stats: dict[str, Any] | None = None,
+    audit: PipelineAuditRecorder | None = None,
 ) -> None:
     """Background thread that drains frame bytes to FFmpeg stdin pipe.
 
@@ -47,22 +79,101 @@ def _pipe_writer_thread(
     Terminates when done_event is set and queue is empty, or on None sentinel.
     """
     bt = BenchmarkTracker.get_instance()
+    if audit is None:
+        # Production hot path: no audit timestamps, qsize sampling, histogram
+        # updates, or diagnostic locks.  The writer receives the SHM memoryview
+        # and performs one direct BufferedWriter.write per frame.
+        try:
+            while True:
+                try:
+                    item = write_queue.get(timeout=0.5)
+                except queue.Empty:
+                    if done_event.is_set():
+                        break
+                    continue
+                if item is None:
+                    break
+                bt.start_timer("ffmpeg_write")
+                try:
+                    if isinstance(item, tuple):
+                        slot, memview = item[:2]
+                        try:
+                            stdin_buffer.write(memview)
+                        finally:
+                            try:
+                                memview.release()
+                            except Exception:
+                                pass
+                            if shm_pool is not None:
+                                shm_pool.release(slot)
+                    else:
+                        stdin_buffer.write(item)
+                finally:
+                    bt.stop_timer("ffmpeg_write")
+                    if writer_stats is not None:
+                        now = time.perf_counter()
+                        if writer_stats["first_frame_time"] is None:
+                            writer_stats["first_frame_time"] = now
+                        writer_stats["last_frame_time"] = now
+                        writer_stats["frames_written"] += 1
+        except (BrokenPipeError, OSError):
+            pass
+        return
+
+    if writer_stats is not None:
+        writer_stats["stream_type"] = type(stdin_buffer).__name__
+        writer_stats["stream_module"] = type(stdin_buffer).__module__
+        writer_stats["thread_started_ns"] = time.perf_counter_ns()
+
     try:
         while True:
+            get_started_ns = time.perf_counter_ns()
+            queue_was_empty = write_queue.empty()
             try:
                 item = write_queue.get(timeout=0.5)
             except queue.Empty:
+                get_finished_ns = time.perf_counter_ns()
+                if writer_stats is not None and queue_was_empty:
+                    writer_stats["idle_wait_ns"] = writer_stats.get("idle_wait_ns", 0) + get_finished_ns - get_started_ns
                 if done_event.is_set():
                     break
                 continue
+            get_finished_ns = time.perf_counter_ns()
+            if writer_stats is not None and queue_was_empty:
+                writer_stats["idle_wait_ns"] = writer_stats.get("idle_wait_ns", 0) + get_finished_ns - get_started_ns
             if item is None:  # sentinel
                 break
+            queue_depth = write_queue.qsize()
             bt.start_timer("ffmpeg_write")
+            write_started_ns = time.perf_counter_ns()
+            write_finished_ns: int | None = None
             try:
                 if isinstance(item, tuple):
-                    slot, memview = item
+                    slot, memview = item[:2]
+                    frame_index = item[2] if len(item) >= 3 else None
+                    if audit is not None and frame_index is not None:
+                        audit.mark(frame_index, "writer_dequeued_ns", get_finished_ns)
+                        audit.mark(frame_index, "writer_queue_depth_after_get", queue_depth)
+                        audit.mark(frame_index, "ffmpeg_write_started_ns", write_started_ns)
                     try:
-                        stdin_buffer.write(memview)
+                        requested_bytes = len(memview)
+                        returned = stdin_buffer.write(memview)
+                        returned_bytes = int(returned) if returned is not None else 0
+                        if audit is not None and frame_index is not None:
+                            audit.mark(frame_index, "writer_requested_bytes", requested_bytes)
+                            audit.mark(frame_index, "writer_returned_bytes", returned_bytes)
+                            audit.mark(frame_index, "writer_write_calls", 1)
+                            if returned_bytes != requested_bytes:
+                                audit.increment("partial_write_observed")
+                        if writer_stats is not None:
+                            writer_stats["requested_bytes"] = writer_stats.get("requested_bytes", 0) + requested_bytes
+                            writer_stats["returned_bytes"] = writer_stats.get("returned_bytes", 0) + returned_bytes
+                            writer_stats["write_calls"] = writer_stats.get("write_calls", 0) + 1
+                            if returned_bytes != requested_bytes:
+                                writer_stats["partial_write_frames"] = writer_stats.get("partial_write_frames", 0) + 1
+                        write_finished_ns = time.perf_counter_ns()
+                        if audit is not None and frame_index is not None:
+                            audit.mark(frame_index, "ffmpeg_write_finished_ns", write_finished_ns)
                     finally:
                         try:
                             memview.release()
@@ -70,9 +181,20 @@ def _pipe_writer_thread(
                             pass
                         if shm_pool is not None:
                             shm_pool.release(slot)
+                        if audit is not None and frame_index is not None:
+                            audit.mark(frame_index, "shm_released_ns", time.perf_counter_ns())
                 else:
+                    frame_index = None
+                    if audit is not None:
+                        audit.increment("raw_bytes_writer_items")
                     stdin_buffer.write(item)
             finally:
+                if write_finished_ns is None:
+                    write_finished_ns = time.perf_counter_ns()
+                if writer_stats is not None:
+                    writer_stats["busy_write_ns"] = writer_stats.get("busy_write_ns", 0) + max(0, write_finished_ns - write_started_ns)
+                if audit is not None and frame_index is not None and audit.frame(frame_index).get("ffmpeg_write_finished_ns") is None:
+                    audit.mark(frame_index, "ffmpeg_write_finished_ns", write_finished_ns)
                 bt.stop_timer("ffmpeg_write")
                 now = time.perf_counter()
                 if writer_stats is not None:
@@ -82,22 +204,37 @@ def _pipe_writer_thread(
                     writer_stats["frames_written"] += 1
     except (BrokenPipeError, OSError):
         pass
+    finally:
+        if writer_stats is not None:
+            writer_stats["thread_finished_ns"] = time.perf_counter_ns()
 
 
 def _report_stream_progress(
     done: int, total: int, start_time: float, progress_cb: Optional[Callable],
     on_render_progress: Optional[Callable] = None,
+    target_fps: Optional[float] = None,
+    audit: PipelineAuditRecorder | None = None,
 ) -> None:
-    """Report streaming progress."""
+    """Report streaming progress and the latest export timestamp for preview."""
     elapsed = time.time() - start_time
     m, s = divmod(int(elapsed), 60)
     h, m = divmod(m, 60)
     fps = done / elapsed if elapsed > 0 else 0
     stats = f"Stream: {done}/{total} | fps: {fps:.1f} | elapse: {h:02d}:{m:02d}:{s:02d}"
     if progress_cb:
+        callback_started = time.perf_counter_ns() if audit is not None else 0
         progress_cb(done, stats)
+        if audit is not None:
+            audit.add_stat("progress_callback", (time.perf_counter_ns() - callback_started) / 1_000_000.0)
     if on_render_progress:
-        on_render_progress(done, total, elapsed, fps, None)
+        hud_state = None
+        if target_fps and target_fps > 0 and done > 0:
+            frame = min(max(0, total - 1), done - 1)
+            hud_state = {"frame": frame, "ts": frame / target_fps}
+        callback_started = time.perf_counter_ns() if audit is not None else 0
+        on_render_progress(done, total, elapsed, fps, hud_state)
+        if audit is not None:
+            audit.add_stat("preview_progress_callback", (time.perf_counter_ns() - callback_started) / 1_000_000.0)
 
 
 def _acquire_shm_slot(
@@ -244,6 +381,9 @@ def stream_overlay_to_ffmpeg(
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     t_prod_start = time.perf_counter()
+    pipeline_audit = PipelineAuditRecorder() if encoder == "nv" and env_enabled() else None
+    if pipeline_audit is not None:
+        pipeline_audit.start(time.perf_counter_ns())
     t_prep_start = t_prod_start
     BenchmarkTracker.get_instance().enable(True)
 
@@ -306,6 +446,17 @@ def stream_overlay_to_ffmpeg(
                 return 0
             print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
 
+    if encoder == "nv" and not is_no_hud:
+        # ETAP 5B.5: keep the persisted/user layout unchanged and snap only the
+        # runtime NVIDIA composition anchors. This is deliberately after the
+        # AMD dispatch so other backends retain their existing geometry.
+        layout = _snap_nvidia_hud_layout(layout, overlay_w, overlay_h, NVIDIA_HUD_GRID_PX)
+        cut_regions = layout.get("cut_regions", [])
+        indicators = layout.get("indicators", {})
+        custom_texts = layout.get("custom_texts", [])
+        enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+        is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
+
     hud_x, hud_y = 0, 0
     stream_w, stream_h = overlay_w, overlay_h
     hud_bbox: tuple[int, int, int, int] | None = None
@@ -331,14 +482,40 @@ def stream_overlay_to_ffmpeg(
                 flush=True,
             )
     elif encoder == "nv" and not is_no_hud:
+        text_bbox_context = build_text_bbox_context(
+            layout,
+            fit_data=fit_data,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+        )
+        phantom_keys = text_bbox_context["phantom_keys"]
+        if phantom_keys:
+            print(f"[NVIDIA] Transport phantom bbox excluded: {sorted(phantom_keys)}", flush=True)
+
         # 1. Global BBox
         bx, by, bw, bh = get_layout_hud_bbox(layout, overlay_w, overlay_h)
         full_area = overlay_w * overlay_h
         global_bbox_area = bw * bh
         global_area_pct = (global_bbox_area / full_area) * 100.0
 
-        # 2. Multi-Region Atlas (up to 3 regions)
-        atlas_w, atlas_h, candidate_regions = get_layout_hud_regions(layout, overlay_w, overlay_h, max_regions=3)
+        # 2. Multi-Region Atlas (ETAP 5B.5: up to 4 regions)
+        atlas_w, atlas_h, candidate_regions = get_layout_hud_regions(
+            layout, overlay_w, overlay_h, max_regions=NVIDIA_HUD_MAX_REGIONS,
+            text_candidates=text_bbox_context["text_candidates"],
+            phantom_keys=phantom_keys,
+            font_path=font_path,
+        )
         atlas_area = atlas_w * atlas_h
         atlas_area_pct = (atlas_area / full_area) * 100.0
 
@@ -364,6 +541,10 @@ def stream_overlay_to_ffmpeg(
             # B. MULTI-REGION ATLAS (at least 30% reduction)
             hud_bbox = None
             hud_regions = candidate_regions
+            layout["_nvidia_direct_region"] = True
+            layout["_nvidia_phantom_keys"] = tuple(sorted(phantom_keys))
+            layout["_nvidia_atlas_size"] = (atlas_w, atlas_h)
+            print("[NVIDIA] HUD producer: DIRECT_REGION", flush=True)
             hud_x, hud_y = 0, 0
             stream_w, stream_h = atlas_w, atlas_h
             slot_mb = (stream_w * stream_h * 4) / (1024 * 1024)
@@ -546,6 +727,13 @@ def stream_overlay_to_ffmpeg(
     if n_workers > 1:
         # Number of SHM slots: enough to keep workers busy + reorder buffer
         MAX_IN_FLIGHT = max(4, n_workers * 2)
+        if pipeline_audit is not None:
+            override = os.environ.get("TELEM_AUDIT_MAX_IN_FLIGHT", "").strip()
+            if override:
+                try:
+                    MAX_IN_FLIGHT = max(1, int(override))
+                except ValueError:
+                    pass
         n_shm_slots = MAX_IN_FLIGHT
         shm_pool = SharedFramePool(n_shm_slots, frame_size)
     else:
@@ -553,12 +741,20 @@ def stream_overlay_to_ffmpeg(
         n_shm_slots = 1
 
     # ── Async pipe writer (background thread) ───────────────────────────
-    writer_stats = {"first_frame_time": None, "last_frame_time": None, "frames_written": 0}
+    writer_stats = {
+        "first_frame_time": None, "last_frame_time": None, "frames_written": 0,
+    }
+    if pipeline_audit is not None:
+        writer_stats.update({
+            "idle_wait_ns": 0, "busy_write_ns": 0,
+            "requested_bytes": 0, "returned_bytes": 0, "write_calls": 0,
+            "partial_write_frames": 0,
+        })
     pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
     pipe_done = threading.Event()
     writer_t = threading.Thread(
         target=_pipe_writer_thread,
-        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool, writer_stats),
+        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool, writer_stats, pipeline_audit),
         daemon=True,
     )
     writer_t.start()
@@ -574,7 +770,7 @@ def stream_overlay_to_ffmpeg(
                 pipe_queue.put(raw_bytes)
                 total_piped += 1
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress)
+                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
@@ -761,10 +957,34 @@ def stream_overlay_to_ffmpeg(
                 next_idx = 0
                 submitted = 0
 
+                def _submit_audited(frame_index: int, slot_index: int):
+                    if pipeline_audit is not None:
+                        pipeline_audit.frame(frame_index)
+                        if pipeline_audit.frame(frame_index).get("frame_scheduled_ns") is None:
+                            pipeline_audit.mark(frame_index, "frame_scheduled_ns", time.perf_counter_ns())
+                    acquired_ns = time.perf_counter_ns()
+                    if pipeline_audit is not None:
+                        pipeline_audit.mark(frame_index, "slot_acquired_ns", acquired_ns)
+                        pipeline_audit.sample_occupancy(
+                            "shm_used", n_shm_slots - shm_pool._free.qsize()
+                        )
+                        pipeline_audit.mark(frame_index, "submit_started_ns", time.perf_counter_ns())
+                    future = ex.submit(
+                        render_frame_shm_job,
+                        (frame_index, slot_index, True) if pipeline_audit is not None else (frame_index, slot_index),
+                    )
+                    if pipeline_audit is not None:
+                        pipeline_audit.mark(frame_index, "job_submitted_ns", time.perf_counter_ns())
+                    return future
+
                 # Fill initial window — acquire SHM slots and submit jobs
                 for _ in range(min(MAX_IN_FLIGHT, total_overlay_frames)):
+                    if pipeline_audit is not None:
+                        pipeline_audit.frame(submitted)
+                        pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
+                        pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
                     slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
-                    pending.add(ex.submit(render_frame_shm_job, (submitted, slot)))
+                    pending.add(_submit_audited(submitted, slot))
                     submitted += 1
 
                 while pending and not (
@@ -773,20 +993,72 @@ def stream_overlay_to_ffmpeg(
                     done, pending = wait(pending, return_when=FIRST_COMPLETED,
                                          timeout=0.1)
                     for fut in done:
-                        idx, slot = fut.result()
+                        future_completed_ns = time.perf_counter_ns()
+                        result = fut.result()
+                        result_observed_ns = time.perf_counter_ns()
+                        if len(result) >= 10:
+                            (
+                                idx, slot, worker_pid, worker_started_ns,
+                                worker_render_started_ns, worker_render_finished_ns,
+                                shm_copy_finished_ns, clear_started_ns,
+                                clear_finished_ns, zero_copy,
+                            ) = result
+                            if pipeline_audit is not None:
+                                pipeline_audit.mark(idx, "worker_clear_started_ns", clear_started_ns)
+                                pipeline_audit.mark(idx, "worker_clear_finished_ns", clear_finished_ns)
+                                pipeline_audit.mark(idx, "worker_zero_copy", bool(zero_copy))
+                            if pipeline_audit is not None:
+                                pipeline_audit.mark(idx, "worker_pid", worker_pid)
+                                pipeline_audit.mark(idx, "worker_started_ns", worker_started_ns)
+                                pipeline_audit.mark(idx, "worker_render_started_ns", worker_render_started_ns)
+                                pipeline_audit.mark(idx, "worker_render_finished_ns", worker_render_finished_ns)
+                                pipeline_audit.mark(idx, "shm_copy_finished_ns", shm_copy_finished_ns)
+                        elif len(result) >= 7:
+                            (
+                                idx, slot, worker_pid, worker_started_ns,
+                                worker_render_started_ns, worker_render_finished_ns,
+                                shm_copy_finished_ns,
+                            ) = result
+                            if pipeline_audit is not None:
+                                pipeline_audit.mark(idx, "worker_pid", worker_pid)
+                                pipeline_audit.mark(idx, "worker_started_ns", worker_started_ns)
+                                pipeline_audit.mark(idx, "worker_render_started_ns", worker_render_started_ns)
+                                pipeline_audit.mark(idx, "worker_render_finished_ns", worker_render_finished_ns)
+                                pipeline_audit.mark(idx, "shm_copy_finished_ns", shm_copy_finished_ns)
+                        else:
+                            idx, slot = result
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "future_completed_ns", future_completed_ns)
+                            pipeline_audit.mark(
+                                idx, "worker_done_ns",
+                                pipeline_audit.frame(idx).get("shm_copy_finished_ns", future_completed_ns),
+                            )
+                            pipeline_audit.mark(idx, "result_observed_ns", result_observed_ns)
                         reorder_buf[idx] = slot
+                        if pipeline_audit is not None:
+                            pipeline_audit.sample_occupancy("in_flight", len(pending) + len(reorder_buf))
 
                     # Drain consecutive frames to pipe writer queue (zero-copy)
                     while next_idx in reorder_buf:
                         slot = reorder_buf.pop(next_idx)
+                        idx = next_idx
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
+                            pipeline_audit.mark(idx, "in_flight_at_ordered", len(pending) + len(reorder_buf) + 1)
+                            pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
+                            pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
                         memview = shm_pool.get_memview(slot)
-                        pipe_queue.put((slot, memview))
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
+                        pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                         total_piped += 1
                         next_idx += 1
                         if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                             _report_stream_progress(
                                 total_piped, total_overlay_frames,
-                                start_time, progress_cb, on_render_progress,
+                                start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
                             )
 
                     # Aggressive top-up: fill ALL available slots in the window
@@ -794,10 +1066,12 @@ def stream_overlay_to_ffmpeg(
                         submitted < total_overlay_frames
                         and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
                     ):
+                        if pipeline_audit is not None:
+                            pipeline_audit.frame(submitted)
+                            pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
+                            pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
                         slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
-                        pending.add(
-                            ex.submit(render_frame_shm_job, (submitted, slot))
-                        )
+                        pending.add(_submit_audited(submitted, slot))
                         submitted += 1
 
                 if cancel_event is not None and cancel_event.is_set():
@@ -808,13 +1082,23 @@ def stream_overlay_to_ffmpeg(
                 # Drain final reorder buffer (zero-copy)
                 while next_idx in reorder_buf:
                     slot = reorder_buf.pop(next_idx)
+                    idx = next_idx
+                    if pipeline_audit is not None:
+                        pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
+                        pipeline_audit.mark(idx, "in_flight_at_ordered", len(reorder_buf) + 1)
+                        pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
+                        pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
                     memview = shm_pool.get_memview(slot)
-                    pipe_queue.put((slot, memview))
+                    if pipeline_audit is not None:
+                        pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
+                    pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
+                    if pipeline_audit is not None:
+                        pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                     total_piped += 1
                     next_idx += 1
                     _report_stream_progress(
                         total_piped, total_overlay_frames,
-                        start_time, progress_cb, on_render_progress,
+                        start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
                     )
 
         # Signal pipe writer to finish and close stdin
@@ -847,7 +1131,7 @@ def stream_overlay_to_ffmpeg(
             try:
                 item = pipe_queue.get_nowait()
                 if isinstance(item, tuple):
-                    _, memview = item
+                    _, memview = item[:2]
                     try:
                         memview.release()
                     except Exception:
@@ -925,6 +1209,54 @@ def stream_overlay_to_ffmpeg(
         print(f"OVERHEAD                : {overhead_pct:.1f} %", flush=True)
         print(f"\nffmpeg_write avg        : {write_avg:.2f} ms", flush=True)
         print(f"ffmpeg_write p95        : {write_p95:.2f} ms\n", flush=True)
+
+    if pipeline_audit is not None:
+        audit_result = pipeline_audit.finalize({
+            "encoder": encoder,
+            "frames": total_overlay_frames,
+            "workers": n_workers,
+            "max_in_flight": MAX_IN_FLIGHT,
+            "shm_slots": n_shm_slots,
+            "frame_size_bytes": frame_size,
+            "stream_size": [stream_w, stream_h],
+            "overlay_size": [overlay_w, overlay_h],
+            "preview": bool(on_render_progress),
+            "hud_mode": "DIRECT_REGION" if hud_regions is not None else ("SINGLE_BBOX" if hud_bbox is not None else "FULL_FRAME"),
+            "pipeline_fps": pipeline_fps,
+            "real_export_fps": real_export_fps,
+            "writer": {
+                "mode": "buffered",
+                "stream_type": writer_stats.get("stream_type"),
+                "stream_module": writer_stats.get("stream_module"),
+                "frames_written": writer_stats.get("frames_written", 0),
+                "requested_bytes": writer_stats.get("requested_bytes", 0),
+                "returned_bytes": writer_stats.get("returned_bytes", 0),
+                "write_calls": writer_stats.get("write_calls", 0),
+                "partial_write_frames": writer_stats.get("partial_write_frames", 0),
+                "idle_wait_ms": writer_stats.get("idle_wait_ns", 0) / 1_000_000.0,
+                "busy_write_ms": writer_stats.get("busy_write_ns", 0) / 1_000_000.0,
+                "thread_active_ms": (
+                    (writer_stats.get("thread_finished_ns", 0) - writer_stats.get("thread_started_ns", 0)) / 1_000_000.0
+                    if writer_stats.get("thread_finished_ns") and writer_stats.get("thread_started_ns") else 0.0
+                ),
+                "idle_percent": (
+                    writer_stats.get("idle_wait_ns", 0)
+                    / max(1, writer_stats.get("thread_finished_ns", 0) - writer_stats.get("thread_started_ns", 0))
+                    * 100.0
+                    if writer_stats.get("thread_finished_ns") and writer_stats.get("thread_started_ns") else 0.0
+                ),
+                "busy_write_percent": (
+                    writer_stats.get("busy_write_ns", 0)
+                    / max(1, writer_stats.get("thread_finished_ns", 0) - writer_stats.get("thread_started_ns", 0))
+                    * 100.0
+                    if writer_stats.get("thread_finished_ns") and writer_stats.get("thread_started_ns") else 0.0
+                ),
+            },
+        })
+        print(
+            f"[5F AUDIT] lifecycle={audit_result['artifacts']['json']} "
+            f"csv={audit_result['artifacts']['csv']}", flush=True,
+        )
 
     return total_piped
 

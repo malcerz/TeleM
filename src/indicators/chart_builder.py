@@ -7,7 +7,11 @@ from __future__ import annotations
 
 from bisect import bisect_right, bisect_left
 from datetime import datetime, timezone
+from itertools import count
 from typing import Any, Callable
+
+
+_CHART_HISTORY_CACHE_TOKENS = count()
 
 
 class ChartHistory(list[float]):
@@ -18,7 +22,10 @@ class ChartHistory(list[float]):
     scanning or copying the complete source series on every frame.
     """
 
-    __slots__ = ("timestamps", "chart_start_dt", "chart_end_dt", "time_scope")
+    __slots__ = (
+        "timestamps", "chart_start_dt", "chart_end_dt", "time_scope",
+        "_chart_cache_token",
+    )
 
     def __init__(
         self,
@@ -33,6 +40,11 @@ class ChartHistory(list[float]):
         self.chart_start_dt = chart_start_dt if chart_start_dt is not None else (timestamps[0] if timestamps else None)
         self.chart_end_dt = chart_end_dt if chart_end_dt is not None else (timestamps[-1] if timestamps else None)
         self.time_scope = time_scope
+        # ``id(self)`` is not a safe immutable-history identity: Python may
+        # reuse an object ID after a temporary prefix view is released.  A
+        # monotonic token keeps worker-local chart caches isolated without
+        # hashing or copying the complete history on every frame.
+        self._chart_cache_token = next(_CHART_HISTORY_CACHE_TOKENS)
 
 
 def clip_chart_data(
@@ -202,4 +214,3 @@ def build_chart_data(
             else:
                 chart_data[ind_key] = ChartHistory([], [], chart_start_dt=chart_start, chart_end_dt=chart_end, time_scope=scope)
     return chart_data
-

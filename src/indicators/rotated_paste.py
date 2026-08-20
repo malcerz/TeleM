@@ -42,6 +42,7 @@ def set_composite_mode(mode: str) -> None:
 # Per-widget minimum alpha, cached once (widget alpha structure is static per
 # indicator type+size). Used to decide the transparent-destination paste path.
 _WIDGET_ALPHA_MIN: dict[tuple, int] = {}
+_WIDGET_CLEAN_TRANSPARENCY: dict[tuple, bool] = {}
 
 
 def _alpha_min(overlay: Image.Image, cache_key) -> int:
@@ -96,6 +97,23 @@ def _clean_transparency(overlay: Image.Image) -> bool:
         return False
 
 
+def _plain_paste_safe(overlay: Image.Image, cache_key) -> bool:
+    """Whether plain paste preserves a ready RGBA raster on empty RGBA ROI.
+
+    The result is cached by widget identity/size.  This is deliberately not a
+    per-frame pixel scan: chart rasters have stable transparent-pixel encoding,
+    while their visible chart contents change every frame.
+    """
+    if _alpha_min(overlay, cache_key) > 0:
+        return True
+    if cache_key is None:
+        return False
+    key = (cache_key, overlay.width, overlay.height)
+    if key not in _WIDGET_CLEAN_TRANSPARENCY:
+        _WIDGET_CLEAN_TRANSPARENCY[key] = _clean_transparency(overlay)
+    return _WIDGET_CLEAN_TRANSPARENCY[key]
+
+
 def composite_final(
     base_img: Image.Image,
     overlay: Image.Image,
@@ -103,6 +121,7 @@ def composite_final(
     y: int,
     prior_bboxes=None,
     cache_key=None,
+    destination_proven_empty: bool = False,
 ) -> None:
     """Composite the ready RGBA *overlay* onto *base_img* at (x, y) (top-left).
 
@@ -110,6 +129,24 @@ def composite_final(
     """
     if _COMPOSITE_MODE != "OPTIMIZED":
         base_img.alpha_composite(overlay, (x, y))
+        return
+
+    # ETAP 5E.5: a planner may explicitly prove that this complete destination
+    # rectangle is empty in a freshly allocated transparent atlas.  With the
+    # cached source-safety proof, plain paste copies the ready RGBA bytes
+    # exactly; unlike ``paste(src, xy, src)`` it does not blend alpha twice.
+    # Rectangle overlap remains a conservative fallback to alpha compositing.
+    if (
+        destination_proven_empty
+        and prior_bboxes is not None
+        and x >= 0
+        and y >= 0
+        and x + overlay.width <= base_img.width
+        and y + overlay.height <= base_img.height
+        and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes)
+        and _plain_paste_safe(overlay, cache_key)
+    ):
+        base_img.paste(overlay, (x, y))
         return
 
     bbox = overlay.getbbox()
@@ -167,6 +204,7 @@ def rotated_paste(
     rotation: int,
     prior_bboxes=None,
     cache_key=None,
+    destination_proven_empty: bool = False,
 ) -> None:
     """Paste *overlay* onto *base_img* centred at (center_x, center_y) with rotation.
     Modifies base_img in place."""
@@ -179,4 +217,7 @@ def rotated_paste(
         overlay = overlay.transpose(Image.Transpose.ROTATE_270)
     x = int(round(center_x - overlay.width / 2))
     y = int(round(center_y - overlay.height / 2))
-    composite_final(base_img, overlay, x, y, prior_bboxes, cache_key)
+    composite_final(
+        base_img, overlay, x, y, prior_bboxes, cache_key,
+        destination_proven_empty=destination_proven_empty,
+    )

@@ -1,0 +1,12 @@
+{
+  "label": "sweep_workers2",
+  "frames": 1200,
+  "workers": 2,
+  "max_in_flight": 4,
+  "preview": "on",
+  "wall_s": 17.682195699999284,
+  "real_export_fps": 67.86487494876265,
+  "preview_updates": 24,
+  "preview_fps": 1.3572974989752529,
+  "audit_json": "H:\\_Dev\\TeleM\\scratch\\etap5f_sweep_workers2.json"
+}

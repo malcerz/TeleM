@@ -1,0 +1,178 @@
+{
+  "buffered": {
+    "runs": [
+      {
+        "mode": "buffered",
+        "run": 1,
+        "frames": 5400,
+        "elapsed_s": 18.027029799995944,
+        "fps": 299.55017880989,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "buffered",
+        "run": 2,
+        "frames": 5400,
+        "elapsed_s": 17.908870799998112,
+        "fps": 301.5265485080483,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "buffered",
+        "run": 3,
+        "frames": 5400,
+        "elapsed_s": 17.783978300001763,
+        "fps": 303.6440952022228,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      }
+    ],
+    "median_fps": 301.5265485080483
+  },
+  "raw": {
+    "runs": [
+      {
+        "mode": "raw",
+        "run": 1,
+        "frames": 5400,
+        "elapsed_s": 17.882445000002917,
+        "fps": 301.972129650007,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "raw",
+        "run": 2,
+        "frames": 5400,
+        "elapsed_s": 17.702038100003847,
+        "fps": 305.0496202467684,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "raw",
+        "run": 3,
+        "frames": 5400,
+        "elapsed_s": 17.811655599994992,
+        "fps": 303.17226659163106,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      }
+    ],
+    "median_fps": 303.17226659163106
+  },
+  "os_write": {
+    "runs": [
+      {
+        "mode": "os_write",
+        "run": 1,
+        "frames": 5400,
+        "elapsed_s": 17.702085600001737,
+        "fps": 305.0488017072672,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "os_write",
+        "run": 2,
+        "frames": 5400,
+        "elapsed_s": 17.888075399998343,
+        "fps": 301.87708175696196,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "os_write",
+        "run": 3,
+        "frames": 5400,
+        "elapsed_s": 17.60068400000455,
+        "fps": 306.8062582112493,
+        "buffer_type": "BufferedWriter",
+        "bufsize": -1,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      }
+    ],
+    "median_fps": 305.0488017072672
+  },
+  "unbuffered": {
+    "runs": [
+      {
+        "mode": "unbuffered",
+        "run": 1,
+        "frames": 5400,
+        "elapsed_s": 17.886495599996124,
+        "fps": 301.9037446329716,
+        "buffer_type": "FileIO",
+        "bufsize": 0,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "unbuffered",
+        "run": 2,
+        "frames": 5400,
+        "elapsed_s": 17.853519200005394,
+        "fps": 302.4613769143267,
+        "buffer_type": "FileIO",
+        "bufsize": 0,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      },
+      {
+        "mode": "unbuffered",
+        "run": 3,
+        "frames": 5400,
+        "elapsed_s": 17.817294799999218,
+        "fps": 303.0763121234452,
+        "buffer_type": "FileIO",
+        "bufsize": 0,
+        "requested_bytes": 31272480000,
+        "returned_bytes": 31272480000,
+        "write_calls": 5400,
+        "partial": false
+      }
+    ],
+    "median_fps": 302.4613769143267
+  }
+}

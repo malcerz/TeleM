@@ -1,0 +1,281 @@
+{
+  "charts": {
+    "fit_cadence_text": {
+      "raster_analysis": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          1,
+          0,
+          577,
+          229
+        ],
+        "alpha_bbox": [
+          1,
+          0,
+          577,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8555417185554172,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 54,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "raster_analysis_first": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          1,
+          0,
+          578,
+          229
+        ],
+        "alpha_bbox": [
+          1,
+          0,
+          578,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8570270340390204,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 54,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "raster_analysis_last": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          1,
+          0,
+          578,
+          229
+        ],
+        "alpha_bbox": [
+          1,
+          0,
+          578,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8570270340390204,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 54,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "transparent_roi_parity": {
+        "rotation_0": {
+          "max_diff": 9,
+          "different_pixels": 54,
+          "min_different_pixels": 54,
+          "samples": 96
+        },
+        "rotation_180": {
+          "max_diff": 9,
+          "different_pixels": 54,
+          "min_different_pixels": 54,
+          "samples": 96
+        },
+        "rotation_90": {
+          "max_diff": 9,
+          "different_pixels": 54,
+          "min_different_pixels": 54,
+          "samples": 96
+        },
+        "rotation_270": {
+          "max_diff": 9,
+          "different_pixels": 54,
+          "min_different_pixels": 54,
+          "samples": 96
+        }
+      },
+      "benchmark_2000": {
+        "current_rotated_paste": {
+          "avg_ms": 0.3627760500457953,
+          "median_ms": 0.3577499956008978,
+          "p95_ms": 0.4546000054688193
+        },
+        "deployed_transparent_roi_fast_paste": {
+          "avg_ms": 0.34391379990120186,
+          "median_ms": 0.33229999826289713,
+          "p95_ms": 0.4450999986147508
+        },
+        "full_plain_paste": {
+          "avg_ms": 0.053268200037564384,
+          "median_ms": 0.03834999733953737,
+          "p95_ms": 0.0973999995039776
+        },
+        "cropped_plain_paste": {
+          "avg_ms": 0.09331664988712873,
+          "median_ms": 0.06750000102329068,
+          "p95_ms": 0.16109999705804512
+        },
+        "alpha_composite_reference": {
+          "avg_ms": 0.32594775015240884,
+          "median_ms": 0.3212999945390038,
+          "p95_ms": 0.42270000267308205
+        }
+      }
+    },
+    "fit_heart_rate_text": {
+      "raster_analysis": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          2,
+          0,
+          579,
+          229
+        ],
+        "alpha_bbox": [
+          2,
+          0,
+          579,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8570270340390204,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 53,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "raster_analysis_first": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          2,
+          0,
+          577,
+          229
+        ],
+        "alpha_bbox": [
+          2,
+          0,
+          577,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8540564030718141,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 53,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "raster_analysis_last": {
+        "size": [
+          584,
+          264
+        ],
+        "getbbox": [
+          2,
+          0,
+          577,
+          229
+        ],
+        "alpha_bbox": [
+          2,
+          0,
+          577,
+          229
+        ],
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "active_bbox_area_ratio": 0.8540564030718141,
+        "alpha_has_transparent_pixels": true,
+        "transparent_pixels_with_nonzero_rgb": 53,
+        "max_nonzero_rgb_under_alpha_zero": 9
+      },
+      "transparent_roi_parity": {
+        "rotation_0": {
+          "max_diff": 9,
+          "different_pixels": 53,
+          "min_different_pixels": 53,
+          "samples": 96
+        },
+        "rotation_180": {
+          "max_diff": 9,
+          "different_pixels": 53,
+          "min_different_pixels": 53,
+          "samples": 96
+        },
+        "rotation_90": {
+          "max_diff": 9,
+          "different_pixels": 53,
+          "min_different_pixels": 53,
+          "samples": 96
+        },
+        "rotation_270": {
+          "max_diff": 9,
+          "different_pixels": 53,
+          "min_different_pixels": 53,
+          "samples": 96
+        }
+      },
+      "benchmark_2000": {
+        "current_rotated_paste": {
+          "avg_ms": 0.2974227000158862,
+          "median_ms": 0.28810000367229804,
+          "p95_ms": 0.36580000596586615
+        },
+        "deployed_transparent_roi_fast_paste": {
+          "avg_ms": 0.27351145013744826,
+          "median_ms": 0.2582000015536323,
+          "p95_ms": 0.3528000015649013
+        },
+        "full_plain_paste": {
+          "avg_ms": 0.04507749997355859,
+          "median_ms": 0.032000003557186574,
+          "p95_ms": 0.0813999940874055
+        },
+        "cropped_plain_paste": {
+          "avg_ms": 0.09414265006125788,
+          "median_ms": 0.07050000567687675,
+          "p95_ms": 0.1627000019652769
+        },
+        "alpha_composite_reference": {
+          "avg_ms": 0.2602437499081134,
+          "median_ms": 0.24494999524904415,
+          "p95_ms": 0.3391999998711981
+        }
+      }
+    }
+  },
+  "static_geometry": {
+    "cadence": [
+      92,
+      796,
+      584,
+      264
+    ],
+    "gauge": [
+      766,
+      814,
+      324,
+      324
+    ],
+    "heart_rate": [
+      1244,
+      796,
+      584,
+      264
+    ],
+    "cadence_gauge_intersects": false,
+    "cadence_hr_intersects": false,
+    "gauge_hr_intersects": false
+  }
+}

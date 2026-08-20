@@ -92,10 +92,19 @@ def compose_overlay(
     gpu_capture_keys: Optional[set[str]] = None,
     gpu_capture: Optional[dict[str, dict[str, Any]]] = None,
     split_chart_keys: Optional[set[str]] = None,
+    target_image: Optional[Image.Image] = None,
+    coordinate_origin: tuple[int, int] = (0, 0),
+    render_keys: Optional[set[str]] = None,
+    destination_proven_empty: bool = False,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators."""
     profiler = get_overlay_profiler()
-    if reuse_canvas:
+    origin_x, origin_y = coordinate_origin
+    if target_image is not None:
+        img = target_image
+        prev_bboxes = None
+        canvas_state = None
+    elif reuse_canvas:
         c_type = "above" if (reuse_canvas == "above" or layout.get("_canvas_type") == "above") else "below"
         img, prev_bboxes, canvas_state = _get_reusable_canvas(canvas_w, canvas_h, canvas_type=c_type)
         if prev_bboxes:
@@ -130,8 +139,19 @@ def compose_overlay(
     if _bboxes is None:
         _bboxes = {}
 
+    def _paste_prior_bboxes() -> list[tuple[int, int, int, int]]:
+        """Return prior geometry in the coordinate system of ``img``."""
+        if target_image is None:
+            return list(_bboxes.values())
+        return [
+            (bx - origin_x, by - origin_y, bw, bh)
+            for bx, by, bw, bh in _bboxes.values()
+        ]
+
     # Time block
-    if "time_block" in layout.get("indicators", {}):
+    if "time_block" in layout.get("indicators", {}) and (
+        render_keys is None or "time_block" in render_keys
+    ):
         time_block_started = time.perf_counter()
         with indicator_scope("time_block"):
             with profiler.measure("indicator.time_block.render"):
@@ -146,8 +166,8 @@ def compose_overlay(
             with indicator_scope("time_block"):
                 with profiler.measure("indicator.time_block.paste_composite"):
                     rotated_paste(
-                        img, tb, cx, cy, tb_rotation,
-                        prior_bboxes=list(_bboxes.values()), cache_key="time_block",
+                        img, tb, cx - origin_x, cy - origin_y, tb_rotation,
+                        prior_bboxes=_paste_prior_bboxes(), cache_key="time_block",
                     )
             if tb_rotation in (90, 270):
                 _bboxes["time_block"] = (
@@ -176,7 +196,9 @@ def compose_overlay(
         )
 
     # Time display (multi-line info block)
-    if "time_display" in layout.get("indicators", {}):
+    if "time_display" in layout.get("indicators", {}) and (
+        render_keys is None or "time_display" in render_keys
+    ):
         with indicator_scope("time_display"):
             with profiler.measure("indicator.time_display.render"):
                 td, tdx, tdy = render_time_display(
@@ -190,8 +212,8 @@ def compose_overlay(
             with indicator_scope("time_display"):
                 with profiler.measure("indicator.time_display.paste_composite"):
                     rotated_paste(
-                        img, td, cx, cy, td_rotation,
-                        prior_bboxes=list(_bboxes.values()), cache_key="time_display",
+                        img, td, cx - origin_x, cy - origin_y, td_rotation,
+                        prior_bboxes=_paste_prior_bboxes(), cache_key="time_display",
                     )
             if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
@@ -251,6 +273,8 @@ def compose_overlay(
     # Render ALL indicators configured in layout (GPMF, FIT, GPX, Custom)
     for key, ind_cfg in layout.get("indicators", {}).items():
         if key in ("time_block", "time_display"):
+            continue
+        if render_keys is not None and key not in render_keys:
             continue
         if not ind_cfg or not ind_cfg.get("enabled", True):
             continue
@@ -419,8 +443,12 @@ def compose_overlay(
                 with indicator_scope(key):
                     with profiler.measure(f"indicator.{key}.paste_composite"):
                         rotated_paste(
-                            img, res, center_x, center_y, rotation,
-                            prior_bboxes=list(_bboxes.values()), cache_key=key,
+                            img, res, center_x - origin_x, center_y - origin_y, rotation,
+                            prior_bboxes=_paste_prior_bboxes(), cache_key=key,
+                            destination_proven_empty=(
+                                destination_proven_empty
+                                and current_cfg.get("form", "text") == "chart"
+                            ),
                         )
 
                 _bboxes[key] = widget_bbox
@@ -441,11 +469,11 @@ def compose_overlay(
                         ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
                         oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
                         if rotation == 90:
-                            text_x = int(center_x + res.height // 2 + 8 + ox)
-                            text_y = int(center_y - text_h / 2 + oy)
+                            text_x = int(center_x + res.height // 2 + 8 + ox - origin_x)
+                            text_y = int(center_y - text_h / 2 + oy - origin_y)
                         else:
-                            text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox)
-                            text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy)
+                            text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox - origin_x)
+                            text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy - origin_y)
                         text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
                         draw.text(
                             (text_x, text_y),
@@ -476,18 +504,18 @@ def compose_overlay(
                         if rotation == 90:
                             left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
                             left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
-                            draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                            draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
                             if right_text:
                                 right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
                                 right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
-                                draw.text((right_x, right_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                                draw.text((right_x - origin_x, right_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
                         else:
                             left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
                             left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
-                            draw.text((left_x, left_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                            draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
                             if right_text:
                                 right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
-                                draw.text((right_x, left_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+                                draw.text((right_x - origin_x, left_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
                 profiler.record(
                     f"indicator.{key}.annotations",
                     (time.perf_counter() - annotation_started) * 1000.0,
@@ -502,12 +530,14 @@ def compose_overlay(
         int(layout.get("global", {}).get("text_outline", 3)) * min(canvas_w, canvas_h) / 1000
     )))
     for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
+        if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
+            continue
         ct_res, ctx, cty = render_custom_text(canvas_w, canvas_h, font_path, ct_cfg, stroke_width=ct_outline)
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
             rotated_paste(
-                img, ct_res, ctx, cty, ct_rotation,
-                prior_bboxes=list(_bboxes.values()), cache_key="custom_text",
+                img, ct_res, ctx - origin_x, cty - origin_y, ct_rotation,
+                prior_bboxes=_paste_prior_bboxes(), cache_key="custom_text",
             )
             # Keep the same conservative rendered geometry used by regular
             # indicators.  This lets CPU_ABOVE_MAP reuse actual custom-text

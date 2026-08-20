@@ -7,13 +7,22 @@ from __future__ import annotations
 
 import math
 import time
+import threading
 try:
     from PIL import Image, ImageDraw
 except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.chart_utils import generate_history_chart, get_history_chart_background
+from src.indicators.chart_utils import (
+    generate_history_chart,
+    get_history_chart_background,
+    get_history_chart_prefix_background,
+    get_average_layer_cache_stats,
+    reset_average_layer_cache_stats,
+    set_average_layer_cache_enabled,
+    get_chart_static_alpha_bbox,
+)
 from src.indicators.helpers import (
     _STATIC_CACHE,
     _static_cache_key,
@@ -26,6 +35,61 @@ from src.indicators.profiling import get_overlay_profiler
 
 
 _FINAL_STATIC_CHART_CACHE = {}
+_PREFIX_STATIC_BUFFER_LOCAL = threading.local()
+_VALUE_MASK_CACHE_LOCAL = threading.local()
+_DYNAMIC_LAYER_CACHE_ENABLED = True
+
+
+def set_dynamic_layer_cache_enabled(enabled: bool) -> None:
+    """Select the 5E.6 dynamic-layer cache for controlled A/B parity tests."""
+    global _DYNAMIC_LAYER_CACHE_ENABLED
+    _DYNAMIC_LAYER_CACHE_ENABLED = bool(enabled)
+    set_average_layer_cache_enabled(enabled)
+
+
+def _value_mask_cache_state() -> dict:
+    state = getattr(_VALUE_MASK_CACHE_LOCAL, "state", None)
+    if state is None:
+        state = {"masks": {}, "hits": 0, "misses": 0}
+        _VALUE_MASK_CACHE_LOCAL.state = state
+    return state
+
+
+def reset_value_mask_cache_stats() -> None:
+    """Reset worker-local current-label mask cache and counters for A/B tests."""
+    _VALUE_MASK_CACHE_LOCAL.state = {"masks": {}, "hits": 0, "misses": 0}
+
+
+def get_value_mask_cache_stats() -> dict[str, int | float]:
+    state = _value_mask_cache_state()
+    hits = int(state["hits"])
+    misses = int(state["misses"])
+    total = hits + misses
+    return {
+        "hits": hits,
+        "misses": misses,
+        "hit_percent": (100.0 * hits / total) if total else 0.0,
+    }
+
+
+def get_dynamic_layer_cache_stats() -> dict[str, dict[str, int | float]]:
+    return {
+        "average": get_average_layer_cache_stats(),
+        "value_label": get_value_mask_cache_stats(),
+    }
+
+
+def reset_dynamic_layer_cache_stats() -> None:
+    reset_average_layer_cache_stats()
+    reset_value_mask_cache_stats()
+
+
+def _prefix_static_buffers():
+    buffers = getattr(_PREFIX_STATIC_BUFFER_LOCAL, "buffers", None)
+    if buffers is None:
+        buffers = {}
+        _PREFIX_STATIC_BUFFER_LOCAL.buffers = buffers
+    return buffers
 _FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
 
 
@@ -219,6 +283,55 @@ def _render_value_text_tile(
     return tile, px + sl, py + st
 
 
+def _render_value_text_masks(v_str, font, text_color, outline):
+    """Return cached L masks reproducing direct Pillow text drawing.
+
+    Applying the stroke mask first and the fill mask second through
+    ``ImageDraw.bitmap`` matches ``ImageDraw.text`` replacement semantics,
+    including antialiased edge alpha.  A transparent RGBA tile composed with
+    ``alpha_composite`` does not have that parity and is intentionally not used.
+    """
+    if not v_str:
+        return None
+    state = _value_mask_cache_state()
+    font_identity = (
+        str(getattr(font, "path", "")),
+        int(getattr(font, "size", 0)),
+        type(font).__module__, type(font).__qualname__,
+    )
+    key = (
+        "value_text_masks", v_str, font_identity, int(outline),
+        tuple(text_color), "direct_top_left_v1",
+    )
+    cached = state["masks"].get(key)
+    if cached is not None:
+        state["hits"] += 1
+        return cached
+
+    state["misses"] += 1
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+    vw = probe.textbbox((0, 0), v_str, font=font)[2]
+    sl, st, sr, sb = probe.textbbox(
+        (0, 0), v_str, font=font, stroke_width=outline,
+    )
+    width = max(1, sr - sl)
+    height = max(1, sb - st)
+    stroke_mask = Image.new("L", (width, height), 0)
+    fill_mask = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(stroke_mask).text(
+        (-sl, -st), v_str, font=font, fill=255,
+        stroke_width=outline, stroke_fill=255,
+    )
+    ImageDraw.Draw(fill_mask).text(
+        (-sl, -st), v_str, font=font, fill=255,
+    )
+    cached = (stroke_mask, fill_mask, sl, st, vw)
+    if len(state["masks"]) >= 128:
+        state["masks"].clear()
+    state["masks"][key] = cached
+    return cached
+
+
 def _render_chart_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
@@ -238,7 +351,7 @@ def _render_chart_indicator(
         chart_vals = history_data
         timestamps = getattr(history_data, "timestamps", None)
 
-    if not chart_vals or len(chart_vals) < 2:
+    if not chart_vals:
         chart_vals = [value, value]
 
     chart_w = size_px
@@ -299,16 +412,27 @@ def _render_chart_indicator(
         font_path=font_path,
     )
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
-    graph_started = time.perf_counter()
-    bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
-        get_history_chart_background(chart_vals, chart_w, chart_h, **graph_kwargs)
-    )
-
-    ci = None
     chart_start_dt = getattr(history_data, "chart_start_dt", None)
     chart_end_dt = getattr(history_data, "chart_end_dt", None)
     t_start = chart_start_dt or (timestamps[0] if timestamps else None)
     t_end = chart_end_dt or (timestamps[-1] if timestamps else None)
+    prefix_dynamic = bool(
+        optimized_static and timestamps and target_dt is not None
+        and t_start is not None and t_end is not None
+    )
+    graph_started = time.perf_counter()
+    if prefix_dynamic:
+        bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
+            get_history_chart_prefix_background(
+                chart_vals, target_dt, chart_w, chart_h, **graph_kwargs
+            )
+        )
+    else:
+        bg_img, points, plot_y1, plot_y2, calc_thickness, bg_key = (
+            get_history_chart_background(chart_vals, chart_w, chart_h, **graph_kwargs)
+        )
+
+    ci = None
 
     pos = None
     align_start = t_start
@@ -339,6 +463,15 @@ def _render_chart_indicator(
     elif current_position is not None:
         pos = max(0.0, min(1.0, current_position))
 
+    if prefix_dynamic and target_dt is not None and align_start is not None:
+        # The visible prefix has its own right edge at current time.  At the
+        # exact activity start there is no elapsed interval and therefore no
+        # cursor to draw; after start the cursor is at that prefix edge.
+        if aligned_target <= align_start:
+            pos = None
+        else:
+            pos = 1.0
+
     if pos is not None and points:
         if (
             timestamps
@@ -361,7 +494,16 @@ def _render_chart_indicator(
         if timestamps and len(timestamps) == len(points) and target_dt is not None:
             from bisect import bisect_right
             idx = bisect_right(timestamps, aligned_target) - 1
-            if idx < 0:
+            if prefix_dynamic:
+                # The prefix renderer never borrows a value from the first
+                # sample after current time.  Between samples (and inside a
+                # gap) the cursor stays on the last visible sample.
+                if idx < 0:
+                    ci = None
+                    py = None
+                else:
+                    py = points[min(idx, len(points) - 1)][1]
+            elif idx < 0:
                 py = points[0][1]
             elif idx >= len(points) - 1:
                 py = points[-1][1]
@@ -378,7 +520,19 @@ def _render_chart_indicator(
                     if dt1.tzinfo is None:
                         dt1 = dt1.replace(tzinfo=timezone.utc)
                 dt_span = (dt1 - dt0).total_seconds()
-                if dt_span > 0:
+                gap_limit = None
+                if len(timestamps) > 2:
+                    deltas = [
+                        (right - left).total_seconds()
+                        for left, right in zip(timestamps, timestamps[1:])
+                        if (right - left).total_seconds() > 0
+                    ]
+                    if deltas:
+                        gap_limit = max(5.0, sorted(deltas)[len(deltas) // 2] * 3.0)
+                if (
+                    dt_span > 0 and (gap_limit is None or dt_span <= gap_limit)
+                    and chart_vals[idx] is not None and chart_vals[idx + 1] is not None
+                ):
                     frac = max(0.0, min(1.0, (aligned_target - dt0).total_seconds() / dt_span))
                     py = points[idx][1] + frac * (points[idx + 1][1] - points[idx][1])
                 else:
@@ -388,7 +542,25 @@ def _render_chart_indicator(
             idx = max(0, min(len(points) - 1, idx))
             py = points[idx][1]
 
-        ci = (cursor_x, py)
+        if py is not None:
+            ci = (cursor_x, py)
+
+        if prefix_dynamic and py is not None:
+            # In prefix mode the current time is the right edge of the
+            # visible domain.  The full point geometry is retained only for
+            # cursor Y interpolation; no future point is drawn by the prefix
+            # raster itself.
+            if (
+                timestamps and len(timestamps) == len(points)
+                and align_start is not None and align_end is not None
+                and align_end > align_start
+            ):
+                norm_0 = max(0.0, min(1.0, (timestamps[0] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
+                norm_last = max(0.0, min(1.0, (timestamps[-1] - align_start).total_seconds() / (align_end - align_start).total_seconds()))
+                if norm_last > norm_0:
+                    plot_w_span = (points[-1][0] - points[0][0]) / (norm_last - norm_0)
+                    plot_x1_base = points[0][0] - norm_0 * plot_w_span
+                    ci = (plot_x1_base + plot_w_span, py)
 
     if not optimized_static:
         chart_img = generate_history_chart(
@@ -432,20 +604,66 @@ def _render_chart_indicator(
             "final_static_chart", bg_key, hdr_key, chart_w + 8, final_h,
             margin_top,
         )
-        final_static = _FINAL_STATIC_CHART_CACHE.get(final_key)
-        if final_static is None:
+        if prefix_dynamic:
+            # The chart history is intentionally dynamic in this stage.  Keep
+            # the immutable header cache, but assemble the current prefix for
+            # this frame so a previous frame can never expose future points.
             static_started = time.perf_counter()
-            final_static = hdr_img.copy()
-            final_static.paste(bg_img, (4, margin_top), bg_img)
-            if len(_FINAL_STATIC_CHART_CACHE) > 50:
-                _FINAL_STATIC_CHART_CACHE.clear()
-            _FINAL_STATIC_CHART_CACHE[final_key] = final_static
+            static_alpha_bbox = get_chart_static_alpha_bbox(bg_key)
+            buffer_key = (
+                "prefix_static_buffer", hdr_key, bg_key,
+                chart_w, chart_h, final_h, margin_top,
+                static_alpha_bbox,
+            )
+            prefix_buffers = _prefix_static_buffers()
+            final_static = prefix_buffers.get(buffer_key)
+            if final_static is None:
+                final_static = hdr_img.copy()
+                prefix_buffers[buffer_key] = final_static
+            else:
+                # The immutable axes geometry proves that all dynamic prefix
+                # pixels are confined to this ROI.  Clear only that ROI before
+                # restoring it; no per-frame getbbox or pixel scan is needed.
+                if static_alpha_bbox is None:
+                    final_static.paste(
+                        (0, 0, 0, 0),
+                        (4, margin_top, 4 + chart_w, margin_top + chart_h),
+                    )
+                else:
+                    bx0, by0, bx1, by1 = static_alpha_bbox
+                    final_static.paste(
+                        (0, 0, 0, 0),
+                        (4 + bx0, margin_top + by0, 4 + bx1, margin_top + by1),
+                    )
+            if static_alpha_bbox is None:
+                final_static.paste(bg_img, (4, margin_top), bg_img)
+            else:
+                bx0, by0, bx1, by1 = static_alpha_bbox
+                bg_roi = bg_img.crop(static_alpha_bbox)
+                final_static.paste(
+                    bg_roi, (4 + bx0, margin_top + by0), bg_roi,
+                )
+            if len(prefix_buffers) > 50:
+                prefix_buffers.clear()
             profiler.record(
-                "graph.final_static_build",
+                "graph.prefix_static_build",
                 (time.perf_counter() - static_started) * 1000.0,
             )
+        else:
+            final_static = _FINAL_STATIC_CHART_CACHE.get(final_key)
+            if final_static is None:
+                static_started = time.perf_counter()
+                final_static = hdr_img.copy()
+                final_static.paste(bg_img, (4, margin_top), bg_img)
+                if len(_FINAL_STATIC_CHART_CACHE) > 50:
+                    _FINAL_STATIC_CHART_CACHE.clear()
+                _FINAL_STATIC_CHART_CACHE[final_key] = final_static
+                profiler.record(
+                    "graph.final_static_build",
+                    (time.perf_counter() - static_started) * 1000.0,
+                )
         v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
-        if split_mode:
+        if split_mode and not prefix_dynamic:
             # ETAP 5K: hand the exporter a static layer + two small dynamic
             # tiles instead of a full per-frame chart image.  No final_static
             # copy, no full tobytes, no full 1160x511 texture upload.
@@ -531,12 +749,21 @@ def _render_chart_indicator(
 
     if v_str:
         labels_started = time.perf_counter()
-        vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0
-        draw.text(
-            (chart_w - vw + tox, toy), v_str, font=font,
-            fill=text_color,
-            stroke_width=outline, stroke_fill=(0, 0, 0, 255),
-        )
+        if _DYNAMIC_LAYER_CACHE_ENABLED:
+            masks = _render_value_text_masks(v_str, font, text_color, outline)
+            if masks is not None:
+                stroke_mask, fill_mask, sl, st, vw = masks
+                text_x = chart_w - vw + tox + sl
+                text_y = toy + st
+                draw.bitmap((text_x, text_y), stroke_mask, fill=(0, 0, 0, 255))
+                draw.bitmap((text_x, text_y), fill_mask, fill=text_color)
+        else:
+            vw = draw.textbbox((0, 0), v_str, font=font)[2] - 0
+            draw.text(
+                (chart_w - vw + tox, toy), v_str, font=font,
+                fill=text_color,
+                stroke_width=outline, stroke_fill=(0, 0, 0, 255),
+            )
         profiler.record(
             "graph.dynamic_labels",
             (time.perf_counter() - labels_started) * 1000.0,

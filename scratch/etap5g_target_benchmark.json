@@ -1,0 +1,55 @@
+{
+  "atlas": [
+    1900,
+    762
+  ],
+  "regions": 5,
+  "before": {
+    "label": "copy_path",
+    "zero_copy": false,
+    "frames": 2000,
+    "render_ms": {
+      "avg": 2.1019641499999997,
+      "median": 2.11755,
+      "p95": 2.6369
+    },
+    "clear_ms": null,
+    "shm_transfer_ms": {
+      "avg": 2.21209665,
+      "median": 2.33125,
+      "p95": 2.7612
+    },
+    "worker_wall_ms": {
+      "avg": 4.4771759,
+      "median": 4.620900000000001,
+      "p95": 5.4289
+    },
+    "zero_copy_frames": 0
+  },
+  "after": {
+    "label": "mapped_target",
+    "zero_copy": true,
+    "frames": 2000,
+    "render_ms": {
+      "avg": 1.1136175000000001,
+      "median": 1.08975,
+      "p95": 1.2696
+    },
+    "clear_ms": {
+      "avg": 0.21257735,
+      "median": 0.206,
+      "p95": 0.2364
+    },
+    "shm_transfer_ms": {
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0
+    },
+    "worker_wall_ms": {
+      "avg": 1.35727495,
+      "median": 1.3286,
+      "p95": 1.5317
+    },
+    "zero_copy_frames": 2000
+  }
+}

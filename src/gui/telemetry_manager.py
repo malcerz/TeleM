@@ -38,6 +38,7 @@ except ImportError:
 
 try:
     from telemetry_fit import (
+        FitDataset,
         find_fit_for_video,
         parse_fit,
         process_fit,
@@ -46,6 +47,10 @@ try:
     _FIT_AVAILABLE = True
 except ImportError:
     _FIT_AVAILABLE = False
+
+    class FitDataset(dict):  # type: ignore[no-redef]
+        available_fit_fields = frozenset()
+        field_catalog = {}
 
     def process_fit(video_path, video_start_dt=None):  # noqa: E302
         return None
@@ -383,6 +388,7 @@ class TelemetryDataManager:
 
         # FIT samples – dict-based (matches telemetry_fit.process_fit return type)
         self.fit_data: dict[str, SampleList] = {}
+        self.available_fit_fields: frozenset[str] = frozenset()
 
         # FIT-registered extension indicator keys (fit_*_text)
         self.fit_ext_fields: list[str] = []
@@ -671,6 +677,7 @@ class TelemetryDataManager:
         # dynamic availability from the previously opened file if parsing or
         # alignment fails.
         self.fit_data.clear()
+        self.available_fit_fields = frozenset()
         self.fit_ext_fields.clear()
         self.fit_gps_track.clear()
 
@@ -713,12 +720,14 @@ class TelemetryDataManager:
         if not fit_result:
             return False
 
-        self.fit_data = {}
+        processed_fit: dict[str, SampleList] = {}
         for key, samples in fit_result.items():
             if key in ("speed", "alt"):
-                self.fit_data[key] = self._smooth(samples)
+                processed_fit[key] = self._smooth(samples)
             else:
-                self.fit_data[key] = samples
+                processed_fit[key] = samples
+        self.fit_data = FitDataset(processed_fit)
+        self.available_fit_fields = self.fit_data.available_fit_fields
 
         if self.start_dt_utc is None and self.fit_data.get("speed"):
             self.start_dt_utc = self.fit_data["speed"][0][0]
@@ -749,6 +758,7 @@ class TelemetryDataManager:
             self.gpx_path = None
         elif source == "fit":
             self.fit_data.clear()
+            self.available_fit_fields = frozenset()
             self.fit_ext_fields.clear()
             self.fit_gps_track.clear()
             self.fit_path = None

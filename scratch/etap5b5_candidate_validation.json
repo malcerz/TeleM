@@ -1,0 +1,129 @@
+{
+  "atlas": [
+    1900,
+    762
+  ],
+  "area_pct": 69.82060185185185,
+  "regions": [
+    [
+      1646,
+      414,
+      0,
+      0,
+      102,
+      20
+    ],
+    [
+      1472,
+      118,
+      106,
+      0,
+      448,
+      244
+    ],
+    [
+      46,
+      754,
+      0,
+      248,
+      1828,
+      326
+    ],
+    [
+      30,
+      30,
+      1832,
+      248,
+      64,
+      514
+    ]
+  ],
+  "clipping": 0,
+  "frames_checked": 7,
+  "parity_unchanged": {
+    "0": "not_applicable: candidate intentionally snaps active indicator positions",
+    "540": "not_applicable: candidate intentionally snaps active indicator positions",
+    "1350": "not_applicable: candidate intentionally snaps active indicator positions",
+    "2700": "not_applicable: candidate intentionally snaps active indicator positions",
+    "4050": "not_applicable: candidate intentionally snaps active indicator positions",
+    "4860": "not_applicable: candidate intentionally snaps active indicator positions",
+    "5399": "not_applicable: candidate intentionally snaps active indicator positions"
+  },
+  "text": {
+    "time_block": {
+      "declared": [
+        30,
+        30,
+        60,
+        61
+      ],
+      "alpha_union": [
+        32,
+        32,
+        56,
+        57
+      ],
+      "violations": 0
+    },
+    "fit_temperature_text": {
+      "declared": [
+        1646,
+        414,
+        101,
+        19
+      ],
+      "alpha_union": [
+        1648,
+        416,
+        97,
+        15
+      ],
+      "violations": 0
+    },
+    "iso_text": {
+      "declared": [
+        30,
+        446,
+        60,
+        17
+      ],
+      "alpha_union": [
+        32,
+        448,
+        50,
+        13
+      ],
+      "violations": 0
+    },
+    "exposure_text": {
+      "declared": [
+        30,
+        494,
+        60,
+        18
+      ],
+      "alpha_union": [
+        32,
+        496,
+        56,
+        14
+      ],
+      "violations": 0
+    },
+    "temp_text": {
+      "declared": [
+        30,
+        526,
+        64,
+        17
+      ],
+      "alpha_union": [
+        32,
+        528,
+        60,
+        13
+      ],
+      "violations": 0
+    }
+  }
+}

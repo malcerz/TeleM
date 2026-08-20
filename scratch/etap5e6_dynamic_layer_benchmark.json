@@ -1,0 +1,82 @@
+{
+  "fit_cadence_text": {
+    "before": {
+      "render": {
+        "avg_ms": 0.7294429999346903,
+        "median_ms": 0.7273499977600295,
+        "p95_ms": 0.9155000007012859
+      },
+      "cache": {
+        "average": {
+          "hits": 0,
+          "misses": 0,
+          "hit_percent": 0.0
+        },
+        "value_label": {
+          "hits": 0,
+          "misses": 0,
+          "hit_percent": 0.0
+        }
+      }
+    },
+    "after": {
+      "render": {
+        "avg_ms": 0.540134799975931,
+        "median_ms": 0.5246000000624917,
+        "p95_ms": 0.691100001859013
+      },
+      "cache": {
+        "average": {
+          "hits": 0,
+          "misses": 0,
+          "hit_percent": 0.0
+        },
+        "value_label": {
+          "hits": 1966,
+          "misses": 34,
+          "hit_percent": 98.3
+        }
+      }
+    }
+  },
+  "fit_heart_rate_text": {
+    "before": {
+      "render": {
+        "avg_ms": 0.721180599895888,
+        "median_ms": 0.7039000010991003,
+        "p95_ms": 0.8687000008649193
+      },
+      "cache": {
+        "average": {
+          "hits": 0,
+          "misses": 0,
+          "hit_percent": 0.0
+        },
+        "value_label": {
+          "hits": 0,
+          "misses": 0,
+          "hit_percent": 0.0
+        }
+      }
+    },
+    "after": {
+      "render": {
+        "avg_ms": 0.5430408499378245,
+        "median_ms": 0.5192499957047403,
+        "p95_ms": 0.7039999982225709
+      },
+      "cache": {
+        "average": {
+          "hits": 1831,
+          "misses": 168,
+          "hit_percent": 91.59579789894947
+        },
+        "value_label": {
+          "hits": 1986,
+          "misses": 14,
+          "hit_percent": 99.3
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "label": "production_audit_final",
+  "frames": 5400,
+  "workers": 4,
+  "max_in_flight": 8,
+  "preview": "on",
+  "wall_s": 25.654112500000338,
+  "real_export_fps": 210.49256722484276,
+  "preview_updates": 108,
+  "preview_fps": 4.2098513444968555,
+  "audit_json": "H:\\_Dev\\TeleM\\scratch\\etap5f_production_audit_final.json"
+}

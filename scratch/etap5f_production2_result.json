@@ -1,0 +1,12 @@
+{
+  "label": "production2",
+  "frames": 5400,
+  "workers": 4,
+  "max_in_flight": null,
+  "preview": "on",
+  "wall_s": 25.632108400001016,
+  "real_export_fps": 210.67326634744515,
+  "preview_updates": 108,
+  "preview_fps": 4.213465326948903,
+  "audit_json": null
+}

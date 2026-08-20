@@ -22,6 +22,35 @@ from src.telemetry_extract import (
 from src.ffmpeg.worker_cache import WORKER_CACHE, _resolve_cache_value
 
 
+def _direct_region_members(layout: dict[str, Any], hud_regions: list[tuple[int, int, int, int, int, int]]) -> list[set[str]] | None:
+    """Assign each enabled indicator to exactly one planned source region."""
+    phantom = set(layout.get("_nvidia_phantom_keys", ()))
+    members = [set() for _ in hud_regions]
+    for key, cfg in layout.get("indicators", {}).items():
+        if key in phantom or not cfg or not cfg.get("enabled", True):
+            continue
+        lx, ly = cfg.get("x", 0.0), cfg.get("y", 0.0)
+        px = round(lx / 100.0 * WORKER_CACHE["video_width"]) if lx <= 100.0 else round(lx)
+        py = round(ly / 100.0 * WORKER_CACHE["video_height"]) if ly <= 100.0 else round(ly)
+        owner = next((i for i, (dx, dy, _ax, _ay, rw, rh) in enumerate(hud_regions)
+                      if dx <= px < dx + rw and dy <= py < dy + rh), None)
+        if owner is None:
+            return None
+        members[owner].add(key)
+    for index, cfg in enumerate(layout.get("custom_texts", [])):
+        if not cfg or not cfg.get("enabled", True):
+            continue
+        lx, ly = cfg.get("x", 0.0), cfg.get("y", 0.0)
+        px = round(lx / 100.0 * WORKER_CACHE["video_width"]) if lx <= 100.0 else round(lx)
+        py = round(ly / 100.0 * WORKER_CACHE["video_height"]) if ly <= 100.0 else round(ly)
+        owner = next((i for i, (dx, dy, _ax, _ay, rw, rh) in enumerate(hud_regions)
+                      if dx <= px < dx + rw and dy <= py < dy + rh), None)
+        if owner is None:
+            return None
+        members[owner].add(f"custom_text:{index}")
+    return members
+
+
 def render_overlay_frame(
     index: int,
     start_dt_utc: Optional[datetime],
@@ -31,6 +60,7 @@ def render_overlay_frame(
     alt_samples: list,
     target_fps: float,
     update_rate_step: int = 1,
+    target_image: Optional[Image.Image] = None,
 ) -> Any:
     """Render a single overlay frame – returns PIL Image RGBA. Uses WORKER_CACHE."""
     video_width = WORKER_CACHE["video_width"]
@@ -42,6 +72,11 @@ def render_overlay_frame(
     cut_regions = WORKER_CACHE.get("_cut_regions", [])
     for cut_start, cut_end in cut_regions:
         if cut_start <= current_t < cut_end:
+            # The SHM fast path has already cleared its mapped atlas target.
+            # Return that target directly so a cut frame does not allocate a
+            # full-size fallback image or trigger a full-atlas copy.
+            if target_image is not None:
+                return target_image
             return Image.new("RGBA", (video_width, video_height), (0, 0, 0, 0))
 
     font_path = WORKER_CACHE["font_path"]
@@ -119,13 +154,17 @@ def render_overlay_frame(
     hud_bbox = WORKER_CACHE.get("hud_bbox")
 
     if hud_regions and len(hud_regions) > 1:
-        atlas_w = max(r[2] + r[4] for r in hud_regions)
-        atlas_h = max(r[3] + r[5] for r in hud_regions)
+        planned_atlas = layout.get("_nvidia_atlas_size")
+        if planned_atlas:
+            atlas_w, atlas_h = planned_atlas
+        else:
+            atlas_w = max(r[2] + r[4] for r in hud_regions)
+            atlas_h = max(r[3] + r[5] for r in hud_regions)
 
         # ── Dirty check: reuse atlas if formatted values unchanged ──
         prev_data = WORKER_CACHE.get("_prev_frame_data")
         prev_atlas = WORKER_CACHE.get("_prev_atlas_img")
-        if prev_data is not None and prev_atlas is not None:
+        if target_image is None and prev_data is not None and prev_atlas is not None:
             is_dirty = False
             if prev_data.get("date_text") != data.get("date_text") or prev_data.get("time_text") != data.get("time_text"):
                 is_dirty = True
@@ -150,6 +189,53 @@ def render_overlay_frame(
 
             if not is_dirty:
                 return prev_atlas
+
+        direct_members = None
+        if layout.get("_nvidia_direct_region"):
+            direct_members = _direct_region_members(layout, hud_regions)
+            if direct_members is None:
+                if not WORKER_CACHE.get("_direct_region_fallback_logged"):
+                    print("[NVIDIA] HUD producer: LEGACY_FULL_CANVAS fallback: region ownership assertion failed", flush=True)
+                    WORKER_CACHE["_direct_region_fallback_logged"] = True
+            else:
+                atlas_img = target_image
+                if atlas_img is None:
+                    atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
+                rot180 = WORKER_CACHE.get("hud_rotate_180", False)
+                for region_index, r in enumerate(hud_regions):
+                    dest_x, dest_y, atlas_x, atlas_y, rw, rh = r
+                    keys = direct_members[region_index]
+                    if keys:
+                        compose_overlay(
+                            video_width, video_height, layout, font_path,
+                            data["date_text"], data["time_text"],
+                            data["speed_value"], data["distance_m"], data["max_distance_m"],
+                            data["alt_value"], data["min_alt"], data["max_alt"],
+                            data["iso_value"], data["exposure_value"], data["temp_value"],
+                            indicator_values=data["indicator_values"],
+                            max_speed_kmh=data["max_speed_kmh"],
+                            power_value=data["power_value"], atemp_value=data["atemp_value"],
+                            hr_value=data["hr_value"], cad_value=data["cad_value"],
+                            battery_value=data["battery_value"], chart_data=data["chart_data"],
+                            current_position=data["current_position"], extra_indicators=data["extra_indicators"],
+                            gps_track=data["gps_track"], target_dt=data["target_dt"],
+                            start_dt_utc=data["start_dt_utc"], elapsed_seconds=data["elapsed_seconds"],
+                            avg_speed_kmh=data["avg_speed_kmh"], reuse_canvas=False,
+                            target_image=atlas_img,
+                            coordinate_origin=(dest_x - atlas_x, dest_y - atlas_y),
+                            render_keys=keys,
+                            # ``atlas_img`` is freshly allocated above.  The
+                            # compositor still checks every prior widget's
+                            # declared rectangle before using plain paste.
+                            destination_proven_empty=True,
+                        )
+                    if rot180:
+                        region_img = atlas_img.crop((atlas_x, atlas_y, atlas_x + rw, atlas_y + rh))
+                        atlas_img.paste(region_img.transpose(Image.Transpose.ROTATE_180), (atlas_x, atlas_y))
+                WORKER_CACHE["_prev_frame_data"] = data
+                if target_image is None:
+                    WORKER_CACHE["_prev_atlas_img"] = atlas_img
+                return atlas_img
 
         img = compose_overlay(
             video_width, video_height, layout, font_path,

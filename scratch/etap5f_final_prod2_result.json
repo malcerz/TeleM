@@ -1,0 +1,13 @@
+{
+  "label": "final_prod2",
+  "frames": 5400,
+  "workers": 4,
+  "max_in_flight": null,
+  "preview": "on",
+  "wall_s": 20.923502099998586,
+  "real_export_fps": 258.082990801065,
+  "preview_updates": 108,
+  "preview_fps": 5.1616598160213005,
+  "audit_json": null,
+  "cpu_samples": []
+}
