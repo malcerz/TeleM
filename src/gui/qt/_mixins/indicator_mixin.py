@@ -37,7 +37,8 @@ class IndicatorMixin:
             cfg["form"] = "time_display"
 
         form = cfg.get("form", "text")
-        schema = get_schema_for_form(form)
+        bar_style = cfg.get("bar_style", "ruler")
+        schema = get_schema_for_form(form, bar_style=bar_style)
 
         self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
 
@@ -224,7 +225,8 @@ class IndicatorMixin:
         cfg["y"] = round(y_norm, 2)
 
         form = cfg.get("form", "text")
-        schema = get_schema_for_form(form)
+        bar_style = cfg.get("bar_style", "ruler")
+        schema = get_schema_for_form(form, bar_style=bar_style)
         self.signals.sig_properties_ready.emit(key, schema, dict(cfg))
 
         self._render_preview()

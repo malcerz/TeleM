@@ -240,25 +240,72 @@ def gauge_indicator_fields() -> list[FieldSchema]:
     )
 
 
-def bar_indicator_fields() -> list[FieldSchema]:
-    """Bar: Header, Text, Labels, Ticks, Gauge + range_labels."""
-    return (
-        _header_fields() + _form_field()
-        + _text_tab_fields(with_distance=False)
-        + _labels_tab_fields()
-        + _ticks_tab_fields()
-        + _gauge_tab_fields()
-        + [
-            FieldSchema("show_range_labels", "bool", "Pokaż zakres", tab="Text"),
-            FieldSchema("range_label_offset_x", "float", "Offset X", tab="Text",
-                        min_val=-20.0, max_val=20.0, step=0.1),
-            FieldSchema("range_label_offset_y", "float", "Offset Y", tab="Text",
-                        min_val=-20.0, max_val=20.0, step=0.1),
-            FieldSchema("bar_direction", "choice", "Kierunek", tab="Gauge",
-                        choices=["horizontal", "vertical"]),
-            FieldSchema("dot_color", "color", "Kolor kropki", tab="Gauge"),
-        ]
-    )
+def _bar_ruler_fields() -> list[FieldSchema]:
+    """Pola specyficzne dla stylu 'ruler'."""
+    return [
+        # Tab Text
+        FieldSchema("show_value", "bool", "Wartość", tab="Text"),
+        FieldSchema("show_label", "bool", "Etykieta", tab="Text"),
+        FieldSchema("show_range_labels", "bool", "Zakres", tab="Text"),
+        FieldSchema("show_mid_label", "bool", "Środek", tab="Text"),
+        FieldSchema("range_units", "bool", "Jednostki", tab="Text"),
+        FieldSchema("title_with_unit", "bool", "Tytuł z jednostką", tab="Text"),
+        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1),
+        FieldSchema("text_color", "color", "Kolor tekstu", tab="Text"),
+        FieldSchema("range_color", "color", "Kolor zakresu", tab="Text"),
+        FieldSchema("text_offset_x", "float", "Pos X", tab="Text", min_val=-0.5, max_val=0.5, step=0.01),
+        FieldSchema("text_offset_y", "float", "Pos Y", tab="Text", min_val=-0.5, max_val=0.5, step=0.01),
+        # Tab Ticks
+        FieldSchema("major_ticks", "int", "Podziałki gł.", tab="Ticks", min_val=1, max_val=30, step=1),
+        FieldSchema("minor_ticks", "int", "Podziałki drobne", tab="Ticks", min_val=1, max_val=10, step=1),
+        FieldSchema("ticks", "int", "Ticks (legacy)", tab="Ticks", min_val=0, max_val=30, step=1),
+        FieldSchema("track_color", "color", "Kolor osi", tab="Ticks"),
+        FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks"),
+        FieldSchema("marker_color", "color", "Kolor wskaźnika", tab="Ticks"),
+        FieldSchema("marker_border_color", "color", "Obramowanie wsk.", tab="Ticks"),
+        FieldSchema("marker_size", "float", "Rozmiar wskaźnika", tab="Ticks", min_val=2.0, max_val=30.0, step=0.5),
+        # Tab Gauge (Zakres / Grubość)
+        FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0),
+        FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=100000.0, step=1.0),
+        FieldSchema("thickness", "int", "Grubość", tab="Gauge", min_val=1, max_val=10, step=1),
+    ]
+
+
+def _bar_segments_fields() -> list[FieldSchema]:
+    """Pola specyficzne dla stylu 'segments'."""
+    return [
+        # Tab Text
+        FieldSchema("show_value", "bool", "Wartość", tab="Text"),
+        FieldSchema("show_label", "bool", "Etykieta", tab="Text"),
+        FieldSchema("show_min", "bool", "Pokaż min.", tab="Text"),
+        FieldSchema("show_max", "bool", "Pokaż max", tab="Text"),
+        FieldSchema("range_units", "bool", "Jednostki", tab="Text"),
+        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1),
+        FieldSchema("text_color", "color", "Kolor tekstu", tab="Text"),
+        FieldSchema("range_color", "color", "Kolor zakresu", tab="Text"),
+        # Tab Segments
+        FieldSchema("segments", "int", "Segmenty", tab="Segments", min_val=2, max_val=50, step=1),
+        FieldSchema("segment_gap", "int", "Odstęp", tab="Segments", min_val=0, max_val=20, step=1),
+        FieldSchema("segment_radius", "int", "Zaokrągl.", tab="Segments", min_val=0, max_val=20, step=1),
+        FieldSchema("inactive_color", "color", "Kolor nieakt.", tab="Segments"),
+        FieldSchema("inactive_alpha", "int", "Alfa nieakt.", tab="Segments", min_val=0, max_val=255, step=5),
+        FieldSchema("grow_height", "bool", "Rosnąca wys.", tab="Segments"),
+        FieldSchema("grow_start", "float", "Start wzrostu", tab="Segments", min_val=0.0, max_val=1.0, step=0.05),
+        FieldSchema("min_val", "float", "Minimum", tab="Segments", min_val=-10000.0, max_val=10000.0, step=1.0),
+        FieldSchema("max_val", "float", "Maksimum", tab="Segments", min_val=-10000.0, max_val=100000.0, step=1.0),
+    ]
+
+
+def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
+    """Bar: Header (w tym Styl: Ruler/Segments) + zakładki specyficzne dla stylu."""
+    style = str(bar_style).strip().lower()
+    style_choice = [
+        FieldSchema("bar_style", "choice", "Styl", tab="", choices=[("ruler", "Ruler"), ("segments", "Segments")]),
+    ]
+    header = _header_fields() + _form_field() + style_choice
+    if style in ("segment", "segments", "segmented", "segment_bar"):
+        return header + _bar_segments_fields()
+    return header + _bar_ruler_fields()
 
 
 def chart_indicator_fields() -> list[FieldSchema]:
@@ -273,19 +320,8 @@ def chart_indicator_fields() -> list[FieldSchema]:
 
 
 def segment_bar_indicator_fields() -> list[FieldSchema]:
-    """SegmentBar: Header, Text, Segments (własna zakładka)."""
-    return (
-        _header_fields() + _form_field()
-        + _text_tab_fields(with_color=False)
-        + _segments_tab_fields()
-        + [
-            FieldSchema("show_label", "bool", "Pokaż etyk.", tab="Text"),
-            FieldSchema("width", "int", "Szerokość", tab="Segments",
-                        min_val=50, max_val=500, step=10),
-            FieldSchema("height", "int", "Wysokość", tab="Segments",
-                        min_val=20, max_val=200, step=5),
-        ]
-    )
+    """SegmentBar (legacy): przekierowanie do bar z bar_style='segments'."""
+    return bar_indicator_fields(bar_style="segments")
 
 
 def _map_labels_tab_fields() -> list[FieldSchema]:
@@ -421,8 +457,12 @@ FORM_SCHEMA_MAP: dict[str, callable] = {
 }
 
 
-def get_schema_for_form(form: str) -> list[FieldSchema]:
+def get_schema_for_form(form: str, bar_style: str = "ruler") -> list[FieldSchema]:
     """Zwraca schemat pól dla podanej formy wskaźnika."""
+    if form == "bar":
+        return bar_indicator_fields(bar_style=bar_style)
+    if form == "segment_bar":
+        return bar_indicator_fields(bar_style="segments")
     fn = FORM_SCHEMA_MAP.get(form, text_indicator_fields)
     return fn()
 

@@ -196,7 +196,7 @@ def apply_overlay_video(
     # Hardware acceleration works natively with rotation metadata in container
     if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
         ov_op = "overlay_cuda=x=0:y=0"
-        ov_fps = f"[1:v]fps={target_fps},format=rgba,hwupload_cuda"
+        ov_fps = f"[1:v]fps={target_fps},format=yuva420p,hwupload_cuda"
         target = RESOLUTION_MAP.get(resolution_name)
         if target:
             w_tgt, h_tgt = target

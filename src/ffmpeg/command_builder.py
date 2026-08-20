@@ -98,26 +98,62 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
     min_x, min_y = canvas_w, canvas_h
     max_x, max_y = 0, 0
     has_any = False
+    min_dim = min(canvas_w, canvas_h)
 
     for key, cfg in enabled_indicators.items():
         lx = cfg.get("x", 0.0)
         ly = cfg.get("y", 0.0)
         px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
         py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
+        rot = int(cfg.get("rotation", 0)) % 360
 
-        sz = cfg.get("size", cfg.get("font_size", 10.0))
-        sw = int(round((sz / 100.0) * canvas_w)) if sz <= 100.0 else int(round(sz))
-        sh = int(round((sz / 100.0) * canvas_h)) if sz <= 100.0 else int(round(sz))
+        form = cfg.get("form", "text")
+        if form == "gauge":
+            sz = cfg.get("size", 0.1)
+            size_px = int(round(sz * min_dim)) if sz <= 1.0 else int(round((sz / 100.0) * min_dim))
+            radius = int(size_px * 1.35)
+            x1, y1 = px - radius, py - radius
+            x2, y2 = px + radius, py + radius
+        elif form in ("bar", "segment_bar"):
+            sz = cfg.get("size", 0.2)
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            bar_w = size_px + 80
+            bar_h = max(60, int(size_px * 0.35)) + 50
+            if rot in (90, 270):
+                w_bar, h_bar = bar_h, bar_w
+            else:
+                w_bar, h_bar = bar_w, bar_h
+            x1 = px - w_bar // 2 - 30
+            y1 = py - h_bar // 2 - 30
+            x2 = px + w_bar // 2 + 30
+            y2 = py + h_bar // 2 + 30
+        elif form in ("chart", "moving_map", "static_map", "map"):
+            cw = cfg.get("w", 0.35)
+            ch = cfg.get("h", 0.25)
+            w_px = int(round(cw * canvas_w)) if cw <= 1.0 else int(round((cw / 100.0) * canvas_w))
+            h_px = int(round(ch * canvas_h)) if ch <= 1.0 else int(round((ch / 100.0) * canvas_h))
+            w_px = max(w_px, int(canvas_w * 0.25))
+            h_px = max(h_px, int(canvas_h * 0.20))
+            x1, y1 = px - 40, py - 40
+            x2, y2 = px + w_px + 60, py + h_px + 60
+        elif key in ("time_block", "time_display") or "time" in key:
+            x1, y1 = px - 40, py - 40
+            x2, y2 = px + int(canvas_w * 0.25) + 40, py + int(canvas_h * 0.15) + 40
+        else:
+            # text indicator
+            fs_val = cfg.get("font_size", cfg.get("size", 0.02))
+            fs = max(10, int(round(fs_val * min_dim)) if fs_val <= 1.0 else int(round((fs_val / 100.0) * min_dim)))
+            text_w = max(int(canvas_w * 0.20), fs * 16)
+            text_h = max(int(canvas_h * 0.08), fs * 3)
+            x1 = px - 40
+            y1 = py - 40
+            x2 = px + text_w + 40
+            y2 = py + text_h + 40
 
-        form = cfg.get("form", "")
-        if form in ("chart", "moving_map", "static_map"):
-            sw = max(sw, int(canvas_w * 0.45))
-            sh = max(sh, int(canvas_h * 0.35))
-
-        min_x = min(min_x, max(0, px - 40))
-        min_y = min(min_y, max(0, py - 40))
-        max_x = max(max_x, min(canvas_w, px + sw + 60))
-        max_y = max(max_y, min(canvas_h, py + sh + 60))
+        min_x = min(min_x, max(0, x1))
+        min_y = min(min_y, max(0, y1))
+        max_x = max(max_x, min(canvas_w, x2))
+        max_y = max(max_y, min(canvas_h, y2))
         has_any = True
 
     for ct_cfg in custom_texts:
@@ -127,29 +163,48 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
         py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
         min_x = min(min_x, max(0, px - 40))
         min_y = min(min_y, max(0, py - 40))
-        max_x = max(max_x, min(canvas_w, px + 500))
-        max_y = max(max_y, min(canvas_h, py + 150))
+        max_x = max(max_x, min(canvas_w, px + int(canvas_w * 0.35) + 40))
+        max_y = max(max_y, min(canvas_h, py + int(canvas_h * 0.15) + 40))
         has_any = True
 
     if not has_any:
         return 0, 0, 2, 2
 
-    w = max(2, max_x - min_x)
-    h = max(2, max_y - min_y)
-    if min_x % 2 != 0: min_x -= 1
-    if min_y % 2 != 0: min_y -= 1
-    if w % 2 != 0: w += 1
-    if h % 2 != 0: h += 1
+    # Round to even coordinates and dimensions
+    min_x = max(0, min_x)
+    min_y = max(0, min_y)
+    max_x = min(canvas_w, max_x)
+    max_y = min(canvas_h, max_y)
+
+    if min_x % 2 != 0:
+        min_x -= 1
+    if min_y % 2 != 0:
+        min_y -= 1
+    w = max_x - min_x
+    h = max_y - min_y
+    if w % 2 != 0:
+        w += 1
+    if h % 2 != 0:
+        h += 1
+    w = min(w, canvas_w - min_x)
+    h = min(h, canvas_h - min_y)
+    if w % 2 != 0:
+        w -= 1
+    if h % 2 != 0:
+        h -= 1
+    return min_x, min_y, max(2, w), max(2, h)
 
 def get_layout_hud_regions(
-    layout: dict[str, Any], canvas_w: int, canvas_h: int, max_regions: int = 3
+    layout: dict[str, Any], canvas_w: int, canvas_h: int, max_regions: int = 3, padding: int = 4
 ) -> tuple[int, int, list[tuple[int, int, int, int, int, int]]]:
-    """Compute compact multi-region atlas bounds for layout.
+    """Compute compact multi-region atlas bounds for layout with exact geometry.
 
     Returns:
         atlas_w, atlas_h, regions
-        where regions is a list of (dest_x, dest_y, src_x, src_y, region_w, region_h)
+        where regions is a list of (dest_x, dest_y, atlas_x, atlas_y, region_w, region_h)
     """
+    import itertools
+
     indicators = layout.get("indicators", {})
     custom_texts = layout.get("custom_texts", [])
     enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
@@ -157,56 +212,77 @@ def get_layout_hud_regions(
     if not enabled_indicators and not custom_texts:
         return 2, 2, [(0, 0, 0, 0, 2, 2)]
 
+    min_dim = min(canvas_w, canvas_h)
     boxes = []
+
     for key, cfg in enabled_indicators.items():
         lx = cfg.get("x", 0.0)
         ly = cfg.get("y", 0.0)
         px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
         py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
-        sz = cfg.get("size", cfg.get("font_size", 10.0))
-        sw = int(round((sz / 100.0) * canvas_w)) if sz <= 100.0 else int(round(sz))
-        sh = int(round((sz / 100.0) * canvas_h)) if sz <= 100.0 else int(round(sz))
+        rot = int(cfg.get("rotation", 0)) % 360
 
         form = cfg.get("form", "text")
-        if form in ("chart", "moving_map", "static_map", "map") or "map" in key or "chart" in key:
-            sw = max(sw, int(canvas_w * 0.45))
-            sh = max(sh, int(canvas_h * 0.45))
-        elif form == "gauge" or "gauge" in key:
-            sw = max(sw, int(canvas_w * 0.35))
-            sh = max(sh, int(canvas_h * 0.50))
-        elif "time" in key or "date" in key or form in ("time", "date"):
-            sw = max(sw, int(canvas_w * 0.25))
-            sh = max(sh, int(canvas_h * 0.15))
+        if form == "gauge":
+            sz = cfg.get("size", 0.1)
+            size_px = int(round(sz * min_dim)) if sz <= 1.0 else int(round((sz / 100.0) * min_dim))
+            radius = int(size_px * 1.35)
+            x1, y1 = px - radius - 10, py - radius - 10
+            x2, y2 = px + radius + 10, py + radius + 10
+        elif form in ("bar", "segment_bar"):
+            sz = cfg.get("size", 0.2)
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            bar_w = size_px + 80
+            bar_h = max(60, int(size_px * 0.35)) + 50
+            if rot in (90, 270):
+                w_bar, h_bar = bar_h, bar_w
+            else:
+                w_bar, h_bar = bar_w, bar_h
+            x1 = px - w_bar // 2 - 20
+            y1 = py - h_bar // 2 - 20
+            x2 = px + w_bar // 2 + 20
+            y2 = py + h_bar // 2 + 20
+        elif form in ("chart", "moving_map", "static_map", "map"):
+            sz = cfg.get("size", cfg.get("w", 0.3))
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            cw = size_px + 60
+            ch = max(50, int(size_px * 0.45)) + 50
+            x1 = px - cw // 2 - 20
+            y1 = py - ch // 2 - 20
+            x2 = px + cw // 2 + 20
+            y2 = py + ch // 2 + 20
+        elif key in ("time_block", "time_display") or "time" in key:
+            x1 = px - 20
+            y1 = py - 20
+            x2 = px + int(canvas_w * 0.20) + 20
+            y2 = py + int(canvas_h * 0.12) + 20
         else:
-            sw = max(sw, int(canvas_w * 0.20))
-            sh = max(sh, int(canvas_h * 0.15))
+            # text indicator
+            fs_val = cfg.get("font_size", cfg.get("size", 0.02))
+            fs = max(10, int(round(fs_val * min_dim)) if fs_val <= 1.0 else int(round((fs_val / 100.0) * min_dim)))
+            text_w = max(int(canvas_w * 0.12), fs * 12)
+            text_h = max(int(canvas_h * 0.06), fs * 3 + 20)
+            x1 = px - 20
+            y1 = py - 20
+            x2 = px + text_w + 20
+            y2 = py + text_h + 20
 
-        is_text = (form == "text") or (key in ("time_block", "time_display"))
-
-        if not is_text:
-            x1 = max(0, px - sw // 2 - 60)
-            y1 = max(0, py - sh // 2 - 60)
-            x2 = min(canvas_w, px + sw // 2 + 60)
-            y2 = min(canvas_h, py + sh // 2 + 60)
-        else:
-            x1 = max(0, px - 40)
-            y1 = max(0, py - 40)
-            x2 = min(canvas_w, px + sw + 60)
-            y2 = min(canvas_h, py + sh + 60)
-
-        boxes.append([x1, y1, x2, y2])
+        boxes.append([max(0, x1), max(0, y1), min(canvas_w, x2), min(canvas_h, y2)])
 
     for ct_cfg in custom_texts:
+        if not ct_cfg.get("enabled", True):
+            continue
         lx = ct_cfg.get("x", 0.0)
         ly = ct_cfg.get("y", 0.0)
         px = int(round((lx / 100.0) * canvas_w)) if lx <= 100.0 else int(round(lx))
         py = int(round((ly / 100.0) * canvas_h)) if ly <= 100.0 else int(round(ly))
-        sw = int(canvas_w * 0.25)
-        sh = int(canvas_h * 0.15)
-        boxes.append([max(0, px - sw // 2 - 40), max(0, py - sh // 2 - 40), min(canvas_w, px + sw // 2 + 40), min(canvas_h, py + sh // 2 + 40)])
+        boxes.append([max(0, px - 20), max(0, py - 20), min(canvas_w, px + int(canvas_w * 0.30) + 20), min(canvas_h, py + int(canvas_h * 0.10) + 20)])
 
+    if not boxes:
+        return 2, 2, [(0, 0, 0, 0, 2, 2)]
+
+    # Hierarchical clustering to at most max_regions
     clusters = [[b[0], b[1], b[2], b[3]] for b in boxes]
-
     while len(clusters) > max_regions:
         best_pair = None
         best_waste = float("inf")
@@ -231,44 +307,50 @@ def get_layout_hud_regions(
         clusters.pop(i)
         clusters.append(mb)
 
-    sorted_clusters = sorted(clusters, key=lambda c: (c[3] - c[1]), reverse=True)
-    regions = []
-    shelf_x = 0
-    shelf_y = 0
-    current_shelf_h = 0
-    atlas_max_x = 0
-    atlas_max_y = 0
-    max_shelf_w = canvas_w
-
-    for c in sorted_clusters:
+    # Format even dimensions
+    clean_clusters = []
+    for c in clusters:
         x1, y1, x2, y2 = c
-        w = max(2, x2 - x1)
-        h = max(2, y2 - y1)
         if x1 % 2 != 0: x1 -= 1
         if y1 % 2 != 0: y1 -= 1
+        w = max(2, x2 - x1)
+        h = max(2, y2 - y1)
         if w % 2 != 0: w += 1
         if h % 2 != 0: h += 1
         w = min(canvas_w - x1, w)
         h = min(canvas_h - y1, h)
+        clean_clusters.append((x1, y1, w, h))
 
-        if shelf_x + w > max_shelf_w and shelf_x > 0:
-            shelf_x = 0
-            shelf_y += current_shelf_h
-            current_shelf_h = 0
+    best_area = float("inf")
+    best_res = None
 
-        regions.append((x1, y1, shelf_x, shelf_y, w, h))
-        shelf_x += w
-        current_shelf_h = max(current_shelf_h, h)
+    for order in itertools.permutations(clean_clusters):
+        shelf_x = 0
+        shelf_y = 0
+        row_h = 0
+        max_x = 0
+        regions = []
+        for c in order:
+            x1, y1, w, h = c
+            if shelf_x + w > canvas_w and shelf_x > 0:
+                shelf_x = 0
+                shelf_y += row_h + padding
+                if shelf_y % 2 != 0: shelf_y += 1
+                row_h = 0
+            regions.append((x1, y1, shelf_x, shelf_y, w, h))
+            shelf_x += w + padding
+            if shelf_x % 2 != 0: shelf_x += 1
+            row_h = max(row_h, h)
+            max_x = max(max_x, shelf_x)
+        aw = max_x if max_x % 2 == 0 else max_x + 1
+        ah = shelf_y + row_h
+        if ah % 2 != 0: ah += 1
+        area = aw * ah
+        if area < best_area:
+            best_area = area
+            best_res = (aw, ah, regions)
 
-        atlas_max_x = max(atlas_max_x, shelf_x)
-        atlas_max_y = max(atlas_max_y, shelf_y + current_shelf_h)
-
-    atlas_w = max(2, atlas_max_x)
-    atlas_h = max(2, atlas_max_y)
-    if atlas_w % 2 != 0: atlas_w += 1
-    if atlas_h % 2 != 0: atlas_h += 1
-
-    return atlas_w, atlas_h, regions
+    return best_res
 
 
 def _build_stream_ffmpeg_cmd(
@@ -393,12 +475,71 @@ def _build_stream_ffmpeg_cmd(
 
     # ── Overlay stream & operator ───────────────────────────────────────
     if encoder == "nv" and not needs_cpu_rotation:
-        if stream_w != render_w or stream_h != render_h:
-            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={render_w}:{render_h}:flags=bilinear,hwupload_cuda[ov]"
+        if hud_regions and len(hud_regions) > 1:
+            n_reg = len(hud_regions)
+            split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
+
+            crop_ops = []
+            overlay_ops = []
+            curr_base = "[base]"
+            for i, r in enumerate(hud_regions):
+                dest_x, dest_y, atlas_x, atlas_y, rw, rh = r
+                s_rw = int(round(rw * scale_x))
+                s_rh = int(round(rh * scale_y))
+                if s_rw % 2 != 0:
+                    s_rw += 1
+                if s_rh % 2 != 0:
+                    s_rh += 1
+                if nv_rot180_cuda:
+                    eff_dest_x = canvas_w - (dest_x + rw)
+                    eff_dest_y = canvas_h - (dest_y + rh)
+                else:
+                    eff_dest_x = dest_x
+                    eff_dest_y = dest_y
+                s_dest_x = int(round(eff_dest_x * scale_x))
+                s_dest_y = int(round(eff_dest_y * scale_y))
+
+                if scale_x != 1.0 or scale_y != 1.0:
+                    crop_ops.append(
+                        f"[ov_raw_{i}]crop={rw}:{rh}:{atlas_x}:{atlas_y},scale={s_rw}:{s_rh}:flags=bilinear,format=yuva420p,hwupload_cuda[ov_{i}]"
+                    )
+                else:
+                    crop_ops.append(
+                        f"[ov_raw_{i}]crop={rw}:{rh}:{atlas_x}:{atlas_y},format=yuva420p,hwupload_cuda[ov_{i}]"
+                    )
+
+                next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+                overlay_ops.append(
+                    f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{next_base}"
+                )
+                curr_base = next_base
+
+            filter_complex = (
+                f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
+            )
         else:
-            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov]"
-        ov_op = f"overlay_cuda=x={hud_x}:y={hud_y}"
-        filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
+            scaled_stream_w = int(round(stream_w * scale_x))
+            scaled_stream_h = int(round(stream_h * scale_y))
+            if scaled_stream_w % 2 != 0:
+                scaled_stream_w += 1
+            if scaled_stream_h % 2 != 0:
+                scaled_stream_h += 1
+            if nv_rot180_cuda:
+                eff_hud_x = canvas_w - hud_x - stream_w
+                eff_hud_y = canvas_h - hud_y - stream_h
+            else:
+                eff_hud_x = hud_x
+                eff_hud_y = hud_y
+            scaled_hud_x = int(round(eff_hud_x * scale_x))
+            scaled_hud_y = int(round(eff_hud_y * scale_y))
+
+            if scale_x != 1.0 or scale_y != 1.0:
+                ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={scaled_stream_w}:{scaled_stream_h}:flags=bilinear,format=yuva420p,hwupload_cuda[ov]"
+            else:
+                ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,format=yuva420p,hwupload_cuda[ov]"
+            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
+            filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
         if "-init_hw_device" not in input_args:
             input_args = ["-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl", *input_args]

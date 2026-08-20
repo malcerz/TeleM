@@ -60,6 +60,12 @@ class SharedFramePool:
         """Close and unlink all shared memory blocks."""
         for shm in self._shm_blocks:
             try:
+                buf = getattr(shm, "_buf", None)
+                if buf is not None:
+                    try:
+                        buf.release()
+                    except Exception:
+                        pass
                 shm.close()
                 shm.unlink()
             except Exception:
@@ -87,6 +93,12 @@ def _close_shm_in_worker() -> None:
     for shm in _SHM_BLOCKS:
         if shm is not None:
             try:
+                buf = getattr(shm, "_buf", None)
+                if buf is not None:
+                    try:
+                        buf.release()
+                    except Exception:
+                        pass
                 shm.close()
             except Exception:
                 pass
@@ -132,4 +144,5 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
     img_arr = np.asarray(img)
     np.copyto(shm_arr, img_arr)
+    del shm_arr
     return index, slot

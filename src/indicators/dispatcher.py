@@ -85,7 +85,9 @@ def render_value_indicator(
 
     if form == "text":
         return _render_text_indicator(**_kwargs, formatted_val=formatted_val)
-    elif form == "bar":
+    elif form in ("bar", "segment_bar"):
+        if form == "segment_bar" and "bar_style" not in cfg:
+            cfg["bar_style"] = "segments"
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "gauge":
         return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
@@ -100,8 +102,6 @@ def render_value_indicator(
             ),
             target_dt=target_dt,
         )
-    elif form == "segment_bar":
-        return _render_segment_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "static_map":
         return _render_static_map_indicator(
             **_kwargs,

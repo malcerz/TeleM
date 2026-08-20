@@ -23,9 +23,9 @@ DEFAULT_FORM_RULES: list[tuple[str, str, float]] = [
     ("alt",              "bar",   15.0),
     ("distance",         "bar",   15.0),
     ("dist",             "bar",   15.0),
-    ("battery",          "segment_bar", 12.0),
-    ("solar",            "segment_bar", 12.0),
-    ("gopro_battery",    "segment_bar", 12.0),
+    ("battery",          "bar",   12.0),
+    ("solar",            "bar",   12.0),
+    ("gopro_battery",    "bar",   12.0),
 ]
 
 
@@ -74,7 +74,8 @@ def get_form_for_key(key: str) -> tuple[str, dict]:
     for pattern, form, size in DEFAULT_FORM_RULES:
         if pattern in key_lower:
             overrides: dict = {"form": form, "size": size}
-            if form == "segment_bar":
+            if pattern in ("battery", "solar", "gopro_battery"):
+                overrides["bar_style"] = "segments"
                 overrides["segments"] = 20
             return form, overrides
     return "text", {}

@@ -171,10 +171,13 @@ def render_overlay_frame(
         )
 
         atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
+        rot180 = WORKER_CACHE.get("hud_rotate_180", False)
         for r in hud_regions:
-            dest_x, dest_y, src_x, src_y, rw, rh = r
+            dest_x, dest_y, atlas_x, atlas_y, rw, rh = r
             r_crop = img.crop((dest_x, dest_y, dest_x + rw, dest_y + rh))
-            atlas_img.paste(r_crop, (src_x, src_y))
+            if rot180:
+                r_crop = r_crop.transpose(Image.Transpose.ROTATE_180)
+            atlas_img.paste(r_crop, (atlas_x, atlas_y))
 
         WORKER_CACHE["_prev_frame_data"] = data
         WORKER_CACHE["_prev_atlas_img"] = atlas_img

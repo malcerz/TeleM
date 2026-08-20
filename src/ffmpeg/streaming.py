@@ -39,6 +39,7 @@ def _pipe_writer_thread(
     stdin_buffer: Any,
     done_event: threading.Event,
     shm_pool: SharedFramePool | None = None,
+    writer_stats: dict[str, Any] | None = None,
 ) -> None:
     """Background thread that drains frame bytes to FFmpeg stdin pipe.
 
@@ -67,12 +68,18 @@ def _pipe_writer_thread(
                             memview.release()
                         except Exception:
                             pass
-                    if shm_pool is not None:
-                        shm_pool.release(slot)
+                        if shm_pool is not None:
+                            shm_pool.release(slot)
                 else:
                     stdin_buffer.write(item)
             finally:
                 bt.stop_timer("ffmpeg_write")
+                now = time.perf_counter()
+                if writer_stats is not None:
+                    if writer_stats["first_frame_time"] is None:
+                        writer_stats["first_frame_time"] = now
+                    writer_stats["last_frame_time"] = now
+                    writer_stats["frames_written"] += 1
     except (BrokenPipeError, OSError):
         pass
 
@@ -105,12 +112,23 @@ def _acquire_shm_slot(
     slots would never be released and ``acquire`` would block for the full
     timeout before raising ``queue.Empty``. Surface the FFmpeg log instead.
     """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(
+                f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
+                f"FFmpeg log output:\n" + "\n".join(stdout_lines[-30:])
+            )
+        try:
+            return shm_pool.acquire(timeout=0.1)
+        except queue.Empty:
+            continue
     if process.poll() is not None:
         raise RuntimeError(
             f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
             f"FFmpeg log output:\n" + "\n".join(stdout_lines[-30:])
         )
-    return shm_pool.acquire(timeout=timeout)
+    raise queue.Empty("Timed out waiting for free SHM slot")
 
 
 def run_ffmpeg_with_progress(
@@ -196,7 +214,7 @@ def stream_overlay_to_ffmpeg(
     max_distance_m: float | None = None,
     target_fps: float = 30.0,
     update_rate_step: int = 1,
-    workers: int = 4,
+    workers: Optional[int] = None,
     iso_samples: Optional[list] = None,
     exposure_samples: Optional[list] = None,
     temperature_samples: Optional[list] = None,
@@ -225,6 +243,10 @@ def stream_overlay_to_ffmpeg(
     active_process_holder: Optional[dict] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
+    t_prod_start = time.perf_counter()
+    t_prep_start = t_prod_start
+    BenchmarkTracker.get_instance().enable(True)
+
     cut_regions = layout.get("cut_regions", [])
 
     generation_fps = target_fps / update_rate_step
@@ -308,9 +330,72 @@ def stream_overlay_to_ffmpeg(
                 f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
                 flush=True,
             )
+    elif encoder == "nv" and not is_no_hud:
+        # 1. Global BBox
+        bx, by, bw, bh = get_layout_hud_bbox(layout, overlay_w, overlay_h)
+        full_area = overlay_w * overlay_h
+        global_bbox_area = bw * bh
+        global_area_pct = (global_bbox_area / full_area) * 100.0
+
+        # 2. Multi-Region Atlas (up to 3 regions)
+        atlas_w, atlas_h, candidate_regions = get_layout_hud_regions(layout, overlay_w, overlay_h, max_regions=3)
+        atlas_area = atlas_w * atlas_h
+        atlas_area_pct = (atlas_area / full_area) * 100.0
+
+        print(f"[NVIDIA] HUD global bbox: {bw}x{bh} / {global_area_pct:.1f}%", flush=True)
+
+        if len(candidate_regions) == 1 or (global_area_pct <= 85.0 and global_bbox_area <= atlas_area):
+            # A. SINGLE BBOX
+            hud_x, hud_y = bx, by
+            stream_w, stream_h = bw, bh
+            hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+            hud_regions = None
+            slot_mb = (stream_w * stream_h * 4) / (1024 * 1024)
+            shm_total_mb = slot_mb * 8
+            reduction_pct = 100.0 - global_area_pct
+            print(f"[NVIDIA] HUD mode: SINGLE_BBOX", flush=True)
+            print(f"[NVIDIA] HUD bbox: x={hud_x} y={hud_y} w={stream_w} h={stream_h}", flush=True)
+            print(f"[NVIDIA] HUD area: {global_area_pct:.1f}% of {overlay_w}x{overlay_h}", flush=True)
+            print(f"[NVIDIA] HUD slot: {slot_mb:.2f} MB", flush=True)
+            print(f"[NVIDIA] HUD SHM total: {shm_total_mb:.1f} MB", flush=True)
+            print(f"[NVIDIA] HUD transport reduction: {reduction_pct:.1f}%", flush=True)
+
+        elif atlas_area_pct <= 70.0:
+            # B. MULTI-REGION ATLAS (at least 30% reduction)
+            hud_bbox = None
+            hud_regions = candidate_regions
+            hud_x, hud_y = 0, 0
+            stream_w, stream_h = atlas_w, atlas_h
+            slot_mb = (stream_w * stream_h * 4) / (1024 * 1024)
+            shm_total_mb = slot_mb * 8
+            reduction_pct = 100.0 - atlas_area_pct
+            print(f"[NVIDIA] HUD mode: MULTI_REGION_ATLAS", flush=True)
+            print(f"[NVIDIA] HUD regions: {len(hud_regions)}", flush=True)
+            for i, r in enumerate(hud_regions):
+                print(f"[NVIDIA] Region {i}: src=({r[0]},{r[1]},{r[4]}x{r[5]}) atlas=({r[2]},{r[3]})", flush=True)
+            print(f"[NVIDIA] HUD atlas: {stream_w}x{stream_h}", flush=True)
+            print(f"[NVIDIA] HUD atlas area: {atlas_area_pct:.1f}% of {overlay_w}x{overlay_h}", flush=True)
+            print(f"[NVIDIA] HUD atlas slot: {slot_mb:.2f} MB", flush=True)
+            print(f"[NVIDIA] HUD atlas SHM total: {shm_total_mb:.1f} MB", flush=True)
+            print(f"[NVIDIA] HUD transport reduction: {reduction_pct:.1f}%", flush=True)
+
+        else:
+            # C. FULL FRAME FALLBACK
+            hud_bbox = None
+            hud_regions = None
+            hud_x, hud_y = 0, 0
+            stream_w, stream_h = overlay_w, overlay_h
+            full_slot_mb = (overlay_w * overlay_h * 4) / (1024 * 1024)
+            full_shm_mb = full_slot_mb * 8
+            print(f"[NVIDIA] HUD mode: FULL_FRAME (fallback: atlas {atlas_area_pct:.1f}% > 70%)", flush=True)
+            print(f"[NVIDIA] HUD slot: {full_slot_mb:.2f} MB", flush=True)
+            print(f"[NVIDIA] HUD SHM total: {full_shm_mb:.1f} MB", flush=True)
+            print(f"[NVIDIA] HUD transport reduction: 0.0%", flush=True)
 
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
+    t_worker_init_start = time.perf_counter()
+    t_prep_end = t_worker_init_start
     init_worker(
         overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
         iso_samples, exposure_samples, temperature_samples,
@@ -416,6 +501,8 @@ def stream_overlay_to_ffmpeg(
         return total_overlay_frames
 
     # Start FFmpeg
+    t_ffmpeg_start = time.perf_counter()
+    t_worker_init_pre_end = t_ffmpeg_start
     startupinfo = None
     if os.name == "nt":
         startupinfo = subprocess.STARTUPINFO()
@@ -444,7 +531,12 @@ def stream_overlay_to_ffmpeg(
 
     start_time = time.time()
     total_piped = 0
-    workers = workers or max(1, (os.cpu_count() or 1) - 1)
+    cpu_n = os.cpu_count() or 1
+    if workers is None:
+        if encoder == "nv":
+            workers = max(1, min(4, cpu_n))
+        else:
+            workers = max(1, cpu_n - 1)
     n_workers = min(workers, total_overlay_frames)
 
     # Frame size in bytes: RGBA = 4 bytes per pixel
@@ -461,14 +553,16 @@ def stream_overlay_to_ffmpeg(
         n_shm_slots = 1
 
     # ── Async pipe writer (background thread) ───────────────────────────
+    writer_stats = {"first_frame_time": None, "last_frame_time": None, "frames_written": 0}
     pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
     pipe_done = threading.Event()
     writer_t = threading.Thread(
         target=_pipe_writer_thread,
-        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool),
+        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool, writer_stats),
         daemon=True,
     )
     writer_t.start()
+    t_ffmpeg_started = time.perf_counter()
 
     try:
         if n_workers <= 1:
@@ -500,12 +594,19 @@ def stream_overlay_to_ffmpeg(
                 nv_rot180_cuda,
             )
 
-            print(
-                f"[STREAM] SHM pool: {n_shm_slots} slots × {frame_size / 1024 / 1024:.1f} MB = "
-                f"{n_shm_slots * frame_size / 1024 / 1024:.0f} MB total | "
-                f"workers={n_workers} | MAX_IN_FLIGHT={MAX_IN_FLIGHT}",
-                flush=True,
-            )
+            if encoder == "nv":
+                print(
+                    f"[NVIDIA] Overlay workers: {n_workers} | MAX_IN_FLIGHT: {MAX_IN_FLIGHT} | "
+                    f"SHM: ~{n_shm_slots * frame_size / 1024 / 1024:.0f} MB ({n_shm_slots} slots × {frame_size / 1024 / 1024:.1f} MB)",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[STREAM] SHM pool: {n_shm_slots} slots × {frame_size / 1024 / 1024:.1f} MB = "
+                    f"{n_shm_slots * frame_size / 1024 / 1024:.0f} MB total | "
+                    f"workers={n_workers} | MAX_IN_FLIGHT={MAX_IN_FLIGHT}",
+                    flush=True,
+                )
 
             with ProcessPoolExecutor(
                 max_workers=n_workers,
@@ -574,6 +675,7 @@ def stream_overlay_to_ffmpeg(
                     )
 
         # Signal pipe writer to finish and close stdin
+        t_drain_start = time.perf_counter()
         pipe_done.set()
         pipe_queue.put(None)  # sentinel
         writer_t.join(timeout=30.0)
@@ -597,12 +699,27 @@ def stream_overlay_to_ffmpeg(
             pass
         raise
     finally:
+        # Drain pipe_queue and release any pending memoryviews
+        while not pipe_queue.empty():
+            try:
+                item = pipe_queue.get_nowait()
+                if isinstance(item, tuple):
+                    _, memview = item
+                    try:
+                        memview.release()
+                    except Exception:
+                        pass
+            except Exception:
+                break
+
         # Always clean up SHM pool
         if shm_pool is not None:
             shm_pool.close()
 
     stdout_t.join(timeout=10.0)
     process.wait()
+    t_drain_end = time.perf_counter()
+    t_drain_time = t_drain_end - t_drain_start
 
     if active_process_holder is not None:
         active_process_holder["process"] = None
@@ -617,6 +734,7 @@ def stream_overlay_to_ffmpeg(
         if concat_txt.exists():
             concat_txt.unlink()
 
+    t_postprocess_start = time.perf_counter()
     if nv_rot180_cuda:
         # The local FFmpeg drops the display-matrix through overlay_cuda and
         # cannot write one via -metadata/-display_rotation, so inject the
@@ -624,9 +742,46 @@ def stream_overlay_to_ffmpeg(
         # Raises on failure so the export is never reported as successful with a
         # physically-rotated file that is missing the rotation metadata.
         _inject_rot180_displaymatrix(output_file, render_w, render_h)
+    t_postprocess_end = time.perf_counter()
+    t_postprocess_time = t_postprocess_end - t_postprocess_start
+
+    t_prod_end = t_postprocess_end
+    t_prod_total = t_prod_end - t_prod_start
+    t_prep_time = t_prep_end - t_prep_start
+    t_worker_init_time = t_worker_init_pre_end - t_worker_init_start
+    t_ffmpeg_startup_time = t_ffmpeg_started - t_ffmpeg_start
+    first_frame_lat = (writer_stats["first_frame_time"] - t_prod_start) if writer_stats["first_frame_time"] is not None else 0.0
+    frame_pipeline_time = (writer_stats["last_frame_time"] - writer_stats["first_frame_time"]) if (writer_stats["first_frame_time"] and writer_stats["last_frame_time"]) else (t_drain_start - t_ffmpeg_started)
+    pipeline_fps = (total_overlay_frames / frame_pipeline_time) if frame_pipeline_time > 0 else 0.0
+    real_export_fps = (total_overlay_frames / t_prod_total) if t_prod_total > 0 else 0.0
+    total_overhead = max(0.0, t_prod_total - frame_pipeline_time)
+    overhead_pct = (total_overhead / t_prod_total * 100.0) if t_prod_total > 0 else 0.0
 
     # Wydrukuj podsumowanie wydajności renderowania
     BenchmarkTracker.get_instance().print_summary()
+
+    if encoder == "nv":
+        summary = BenchmarkTracker.get_instance().get_summary()
+        write_stats = summary.get("ffmpeg_write", {"avg": 0.0, "p95": 0.0})
+        write_avg = write_stats.get("avg", 0.0)
+        write_p95 = write_stats.get("p95", 0.0)
+
+        print("\n=== NVIDIA PRODUCTION EXPORT TIMING ===", flush=True)
+        print(f"\nFrames                 : {total_overlay_frames}", flush=True)
+        print(f"\nPREPARE                 : {t_prep_time:.3f} s", flush=True)
+        print(f"WORKER_INIT             : {t_worker_init_time:.3f} s", flush=True)
+        print(f"FFMPEG_STARTUP          : {t_ffmpeg_startup_time:.3f} s", flush=True)
+        print(f"FIRST_FRAME_LATENCY     : {first_frame_lat:.3f} s", flush=True)
+        print(f"FRAME_PIPELINE          : {frame_pipeline_time:.3f} s", flush=True)
+        print(f"FFMPEG_DRAIN_FINALIZE   : {t_drain_time:.3f} s", flush=True)
+        print(f"POSTPROCESS             : {t_postprocess_time:.3f} s", flush=True)
+        print(f"\nPRODUCTION_TOTAL        : {t_prod_total:.3f} s", flush=True)
+        print(f"\nPIPELINE_FPS            : {pipeline_fps:.1f}", flush=True)
+        print(f"REAL_EXPORT_FPS         : {real_export_fps:.1f}", flush=True)
+        print(f"\nTOTAL_OVERHEAD          : {total_overhead:.3f} s", flush=True)
+        print(f"OVERHEAD                : {overhead_pct:.1f} %", flush=True)
+        print(f"\nffmpeg_write avg        : {write_avg:.2f} ms", flush=True)
+        print(f"ffmpeg_write p95        : {write_p95:.2f} ms\n", flush=True)
 
     return total_piped
 
