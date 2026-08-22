@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QCheckBox, QComboBox,
     QDoubleSpinBox, QSpinBox, QLineEdit,
     QFormLayout, QHBoxLayout, QPushButton, QColorDialog,
-    QSizePolicy, QSpacerItem, QTabWidget,
+    QSizePolicy, QSpacerItem, QTabWidget, QFileDialog,
 )
 
 from src.gui.qt.models import FieldSchema
@@ -326,6 +326,35 @@ class PropertyEditor(QWidget):
             )
             res_widget = edit
 
+        elif field.field_type == "font":
+            row = QWidget()
+            hbox = QHBoxLayout(row)
+            hbox.setContentsMargins(0, 0, 0, 0)
+            edit = QLineEdit(str(value) if value else "")
+            edit.setPlaceholderText("Domyślny")
+            edit.setToolTip("Wpisz nazwę rodziny fontu (np. Digital-7, Comic Sans) lub wskaż plik")
+            try:
+                from PySide6.QtGui import QFontDatabase
+                from PySide6.QtWidgets import QCompleter
+                families = QFontDatabase.families()
+                if families:
+                    completer = QCompleter(families, edit)
+                    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                    edit.setCompleter(completer)
+            except Exception:
+                pass
+            edit.textChanged.connect(
+                lambda txt, n=name: self._emit_change(n, txt or None)
+            )
+            btn = QPushButton("Wybierz plik…")
+            btn.clicked.connect(
+                lambda checked=False, e=edit: self._pick_font(e)
+            )
+            hbox.addWidget(edit, 1)
+            hbox.addWidget(btn)
+            self._field_widgets[name] = edit
+            return row
+
         elif field.field_type == "color":
             row = QWidget()
             hbox = QHBoxLayout(row)
@@ -373,6 +402,13 @@ class PropertyEditor(QWidget):
                 f"background-color: {color_name}; "
                 f"border: 1px solid #555; border-radius: 2px;"
             )
+
+    def _pick_font(self, edit: QLineEdit) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Wybierz plik fontu", "", "Fonty (*.ttf *.otf *.ttc)"
+        )
+        if path:
+            edit.setText(path)
 
     def _emit_change(self, field_name: str, value: Any) -> None:
         """Emituje sygnał zmiany właściwości."""

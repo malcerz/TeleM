@@ -33,6 +33,7 @@ def render_map_working_image(
     gps_track,
     target_dt=None,
     current_position=None,
+    map_heading=None,
 ):
     """Render the map working image (692x692 for 4K) WITHOUT the final Pillow
     LANCZOS resize, using the same render plan/renderer semantics as the
@@ -56,7 +57,8 @@ def render_map_working_image(
         working_size = render_plan["working_size"]
         effective_zoom = render_plan["effective_zoom"]
         map_style = cfg.get("map_style", "light_all")
-        cache_key = (id(gps_track), effective_zoom, map_style)
+        marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        cache_key = (id(gps_track), effective_zoom, map_style, marker_style)
         renderers = _shared_map_renderers()
         renderer = renderers.get(cache_key)
         if renderer is None:
@@ -74,6 +76,7 @@ def render_map_working_image(
                 track_width=max(1, int(round(
                     track_width * (2.0 ** render_plan["zoom_offset"])
                 ))),
+                marker_style=marker_style,
             )
             renderers[cache_key] = renderer
             renderer._is_first_render = True
@@ -96,12 +99,22 @@ def render_map_working_image(
             ts = (current_position if current_position is not None else 0.0) * dur
 
         dl_missing = getattr(renderer, '_is_first_render', False)
-        map_img = renderer.render(
-            ts, working_size, working_size,
-            download_missing=dl_missing,
-            draw_track=not bool(cfg.get("hide_track", False)),
-            draw_marker=not bool(cfg.get("hide_marker", False)),
-        )
+        draw_track = not bool(cfg.get("hide_track", False))
+        draw_marker = not bool(cfg.get("hide_marker", False))
+        if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
+            map_img = renderer.render_track_up(
+                ts, working_size, heading=map_heading,
+                download_missing=dl_missing,
+                draw_track=draw_track,
+                draw_marker=draw_marker,
+            )
+        else:
+            map_img = renderer.render(
+                ts, working_size, working_size,
+                download_missing=dl_missing,
+                draw_track=draw_track,
+                draw_marker=draw_marker,
+            )
         renderer._is_first_render = False
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         rx = s(cfg["x"], canvas_w)
@@ -156,6 +169,7 @@ def _render_moving_map_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     gps_track=None, target_dt=None, current_position=None,
+    map_heading=None,
 ):
     """Render a moving-map indicator."""
     if not gps_track or len(gps_track) < 2:
@@ -171,7 +185,8 @@ def _render_moving_map_indicator(
         effective_zoom = render_plan["effective_zoom"]
         working_size = render_plan["working_size"]
         map_style = cfg.get("map_style", "light_all")
-        cache_key = (track_id, effective_zoom, map_style)
+        marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        cache_key = (track_id, effective_zoom, map_style, marker_style)
         if not hasattr(_render_moving_map_indicator, "_map_renderers"):
             _render_moving_map_indicator._map_renderers = {}
         _cache = _render_moving_map_indicator._map_renderers
@@ -193,6 +208,7 @@ def _render_moving_map_indicator(
                 track_width=max(1, int(round(
                     track_width * (2.0 ** render_plan["zoom_offset"])
                 ))),
+                marker_style=marker_style,
             )
             _cache[cache_key] = renderer
             renderer._is_first_render = True
@@ -215,6 +231,7 @@ def _render_moving_map_indicator(
             renderer._mkr_radius = max(1, int(round(
                 float(cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"])
             )))
+            renderer._mkr_style = marker_style
         if target_dt is not None:
             gps0 = gps_track[0][0]
             if hasattr(gps0, 'timestamp'):
@@ -239,12 +256,23 @@ def _render_moving_map_indicator(
         hide_marker = bool(cfg.get("hide_marker", False))
         hide_track = bool(cfg.get("hide_track", False))
         
-        map_img = renderer.render(
-            ts, working_size, working_size,
-            download_missing=False,
-            draw_track=not hide_track,
-            draw_marker=not hide_marker
-        )
+        draw_track = not hide_track
+        draw_marker = not hide_marker
+        if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
+            map_img = renderer.render_track_up(
+                ts, working_size, heading=map_heading,
+                download_missing=dl_missing,
+                draw_track=draw_track,
+                draw_marker=draw_marker,
+            )
+        else:
+            map_img = renderer.render(
+                ts, working_size, working_size,
+                download_missing=dl_missing,
+                draw_track=draw_track,
+                draw_marker=draw_marker,
+                heading=map_heading,
+            )
         renderer._is_first_render = False
         if map_img.size != (map_w, map_h):
             map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)

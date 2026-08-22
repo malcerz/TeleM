@@ -38,7 +38,7 @@ class FieldSchema:
     """Schema pojedynczego pola właściwości wskaźnika."""
 
     name: str           # nazwa pola (np. "font_size", "color", "min_val")
-    field_type: str     # typ: "bool", "int", "float", "choice", "text", "color"
+    field_type: str     # typ: "bool", "int", "float", "choice", "text", "color", "font"
     label: str          # etykieta wyświetlana
 
     # Zakładka w panelu właściwości ("" = header nad zakładkami):
@@ -72,6 +72,10 @@ def _header_fields(with_source: bool = True, text_size: bool = False) -> list[Fi
                     min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("rotation", "choice", "Rotacja", tab="",
                     choices=["0", "90", "180", "270"]),
+        FieldSchema("font", "font", "Font", tab=""),
+        FieldSchema("icon", "choice", "Ikona", tab="", choices=[
+            "none", "clock", "camera", "temperature", "battery", "solar",
+        ]),
     ]
     if with_source:
         fields.append(
@@ -173,12 +177,16 @@ def _gauge_tab_fields() -> list[FieldSchema]:
     ]
 
 
-def _chart_tab_fields() -> list[FieldSchema]:
+def _chart_tab_fields(chart_time_scope: str = "activity") -> list[FieldSchema]:
     """Zakładka Chart – wygląd wykresu."""
-    return [
+    fields = [
         FieldSchema(
             "chart_time_scope", "choice", "Zakres czasu wykresu", tab="Chart",
-            choices=[("activity", "Cała aktywność"), ("video", "Zakres filmu")],
+            choices=[
+                ("activity", "Cała aktywność"),
+                ("video", "Zakres filmu"),
+                ("window", "Ostatnie N sekund"),
+            ],
         ),
         FieldSchema("chart_color", "color", "Linia", tab="Chart"),
         FieldSchema("fill_color", "color", "Wypełnienie", tab="Chart"),
@@ -189,6 +197,15 @@ def _chart_tab_fields() -> list[FieldSchema]:
         FieldSchema("line_width", "int", "Grubość linii", tab="Chart",
                     min_val=1, max_val=8, step=1),
     ]
+    if chart_time_scope == "window":
+        fields.insert(
+            1,
+            FieldSchema(
+                "chart_window_s", "float", "Okno historii [s]", tab="Chart",
+                min_val=5.0, max_val=600.0, step=1.0,
+            ),
+        )
+    return fields
 
 
 def _segments_tab_fields() -> list[FieldSchema]:
@@ -235,8 +252,40 @@ def gauge_indicator_fields() -> list[FieldSchema]:
     return (
         _header_fields() + _form_field()
         + _text_tab_fields()
+        + [FieldSchema("tick_profile", "choice", "Profil ticków", tab="Ticks",
+                       choices=["default", "pixel"])]
         + _ticks_tab_fields()
         + _gauge_tab_fields()
+    )
+
+
+def compass_indicator_fields() -> list[FieldSchema]:
+    """Compass: gauge layout controls plus compass-only styling fields."""
+    return (
+        _header_fields() + _form_field(["gauge"])
+        + _text_tab_fields()
+        + _ticks_tab_fields(with_range=False)
+        + [
+            FieldSchema("tick_profile", "choice", "Profil ticków", tab="Compass",
+                        choices=["default", "pixel"]),
+            FieldSchema("field", "choice", "Pole", tab="Compass", choices=["heading"]),
+            FieldSchema("gauge_style", "choice", "Styl", tab="Compass", choices=["compass"]),
+            FieldSchema("opacity", "float", "Przezroczystość", tab="Compass",
+                        min_val=0.0, max_val=1.0, step=0.05),
+            FieldSchema("compass_show_cardinals", "bool", "N/E/S/W", tab="Compass"),
+            FieldSchema("compass_show_heading", "bool", "Wartość heading", tab="Compass"),
+            FieldSchema("compass_heading_format", "choice", "Format heading", tab="Compass",
+                        choices=["03d", "d"]),
+            FieldSchema("compass_tick_degrees", "int", "Subtick co", tab="Compass",
+                        min_val=5, max_val=90, step=5),
+            FieldSchema("compass_major_tick_degrees", "int", "Główny tick co", tab="Compass",
+                        min_val=15, max_val=90, step=15),
+            FieldSchema("compass_tick_color", "color", "Kolor ticków", tab="Compass"),
+            FieldSchema("compass_cardinal_color", "color", "Kolor N/E/S/W", tab="Compass"),
+            FieldSchema("compass_needle_color", "color", "Kolor wskazówki", tab="Compass"),
+            FieldSchema("compass_ring_color", "color", "Kolor tarczy", tab="Compass"),
+            FieldSchema("compass_heading_color", "color", "Kolor wartości", tab="Compass"),
+        ]
     )
 
 
@@ -264,6 +313,7 @@ def _bar_ruler_fields() -> list[FieldSchema]:
         FieldSchema("marker_color", "color", "Kolor wskaźnika", tab="Ticks"),
         FieldSchema("marker_border_color", "color", "Obramowanie wsk.", tab="Ticks"),
         FieldSchema("marker_size", "float", "Rozmiar wskaźnika", tab="Ticks", min_val=2.0, max_val=30.0, step=0.5),
+        FieldSchema("tick_profile", "choice", "Profil ticków", tab="Ticks", choices=["default", "pixel"]),
         # Tab Gauge (Zakres / Grubość)
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=100000.0, step=1.0),
@@ -296,26 +346,54 @@ def _bar_segments_fields() -> list[FieldSchema]:
     ]
 
 
+def _bar_slope_fields() -> list[FieldSchema]:
+    """Fields for the canonical slope/grade vertical ruler."""
+    return [
+        FieldSchema("field", "choice", "Pole", tab="", choices=["slope"]),
+        FieldSchema("show_value", "bool", "Wartość", tab="Text"),
+        FieldSchema("show_label", "bool", "Etykieta", tab="Text"),
+        FieldSchema("show_range_labels", "bool", "Zakres", tab="Text"),
+        FieldSchema("show_units", "bool", "Jednostki", tab="Text"),
+        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1),
+        FieldSchema("text_color", "color", "Kolor tekstu", tab="Text"),
+        FieldSchema("range_color", "color", "Kolor zakresu", tab="Text"),
+        FieldSchema("opacity", "float", "Opacity", tab="Text", min_val=0.0, max_val=1.0, step=0.05),
+        FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0),
+        FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0),
+        FieldSchema("major_tick", "float", "Major tick", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5),
+        FieldSchema("minor_tick", "float", "Minor tick", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5),
+        FieldSchema("track_color", "color", "Kolor osi", tab="Ticks"),
+        FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks"),
+        FieldSchema("zero_tick_color", "color", "Kolor zera", tab="Ticks"),
+        FieldSchema("marker_color", "color", "Kolor markera", tab="Ticks"),
+        FieldSchema("marker_border_color", "color", "Obramowanie markera", tab="Ticks"),
+        FieldSchema("marker_size", "float", "Rozmiar markera", tab="Ticks", min_val=1.0, max_val=30.0, step=0.5),
+        FieldSchema("tick_profile", "choice", "Profil ticków", tab="Ticks", choices=["default", "pixel"]),
+    ]
+
+
 def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
     """Bar: Header (w tym Styl: Ruler/Segments) + zakładki specyficzne dla stylu."""
     style = str(bar_style).strip().lower()
     style_choice = [
-        FieldSchema("bar_style", "choice", "Styl", tab="", choices=[("ruler", "Ruler"), ("segments", "Segments")]),
+        FieldSchema("bar_style", "choice", "Styl", tab="", choices=[("ruler", "Ruler"), ("segments", "Segments"), ("slope", "Slope")]),
     ]
     header = _header_fields() + _form_field() + style_choice
     if style in ("segment", "segments", "segmented", "segment_bar"):
         return header + _bar_segments_fields()
+    if style in ("slope", "grade", "vertical_slope"):
+        return header + _bar_slope_fields()
     return header + _bar_ruler_fields()
 
 
-def chart_indicator_fields() -> list[FieldSchema]:
+def chart_indicator_fields(chart_time_scope: str = "activity") -> list[FieldSchema]:
     """Chart: Header, Text, Labels, Ticks (bez Tick), Chart (własna zakładka)."""
     return (
         _header_fields() + _form_field()
         + _text_tab_fields(with_color=True)
         + _labels_tab_fields()
         + _ticks_tab_fields(with_ticks=False)
-        + _chart_tab_fields()
+        + _chart_tab_fields(chart_time_scope=chart_time_scope)
     )
 
 
@@ -355,6 +433,8 @@ def _map_path_tab_fields() -> list[FieldSchema]:
 
 def _map_shape_tab_fields() -> list[FieldSchema]:
     return [
+        FieldSchema("map_orientation", "choice", "Orientacja mapy", tab="Shape",
+                    choices=["north_up", "track_up"]),
         FieldSchema("map_style", "choice", "Mapa (Map)", tab="Shape",
                     choices=["light_all", "light_nolabels", "dark_all",
                              "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"]),
@@ -408,6 +488,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
                     min_val=0.0, max_val=100.0, step=0.1),
         FieldSchema("rotation", "choice", "Rotacja", tab="",
                     choices=["0", "90", "180", "270"]),
+        FieldSchema("font", "font", "Font", tab=""),
     ]
     date_tab = [
         FieldSchema("show_date", "bool", "Pokaż datę", tab="Data"),
@@ -448,6 +529,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
 FORM_SCHEMA_MAP: dict[str, callable] = {
     "text":        text_indicator_fields,
     "gauge":       gauge_indicator_fields,
+    "compass":      compass_indicator_fields,
     "bar":         bar_indicator_fields,
     "chart":       chart_indicator_fields,
     "segment_bar": segment_bar_indicator_fields,
@@ -457,12 +539,16 @@ FORM_SCHEMA_MAP: dict[str, callable] = {
 }
 
 
-def get_schema_for_form(form: str, bar_style: str = "ruler") -> list[FieldSchema]:
+def get_schema_for_form(
+    form: str, bar_style: str = "ruler", chart_time_scope: str = "activity",
+) -> list[FieldSchema]:
     """Zwraca schemat pól dla podanej formy wskaźnika."""
     if form == "bar":
         return bar_indicator_fields(bar_style=bar_style)
     if form == "segment_bar":
         return bar_indicator_fields(bar_style="segments")
+    if form == "chart":
+        return chart_indicator_fields(chart_time_scope=chart_time_scope)
     fn = FORM_SCHEMA_MAP.get(form, text_indicator_fields)
     return fn()
 

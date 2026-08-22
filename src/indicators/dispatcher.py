@@ -42,6 +42,7 @@ def render_value_indicator(
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
     split_chart_keys: Optional[set[str]] = None,
+    map_heading: Optional[float] = None,
 ) -> tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]:
     """Render a single telemetry indicator – dispatcher to per-form helpers."""
     cfg = cfg_override if cfg_override else layout["indicators"].get(key)
@@ -108,6 +109,7 @@ def render_value_indicator(
             gps_track=gps_track,
             target_dt=target_dt,
             current_position=current_position,
+            map_heading=map_heading,
         )
     elif form == "map":
         return _render_moving_map_indicator(
@@ -115,6 +117,7 @@ def render_value_indicator(
             gps_track=gps_track,
             target_dt=target_dt,
             current_position=current_position,
+            map_heading=map_heading,
         )
 
     return None, 0, 0, None

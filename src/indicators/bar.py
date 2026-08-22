@@ -22,7 +22,7 @@ by the compositor's annotation path.
 
 from __future__ import annotations
 
-from math import ceil
+from math import ceil, floor
 from typing import Any, Iterable
 
 try:
@@ -38,6 +38,7 @@ from src.indicators.helpers import (
     parse_hex_color,
     s,
 )
+from src.indicators.icons import render_icon
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +208,13 @@ def _render_ruler(
     dim_text = _rgba(cfg.get("range_color", cfg.get("text_color", "#E0E0E0")), (224, 224, 224), 255)
 
     line_w = max(1 * ss, int(round(max(1, thickness) * 0.35 * ss)))
+    pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
     tick_w = max(1 * ss, int(round(float(cfg.get("tick_width", 1.4)) * ss)))
     major_len = max(8 * ss, int(round(float(cfg.get("major_tick_length", 17)) * ss)))
     minor_len = max(4 * ss, int(round(float(cfg.get("minor_tick_length", 10)) * ss)))
+    if pixel_profile:
+        major_len = max(8 * ss, int(round(width * 0.040)))
+        minor_len = max(4 * ss, int(round(width * 0.018)))
     marker_radius = max(3 * ss, int(round(float(cfg.get("marker_size", 7)) * ss)))
     marker_border_w = max(1 * ss, int(round(float(cfg.get("marker_border_width", 1.5)) * ss)))
 
@@ -238,7 +243,7 @@ def _render_ruler(
         show_title, show_range, show_mid, range_units, decimals,
         val_min, val_max, unit, major_divisions, minor_per_major,
         track_color, tick_color, text_color, dim_text,
-        line_w, tick_w, major_len, minor_len, ss,
+        line_w, tick_w, major_len, minor_len, pixel_profile, ss,
     )
     base = _STATIC_CACHE.get(static_key)
     if base is None:
@@ -266,7 +271,9 @@ def _render_ruler(
             _line_with_shadow(
                 d, (x, track_y - length, x, track_y + max(1 * ss, line_w // 2)),
                 fill=tick_color,
-                width=tick_w if not is_major else max(tick_w, 2 * ss),
+                width=(max(tick_w, 2 * ss) if is_major else tick_w) if not pixel_profile
+                else (max(2 * ss, int(round(tick_w * 1.25))) if is_major
+                      else max(1 * ss, int(round(tick_w * 0.65)))),
             )
 
         if show_range:
@@ -485,6 +492,11 @@ def _render_segments(
         )
 
     if show_label and label:
+        icon = render_icon(cfg.get("icon"), max(10 * ss, int(label_fs * 1.1)))
+        if icon:
+            ix = max(0, int((raster_w - icon.width - int(label_font.getlength(str(label)))) / 2) - 3 * ss)
+            iy = max(0, int(bottom_y + (bottom_text_h - icon.height) / 2))
+            img.alpha_composite(icon, (ix, iy))
         _draw_text_bounded(
             d, (raster_w / 2, bottom_y), str(label).upper() if cfg.get("uppercase_label", True) else str(label),
             font=label_font, fill=text_color,
@@ -492,6 +504,229 @@ def _render_segments(
             bounds=(raster_w, raster_h), anchor="ma",
         )
 
+    return img
+
+
+# ---------------------------------------------------------------------------
+# Slope / grade vertical ruler
+# ---------------------------------------------------------------------------
+
+
+def _format_slope_number(value: float, decimals: int) -> str:
+    """Format a slope value with an explicit sign for climb/descent."""
+    return f"{float(value):+.{max(0, int(decimals))}f}"
+
+
+def _render_slope(
+    *,
+    canvas_w: int,
+    canvas_h: int,
+    font_path: str,
+    value: float,
+    unit: str,
+    label: str,
+    cfg: dict[str, Any],
+    val_min: float,
+    val_max: float,
+    thickness: int,
+    size_px: int,
+    fs: int,
+    outline: int,
+    ss: int,
+    formatted_val: str | None,
+):
+    """Render the canonical ``slope`` value as a lightweight vertical ruler.
+
+    ``value`` is already resolved telemetry.  This function only maps it to
+    the configured visual range; it never reads altitude, distance or source
+    data and never changes the canonical value used for the text label.
+    """
+    ss = max(1, int(ss))
+    lo = float(val_min)
+    hi = float(val_max)
+    if hi <= lo:
+        hi = lo + 1.0
+
+    decimals = max(0, int(cfg.get("decimals", 1)))
+    show_label = bool(cfg.get("show_label", True))
+    show_value = bool(cfg.get("show_value", True))
+    show_range = bool(cfg.get("show_range_labels", True))
+    missing = bool(cfg.get("_slope_missing", False))
+    opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
+    major_tick = max(0.1, abs(float(cfg.get("major_tick", 5.0))))
+    minor_tick = max(0.1, abs(float(cfg.get("minor_tick", 1.0))))
+    if minor_tick > major_tick:
+        minor_tick = major_tick
+
+    title_font = load_font(font_path, max(8 * ss, int(round(fs * 0.9 * ss))))
+    tick_font = load_font(font_path, max(7 * ss, int(round(fs * 0.72 * ss))))
+    value_font = load_font(font_path, max(9 * ss, int(round(fs * 1.12 * ss))))
+    text_stroke = max(0, int(round(max(1, outline) * ss)))
+
+    title = str(cfg.get("title_text", label or "SLOPE")).strip()
+    if bool(cfg.get("uppercase_label", True)):
+        title = title.upper()
+    value_text = (
+        str(formatted_val)
+        if formatted_val is not None
+        else ("--%" if missing else f"{_format_slope_number(value, decimals)}%")
+    )
+
+    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dummy)
+    tick_values: list[float] = []
+    tick_start = ceil((lo - 1e-9) / minor_tick) * minor_tick
+    tick_count = int(floor((hi - tick_start + 1e-9) / minor_tick))
+    for index in range(max(0, tick_count + 1)):
+        tick = tick_start + index * minor_tick
+        if lo - 1e-7 <= tick <= hi + 1e-7:
+            tick_values.append(0.0 if abs(tick) < 1e-7 else tick)
+    if not tick_values:
+        tick_values = [lo, 0.0 if lo <= 0.0 <= hi else hi]
+
+    major_values = [
+        tick for tick in tick_values
+        if abs(tick / major_tick - round(tick / major_tick)) < 1e-6
+        or abs(tick) < 1e-7
+    ]
+    if show_range:
+        tick_texts = [_format_slope_number(tick, 0) for tick in major_values]
+    else:
+        tick_texts = []
+    tick_widths = [
+        _text_size(dd, text, tick_font, text_stroke)[0] for text in tick_texts
+    ]
+    label_width = max(tick_widths or [0])
+    title_width = _text_size(dd, title, title_font, text_stroke)[0] if show_label else 0
+    value_width = _text_size(dd, value_text, value_font, text_stroke)[0] if show_value else 0
+
+    track_height = max(200 * ss, int(size_px * ss))
+    track_width = max(2 * ss, int(round(float(cfg.get("track_width", max(1, thickness * 0.45)) * ss))))
+    pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
+    tick_width = max(1 * ss, int(round(float(cfg.get("tick_width", max(1, thickness))) * ss)))
+    major_len = max(10 * ss, int(round(float(cfg.get("major_tick_length", 22.0)) * ss)))
+    minor_len = max(5 * ss, int(round(float(cfg.get("minor_tick_length", 12.0)) * ss)))
+    marker_width = max(1 * ss, int(round(float(cfg.get("marker_width", 3.0)) * ss)))
+    if pixel_profile:
+        major_len = max(10 * ss, int(round(track_height * 0.075)))
+        minor_len = max(5 * ss, int(round(track_height * 0.038)))
+        marker_width = max(marker_width, 4 * ss)
+    marker_len = max(12 * ss, int(round(float(cfg.get("marker_length", 28.0)) * ss)))
+    pad_x = 8 * ss
+    pad_top = 5 * ss
+    title_gap = 5 * ss if show_label and title else 0
+    title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label else 0
+    value_gap = 8 * ss if show_value else 0
+    track_x = pad_x + label_width + major_len + 10 * ss
+    top = pad_top + title_h + title_gap
+    bottom = top + track_height
+    value_x = track_x + marker_len + 12 * ss
+    raster_w = max(track_x + track_width + pad_x, value_x + value_width + pad_x)
+    raster_h = bottom + 6 * ss
+    track_color = _rgba(cfg.get("track_color", "#8D9AA7"), (141, 154, 167), int(235 * opacity))
+    tick_color = _rgba(cfg.get("tick_color", "#DDE7F2"), (221, 231, 242), int(240 * opacity))
+    zero_color = _rgba(cfg.get("zero_tick_color", "#FFFFFF"), (255, 255, 255), int(255 * opacity))
+    marker_color = _rgba(cfg.get("marker_color", "#FFD42A"), (255, 212, 42), int(255 * opacity))
+    marker_border = _rgba(cfg.get("marker_border_color", "#FFFFFF"), (255, 255, 255), int(255 * opacity))
+    text_color = _rgba(cfg.get("text_color", "#FFFFFF"), (255, 255, 255), int(255 * opacity))
+    dim_color = _rgba(cfg.get("range_color", "#DDE7F2"), (221, 231, 242), int(235 * opacity))
+    shadow_alpha = int(150 * opacity)
+
+    static_key = _static_cache_key(
+        "bar_slope_v1", raster_w, raster_h, track_x, top, bottom,
+        title, font_path, title_font.size, tick_font.size, value_font.size,
+        show_label, show_range, lo, hi, major_tick, minor_tick,
+        track_color, tick_color, zero_color, text_color, dim_color,
+        track_width, tick_width, major_len, minor_len, marker_width, pixel_profile, text_stroke,
+    )
+    base = _STATIC_CACHE.get(static_key)
+    if base is None:
+        base = Image.new("RGBA", (raster_w, raster_h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(base)
+        if show_label and title:
+            _draw_text_bounded(
+                d, (raster_w / 2, pad_top), title,
+                font=title_font, fill=text_color, stroke_width=text_stroke,
+                stroke_fill=(0, 0, 0, 230), bounds=(raster_w, raster_h), anchor="ma",
+            )
+        d.line(
+            (track_x, top, track_x, bottom), fill=(0, 0, 0, shadow_alpha),
+            width=max(track_width + 2 * ss, 1),
+        )
+        d.line((track_x, top, track_x, bottom), fill=track_color, width=track_width)
+        for tick in tick_values:
+            fraction = _fraction(hi - tick, 0.0, hi - lo)
+            y = int(round(top + fraction * track_height))
+            is_zero = abs(tick) < 1e-7
+            is_major = is_zero or abs(tick / major_tick - round(tick / major_tick)) < 1e-6
+            length = major_len if is_major else minor_len
+            colour = zero_color if is_zero else (tick_color if is_major else dim_color)
+            d.line(
+                (track_x - length, y, track_x + max(1, track_width // 2), y),
+                fill=(0, 0, 0, shadow_alpha), width=max(tick_width + ss, 1),
+            )
+            d.line(
+                (track_x - length, y, track_x + max(1, track_width // 2), y),
+                fill=colour,
+                width=max(
+                    tick_width + (ss if is_zero else 0), 1
+                ) if not pixel_profile else max(
+                    (tick_width + 2 * ss) if is_zero else
+                    (int(round(tick_width * 1.25)) if is_major else max(1 * ss, int(round(tick_width * 0.65)))),
+                    1,
+                ),
+            )
+            if show_range and is_major:
+                tick_text = _format_slope_number(tick, 0)
+                _draw_text_bounded(
+                    d, (track_x - length - 6 * ss, y), tick_text,
+                    font=tick_font, fill=zero_color if is_zero else dim_color,
+                    stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
+                    bounds=(raster_w, raster_h), anchor="rm",
+                )
+        _STATIC_CACHE[static_key] = base
+
+    img = base.copy()
+    d = ImageDraw.Draw(img)
+    visual_value = max(lo, min(hi, float(value)))
+    marker_fraction = _fraction(hi - visual_value, 0.0, hi - lo)
+    marker_y = int(round(top + marker_fraction * track_height))
+    if not missing:
+        d.line(
+            (track_x - marker_len, marker_y, track_x + marker_len, marker_y),
+            fill=(0, 0, 0, shadow_alpha), width=marker_width + 2 * ss,
+        )
+        d.line(
+            (track_x - marker_len, marker_y, track_x + marker_len, marker_y),
+            fill=marker_color, width=marker_width,
+        )
+        radius = max(3 * ss, int(round(float(cfg.get("marker_size", 6.0)) * ss)))
+        if pixel_profile:
+            d.rectangle(
+                (track_x - radius, marker_y - radius, track_x + radius, marker_y + radius),
+                fill=marker_border,
+            )
+            inner = max(1, radius - max(1, ss))
+            d.rectangle(
+                (track_x - inner, marker_y - inner, track_x + inner, marker_y + inner),
+                fill=marker_color,
+            )
+        else:
+            d.ellipse(
+                (track_x - radius, marker_y - radius, track_x + radius, marker_y + radius),
+                fill=marker_border,
+            )
+            inner = max(1, radius - max(1, ss))
+            d.ellipse(
+                (track_x - inner, marker_y - inner, track_x + inner, marker_y + inner),
+                fill=marker_color,
+            )
+    if show_value:
+        _draw_text_bounded(
+            d, (value_x, marker_y), value_text,
+            font=value_font, fill=text_color, stroke_width=text_stroke,
+            stroke_fill=(0, 0, 0, 230), bounds=(raster_w, raster_h), anchor="lm",
+        )
     return img
 
 
@@ -511,7 +746,7 @@ def _render_bar_indicator(
 
     Common
     ------
-    ``bar_style``: ``"ruler"`` (default) or ``"segments"``.
+    ``bar_style``: ``"ruler"`` (default), ``"segments"`` or ``"slope"``.
     ``show_value``, ``show_label``, ``show_range_labels``, ``text_color``.
 
     Ruler
@@ -532,7 +767,25 @@ def _render_bar_indicator(
     style = str(cfg.get("bar_style", cfg.get("style", "ruler"))).strip().lower()
     # This lets the same module replace segment_bar later if the dispatcher is
     # unified; normal ``form='bar'`` remains ruler by default.
-    if style in {"segment", "segments", "segmented", "segment_bar"}:
+    if style in {"slope", "grade", "vertical_slope"}:
+        img = _render_slope(
+            canvas_w=canvas_w,
+            canvas_h=canvas_h,
+            font_path=font_path,
+            value=float(value),
+            unit=str(unit or "%"),
+            label=str(label or "Slope"),
+            cfg=cfg,
+            val_min=float(val_min),
+            val_max=float(val_max),
+            thickness=int(thickness),
+            size_px=int(size_px),
+            fs=int(fs),
+            outline=int(outline),
+            ss=max(1, int(ss)),
+            formatted_val=formatted_val,
+        )
+    elif style in {"segment", "segments", "segmented", "segment_bar"}:
         img = _render_segments(
             canvas_w=canvas_w,
             canvas_h=canvas_h,

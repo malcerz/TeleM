@@ -117,8 +117,15 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
         elif form in ("bar", "segment_bar"):
             sz = cfg.get("size", 0.2)
             size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
-            bar_w = size_px + 80
-            bar_h = max(60, int(size_px * 0.35)) + 50
+            if str(cfg.get("bar_style", "")).strip().lower() in ("slope", "grade", "vertical_slope"):
+                # Slope is a vertical bar/ruler with a taller local raster.
+                # Keep this estimate deliberately generous for labels/ticks;
+                # ordinary ruler and segment geometry remains unchanged.
+                bar_w = max(180, int(size_px * 0.30)) + 80
+                bar_h = size_px + 100
+            else:
+                bar_w = size_px + 80
+                bar_h = max(60, int(size_px * 0.35)) + 50
             if rot in (90, 270):
                 w_bar, h_bar = bar_h, bar_w
             else:
@@ -127,7 +134,19 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
             y1 = py - h_bar // 2 - 30
             x2 = px + w_bar // 2 + 30
             y2 = py + h_bar // 2 + 30
-        elif form in ("chart", "moving_map", "static_map", "map"):
+        elif form in ("moving_map", "static_map", "map"):
+            # Map renderers produce a square tile (the configured ``size`` is
+            # its side), unlike charts whose height is intentionally shorter.
+            # The old shared estimate used the chart aspect ratio and left the
+            # lower part of the map outside the packed source region.
+            sz = cfg.get("size", cfg.get("w", 0.3))
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            cw = size_px + 60
+            ch = size_px + 60
+            x1 = px - cw // 2 - 20
+            y1 = py - ch // 2 - 20
+            x2, y2 = x1 + cw, y1 + ch
+        elif form == "chart":
             cw = cfg.get("w", 0.35)
             ch = cfg.get("h", 0.25)
             w_px = int(round(cw * canvas_w)) if cw <= 1.0 else int(round((cw / 100.0) * canvas_w))
@@ -433,8 +452,12 @@ def get_layout_hud_regions(
         elif form in ("bar", "segment_bar"):
             sz = cfg.get("size", 0.2)
             size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
-            bar_w = size_px + 80
-            bar_h = max(60, int(size_px * 0.35)) + 50
+            if str(cfg.get("bar_style", "")).strip().lower() in ("slope", "grade", "vertical_slope"):
+                bar_w = max(180, int(size_px * 0.30)) + 80
+                bar_h = size_px + 100
+            else:
+                bar_w = size_px + 80
+                bar_h = max(60, int(size_px * 0.35)) + 50
             if rot in (90, 270):
                 w_bar, h_bar = bar_h, bar_w
             else:
@@ -443,7 +466,18 @@ def get_layout_hud_regions(
             y1 = py - h_bar // 2 - 20
             x2 = px + w_bar // 2 + 20
             y2 = py + h_bar // 2 + 20
-        elif form in ("chart", "moving_map", "static_map", "map"):
+        elif form in ("moving_map", "static_map", "map"):
+            # Map renderers produce a square tile (the configured ``size`` is
+            # its side), unlike charts whose height is intentionally shorter.
+            # Keep the packed source region large enough for the full tile.
+            sz = cfg.get("size", cfg.get("w", 0.3))
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            cw = size_px + 60
+            ch = size_px + 60
+            x1 = px - cw // 2 - 20
+            y1 = py - ch // 2 - 20
+            x2, y2 = x1 + cw, y1 + ch
+        elif form == "chart":
             sz = cfg.get("size", cfg.get("w", 0.3))
             size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
             cw = size_px + 60

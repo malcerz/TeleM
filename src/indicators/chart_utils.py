@@ -26,6 +26,7 @@ from datetime import timezone
 _CHART_BG_CACHE: dict[tuple, tuple[Image.Image, list[tuple[float, float]], float, float]] = {}
 _CHART_PREFIX_GEOMETRY_CACHE: dict[tuple, tuple] = {}
 _CHART_STATIC_ALPHA_BBOX_CACHE: dict[tuple, tuple[int, int, int, int] | None] = {}
+_CHART_AXIS_CACHE: dict[tuple, tuple[Image.Image, float, float, float, float]] = {}
 _AVERAGE_LAYER_CACHE_LOCAL = threading.local()
 _AVERAGE_LAYER_CACHE_ENABLED = True
 
@@ -628,9 +629,6 @@ def _build_chart_bg(
     val_range = max_val - min_val
     num_points = len(history_values) if has_data else 0
 
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
     count = max(2, label_count)
     y_label_values = value_labels if value_labels else [
         f"{min_val + (i / (count - 1)) * val_range:.0f}"
@@ -639,22 +637,40 @@ def _build_chart_bg(
     ]
     x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
 
-    axis_bottom_margin_est = (int(max(6, height * 0.20)) if show_axes else 0) * ss
-    try:
-        plot_h_est = max(1, height - 4 * ss - axis_bottom_margin_est)
-        if label_font_size and label_font_size > 0:
-            label_fs = int(label_font_size * ss)
-        else:
-            label_fs = int(max(7, min(width, height) * 0.13) * ss)
-        label_fs = max(6, min(label_fs, max(6, plot_h_est // 2)))
-        if font_path:
-            font_axis = load_font(font_path, label_fs)
-        else:
-            font_axis = load_font_cache_small(label_fs)
-    except Exception:
+    axis_cache_key = (
+        "chart_axis_v1", width, height, ss, bool(show_axes),
+        tuple(grid_color) if grid_color is not None else None,
+        tuple(y_label_values), tuple(x_labels),
+        label_font_size, font_path,
+    )
+    cached_axis = _CHART_AXIS_CACHE.get(axis_cache_key)
+    axis_cache_hit = cached_axis is not None
+    if axis_cache_hit:
+        img, plot_x1, plot_y1, plot_x2, plot_y2 = cached_axis
+        img = img.copy()
+        draw = ImageDraw.Draw(img)
         font_axis = None
+    else:
+        img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
 
-    if show_axes:
+    if not axis_cache_hit:
+        axis_bottom_margin_est = (int(max(6, height * 0.20)) if show_axes else 0) * ss
+        try:
+            plot_h_est = max(1, height - 4 * ss - axis_bottom_margin_est)
+            if label_font_size and label_font_size > 0:
+                label_fs = int(label_font_size * ss)
+            else:
+                label_fs = int(max(7, min(width, height) * 0.13) * ss)
+            label_fs = max(6, min(label_fs, max(6, plot_h_est // 2)))
+            if font_path:
+                font_axis = load_font(font_path, label_fs)
+            else:
+                font_axis = load_font_cache_small(label_fs)
+        except Exception:
+            font_axis = None
+
+    if not axis_cache_hit and show_axes:
         max_label_w = 0
         max_y_bot = 0
         max_y_top = 0
@@ -688,24 +704,27 @@ def _build_chart_bg(
         axis_top_margin = int(math.ceil(max(4 * ss, max_y_bot / 2.0 + max_y_top + 4 * ss)))
         needed_bottom_margin = int(math.ceil(max_x_bot + 10 * ss))
         axis_bottom_margin = max(axis_bottom_margin_est, needed_bottom_margin)
-    else:
+    elif not axis_cache_hit:
         axis_left_margin = 0
         axis_right_margin = 4 * ss
         axis_top_margin = 4 * ss
         axis_bottom_margin = 4 * ss
 
-    plot_x1 = axis_left_margin
-    plot_y1 = axis_top_margin
-    plot_x2 = width - axis_right_margin
-    plot_y2 = height - axis_bottom_margin
-    plot_w = max(1, plot_x2 - plot_x1)
-    plot_h = max(1, plot_y2 - plot_y1)
+    if not axis_cache_hit:
+        plot_x1 = axis_left_margin
+        plot_y1 = axis_top_margin
+        plot_x2 = width - axis_right_margin
+        plot_y2 = height - axis_bottom_margin
+        plot_w = max(1, plot_x2 - plot_x1)
+        plot_h = max(1, plot_y2 - plot_y1)
+    else:
+        plot_w = max(1, plot_x2 - plot_x1)
+        plot_h = max(1, plot_y2 - plot_y1)
+    axis_color = (180, 180, 180, 220)
+    tick_color = (150, 150, 150, 200)
+    label_color = (200, 200, 200, 240)
 
-    if show_axes:
-        axis_color = (180, 180, 180, 220)
-        tick_color = (150, 150, 150, 200)
-        label_color = (200, 200, 200, 240)
-
+    if not axis_cache_hit and show_axes:
         draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=max(1, ss))
         draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=max(1, ss))
 
@@ -764,6 +783,11 @@ def _build_chart_bg(
                 draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
             else:
                 draw.text((tx, ty), lbl, fill=label_color)
+
+    if not axis_cache_hit:
+        if len(_CHART_AXIS_CACHE) >= 64:
+            _CHART_AXIS_CACHE.clear()
+        _CHART_AXIS_CACHE[axis_cache_key] = (img.copy(), plot_x1, plot_y1, plot_x2, plot_y2)
 
     points: list[tuple[float, float]] = []
     if has_data:

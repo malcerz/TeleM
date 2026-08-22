@@ -1,0 +1,190 @@
+{
+  "source": "Video\\GX030120.json",
+  "counts": {
+    "accel": 35802,
+    "gyro": 35802,
+    "gps": 1802
+  },
+  "timing": {
+    "duration_s": 180.174667,
+    "accel_median_dt_s": 0.005032999999997401,
+    "gyro_median_dt_s": 0.005032999999997401,
+    "accel_hz": 198.6886548779091,
+    "gyro_hz": 198.6886548779091
+  },
+  "units": {
+    "accel_metadata": "m/s",
+    "gyro_metadata": "rad/s",
+    "accel_physical_interpretation": "m/s^2 (norm near g)"
+  },
+  "axis_mapping": {
+    "raw_order": "ZXY",
+    "canonical_X": "raw[1]",
+    "canonical_Y": "raw[2]",
+    "canonical_Z": "raw[0]",
+    "roll_candidate": "X"
+  },
+  "accel_norm_stats": {
+    "median": 10.414867139120865,
+    "p10": 7.261710834525428,
+    "p90": 17.981083455601905
+  },
+  "candidate_correlations": {
+    "roll_axis_X_atan2_Y_negZ": 0.5136339631833193,
+    "roll_axis_Y_atan2_X_negZ": -0.1571102624123632,
+    "roll_axis_Z_atan2_X_Y": -0.011132575297320393
+  },
+  "mount_offset_deg": 0.41500554653981403,
+  "gyro_only": {
+    "0": {
+      "range_deg": [
+        -2.276000429865278,
+        163.7849173854034
+      ],
+      "at_30_s_deg": 28.336542721149765,
+      "at_60_s_deg": 72.92324785730138,
+      "at_clip_end_deg": 162.7225235126243
+    },
+    "1": {
+      "range_deg": [
+        -23.666658449347572,
+        15.666173443309622
+      ],
+      "at_30_s_deg": -1.2845454135793335,
+      "at_60_s_deg": -1.1320279231507664,
+      "at_clip_end_deg": 2.28240834347255
+    },
+    "2": {
+      "range_deg": [
+        -68.81021495123913,
+        59.54067483307503
+      ],
+      "at_30_s_deg": -24.64636420026933,
+      "at_60_s_deg": 51.20244935962274,
+      "at_clip_end_deg": 17.44563656637122
+    }
+  },
+  "filters": {
+    "cf_0.950": {
+      "mean_alpha": 0.9499999999999998,
+      "straight_drift_deg_per_s": -0.06136223555157661
+    },
+    "cf_0.980": {
+      "mean_alpha": 0.9800000000000002,
+      "straight_drift_deg_per_s": -0.05619432381533916
+    },
+    "cf_0.995": {
+      "mean_alpha": 0.9950000000000001,
+      "straight_drift_deg_per_s": -0.03217324668884391
+    },
+    "adaptive_cf_0.98": {
+      "mean_alpha": 0.9927146554298465,
+      "straight_drift_deg_per_s": -0.21755315341968884
+    }
+  },
+  "adaptive_comparison": {
+    "mean_alpha": 0.9927146554298465,
+    "rmse_vs_fixed_cf_0.98_deg": 4.076010260784841,
+    "straight_drift_deg_per_s": -0.21755315341968884
+  },
+  "windows": {
+    "straight": {
+      "start_s": 125.0,
+      "end_s": 140.0,
+      "speed_median_kmh": 19.709608679999995,
+      "fused_min_deg": -5.8118523323683,
+      "fused_max_deg": 2.641183910388037,
+      "fused_peak_abs_deg": 5.8118523323683,
+      "accel_min_deg": -67.82020680415364,
+      "accel_max_deg": 117.88286683264836,
+      "gyro_rate_peak_rad_s": 1.2406026508315917,
+      "gyro_peak_s": 127.220751,
+      "fused_peak_s": 127.225784,
+      "peak_lag_s": 0.005032999999997401,
+      "fused_drift_deg_per_s": -0.05619432381533916
+    },
+    "turn_1": {
+      "start_s": 64.0,
+      "end_s": 72.0,
+      "speed_median_kmh": 20.64904722000001,
+      "fused_min_deg": -22.739241557212384,
+      "fused_max_deg": 9.742166846035188,
+      "fused_peak_abs_deg": 22.739241557212384,
+      "accel_min_deg": -174.11417301490897,
+      "accel_max_deg": 175.52874255321356,
+      "gyro_rate_peak_rad_s": 5.822040348396557,
+      "gyro_peak_s": 67.034877,
+      "fused_peak_s": 70.079643,
+      "peak_lag_s": 3.04476600000001,
+      "fused_drift_deg_per_s": 0.022584987127626688
+    },
+    "turn_2": {
+      "start_s": 145.0,
+      "end_s": 155.0,
+      "speed_median_kmh": 22.03058159999994,
+      "fused_min_deg": -13.597192529824413,
+      "fused_max_deg": 2.3581758671603135,
+      "fused_peak_abs_deg": 13.597192529824413,
+      "accel_min_deg": -178.51147121234447,
+      "accel_max_deg": 152.8032133696909,
+      "gyro_rate_peak_rad_s": 0.8114180170197246,
+      "gyro_peak_s": 149.797381,
+      "fused_peak_s": 147.034437,
+      "peak_lag_s": -2.7629440000000045,
+      "fused_drift_deg_per_s": 0.025865597006193744
+    },
+    "low_speed": {
+      "start_s": 38.0,
+      "end_s": 48.0,
+      "speed_median_kmh": 0.5016330000000008,
+      "fused_min_deg": 4.0038579894219755,
+      "fused_max_deg": 12.060922289733124,
+      "fused_peak_abs_deg": 12.060922289733124,
+      "accel_min_deg": -25.42627036061203,
+      "accel_max_deg": 40.257518864395664,
+      "gyro_rate_peak_rad_s": -0.3513985544184669,
+      "gyro_peak_s": 39.546488,
+      "fused_peak_s": 40.049754,
+      "peak_lag_s": 0.5032660000000035,
+      "fused_drift_deg_per_s": -0.2756324340186525
+    }
+  },
+  "gps_heading_context": {
+    "turn_1": {
+      "start_heading_deg": 13.836660645687592,
+      "end_heading_deg": 337.4565411837194,
+      "heading_change_deg": -36.38011946196815,
+      "center_time_s": 68.001152,
+      "center_speed_kmh": 18.95590656000008,
+      "center_gyro_roll_rate_rad_s": -0.12234754017286438,
+      "center_accel_estimate_deg": -5.950334637906506,
+      "center_fused_lean_deg": -4.181416004816302
+    },
+    "turn_2": {
+      "start_heading_deg": 351.5131683498859,
+      "end_heading_deg": 14.153432949481259,
+      "heading_change_deg": 22.640264599595355,
+      "center_time_s": 149.998688,
+      "center_speed_kmh": 21.36463487999981,
+      "center_gyro_roll_rate_rad_s": 0.32482315334339396,
+      "center_accel_estimate_deg": -19.706726754409996,
+      "center_fused_lean_deg": -0.7656018641367767
+    }
+  },
+  "downsample": {
+    "20": {
+      "rmse_deg": 1.177249797282124,
+      "max_error_deg": 15.911701768020599
+    },
+    "10": {
+      "rmse_deg": 1.4662850994322238,
+      "max_error_deg": 18.825617460278362
+    }
+  },
+  "performance": {
+    "parse_existing_samples_ms": 1480.1178999987314,
+    "core_fusion_ms": 339.71390000078827,
+    "downsample_20_10_ms": 0.973999995039776
+  },
+  "plot": "Raporty\\ETAP8G_LEAN_IMU_DIAGNOSTIC.png"
+}

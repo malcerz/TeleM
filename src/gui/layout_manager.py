@@ -339,29 +339,7 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
 
 def resolve_font_path(family_name: str) -> str:
     """Znajduje ścieżkę pliku czcionki dla podanej nazwy rodziny (Windows)."""
-    import os
-    if os.name != 'nt':
-        return family_name
-    if Path(family_name).exists():
-        return family_name
-    try:
-        import winreg
-        fonts_dir = Path(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts')
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                            r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts') as key:
-            count = winreg.QueryInfoKey(key)[1]
-            for i in range(count):
-                name, value, _ = winreg.EnumValue(key, i)
-                if name.lower().startswith(family_name.lower()) and '(TrueType)' in name:
-                    candidate = fonts_dir / value
-                    if candidate.exists():
-                        return str(candidate)
-    except Exception:
-        pass
-    for ext in ('.ttf', '.otf'):
-        candidate = Path(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts') / f'{family_name}{ext}'
-        if candidate.exists():
-            return str(candidate)
-    return family_name
+    from src.indicators.helpers import resolve_indicator_font_path
+    return resolve_indicator_font_path(family_name, default_font_path="")
 
 

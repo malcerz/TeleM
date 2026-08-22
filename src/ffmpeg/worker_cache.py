@@ -16,6 +16,8 @@ from src.telemetry_extract import (
     interpolate_altitude,
     interpolate_value,
 )
+from src.telemetry_heading import interpolate_heading
+from src.telemetry_slope import interpolate_slope
 
 WORKER_CACHE: dict[str, Any] = {}
 
@@ -60,6 +62,7 @@ def init_worker(
     WORKER_CACHE["font_path"] = font_path
     WORKER_CACHE["layout"] = layout
     WORKER_CACHE["_telemetry_cache"] = telemetry_cache
+    field_samples = field_samples or {}
     WORKER_CACHE["field_samples"] = field_samples
     WORKER_CACHE["max_distance_m"] = max_distance_m or 1000.0
     WORKER_CACHE["iso_samples"] = iso_samples or []
@@ -72,6 +75,8 @@ def init_worker(
     WORKER_CACHE["gpx_atemp_samples"] = gpx_atemp_samples or []
     WORKER_CACHE["gpx_hr_samples"] = gpx_hr_samples or []
     WORKER_CACHE["gpx_cad_samples"] = gpx_cad_samples or []
+    WORKER_CACHE["gpx_heading_samples"] = field_samples.get("gpx_heading_samples", []) or []
+    WORKER_CACHE["gpx_slope_samples"] = field_samples.get("gpx_slope_samples", []) or []
     WORKER_CACHE["fit_data"] = fit_data or {}
     WORKER_CACHE["gps_track"] = gps_track or []
     WORKER_CACHE["start_dt_utc"] = start_dt_utc
@@ -194,6 +199,10 @@ def _resolve_cache_value(
     samples = _resolve_cache_samples(field_name, source)
     if not samples:
         return None
+    if field_name == "heading":
+        return interpolate_heading(samples, target_dt)
+    if field_name == "slope":
+        return interpolate_slope(samples, target_dt)
     # Linear interpolation for speed/distance/altitude fields (smooth per frame),
     # step for the rest — must match telemetry_manager.resolve_value.
     if field_name in ("speed", "enhanced_speed"):
@@ -215,6 +224,8 @@ def _resolve_cache_samples(
         "speed": "speed_samples", "alt": "alt_samples", "altitude": "alt_samples",
         "dist": "track_samples", "track": "track_samples", "iso": "iso_samples",
         "exposure": "exposure_samples", "temperature": "temperature_samples",
+        "heading": "heading_samples",
+        "slope": "slope_samples",
         "accel_x": "accel_x_samples", "accel_y": "accel_y_samples",
         "accel_z": "accel_z_samples", "accel_magnitude": "accel_magnitude_samples",
         "gyro_x": "gyro_x_samples", "gyro_y": "gyro_y_samples",
@@ -225,6 +236,8 @@ def _resolve_cache_samples(
         "dist": "gpx_track_samples", "track": "gpx_track_samples", "power": "gpx_power_samples",
         "atemp": "gpx_atemp_samples", "hr": "gpx_hr_samples", "cad": "gpx_cad_samples",
         "battery": "gpx_battery_samples",
+        "heading": "gpx_heading_samples",
+        "slope": "gpx_slope_samples",
     }
     if source == "gpmf":
         key = gpmf_map.get(field_name, "")

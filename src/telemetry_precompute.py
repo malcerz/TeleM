@@ -20,7 +20,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.registry import HARDCODED_KEYS
-from src.indicators.chart_builder import clip_chart_data
+from src.indicators.chart_builder import clip_chart_data_for_target
+from src.telemetry_heading import normalize_heading
 
 
 # Sensible default units for known FIT field names (identical to the reference
@@ -32,6 +33,9 @@ FIT_UNIT_HINTS: dict[str, str] = {
     "temperature": "\u00b0C", "torque_effectiveness": "%",
     "vertical_oscillation": "mm", "stance_time": "ms",
 }
+
+_HEADING_CONSUMER_KEYS = frozenset(("heading_text", "compass", "track_map"))
+_SLOPE_CONSUMER_KEYS = frozenset(("slope_text",))
 
 
 @dataclass(slots=True)
@@ -45,6 +49,9 @@ class _FrameRec:
     iso_value: float
     exposure_value: float
     temp_value: float
+    heading_value: Optional[float]
+    map_heading_value: Optional[float]
+    slope_value: Optional[float]
     indicator_values: dict[str, float]
     fit_vals: tuple
     dynamic_vals: tuple
@@ -72,6 +79,12 @@ class _Static:
     dynamic_keys: tuple
     dynamic_meta: dict[str, tuple]
     std_names: tuple
+    heading_keys: tuple
+    heading_units: dict[str, str]
+    heading_labels: dict[str, str]
+    slope_keys: tuple
+    slope_units: dict[str, str]
+    slope_labels: dict[str, str]
 
 
 class TelemetryFrameCache:
@@ -107,6 +120,18 @@ class TelemetryFrameCache:
         for i, key in enumerate(st.dynamic_keys):
             unit, label = st.dynamic_meta[key]
             extra_indicators[key] = (rec.dynamic_vals[i], unit, label)
+        for key in st.heading_keys:
+            extra_indicators[key] = (
+                rec.map_heading_value if key == "track_map" else rec.heading_value,
+                st.heading_units[key],
+                st.heading_labels[key],
+            )
+        for key in st.slope_keys:
+            extra_indicators[key] = (
+                rec.slope_value,
+                st.slope_units[key],
+                st.slope_labels[key],
+            )
         std = rec.std_vals
         return {
             "date_text": rec.date_text,
@@ -127,10 +152,11 @@ class TelemetryFrameCache:
             "hr_value": std[2],
             "cad_value": std[3],
             "battery_value": std[4],
-            "chart_data": st.chart_data or {},
+            "chart_data": clip_chart_data_for_target(st.chart_data, rec.target_dt),
             "current_position": rec.current_position,
             "extra_indicators": extra_indicators,
             "gps_track": st.gps_track,
+            "map_heading": rec.map_heading_value,
             "target_dt": rec.target_dt,
             "start_dt_utc": st.start_dt_utc,
             "elapsed_seconds": rec.elapsed_seconds,
@@ -181,6 +207,53 @@ def _vectorize_step(
         i = idx[k]
         if i >= 0:
             out[k] = sample_vals[i]
+    return out
+
+
+def _vectorize_heading(
+    samples: list[tuple[datetime, Optional[float]]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized circular interpolation for the precomputed heading stream."""
+    del target_dts
+    if not samples:
+        return []
+    ordered = sorted(
+        [
+            (
+                dt.replace(tzinfo=None) if dt.tzinfo is not None else dt,
+                value,
+            )
+            for dt, value in samples
+        ],
+        key=lambda item: item[0],
+    )
+    sample_ts = np.array(
+        [(dt - ref_dt).total_seconds() for dt, _ in ordered], dtype=np.float64
+    )
+    indices = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
+    out: list[Optional[float]] = [None] * len(target_ts_arr)
+    for k, raw_index in enumerate(indices):
+        index = int(raw_index)
+        if index < 0:
+            continue
+        current = ordered[index][1]
+        if current is None:
+            continue
+        current_value = normalize_heading(float(current))
+        if index + 1 >= len(ordered) or ordered[index + 1][1] is None:
+            out[k] = current_value
+            continue
+        next_dt, next_value = ordered[index + 1]
+        span = (next_dt - ordered[index][0]).total_seconds()
+        if span <= 0.0:
+            out[k] = current_value
+            continue
+        fraction = (target_ts_arr[k] - sample_ts[index]) / span
+        delta = ((float(next_value) - current_value + 180.0) % 360.0) - 180.0
+        out[k] = normalize_heading(current_value + float(fraction) * delta)
     return out
 
 
@@ -302,6 +375,39 @@ def build_telemetry_cache(
     max_alt = rc.get("max_alt")
 
     indicators = layout.get("indicators", {})
+    heading_keys = tuple(
+        key for key, cfg in indicators.items()
+        if (
+            key in ("heading_text", "compass")
+            or (
+                key == "track_map"
+                and isinstance(cfg, dict)
+                and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                == "track_up"
+            )
+        )
+        and isinstance(cfg, dict)
+        and cfg.get("enabled", True)
+    )
+    heading_units = {
+        key: indicators[key].get("unit") or "deg" for key in heading_keys
+    }
+    heading_labels = {
+        key: indicators[key].get("label") or "GPS Course Over Ground"
+        for key in heading_keys
+    }
+    slope_keys = tuple(
+        key for key, cfg in indicators.items()
+        if key in _SLOPE_CONSUMER_KEYS
+        and isinstance(cfg, dict) and cfg.get("enabled", True)
+    )
+    slope_units = {
+        key: indicators[key].get("unit") or "%" for key in slope_keys
+    }
+    slope_labels = {
+        key: indicators[key].get("label") or "Slope"
+        for key in slope_keys
+    }
 
     # active FIT fields -> keys, units, labels
     if fit_field_plan is not None:
@@ -309,7 +415,23 @@ def build_telemetry_cache(
         std_names = tuple(fit_field_plan.get("active_standard_resolve_fields", []))
     else:
         active_fit = []
-        std_names = tuple()
+        std_names = tuple(
+            sorted({
+                field for key, field in (
+                    ("heading_text", "heading"), ("compass", "heading"),
+                    ("slope_text", "slope"),
+                )
+                if isinstance(indicators.get(key), dict)
+                and indicators[key].get("enabled", True)
+            } | {
+                "heading" for key, cfg in indicators.items()
+                if key == "track_map"
+                and isinstance(cfg, dict)
+                and cfg.get("enabled", True)
+                and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                == "track_up"
+            })
+        )
         fit = fit_data or {}
         for k, cfg in indicators.items():
             if k.startswith("fit_") and k.endswith("_text"):
@@ -459,6 +581,54 @@ def build_telemetry_cache(
             std_field_arrs.append([None] * total_frames)
     t_std_ms = (time.perf_counter() - t0_std) * 1000.0
 
+    # Heading is derived once per source and interpolated with circular
+    # semantics only when a future heading consumer is enabled in the layout.
+    t0_heading = time.perf_counter()
+    heading_arr: list[Optional[float]] = [None] * total_frames
+    map_heading_arr: list[Optional[float]] = [None] * total_frames
+    if "heading" in std_names:
+        def _heading_array(key: str) -> list[Optional[float]]:
+            heading_cfg = indicators.get(key, {})
+            heading_src = heading_cfg.get("source", "gpmf")
+            heading_samples = _resolve_cache_samples("heading", heading_src)
+            if heading_samples:
+                return _vectorize_heading(
+                    heading_samples, target_dts, target_ts_arr, ref_dt
+                )
+            if resolve_cache_value is not None:
+                return [
+                    resolve_cache_value("heading", heading_src, dt, key)
+                    for dt in target_dts
+                ]
+            return [None] * total_frames
+
+        heading_key = next((key for key in heading_keys if key != "track_map"), None)
+        if heading_key is not None:
+            heading_arr = _heading_array(heading_key)
+        if "track_map" in heading_keys:
+            map_heading_arr = _heading_array("track_map")
+    t_heading_ms = (time.perf_counter() - t0_heading) * 1000.0
+
+    # Slope is an already-derived, causal STEP stream.  No renderer performs
+    # slope math; this stage only places the canonical field in the cache when
+    # a future layout explicitly binds ``slope_text``.
+    t0_slope = time.perf_counter()
+    slope_arr: list[Optional[float]] = [None] * total_frames
+    if "slope" in std_names and slope_keys:
+        slope_cfg = indicators.get(slope_keys[0], {})
+        slope_src = slope_cfg.get("source", "gpmf")
+        slope_samples = _resolve_cache_samples("slope", slope_src)
+        if slope_samples:
+            slope_arr = _vectorize_step(
+                slope_samples, target_dts, target_ts_arr, ref_dt
+            )
+        elif resolve_cache_value is not None:
+            slope_arr = [
+                resolve_cache_value("slope", slope_src, dt, slope_keys[0])
+                for dt in target_dts
+            ]
+    t_slope_ms = (time.perf_counter() - t0_slope) * 1000.0
+
     # 6. Active FIT Fields
     t0_fit = time.perf_counter()
     fit_field_arrs: list[list] = []
@@ -529,6 +699,9 @@ def build_telemetry_cache(
             iso_value=iso_arr[i],
             exposure_value=exposure_arr[i],
             temp_value=temp_arr[i],
+            heading_value=heading_arr[i],
+            map_heading_value=map_heading_arr[i],
+            slope_value=slope_arr[i],
             indicator_values=ind_vals,
             fit_vals=fit_v,
             dynamic_vals=dyn_v,
@@ -550,6 +723,8 @@ def build_telemetry_cache(
             "build_dynamic_fit": t_fit_ms,
             "build_gpmf": t_gpmf_ms,
             "build_imu": t_imu_ms,
+            "build_heading": t_heading_ms,
+            "build_slope": t_slope_ms,
             "build_gps": t_static_ms,
             "build_distance": t_linear_ms * 0.33,
             "build_frame_rec": t_records_ms,
@@ -569,6 +744,10 @@ def build_telemetry_cache(
         fit_units=fit_units, fit_labels=fit_labels,
         remaining_extra=remaining_extra, dynamic_keys=dynamic_keys,
         dynamic_meta=dynamic_meta, std_names=std_names,
+        heading_keys=heading_keys, heading_units=heading_units,
+        heading_labels=heading_labels,
+        slope_keys=slope_keys, slope_units=slope_units,
+        slope_labels=slope_labels,
     )
     return TelemetryFrameCache(
         records, static, t_total_ms, memory_bytes,

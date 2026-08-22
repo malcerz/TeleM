@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.profiling import get_overlay_profiler
-from src.indicators.chart_builder import clip_chart_data
+from src.indicators.chart_builder import clip_chart_data_for_target
 
 
 _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
@@ -23,6 +23,9 @@ _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
     "hr_text": "hr",
     "cad_text": "cad",
     "battery_text": "battery",
+    "heading_text": "heading",
+    "compass": "heading",
+    "slope_text": "slope",
 }
 
 
@@ -51,6 +54,12 @@ def build_active_fit_field_plan(
         standard_field = _STANDARD_RESOLVE_CONSUMERS.get(key)
         if standard_field:
             active_standard.add(standard_field)
+        if (
+            key == "track_map"
+            and str(config.get("map_orientation", "north_up")).strip().lower()
+            == "track_up"
+        ):
+            active_standard.add("heading")
 
     return {
         "discovered_fit_fields": sorted(discovered),
@@ -286,19 +295,69 @@ def prepare_overlay_frame_data(
         # Compatibility path for preview and non-AMD exporters.  AMD production
         # always supplies a plan built once from its immutable export snapshot.
         standard_resolve_fields = set(_STANDARD_RESOLVE_CONSUMERS.values())
+        heading_cfg = next(
+            (
+                cfg for key, cfg in layout.get("indicators", {}).items()
+                if isinstance(cfg, dict)
+                and cfg.get("enabled", True)
+                and (
+                    _STANDARD_RESOLVE_CONSUMERS.get(key) == "heading"
+                    or (
+                        key == "track_map"
+                        and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                        == "track_up"
+                    )
+                )
+            ),
+            None,
+        )
+        if heading_cfg is None:
+            standard_resolve_fields.discard("heading")
     else:
         standard_resolve_fields = set(
             fit_field_plan.get("active_standard_resolve_fields", [])
         )
 
     def configured_source(indicator_key: str) -> str:
-        return layout.get("indicators", {}).get(indicator_key, {}).get("source", "gpx")
+        if indicator_key == "track_map":
+            return layout.get("indicators", {}).get("track_map", {}).get("source", "fit")
+        default = "gpmf" if _STANDARD_RESOLVE_CONSUMERS.get(indicator_key) in ("heading", "slope") else "gpx"
+        return layout.get("indicators", {}).get(indicator_key, {}).get("source", default)
 
     power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
     atemp_value = profiled_resolve("atemp", configured_source("atemp_text"), "atemp_text") if "atemp" in standard_resolve_fields else None
     hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None
     cad_value = profiled_resolve("cad", configured_source("cad_text"), "cad_text") if "cad" in standard_resolve_fields else None
     battery_value = profiled_resolve("battery", configured_source("battery_text"), "battery_text") if "battery" in standard_resolve_fields else None
+    heading_consumers = [
+        key for key, field in _STANDARD_RESOLVE_CONSUMERS.items()
+        if field == "heading"
+        and isinstance(layout.get("indicators", {}).get(key), dict)
+        and layout["indicators"][key].get("enabled", True)
+    ]
+    track_map_cfg = layout.get("indicators", {}).get("track_map", {})
+    if (
+        isinstance(track_map_cfg, dict)
+        and track_map_cfg.get("enabled", True)
+        and str(track_map_cfg.get("map_orientation", "north_up")).strip().lower()
+        == "track_up"
+        and "track_map" not in heading_consumers
+    ):
+        heading_consumers.append("track_map")
+    heading_values = {
+        key: profiled_resolve("heading", configured_source(key), key)
+        for key in heading_consumers
+    } if "heading" in standard_resolve_fields else {}
+    slope_consumers = [
+        key for key, field in _STANDARD_RESOLVE_CONSUMERS.items()
+        if field == "slope"
+        and isinstance(layout.get("indicators", {}).get(key), dict)
+        and layout["indicators"][key].get("enabled", True)
+    ]
+    slope_value = (
+        profiled_resolve("slope", configured_source(slope_consumers[0]), slope_consumers[0])
+        if "slope" in standard_resolve_fields and slope_consumers else None
+    )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
     elapsed_seconds = 0.0
@@ -399,6 +458,25 @@ def prepare_overlay_frame_data(
         label = cfg.get("label", key)
         extra_indicators[key] = (val, unit, label)
 
+    if "heading" in standard_resolve_fields:
+        for heading_key in heading_consumers:
+            if heading_key == "track_map":
+                continue
+            heading_cfg = layout.get("indicators", {}).get(heading_key, {})
+            extra_indicators[heading_key] = (
+                heading_values.get(heading_key),
+                heading_cfg.get("unit") or "deg",
+                heading_cfg.get("label") or "GPS Course Over Ground",
+            )
+    if "slope" in standard_resolve_fields:
+        for slope_key in slope_consumers:
+            slope_cfg = layout.get("indicators", {}).get(slope_key, {})
+            extra_indicators[slope_key] = (
+                slope_value,
+                slope_cfg.get("unit") or "%",
+                slope_cfg.get("label") or "Slope",
+            )
+
     # ── Position / chart data ─────────────────────────────────────────
     section_started = time.perf_counter()
     current_position = (
@@ -417,6 +495,8 @@ def prepare_overlay_frame_data(
         "telemetry.map_gps_data",
         (time.perf_counter() - section_started) * 1000.0,
     )
+
+    prepared_chart_data = clip_chart_data_for_target(chart_data, target_dt)
 
     return {
         "date_text": date_text,
@@ -437,10 +517,11 @@ def prepare_overlay_frame_data(
         "hr_value": hr_value,
         "cad_value": cad_value,
         "battery_value": battery_value,
-        "chart_data": chart_data or {},
+        "chart_data": prepared_chart_data,
         "current_position": current_position,
         "extra_indicators": extra_indicators,
         "gps_track": gps_trk,
+        "map_heading": heading_values.get("track_map"),
         "target_dt": target_dt,
         "start_dt_utc": start_dt_utc,
         "elapsed_seconds": elapsed_seconds,

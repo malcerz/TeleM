@@ -93,6 +93,21 @@ _AMD_DECODE_MODES = {
     "GPU_HUD_D3D11VA": 1,
     "D3D11VA": 1,
 }
+
+
+def _resolve_amd_decode_mode(native_hud_mode: str, requested_decode_mode: str) -> tuple[str, bool]:
+    """Keep the CPU reference HUD on the CPU-NV12 path.
+
+    ``telem_amd_update_hud`` performs the reference RGBA->NV12 blend while
+    uploading a CPU-decoded frame.  D3D11VA supplies only a GPU surface, so
+    the native compositor intentionally disables its GPU HUD in
+    ``CPU_REFERENCE`` mode and would otherwise submit an uncomposited base
+    surface to AMF.
+    """
+    use_d3d11va = _AMD_DECODE_MODES[requested_decode_mode] == 1
+    if native_hud_mode == "CPU_REFERENCE" and use_d3d11va:
+        return "GPU_HUD_CPU_DECODE_REFERENCE", False
+    return requested_decode_mode, use_d3d11va
 # ETAP 5G — GPU map resize/composite.  CPU_REFERENCE keeps the map in the
 # Pillow HUD (unchanged); GPU uploads the 692x692 working map and resizes +
 # composites it on the GPU.  Filter: 0=bilinear, 1=bicubic, 2=Lanczos-3.
@@ -252,6 +267,30 @@ def _ordered_map_layout_parts(layout: dict) -> tuple[dict, dict, list[str]]:
     below["custom_texts"] = []
     above["custom_texts"] = copy.deepcopy(layout.get("custom_texts", []))
     return below, above, after_keys
+
+
+def _amd_layout_roles(
+    layout: dict[str, Any],
+    gpu_map_enabled: bool,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, list[str]]:
+    """Return semantic and compositing layouts for the AMD ordered-map path.
+
+    The full user layout remains the source of widget semantics and all
+    precomputed telemetry.  Only the compositing layout is partitioned for
+    the below-map / map / above-map z-order phases.
+    """
+    semantic_layout = layout
+    compose_layout = layout
+    map_above_layout = None
+    map_after_keys: list[str] = []
+    track_map_cfg = layout.get("indicators", {}).get("track_map")
+    if (
+        gpu_map_enabled
+        and track_map_cfg
+        and track_map_cfg.get("enabled", True)
+    ):
+        compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(layout)
+    return semantic_layout, compose_layout, map_above_layout, map_after_keys
 
 
 class _HUDDirtyRect(ctypes.Structure):
@@ -787,7 +826,16 @@ def export_amd_native_d3d11(
             flush=True,
         )
         return False
-    use_d3d11va = _AMD_DECODE_MODES[native_decode_mode] == 1
+    requested_native_decode_mode = native_decode_mode
+    native_decode_mode, use_d3d11va = _resolve_amd_decode_mode(
+        native_hud_mode, native_decode_mode
+    )
+    if native_decode_mode != requested_native_decode_mode:
+        print(
+            "[AMD NATIVE D3D11] CPU_REFERENCE HUD requires CPU-NV12 reference "
+            "decode; overriding GPU_HUD_D3D11VA to GPU_HUD_CPU_DECODE_REFERENCE.",
+            flush=True,
+        )
     hud_upload_mode = os.environ.get("AMD_NATIVE_HUD_UPLOAD_MODE", "DIRTY").strip().upper()
     if hud_upload_mode not in {"FULL", "DIRTY"}:
         print(
@@ -816,6 +864,7 @@ def export_amd_native_d3d11(
     hud_enabled = _layout_has_hud(layout)
     legacy_no_hud = not hud_enabled and _env_flag("AMD_NATIVE_LEGACY_NO_HUD", False)
     hud_work_enabled = hud_enabled or legacy_no_hud
+    cpu_reference_hud = native_hud_mode == "CPU_REFERENCE"
 
     # ── ETAP 5G: GPU map resize/composite ───────────────────────────────
     # CPU_REFERENCE keeps the map in the Pillow HUD (unchanged).  GPU uploads
@@ -826,6 +875,8 @@ def export_amd_native_d3d11(
     if requested_map_path not in {"CPU_REFERENCE", "GPU"}:
         print("[AMD NATIVE D3D11] ERROR: AMD_MAP_PATH must be CPU_REFERENCE or GPU.", flush=True)
         return False
+    if cpu_reference_hud:
+        requested_map_path = "CPU_REFERENCE"
     map_gpu_safe, map_gpu_reason = _map_gpu_layout_safe(layout)
     gpu_map_enabled = requested_map_path == "GPU" and map_gpu_safe
     if requested_map_path == "GPU" and not map_gpu_safe:
@@ -868,11 +919,10 @@ def export_amd_native_d3d11(
     # ETAP 5G: in GPU map mode the track_map widget leaves the Pillow HUD; the
     # CPU still renders its 692x692 working image, which is uploaded and
     # resized/composited on the GPU.  Everything else keeps the 5E path.
-    compose_layout = layout
-    map_above_layout = None
-    map_after_keys: list[str] = []
-    if gpu_map_enabled and "track_map" in layout.get("indicators", {}):
-        compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(layout)
+    semantic_layout, compose_layout, map_above_layout, map_after_keys = _amd_layout_roles(
+        layout, gpu_map_enabled,
+    )
+    if map_above_layout is not None:
         print(
             "[AMD NATIVE D3D11] AMD_MAP_ORDER: "
             "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP "
@@ -892,6 +942,8 @@ def export_amd_native_d3d11(
     if requested_chart_path not in _AMD_CHART_PATHS:
         print("[AMD NATIVE D3D11] ERROR: AMD_CHART_PATH must be CPU_REFERENCE, GPU or GPU_SPLIT.", flush=True)
         return False
+    if cpu_reference_hud:
+        requested_chart_path = "CPU_REFERENCE"
     gpu_charts_requested = requested_chart_path in ("GPU", "GPU_SPLIT")
     gpu_charts_split = requested_chart_path == "GPU_SPLIT"
     chart_mode_value = _AMD_CHART_PATHS[requested_chart_path]
@@ -904,6 +956,8 @@ def export_amd_native_d3d11(
     if requested_gauge_path not in _AMD_GAUGE_PATHS:
         print("[AMD NATIVE D3D11] ERROR: AMD_GAUGE_PATH must be CPU_REFERENCE or GPU.", flush=True)
         return False
+    if cpu_reference_hud:
+        requested_gauge_path = "CPU_REFERENCE"
     gauge_gpu_requested = requested_gauge_path == "GPU"
     print(f"[AMD NATIVE D3D11] AMD_GAUGE_PATH: {requested_gauge_path}", flush=True)
 
@@ -1232,7 +1286,7 @@ def export_amd_native_d3d11(
             video_width=video_width,
             video_height=video_height,
             font_path=font_path,
-            layout=compose_layout,
+            layout=semantic_layout,
             field_samples=field_samples,
             max_distance_m=max_distance_m,
             iso_samples=iso_samples,
@@ -1601,7 +1655,7 @@ def export_amd_native_d3d11(
     # Live reference closure (used by REFERENCE mode and as the VFR fallback).
     def _live_frame_data(frame_idx, curr_dt, chart_data):
         return prepare_overlay_frame_data(
-            layout=compose_layout,
+            layout=semantic_layout,
             target_dt=curr_dt,
             start_dt_utc=base_dt,
             tz_offset_hours=tz_offset_hours,
@@ -1635,7 +1689,7 @@ def export_amd_native_d3d11(
         from src.telemetry_precompute import build_telemetry_cache
         _pre_t0 = time.perf_counter()
         telemetry_cache = build_telemetry_cache(
-            layout=compose_layout,
+            layout=semantic_layout,
             base_dt=base_dt,
             tz_offset_hours=tz_offset_hours,
             start_dt_utc=base_dt,
@@ -1767,15 +1821,20 @@ def export_amd_native_d3d11(
         if idx == 0 and gpu_charts_requested and not gpu_chart_keys:
             _probe_capture: dict[str, dict[str, Any]] = {}
             _probe_bboxes: dict[str, tuple[int, int, int, int]] = {}
+            _probe_render_keys = set(semantic_layout.get("indicators", {})) - {"track_map"}
+            _probe_render_keys.update(
+                f"custom_text:{idx}" for idx, _ in enumerate(semantic_layout.get("custom_texts", []))
+            )
             compose_overlay(
                 canvas_w=video_width, canvas_h=video_height,
-                layout=compose_layout, font_path=font_path,
+                layout=semantic_layout, font_path=font_path,
                 _bboxes=_probe_bboxes,
                 gpu_capture_keys=set(_CHART_GPU_SLOTS.keys()),
                 gpu_capture=_probe_capture,
                 split_chart_keys=(
                     set(_CHART_GPU_SLOTS.keys()) if gpu_charts_split else None
                 ),
+                render_keys=_probe_render_keys,
                 reuse_canvas=False,
                 **frame_kwargs,
             )
@@ -1785,6 +1844,7 @@ def export_amd_native_d3d11(
                     video_width, video_height, layout, "track_map",
                     gps_track, target_dt=c_dt,
                     current_position=frame_kwargs.get("current_position"),
+                    map_heading=frame_kwargs.get("map_heading"),
                 )
                 _probe_map_dst = _p_dst
             gpu_chart_keys, gpu_chart_reason = _chart_gpu_layout_safe(
@@ -2005,6 +2065,7 @@ def export_amd_native_d3d11(
             map_img, map_dst = render_map_working_image(
                 video_width, video_height, layout, "track_map",
                 gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
+                map_heading=frame_kwargs.get("map_heading"),
             )
             if map_img is not None and map_dst is not None:
                 last_map_img_out = map_img

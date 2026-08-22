@@ -406,6 +406,7 @@ class PreviewMixin:
                             chart_data=overlay_data["chart_data"],
                             current_position=current_position,
                             gps_track=overlay_data["gps_track"],
+                            map_heading=overlay_data.get("map_heading"),
                             target_dt=overlay_data["target_dt"],
                             start_dt_utc=overlay_data["start_dt_utc"],
                             elapsed_seconds=overlay_data["elapsed_seconds"],

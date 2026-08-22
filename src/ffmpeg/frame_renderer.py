@@ -218,7 +218,7 @@ def render_overlay_frame(
                             hr_value=data["hr_value"], cad_value=data["cad_value"],
                             battery_value=data["battery_value"], chart_data=data["chart_data"],
                             current_position=data["current_position"], extra_indicators=data["extra_indicators"],
-                            gps_track=data["gps_track"], target_dt=data["target_dt"],
+                            gps_track=data["gps_track"], map_heading=data.get("map_heading"), target_dt=data["target_dt"],
                             start_dt_utc=data["start_dt_utc"], elapsed_seconds=data["elapsed_seconds"],
                             avg_speed_kmh=data["avg_speed_kmh"], reuse_canvas=False,
                             target_image=atlas_img,
@@ -254,6 +254,7 @@ def render_overlay_frame(
             current_position=data["current_position"],
             extra_indicators=data["extra_indicators"],
             gps_track=data["gps_track"],
+            map_heading=data.get("map_heading"),
             target_dt=data["target_dt"],
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
@@ -290,6 +291,7 @@ def render_overlay_frame(
             current_position=data["current_position"],
             extra_indicators=data["extra_indicators"],
             gps_track=data["gps_track"],
+            map_heading=data.get("map_heading"),
             target_dt=data["target_dt"],
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
@@ -423,7 +425,7 @@ def render_overlay_job(job: tuple) -> int:
         "speed_visual", "speed_text", "dist_visual", "dist_text",
         "alt_visual", "alt_text", "iso_text", "exposure_text",
         "temp_text", "power_text", "atemp_text", "hr_text",
-        "cad_text", "battery_text", "track_map", "time_block",
+        "cad_text", "battery_text", "compass", "track_map", "time_block",
     }
     extra_indicators: dict[str, tuple[float, str, str]] = {}
     # 1) FIT fields – resolve real values from telemetry
@@ -440,6 +442,15 @@ def render_overlay_job(job: tuple) -> int:
             continue
         ind_cfg = layout["indicators"][ind_key]
         extra_indicators[ind_key] = (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", ind_key))
+    if "compass" in layout.get("indicators", {}):
+        compass_cfg = layout["indicators"]["compass"]
+        if compass_cfg.get("enabled", True):
+            compass_source = compass_cfg.get("source", "gpmf")
+            compass_value = _resolve_cache_value("heading", compass_source, current_dt_utc, "compass")
+            extra_indicators["compass"] = (
+                compass_value, compass_cfg.get("unit", "deg"),
+                compass_cfg.get("label", "GPS Course Over Ground"),
+            )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
     _elapsed = 0.0
@@ -448,6 +459,18 @@ def render_overlay_job(job: tuple) -> int:
     _avg_spd = 0.0
     if _elapsed > 0 and distance_m > 0:
         _avg_spd = (distance_m / _elapsed) * 3.6
+
+    map_heading = None
+    map_cfg = layout.get("indicators", {}).get("track_map", {})
+    if (
+        isinstance(map_cfg, dict)
+        and map_cfg.get("enabled", True)
+        and str(map_cfg.get("map_orientation", "north_up")).strip().lower()
+        == "track_up"
+    ):
+        map_heading = _resolve_cache_value(
+            "heading", map_cfg.get("source", "fit"), current_dt_utc, "track_map"
+        )
 
     img = compose_overlay(
         video_width, video_height, layout, font_path, date_text, time_text,
@@ -460,6 +483,7 @@ def render_overlay_job(job: tuple) -> int:
         chart_data=chart_data, current_position=current_position,
         extra_indicators=extra_indicators,
         gps_track=WORKER_CACHE.get("gps_track", []),
+        map_heading=map_heading,
         target_dt=current_dt_utc,
         start_dt_utc=start_dt_utc,
         elapsed_seconds=_elapsed,

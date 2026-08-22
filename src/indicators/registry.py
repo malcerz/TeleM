@@ -26,6 +26,7 @@ DEFAULT_FORM_RULES: list[tuple[str, str, float]] = [
     ("battery",          "bar",   12.0),
     ("solar",            "bar",   12.0),
     ("gopro_battery",    "bar",   12.0),
+    ("slope",            "bar",   20.0),
 ]
 
 
@@ -36,6 +37,8 @@ DEFAULT_SOURCE_MAP: dict[str, str] = {
     "power_text":  "gpx",
     "atemp_text":  "gpx",
     "battery_text":"gpx",
+    "compass":     "gpmf",
+    "slope_text":  "gpmf",
 }
 
 
@@ -60,7 +63,7 @@ HARDCODED_KEYS: frozenset[str] = frozenset({
     "speed_visual", "speed_text", "dist_visual", "dist_text",
     "alt_visual", "alt_text", "iso_text", "exposure_text",
     "temp_text", "power_text", "atemp_text", "hr_text",
-    "cad_text", "battery_text", "track_map", "time_block",
+    "cad_text", "battery_text", "compass", "slope_text", "track_map", "time_block",
     "time_display",
 })
 
@@ -77,6 +80,8 @@ def get_form_for_key(key: str) -> tuple[str, dict]:
             if pattern in ("battery", "solar", "gopro_battery"):
                 overrides["bar_style"] = "segments"
                 overrides["segments"] = 20
+            elif pattern == "slope":
+                overrides["bar_style"] = "slope"
             return form, overrides
     return "text", {}
 

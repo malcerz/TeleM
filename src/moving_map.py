@@ -38,6 +38,25 @@ REQUEST_DELAY = 0.15          # fair-use delay between tile requests
 DEFAULT_ZOOM = 15
 DEFAULT_STYLE = "light_all"
 
+
+def track_up_working_size(output_size: int) -> int:
+    """Return the square working size required before a Track-Up rotation."""
+    output = max(1, int(output_size))
+    return max(output, int(math.ceil(output * math.sqrt(2.0))))
+
+
+def track_up_rotation_degrees(heading: float | None) -> float:
+    """Return the image rotation that puts geographic heading at the top.
+
+    Pillow's positive image rotation moves a vector pointing east (right) to
+    the top at +90 degrees, so the map is rotated by the canonical heading
+    itself.  ``None`` is deliberately represented as zero only for the visual
+    fallback; callers retain the original missing telemetry state.
+    """
+    if heading is None:
+        return 0.0
+    return float(heading) % 360.0
+
 MAP_STYLES: dict[str, str] = {
     "light_all":       "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
     "light_nolabels":  "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
@@ -143,6 +162,26 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
 
 # ── MovingMapRenderer ───────────────────────────────────────────────────
 
+def draw_position_marker(image, center, radius, *, style="dot", heading=None):
+    """Draw the position marker in output coordinates.
+
+    Direction is clockwise degrees from screen-up; missing direction keeps the
+    legacy dot behaviour.
+    """
+    d = ImageDraw.Draw(image)
+    mx, my = center
+    r = max(1, float(radius))
+    if str(style).strip().lower() == "directional" and heading is not None:
+        a = math.radians(float(heading))
+        tip = (mx + math.sin(a) * r * 1.8, my - math.cos(a) * r * 1.8)
+        left = (mx + math.sin(a + 2.45) * r, my - math.cos(a + 2.45) * r)
+        right = (mx + math.sin(a - 2.45) * r, my - math.cos(a - 2.45) * r)
+        d.polygon((tip, left, right), fill=(255, 255, 255, 255), outline=(0, 0, 0, 220))
+    else:
+        d.ellipse((mx-r, my-r, mx+r, my+r), fill=(255, 255, 255, 255), outline=(0, 0, 0, 220), width=2)
+    return image
+
+
 class MovingMapRenderer:
     """Renders map frames following GPS track frame-by-frame."""
 
@@ -156,6 +195,7 @@ class MovingMapRenderer:
         track_width=3,
         marker_color=(255, 255, 255, 255),
         marker_radius=7,
+        marker_style="dot",
     ):
         if Image is None: raise ImportError("Pillow required")
         self._gps = gps_track
@@ -165,6 +205,7 @@ class MovingMapRenderer:
         self._trk_width = track_width
         self._mkr_color = marker_color
         self._mkr_radius = marker_radius
+        self._mkr_style = str(marker_style or "dot").strip().lower()
         self._cache = TileCache(cache_dir)
 
         # Pre-compute tile coords & pixel positions for all GPS points
@@ -241,7 +282,7 @@ class MovingMapRenderer:
 
     def render(self, ts: float, w: int, h: int, *, draw_track=True,
                draw_marker=True,
-               download_missing=True) -> Image.Image:
+               download_missing=True, heading=None) -> Image.Image:
         """Map image centred on GPS position at timestamp *ts* (seconds).
 
         Args:
@@ -328,11 +369,22 @@ class MovingMapRenderer:
         # the previous full-grid draw-then-crop path.
         if draw_marker:
             marker_started = time.perf_counter()
-            d = ImageDraw.Draw(cropped)
             mx, my = scx - x1, scy - y1
             r = self._mkr_radius
-            d.ellipse((mx - r, my - r, mx + r, my + r),
-                      fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
+            d = ImageDraw.Draw(cropped)
+            if self._mkr_style == "directional" and heading is not None:
+                # North-up: canonical heading points clockwise from screen-up.
+                # Track-up calls this renderer with heading=None and draws an
+                # upright marker after map rotation below.
+                angle = float(heading)
+                a = math.radians(angle)
+                tip = (mx + math.sin(a) * r * 1.8, my - math.cos(a) * r * 1.8)
+                left = (mx + math.sin(a + 2.45) * r, my - math.cos(a + 2.45) * r)
+                right = (mx + math.sin(a - 2.45) * r, my - math.cos(a - 2.45) * r)
+                d.polygon((tip, left, right), fill=self._mkr_color, outline=(0, 0, 0, 220))
+            else:
+                d.ellipse((mx - r, my - r, mx + r, my + r),
+                          fill=self._mkr_color, outline=(0, 0, 0, 220), width=2)
             profiler.record(
                 "map.current_marker",
                 (time.perf_counter() - marker_started) * 1000.0,
@@ -352,6 +404,67 @@ class MovingMapRenderer:
             (time.perf_counter() - crop_started) * 1000.0,
         )
         return cropped
+
+    def render_track_up(
+        self,
+        ts: float,
+        output_size: int,
+        *,
+        heading: float | None,
+        draw_track: bool = True,
+        draw_marker: bool = True,
+        download_missing: bool = True,
+    ) -> Image.Image:
+        """Render one final-size map with the canonical heading at the top.
+
+        The existing north-up renderer creates the complete tiles+route+marker
+        raster first.  Track-Up only adds an internal overscan, rotates that
+        finished raster around its center and crops back to the requested
+        destination size.  Heading never enters tile selection or cache keys.
+        """
+        output = max(1, int(output_size))
+        angle = track_up_rotation_degrees(heading)
+
+        # Preserve the exact north-up fast path for missing/zero heading.
+        if angle == 0.0:
+            return self.render(
+                ts, output, output,
+                draw_track=draw_track,
+                draw_marker=draw_marker,
+                download_missing=download_missing,
+                heading=(0.0 if heading is not None else None),
+            )
+
+        working = track_up_working_size(output)
+        north_up = self.render(
+            ts, working, working,
+            draw_track=draw_track,
+            # A directional marker is painted once in final Track-Up space;
+            # suppress the north-up dot to avoid two position markers.
+            draw_marker=(draw_marker and not (
+                self._mkr_style == "directional" and heading is not None
+            )),
+            download_missing=download_missing,
+            heading=None,
+        )
+        resampling = getattr(Image, "Resampling", Image)
+        rotated = north_up.rotate(
+            angle,
+            resample=resampling.BICUBIC,
+            expand=False,
+            fillcolor=(30, 30, 30, 255),
+        )
+        # Repaint the marker in output space so it remains directional-up.
+        if draw_marker and self._mkr_style == "directional" and heading is not None:
+            d = ImageDraw.Draw(rotated)
+            c = working / 2.0
+            r = self._mkr_radius
+            tip = (c, c - r * 1.8)
+            left = (c - r * 0.65, c + r * 0.75)
+            right = (c + r * 0.65, c + r * 0.75)
+            d.polygon((tip, left, right), fill=self._mkr_color, outline=(0, 0, 0, 220))
+        offset = (working - output) // 2
+        return rotated.crop((offset, offset, offset + output, offset + output))
 
     def _interp_pos(self, ts: float) -> tuple[float, float]:
         """Return interpolated (px_x, px_y) at timestamp *ts* (seconds from track start).

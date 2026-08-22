@@ -1,0 +1,210 @@
+{
+  "source": "Video\\GX030120.json",
+  "duration_s": 180.174667,
+  "counts": {
+    "accel": 35802,
+    "gyro": 35802
+  },
+  "gps_reference": {
+    "algorithm": "lean_ref=atan2(v*d(COG)/dt,g)",
+    "speed_unit": "km/h converted to m/s",
+    "production_smoothing_s": 2.0,
+    "light_smoothing_s": 0.5,
+    "production_vs_light_rmse_deg": 2.4733342370006626
+  },
+  "candidates": {
+    "X": {
+      "+": {
+        "offset_deg": -1.8517445496934317,
+        "signed_corr": -0.03624846704926795,
+        "abs_corr": 0.03624846704926795,
+        "rmse_deg": 5.79172757327456,
+        "lag_ms": 1986.1359999979413,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": -20.472491460979132,
+            "same_sign": true
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": -11.33044243359117,
+            "same_sign": false
+          }
+        ]
+      },
+      "-": {
+        "offset_deg": 1.7984306506779029,
+        "signed_corr": 0.03624846704926799,
+        "abs_corr": 0.03624846704926799,
+        "rmse_deg": 5.542442437789672,
+        "lag_ms": 1986.1359999979413,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": 20.52580535999466,
+            "same_sign": false
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": 11.383756332606698,
+            "same_sign": true
+          }
+        ]
+      }
+    },
+    "Y": {
+      "+": {
+        "offset_deg": -0.13942189888945564,
+        "signed_corr": -0.3018662864109069,
+        "abs_corr": 0.3018662864109069,
+        "rmse_deg": 6.283496498931478,
+        "lag_ms": 617.1599999986483,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": 45.142868860102865,
+            "same_sign": false
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": 8.772836138588582,
+            "same_sign": true
+          }
+        ]
+      },
+      "-": {
+        "offset_deg": -0.06672211462985964,
+        "signed_corr": 0.30186628641090696,
+        "abs_corr": 0.30186628641090696,
+        "rmse_deg": 4.678814511157688,
+        "lag_ms": 617.1599999986483,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": -44.93672484658355,
+            "same_sign": true
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": -8.566692125069265,
+            "same_sign": false
+          }
+        ]
+      }
+    },
+    "Z": {
+      "+": {
+        "offset_deg": -0.26950646697933794,
+        "signed_corr": -0.17810269509692167,
+        "abs_corr": 0.17810269509692167,
+        "rmse_deg": 96.03133604687147,
+        "lag_ms": 1482.8359999982013,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": 120.08369406921736,
+            "same_sign": false
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": -172.74612586161717,
+            "same_sign": false
+          }
+        ]
+      },
+      "-": {
+        "offset_deg": 0.7755750602222125,
+        "signed_corr": 0.17810269509692153,
+        "abs_corr": 0.17810269509692153,
+        "rmse_deg": 94.86954612821992,
+        "lag_ms": 1482.8359999982013,
+        "turns": [
+          {
+            "ref_peak": -11.53624642790712,
+            "imu_peak": -120.58976266246023,
+            "same_sign": true
+          },
+          {
+            "ref_peak": 3.9065319225538766,
+            "imu_peak": 172.2400572683743,
+            "same_sign": true
+          }
+        ]
+      }
+    }
+  },
+  "selected": {
+    "axis": "X",
+    "sign": "negative of atan2(Y,-Z)",
+    "mount_offset_deg": 1.7984306506779029,
+    "gyro_bias_rad_s": -0.0010649627263045794,
+    "alpha": 0.98,
+    "filter": "0.980_bias_corrected"
+  },
+  "turns": [
+    {
+      "fragment": "turn_1",
+      "direction": "left/negative",
+      "gps_peak_deg": -11.53624642790712,
+      "imu_peak_deg": 20.54085237923201,
+      "sign_agreement": false,
+      "peak_time_difference_ms": 5279.271000000009,
+      "best_lag_ms": 2001.2349999979335,
+      "corr_at_best_lag": -0.48673125493580915
+    },
+    {
+      "fragment": "turn_2",
+      "direction": "right/positive",
+      "gps_peak_deg": 3.9065319225538766,
+      "imu_peak_deg": 11.398803435179444,
+      "sign_agreement": true,
+      "peak_time_difference_ms": -4066.4099999999908,
+      "best_lag_ms": 848.6779999985288,
+      "corr_at_best_lag": -0.28847612093737324
+    }
+  ],
+  "straight": {
+    "mean_deg": -0.665513037419691,
+    "stddev_deg": 1.3375212798039686,
+    "drift_deg_per_s": 0.05619432368541276
+  },
+  "low_speed": {
+    "speed_median_kmh": 0.5016330000000008,
+    "mean_deg": -8.092196807476807,
+    "stddev_deg": 1.5020150146044364
+  },
+  "filters": {
+    "0.980_no_bias": {
+      "straight_drift_deg_per_s": 0.05619432381533926,
+      "straight_stddev_deg": 1.3375212794798608
+    },
+    "0.980_bias_corrected": {
+      "straight_drift_deg_per_s": 0.05619432368541276,
+      "straight_stddev_deg": 1.3375212798039686
+    },
+    "0.995_no_bias": {
+      "straight_drift_deg_per_s": 0.03217324668884377,
+      "straight_stddev_deg": 0.7926877758288187
+    },
+    "0.995_bias_corrected": {
+      "straight_drift_deg_per_s": 0.0321732460918637,
+      "straight_stddev_deg": 0.7926877764730654
+    }
+  },
+  "downsample": {
+    "199": {
+      "samples": 35855,
+      "rmse_vs_full_deg": 0.0,
+      "max_error_deg": 0.0
+    },
+    "20": {
+      "samples": 3604,
+      "rmse_vs_full_deg": 1.1772498221710577,
+      "max_error_deg": 15.91170177636921
+    }
+  },
+  "asset_exists": true,
+  "performance_total_ms": 3569.283400000131,
+  "plot": "Raporty\\ETAP8H_LEAN_GPS_CALIBRATION.png"
+}

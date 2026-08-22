@@ -93,6 +93,25 @@ def _prefix_static_buffers():
 _FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
 
 
+def _window_time_labels(duration_s: float) -> list[str]:
+    """Return relative X-axis labels for the current moving window."""
+    duration_s = max(0.0, float(duration_s))
+
+    def fmt(seconds: float) -> str:
+        rounded = round(seconds)
+        if abs(seconds - rounded) < 0.05:
+            return str(int(rounded))
+        return f"{seconds:.1f}".rstrip("0").rstrip(".")
+
+    return [
+        f"-{fmt(duration_s)} s",
+        f"-{fmt(duration_s * 0.75)} s",
+        f"-{fmt(duration_s * 0.5)} s",
+        f"-{fmt(duration_s * 0.25)} s",
+        "0 s",
+    ]
+
+
 class ChartSplit:
     """ETAP 5K — the split (static + dynamic) representation of a chart.
 
@@ -416,9 +435,20 @@ def _render_chart_indicator(
     chart_end_dt = getattr(history_data, "chart_end_dt", None)
     t_start = chart_start_dt or (timestamps[0] if timestamps else None)
     t_end = chart_end_dt or (timestamps[-1] if timestamps else None)
+    time_scope = getattr(history_data, "time_scope", cfg.get("chart_time_scope", "activity"))
+    if (
+        time_scope == "window"
+        and t_start is not None and t_end is not None
+    ):
+        try:
+            window_duration_s = max(0.0, (t_end - t_start).total_seconds())
+            graph_kwargs["time_labels"] = _window_time_labels(window_duration_s)
+        except (AttributeError, TypeError):
+            pass
     prefix_dynamic = bool(
         optimized_static and timestamps and target_dt is not None
         and t_start is not None and t_end is not None
+        and time_scope == "window"
     )
     graph_started = time.perf_counter()
     if prefix_dynamic:

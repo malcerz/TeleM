@@ -88,13 +88,21 @@ def test_chart_schema_has_no_dead_fields():
     """Chart Właściwości must not expose controls the renderer ignores."""
     from src.gui.qt.models import chart_indicator_fields
     names = {f.name for f in chart_indicator_fields()}
-    for dead in ("ticks", "window_s"):
+    for dead in ("ticks",):
         assert dead not in names
     for used in ("label_count", "label_font_size", "label_units", "show_average",
                  "thickness", "min_val", "max_val", "line_width", "fill_alpha",
                  "show_grid", "chart_color", "fill_color", "grid_color",
                  "show_value", "show_units", "text_color"):
         assert used in names
+
+
+def test_chart_window_field_is_visible_only_for_window_scope():
+    from src.gui.qt.models import chart_indicator_fields
+    activity = {f.name for f in chart_indicator_fields("activity")}
+    window = {f.name for f in chart_indicator_fields("window")}
+    assert "chart_window_s" not in activity
+    assert "chart_window_s" in window
 
 
 def test_chart_schema_min_val_allows_negative():

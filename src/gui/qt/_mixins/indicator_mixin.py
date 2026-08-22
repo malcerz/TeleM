@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
-from src.gui.qt.models import DataStream, get_schema_for_form
+from src.gui.qt.models import DataStream, compass_indicator_fields, get_schema_for_form
 from src.telemetry_extract import interpolate_value
 
 
@@ -38,7 +38,14 @@ class IndicatorMixin:
 
         form = cfg.get("form", "text")
         bar_style = cfg.get("bar_style", "ruler")
-        schema = get_schema_for_form(form, bar_style=bar_style)
+        schema = (
+            compass_indicator_fields()
+            if stream_key == "compass"
+            else get_schema_for_form(
+                form, bar_style=bar_style,
+                chart_time_scope=cfg.get("chart_time_scope", "activity"),
+            )
+        )
 
         self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
 
@@ -65,7 +72,7 @@ class IndicatorMixin:
             "needle_length": 1.1, "needle_width": 4, "needle_color": "#DC3232",
             "marker_size": 6, "marker_color": "#FFFFFF",
             # Chart
-            "window_s": 30.0, "chart_color": "#00AAFF",
+            "chart_window_s": 60.0, "chart_color": "#00AAFF",
             "fill_color": "#00AAFF", "fill_alpha": 80,
             "grid_color": "#444444", "show_grid": True,
             "line_width": 2,
@@ -128,11 +135,63 @@ class IndicatorMixin:
             defaults["form"] = "map"
             defaults["size"] = 18.0
             defaults["zoom"] = 16
+            defaults["map_orientation"] = "north_up"
             defaults["map_style"] = "light_all"
             defaults["marker_size"] = 7
             defaults["marker_color"] = "#FFFFFF"
             defaults["x"] = 2.0
             defaults["y"] = 15.0
+
+        if key == "compass":
+            defaults["label"] = "COMPASS"
+            defaults["form"] = "gauge"
+            defaults["gauge_style"] = "compass"
+            defaults["field"] = "heading"
+            defaults["source"] = "gpmf"
+            defaults["x"] = 70.65
+            defaults["y"] = 20.0
+            defaults["size"] = 7.8
+            defaults["font_size"] = 1.2
+            defaults["show_value"] = True
+            defaults["unit"] = "°"
+            defaults["opacity"] = 1.0
+            defaults["compass_show_cardinals"] = True
+            defaults["compass_show_heading"] = True
+            defaults["compass_heading_format"] = "03d"
+            defaults["compass_tick_degrees"] = 15
+            defaults["compass_major_tick_degrees"] = 45
+            defaults["compass_tick_color"] = "#DDE7F2"
+            defaults["compass_cardinal_color"] = "#FFFFFF"
+            defaults["compass_needle_color"] = "#FFD42A"
+            defaults["compass_ring_color"] = "#B8C7D9"
+            defaults["compass_heading_color"] = "#FFFFFF"
+
+        if key == "slope_text":
+            defaults["label"] = "SLOPE"
+            defaults["field"] = "slope"
+            defaults["form"] = "bar"
+            defaults["bar_style"] = "slope"
+            defaults["source"] = "gpmf"
+            defaults["x"] = 73.0
+            defaults["y"] = 52.0
+            defaults["size"] = 20.0
+            defaults["font_size"] = 1.35
+            defaults["unit"] = "%"
+            defaults["min_val"] = -20.0
+            defaults["max_val"] = 20.0
+            defaults["major_tick"] = 5.0
+            defaults["minor_tick"] = 1.0
+            defaults["show_value"] = True
+            defaults["show_label"] = True
+            defaults["show_range_labels"] = True
+            defaults["show_units"] = True
+            defaults["decimals"] = 1
+            defaults["opacity"] = 1.0
+            defaults["track_color"] = "#8D9AA7"
+            defaults["tick_color"] = "#DDE7F2"
+            defaults["zero_tick_color"] = "#FFFFFF"
+            defaults["marker_color"] = "#FFD42A"
+            defaults["marker_border_color"] = "#FFFFFF"
 
         # Automatycznie ustaw min/max z danych telemetrycznych
         _min_v, _max_v = self._get_indicator_range(key)
@@ -148,6 +207,9 @@ class IndicatorMixin:
         Zwraca (min_val, max_val) zaokrąglone do pełnych dziesiątek,
         lub (None, None) gdy brak danych.
         """
+        if key == "slope_text":
+            return -20.0, 20.0
+
         samples: list[tuple] | None = None
 
         # FIT fields: fit_{field_name}_text
@@ -226,7 +288,10 @@ class IndicatorMixin:
 
         form = cfg.get("form", "text")
         bar_style = cfg.get("bar_style", "ruler")
-        schema = get_schema_for_form(form, bar_style=bar_style)
+        schema = get_schema_for_form(
+            form, bar_style=bar_style,
+            chart_time_scope=cfg.get("chart_time_scope", "activity"),
+        )
         self.signals.sig_properties_ready.emit(key, schema, dict(cfg))
 
         self._render_preview()
@@ -307,6 +372,38 @@ class IndicatorMixin:
                 ),
                 value_range=(0, 0),
             ))
+        heading_source = None
+        heading_count = 0
+        if tm.heading_samples:
+            heading_source, heading_count = "gpmf", len(tm.heading_samples)
+        elif tm.fit_data.get("heading"):
+            heading_source, heading_count = "fit", len(tm.fit_data["heading"])
+        elif tm.gpx_heading_samples:
+            heading_source, heading_count = "gpx", len(tm.gpx_heading_samples)
+        if heading_source is not None:
+            streams.append(DataStream(
+                key="compass", display_name="Compass / GPS course",
+                source=heading_source, category="gps", unit="°",
+                suggested_form="gauge", sample_count=heading_count,
+                value_range=(0.0, 360.0),
+            ))
+        slope_source = None
+        slope_samples = []
+        if tm.slope_samples:
+            slope_source, slope_samples = "gpmf", tm.slope_samples
+        elif tm.fit_data.get("slope"):
+            slope_source, slope_samples = "fit", tm.fit_data["slope"]
+        elif tm.gpx_slope_samples:
+            slope_source, slope_samples = "gpx", tm.gpx_slope_samples
+        if slope_source is not None:
+            vals = [v for _, v in slope_samples if v is not None]
+            if vals:
+                streams.append(DataStream(
+                    key="slope_text", display_name="Slope / Grade",
+                    source=slope_source, category="gps", unit="%",
+                    suggested_form="bar", sample_count=len(slope_samples),
+                    value_range=(min(vals), max(vals)),
+                ))
         if tm.alt_samples:
             vals = [v for _, v in tm.alt_samples]
             streams.append(DataStream(
@@ -407,7 +504,7 @@ class IndicatorMixin:
 
         # ── FIT (dynamicznie) ─────────────────────────────────────────
         for field_name in sorted(tm.fit_data.keys()):
-            if field_name in ("speed", "alt", "track", "lat", "lon", "timestamp"):
+            if field_name in ("speed", "alt", "track", "lat", "lon", "timestamp", "heading"):
                 continue
             samples = tm.fit_data[field_name]
             vals = [v for _, v in samples if v is not None]

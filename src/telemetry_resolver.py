@@ -18,6 +18,8 @@ SOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
         "cad": ("cad", "cadence"),
         "atemp": ("atemp", "temperature"),
         "battery": ("battery", "battery_soc"),
+        "heading": ("heading",),
+        "slope": ("slope",),
     },
     "gpx": {
         "power": ("power",),
@@ -37,6 +39,8 @@ _GPMF_ATTRS = {
     "iso": "iso_samples",
     "exposure": "exposure_samples",
     "temperature": "temperature_samples",
+    "heading": "heading_samples",
+    "slope": "slope_samples",
     "accel_x": "accel_x_samples",
     "accel_y": "accel_y_samples",
     "accel_z": "accel_z_samples",
@@ -58,6 +62,8 @@ _GPX_ATTRS = {
     "cad": "gpx_cad_samples",
     "atemp": "gpx_atemp_samples",
     "battery": "gpx_battery_samples",
+    "heading": "gpx_heading_samples",
+    "slope": "gpx_slope_samples",
 }
 
 

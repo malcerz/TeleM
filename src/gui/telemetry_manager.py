@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from src.telemetry_resolver import resolve_samples_from_sources
+from src.telemetry_heading import derive_heading_samples, interpolate_heading
+from src.telemetry_slope import derive_slope_from_streams, interpolate_slope
 
 # Import telemetry modules (with fallback stubs)
 try:
@@ -79,7 +81,7 @@ _FIT_LOOKUP: dict[str, tuple[str, ...]] = {
 }
 
 # GPS-related fields handled by built-in indicators (not registered as extension)
-_GPS_HANDLED: set[str] = {"speed", "alt", "track", "lat", "lon", "timestamp"}
+_GPS_HANDLED: set[str] = {"speed", "alt", "track", "lat", "lon", "timestamp", "heading", "slope"}
 
 # GPMF-native field names that resolve to GPMF samples directly
 _GPMF_NATIVE: set[str] = {"speed", "alt", "dist", "track", "iso", "exposure", "temperature"}
@@ -358,6 +360,7 @@ class TelemetryDataManager:
         self.iso_samples: SampleList = []
         self.exposure_samples: SampleList = []
         self.temperature_samples: SampleList = []
+        self.slope_samples: list[tuple[datetime, float | None]] = []
         self.accelerometer_samples: list[tuple[datetime, tuple[float, float, float]]] = []
         self.gyroscope_samples: list[tuple[datetime, tuple[float, float, float]]] = []
         self.accel_x_samples: SampleList = []
@@ -380,11 +383,14 @@ class TelemetryDataManager:
         self.gpx_hr_samples: SampleList = []
         self.gpx_cad_samples: SampleList = []
         self.gpx_battery_samples: SampleList = []
+        self.gpx_heading_samples: list[tuple[datetime, float | None]] = []
+        self.gpx_slope_samples: list[tuple[datetime, float | None]] = []
 
         # GPS track for map rendering (lat/lon points per source)
         self.gps_track: list[tuple[datetime, float, float]] = []
         self.gpx_gps_track: list[tuple[datetime, float, float]] = []
         self.fit_gps_track: list[tuple[datetime, float, float]] = []
+        self.heading_samples: list[tuple[datetime, float | None]] = []
 
         # FIT samples – dict-based (matches telemetry_fit.process_fit return type)
         self.fit_data: dict[str, SampleList] = {}
@@ -547,6 +553,17 @@ class TelemetryDataManager:
         # Smooth
         self.smooth_all_gpmf()
 
+        # Heading is derived from the GPMF GPS track only.  The explicit
+        # load_gps_track call also rebuilds this stream after the track is
+        # available to the map path.
+        if self._extract_gps_track:
+            self.heading_samples = derive_heading_samples(
+                self._extract_gps_track(records), self.speed_samples
+            )
+        self.slope_samples = derive_slope_from_streams(
+            self.track_samples, self.alt_samples
+        )
+
     def smooth_all_gpmf(self) -> None:
         """Smooth GPMF speed and altitude samples."""
         if self._smooth_fn:
@@ -644,6 +661,12 @@ class TelemetryDataManager:
         self.gpx_atemp_samples = gpx_atemp or []
         self.gpx_hr_samples = gpx_hr or []
         self.gpx_cad_samples = gpx_cad or []
+        self.gpx_heading_samples = derive_heading_samples(
+            self.gpx_gps_track, self.gpx_speed_samples
+        )
+        self.gpx_slope_samples = derive_slope_from_streams(
+            self.gpx_track_samples, self.gpx_alt_samples
+        )
 
         if self.start_dt_utc is None and gpx_speed:
             self.start_dt_utc = gpx_speed[0][0]
@@ -726,6 +749,15 @@ class TelemetryDataManager:
                 processed_fit[key] = self._smooth(samples)
             else:
                 processed_fit[key] = samples
+        fit_heading = derive_heading_samples(
+            self.fit_gps_track, processed_fit.get("speed", [])
+        )
+        if fit_heading:
+            processed_fit["heading"] = fit_heading
+        fit_distance = processed_fit.get("track") or processed_fit.get("distance", [])
+        processed_fit["slope"] = derive_slope_from_streams(
+            fit_distance, processed_fit.get("alt", [])
+        )
         self.fit_data = FitDataset(processed_fit)
         self.available_fit_fields = self.fit_data.available_fit_fields
 
@@ -754,6 +786,8 @@ class TelemetryDataManager:
             self.gpx_hr_samples.clear()
             self.gpx_cad_samples.clear()
             self.gpx_battery_samples.clear()
+            self.gpx_heading_samples.clear()
+            self.gpx_slope_samples.clear()
             self.gpx_gps_track.clear()
             self.gpx_path = None
         elif source == "fit":
@@ -772,6 +806,8 @@ class TelemetryDataManager:
         self.iso_samples.clear()
         self.exposure_samples.clear()
         self.temperature_samples.clear()
+        self.heading_samples.clear()
+        self.slope_samples.clear()
         self.accelerometer_samples.clear()
         self.gyroscope_samples.clear()
         for name in (
@@ -804,6 +840,12 @@ class TelemetryDataManager:
         """Extract raw GPS lat/lon track from GPMF records for map rendering."""
         if self._extract_gps_track:
             self.gps_track = self._extract_gps_track(records)
+            self.heading_samples = derive_heading_samples(
+                self.gps_track, self.speed_samples
+            )
+        else:
+            self.gps_track = []
+            self.heading_samples = []
 
     def get_gps_track_for_source(self, source_type: str) -> list[tuple[datetime, float, float]]:
         """Return GPS track (lat/lon) for exactly the requested source."""
@@ -866,6 +908,10 @@ class TelemetryDataManager:
             return interpolate_distance(samples, target_dt)
         if field_name in ("alt", "enhanced_altitude", "altitude"):
             return interpolate_altitude(samples, target_dt)
+        if field_name == "heading":
+            return interpolate_heading(samples, target_dt)
+        if field_name == "slope":
+            return interpolate_slope(samples, target_dt)
         return self._interpolate(samples, target_dt)
 
     def resolve_samples(

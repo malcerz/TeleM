@@ -19,7 +19,7 @@ except ImportError:
 from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
-from src.indicators.helpers import load_font, s, parse_hex_color
+from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_block import render_time_block
 from src.indicators.time_display import render_time_display
@@ -29,7 +29,6 @@ from src.indicators.profiling import get_overlay_profiler, indicator_scope
 import threading
 
 _THREAD_CANVAS = threading.local()
-
 
 def _get_reusable_canvas(
     canvas_w: int, canvas_h: int, canvas_type: str = "below"
@@ -96,9 +95,16 @@ def compose_overlay(
     coordinate_origin: tuple[int, int] = (0, 0),
     render_keys: Optional[set[str]] = None,
     destination_proven_empty: bool = False,
+    map_heading: Optional[float] = None,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators."""
     profiler = get_overlay_profiler()
+    widget_fonts: dict[str, str] = {}
+
+    def _font_for(key: str) -> str:
+        if key not in widget_fonts:
+            widget_fonts[key] = indicator_font_path(layout, key, font_path)
+        return widget_fonts[key]
     origin_x, origin_y = coordinate_origin
     if target_image is not None:
         img = target_image
@@ -156,7 +162,7 @@ def compose_overlay(
         with indicator_scope("time_block"):
             with profiler.measure("indicator.time_block.render"):
                 tb, tbx, tby = render_time_block(
-                    canvas_w, canvas_h, layout, font_path, date_text, time_text
+                    canvas_w, canvas_h, layout, _font_for("time_block"), date_text, time_text
                 )
         if tb:
             tb_rotation = layout["indicators"]["time_block"].get("rotation", 0)
@@ -202,7 +208,7 @@ def compose_overlay(
         with indicator_scope("time_display"):
             with profiler.measure("indicator.time_display.render"):
                 td, tdx, tdy = render_time_display(
-                    canvas_w, canvas_h, layout, font_path,
+                    canvas_w, canvas_h, layout, _font_for("time_display"),
                     date_text, time_text, elapsed_seconds, avg_speed_kmh,
                 )
         if td:
@@ -253,6 +259,8 @@ def compose_overlay(
         "hr_text": (hr_value, "BPM", "HR"),
         "cad_text": (cad_value, "RPM", "Cad"),
         "battery_text": (battery_value, "%", "Bat"),
+        "slope_text": (None, "%", "Slope"),
+        "compass": (None, "°", "Compass"),
         "track_map": (0.0, "", "Mapa"),
     }
 
@@ -287,16 +295,27 @@ def compose_overlay(
             default_label = ind_cfg.get("label", key)
         else:
             value, default_unit, default_label = val_entry
-        if value is None:
+        compass_missing = key == "compass" and value is None
+        slope_missing = key == "slope_text" and value is None
+        chart_missing = ind_cfg.get("form") == "chart" and value is None
+        if value is None and not compass_missing and not slope_missing and not chart_missing:
             # Missing telemetry is not a numeric zero. Keep the configured
             # indicator in the layout, but render it as unavailable/hidden.
             continue
+        if compass_missing:
+            value = 0.0
+        if slope_missing:
+            value = 0.0
         # An empty string in the layout must not suppress a sensible unit —
         # fall back to the default unit for the data source.
         unit = ind_cfg.get("unit") or default_unit
         label = ind_cfg.get("label", default_label)
 
         current_cfg = ind_cfg.copy()
+        if compass_missing:
+            current_cfg["_compass_missing"] = True
+        if slope_missing:
+            current_cfg["_slope_missing"] = True
 
         # Dynamic max/min range scaling for visual bars/gauges
         if key == "dist_visual" and max_distance_m is not None:
@@ -313,16 +332,33 @@ def compose_overlay(
         if not show_value:
             fv = ""
         else:
-            default_decimals = 0 if key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text") or key.startswith("fit_") else 1
+            default_decimals = 0 if key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass") or key.startswith("fit_") else 1
             decimals = int(current_cfg.get("decimals", default_decimals))
+            show_units = current_cfg.get("show_units", True)
 
-            if key == "exposure_text":
+            if key == "compass":
+                if compass_missing:
+                    val_str = "--°"
+                else:
+                    rounded_heading = int(round(float(value))) % 360
+                    heading_format = current_cfg.get("compass_heading_format", "03d")
+                    if heading_format == "d":
+                        val_str = f"{rounded_heading}°"
+                    else:
+                        val_str = f"{rounded_heading:03d}°"
+            elif key == "slope_text":
+                suffix = "%" if show_units else ""
+                val_str = f"--{suffix}" if slope_missing else f"{float(value):+.{decimals}f}{suffix}"
+            elif key == "exposure_text":
                 val_str = f"1/{int(value)}" if value and int(value) > 0 else ""
+            elif value is None:
+                val_str = "--"
             else:
                 val_str = f"{value:.{decimals}f}"
 
-            show_units = current_cfg.get("show_units", True)
-            if show_units:
+            if key in ("compass", "slope_text"):
+                fv = val_str
+            elif show_units:
                 if key in ("temp_text", "atemp_text"):
                     fv = f"{val_str}\u00b0C"
                 elif key == "power_text":
@@ -348,7 +384,7 @@ def compose_overlay(
         with indicator_scope(key):
             with profiler.measure(f"indicator.{key}.render"):
                 res, rx, ry, extra = render_value_indicator(
-                    canvas_w, canvas_h, layout, font_path,
+                    canvas_w, canvas_h, layout, _font_for(key),
                     key, value, unit, label,
                     cfg_override=current_cfg,
                     formatted_val=fv,
@@ -359,6 +395,7 @@ def compose_overlay(
                     supersample=ss,
                     target_dt=target_dt,
                     split_chart_keys=split_chart_keys,
+                    map_heading=map_heading,
                 )
 
         if res:
@@ -532,7 +569,9 @@ def compose_overlay(
     for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
         if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
             continue
-        ct_res, ctx, cty = render_custom_text(canvas_w, canvas_h, font_path, ct_cfg, stroke_width=ct_outline)
+        ct_res, ctx, cty = render_custom_text(
+            canvas_w, canvas_h, _font_for("custom_text"), ct_cfg, stroke_width=ct_outline
+        )
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
             rotated_paste(
@@ -593,6 +632,7 @@ def render_preview(
     elapsed_seconds: float = 0.0,
     avg_speed_kmh: float = 0.0,
     inplace: bool = False,
+    map_heading: Optional[float] = None,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top."""
     # Avoid a full-resolution copy if the image is already RGBA
@@ -635,6 +675,7 @@ def render_preview(
         elapsed_seconds=elapsed_seconds,
         avg_speed_kmh=avg_speed_kmh,
         fast_preview=True,
+        map_heading=map_heading,
     )
     # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)

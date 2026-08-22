@@ -63,12 +63,148 @@ def _gauge_ticks(display_min: float, raw_max: float, ticks: int) -> tuple:
             sub_ticks_count, total_ticks)
 
 
+def _render_compass_indicator(
+    canvas_w, canvas_h, layout, font_path, key, value, unit, label,
+    cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
+    formatted_val=None,
+):
+    """Render a lightweight fixed-dial GPS course compass.
+
+    ``value`` is already the canonical telemetry ``heading``.  This function
+    deliberately contains no GPS/source/bearing logic; it only maps the
+    absolute degree value to screen geometry.
+    """
+    del layout, key, unit, label, val_min, val_max, ticks, font
+    ss = max(1, int(ss))
+    radius = max(20, int(round(size_px * ss)))
+    img_size = max(48, int(round(size_px * 2.4 * ss)))
+    cx = cy = img_size // 2
+    ring_r = max(12, int(round(radius * 0.88)))
+
+    ring_rgb = parse_hex_color(cfg.get("compass_ring_color", "#B8C7D9")) or (184, 199, 217)
+    tick_rgb = parse_hex_color(cfg.get("compass_tick_color", "#DDE7F2")) or (221, 231, 242)
+    cardinal_rgb = parse_hex_color(cfg.get("compass_cardinal_color", "#FFFFFF")) or (255, 255, 255)
+    needle_rgb = parse_hex_color(cfg.get("compass_needle_color", cfg.get("needle_color", "#FFD42A"))) or (255, 212, 42)
+    heading_rgb = parse_hex_color(cfg.get("compass_heading_color", cfg.get("text_color", "#FFFFFF"))) or (255, 255, 255)
+    ring_width = max(1, int(round(float(cfg.get("compass_ring_width", 1.5)) * ss)))
+    tick_width = max(1, int(round(float(cfg.get("compass_tick_width", 1.0)) * ss)))
+    major_width = max(tick_width, int(round(tick_width * 1.6)))
+    tick_degrees = max(1, int(cfg.get("compass_tick_degrees", 15)))
+    major_degrees = max(tick_degrees, int(cfg.get("compass_major_tick_degrees", 45)))
+    pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
+    major_len = max(4, int(round(radius * (0.14 if pixel_profile else 0.10))))
+    minor_len = max(2, int(round(radius * (0.065 if pixel_profile else 0.055))))
+
+    def screen_angle(degrees: float) -> float:
+        # PIL's 0° points east; geographic 0° must point up.
+        return math.radians(float(degrees) - 90.0)
+
+    static_key = _static_cache_key(
+        "compass_static_v1", img_size, radius, ring_r, font_path, fs, outline,
+        ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
+        tick_degrees, major_degrees, pixel_profile,
+        bool(cfg.get("compass_show_cardinals", True)),
+    )
+    img = _STATIC_CACHE.get(static_key)
+    if img is None:
+        img = Image.new("RGBA", (img_size, img_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse(
+            (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
+            outline=(*ring_rgb, 235), width=ring_width,
+        )
+        for degrees in range(0, 360, tick_degrees):
+            angle = screen_angle(degrees)
+            major = degrees % major_degrees == 0
+            length = major_len if major else minor_len
+            outer = ring_r - ring_width
+            inner = outer - length
+            x1 = cx + math.cos(angle) * inner
+            y1 = cy + math.sin(angle) * inner
+            x2 = cx + math.cos(angle) * outer
+            y2 = cy + math.sin(angle) * outer
+            if pixel_profile:
+                width = max(1, int(round((tick_width * (1.35 if major else 0.75)))))
+                draw.line((round(x1), round(y1), round(x2), round(y2)),
+                          fill=(*tick_rgb, 245), width=width)
+            else:
+                draw.line((x1, y1, x2, y2), fill=(*tick_rgb, 245), width=major_width if major else tick_width)
+
+        compass_font = load_font(font_path, max(8, int(round(fs * ss))))
+        if cfg.get("compass_show_cardinals", True):
+            label_radius = ring_r - int(round(radius * 0.22))
+            for degrees, text in ((0, "N"), (90, "E"), (180, "S"), (270, "W")):
+                angle = screen_angle(degrees)
+                tx = cx + math.cos(angle) * label_radius
+                ty = cy + math.sin(angle) * label_radius
+                draw.text((tx, ty), text, font=compass_font, anchor="mm",
+                          fill=(*cardinal_rgb, 255), stroke_width=max(1, outline * ss // 2),
+                          stroke_fill=(0, 0, 0, 230))
+        _STATIC_CACHE[static_key] = img
+
+    img = img.copy()
+    draw = ImageDraw.Draw(img)
+
+    missing = bool(cfg.get("_compass_missing", False)) or value is None
+    heading = None
+    if not missing:
+        try:
+            heading = float(value) % 360.0
+            if not math.isfinite(heading):
+                heading = None
+        except (TypeError, ValueError):
+            heading = None
+
+    if heading is not None:
+        angle = screen_angle(heading)
+        needle_tip = int(round(ring_r * float(cfg.get("compass_needle_length", 0.62))))
+        needle_base = max(2, int(round(ring_r * 0.08)))
+        px = -math.sin(angle)
+        py = math.cos(angle)
+        tip_x = cx + math.cos(angle) * needle_tip
+        tip_y = cy + math.sin(angle) * needle_tip
+        base_x = cx + math.cos(angle) * needle_base
+        base_y = cy + math.sin(angle) * needle_base
+        half_width = max(2, int(round(float(cfg.get("compass_needle_width", 3.0)) * ss)))
+        draw.polygon([
+            (base_x + px * half_width, base_y + py * half_width),
+            (base_x - px * half_width, base_y - py * half_width),
+            (tip_x, tip_y),
+        ], fill=(*needle_rgb, 255))
+        marker_radius = max(2, int(round(float(cfg.get("compass_marker_size", 4.0)) * ss)))
+        draw.ellipse((cx - marker_radius, cy - marker_radius,
+                      cx + marker_radius, cy + marker_radius),
+                     fill=(*needle_rgb, 255), outline=(*ring_rgb, 255),
+                     width=max(1, ss))
+
+    if cfg.get("compass_show_heading", cfg.get("show_value", True)):
+        heading_text = formatted_val if formatted_val is not None else ("--°" if heading is None else f"{int(round(heading)) % 360:03d}°")
+        heading_font = load_font(font_path, max(8, int(round(fs * 0.78 * ss))))
+        draw.text((cx, cy + int(round(radius * 0.34))), heading_text,
+                  font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
+                  stroke_width=max(1, outline * ss // 2), stroke_fill=(0, 0, 0, 230))
+
+    if ss > 1:
+        img = img.resize((max(1, int(round(img_size / ss))), max(1, int(round(img_size / ss)))), Image.LANCZOS)
+    opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
+    if opacity < 1.0:
+        alpha = img.getchannel("A").point(lambda a: int(round(a * opacity)))
+        img.putalpha(alpha)
+    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+
+
 def _render_gauge_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
     """Render a gauge-form indicator (background cached)."""
+    if cfg.get("gauge_style") == "compass" or cfg.get("gauge_mode") == "compass":
+        return _render_compass_indicator(
+            canvas_w, canvas_h, layout, font_path, key, value, unit, label,
+            cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness,
+            size_px, ss, formatted_val=formatted_val,
+        )
     ss = max(1, ss)
     gauge_fs = max(8, fs * ss)
     gauge_font = load_font(font_path, gauge_fs)
@@ -98,11 +234,13 @@ def _render_gauge_indicator(
 
     (display_min, display_max, step_val, major_intervals,
      sub_ticks_count, total_ticks) = _gauge_ticks(display_min, raw_max, ticks)
+    pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
 
     # ── Static background: tick marks + numbers (cached) ──
     bg_key = _static_cache_key(
         "gauge_bg", img_size, start_deg, sweep_deg,
         display_min, display_max, ticks, thickness, ss, gauge_fs, font_path, outline,
+        pixel_profile,
     )
     bg = _STATIC_CACHE.get(bg_key)
     if bg is None:
@@ -114,8 +252,12 @@ def _render_gauge_indicator(
             cos_a, sin_a = math.cos(a), math.sin(a)
             if i % sub_ticks_count == 0:
                 # Główna kreska (pełna dziesiątka) — grubsza i dłuższa z etykietą
-                tick_len = thickness * 1.4 * ss
-                tick_width = max(3 * ss, int(thickness * 0.8) * ss)
+                if pixel_profile:
+                    tick_len = max(8 * ss, radius * 0.12)
+                    tick_width = max(3 * ss, int(round(thickness * 1.15 * ss)))
+                else:
+                    tick_len = thickness * 1.4 * ss
+                    tick_width = max(3 * ss, int(thickness * 0.8) * ss)
                 tick_val = display_min + (display_max - display_min) * (i / total_ticks)
                 txt_tick = f"{tick_val:.0f}"
                 text_radius = radius - tick_len - (radius * 0.16)
@@ -125,12 +267,20 @@ def _render_gauge_indicator(
                     stroke_fill=(0, 0, 0, 255), anchor="mm")
             elif sub_ticks_count % 2 == 0 and i % (sub_ticks_count // 2) == 0:
                 # Średnia kreska pośrodku (np. 5)
-                tick_len = thickness * 0.9 * ss
-                tick_width = max(2 * ss, int(thickness * 0.5) * ss)
+                if pixel_profile:
+                    tick_len = max(5 * ss, radius * 0.075)
+                    tick_width = max(2 * ss, int(round(thickness * 0.70 * ss)))
+                else:
+                    tick_len = thickness * 0.9 * ss
+                    tick_width = max(2 * ss, int(thickness * 0.5) * ss)
             else:
                 # Mniejsza i cieńsza kreska (sub-tick)
-                tick_len = thickness * 0.5 * ss
-                tick_width = max(1 * ss, int(thickness * 0.3) * ss)
+                if pixel_profile:
+                    tick_len = max(3 * ss, radius * 0.035)
+                    tick_width = max(1 * ss, int(round(thickness * 0.42 * ss)))
+                else:
+                    tick_len = thickness * 0.5 * ss
+                    tick_width = max(1 * ss, int(thickness * 0.3) * ss)
             r_out, r_in = radius, radius - tick_len
             x1, y1 = cx + cos_a * r_in, cy + sin_a * r_in
             x2, y2 = cx + cos_a * r_out, cy + sin_a * r_out
@@ -167,7 +317,7 @@ def _render_gauge_indicator(
     # space, while the needle is drawn in output space — so scale by /ss.
     needle_r_out = max(2, int(radius * needle_len_rel / ss))
     needle_r_in = max(1, int(radius * 0.05))
-    needle_width_px = max(2, int(cfg.get("needle_width", 4) * 1.5))
+    needle_width_px = max(2, int(cfg.get("needle_width", 4) * (1.8 if pixel_profile else 1.5)))
     needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
     needle_fill = (needle_rgb[0], needle_rgb[1], needle_rgb[2], 255)
 
