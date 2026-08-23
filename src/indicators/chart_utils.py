@@ -207,11 +207,63 @@ def _chart_segment_ranges(timestamps, values) -> list[tuple[int, int]]:
     ]
 
 
+_NICE_TIME_STEPS = [
+    1, 2, 5, 10, 15, 30,
+    60, 120, 300, 600, 900, 1800,
+    3600, 7200, 14400, 21600, 43200, 86400,
+]
+
+
+def generate_nice_time_ticks(duration_s: float, target_count: int = 5) -> list[tuple[float, str]]:
+    """Generate nice time ticks for a given duration.
+
+    Returns a list of (norm_x, label_str) tuples where norm_x is in [0.0, 1.0].
+    Formatting:
+    - duration < 1 hour: MM:SS (e.g. 00:00, 02:00)
+    - duration >= 1 hour: H:MM (e.g. 0:00, 0:30, 1:00)
+    """
+    duration_s = max(1.0, float(duration_s))
+
+    best_step = _NICE_TIME_STEPS[0]
+    best_score = float("inf")
+
+    for step in _NICE_TIME_STEPS:
+        count = int(duration_s // step) + 1
+        score = abs(count - target_count)
+        if count < 2:
+            score += 100
+        elif count > 9:
+            score += (count - 9) * 2
+        if score < best_score:
+            best_score = score
+            best_step = step
+
+    ticks: list[tuple[float, str]] = []
+    tick_sec = 0
+    is_hours = duration_s >= 3600.0
+
+    while tick_sec <= duration_s:
+        norm_x = tick_sec / duration_s
+        if is_hours:
+            h = int(tick_sec // 3600)
+            m = int((tick_sec % 3600) // 60)
+            lbl = f"{h}:{m:02d}"
+        else:
+            m = int(tick_sec // 60)
+            s = int(tick_sec % 60)
+            lbl = f"{m:02d}:{s:02d}"
+        ticks.append((norm_x, lbl))
+        tick_sec += best_step
+
+    return ticks
+
+
 def _history_chart_cache_key(
     history_values, width, height, line_color, line_thickness, fill_alpha,
     fill_color, show_axes, grid_color, time_labels, value_labels, supersample,
     custom_min_val, custom_max_val, label_count, label_units, unit,
     show_average, label_font_size, font_path,
+    show_x_axis_values=True, show_y_axis_values=True,
 ) -> tuple:
     chart_start_dt = getattr(history_values, "chart_start_dt", None)
     chart_end_dt = getattr(history_values, "chart_end_dt", None)
@@ -230,6 +282,7 @@ def _history_chart_cache_key(
         tuple(value_labels) if value_labels else None,
         supersample, custom_min_val, custom_max_val, label_count,
         label_units, unit, show_average, label_font_size, font_path,
+        bool(show_x_axis_values), bool(show_y_axis_values),
     )
 
 
@@ -245,7 +298,7 @@ def generate_history_chart(
     cursor_color: tuple[int, int, int] = (255, 255, 255),
     show_axes: bool = True,
     grid_color: Optional[tuple[int, int, int, int]] = None,
-    time_labels: Optional[list[str]] = None,
+    time_labels: Optional[list[str] | list[tuple[float, str]]] = None,
     value_labels: Optional[list[str]] = None,
     supersample: int = 1,
     custom_min_val: Optional[float] = None,
@@ -256,6 +309,8 @@ def generate_history_chart(
     show_average: bool = False,
     label_font_size: Optional[float] = None,
     font_path: Optional[str] = None,
+    show_x_axis_values: bool = True,
+    show_y_axis_values: bool = True,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
     profiler = get_overlay_profiler()
@@ -265,6 +320,7 @@ def generate_history_chart(
         fill_color, show_axes, grid_color, time_labels, value_labels,
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
+        show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
     )
 
     bg_data = _CHART_BG_CACHE.get(cache_key)
@@ -283,7 +339,9 @@ def generate_history_chart(
             supersample=supersample, custom_min_val=custom_min_val,
             custom_max_val=custom_max_val, label_count=label_count,
             label_units=label_units, unit=unit, show_average=show_average,
-            label_font_size=label_font_size, font_path=font_path
+            label_font_size=label_font_size, font_path=font_path,
+            show_x_axis_values=show_x_axis_values,
+            show_y_axis_values=show_y_axis_values,
         )
         if len(_CHART_BG_CACHE) > 50:
             _CHART_BG_CACHE.clear()
@@ -333,6 +391,7 @@ def get_history_chart_background(
     value_labels=None, supersample=1, custom_min_val=None,
     custom_max_val=None, label_count=2, label_units=False, unit="",
     show_average=False, label_font_size=None, font_path=None,
+    show_x_axis_values=True, show_y_axis_values=True,
 ):
     """Return immutable background geometry and its complete cache identity."""
     cache_key = _history_chart_cache_key(
@@ -340,6 +399,7 @@ def get_history_chart_background(
         fill_color, show_axes, grid_color, time_labels, value_labels,
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
+        show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
     )
     if cache_key not in _CHART_BG_CACHE:
         generate_history_chart(
@@ -352,6 +412,8 @@ def get_history_chart_background(
             label_count=label_count, label_units=label_units, unit=unit,
             show_average=show_average, label_font_size=label_font_size,
             font_path=font_path,
+            show_x_axis_values=show_x_axis_values,
+            show_y_axis_values=show_y_axis_values,
         )
     return (*_CHART_BG_CACHE[cache_key], cache_key)
 
@@ -363,6 +425,7 @@ def get_history_chart_prefix_background(
     value_labels=None, supersample=1, custom_min_val=None,
     custom_max_val=None, label_count=2, label_units=False, unit="",
     show_average=False, label_font_size=None, font_path=None,
+    show_x_axis_values=True, show_y_axis_values=True,
 ):
     """Render only the activity-history prefix ending at ``visible_end_dt``.
 
@@ -383,6 +446,8 @@ def get_history_chart_prefix_background(
             custom_max_val=custom_max_val, label_count=label_count,
             label_units=label_units, unit=unit, show_average=show_average,
             label_font_size=label_font_size, font_path=font_path,
+            show_x_axis_values=show_x_axis_values,
+            show_y_axis_values=show_y_axis_values,
         )
 
     cache_key = _history_chart_cache_key(
@@ -390,6 +455,7 @@ def get_history_chart_prefix_background(
         fill_color, show_axes, grid_color, time_labels, value_labels,
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
+        show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
     )
     geometry = _CHART_PREFIX_GEOMETRY_CACHE.get(cache_key)
     if geometry is None:
@@ -404,6 +470,8 @@ def get_history_chart_prefix_background(
             label_units=label_units, unit=unit, show_average=show_average,
             label_font_size=label_font_size, font_path=font_path,
             draw_series=False,
+            show_x_axis_values=show_x_axis_values,
+            show_y_axis_values=show_y_axis_values,
         )
         if len(_CHART_PREFIX_GEOMETRY_CACHE) > 50:
             _CHART_PREFIX_GEOMETRY_CACHE.clear()
@@ -592,7 +660,7 @@ def _build_chart_bg(
     fill_color: Optional[tuple[int, int, int]],
     show_axes: bool,
     grid_color: Optional[tuple[int, int, int, int]],
-    time_labels: Optional[list[str]],
+    time_labels: Optional[list[str] | list[tuple[float, str]]],
     value_labels: Optional[list[str]],
     supersample: int,
     custom_min_val: Optional[float],
@@ -604,6 +672,8 @@ def _build_chart_bg(
     label_font_size: Optional[float],
     font_path: Optional[str],
     draw_series: bool = True,
+    show_x_axis_values: bool = True,
+    show_y_axis_values: bool = True,
 ) -> tuple[Image.Image, list[tuple[float, float]], float, float, int]:
     """Build and return static chart background (image, points, plot_y1, plot_y2, thickness)."""
     ss = max(1, int(supersample))
@@ -635,13 +705,23 @@ def _build_chart_bg(
         + (f" {unit}" if (label_units and unit) else "")
         for i in range(count)
     ]
-    x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
+    if time_labels:
+        if isinstance(time_labels[0], (tuple, list)):
+            x_ticks = list(time_labels)
+        else:
+            x_ticks = [
+                (i / max(1, len(time_labels) - 1), str(lbl))
+                for i, lbl in enumerate(time_labels)
+            ]
+    else:
+        x_ticks = [(i / 4.0, lbl) for i, lbl in enumerate(["0%", "25%", "50%", "75%", "100%"])]
 
     axis_cache_key = (
-        "chart_axis_v1", width, height, ss, bool(show_axes),
+        "chart_axis_v2", width, height, ss, bool(show_axes),
         tuple(grid_color) if grid_color is not None else None,
-        tuple(y_label_values), tuple(x_labels),
+        tuple(y_label_values), tuple(x_ticks),
         label_font_size, font_path,
+        bool(show_x_axis_values), bool(show_y_axis_values),
     )
     cached_axis = _CHART_AXIS_CACHE.get(axis_cache_key)
     axis_cache_hit = cached_axis is not None
@@ -689,7 +769,7 @@ def _build_chart_bg(
 
         max_x_bot = 0
         max_x_label_w = 0
-        for lbl in x_labels:
+        for norm_x, lbl in x_ticks:
             if font_axis:
                 bbox = draw.textbbox((0, 0), lbl, font=font_axis)
                 max_x_bot = max(max_x_bot, bbox[3])
@@ -737,52 +817,53 @@ def _build_chart_bg(
             if grid_color is not None:
                 draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=max(1, ss))
             draw.line((plot_x1 - 4 * ss, yp, plot_x1, yp), fill=tick_color, width=max(1, ss))
-            if font_axis:
-                bbox = draw.textbbox((0, 0), lbl, font=font_axis)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-                b_bot = bbox[3]
-                b_top = bbox[1]
-            else:
-                tw = len(lbl) * 6
-                th = 10
-                b_bot = 10
-                b_top = 0
-            tx = max(2 * ss, plot_x1 - tw - 5 * ss)
-            ty = int(round(yp - (b_bot + b_top) / 2.0))
-            ty = max(2 * ss - b_top, min(height - b_bot - 2 * ss, ty))
-            if font_axis:
-                draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
-            else:
-                draw.text((tx, ty), lbl, fill=label_color)
+            if show_y_axis_values:
+                if font_axis:
+                    bbox = draw.textbbox((0, 0), lbl, font=font_axis)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    b_bot = bbox[3]
+                    b_top = bbox[1]
+                else:
+                    tw = len(lbl) * 6
+                    th = 10
+                    b_bot = 10
+                    b_top = 0
+                tx = max(2 * ss, plot_x1 - tw - 5 * ss)
+                ty = int(round(yp - (b_bot + b_top) / 2.0))
+                ty = max(2 * ss - b_top, min(height - b_bot - 2 * ss, ty))
+                if font_axis:
+                    draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
+                else:
+                    draw.text((tx, ty), lbl, fill=label_color)
 
-        x_labels = time_labels if time_labels else ["0%", "25%", "50%", "75%", "100%"]
-        for i, lbl in enumerate(x_labels):
-            x = plot_x1 + (plot_w * i / max(1, len(x_labels) - 1))
+        for norm_x, lbl in x_ticks:
+            x = plot_x1 + plot_w * norm_x
             draw.line((x, plot_y2, x, plot_y2 + 4 * ss), fill=tick_color, width=max(1, ss))
-            if font_axis:
-                bbox = draw.textbbox((0, 0), lbl, font=font_axis)
-                tw = bbox[2] - bbox[0]
-                b_bot = bbox[3]
-            else:
-                tw = len(lbl) * 6
-                bbox = (0, 0, tw, 10)
-                b_bot = 10
-            
-            if i == 0:
-                tx = max(2 * ss, int(round(x - max(0, bbox[0]))))
-            elif i == len(x_labels) - 1:
-                tx = min(width - tw - 2 * ss, int(round(x - tw)))
-            else:
-                tx = int(round(x - tw / 2.0))
-                tx = max(2 * ss, min(width - tw - 2 * ss, tx))
-            
-            ty = plot_y2 + 5 * ss
-            ty = min(height - b_bot - 2 * ss, ty)
-            if font_axis:
-                draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
-            else:
-                draw.text((tx, ty), lbl, fill=label_color)
+            if show_x_axis_values:
+                if font_axis:
+                    bbox = draw.textbbox((0, 0), lbl, font=font_axis)
+                    tw = bbox[2] - bbox[0]
+                    b_bot = bbox[3]
+                else:
+                    tw = len(lbl) * 6
+                    bbox = (0, 0, tw, 10)
+                    b_bot = 10
+
+                if norm_x <= 0.01:
+                    tx = max(2 * ss, int(round(x - max(0, bbox[0]))))
+                elif norm_x >= 0.99:
+                    tx = min(width - tw - 2 * ss, int(round(x - tw)))
+                else:
+                    tx = int(round(x - tw / 2.0))
+                    tx = max(2 * ss, min(width - tw - 2 * ss, tx))
+
+                ty = plot_y2 + 5 * ss
+                ty = min(height - b_bot - 2 * ss, ty)
+                if font_axis:
+                    draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
+                else:
+                    draw.text((tx, ty), lbl, fill=label_color)
 
     if not axis_cache_hit:
         if len(_CHART_AXIS_CACHE) >= 64:

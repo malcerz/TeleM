@@ -71,6 +71,15 @@ def compose_overlay(
     cad_value: Optional[float] = None,
     battery_value: Optional[float] = None,
     _bboxes: Optional[dict[str, tuple[int, int, int, int]]] = None,
+    # ETAP 10R: optional additive channel for the alpha-tight bounding box of
+    # each pasted widget in absolute canvas coordinates (``{key: {"rect":
+    # (x, y, w, h) | None, "clipped": bool}}``).  When None (the default) the
+    # behaviour is 100% unchanged; when provided, composite_final records the
+    # alpha-tight bbox (the canonical ``alpha != 0`` bbox, identical to what
+    # the AMD SCAN path re-derives via ``getchannel("A").getbbox()``) for
+    # every widget pasted into the canvas.  This is the data source for the
+    # AMD_ABOVE_DIRTY_MODE=EXACT fast dirty-bbox path.
+    _tight_bboxes: Optional[dict[str, Any]] = None,
     chart_data: Optional[dict[str, list[float]]] = None,
     current_position: Optional[float] = None,
     extra_indicators: Optional[dict[str, tuple[float, str, str]]] = None,
@@ -174,6 +183,7 @@ def compose_overlay(
                     rotated_paste(
                         img, tb, cx - origin_x, cy - origin_y, tb_rotation,
                         prior_bboxes=_paste_prior_bboxes(), cache_key="time_block",
+                        tight_bboxes=_tight_bboxes, tight_key="time_block",
                     )
             if tb_rotation in (90, 270):
                 _bboxes["time_block"] = (
@@ -220,6 +230,7 @@ def compose_overlay(
                     rotated_paste(
                         img, td, cx - origin_x, cy - origin_y, td_rotation,
                         prior_bboxes=_paste_prior_bboxes(), cache_key="time_display",
+                        tight_bboxes=_tight_bboxes, tight_key="time_display",
                     )
             if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
@@ -271,7 +282,8 @@ def compose_overlay(
 
     # Apply per-indicator value overrides
     for k, raw in indicator_values.items():
-        val = (raw / 1000.0) if (k in ("dist_visual", "dist_text") and raw is not None) else raw
+        is_dist = k in ("dist_visual", "dist_text") or (raw is not None and ("distance" in k or "dist_" in k))
+        val = (raw / 1000.0) if (is_dist and raw is not None) else raw
         if k in known_vals:
             _, u, l = known_vals[k]
             known_vals[k] = (val, u, l)
@@ -297,11 +309,6 @@ def compose_overlay(
             value, default_unit, default_label = val_entry
         compass_missing = key == "compass" and value is None
         slope_missing = key == "slope_text" and value is None
-        chart_missing = ind_cfg.get("form") == "chart" and value is None
-        if value is None and not compass_missing and not slope_missing and not chart_missing:
-            # Missing telemetry is not a numeric zero. Keep the configured
-            # indicator in the layout, but render it as unavailable/hidden.
-            continue
         if compass_missing:
             value = 0.0
         if slope_missing:
@@ -318,9 +325,13 @@ def compose_overlay(
             current_cfg["_slope_missing"] = True
 
         # Dynamic max/min range scaling for visual bars/gauges
-        if key == "dist_visual" and max_distance_m is not None:
+        is_dist_key = key in ("dist_visual", "dist_text", "fit_distance_text") or (
+            current_cfg.get("form") in ("bar", "gauge", "segment_bar")
+            and (current_cfg.get("unit") == "km" or "distance" in key or "dist_" in key)
+        )
+        if is_dist_key and max_distance_m is not None:
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, max_distance_m / 1000.0)
-        elif key == "speed_visual" and max_speed_kmh is not None:
+        elif key in ("speed_visual", "speed_text") and max_speed_kmh is not None and current_cfg.get("form") in ("bar", "gauge", "segment_bar"):
             rounded = math.ceil(max_speed_kmh / 10.0) * 10
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, rounded)
         elif key in ("alt_visual", "alt_text") and min_alt is not None and max_alt is not None:
@@ -486,6 +497,7 @@ def compose_overlay(
                                 destination_proven_empty
                                 and current_cfg.get("form", "text") == "chart"
                             ),
+                            tight_bboxes=_tight_bboxes, tight_key=key,
                         )
 
                 _bboxes[key] = widget_bbox
@@ -577,6 +589,8 @@ def compose_overlay(
             rotated_paste(
                 img, ct_res, ctx - origin_x, cty - origin_y, ct_rotation,
                 prior_bboxes=_paste_prior_bboxes(), cache_key="custom_text",
+                tight_bboxes=_tight_bboxes,
+                tight_key=f"custom_text:{custom_index}",
             )
             # Keep the same conservative rendered geometry used by regular
             # indicators.  This lets CPU_ABOVE_MAP reuse actual custom-text

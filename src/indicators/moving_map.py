@@ -58,14 +58,20 @@ def render_map_working_image(
         effective_zoom = render_plan["effective_zoom"]
         map_style = cfg.get("map_style", "light_all")
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
-        cache_key = (id(gps_track), effective_zoom, map_style, marker_style)
+        track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
+        if len(track_color) == 3:
+            track_color = (*track_color, 220)
+        track_width = int(cfg.get("track_width", 3))
+        track_aa = max(1, min(8, int(cfg.get("track_antialiasing", 1) or 1)))
+        track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
+        track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
+        cache_key = (
+            id(gps_track), effective_zoom, map_style, marker_style,
+            track_color, track_width, track_aa, track_outline_w, track_outline_color,
+        )
         renderers = _shared_map_renderers()
         renderer = renderers.get(cache_key)
         if renderer is None:
-            track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
-            if len(track_color) == 3:
-                track_color = (*track_color, 220)
-            track_width = int(cfg.get("track_width", 3))
             renderer = MovingMapRenderer(
                 gps_track, zoom=effective_zoom, style=map_style,
                 marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
@@ -77,6 +83,9 @@ def render_map_working_image(
                     track_width * (2.0 ** render_plan["zoom_offset"])
                 ))),
                 marker_style=marker_style,
+                track_antialiasing=track_aa,
+                track_outline_width=track_outline_w,
+                track_outline_color=track_outline_color,
             )
             renderers[cache_key] = renderer
             renderer._is_first_render = True
@@ -196,6 +205,10 @@ def _render_moving_map_indicator(
         if len(track_color) == 3:
             track_color = (*track_color, 220)
         track_width = int(cfg.get("track_width", 3))
+        # ETAP 10T: track antialiasing + outline (defaults preserve legacy look).
+        track_aa = max(1, min(8, int(cfg.get("track_antialiasing", 1) or 1)))
+        track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
+        track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
 
         if cache_key not in _cache:
             renderer = MovingMapRenderer(
@@ -209,6 +222,9 @@ def _render_moving_map_indicator(
                     track_width * (2.0 ** render_plan["zoom_offset"])
                 ))),
                 marker_style=marker_style,
+                track_antialiasing=track_aa,
+                track_outline_width=track_outline_w,
+                track_outline_color=track_outline_color,
             )
             _cache[cache_key] = renderer
             renderer._is_first_render = True
@@ -232,6 +248,9 @@ def _render_moving_map_indicator(
                 float(cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"])
             )))
             renderer._mkr_style = marker_style
+            renderer._track_aa = track_aa
+            renderer._track_outline_w = track_outline_w
+            renderer._track_outline_color = track_outline_color
         if target_dt is not None:
             gps0 = gps_track[0][0]
             if hasattr(gps0, 'timestamp'):

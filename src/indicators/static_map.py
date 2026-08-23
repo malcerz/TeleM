@@ -89,6 +89,9 @@ def _render_static_map_indicator(
             hide_marker=hide_marker,
             hide_track=hide_track,
             download_missing=False,
+            track_antialiasing=max(1, min(8, int(cfg.get("track_antialiasing", 1) or 1))),
+            track_outline_width=max(0, int(cfg.get("track_outline_width", 0) or 0)),
+            track_outline_color=_parse_marker_color(cfg.get("track_outline_color", "#000000")),
         )
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))

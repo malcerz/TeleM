@@ -20,8 +20,7 @@ def _render_text_indicator(
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
-    """Render a text-form indicator."""
-    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
+    v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
     
     if label and v_str:
         txt = f"{label}: {v_str}"
@@ -35,7 +34,7 @@ def _render_text_indicator(
         
     text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
 
-    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key, load_font
 
     cache_key = _static_cache_key(
         "text_indicator", canvas_w, canvas_h, font_path, key, txt, text_color, outline, fs,
@@ -46,7 +45,10 @@ def _render_text_indicator(
     cached = _STATIC_CACHE.get(cache_key)
     if cached is not None:
         return cached, px_x, px_y, None
-    
+
+    if font is None:
+        font = load_font(font_path, max(8, int(fs)))
+
     icon = render_icon(cfg.get("icon"), max(8, int(fs * 0.95)))
     gap = max(2, int(fs * 0.18)) if icon else 0
     txt_w = int(font.getlength(txt) + outline * 4 + (icon.width + gap if icon else 0))

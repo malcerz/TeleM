@@ -31,6 +31,10 @@ except ImportError:
 
 from src.indicators.compositor import compose_overlay
 from src.indicators.moving_map import render_map_working_image
+from src.indicators.rotated_paste import (
+    get_tight_bbox_collect_ms,
+    reset_tight_bbox_collect,
+)
 from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CACHE
 
 
@@ -416,6 +420,317 @@ def _cluster_above_bboxes(
     return merged
 
 
+def _cluster_above_bboxes_members(
+    bboxes: dict[str, tuple[int, int, int, int]],
+    canvas_w: int,
+    canvas_h: int,
+    pad: int = 16,
+    merge_dist: int = 32,
+    max_regions: int = 16,
+) -> list[tuple[tuple[int, int, int, int], list[str]]]:
+    """Like ``_cluster_above_bboxes`` but also reports each cluster's member keys.
+
+    Uses exactly the same pad / merge_dist / max_regions rules, so the
+    candidate rects are identical to ``_cluster_above_bboxes``; only the
+    member-key tracking is added (verified by test).  Used by the ETAP 10R
+    EXACT path to union the per-widget tight bboxes of exactly the widgets
+    that belong to each cluster.
+    """
+    valid: list[tuple[str, tuple[int, int, int, int]]] = []
+    for key, box in bboxes.items():
+        if not box or int(box[2]) <= 0 or int(box[3]) <= 0:
+            continue
+        clipped = _clip_rect(box, canvas_w, canvas_h, pad=pad)
+        if clipped is not None:
+            valid.append((key, clipped))
+
+    if not valid:
+        return []
+
+    m_rects: list[tuple[int, int, int, int]] = [r for _, r in valid]
+    m_members: list[list[str]] = [[k] for k, _ in valid]
+
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(m_rects)):
+            for j in range(i + 1, len(m_rects)):
+                r1, r2 = m_rects[i], m_rects[j]
+                dx = max(0, max(r1[0], r2[0]) - min(r1[0] + r1[2], r2[0] + r2[2]))
+                dy = max(0, max(r1[1], r2[1]) - min(r1[1] + r1[3], r2[1] + r2[3]))
+                if dx <= merge_dist and dy <= merge_dist:
+                    union_box = _rect_union(r1, r2)
+                    new_members = m_members[i] + m_members[j]
+                    m_rects.pop(j)
+                    m_rects.pop(i)
+                    m_members.pop(j)
+                    m_members.pop(i)
+                    m_rects.append(union_box)
+                    m_members.append(new_members)
+                    changed = True
+                    break
+            if changed:
+                break
+
+    while len(m_rects) > max_regions:
+        best_pair: tuple[int, int] | None = None
+        min_dist_sq = float("inf")
+        for i in range(len(m_rects)):
+            for j in range(i + 1, len(m_rects)):
+                r1, r2 = m_rects[i], m_rects[j]
+                c1 = (r1[0] + r1[2] / 2.0, r1[1] + r1[3] / 2.0)
+                c2 = (r2[0] + r2[2] / 2.0, r2[1] + r2[3] / 2.0)
+                dist_sq = (c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
+                    best_pair = (i, j)
+        if best_pair is None:
+            break
+        i, j = best_pair
+        union_box = _rect_union(m_rects[i], m_rects[j])
+        new_members = m_members[i] + m_members[j]
+        m_rects.pop(j)
+        m_rects.pop(i)
+        m_members.pop(j)
+        m_members.pop(i)
+        m_rects.append(union_box)
+        m_members.append(new_members)
+
+    return [(rect, members) for rect, members in zip(m_rects, m_members)]
+
+
+def _extract_above_regions(
+    above_full: "Image.Image",
+    candidate_clusters: list[tuple[int, int, int, int]],
+    mode: str,
+) -> tuple[list[tuple[int, int, int, int, bytes]], dict[str, Any]]:
+    """ETAP 10Q: extract ABOVE dirty regions from the composed canvas.
+
+    ``mode == "SCAN"`` (legacy fallback, byte-identical to the pre-10Q code):
+
+        candidate crop -> local alpha scan (getchannel A + getbbox)
+        -> tight final crop -> tobytes
+
+    ``mode == "CANDIDATE"`` (ETAP 10Q):
+
+        candidate crop -> tobytes
+
+    CANDIDATE skips the local alpha scan and the tight final crop and uploads
+    the whole candidate region.  NOTE (ETAP 10Q verdict): CANDIDATE is NOT
+    production-safe — the larger uploaded rect becomes the GPU
+    ``ClearPreviousAboveMap`` erase region, which wipes map pixels under the
+    transparent padding that the map redraw (bounded by ``map_dst``) does not
+    restore, so the final raster differs from SCAN.  The CPU extraction here
+    is content-correct (identical overlay, padding alpha == 0); the failure is
+    purely the GPU erase-region interaction.  SCAN remains the production
+    default.
+
+    Returns ``(regions, stats)``; each region is
+    ``(reg_x, reg_y, reg_w, reg_h, r_bytes)`` and ``stats`` mirrors the
+    per-frame ``above_stats_p`` (candidate/scanned/uploaded pixels + bytes)
+    plus the internal step timings in ms.
+    """
+    regions_out: list[tuple[int, int, int, int, bytes]] = []
+    candidate_crop_ms = 0.0
+    alpha_scan_ms = 0.0
+    final_crop_ms = 0.0
+    tobytes_ms = 0.0
+    candidate_pixels = 0
+    scanned_pixels = 0
+    uploaded_pixels = 0
+    uploaded_bytes = 0
+
+    for cx, cy, cw, ch in candidate_clusters:
+        candidate_pixels += cw * ch
+        t_cand_start = time.perf_counter()
+        candidate_image = above_full.crop((cx, cy, cx + cw, cy + ch))
+        candidate_crop_ms += (time.perf_counter() - t_cand_start) * 1000.0
+
+        if mode == "CANDIDATE":
+            # ETAP 10Q: no alpha scan, no tight crop.  Upload the candidate
+            # region as-is; transparent padding is a no-op in the GPU blend.
+            reg_x, reg_y, reg_w, reg_h = cx, cy, cw, ch
+            uploaded_pixels += reg_w * reg_h
+            t_b_start = time.perf_counter()
+            r_bytes = candidate_image.tobytes("raw", "RGBA")
+            tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+            uploaded_bytes += len(r_bytes)
+            regions_out.append((reg_x, reg_y, reg_w, reg_h, r_bytes))
+            continue
+
+        # SCAN (legacy fallback): local alpha scan + tight final crop.
+        t_alpha_start = time.perf_counter()
+        local_alpha_bbox = candidate_image.getchannel("A").getbbox()
+        alpha_scan_ms += (time.perf_counter() - t_alpha_start) * 1000.0
+        scanned_pixels += cw * ch
+        if local_alpha_bbox is None:
+            continue
+        lx, ly, rx, by = local_alpha_bbox
+        reg_w = rx - lx
+        reg_h = by - ly
+        if reg_w <= 0 or reg_h <= 0:
+            continue
+        t_final_start = time.perf_counter()
+        reg_img = candidate_image.crop(local_alpha_bbox)
+        final_crop_ms += (time.perf_counter() - t_final_start) * 1000.0
+        reg_x = cx + lx
+        reg_y = cy + ly
+        uploaded_pixels += reg_w * reg_h
+        t_b_start = time.perf_counter()
+        r_bytes = reg_img.tobytes("raw", "RGBA")
+        tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+        uploaded_bytes += len(r_bytes)
+        regions_out.append((reg_x, reg_y, reg_w, reg_h, r_bytes))
+
+    stats: dict[str, Any] = {
+        "region_count": len(regions_out),
+        "candidate_pixels": candidate_pixels,
+        "scanned_pixels": scanned_pixels,
+        "uploaded_pixels": uploaded_pixels,
+        "uploaded_bytes": uploaded_bytes,
+        "candidate_crop_ms": candidate_crop_ms,
+        "alpha_scan_ms": alpha_scan_ms,
+        "final_crop_ms": final_crop_ms,
+        "tobytes_ms": tobytes_ms,
+    }
+    return regions_out, stats
+
+
+def _extract_exact_above_regions(
+    above_full: "Image.Image",
+    clusters_with_members: list[tuple[tuple[int, int, int, int], list[str]]],
+    tight_bboxes: dict[str, dict[str, Any]],
+    canvas_w: int,
+    canvas_h: int,
+) -> tuple[list[tuple[int, int, int, int, bytes]], dict[str, Any]]:
+    """ETAP 10R EXACT: extract ABOVE dirty regions from propagated tight bboxes.
+
+    For each candidate cluster ``(rect, members)`` the exact upload region is
+    the union of the members' alpha-tight bboxes (no extra padding), clipped to
+    the canvas.  This must be geometrically and pixel-identical to the SCAN
+    path's ``candidate.getchannel("A").getbbox()`` result — the exact region is
+    later used by the GPU ``ClearPreviousAboveMap`` erase, so any divergence
+    would change the final raster.
+
+    Fallback (fail-safe): if any member has a missing / None / clipped tight
+    bbox, or the union is invalid, that single cluster falls back to the SCAN
+    alpha-scan path.  No per-frame log spam; reasons are aggregated in stats.
+    """
+    regions_out: list[tuple[int, int, int, int, bytes]] = []
+    exact_union_ms = 0.0
+    exact_crop_ms = 0.0
+    fallback_scan_ms = 0.0
+    fallback_final_crop_ms = 0.0
+    tobytes_ms = 0.0
+    candidate_pixels = 0
+    scanned_pixels = 0
+    uploaded_pixels = 0
+    uploaded_bytes = 0
+    exact_clusters = 0
+    fallback_clusters = 0
+    fallback_reasons: dict[str, int] = {}
+
+    for (cx, cy, cw, ch), members in clusters_with_members:
+        candidate_pixels += cw * ch
+
+        t_union_start = time.perf_counter()
+        rects: list[tuple[int, int, int, int]] = []
+        unsafe = False
+        reason: str | None = None
+        for m in members:
+            entry = tight_bboxes.get(m)
+            if entry is None:
+                unsafe = True
+                reason = "missing_tight_bbox"
+                break
+            if entry.get("clipped"):
+                unsafe = True
+                reason = "clipped_widget"
+                break
+            r = entry.get("rect")
+            if r is not None:
+                rects.append(tuple(int(v) for v in r))
+        if not unsafe and rects:
+            left = min(r[0] for r in rects)
+            top = min(r[1] for r in rects)
+            right = max(r[0] + r[2] for r in rects)
+            bottom = max(r[1] + r[3] for r in rects)
+            exact_rect = _clip_rect(
+                (left, top, right - left, bottom - top), canvas_w, canvas_h, pad=0
+            )
+            if exact_rect is None:
+                unsafe = True
+                reason = "invalid_exact_rect"
+        else:
+            exact_rect = None
+        exact_union_ms += (time.perf_counter() - t_union_start) * 1000.0
+
+        if unsafe:
+            # SCAN fallback for this single cluster (candidate -> alpha scan
+            # -> tight crop -> tobytes), identical to the SCAN mode.
+            fallback_clusters += 1
+            fallback_reasons[reason or "unknown"] = (
+                fallback_reasons.get(reason or "unknown", 0) + 1
+            )
+            t_scan_start = time.perf_counter()
+            candidate_image = above_full.crop((cx, cy, cx + cw, cy + ch))
+            local_alpha_bbox = candidate_image.getchannel("A").getbbox()
+            fallback_scan_ms += (time.perf_counter() - t_scan_start) * 1000.0
+            scanned_pixels += cw * ch
+            if local_alpha_bbox is not None:
+                lx, ly, rx, by = local_alpha_bbox
+                reg_w, reg_h = rx - lx, by - ly
+                if reg_w > 0 and reg_h > 0:
+                    t_final_start = time.perf_counter()
+                    reg_img = candidate_image.crop(local_alpha_bbox)
+                    fallback_final_crop_ms += (
+                        time.perf_counter() - t_final_start
+                    ) * 1000.0
+                    reg_x, reg_y = cx + lx, cy + ly
+                    uploaded_pixels += reg_w * reg_h
+                    t_b_start = time.perf_counter()
+                    r_bytes = reg_img.tobytes("raw", "RGBA")
+                    tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+                    uploaded_bytes += len(r_bytes)
+                    regions_out.append((reg_x, reg_y, reg_w, reg_h, r_bytes))
+            continue
+
+        exact_clusters += 1
+        if exact_rect is None:
+            # All members fully transparent -> no content -> no region
+            # (matches SCAN: candidate alpha bbox is None).
+            continue
+        ex, ey, ew, eh = exact_rect
+        uploaded_pixels += ew * eh
+        t_crop_start = time.perf_counter()
+        reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
+        exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
+        t_b_start = time.perf_counter()
+        r_bytes = reg_img.tobytes("raw", "RGBA")
+        tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+        uploaded_bytes += len(r_bytes)
+        regions_out.append((ex, ey, ew, eh, r_bytes))
+
+    stats: dict[str, Any] = {
+        "region_count": len(regions_out),
+        "candidate_pixels": candidate_pixels,
+        "scanned_pixels": scanned_pixels,
+        "uploaded_pixels": uploaded_pixels,
+        "uploaded_bytes": uploaded_bytes,
+        "candidate_crop_ms": 0.0,
+        "alpha_scan_ms": fallback_scan_ms,
+        "final_crop_ms": fallback_final_crop_ms,
+        "tobytes_ms": tobytes_ms,
+        "tight_bbox_collect_ms": get_tight_bbox_collect_ms(),
+        "exact_union_ms": exact_union_ms,
+        "exact_crop_ms": exact_crop_ms,
+        "exact_clusters": exact_clusters,
+        "scan_fallback_clusters": fallback_clusters,
+        "fallback_reason": fallback_reasons,
+    }
+    return regions_out, stats
+
+
 class _FrameAccountant:
     """ETAP 5P — opt-in per-frame exclusive wall-clock accounting.
 
@@ -624,6 +939,93 @@ def _dirty_rects_from_bboxes(
         if clipped is not None:
             candidates.append(clipped)
     return _coalesce_dirty_rects(candidates, max_rects=max_rects)
+
+
+# ETAP 10Q/10R: production default for AMD_ABOVE_DIRTY_MODE.
+#   SCAN      = legacy alpha-scan path (candidate crop -> alpha scan ->
+#               tight crop -> tobytes).  Complete fallback, always available.
+#   CANDIDATE = candidate crop -> tobytes (skips alpha scan + final crop).
+#               Env-opt-in DIAGNOSTIC ONLY: ETAP 10Q proved it is NOT
+#               production-safe — the larger uploaded rect grows
+#               ClearPreviousAboveMap's erase region and the final raster
+#               differs from SCAN.
+#   EXACT     = ETAP 10R fast exact tight-bbox path (Variant A): uploads the
+#               exact SCAN tight region computed from propagated alpha-tight
+#               widget bboxes, with a per-cluster SCAN fallback.
+#               Production default after ETAP 10R: region parity PASS, final
+#               GPU parity PASS (120/120 frames byte-identical), ghosting PASS,
+#               map-underneath PASS, frame accounting PASS.  Dirty-path saving
+#               measured ~0.5 ms/frame (modest; see RAPORT 10R).
+_ABOVE_DIRTY_MODE_DEFAULT = "EXACT"
+
+
+def _resolve_above_dirty_mode() -> str:
+    """Resolve ``AMD_ABOVE_DIRTY_MODE`` with a SCAN fallback for unknown values.
+
+    Supported: ``SCAN`` (legacy baseline), ``CANDIDATE`` (env-opt-in
+    diagnostic — ETAP 10Q final-parity FAILED) and ``EXACT`` (ETAP 10R fast
+    exact tight-bbox path).  An unknown value fails safe to ``SCAN`` with a
+    single diagnostic warning.
+    """
+    raw = os.environ.get("AMD_ABOVE_DIRTY_MODE")
+    if raw is None:
+        return _ABOVE_DIRTY_MODE_DEFAULT
+    mode = raw.strip().upper()
+    if mode in ("SCAN", "CANDIDATE", "EXACT"):
+        return mode
+    print(
+        f"[AMD NATIVE D3D11] WARNING: unknown AMD_ABOVE_DIRTY_MODE={raw!r}; "
+        "falling back to SCAN.",
+        flush=True,
+    )
+    return "SCAN"
+
+
+# ETAP 10S: production default for AMD_ABOVE_UPLOAD_BUFFER_MODE.
+#   COPY   = historical path: full memcpy into a fresh ctypes buffer via
+#            from_buffer_copy before the native call.  Safe baseline/fallback.
+#   DIRECT = zero-copy pointer into the immutable Python bytes payload
+#            (ctypes.c_char_p is O(1), no copy).  Safe because the native
+#            UpdateAboveRegion -> UpdateSubresource copies the data
+#            synchronously before returning (verified in
+#            d3d11_vp_pipeline.cpp), so the pointer only needs to live for
+#            the duration of the call (r_bytes is referenced throughout).
+# Stays COPY as the production default until final GPU parity is validated on
+# a machine with an available GPU video device; DIRECT is selectable via
+# AMD_ABOVE_UPLOAD_BUFFER_MODE=DIRECT.
+_ABOVE_UPLOAD_BUFFER_MODE_DEFAULT = "COPY"
+
+
+def _resolve_above_upload_buffer_mode() -> str:
+    """Resolve ``AMD_ABOVE_UPLOAD_BUFFER_MODE`` (COPY | DIRECT), COPY fallback."""
+    raw = os.environ.get("AMD_ABOVE_UPLOAD_BUFFER_MODE")
+    if raw is None:
+        return _ABOVE_UPLOAD_BUFFER_MODE_DEFAULT
+    mode = raw.strip().upper()
+    if mode in ("COPY", "DIRECT"):
+        return mode
+    print(
+        f"[AMD NATIVE D3D11] WARNING: unknown AMD_ABOVE_UPLOAD_BUFFER_MODE={raw!r}; "
+        "falling back to COPY.",
+        flush=True,
+    )
+    return "COPY"
+
+
+def _above_region_pointer(r_bytes: bytes, mode: str):
+    """ETAP 10S: build the pointer handed to ``telem_amd_update_above_region``.
+
+    ``COPY``   — historical: full memcpy into a fresh ctypes buffer.
+    ``DIRECT`` — zero-copy pointer into the immutable Python ``bytes`` payload
+                 (``c_char_p`` is O(1) and does not copy; embedded NUL bytes
+                 are just data because the native call uses the explicit
+                 ``width*height*4`` length, not a C string).  The caller must
+                 keep ``r_bytes`` referenced for the duration of the native
+                 call, which the upload loop does.
+    """
+    if mode == "DIRECT":
+        return ctypes.cast(ctypes.c_char_p(r_bytes), ctypes.POINTER(ctypes.c_uint8))
+    return (ctypes.c_uint8 * len(r_bytes)).from_buffer_copy(r_bytes)
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -977,6 +1379,29 @@ def export_amd_native_d3d11(
     print(f"[AMD NATIVE D3D11] AMD_AMF_MODE: {amf_mode}  AMD_AMF_DIAG: {amf_diag_enabled}", flush=True)
     fa_enabled = _env_flag("AMD_FRAME_ACCOUNTING", False)
     print(f"[AMD NATIVE D3D11] AMD_FRAME_ACCOUNTING: {'ON' if fa_enabled else 'OFF'}", flush=True)
+
+    # ── ETAP 10Q/10R: AMD ABOVE dirty-region mode ────────────────────
+    # SCAN      = legacy path (candidate crop -> alpha scan -> tight crop
+    #             -> tobytes).  Production default until ETAP 10R validates
+    #             EXACT (region parity, final GPU parity, ghosting,
+    #             map-underneath, frame accounting).
+    # CANDIDATE = candidate crop -> tobytes (skips the local alpha scan and
+    #             the tight final crop).  Env-opt-in DIAGNOSTIC ONLY: ETAP 10Q
+    #             proved the larger uploaded rect grows ClearPreviousAboveMap's
+    #             erase region and the final raster differs from SCAN.
+    # EXACT     = ETAP 10R Variant A: uploads the exact SCAN tight region
+    #             computed from propagated alpha-tight widget bboxes, with a
+    #             per-cluster SCAN fallback.  Becomes the production default
+    #             only after ETAP 10R validation (see _extract_exact_above_regions).
+    above_dirty_mode = _resolve_above_dirty_mode()
+    print(f"[AMD NATIVE D3D11] AMD_ABOVE_DIRTY_MODE: {above_dirty_mode}", flush=True)
+
+    # ── ETAP 10S: ABOVE upload buffer mode (COPY fallback | DIRECT zero-copy) ──
+    above_upload_buffer_mode = _resolve_above_upload_buffer_mode()
+    print(
+        f"[AMD NATIVE D3D11] AMD_ABOVE_UPLOAD_BUFFER_MODE: {above_upload_buffer_mode}",
+        flush=True,
+    )
 
     from src.indicators.frame_data import build_active_fit_field_plan
 
@@ -1516,6 +1941,10 @@ def export_amd_native_d3d11(
         "above_final_crop": [],
         "above_region_to_bytes": [],
         "above_region_upload": [],
+        "above_upload_buffer_prepare": [],
+        "above_tight_bbox_collect": [],
+        "above_exact_union": [],
+        "above_exact_crop": [],
         "above_total": [],
         "HUD dirty bbox": [],
         "HUD dirty extract": [],
@@ -1566,6 +1995,14 @@ def export_amd_native_d3d11(
     above_scanned_pixels_samples: list[int] = []
     above_uploaded_pixels_samples: list[int] = []
     above_uploaded_bytes_samples: list[int] = []
+    # ETAP 10R EXACT counters (accumulated across frames for the profile).
+    above_exact_counters: dict[str, Any] = {
+        "clusters": 0,
+        "fallback_clusters": 0,
+        "fallback_reason": {},
+    }
+    above_exact_clusters_samples: list[int] = []
+    above_scan_fallback_clusters_samples: list[int] = []
     above_candidate_bbox_samples: list[tuple[int, int, int, int] | None] = []
     above_final_bbox_samples: list[tuple[int, int, int, int] | None] = []
     above_candidate_widths: list[float] = []
@@ -1908,18 +2345,28 @@ def export_amd_native_d3d11(
         above_scanned_pixels = 0
         above_uploaded_pixels = 0
         above_uploaded_bytes = 0
+        # ETAP 10R EXACT per-frame counters (mirrored into above_stats_p so the
+        # consumer can sample them per frame).
+        above_exact_clusters_frame = 0
+        above_scan_fallback_clusters_frame = 0
+        above_exact_fallback_reason_frame: dict[str, int] = {}
         
         if map_above_layout is not None:
             above_bboxes: dict[str, tuple[int, int, int, int]] = {}
+            above_tight_bboxes: dict[str, Any] | None = (
+                {} if above_dirty_mode == "EXACT" else None
+            )
             above_cache_enabled = os.getenv("AMD_ABOVE_TEXT_CACHE", "1") != "0"
             above_reuse = "above" if above_cache_enabled else False
             above_compose_start = time.perf_counter()
+            reset_tight_bbox_collect()
             above_full = compose_overlay(
                 canvas_w=video_width,
                 canvas_h=video_height,
                 layout=map_above_layout,
                 font_path=font_path,
                 _bboxes=above_bboxes,
+                _tight_bboxes=above_tight_bboxes,
                 gpu_capture_keys=set(),
                 split_chart_keys=None,
                 reuse_canvas=above_reuse,
@@ -1928,44 +2375,56 @@ def export_amd_native_d3d11(
             above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
             
             plan_start = time.perf_counter()
-            if os.getenv("AMD_ABOVE_MULTI_REGION", "1") != "0":
+            if above_dirty_mode == "EXACT":
+                clusters_with_members = _cluster_above_bboxes_members(
+                    above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=16
+                )
+                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                # ETAP 10R: exact tight-bbox upload (Variant A).  The exact
+                # region must equal SCAN's tight alpha region so that the GPU
+                # ClearPreviousAboveMap erase contract is preserved; any unsafe
+                # cluster falls back to the SCAN alpha-scan path.
+                above_regions_out, above_stats_p = _extract_exact_above_regions(
+                    above_full, clusters_with_members, above_tight_bboxes or {},
+                    video_width, video_height,
+                )
+                above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
+                above_scan_fallback_clusters_frame = above_stats_p.get("scan_fallback_clusters", 0)
+                above_exact_fallback_reason_frame = dict(above_stats_p.get("fallback_reason") or {})
+                above_exact_counters["clusters"] += above_exact_clusters_frame
+                above_exact_counters["fallback_clusters"] += above_scan_fallback_clusters_frame
+                for _reason, _cnt in above_exact_fallback_reason_frame.items():
+                    above_exact_counters["fallback_reason"][_reason] = (
+                        above_exact_counters["fallback_reason"].get(_reason, 0) + _cnt
+                    )
+            elif os.getenv("AMD_ABOVE_MULTI_REGION", "1") != "0":
                 candidate_clusters = _cluster_above_bboxes(
                     above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=16
+                )
+                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                above_regions_out, above_stats_p = _extract_above_regions(
+                    above_full, candidate_clusters, above_dirty_mode
                 )
             else:
                 cand = _rendered_bbox_union(
                     above_bboxes, video_width, video_height, pad=64
                 )
                 candidate_clusters = [cand] if cand is not None else []
-            above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
-
-            for cx, cy, cw, ch in candidate_clusters:
-                above_candidate_pixels += cw * ch
-                t_cand_start = time.perf_counter()
-                candidate_image = above_full.crop((cx, cy, cx + cw, cy + ch))
-                above_candidate_crop_ms += (time.perf_counter() - t_cand_start) * 1000.0
-
-                t_alpha_start = time.perf_counter()
-                local_alpha_bbox = candidate_image.getchannel("A").getbbox()
-                above_local_alpha_scan_ms += (time.perf_counter() - t_alpha_start) * 1000.0
-                above_scanned_pixels += cw * ch
-
-                if local_alpha_bbox is not None:
-                    lx, ly, rx, by = local_alpha_bbox
-                    reg_w = rx - lx
-                    reg_h = by - ly
-                    if reg_w > 0 and reg_h > 0:
-                        t_final_start = time.perf_counter()
-                        reg_img = candidate_image.crop(local_alpha_bbox)
-                        above_final_crop_ms += (time.perf_counter() - t_final_start) * 1000.0
-                        reg_x = cx + lx
-                        reg_y = cy + ly
-                        above_uploaded_pixels += reg_w * reg_h
-                        t_b_start = time.perf_counter()
-                        r_bytes = reg_img.tobytes("raw", "RGBA")
-                        above_region_to_bytes_ms += (time.perf_counter() - t_b_start) * 1000.0
-                        above_uploaded_bytes += len(r_bytes)
-                        above_regions_out.append((reg_x, reg_y, reg_w, reg_h, r_bytes))
+                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                above_regions_out, above_stats_p = _extract_above_regions(
+                    above_full, candidate_clusters, above_dirty_mode
+                )
+            above_candidate_crop_ms = above_stats_p["candidate_crop_ms"]
+            above_local_alpha_scan_ms = above_stats_p["alpha_scan_ms"]
+            above_final_crop_ms = above_stats_p["final_crop_ms"]
+            above_region_to_bytes_ms = above_stats_p["tobytes_ms"]
+            above_candidate_pixels = above_stats_p["candidate_pixels"]
+            above_scanned_pixels = above_stats_p["scanned_pixels"]
+            above_uploaded_pixels = above_stats_p["uploaded_pixels"]
+            above_uploaded_bytes = above_stats_p["uploaded_bytes"]
+            t_samples_p["above_tight_bbox_collect"] = above_stats_p.get("tight_bbox_collect_ms", 0.0)
+            t_samples_p["above_exact_union"] = above_stats_p.get("exact_union_ms", 0.0)
+            t_samples_p["above_exact_crop"] = above_stats_p.get("exact_crop_ms", 0.0)
 
         above_bbox_crop_ms = (
             above_region_plan_ms + above_candidate_crop_ms
@@ -1988,6 +2447,9 @@ def export_amd_native_d3d11(
             "scanned_pixels": above_scanned_pixels,
             "uploaded_pixels": above_uploaded_pixels,
             "uploaded_bytes": above_uploaded_bytes,
+            "exact_clusters": above_exact_clusters_frame,
+            "scan_fallback_clusters": above_scan_fallback_clusters_frame,
+            "exact_fallback_reason": dict(above_exact_fallback_reason_frame),
         }
 
         # Charts static & dynamic tiles
@@ -2187,6 +2649,8 @@ def export_amd_native_d3d11(
             above_scanned_pixels_samples.append(prepared.above_stats.get("scanned_pixels", 0))
             above_uploaded_pixels_samples.append(prepared.above_stats.get("uploaded_pixels", 0))
             above_uploaded_bytes_samples.append(prepared.above_stats.get("uploaded_bytes", 0))
+            above_exact_clusters_samples.append(prepared.above_stats.get("exact_clusters", 0))
+            above_scan_fallback_clusters_samples.append(prepared.above_stats.get("scan_fallback_clusters", 0))
 
         # Decode step on consumer
         raw_nv12: bytes | None = None
@@ -2281,8 +2745,15 @@ def export_amd_native_d3d11(
             reg_count = len(prepared.above_regions)
             native_dll.telem_amd_update_above_regions_count(h_context, reg_count)
             above_up_ms = 0.0
+            above_buf_prep_ms = 0.0
             for r_idx, (rx, ry, rw, rh, r_bytes) in enumerate(prepared.above_regions):
-                r_ptr = (c_uint8 * len(r_bytes)).from_buffer_copy(r_bytes)
+                t_prep_start = time.perf_counter()
+                # ETAP 10S: DIRECT = zero-copy pointer into the PyBytes payload
+                # (r_bytes stays referenced by this loop variable throughout the
+                # call; native UpdateSubresource copies synchronously).
+                # COPY = historical from_buffer_copy memcpy fallback.
+                r_ptr = _above_region_pointer(r_bytes, above_upload_buffer_mode)
+                above_buf_prep_ms += (time.perf_counter() - t_prep_start) * 1000.0
                 t_r_start = time.perf_counter()
                 r_ok = native_dll.telem_amd_update_above_region(
                     h_context, r_idx, r_ptr, rw, rh, rw * 4, rx, ry
@@ -2291,6 +2762,7 @@ def export_amd_native_d3d11(
                 if r_ok:
                     above_map_uploaded_bytes_total += len(r_bytes)
             timing_samples["above_region_upload"].append(above_up_ms)
+            timing_samples["above_upload_buffer_prepare"].append(above_buf_prep_ms)
             above_map_frames += 1
             if reg_count > 0:
                 above_map_visible_frames += 1
@@ -2905,6 +3377,17 @@ def export_amd_native_d3d11(
         },
         "etap8n": {
             "multi_region_enabled": True,
+            "above_dirty_mode": above_dirty_mode,
+            "above_upload_buffer_mode": above_upload_buffer_mode,
+            "above_exact_clusters": (
+                _value_summary([float(v) for v in above_exact_clusters_samples])
+                if above_exact_clusters_samples else None
+            ),
+            "above_scan_fallback_clusters": (
+                _value_summary([float(v) for v in above_scan_fallback_clusters_samples])
+                if above_scan_fallback_clusters_samples else None
+            ),
+            "above_exact_fallback_reason": dict(above_exact_counters["fallback_reason"]),
             "full_frame_alpha_scan": False,
             "full_frame_alpha_pixels_scanned_per_frame": 0,
             "regions_per_frame": _value_summary(

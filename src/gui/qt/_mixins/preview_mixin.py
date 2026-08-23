@@ -149,7 +149,8 @@ class PreviewMixin:
 
         # max_distance_m — per source
         max_dist = None
-        dist_src = indic.get("dist_visual", {}).get("source", "gpmf")
+        dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
+        dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
         if dist_src == "gpx":
             trk_for_range = gpx_trk or trk
         elif dist_src == "fit":

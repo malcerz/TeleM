@@ -197,7 +197,8 @@ class PropertyEditor(QWidget):
 
         # ── Zakładki ──────────────────────────────────────────────────
         tab_order = ["Text", "Data", "Czas", "Od początku", "Śr. prędkość",
-                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Path", "Shape"]
+                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Colors",
+                     "Marker", "Range", "Path", "Shape"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
         for field in schema:
             if field.tab in grouped:
@@ -321,6 +322,8 @@ class PropertyEditor(QWidget):
 
         elif field.field_type == "text":
             edit = QLineEdit(str(value) if value is not None else "")
+            if field.placeholder:
+                edit.setPlaceholderText(field.placeholder)
             edit.textChanged.connect(
                 lambda txt, n=name: self._emit_change(n, txt)
             )

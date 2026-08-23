@@ -308,7 +308,17 @@ def _render_gauge_indicator(
     img = bg.copy()
     draw = ImageDraw.Draw(img)
 
-    frac = max(0, min(1, (value - display_min) / (display_max - display_min))) if display_max > display_min else 0
+    draw_needle = False
+    if value is not None:
+        try:
+            val_num = float(value)
+            frac = max(0.0, min(1.0, (val_num - display_min) / (display_max - display_min))) if display_max > display_min else 0.0
+            draw_needle = True
+        except (TypeError, ValueError):
+            frac = 0.0
+    else:
+        frac = 0.0
+
     ang = math.radians(start_deg + (end_deg - start_deg) * frac)
 
     # Needle
@@ -329,11 +339,12 @@ def _render_gauge_indicator(
     base_x = _cx + math.cos(ang) * needle_r_in
     base_y = _cy + math.sin(ang) * needle_r_in
 
-    draw.polygon([
-        (base_x + pdx * needle_width_px / 2, base_y + pdy * needle_width_px / 2),
-        (base_x - pdx * needle_width_px / 2, base_y - pdy * needle_width_px / 2),
-        (tip_x, tip_y),
-    ], fill=needle_fill)
+    if draw_needle:
+        draw.polygon([
+            (base_x + pdx * needle_width_px / 2, base_y + pdy * needle_width_px / 2),
+            (base_x - pdx * needle_width_px / 2, base_y - pdy * needle_width_px / 2),
+            (tip_x, tip_y),
+        ], fill=needle_fill)
 
     # Marker (center dot cap)
     show_marker = bool(cfg.get("show_marker", False))
@@ -353,7 +364,7 @@ def _render_gauge_indicator(
     _fs_ds = max(8, fs)
     _c_font = load_font(font_path, _fs_ds)
     if show_value:
-        txt_main = formatted_val if formatted_val is not None else f"{value:.1f}"
+        txt_main = formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")
         if txt_main:
             text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
             tw = draw.textbbox((0, 0), txt_main, font=_c_font)[2]

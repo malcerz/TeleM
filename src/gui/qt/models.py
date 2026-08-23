@@ -52,6 +52,9 @@ class FieldSchema:
     # Dla typu choice:
     choices: list[str] | None = None
 
+    # Placeholder / podpowiedź dla pól tekstowych (np. format progów):
+    placeholder: str | None = None
+
 
 # ── Fabryki pól per-zakładka ────────────────────────────────────────────────
 
@@ -61,7 +64,7 @@ def _header_fields(with_source: bool = True, text_size: bool = False) -> list[Fi
         FieldSchema(
             "font_size" if text_size else "size", "float", "Rozmiar", tab="",
             min_val=0.5 if text_size else 1.0,
-            max_val=10.0 if text_size else 50.0,
+            max_val=10.0 if text_size else 100.0,
             step=0.1,
         ),
         FieldSchema("label", "text", "Etykieta", tab=""),
@@ -131,6 +134,8 @@ def _text_tab_fields(
 def _labels_tab_fields() -> list[FieldSchema]:
     """Zakładka Labels – etykiety na osi."""
     return [
+        FieldSchema("show_x_axis_values", "bool", "Wartości osi poziomej", tab="Labels"),
+        FieldSchema("show_y_axis_values", "bool", "Wartości osi pionowej", tab="Labels"),
         FieldSchema("label_count", "int", "Number",
                     tab="Labels", min_val=2, max_val=21, step=1),
         FieldSchema("label_font_size", "float", "Size",
@@ -146,6 +151,8 @@ def _ticks_tab_fields(with_range: bool = True, with_ticks: bool = True) -> list[
     if with_ticks:
         fields.append(FieldSchema("ticks", "int", "Liczba podziałek",
                                   tab="Ticks", min_val=0, max_val=20, step=1))
+    fields.append(FieldSchema("major_step", "float", "Krok główny", tab="Ticks",
+                              min_val=0.0, max_val=1000.0, step=0.1))
     fields.append(FieldSchema("thickness", "int", "Grubość podziałek",
                               tab="Ticks", min_val=1, max_val=10, step=1))
     if with_range:
@@ -322,27 +329,76 @@ def _bar_ruler_fields() -> list[FieldSchema]:
 
 
 def _bar_segments_fields() -> list[FieldSchema]:
-    """Pola specyficzne dla stylu 'segments'."""
+    """Pola specyficzne dla stylu 'segments' (Segment Bar, ETAP 10T)."""
     return [
-        # Tab Text
+        # ── Tab Text (wartość / etykieta / zakres) ──────────────────────
         FieldSchema("show_value", "bool", "Wartość", tab="Text"),
         FieldSchema("show_label", "bool", "Etykieta", tab="Text"),
         FieldSchema("show_min", "bool", "Pokaż min.", tab="Text"),
         FieldSchema("show_max", "bool", "Pokaż max", tab="Text"),
+        FieldSchema("show_marker", "bool", "Pokaż marker", tab="Text"),
         FieldSchema("range_units", "bool", "Jednostki", tab="Text"),
         FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1),
+        FieldSchema("value_font", "font", "Font wartości", tab="Text"),
+        FieldSchema("value_font_size", "float", "Rozmiar wartości", tab="Text", min_val=0.5, max_val=5.0, step=0.05),
+        FieldSchema("label_font", "font", "Font etykiety", tab="Text"),
+        FieldSchema("label_font_size", "float", "Rozmiar etykiety", tab="Text", min_val=0.3, max_val=3.0, step=0.05),
+        FieldSchema("range_font", "font", "Font zakresu", tab="Text"),
+        FieldSchema("range_font_size", "float", "Rozmiar zakresu", tab="Text", min_val=0.3, max_val=3.0, step=0.05),
+        FieldSchema("value_color", "color", "Kolor wartości", tab="Text"),
+        FieldSchema("label_color", "color", "Kolor etykiety", tab="Text"),
         FieldSchema("text_color", "color", "Kolor tekstu", tab="Text"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text"),
-        # Tab Segments
-        FieldSchema("segments", "int", "Segmenty", tab="Segments", min_val=2, max_val=50, step=1),
-        FieldSchema("segment_gap", "int", "Odstęp", tab="Segments", min_val=0, max_val=20, step=1),
-        FieldSchema("segment_radius", "int", "Zaokrągl.", tab="Segments", min_val=0, max_val=20, step=1),
-        FieldSchema("inactive_color", "color", "Kolor nieakt.", tab="Segments"),
-        FieldSchema("inactive_alpha", "int", "Alfa nieakt.", tab="Segments", min_val=0, max_val=255, step=5),
+        FieldSchema("value_align", "choice", "Wyrównanie wartości", tab="Text", choices=["left", "center", "right"]),
+        FieldSchema("label_align", "choice", "Wyrównanie etykiety", tab="Text", choices=["left", "center", "right"]),
+        FieldSchema("value_gap", "int", "Odstęp wartości", tab="Text", min_val=0, max_val=40, step=1),
+        FieldSchema("label_gap", "int", "Odstęp etykiety", tab="Text", min_val=0, max_val=40, step=1),
+        FieldSchema("range_gap", "int", "Odstęp zakresu", tab="Text", min_val=0, max_val=40, step=1),
+        # ── Tab Segments (geometria) ─────────────────────────────────────
+        FieldSchema("segments", "int", "Segmenty", tab="Segments", min_val=2, max_val=100, step=1),
+        FieldSchema("segment_count", "int", "Liczba segmentów", tab="Segments", min_val=2, max_val=100, step=1),
+        FieldSchema("segment_width", "float", "Szerokość segmentu", tab="Segments", min_val=0.0, max_val=200.0, step=1.0),
+        FieldSchema("segment_height", "float", "Wysokość segmentu", tab="Segments", min_val=0.0, max_val=200.0, step=1.0),
+        FieldSchema("segment_gap", "int", "Odstęp segmentów", tab="Segments", min_val=0, max_val=20, step=1),
+        FieldSchema("segment_shape", "choice", "Kształt segmentu", tab="Segments", choices=[("rectangle", "Prostokąt"), ("rounded", "Zaokrąglony"), ("pill", "Pigułka")]),
+        FieldSchema("segment_corner_radius", "float", "Zaokrąglenie", tab="Segments", min_val=0.0, max_val=40.0, step=0.5),
+        FieldSchema("segment_radius", "float", "Zaokrągl. (legacy)", tab="Segments", min_val=0.0, max_val=40.0, step=0.5),
         FieldSchema("grow_height", "bool", "Rosnąca wys.", tab="Segments"),
         FieldSchema("grow_start", "float", "Start wzrostu", tab="Segments", min_val=0.0, max_val=1.0, step=0.05),
+        FieldSchema("segment_fill_mode", "choice", "Tryb wypełnienia", tab="Segments", choices=[("whole", "Cały"), ("partial", "Częściowy")]),
+        FieldSchema("fill_direction", "choice", "Kierunek", tab="Segments", choices=[("forward", "Lewo → prawo"), ("reverse", "Prawo → lewo")]),
         FieldSchema("min_val", "float", "Minimum", tab="Segments", min_val=-10000.0, max_val=10000.0, step=1.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Segments", min_val=-10000.0, max_val=100000.0, step=1.0),
+        # ── Tab Colors (kolory segmentów) ────────────────────────────────
+        FieldSchema("segment_color_mode", "choice", "Tryb kolorów", tab="Colors",
+                    choices=[("solid", "Jednolity"), ("gradient", "Gradient"), ("threshold", "Progi")]),
+        FieldSchema("segment_color", "color", "Kolor segmentu", tab="Colors"),
+        FieldSchema("segment_color_start", "color", "Kolor początku grad.", tab="Colors"),
+        FieldSchema("segment_color_end", "color", "Kolor końca grad.", tab="Colors"),
+        FieldSchema("gradient_space", "choice", "Przestrzeń gradientu", tab="Colors", choices=[("rgb", "RGB"), ("hsv", "HSV")]),
+        FieldSchema("segment_thresholds", "text", "Progi (wartość:kolor)", tab="Colors",
+                    placeholder="20:#ff0000;50:#ffaa00;80:#00cc66;100:#00ff00"),
+        FieldSchema("segment_inactive_color", "color", "Kolor nieaktywny", tab="Colors"),
+        FieldSchema("segment_inactive_opacity", "float", "Przezroczystość nieakt.", tab="Colors", min_val=0.0, max_val=1.0, step=0.05),
+        FieldSchema("inactive_color", "color", "Kolor nieakt. (legacy)", tab="Colors"),
+        FieldSchema("inactive_alpha", "int", "Alfa nieakt. (legacy)", tab="Colors", min_val=0, max_val=255, step=5),
+        # ── Tab Marker ───────────────────────────────────────────────────
+        FieldSchema("marker_style", "choice", "Styl markera", tab="Marker",
+                    choices=[("none", "Brak"), ("triangle", "Trójkąt"), ("line", "Linia"), ("circle", "Koło")]),
+        FieldSchema("marker_size", "float", "Rozmiar markera", tab="Marker", min_val=1.0, max_val=40.0, step=0.5),
+        FieldSchema("marker_color", "color", "Kolor markera", tab="Marker"),
+        FieldSchema("marker_border_color", "color", "Kolor obrysu", tab="Marker"),
+        FieldSchema("marker_border_width", "float", "Grubość obrysu", tab="Marker", min_val=0.0, max_val=8.0, step=0.5),
+        FieldSchema("marker_position", "choice", "Pozycja markera", tab="Marker",
+                    choices=[("top", "Góra"), ("bottom", "Dół"), ("center", "Środek")]),
+        FieldSchema("marker_offset", "float", "Odstęp markera", tab="Marker", min_val=0.0, max_val=40.0, step=1.0),
+        # ── Tab Range (zakres min/max) ───────────────────────────────────
+        FieldSchema("show_min", "bool", "Pokaż minimum", tab="Range"),
+        FieldSchema("show_max", "bool", "Pokaż maksimum", tab="Range"),
+        FieldSchema("range_units", "bool", "Jednostki zakresu", tab="Range"),
+        FieldSchema("range_font", "font", "Font zakresu", tab="Range"),
+        FieldSchema("range_font_size", "float", "Rozmiar zakresu", tab="Range", min_val=0.3, max_val=3.0, step=0.05),
+        FieldSchema("range_color", "color", "Kolor zakresu", tab="Range"),
     ]
 
 
@@ -428,6 +484,12 @@ def _map_path_tab_fields() -> list[FieldSchema]:
         FieldSchema("track_width", "int", "Grubość (Width)", tab="Path",
                     min_val=1, max_val=20, step=1),
         FieldSchema("track_color", "color", "Kolor", tab="Path"),
+        # ETAP 10T: track antialiasing + outline
+        FieldSchema("track_antialiasing", "choice", "Wygładzanie trasy", tab="Path",
+                    choices=[("1", "Wyłączone"), ("2", "2x"), ("4", "4x")]),
+        FieldSchema("track_outline_width", "int", "Grubość obrysu trasy", tab="Path",
+                    min_val=0, max_val=12, step=1),
+        FieldSchema("track_outline_color", "color", "Kolor obrysu trasy", tab="Path"),
     ]
 
 

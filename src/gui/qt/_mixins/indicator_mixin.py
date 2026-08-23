@@ -17,6 +17,11 @@ class IndicatorMixin:
         """Użytkownik kliknął przycisk strumienia danych."""
         self._selected_stream_key = stream_key
 
+        # Invalidate chart and prepare caches so newly added indicators compute freshly
+        self._chart_data_cache = None
+        if hasattr(self, "_prepare_cache") and isinstance(self._prepare_cache, dict):
+            self._prepare_cache.clear()
+
         # Upewnij się, że wskaźnik istnieje w layoucie
         if "indicators" not in self.layout:
             self.layout["indicators"] = {}
@@ -86,6 +91,32 @@ class IndicatorMixin:
         # Ustal źródło na podstawie klucza
         if key.startswith("fit_"):
             defaults["source"] = "fit"
+            if key.endswith("_text"):
+                field_name = key[4:-5]
+                defaults["field"] = field_name
+                catalog = getattr(getattr(self, "telemetry", None), "fit_data", {})
+                cat_dict = getattr(catalog, "field_catalog", {}) if catalog else {}
+                meta = cat_dict.get(field_name, {})
+                if field_name in ("enhanced_speed", "speed"):
+                    defaults["label"] = "Speed"
+                elif field_name in ("enhanced_altitude", "altitude"):
+                    defaults["label"] = "Altitude"
+                else:
+                    defaults["label"] = meta.get("display_name") or field_name.replace("_", " ").title()
+                defaults["unit"] = meta.get("unit") or ""
+                if not defaults["unit"]:
+                    unit_map = {
+                        "heart_rate": "BPM", "cadence": "rpm", "power": "W",
+                        "temperature": "°C", "altitude": "m", "curVpower": "W",
+                        "solar": "%", "solar_pct": "%", "battery": "%", "battery_pct": "%",
+                        "discharge": "%/h", "speed": "km/h", "enhanced_speed": "km/h",
+                        "enhanced_altitude": "m", "distance": "km",
+                    }
+                    defaults["unit"] = unit_map.get(field_name, "")
+                if defaults["unit"] in ("°C", "C", "degC") or "temp" in field_name.lower():
+                    defaults["major_step"] = 1.0
+                elif defaults["unit"] == "km" or "dist" in field_name.lower():
+                    defaults["major_step"] = 1.0
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
@@ -255,6 +286,17 @@ class IndicatorMixin:
         vals = [v for _, v in samples if v is not None]
         if len(vals) < 2:
             return None, None
+
+        is_distance = key in ("dist_text", "dist_visual", "fit_distance_text") or "distance" in key or "dist_" in key
+        if is_distance:
+            vals = [v / 1000.0 for v in vals]
+            raw_min = min(vals)
+            raw_max = max(vals)
+            min_val = 0.0
+            max_val = math.ceil(raw_max)
+            if max_val <= min_val:
+                max_val = min_val + 5.0
+            return min_val, max_val
 
         raw_min = min(vals)
         raw_max = max(vals)
@@ -503,27 +545,50 @@ class IndicatorMixin:
             ))
 
         # ── FIT (dynamicznie) ─────────────────────────────────────────
+        from src.indicators import get_form_for_key
         for field_name in sorted(tm.fit_data.keys()):
-            if field_name in ("speed", "alt", "track", "lat", "lon", "timestamp", "heading"):
+            if field_name in ("track", "lat", "lon", "timestamp", "heading"):
+                continue
+            if field_name == "speed" and "enhanced_speed" in tm.fit_data:
+                continue
+            if field_name == "alt" and "enhanced_altitude" in tm.fit_data:
                 continue
             samples = tm.fit_data[field_name]
             vals = [v for _, v in samples if v is not None]
-            if not vals:
+            if not vals and not samples:
                 continue
 
-            display = field_name.replace("_", " ").title()
-            unit_map = {
-                "heart_rate": "BPM", "cadence": "rpm", "power": "W",
-                "temperature": "°C", "altitude": "m",
-            }
-            unit = unit_map.get(field_name, "")
+            catalog = getattr(tm.fit_data, "field_catalog", {}) or {}
+            meta = catalog.get(field_name, {})
+            raw_display = meta.get("display_name") or field_name.replace("_", " ").title()
+            unit = meta.get("unit", "")
+            if not unit:
+                unit_map = {
+                    "heart_rate": "BPM", "cadence": "rpm", "power": "W",
+                    "temperature": "°C", "altitude": "m", "curVpower": "W",
+                    "solar": "%", "solar_pct": "%", "battery": "%", "battery_pct": "%",
+                    "discharge": "%/h", "speed": "km/h", "enhanced_speed": "km/h",
+                    "enhanced_altitude": "m",
+                }
+                unit = unit_map.get(field_name, "")
 
             key = f"fit_{field_name}_text"
+            form, _ = get_form_for_key(key)
+            val_min = min(vals) if vals else 0.0
+            val_max = max(vals) if vals else 100.0
+
+            display_suffix = "" if "(FIT)" in raw_display else " (FIT)"
+            display_name = f"{raw_display}{display_suffix}"
+
+            category = "sensor"
+            if field_name in ("speed", "enhanced_speed", "alt", "enhanced_altitude", "distance"):
+                category = "gps"
+
             streams.append(DataStream(
-                key=key, display_name=f"{display} (FIT)", source="fit",
-                category="sensor", unit=unit, suggested_form="text",
+                key=key, display_name=display_name, source="fit",
+                category=category, unit=unit, suggested_form=form,
                 sample_count=len(samples),
-                value_range=(min(vals), max(vals)),
+                value_range=(val_min, val_max),
             ))
 
         return streams

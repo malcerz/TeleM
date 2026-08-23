@@ -196,6 +196,9 @@ class MovingMapRenderer:
         marker_color=(255, 255, 255, 255),
         marker_radius=7,
         marker_style="dot",
+        track_antialiasing=1,
+        track_outline_width=0,
+        track_outline_color=(0, 0, 0, 220),
     ):
         if Image is None: raise ImportError("Pillow required")
         self._gps = gps_track
@@ -206,6 +209,10 @@ class MovingMapRenderer:
         self._mkr_color = marker_color
         self._mkr_radius = marker_radius
         self._mkr_style = str(marker_style or "dot").strip().lower()
+        # ETAP 10T: track-line antialiasing + outline (default preserves legacy).
+        self._track_aa = max(1, min(8, int(track_antialiasing or 1)))
+        self._track_outline_w = max(0, int(track_outline_width or 0))
+        self._track_outline_color = tuple(track_outline_color or (0, 0, 0, 220))
         self._cache = TileCache(cache_dir)
 
         # Pre-compute tile coords & pixel positions for all GPS points
@@ -309,7 +316,9 @@ class MovingMapRenderer:
         )
 
         background_started = time.perf_counter()
-        grid_key = (tx1, tx2, ty1, ty2, self._zoom, self._style, draw_track, self._trk_color, self._trk_width)
+        grid_key = (tx1, tx2, ty1, ty2, self._zoom, self._style, draw_track,
+                    self._trk_color, self._trk_width,
+                    self._track_aa, self._track_outline_w, self._track_outline_color)
         if getattr(self, "_grid_cache_key", None) == grid_key and hasattr(self, "_grid_cache_img"):
             # The cached grid is immutable: it contains tiles and the route,
             # but never the dynamic marker.  Keep it shared and crop the small
@@ -335,10 +344,37 @@ class MovingMapRenderer:
 
             if draw_track and len(self._gps) >= 2:
                 route_started = time.perf_counter()
-                d_grid = ImageDraw.Draw(img)
                 ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
                 pts = [(self._px_x[i] - ox, self._px_y[i] - oy) for i in range(len(self._gps))]
-                d_grid.line(pts, fill=self._trk_color, width=self._trk_width, joint="round")
+                aa = self._track_aa
+                if aa > 1:
+                    # ETAP 10T: supersampled transparent route overlay -> LANCZOS
+                    # downsample -> alpha composite.  Preserves the visual line
+                    # width (width scaled by aa, then downsampled back) and keeps
+                    # the centre coordinates identical (only edges get AA).
+                    overlay = Image.new("RGBA", (tw * aa, th * aa), (0, 0, 0, 0))
+                    d_ov = ImageDraw.Draw(overlay)
+                    aa_pts = [(x * aa, y * aa) for x, y in pts]
+                    if self._track_outline_w > 0:
+                        outline_w = max(1, int(round(
+                            (self._trk_width + 2 * self._track_outline_w) * aa
+                        )))
+                        d_ov.line(aa_pts, fill=self._track_outline_color,
+                                  width=outline_w, joint="round")
+                    d_ov.line(aa_pts, fill=self._trk_color,
+                              width=max(1, int(round(self._trk_width * aa))),
+                              joint="round")
+                    resampling = getattr(Image, "Resampling", Image)
+                    overlay = overlay.resize((tw, th), resampling.LANCZOS)
+                    img = Image.alpha_composite(img, overlay)
+                else:
+                    d_grid = ImageDraw.Draw(img)
+                    if self._track_outline_w > 0:
+                        d_grid.line(pts, fill=self._track_outline_color,
+                                    width=max(1, self._trk_width + 2 * self._track_outline_w),
+                                    joint="round")
+                    d_grid.line(pts, fill=self._trk_color,
+                                width=max(1, self._trk_width), joint="round")
                 profiler.record(
                     "map.route_polyline",
                     (time.perf_counter() - route_started) * 1000.0,

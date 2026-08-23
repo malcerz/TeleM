@@ -38,7 +38,7 @@ def get_value_schema() -> list[tuple]:
     return get_common_schema() + [
         ("form", "choice", ["text", "gauge", "bar", "chart", "segment_bar"], None, None),
         ("font_size", "float", 0.5, 10.0, 0.1),
-        ("size", "float", 1.0, 50.0, 0.1),
+        ("size", "float", 1.0, 100.0, 0.1),
         ("thickness", "int", 1, 10, 1),
         ("min_val", "float", 0.0, 1000.0, 1.0),
         ("max_val", "float", 1.0, 10000.0, 1.0),
@@ -51,6 +51,8 @@ def get_value_schema() -> list[tuple]:
         ("fill_alpha", "int", 0, 255, 5),
         ("chart_time_scope", "choice", ["activity", "video", "window"], None, None),
         ("chart_window_s", "float", 5.0, 600.0, 1.0),
+        ("show_x_axis_values", "bool", None, None, None),
+        ("show_y_axis_values", "bool", None, None, None),
         # Gauge-specific
         ("start_angle", "int", 0, 360, 5),
         ("sweep_angle", "int", 30, 360, 5),

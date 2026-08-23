@@ -217,6 +217,9 @@ def render_map_overlay(
     hide_track: bool = False,
     margin: int = 4,
     download_missing: bool = True,
+    track_antialiasing: int = 1,
+    track_outline_width: int = 0,
+    track_outline_color: tuple[int, int, int, int] = (0, 0, 0, 220),
 ) -> Image.Image:
     """Render a map with GPS track and current-position marker.
 
@@ -236,6 +239,9 @@ def render_map_overlay(
         margin: Padding around the map in pixels.
         download_missing: If True (default), download tiles not yet cached.
             If False, only use tiles already on disk — uncached areas stay dark.
+        track_antialiasing (ETAP 10T): 1/2/4 route supersampling factor (1=off).
+        track_outline_width (ETAP 10T): outline halo width in px (0 = none).
+        track_outline_color (ETAP 10T): outline colour (RGBA).
 
     Returns:
         RGBA PIL.Image containing the rendered map or a placeholder.
@@ -331,14 +337,23 @@ def render_map_overlay(
     # ── Project cached coords to canvas pixels (fast: no trig) ─────────
     origin_tx_f = float(tx1)
     origin_ty_f = float(ty1)
-    track_draw = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    aa = max(1, min(8, int(track_antialiasing or 1)))
+    outline_w = max(0, int(track_outline_width or 0))
+    track_draw = Image.new("RGBA", (width * aa, height * aa), (0, 0, 0, 0))
     td = ImageDraw.Draw(track_draw)
     points_px: list[tuple[int, int] | None] = []
 
     for tx_f, ty_f in zip(abs_tx_list, abs_ty_list):
-        px_i = int(off_x + (tx_f - origin_tx_f) * TILE_SIZE * scale)
-        py_i = int(off_y + (ty_f - origin_ty_f) * TILE_SIZE * scale)
-        if -100 <= px_i <= width + 100 and -100 <= py_i <= height + 100:
+        raw_px = off_x + (tx_f - origin_tx_f) * TILE_SIZE * scale
+        raw_py = off_y + (ty_f - origin_ty_f) * TILE_SIZE * scale
+        if aa == 1:
+            # Legacy path: int() truncation preserved exactly for byte-parity.
+            px_i = int(raw_px)
+            py_i = int(raw_py)
+        else:
+            px_i = int(round(raw_px * aa))
+            py_i = int(round(raw_py * aa))
+        if -100 * aa <= px_i <= width * aa + 100 * aa and -100 * aa <= py_i <= height * aa + 100 * aa:
             points_px.append((px_i, py_i))
         else:
             points_px.append(None)
@@ -348,16 +363,34 @@ def render_map_overlay(
         for pt in points_px:
             if pt is None:
                 if len(segments) >= 2:
-                    td.line(segments, fill=track_color, width=track_width, joint="curve")
+                    if outline_w > 0:
+                        td.line(segments, fill=track_outline_color,
+                                width=max(1, (track_width + 2 * outline_w) * aa), joint="curve")
+                    td.line(segments, fill=track_color,
+                            width=max(1, track_width * aa), joint="curve")
                 segments = []
             else:
                 segments.append(pt)
         if len(segments) >= 2:
-            td.line(segments, fill=track_color, width=track_width, joint="curve")
+            if outline_w > 0:
+                td.line(segments, fill=track_outline_color,
+                        width=max(1, (track_width + 2 * outline_w) * aa), joint="curve")
+            td.line(segments, fill=track_color,
+                    width=max(1, track_width * aa), joint="curve")
 
-    # ── Position marker ─────────────────────────────────────────────────
+    if aa > 1:
+        # ETAP 10T: downsample the supersampled track overlay back to output
+        # size.  Keeps the visual line width and centre coordinates identical;
+        # only the edges become antialiased.
+        resampling = getattr(Image, "Resampling", Image)
+        track_draw = track_draw.resize((width, height), resampling.LANCZOS)
+        td = ImageDraw.Draw(track_draw)
+
+    # ── Position marker (drawn at final resolution so it never blurs) ──
     if not hide_marker and 0 <= ci < len(points_px) and points_px[ci] is not None:
-        mx, my = points_px[ci]
+        mx_f = (points_px[ci][0] + 0.0) / aa
+        my_f = (points_px[ci][1] + 0.0) / aa
+        mx, my = int(round(mx_f)), int(round(my_f))
         for r in range(marker_radius + 4, marker_radius - 1, -1):
             alpha = 80 if r > marker_radius + 1 else 200
             td.ellipse(

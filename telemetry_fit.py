@@ -45,24 +45,44 @@ class FitRecords(list[RecordDict]):
 
     source = "fit"
 
-    def __init__(self, records: list[RecordDict] | None = None) -> None:
+    def __init__(
+        self,
+        records: list[RecordDict] | None = None,
+        catalog: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(records or [])
-        catalog: dict[str, dict[str, Any]] = {}
+        if catalog is not None:
+            self.field_catalog = dict(catalog)
+        else:
+            self.field_catalog = {}
+
+        # Populate samples in catalog
         for record in self:
             timestamp = record.get("timestamp")
+            if timestamp is None:
+                continue
             for name, value in record.items():
-                if name == "timestamp" or value is None or timestamp is None:
+                if name == "timestamp" or value is None:
                     continue
-                catalog.setdefault(name, {
-                    "name": name,
-                    "source": self.source,
-                    "samples": [],
-                    "occurred": False,
-                })["samples"].append((timestamp, value))
-        for field in catalog.values():
-            field["occurred"] = bool(field["samples"])
-        self.field_catalog = catalog
-        self.available_fit_fields = frozenset(catalog)
+                if name not in self.field_catalog:
+                    self.field_catalog[name] = {
+                        "name": name,
+                        "field_name": name,
+                        "source": self.source,
+                        "display_name": name.replace("_", " ").title(),
+                        "unit": "",
+                        "samples": [],
+                        "occurred": False,
+                    }
+                entry = self.field_catalog[name]
+                if "samples" not in entry:
+                    entry["samples"] = []
+                entry["samples"].append((timestamp, value))
+
+        for field in self.field_catalog.values():
+            field["occurred"] = bool(field.get("samples"))
+
+        self.available_fit_fields = frozenset(self.field_catalog)
 
 
 class FitDataset(dict[str, list[Sample]]):
@@ -75,20 +95,32 @@ class FitDataset(dict[str, list[Sample]]):
 
     source = "fit"
 
-    def __init__(self, fields: Mapping[str, list[Sample]] | None = None) -> None:
+    def __init__(
+        self,
+        fields: Mapping[str, list[Sample]] | None = None,
+        catalog: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(fields or {})
         self.available_fit_fields: frozenset[str] = frozenset(
             name for name, samples in self.items() if samples
         )
-        self.field_catalog: dict[str, dict[str, Any]] = {
-            name: {
+        base_cat = dict(catalog) if catalog is not None else {}
+        self.field_catalog: dict[str, dict[str, Any]] = {}
+
+        for name, samples in self.items():
+            meta = base_cat.get(name, {})
+            self.field_catalog[name] = {
                 "name": name,
+                "field_name": meta.get("field_name", name),
                 "source": self.source,
+                "is_dev": meta.get("is_dev", False),
+                "dev_data_index": meta.get("dev_data_index"),
+                "field_def_num": meta.get("field_def_num"),
+                "display_name": meta.get("display_name", name.replace("_", " ").title()),
+                "unit": meta.get("unit", ""),
                 "samples": samples,
                 "occurred": bool(samples),
             }
-            for name, samples in self.items()
-        }
 
     def catalog(self, field_name: str) -> dict[str, Any] | None:
         """Return metadata for one field, or ``None`` if it never occurred."""
@@ -103,7 +135,7 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
       - ``lat`` / ``lon`` (decimal degrees, or None)
       - ``alt`` (metres, from enhanced_altitude)
       - ``speed`` (km/h, converted from m/s)
-      - Every other discovered scalar field with its original FIT name.
+      - Every other discovered scalar field with its original FIT name or unique key.
 
     Returns ``None`` on failure.
     """
@@ -117,13 +149,156 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
         print(f"[FIT] Error opening file: {exc}", flush=True)
         return None
 
+    # 1. Discover developer field descriptions from field_description messages
+    dev_field_defs: dict[tuple[int, int], dict[str, Any]] = {}
+    for msg in fitfile.get_messages("field_description"):
+        vals = {f.name: f.value for f in msg.fields}
+        dev_idx = vals.get("developer_data_index")
+        f_num = vals.get("field_definition_number")
+        fname = vals.get("field_name")
+        funits = vals.get("units")
+        if dev_idx is not None and f_num is not None and fname:
+            funits_str = str(funits) if funits else ""
+            if funits_str == "watts":
+                funits_str = "W"
+            elif funits_str == "%d":
+                funits_str = ""
+            elif funits_str == "C":
+                funits_str = "°C"
+            dev_field_defs[(dev_idx, f_num)] = {
+                "field_name": str(fname),
+                "units": funits_str,
+                "dev_data_index": dev_idx,
+                "field_def_num": f_num,
+            }
+
+    # 2. Discover developer fields present in record messages to check for duplicate names
+    name_to_dev_tuples: dict[str, set[tuple[int, int]]] = {}
+    dev_key_names: dict[tuple[int, int], str] = {}
+    field_metadata: dict[str, dict[str, Any]] = {}
+
+    for msg in fitfile.get_messages("record"):
+        for f in msg.fields:
+            fd = getattr(f, "field_def", None)
+            is_dev = isinstance(fd, fitparse.records.DevFieldDefinition)
+            if is_dev:
+                dev_idx = getattr(fd, "dev_data_index", None)
+                def_num = getattr(fd, "def_num", None)
+                if dev_idx is not None and def_num is not None:
+                    raw_name = f.name or dev_field_defs.get((dev_idx, def_num), {}).get(
+                        "field_name", f"dev_{dev_idx}_{def_num}"
+                    )
+                    name_to_dev_tuples.setdefault(raw_name, set()).add((dev_idx, def_num))
+
+    for raw_name, dev_tuples in name_to_dev_tuples.items():
+        if len(dev_tuples) > 1:
+            for dev_idx, def_num in sorted(dev_tuples):
+                ukey = f"{raw_name}_{dev_idx}_{def_num}"
+                dev_key_names[(dev_idx, def_num)] = ukey
+                units = dev_field_defs.get((dev_idx, def_num), {}).get("units", "")
+                field_metadata[ukey] = {
+                    "name": ukey,
+                    "field_name": raw_name,
+                    "source": "fit",
+                    "is_dev": True,
+                    "dev_data_index": dev_idx,
+                    "field_def_num": def_num,
+                    "display_name": f"{raw_name.replace('_', ' ').title()} [Dev {dev_idx}:{def_num}]",
+                    "unit": units,
+                }
+        else:
+            dev_idx, def_num = next(iter(dev_tuples))
+            dev_key_names[(dev_idx, def_num)] = raw_name
+            units = dev_field_defs.get((dev_idx, def_num), {}).get("units", "")
+            field_metadata[raw_name] = {
+                "name": raw_name,
+                "field_name": raw_name,
+                "source": "fit",
+                "is_dev": True,
+                "dev_data_index": dev_idx,
+                "field_def_num": def_num,
+                "display_name": raw_name.replace("_", " ").title(),
+                "unit": units,
+            }
+
     records: list[RecordDict] = []
     for msg in fitfile.get_messages("record"):
-        raw: dict[str, Any] = {}
-        for field in msg:
-            raw[field.name] = field.value
+        timestamp = None
+        lat = None
+        lon = None
+        alt = None
+        speed_ms = None
+        enhanced_ms = None
 
-        timestamp = raw.get("timestamp")
+        scalar_fields: dict[str, float] = {}
+        for f in msg.fields:
+            fname = f.name
+            fd = getattr(f, "field_def", None)
+            is_dev = isinstance(fd, fitparse.records.DevFieldDefinition)
+            if is_dev:
+                dev_idx = getattr(fd, "dev_data_index", None)
+                def_num = getattr(fd, "def_num", None)
+                ukey = dev_key_names.get((dev_idx, def_num), fname)
+                num = _try_float(f.value)
+                if num is not None and ukey not in _EXCLUDED_FIELDS:
+                    scalar_fields[ukey] = num
+            else:
+                if fname == "timestamp":
+                    timestamp = f.value
+                elif fname == "position_lat":
+                    lat = f.value
+                elif fname == "position_long":
+                    lon = f.value
+                elif fname in ("enhanced_altitude", "altitude"):
+                    if alt is None:
+                        alt = f.value
+                    val = _try_float(f.value)
+                    if val is not None and fname not in _EXCLUDED_FIELDS:
+                        scalar_fields[fname] = val
+                        if fname not in field_metadata:
+                            units = getattr(f, "units", "") or "m"
+                            disp = "Altitude (FIT)" if fname in ("altitude", "enhanced_altitude") else fname.replace("_", " ").title()
+                            field_metadata[fname] = {
+                                "name": fname,
+                                "field_name": fname,
+                                "source": "fit",
+                                "is_dev": False,
+                                "display_name": disp,
+                                "unit": units,
+                            }
+                elif fname in ("enhanced_speed", "speed"):
+                    if speed_ms is None:
+                        speed_ms = f.value
+                    val = _try_float(f.value, scale=3.6)
+                    if val is not None and fname not in _EXCLUDED_FIELDS:
+                        scalar_fields[fname] = val
+                        if fname not in field_metadata:
+                            disp = "Speed (FIT)" if fname in ("speed", "enhanced_speed") else fname.replace("_", " ").title()
+                            field_metadata[fname] = {
+                                "name": fname,
+                                "field_name": fname,
+                                "source": "fit",
+                                "is_dev": False,
+                                "display_name": disp,
+                                "unit": "km/h",
+                            }
+                elif fname not in _EXCLUDED_FIELDS:
+                    num = _try_float(f.value)
+                    if num is not None:
+                        scalar_fields[fname] = num
+                        if fname not in field_metadata:
+                            units = getattr(f, "units", "") or ""
+                            if units == "C":
+                                units = "°C"
+                            field_metadata[fname] = {
+                                "name": fname,
+                                "field_name": fname,
+                                "source": "fit",
+                                "is_dev": False,
+                                "display_name": fname.replace("_", " ").title(),
+                                "unit": units,
+                            }
+
         if timestamp is None:
             continue
 
@@ -139,8 +314,6 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
         rec: RecordDict = {"timestamp": dt.replace(tzinfo=None)}
 
         # GPS semicircles → degrees
-        lat = raw.get("position_lat")
-        lon = raw.get("position_long")
         rec["lat"] = lat * _SEMICIRC_DEG if lat is not None else None
         rec["lon"] = lon * _SEMICIRC_DEG if lon is not None else None
         if rec["lat"] is not None and rec["lon"] is not None:
@@ -148,34 +321,22 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
                 rec["lat"] = rec["lon"] = None
 
         # Altitude
-        alt = raw.get("enhanced_altitude") or raw.get("altitude")
         rec["alt"] = _try_float(alt)
 
         # Speed: m/s → km/h (enhanced_speed preferred, GPS speed fallback)
-        speed_ms = raw.get("enhanced_speed") or raw.get("speed")
         rec["speed"] = _try_float(speed_ms, scale=3.6)
 
-        # enhanced_speed is the more accurate (GPS+accelerometer) speed.
-        # Store it in km/h as well so `fit_enhanced_speed_text` gauge
-        # shows correct units (it resolves the "enhanced_speed" field).
-        enhanced_ms = raw.get("enhanced_speed")
-        if enhanced_ms is not None:
-            rec["enhanced_speed"] = _try_float(enhanced_ms, scale=3.6)
+        for k, v in scalar_fields.items():
+            rec[k] = v
 
-        # Every other scalar field
-        for name, value in raw.items():
-            if name in _EXCLUDED_FIELDS:
-                continue
-            if name in (
-                "timestamp", "position_lat", "position_long",
-                "altitude", "speed", "enhanced_speed",
-            ):
-                continue
-            if isinstance(value, (list, tuple)):
-                continue
-            numeric = _try_float(value)
-            if numeric is not None:
-                rec[name] = numeric
+        # Alias for duplicate field names if raw name not yet set (e.g. battery_pct -> battery_pct_3_2)
+        for raw_name, dev_tuples in name_to_dev_tuples.items():
+            if len(dev_tuples) > 1 and raw_name not in rec:
+                for dev_idx, def_num in sorted(dev_tuples, reverse=True):
+                    ukey = dev_key_names.get((dev_idx, def_num))
+                    if ukey in rec:
+                        rec[raw_name] = rec[ukey]
+                        break
 
         records.append(rec)
 
@@ -207,23 +368,23 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
     if discovered:
         print(f"[FIT] Fields discovered: {sorted(discovered)}", flush=True)
 
-    return FitRecords(deduped)
+    return FitRecords(deduped, catalog=field_metadata)
 
 
 def sync_fit_to_video(
     records: list[RecordDict],
     video_start_dt: datetime | None,
-) -> dict[str, list[Sample]]:
+) -> FitDataset:
     """Synchronise FIT records to the video timeline.
 
     Every numeric field becomes a key in the returned dict:
       - ``speed`` – km/h (with GPS-fallback computation)
       - ``track`` – cumulative distance in metres
       - ``alt``   – altitude in metres
-      - All other discovered fields keep their original FIT name.
+      - All other discovered fields keep their original FIT name or unique key.
 
     Returns:
-        Dict mapping field-name to list of (datetime, value) pairs.
+        FitDataset mapping field-name to list of (datetime, value) pairs.
     """
     if not records:
         return FitDataset()
@@ -295,15 +456,13 @@ def sync_fit_to_video(
         if samples:
             result[key] = samples
 
-    # Aliases are resolved at lookup time by resolve_source_value(),
-    # not by duplicating keys here – otherwise _register_fit_fields()
-    # creates duplicate fit_*_text indicators for the same data.
+    catalog = getattr(records, "field_catalog", None)
     print(
         f"[FIT] Synchro: {len(result)} field(s) – { {k: len(v) for k, v in result.items()} }",
         flush=True,
     )
 
-    return FitDataset(result)
+    return FitDataset(result, catalog=catalog)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────

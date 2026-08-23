@@ -208,7 +208,9 @@ def prepare_overlay_frame_data(
         max_distance_m = _range_cache["max_distance_m"]
     else:
         max_distance_m = None
-        dist_src = layout.get("indicators", {}).get("dist_visual", {}).get("source", "gpmf")
+        indic_map = layout.get("indicators", {})
+        dist_ind = indic_map.get("dist_visual") or indic_map.get("dist_text") or indic_map.get("fit_distance_text") or {}
+        dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic_map else "gpmf")
         if dist_src == "gpx":
             gpx_trk_l = gpx_track_samples or []
             if gpx_trk_l:

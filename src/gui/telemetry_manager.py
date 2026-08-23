@@ -758,7 +758,9 @@ class TelemetryDataManager:
         processed_fit["slope"] = derive_slope_from_streams(
             fit_distance, processed_fit.get("alt", [])
         )
-        self.fit_data = FitDataset(processed_fit)
+        self.fit_data = FitDataset(
+            processed_fit, catalog=getattr(fit_result, "field_catalog", None)
+        )
         self.available_fit_fields = self.fit_data.available_fit_fields
 
         if self.start_dt_utc is None and self.fit_data.get("speed"):
@@ -931,7 +933,11 @@ class TelemetryDataManager:
     def _interpolate(self, samples: SampleList, target_dt: datetime) -> Optional[float]:
         if self._interpolate_fn:
             return self._interpolate_fn(samples, target_dt)
-        return None
+        try:
+            from src.telemetry_extract import interpolate_value
+            return interpolate_value(samples, target_dt)
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Altitude cache (for preview rendering)
@@ -996,15 +1002,20 @@ class TelemetryDataManager:
                 max_val = max(vals) if vals else 100
                 min_val = min(vals) if vals else 0
 
+                catalog = getattr(self.fit_data, "field_catalog", {}) or {}
+                meta = catalog.get(field_name, {})
+                label = meta.get("display_name") or field_name.replace("_", " ").title()
+                unit = meta.get("unit") or ""
+
                 indicators[key] = {
                     "enabled": False,
-                    "label": field_name.replace("_", " ").title(),
+                    "label": label,
                     "x": 50.0, "y": 8.0, "rotation": 0,
                     "form": "text",
                     "font_size": 2.5, "size": 2.5, "thickness": 1,
                     "min_val": min_val, "max_val": max(max_val, min_val + 1),
                     "ticks": 0, "source": "fit",
-                    "unit": "",
+                    "unit": unit,
                 }
                 if get_value_schema_fn:
                     builtin_fields[key] = get_value_schema_fn()

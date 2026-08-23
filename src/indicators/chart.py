@@ -22,6 +22,7 @@ from src.indicators.chart_utils import (
     reset_average_layer_cache_stats,
     set_average_layer_cache_enabled,
     get_chart_static_alpha_bbox,
+    generate_nice_time_ticks,
 )
 from src.indicators.helpers import (
     _STATIC_CACHE,
@@ -179,6 +180,9 @@ def _cursor_tile_bbox(
     return (dst_left, dst_top, dst_right, dst_bottom)
 
 
+_DOT_TILES_CACHE: dict[tuple, Image.Image] = {}
+
+
 def _draw_post_paste_cursor(
     image, points, current_index, plot_y1, plot_y2, calc_thickness,
     cursor_color, line_color, offset_x, offset_y, chart_width, chart_height,
@@ -208,17 +212,36 @@ def _draw_post_paste_cursor(
     dot_r = max(3, calc_thickness + 1)
     # Render the opaque dot in a tiny tile so clipping remains identical to
     # drawing on the old chart-sized image before it was pasted into the widget.
-    left = math.floor(cursor_x - dot_r)
-    top = math.floor(py - dot_r)
-    right = math.ceil(cursor_x + dot_r) + 1
-    bottom = math.ceil(py + dot_r) + 1
-    tile = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
-    tile_draw = ImageDraw.Draw(tile)
-    tile_draw.ellipse(
-        (cursor_x - dot_r - left, py - dot_r - top,
-         cursor_x + dot_r - left, py + dot_r - top),
-        fill=(*cursor_color, 255), outline=(*line_color, 255),
-    )
+    left = int(math.floor(cursor_x - dot_r))
+    top = int(math.floor(py - dot_r))
+    x0 = cursor_x - dot_r - left
+    y0 = py - dot_r - top
+    if x0 == 0.0 and y0 == 0.0:
+        dot_key = (int(dot_r), tuple(cursor_color), tuple(line_color))
+        tile = _DOT_TILES_CACHE.get(dot_key)
+        if tile is None:
+            dim = 2 * int(dot_r) + 1
+            tile = Image.new("RGBA", (dim, dim), (0, 0, 0, 0))
+            tile_draw = ImageDraw.Draw(tile)
+            tile_draw.ellipse(
+                (0, 0, 2 * dot_r, 2 * dot_r),
+                fill=(*cursor_color, 255), outline=(*line_color, 255),
+            )
+            if len(_DOT_TILES_CACHE) >= 32:
+                _DOT_TILES_CACHE.clear()
+            _DOT_TILES_CACHE[dot_key] = tile
+        right = left + 2 * int(dot_r) + 1
+        bottom = top + 2 * int(dot_r) + 1
+    else:
+        right = math.ceil(cursor_x + dot_r) + 1
+        bottom = math.ceil(py + dot_r) + 1
+        tile = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
+        tile_draw = ImageDraw.Draw(tile)
+        tile_draw.ellipse(
+            (cursor_x - dot_r - left, py - dot_r - top,
+             cursor_x + dot_r - left, py + dot_r - top),
+            fill=(*cursor_color, 255), outline=(*line_color, 255),
+        )
     clip_left, clip_top = offset_x, offset_y
     clip_right, clip_bottom = offset_x + chart_width, offset_y + chart_height
     dst_left, dst_top = max(left, clip_left), max(top, clip_top)
@@ -381,8 +404,8 @@ def _render_chart_indicator(
     # Center placement: paste_y = round(center_y - final_h / 2), final_h = chart_h + margin_top + 4.
     import math
     _margin_top_est = (fs + 8) if label else 0
-    _center_y = s(cfg["y"], canvas_h)
-    _center_x = s(cfg["x"], canvas_w)
+    _center_y = s(cfg.get("y", 50.0), canvas_h)
+    _center_x = s(cfg.get("x", 50.0), canvas_w)
     _max_full_h = 2 * min(_center_y, canvas_h - _center_y)
     _max_chart_h = max(20, _max_full_h - _margin_top_est - 4)
     if chart_h > _max_chart_h:
@@ -421,6 +444,9 @@ def _render_chart_indicator(
     else:
         label_fs_px = 0
 
+    show_x_axis_values = bool(cfg.get("show_x_axis_values", True))
+    show_y_axis_values = bool(cfg.get("show_y_axis_values", True))
+
     graph_kwargs = dict(
         line_color=line_clr, line_thickness=max(1, line_width),
         fill_alpha=chart_fill_alpha, fill_color=chart_fill_color,
@@ -429,6 +455,8 @@ def _render_chart_indicator(
         label_count=label_count, label_units=label_units, unit=unit,
         show_average=show_average, label_font_size=label_fs_px,
         font_path=font_path,
+        show_x_axis_values=show_x_axis_values,
+        show_y_axis_values=show_y_axis_values,
     )
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
     chart_start_dt = getattr(history_data, "chart_start_dt", None)
@@ -443,6 +471,15 @@ def _render_chart_indicator(
         try:
             window_duration_s = max(0.0, (t_end - t_start).total_seconds())
             graph_kwargs["time_labels"] = _window_time_labels(window_duration_s)
+        except (AttributeError, TypeError):
+            pass
+    elif (
+        time_scope in ("activity", "video")
+        and t_start is not None and t_end is not None
+    ):
+        try:
+            duration_s = max(1.0, (t_end - t_start).total_seconds())
+            graph_kwargs["time_labels"] = generate_nice_time_ticks(duration_s)
         except (AttributeError, TypeError):
             pass
     prefix_dynamic = bool(
@@ -587,14 +624,16 @@ def _render_chart_indicator(
 
     tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
     toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
-    v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
+    v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
 
-    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key, load_font
     hdr_key = _static_cache_key("chart_hdr", chart_w + 8, final_h, label, font_path, fs, outline, text_color, tox, toy)
     hdr_img = _STATIC_CACHE.get(hdr_key)
     if hdr_img is None:
         hdr_img = Image.new("RGBA", (chart_w + 8, final_h), (0, 0, 0, 0))
         if label:
+            if font is None:
+                font = load_font(font_path, max(8, int(fs)))
             d_hdr = ImageDraw.Draw(hdr_img)
             d_hdr.text(
                 (4 + tox, outline + toy), label, font=font,
@@ -667,7 +706,7 @@ def _render_chart_indicator(
                     "graph.final_static_build",
                     (time.perf_counter() - static_started) * 1000.0,
                 )
-        v_str = formatted_val if formatted_val is not None else f"{value:.1f} {unit}"
+        v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
         if split_mode and not prefix_dynamic:
             # ETAP 5K: hand the exporter a static layer + two small dynamic
             # tiles instead of a full per-frame chart image.  No final_static
