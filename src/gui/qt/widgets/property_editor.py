@@ -197,8 +197,8 @@ class PropertyEditor(QWidget):
 
         # ── Zakładki ──────────────────────────────────────────────────
         tab_order = ["Text", "Data", "Czas", "Od początku", "Śr. prędkość",
-                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Colors",
-                     "Marker", "Range", "Path", "Shape"]
+                     "Labels", "Ticks", "Gauge", "Compass", "Chart", "Segments",
+                     "Colors", "Marker", "Range", "Path", "Shape"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
         for field in schema:
             if field.tab in grouped:
@@ -254,8 +254,17 @@ class PropertyEditor(QWidget):
     def _create_field_widget(
         self, field: FieldSchema, value: Any,
     ) -> QWidget | None:
-        """Tworzy widget dla pojedynczego pola schematu."""
+        """Tworzy widget dla pojedynczego pola schematu.
+
+        Gdy pola brakuje w konfiguracji (stary/niepełny projekt), używa
+        kanonicznego ``field.default`` zamiast domyślnych wartości widgetów
+        (0 / False / "" / pierwsza pozycja combo) — dzięki temu wartość
+        pokazana w Właściwościach odpowiada temu, co używa renderer.
+        """
         name = field.name
+        # Kanoniczna wartość: model > default schematu
+        if value is None:
+            value = field.default
 
         res_widget = None
         if field.field_type == "bool":

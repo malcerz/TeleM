@@ -22,17 +22,14 @@ from src.ffmpeg.amd_native_exporter import (
 )
 
 
-def test_default_mode_is_copy_until_gpu_parity_validated(monkeypatch) -> None:
+def test_default_mode_is_direct_after_gpu_parity_validated(monkeypatch) -> None:
     monkeypatch.delenv("AMD_ABOVE_UPLOAD_BUFFER_MODE", raising=False)
-    # ETAP 10S verified the zero-copy DIRECT pointer at Python level (byte
-    # integrity, embedded zeros, lifetime) and confirmed the native
-    # UpdateSubresource contract is synchronous, but final GPU parity could not
-    # be runtime-validated on this machine (GPU video device unavailable).
-    # Therefore the production default remains COPY (safe, validated behavior);
-    # DIRECT is available via AMD_ABOVE_UPLOAD_BUFFER_MODE=DIRECT and becomes
-    # the default only after GPU parity passes.
-    assert _ABOVE_UPLOAD_BUFFER_MODE_DEFAULT == "COPY"
-    assert _resolve_above_upload_buffer_mode() == "COPY"
+    # ETAP 10U validated DIRECT on the GPU (120-frame COPY vs DIRECT byte-identical
+    # parity, runtime byte-integrity 120/120, region geometry parity, ghosting,
+    # frame accounting, SCAN+DIRECT smoke), so the production default is DIRECT
+    # (zero-copy); COPY remains the env-forced fallback.
+    assert _ABOVE_UPLOAD_BUFFER_MODE_DEFAULT == "DIRECT"
+    assert _resolve_above_upload_buffer_mode() == "DIRECT"
 
 
 def test_copy_and_direct_modes_accepted(monkeypatch) -> None:

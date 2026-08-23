@@ -5,10 +5,10 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
-    QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox,
+    QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox, QProgressBar,
 )
 
 from src.gui.qt.signals import get_signals
@@ -44,6 +44,13 @@ class LoadTab(QWidget):
         self._qp_gen: int = 0
         self._qp_path: str = ""
         self._qp_cancel_event: threading.Event | None = None
+        # Stan paska postępu wczytywania: target (backend) vs display (GUI)
+        self._loading = False
+        self._load_target = 0.0
+        self._load_display = 0.0
+        self._load_timer = QTimer(self)
+        self._load_timer.setInterval(30)
+        self._load_timer.timeout.connect(self._load_tick)
         self._build_ui()
         self._connect_local_signals()
 
@@ -111,6 +118,26 @@ class LoadTab(QWidget):
         btn_row.addWidget(self.btn_clear)
 
         vbox.addLayout(btn_row)
+
+        # ── Pasek postępu wczytywania (szeroki, płynny, pod Wczytaj) ─────
+        self.load_progress = QProgressBar()
+        self.load_progress.setRange(0, 100)
+        self.load_progress.setValue(0)
+        self.load_progress.setVisible(False)
+        self.load_progress.setMinimumHeight(10)
+        # Stylistycznie spójny z paskiem renderingu (gruby, zaokrąglony)
+        self.load_progress.setStyleSheet(
+            "QProgressBar { min-height: 10px; border: 1px solid #999; "
+            "border-radius: 5px; background: #eee; text-align: center; }"
+            "QProgressBar::chunk { background-color: #0078d4; "
+            "border-radius: 5px; }"
+        )
+        vbox.addWidget(self.load_progress)
+
+        self.lbl_load_status = QLabel("")
+        self.lbl_load_status.setStyleSheet("color: #666; font-size: 12px;")
+        self.lbl_load_status.setVisible(False)
+        vbox.addWidget(self.lbl_load_status)
 
         # ── Informacje o filmie (automatyczna inspekcja po wyborze MP4) ──
         info_group = QGroupBox("Informacje o filmie")
@@ -221,23 +248,85 @@ class LoadTab(QWidget):
             QMessageBox.warning(self, "Brak pliku", "Wybierz plik MP4.")
             return
 
-        self.btn_load.setEnabled(False)
-        self.lbl_info.setText("Wczytywanie...")
+        self._start_loading()
         self.signals.sig_files_selected.emit(
             self._video_paths, self._gpx_path, self._fit_path,
         )
 
-        # Przywróć przycisk po zakończeniu
-        self.signals.sig_progress.connect(self._on_loading_done)
+    # ═════════════════════════════════════════════════════════════════════
+    # Pasek postępu wczytywania (target_progress → display_progress)
+    # ═════════════════════════════════════════════════════════════════════
 
-    def _on_loading_done(self, percent: int, _text: str) -> None:
+    def _start_loading(self) -> None:
+        """Rozpocznij wczytywanie: pokaż pasek i uruchom płynną animację."""
+        self._loading = True
+        self._load_target = 0.0
+        self._load_display = 0.0
+        self.btn_load.setEnabled(False)
+        self.load_progress.setVisible(True)
+        self.load_progress.setValue(0)
+        self.lbl_load_status.setVisible(True)
+        self.lbl_load_status.setText("Wczytywanie...")
+        self.lbl_info.setText("Wczytywanie...")
+        self._load_timer.start()
+
+    def _on_load_progress(self, percent: int, text: str) -> None:
+        """Backend raportuje rzeczywisty (etapowy) postęp wczytywania.
+
+        ``percent`` to wartość docelowa (target_progress); pasek animuje
+        display_progress w jej kierunku w osobnym QTimerze.
+        """
+        if not self._loading:
+            return
+        pct = float(max(0, min(100, percent)))
+        if pct > self._load_target:
+            self._load_target = pct  # nigdy nie cofaj postępu
+        if text:
+            self.lbl_load_status.setText(text)
         if percent >= 100:
-            self.btn_load.setEnabled(True)
-            self.lbl_info.setText("Wczytano pomyślnie.")
-            try:
-                self.signals.sig_progress.disconnect(self._on_loading_done)
-            except Exception:
-                pass
+            self._finish_loading_success()
+
+    def _finish_loading_success(self) -> None:
+        """100% — ustawiane dopiero po faktycznym sukcesie wczytywania."""
+        self._loading = False
+        self._load_target = 100.0
+        self.lbl_load_status.setText("Gotowe")
+        self.lbl_info.setText("Wczytano pomyślnie.")
+        self.btn_load.setEnabled(True)
+
+    def _on_load_error(self, msg: str) -> None:
+        """Błąd wczytywania — pasek nie udaje sukcesu (nigdy 100%)."""
+        if not self._loading:
+            return
+        self._loading = False
+        self._load_timer.stop()
+        self.lbl_load_status.setText("Błąd")
+        self.lbl_info.setText(f"Błąd wczytywania: {msg}")
+        self.btn_load.setEnabled(True)
+
+    def _load_tick(self) -> None:
+        """Płynna animacja: display_progress płynie w kierunku target_progress."""
+        delta = self._load_target - self._load_display
+        if delta <= 0.2:
+            self._load_display = self._load_target
+        else:
+            self._load_display += max(delta * 0.2, 0.3)
+            if self._load_display > self._load_target:
+                self._load_display = self._load_target
+        self.load_progress.setValue(int(round(self._load_display)))
+        if self._load_display >= 100.0:
+            self.load_progress.setValue(100)
+            self._load_timer.stop()
+
+    def _reset_loading_ui(self) -> None:
+        """Powrót do stanu idle (np. przy Wyczyść w trakcie wczytywania)."""
+        self._loading = False
+        self._load_timer.stop()
+        self._load_target = 0.0
+        self._load_display = 0.0
+        self.load_progress.setVisible(False)
+        self.lbl_load_status.setVisible(False)
+        self.btn_load.setEnabled(True)
 
     def _on_accel_changed(self, _index: int) -> None:
         """Emit preview accelerator changed when the user picks a new GPU."""
@@ -258,6 +347,8 @@ class LoadTab(QWidget):
         self.lbl_file_info.setText("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
         self._reset_qp_state()
         self.btn_analyze_qp.setEnabled(False)
+        # Przerwij ewentualne wczytywanie i schowaj pasek postępu
+        self._reset_loading_ui()
 
     # ═════════════════════════════════════════════════════════════════════
     # Asynchroniczna inspekcja pliku (ffprobe poza wątkiem GUI)
@@ -269,6 +360,10 @@ class LoadTab(QWidget):
         self.sig_qp_progress.connect(self._on_qp_progress)
         self.sig_qp_done.connect(self._on_qp_done)
         self.sig_qp_error.connect(self._on_qp_error)
+        # Globalne sygnały postępu/błędów — chronione flagą self._loading,
+        # aby nie reagować na postęp renderingu ani błędy spoza wczytywania.
+        self.signals.sig_progress.connect(self._on_load_progress)
+        self.signals.sig_error.connect(self._on_load_error)
 
     def _start_info_inspection(self) -> None:
         """Uruchom odczyt informacji o pierwszym wybranym pliku MP4."""

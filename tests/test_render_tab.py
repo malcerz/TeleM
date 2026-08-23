@@ -338,7 +338,8 @@ class TestExportOptions:
     def test_encoder_options(self, shared_setup):
         _, rt, _ = shared_setup
         items = [rt.cmb_encoder.itemText(i) for i in range(rt.cmb_encoder.count())]
-        assert items == ["amd", "nv", "intel", "cpu"]
+        # auto = wykryty najlepszy backend; intel = INTEL_FORCE (bez cross-GPU fallback)
+        assert items == ["auto", "amd", "nv", "intel", "cpu"]
 
     def test_render_options_dict(self, shared_setup):
         _, rt, _ = shared_setup
@@ -352,4 +353,4 @@ class TestExportOptions:
             "output": rt.edit_output.text().strip(),
         }
         assert options["output"] == "out.mp4"
-        assert options["encoder"] in ("nv", "amd", "intel", "cpu")
+        assert options["encoder"] in ("auto", "nv", "amd", "intel", "cpu")

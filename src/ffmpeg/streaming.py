@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
+from src.ffmpeg.intel_backend import resolve_intel_force
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
@@ -237,6 +238,34 @@ def _report_stream_progress(
             audit.add_stat("preview_progress_callback", (time.perf_counter_ns() - callback_started) / 1_000_000.0)
 
 
+def _report_phase(
+    on_render_progress: Optional[Callable],
+    phase: str,
+    pct: float,
+    label: str,
+    elapsed: float = 0.0,
+) -> None:
+    """Report a phase-level progress milestone on the shared render-progress
+    contract so the GUI can map the WHOLE export onto one continuous 0..100 bar.
+
+    Regular frame-level reports keep the existing
+    ``(completed, total, elapsed, fps, {"frame", "ts"})`` shape; phase reports
+    are distinguished by the ``"phase"`` key and carry a phase-local ``pct`` in
+    0..1 plus a status ``label``:
+
+    - ``"prep"``     -> HUD preparation (GUI maps to the 0..10% slice)
+    - ``"finalize"`` -> final mux / drain (GUI maps to the 98..100% slice)
+
+    This is a progress-reporting-only change: it never alters rendering logic.
+    """
+    if on_render_progress is None:
+        return
+    on_render_progress(
+        0, 0, max(0.0, elapsed), 0.0,
+        {"phase": phase, "pct": max(0.0, min(1.0, pct)), "label": label},
+    )
+
+
 def _acquire_shm_slot(
     shm_pool: "SharedFramePool",
     process: Any,
@@ -380,6 +409,13 @@ def stream_overlay_to_ffmpeg(
     active_process_holder: Optional[dict] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
+    if encoder == "intel":
+        # INTEL_FORCE: strictly require a usable Intel GPU + QSV.  No silent
+        # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU
+        # fallback.  On failure resolve_intel_force raises IntelBackendError,
+        # which intentionally stops the Intel backend initialisation.
+        resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
+
     t_prod_start = time.perf_counter()
     pipeline_audit = PipelineAuditRecorder() if encoder == "nv" and env_enabled() else None
     if pipeline_audit is not None:
@@ -387,10 +423,12 @@ def stream_overlay_to_ffmpeg(
     t_prep_start = t_prod_start
     BenchmarkTracker.get_instance().enable(True)
 
+    phase_t0 = time.time()
     cut_regions = layout.get("cut_regions", [])
 
     generation_fps = target_fps / update_rate_step
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
+    _report_phase(on_render_progress, "prep", 0.05, "Przygotowywanie HUD...", time.time() - phase_t0)
 
     indicators = layout.get("indicators", {})
     custom_texts = layout.get("custom_texts", [])
@@ -573,6 +611,8 @@ def stream_overlay_to_ffmpeg(
             print(f"[NVIDIA] HUD SHM total: {full_shm_mb:.1f} MB", flush=True)
             print(f"[NVIDIA] HUD transport reduction: 0.0%", flush=True)
 
+    _report_phase(on_render_progress, "prep", 0.45, "Przygotowywanie HUD...", time.time() - phase_t0)
+
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
     t_worker_init_start = time.perf_counter()
@@ -596,6 +636,8 @@ def stream_overlay_to_ffmpeg(
 
     if cancel_event is not None and cancel_event.is_set():
         return 0
+
+    _report_phase(on_render_progress, "prep", 0.70, "Przygotowywanie HUD...", time.time() - phase_t0)
 
     # Build FFmpeg input args
     hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
@@ -709,6 +751,8 @@ def stream_overlay_to_ffmpeg(
 
     stdout_t = threading.Thread(target=_stdout_reader, daemon=True)
     stdout_t.start()
+
+    _report_phase(on_render_progress, "prep", 1.0, "Renderowanie klatek...", time.time() - phase_t0)
 
     start_time = time.time()
     total_piped = 0
@@ -1100,6 +1144,8 @@ def stream_overlay_to_ffmpeg(
                         total_piped, total_overlay_frames,
                         start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
                     )
+
+        _report_phase(on_render_progress, "finalize", 0.0, "Finalizacja...", time.time() - phase_t0)
 
         # Signal pipe writer to finish and close stdin
         t_drain_start = time.perf_counter()

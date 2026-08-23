@@ -19,7 +19,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, QComboBox,
@@ -34,6 +34,17 @@ from src.gui.qt.widgets.video_preview import VideoPreview, preview_aspect_size
 
 class RenderTab(QWidget):
     """Zakładka opcji renderowania z podglądem i zakresem eksportu IN/OUT."""
+
+    # ── Zakresy JEDNEGO wspólnego paska postępu eksportu (0..100%) ───────
+    # "Przygotowywanie HUD"  ->  0..10%
+    # rendering klatek       -> 10..98%
+    # finalizacja (mux)      -> 98..100%
+    _HUD_PREP_START = 0.0
+    _HUD_PREP_END = 10.0
+    _RENDER_START = 10.0
+    _RENDER_END = 98.0
+    _FINALIZE_START = 98.0
+    _FINALIZE_END = 100.0
 
     def __init__(self, preview: VideoPreview | None = None) -> None:
         super().__init__()
@@ -55,6 +66,12 @@ class RenderTab(QWidget):
         self._hud_prepare_cache: dict | None = None
         self._last_preview_time = 0.0
         self._preview_busy = False
+        # Płynna animacja wspólnego paska: target (backend) vs display (GUI)
+        self._render_target = 0.0
+        self._render_display = 0.0
+        self._render_timer = QTimer(self)
+        self._render_timer.setInterval(30)
+        self._render_timer.timeout.connect(self._render_tick)
         self._build_ui()
         self._connect_signals()
         if self._owns_preview:
@@ -119,8 +136,11 @@ class RenderTab(QWidget):
         form.setSpacing(10)
 
         self.cmb_encoder = QComboBox()
-        self.cmb_encoder.addItems(["amd", "nv", "intel", "cpu"])
-        self.cmb_encoder.setToolTip("amd = AMD AMF (domyślny), nv = NVIDIA NVENC, intel = Intel QuickSync, cpu = software")
+        # auto = wykryty najlepszy backend, amd = AMD AMF, nv = NVIDIA NVENC,
+        # intel = Intel QuickSync (INTEL_FORCE — bez cross-GPU fallback),
+        # cpu = software
+        self.cmb_encoder.addItems(["auto", "amd", "nv", "intel", "cpu"])
+        self.cmb_encoder.setToolTip("auto = wykryty najlepszy backend, amd = AMD AMF, nv = NVIDIA NVENC, intel = Intel QuickSync (INTEL_FORCE), cpu = software")
         try:
             from src.ffmpeg_pipeline import detect_best_encoder
             best_enc = detect_best_encoder()
@@ -447,6 +467,9 @@ class RenderTab(QWidget):
         self.progress.setVisible(True)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self._render_target = 0.0
+        self._render_display = 0.0
+        self._render_timer.start()
         self._set_stats(0, 0, 0.0, 0.0, "Renderowanie...")
         # Przełącz widok na HUD Preview (bez filmu) — wideo wraca po końcu
         hud_on = self.chk_hud_preview.isChecked()
@@ -488,29 +511,72 @@ class RenderTab(QWidget):
 
     def _on_render_progress(self, completed: int, total: int, elapsed: float,
                             fps: float, hud_state) -> None:
-        """Rzeczywisty progress pipeline'u (completed/total, nie timer)."""
+        """Rzeczywisty progress pipeline'u (completed/total, nie timer).
+
+        Obsługuje dwa kontrakty na tym samym sygnale:
+        - raport fazy ({"phase": "prep"|"finalize", "pct", "label"}) — mapowany
+          na zakres wspólnego paska (Przygotowywanie HUD / Finalizacja);
+        - raport klatki (completed/total, {"frame","ts"}) — mapowany na zakres
+          10..98% wspólnego paska.
+        """
         if self._cancelling:
             return
+        if hud_state is not None and isinstance(hud_state, dict) and "phase" in hud_state:
+            self._on_render_phase(hud_state, elapsed)
+            return
+
         if total > 0:
             self._render_total = total
         total = self._render_total or total or 1
-        pct = (completed / total) * 100.0
-        # Nigdy nie pokazuj 100% przed faktycznym końcem (finalizacja/mux).
+        frac = min(1.0, completed / total)
+        overall = self._RENDER_START + frac * (self._RENDER_END - self._RENDER_START)
         if completed >= total:
-            pct = min(pct, 99.0)
+            # Wszystkie klatki wypisane — finalizacja (mux/flush) jeszcze trwa
+            overall = min(overall, self._RENDER_END)
             status = "Finalizacja..."
         else:
             status = "Renderowanie..."
-        self.progress.setValue(int(pct))
+        # Nigdy nie cofaj paska
+        if overall > self._render_target:
+            self._render_target = overall
         self._set_stats(completed, total, elapsed, fps, status)
 
-        # HUD Preview — latest-state, z wideo, tylko gdy backend dostarczył snapshot
-        if hud_state is not None and isinstance(hud_state, dict) and self.chk_hud_preview.isChecked():
+        # HUD Preview — latest-state, tylko dla raportów klatek (mają "ts")
+        if hud_state is not None and isinstance(hud_state, dict) and "ts" in hud_state and self.chk_hud_preview.isChecked():
             self._hud_ts = hud_state.get("ts")
             now = time.monotonic()
             if now - self._last_preview_time >= 0.2:  # ~5 Hz
                 self._last_preview_time = now
                 self._trigger_async_preview(self._hud_ts)
+
+    def _on_render_phase(self, hud_state: dict, elapsed: float) -> None:
+        """Raport fazy eksportu (prep/finalize) — mapowany na wspólny pasek."""
+        phase = hud_state.get("phase", "")
+        pct = max(0.0, min(1.0, float(hud_state.get("pct", 0.0) or 0.0)))
+        label = str(hud_state.get("label", "") or "Renderowanie...")
+        if phase == "prep":
+            overall = self._HUD_PREP_START + pct * (self._HUD_PREP_END - self._HUD_PREP_START)
+        elif phase == "finalize":
+            overall = self._FINALIZE_START + pct * (self._FINALIZE_END - self._FINALIZE_START)
+        else:
+            return
+        if overall > self._render_target:
+            self._render_target = overall
+        self._set_stats(0, 0, elapsed, 0.0, label)
+
+    def _render_tick(self) -> None:
+        """Płynna animacja wspólnego paska postępu eksportu (30 ms)."""
+        if not self._rendering:
+            self._render_timer.stop()
+            return
+        delta = self._render_target - self._render_display
+        if delta <= 0.2:
+            self._render_display = self._render_target
+        else:
+            self._render_display += max(delta * 0.2, 0.25)
+            if self._render_display > self._render_target:
+                self._render_display = self._render_target
+        self.progress.setValue(int(round(self._render_display)))
 
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
                    status: str, final_eta: str | None = None) -> None:
@@ -541,6 +607,9 @@ class RenderTab(QWidget):
 
     def _on_finished(self, _stats: dict, output: str) -> None:
         # Koniec — dopiero teraz 100% i status "Gotowe"
+        self._render_target = 100.0
+        self._render_display = 100.0
+        self._render_timer.stop()
         self.progress.setValue(100)
         elapsed = time.monotonic() - self._render_start if self._render_start else 0.0
         fps = (self._render_total / elapsed) if elapsed > 0 and self._render_total else 0.0
@@ -564,6 +633,9 @@ class RenderTab(QWidget):
         """Powrót do stanu idle po zakończeniu / anulowaniu / błędzie."""
         self._rendering = False
         self._cancelling = False
+        self._render_timer.stop()
+        self._render_target = 0.0
+        self._render_display = 0.0
         self.btn_render.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.progress.setVisible(False)

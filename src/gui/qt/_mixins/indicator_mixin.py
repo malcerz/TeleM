@@ -8,7 +8,12 @@ from datetime import datetime
 from typing import Any
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
-from src.gui.qt.models import DataStream, compass_indicator_fields, get_schema_for_form
+from src.gui.qt.models import (
+    DataStream,
+    canonical_defaults,
+    compass_indicator_fields,
+    get_schema_for_form,
+)
 from src.telemetry_extract import interpolate_value
 
 
@@ -229,6 +234,22 @@ class IndicatorMixin:
         if _min_v is not None and _max_v is not None:
             defaults["min_val"] = _min_v
             defaults["max_val"] = _max_v
+
+        # ── Kompletny config: uzupełnij brakujące pola kanonicznymi
+        # defaultami ze schematu (JEDNO źródło prawdy).
+        # Dzięki temu model == Property Editor == Preview/Renderer od pierwszej
+        # chwili, bez „przeskoku" przy pierwszej edycji właściwości.
+        if key == "compass":
+            _schema = compass_indicator_fields()
+        else:
+            _schema = get_schema_for_form(
+                defaults.get("form", "text"),
+                bar_style=defaults.get("bar_style", "ruler"),
+                chart_time_scope=defaults.get("chart_time_scope", "activity"),
+            )
+        for _field_name, _field_default in canonical_defaults(_schema).items():
+            if _field_name not in defaults:
+                defaults[_field_name] = _field_default
 
         self.layout["indicators"][key] = defaults
 

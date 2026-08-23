@@ -262,10 +262,13 @@ class ProjectMixin:
                     self.fit_ext_fields = list(fit_keys)
 
                 # Odkryj strumienie danych
+                self.signals.sig_progress.emit(75, "Przygotowywanie danych...")
                 self.signals.sig_progress.emit(80, "Budowa interfejsu...")
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
+                self.signals.sig_progress.emit(85, "Przygotowywanie podglądu...")
 
+                self.signals.sig_progress.emit(90, "Pobieranie klatki...")
                 if self.is_using_mpv():
                     target_h = int(self._preview_target_w * h / w) if w > 0 else 540
                     first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
@@ -293,6 +296,7 @@ class ProjectMixin:
                     self.src_img = first_frame
                     self.last_src_pil = first_frame
                     self.last_preview_ts = 0.0
+                self.signals.sig_progress.emit(95, "Składanie podglądu...")
                 self._render_preview(0)
 
                 # ── Hwdec diagnostics (deferred, needs main thread) ────

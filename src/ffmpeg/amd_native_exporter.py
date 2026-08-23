@@ -981,19 +981,20 @@ def _resolve_above_dirty_mode() -> str:
     return "SCAN"
 
 
-# ETAP 10S: production default for AMD_ABOVE_UPLOAD_BUFFER_MODE.
+# ETAP 10S/10U: production default for AMD_ABOVE_UPLOAD_BUFFER_MODE.
 #   COPY   = historical path: full memcpy into a fresh ctypes buffer via
-#            from_buffer_copy before the native call.  Safe baseline/fallback.
+#            from_buffer_copy before the native call.  Safe fallback.
 #   DIRECT = zero-copy pointer into the immutable Python bytes payload
 #            (ctypes.c_char_p is O(1), no copy).  Safe because the native
 #            UpdateAboveRegion -> UpdateSubresource copies the data
 #            synchronously before returning (verified in
 #            d3d11_vp_pipeline.cpp), so the pointer only needs to live for
 #            the duration of the call (r_bytes is referenced throughout).
-# Stays COPY as the production default until final GPU parity is validated on
-# a machine with an available GPU video device; DIRECT is selectable via
-# AMD_ABOVE_UPLOAD_BUFFER_MODE=DIRECT.
-_ABOVE_UPLOAD_BUFFER_MODE_DEFAULT = "COPY"
+# ETAP 10U validated DIRECT on the GPU (120-frame COPY vs DIRECT byte-identical
+# parity, runtime byte-integrity check 120/120, region geometry parity, ghosting,
+# frame accounting, SCAN+DIRECT smoke) and flipped the production default to
+# DIRECT.  COPY remains selectable via AMD_ABOVE_UPLOAD_BUFFER_MODE=COPY.
+_ABOVE_UPLOAD_BUFFER_MODE_DEFAULT = "DIRECT"
 
 
 def _resolve_above_upload_buffer_mode() -> str:
@@ -1882,6 +1883,10 @@ def export_amd_native_d3d11(
     base_dt = start_dt_utc or datetime.now()
     start_time = time.time()
     progress_interval = max(1, min(10, total_frames // 100))
+    # GUI phase-report: AMD native HUD initialization has started.
+    if on_render_progress is not None:
+        on_render_progress(0, 0, 0.0, 0.0,
+                           {"phase": "prep", "pct": 0.3, "label": "Przygotowywanie HUD..."})
 
     from src.indicators.frame_data import prepare_overlay_frame_data
     from src.indicators.profiling import get_overlay_profiler
@@ -2160,6 +2165,9 @@ def export_amd_native_d3d11(
             flush=True,
         )
     t_precompute_end = time.perf_counter()
+    if on_render_progress is not None:
+        on_render_progress(0, 0, time.time() - start_time, 0.0,
+                           {"phase": "prep", "pct": 0.6, "label": "Przygotowywanie HUD..."})
 
     # Main Frame Processing Loop
     # ── ETAP 8T-B/C: Unified Producer-Consumer Frame Pipeline ──
@@ -2929,6 +2937,11 @@ def export_amd_native_d3d11(
 
         return True
 
+    # GUI phase-report: HUD preparation finished, frame rendering begins.
+    if on_render_progress is not None:
+        on_render_progress(0, 0, time.time() - start_time, 0.0,
+                           {"phase": "prep", "pct": 1.0, "label": "Renderowanie klatek..."})
+
     # Main Execution Switch: ASYNC (Producer-Consumer) vs SYNC (Diagnostic)
     try:
         if pipeline_mode == "ASYNC":
@@ -3016,6 +3029,10 @@ def export_amd_native_d3d11(
                     break
 
         t_video_render_end = time.perf_counter()
+        # GUI phase-report: all frames rendered, final flush/mux starts.
+        if on_render_progress is not None:
+            on_render_progress(0, 0, time.time() - start_time, 0.0,
+                               {"phase": "finalize", "pct": 0.0, "label": "Finalizacja..."})
 
         # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
         flush_start = time.perf_counter()

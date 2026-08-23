@@ -167,36 +167,51 @@ def test_none_and_zero_raster(v10_layout):
 # ---------------------------------------------------------------------------
 
 
-def test_compositor_distance_scaling(v10_layout):
-    """Test that compose_overlay dynamically scales max_val for all distance bar keys."""
+def _compose_dist_bar(key, v10_layout, **extra_cfg):
+    """Compose a single distance bar and return the marker center-x in the bbox crop."""
+    layout = json.loads(json.dumps(v10_layout))
+    cfg = {
+        "enabled": True, "label": "DISTANCE", "x": 50.0, "y": 74.0, "rotation": 0,
+        "form": "bar", "bar_style": "ruler", "font_size": 1.2, "size": 28.0, "thickness": 1,
+        "min_val": 0.0, "max_val": 100.0, "ticks": 5, "show_value": True, "source": "fit", "unit": "km",
+        "marker_color": "#FFD42A",
+    }
+    cfg.update(extra_cfg)
+    layout["indicators"] = {key: cfg}
+    bboxes = {}
+    overlay = compose_overlay(
+        1280, 720, layout, "",
+        date_text="2026-08-14",
+        time_text="11:18:03",
+        speed_value=0.0,
+        distance_m=11886.6,
+        max_distance_m=23926.4,
+        _bboxes=bboxes,
+    )
+    bb = bboxes.get(key)
+    assert bb is not None
+    ox, oy, ow, oh = bb
+    crop = overlay.crop((ox, oy, ox + ow, oy + oh))
+    arr = np.array(crop)
+    mask = (arr[:, :, 0] == 255) & (arr[:, :, 1] == 212) & (arr[:, :, 2] == 42) & (arr[:, :, 3] > 200)
+    ys, xs = np.where(mask)
+    assert len(xs) > 0, f"{key}: marker pixel not found"
+    return float(np.mean(xs))
+
+
+def test_compositor_distance_manual_scale_respected(v10_layout):
+    """MANUAL (auto_scale=False / brak): compose_overlay MUSI szanować ręczne
+    max_val=100.0 — marker dla 11.886 km stoi na ~11.9% (a nie ~50%)."""
     for key in ("dist_visual", "dist_text"):
-        layout = json.loads(json.dumps(v10_layout))
-        layout["indicators"] = {
-            key: {
-                "enabled": True, "label": "DISTANCE", "x": 50.0, "y": 74.0, "rotation": 0,
-                "form": "bar", "bar_style": "ruler", "font_size": 1.2, "size": 28.0, "thickness": 1,
-                "min_val": 0.0, "max_val": 100.0, "ticks": 5, "show_value": True, "source": "fit", "unit": "km",
-                "marker_color": "#FFD42A"
-            }
-        }
-        bboxes = {}
-        overlay = compose_overlay(
-            1280, 720, layout, "",
-            date_text="2026-08-14",
-            time_text="11:18:03",
-            speed_value=0.0,
-            distance_m=11886.6,
-            max_distance_m=23926.4,
-            _bboxes=bboxes,
-        )
-        bb = bboxes.get(key)
-        assert bb is not None
-        ox, oy, ow, oh = bb
-        crop = overlay.crop((ox, oy, ox + ow, oy + oh))
-        arr = np.array(crop)
-        mask = (arr[:, :, 0] == 255) & (arr[:, :, 1] == 212) & (arr[:, :, 2] == 42) & (arr[:, :, 3] > 200)
-        ys, xs = np.where(mask)
-        assert len(xs) > 0
-        cx = float(np.mean(xs))
-        # Expected around 188 px in 378 px crop (~50%)
-        assert 170 <= cx <= 200, f"Key {key} expected marker around ~188 px, got {cx} px"
+        cx = _compose_dist_bar(key, v10_layout)
+        # 11.886 km / 100 km ≈ 11.9% -> lewa część cropu (max_val=100 NIE nadpisany)
+        assert cx < 100.0, f"{key}: manual max_val=100 nie został uszanowany (marker x={cx:.1f})"
+
+
+def test_compositor_distance_auto_scale(v10_layout):
+    """AUTO (auto_scale=True): compose_overlay nadpisuje max_val pełnym
+    dystansem (23.926 km) — marker dla 11.886 km stoi na ~50%."""
+    for key in ("dist_visual", "dist_text"):
+        cx = _compose_dist_bar(key, v10_layout, auto_scale=True)
+        # 11.886 / 23.926 ≈ 49.7% -> środek cropu (~188 px)
+        assert 170 <= cx <= 200, f"{key} auto_scale marker expected ~188 px, got {cx:.1f} px"

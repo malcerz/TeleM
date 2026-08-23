@@ -324,12 +324,20 @@ def compose_overlay(
         if slope_missing:
             current_cfg["_slope_missing"] = True
 
-        # Dynamic max/min range scaling for visual bars/gauges
+        # Dynamic max/min range scaling for visual bars/gauges.
+        # Tylko JAWNY tryb AUTO (auto_scale=True) nadpisuje ręcznie ustawioną
+        # skalę (min_val/max_val) pełnym zakresem telemetrii. Domyślnie
+        # (auto_scale=False / brak pola) renderer SZANUJE ręczne min/max —
+        # wcześniej ukryte AUTO nadpisywało max_val dystansu, np. 3 km -> 24 km.
         is_dist_key = key in ("dist_visual", "dist_text", "fit_distance_text") or (
             current_cfg.get("form") in ("bar", "gauge", "segment_bar")
             and (current_cfg.get("unit") == "km" or "distance" in key or "dist_" in key)
         )
-        if is_dist_key and max_distance_m is not None:
+        if (
+            is_dist_key
+            and current_cfg.get("auto_scale", False)
+            and max_distance_m is not None
+        ):
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, max_distance_m / 1000.0)
         elif key in ("speed_visual", "speed_text") and max_speed_kmh is not None and current_cfg.get("form") in ("bar", "gauge", "segment_bar"):
             rounded = math.ceil(max_speed_kmh / 10.0) * 10

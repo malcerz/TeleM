@@ -60,13 +60,19 @@ class RenderMixin:
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
         encoder = options.get("encoder", detect_best_encoder())
+        if encoder == "auto":
+            encoder = detect_best_encoder()
         # Validate that the requested hardware encoder actually works on this GPU
         if encoder == "nv" and not _test_encoder("hevc_nvenc"):
             encoder = detect_best_encoder()
         elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
             encoder = detect_best_encoder()
-        elif encoder == "intel" and not _test_encoder("hevc_qsv"):
-            encoder = detect_best_encoder()
+        elif encoder == "intel":
+            # INTEL_FORCE: no silent cross-GPU fallback.  If the user explicitly
+            # requested Intel, the full controlled resolution (adapter + QSV) is
+            # performed by stream_overlay_to_ffmpeg, which raises a controlled
+            # error (IntelBackendError) when no usable Intel GPU/QSV exists.
+            pass
 
         resolution = options.get("resolution", "source")
         output = options.get("output", "output.mp4")
@@ -123,6 +129,12 @@ class RenderMixin:
             output_path = self.video_path.parent / output_path
 
         self.signals.sig_progress.emit(5, "Renderowanie HUD...")
+        # Faza "Przygotowywanie HUD" na wspólnym pasku postępu eksportu
+        # (render_mixin przygotowuje dane przed stream_overlay_to_ffmpeg).
+        self.signals.sig_render_progress.emit(
+            0, 0, 0.0, 0.0,
+            {"phase": "prep", "pct": 0.0, "label": "Przygotowywanie HUD..."},
+        )
 
         field_samples = {
             "speed_samples": speed,
