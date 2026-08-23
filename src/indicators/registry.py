@@ -27,6 +27,7 @@ DEFAULT_FORM_RULES: list[tuple[str, str, float]] = [
     ("solar",            "bar",   12.0),
     ("gopro_battery",    "bar",   12.0),
     ("slope",            "bar",   20.0),
+    ("lean",             "lean",  14.0),
 ]
 
 
@@ -39,6 +40,7 @@ DEFAULT_SOURCE_MAP: dict[str, str] = {
     "battery_text":"gpx",
     "compass":     "gpmf",
     "slope_text":  "gpmf",
+    "lean_indicator": "gpmf",
 }
 
 

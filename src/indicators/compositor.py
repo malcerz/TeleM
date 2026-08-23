@@ -271,19 +271,35 @@ def compose_overlay(
         "cad_text": (cad_value, "RPM", "Cad"),
         "battery_text": (battery_value, "%", "Bat"),
         "slope_text": (None, "%", "Slope"),
+        "lean_indicator": (None, "°", "Przechył"),
         "compass": (None, "°", "Compass"),
         "track_map": (0.0, "", "Mapa"),
     }
 
-    # Overlay with extra indicators (e.g. FIT fields dynamically discovered)
+    # Overlay with extra indicators (e.g. FIT fields dynamically discovered).
+    # NOTE (ETAP 11B): distance fields arriving via *extra_indicators* (e.g.
+    # ``fit_distance_text``) carry RAW METERS (FIT/GPMF store distance in m).
+    # They MUST be normalised to the display unit (km) exactly like the
+    # built-in dist_visual/dist_text values, otherwise the renderer receives
+    # ``10129.14`` with ``unit="km"`` -> "10129 km" text + marker pinned at 100%.
+    def _dist_display_value(k: str, raw: Any) -> Any:
+        if raw is None:
+            return raw
+        if "distance" in k or "dist_" in k:
+            return raw / 1000.0
+        return raw
+
     if extra_indicators:
         for k, v in extra_indicators.items():
-            known_vals[k] = v
+            if isinstance(v, (tuple, list)) and len(v) >= 1:
+                known_vals[k] = (_dist_display_value(k, v[0]), v[1], v[2] if len(v) >= 3 else k)
+            else:
+                known_vals[k] = _dist_display_value(k, v)
 
-    # Apply per-indicator value overrides
+    # Apply per-indicator value overrides (built-in dist_visual/dist_text and
+    # any custom distance key emitted through indicator_values).
     for k, raw in indicator_values.items():
-        is_dist = k in ("dist_visual", "dist_text") or (raw is not None and ("distance" in k or "dist_" in k))
-        val = (raw / 1000.0) if (is_dist and raw is not None) else raw
+        val = _dist_display_value(k, raw)
         if k in known_vals:
             _, u, l = known_vals[k]
             known_vals[k] = (val, u, l)

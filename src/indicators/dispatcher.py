@@ -17,6 +17,7 @@ from src.indicators.bar import _render_bar_indicator
 from src.indicators.chart import _render_chart_indicator
 from src.indicators.gauge import _render_gauge_indicator
 from src.indicators.helpers import load_font, s
+from src.indicators.lean import _render_lean_indicator
 from src.indicators.moving_map import _render_moving_map_indicator
 from src.indicators.segment_bar import _render_segment_bar_indicator
 from src.indicators.static_map import _render_static_map_indicator
@@ -92,6 +93,8 @@ def render_value_indicator(
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "gauge":
         return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
+    elif form == "lean":
+        return _render_lean_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "chart":
         return _render_chart_indicator(
             **_kwargs,

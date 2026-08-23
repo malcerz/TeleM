@@ -119,7 +119,8 @@ def _header_fields(with_source: bool = True, text_size: bool = False) -> list[Fi
 def _form_field(choices: list[str] | None = None) -> list[FieldSchema]:
     """Pole wyboru formy – zawsze widoczne."""
     if choices is None:
-        choices = ["text", "gauge", "bar", "chart", "segment_bar", "map"]
+        choices = ["text", "gauge", "bar", "chart", "segment_bar", "map",
+                   ("lean", "Przechył")]
     return [
         FieldSchema("form", "choice", "Forma", tab="", choices=choices, default="text"),
     ]
@@ -341,22 +342,33 @@ def _bar_ruler_fields() -> list[FieldSchema]:
         FieldSchema("show_mid_label", "bool", "Środek", tab="Text", default=True),
         FieldSchema("range_units", "bool", "Jednostki", tab="Text", default=True),
         FieldSchema("title_with_unit", "bool", "Tytuł z jednostką", tab="Text", default=True),
-        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1, default=1),
+        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=3, step=1, default=1),
         FieldSchema("text_color", "color", "Kolor tekstu", tab="Text", default="#F4F4F4"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text", default="#E0E0E0"),
         FieldSchema("text_offset_x", "float", "Pos X", tab="Text", min_val=-0.5, max_val=0.5, step=0.01, default=0.0),
         FieldSchema("text_offset_y", "float", "Pos Y", tab="Text", min_val=-0.5, max_val=0.5, step=0.01, default=0.0),
-        # Tab Ticks
+        # Tab Ticks — wspólny kontrakt: Auto / Count / Step (ETAP 11B)
+        FieldSchema("major_tick_mode", "choice", "Tryb podziałki gł.", tab="Ticks",
+                    choices=[("auto", "Auto"), ("count", "Liczba (Count)"), ("step", "Krok (Step)")],
+                    default="count"),
         FieldSchema("major_ticks", "int", "Podziałki gł.", tab="Ticks", min_val=1, max_val=30, step=1, default=8),
+        FieldSchema("major_step", "float", "Krok główny (Step)", tab="Ticks", min_val=0.0, max_val=1000.0, step=0.1, default=0.0),
         FieldSchema("minor_ticks", "int", "Podziałki drobne", tab="Ticks", min_val=1, max_val=10, step=1, default=5),
         FieldSchema("ticks", "int", "Ticks (legacy)", tab="Ticks", min_val=0, max_val=30, step=1, default=0),
+        FieldSchema("show_tick_labels", "bool", "Etykiety wartości ticków", tab="Ticks", default=False),
+        FieldSchema("tick_label_signed", "bool", "Znak +/− ticków", tab="Ticks", default=False),
         FieldSchema("track_color", "color", "Kolor osi", tab="Ticks", default="#F4F4F4"),
         FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks", default="#F6F6F6"),
+        FieldSchema("zero_tick_color", "color", "Kolor zera", tab="Ticks", default="#FFFFFF"),
+        FieldSchema("marker_style", "choice", "Styl wskaźnika", tab="Ticks",
+                    choices=[("dot", "Kropka"), ("line", "Linia")], default="dot"),
         FieldSchema("marker_color", "color", "Kolor wskaźnika", tab="Ticks", default="#159FA5"),
         FieldSchema("marker_border_color", "color", "Obramowanie wsk.", tab="Ticks", default="#D8D8D8"),
         FieldSchema("marker_size", "float", "Rozmiar wskaźnika", tab="Ticks", min_val=2.0, max_val=30.0, step=0.5, default=7.0),
         FieldSchema("tick_profile", "choice", "Profil ticków", tab="Ticks", choices=["default", "pixel"], default="default"),
-        # Tab Gauge (Zakres / Grubość)
+        # Tab Gauge (Orientacja / Zakres / Grubość)
+        FieldSchema("orientation", "choice", "Orientacja", tab="Gauge",
+                    choices=[("horizontal", "Pozioma"), ("vertical", "Pionowa")], default="horizontal"),
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=100000.0, step=1.0, default=100.0),
@@ -443,37 +455,51 @@ def _bar_segments_fields() -> list[FieldSchema]:
 
 
 def _bar_slope_fields() -> list[FieldSchema]:
-    """Fields for the canonical slope/grade vertical ruler."""
+    """Legacy slope/grade vertical ruler schema (ETAP 11B: kept for OLD configs).
+
+    ``bar_style="slope"`` is no longer a selectable variant — the unified
+    ``Ruler`` now exposes ``orientation`` (horizontal/vertical).  This schema is
+    still used to EDIT an existing legacy ``slope`` config; it maps onto the
+    ruler STEP contract at render time.
+    """
     return [
         FieldSchema("field", "choice", "Pole", tab="", choices=["slope"], default="slope"),
+        FieldSchema("orientation", "choice", "Orientacja", tab="",
+                    choices=[("vertical", "Pionowa")], default="vertical"),
         FieldSchema("show_value", "bool", "Wartość", tab="Text", default=True),
         FieldSchema("show_label", "bool", "Etykieta", tab="Text", default=True),
-        FieldSchema("show_range_labels", "bool", "Zakres", tab="Text", default=True),
+        FieldSchema("show_range_labels", "bool", "Etykiety ticków", tab="Text", default=True),
         FieldSchema("show_units", "bool", "Jednostki", tab="Text", default=True),
-        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1, default=1),
+        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=3, step=1, default=1),
         FieldSchema("text_color", "color", "Kolor tekstu", tab="Text", default="#FFFFFF"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text", default="#DDE7F2"),
-        FieldSchema("opacity", "float", "Opacity", tab="Text", min_val=0.0, max_val=1.0, step=0.05, default=1.0),
+        FieldSchema("opacity", "float", "Przezroczystość", tab="Text", min_val=0.0, max_val=1.0, step=0.05, default=1.0),
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=100.0),
-        FieldSchema("major_tick", "float", "Major tick", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
-        FieldSchema("minor_tick", "float", "Minor tick", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
+        FieldSchema("major_tick", "float", "Krok główny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
+        FieldSchema("minor_tick", "float", "Krok drobny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
         FieldSchema("track_color", "color", "Kolor osi", tab="Ticks", default="#8D9AA7"),
         FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks", default="#DDE7F2"),
         FieldSchema("zero_tick_color", "color", "Kolor zera", tab="Ticks", default="#FFFFFF"),
-        FieldSchema("marker_color", "color", "Kolor markera", tab="Ticks", default="#FFD42A"),
-        FieldSchema("marker_border_color", "color", "Obramowanie markera", tab="Ticks", default="#FFFFFF"),
-        FieldSchema("marker_size", "float", "Rozmiar markera", tab="Ticks", min_val=1.0, max_val=30.0, step=0.5, default=6.0),
+        FieldSchema("marker_color", "color", "Kolor wskaźnika", tab="Ticks", default="#FFD42A"),
+        FieldSchema("marker_border_color", "color", "Obramowanie wskaźnika", tab="Ticks", default="#FFFFFF"),
+        FieldSchema("marker_size", "float", "Rozmiar wskaźnika", tab="Ticks", min_val=1.0, max_val=30.0, step=0.5, default=6.0),
         FieldSchema("tick_profile", "choice", "Profil ticków", tab="Ticks", choices=["default", "pixel"], default="default"),
     ]
 
 
 def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
-    """Bar: Header (w tym Styl: Ruler/Segments) + zakładki specyficzne dla stylu."""
+    """Bar: Header (w tym Styl: Ruler/Segments) + zakładki specyficzne dla stylu.
+
+    ETAP 11B: ``slope`` nie jest już wybieranym wariantem — pionowy Ruler to
+    ``bar_style="ruler"`` + ``orientation="vertical"``.  Stary ``slope`` nadal
+    jest obsługiwany przez ``_bar_slope_fields()`` przy edycji legacy configów.
+    """
     style = str(bar_style).strip().lower()
     style_choice = [
-        FieldSchema("bar_style", "choice", "Styl", tab="", choices=[("ruler", "Ruler"), ("segments", "Segments"), ("slope", "Slope")], default="ruler"),
+        FieldSchema("bar_style", "choice", "Styl", tab="",
+                    choices=[("ruler", "Ruler"), ("segments", "Segments")], default="ruler"),
     ]
     header = _header_fields() + _form_field() + style_choice
     if style in ("segment", "segments", "segmented", "segment_bar"):
@@ -481,6 +507,43 @@ def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
     if style in ("slope", "grade", "vertical_slope"):
         return header + _bar_slope_fields()
     return header + _bar_ruler_fields()
+
+
+def lean_indicator_fields() -> list[FieldSchema]:
+    """Przechył / Lean — OSOBNY wskaźnik animowany (nie BAR!).
+
+    Obraca grafikę (ikona roweru / belka) wokół środka zgodnie z sygnałem
+    orientacji (GPMF gyro — wybór osi, lub FIT grade / nachylenie terenu),
+    z mnożnikiem siły wychyłu i ograniczeniem maksymalnego kąta.  To NIE jest
+    pionowy BAR/Ruler.
+    """
+    return (
+        _header_fields(with_source=False)
+        + _form_field([("lean", "Przechył")])
+        + [
+            FieldSchema("source", "choice", "Źródło danych", tab="Data",
+                        choices=[("gyro", "GPMF Gyro (żyroskop)"),
+                                 ("grade", "FIT Grade / nachylenie terenu")],
+                        default="gyro"),
+            FieldSchema("axis", "choice", "Oś żyroskopu", tab="Data",
+                        choices=[("x", "X (roll)"), ("y", "Y (pitch)"), ("z", "Z (yaw)")],
+                        default="z"),
+            FieldSchema("sensitivity", "float", "Mnożnik wychyłu", tab="Data",
+                        min_val=0.0, max_val=20.0, step=0.05, default=0.2),
+            FieldSchema("max_angle", "float", "Maks. kąt wychyłu [°]", tab="Data",
+                        min_val=1.0, max_val=90.0, step=1.0, default=15.0),
+            FieldSchema("graphic", "choice", "Grafika", tab="Data",
+                        choices=[("bike", "Rower (ikona)"), ("beam", "Belka"), ("none", "Brak")],
+                        default="bike"),
+            FieldSchema("show_reference", "bool", "Linia odniesienia 0°", tab="Data", default=True),
+            FieldSchema("show_ticks", "bool", "Podziałka kątowa", tab="Data", default=True),
+            FieldSchema("track_color", "color", "Kolor odniesienia", tab="Data", default="#FFFFFF"),
+            FieldSchema("marker_color", "color", "Kolor grafiki", tab="Data", default="#FFFFFF"),
+            FieldSchema("show_value", "bool", "Pokaż wartość", tab="Text", default=True),
+            FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text",
+                        min_val=0, max_val=3, step=1, default=0),
+        ]
+    )
 
 
 def chart_indicator_fields(chart_time_scope: str = "activity") -> list[FieldSchema]:
@@ -640,6 +703,7 @@ FORM_SCHEMA_MAP: dict[str, callable] = {
     "map":         map_indicator_fields,
     "static_map":  map_indicator_fields,
     "time_display": time_display_indicator_fields,
+    "lean":        lean_indicator_fields,
 }
 
 

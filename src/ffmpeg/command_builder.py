@@ -114,13 +114,24 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
             radius = int(size_px * 1.35)
             x1, y1 = px - radius, py - radius
             x2, y2 = px + radius, py + radius
+        elif form == "lean":
+            # Przechył / Lean — roughly square rotating-graphic widget.
+            sz = cfg.get("size", 0.14)
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            radius = int(size_px * 0.9) + 40
+            x1, y1 = px - radius, py - radius
+            x2, y2 = px + radius, py + radius
         elif form in ("bar", "segment_bar"):
             sz = cfg.get("size", 0.2)
             size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
-            if str(cfg.get("bar_style", "")).strip().lower() in ("slope", "grade", "vertical_slope"):
-                # Slope is a vertical bar/ruler with a taller local raster.
-                # Keep this estimate deliberately generous for labels/ticks;
-                # ordinary ruler and segment geometry remains unchanged.
+            _bar_style = str(cfg.get("bar_style", "")).strip().lower()
+            _bar_orient = str(cfg.get("orientation", "")).strip().lower()
+            if _bar_style in ("slope", "grade", "vertical_slope") or (
+                _bar_style in ("", "ruler") and _bar_orient == "vertical"
+            ):
+                # Vertical bar/ruler (legacy slope or orientation=vertical) has
+                # a taller local raster. Keep this estimate deliberately
+                # generous for labels/ticks; horizontal geometry is unchanged.
                 bar_w = max(180, int(size_px * 0.30)) + 80
                 bar_h = size_px + 100
             else:
@@ -449,10 +460,20 @@ def get_layout_hud_regions(
             radius = int(size_px * 1.35)
             x1, y1 = px - radius - 10, py - radius - 10
             x2, y2 = px + radius + 10, py + radius + 10
+        elif form == "lean":
+            sz = cfg.get("size", 0.14)
+            size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
+            radius = int(size_px * 0.9) + 40
+            x1, y1 = px - radius - 10, py - radius - 10
+            x2, y2 = px + radius + 10, py + radius + 10
         elif form in ("bar", "segment_bar"):
             sz = cfg.get("size", 0.2)
             size_px = int(round(sz * canvas_w)) if sz <= 1.0 else int(round((sz / 100.0) * canvas_w))
-            if str(cfg.get("bar_style", "")).strip().lower() in ("slope", "grade", "vertical_slope"):
+            _bar_style = str(cfg.get("bar_style", "")).strip().lower()
+            _bar_orient = str(cfg.get("orientation", "")).strip().lower()
+            if _bar_style in ("slope", "grade", "vertical_slope") or (
+                _bar_style in ("", "ruler") and _bar_orient == "vertical"
+            ):
                 bar_w = max(180, int(size_px * 0.30)) + 80
                 bar_h = size_px + 100
             else:

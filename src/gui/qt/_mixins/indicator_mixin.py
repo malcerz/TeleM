@@ -109,6 +109,11 @@ class IndicatorMixin:
                 else:
                     defaults["label"] = meta.get("display_name") or field_name.replace("_", " ").title()
                 defaults["unit"] = meta.get("unit") or ""
+                # Dystans FIT: skala i wartość są zawsze w km (compositor konwertuje
+                # metry -> km przez /1000). Wymuś unit="km" zamiast natywnego "m",
+                # aby uniknąć rozjazdu jednostek (metry traktowane jako km).
+                if "dist" in field_name.lower():
+                    defaults["unit"] = "km"
                 if not defaults["unit"]:
                     unit_map = {
                         "heart_rate": "BPM", "cadence": "rpm", "power": "W",
@@ -118,10 +123,9 @@ class IndicatorMixin:
                         "enhanced_altitude": "m", "distance": "km",
                     }
                     defaults["unit"] = unit_map.get(field_name, "")
-                if defaults["unit"] in ("°C", "C", "degC") or "temp" in field_name.lower():
-                    defaults["major_step"] = 1.0
-                elif defaults["unit"] == "km" or "dist" in field_name.lower():
-                    defaults["major_step"] = 1.0
+                # BAR Ruler używa trybu COUNT (major_ticks) — NIE ustawiamy już
+                # ukrytego major_step>0, który ignorowałby major_ticks w GUI.
+                # Stare projekty z jawnym major_step>0 zachowują tryb STEP.
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
@@ -131,6 +135,11 @@ class IndicatorMixin:
         }
         if key in _label_map:
             defaults["label"] = _label_map[key]
+
+        # Dystans (GPMF/GPX): wartość i skala BAR-a są zawsze w km (compositor
+        # konwertuje /1000) — wymuś unit="km" dla spójnych etykiet zakresu.
+        if key in ("dist_visual", "dist_text", "dist_text_gpx"):
+            defaults["unit"] = "km"
 
         # Specjalne domyślne wartości dla time_display
         if key == "time_display":
@@ -206,7 +215,12 @@ class IndicatorMixin:
             defaults["label"] = "SLOPE"
             defaults["field"] = "slope"
             defaults["form"] = "bar"
-            defaults["bar_style"] = "slope"
+            # ETAP 11B: Slope NIE jest osobnym stylem — to wspólny Ruler
+            # z orientacją pionową. Nowy wskaźnik zapisuje bar_style="ruler" +
+            # orientation="vertical"; stary bar_style="slope" jest normalizowany
+            # przy renderze (zachowuje wygląd legacy).
+            defaults["bar_style"] = "ruler"
+            defaults["orientation"] = "vertical"
             defaults["source"] = "gpmf"
             defaults["x"] = 73.0
             defaults["y"] = 52.0
@@ -215,11 +229,14 @@ class IndicatorMixin:
             defaults["unit"] = "%"
             defaults["min_val"] = -20.0
             defaults["max_val"] = 20.0
-            defaults["major_tick"] = 5.0
-            defaults["minor_tick"] = 1.0
+            defaults["major_tick_mode"] = "step"
+            defaults["major_step"] = 5.0
+            defaults["minor_ticks"] = 5
+            defaults["show_tick_labels"] = True
+            defaults["tick_label_signed"] = True
+            defaults["show_range_labels"] = False  # etykiety ticków zamiast min/max
             defaults["show_value"] = True
             defaults["show_label"] = True
-            defaults["show_range_labels"] = True
             defaults["show_units"] = True
             defaults["decimals"] = 1
             defaults["opacity"] = 1.0
@@ -228,6 +245,28 @@ class IndicatorMixin:
             defaults["zero_tick_color"] = "#FFFFFF"
             defaults["marker_color"] = "#FFD42A"
             defaults["marker_border_color"] = "#FFFFFF"
+            defaults["marker_style"] = "line"
+
+        if key == "lean_indicator":
+            # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).
+            defaults["label"] = "PRZECHYŁ"
+            defaults["field"] = "gyro_z"
+            defaults["form"] = "lean"
+            defaults["source"] = "gyro"
+            defaults["axis"] = "z"
+            defaults["sensitivity"] = 0.2
+            defaults["max_angle"] = 15.0
+            defaults["graphic"] = "bike"
+            defaults["show_value"] = True
+            defaults["decimals"] = 0
+            defaults["show_reference"] = True
+            defaults["show_ticks"] = True
+            defaults["unit"] = "°"
+            defaults["track_color"] = "#FFFFFF"
+            defaults["marker_color"] = "#FFFFFF"
+            defaults["x"] = 50.0
+            defaults["y"] = 50.0
+            defaults["size"] = 14.0
 
         # Automatycznie ustaw min/max z danych telemetrycznych
         _min_v, _max_v = self._get_indicator_range(key)
@@ -262,6 +301,11 @@ class IndicatorMixin:
         if key == "slope_text":
             return -20.0, 20.0
 
+        if key == "lean_indicator":
+            # Skala wskaźnika przechyłu to clamp maksymalnego kąta (max_angle),
+            # nie automatyczny zakres z danych — nie nadpisuj.
+            return None, None
+
         samples: list[tuple] | None = None
 
         # FIT fields: fit_{field_name}_text
@@ -285,7 +329,7 @@ class IndicatorMixin:
         # GPMF fields
         elif key in ("speed_text",):
             samples = self.telemetry.speed_samples
-        elif key in ("dist_text",):
+        elif key in ("dist_text", "dist_visual"):
             samples = self.telemetry.track_samples
         elif key in ("alt_text",):
             samples = self.telemetry.alt_samples
@@ -461,12 +505,21 @@ class IndicatorMixin:
         if slope_source is not None:
             vals = [v for _, v in slope_samples if v is not None]
             if vals:
+                # ETAP 12: to jest NACHYLENIE TERENU (grade), nie przechył —
+                # nazwa nie może mylić z nowym wskaźnikiem „Przechył" (lean).
                 streams.append(DataStream(
-                    key="slope_text", display_name="Slope / Grade",
+                    key="slope_text", display_name="Nachylenie trasy (Grade)",
                     source=slope_source, category="gps", unit="%",
                     suggested_form="bar", sample_count=len(slope_samples),
                     value_range=(min(vals), max(vals)),
                 ))
+        if tm.gyroscope_samples:
+            streams.append(DataStream(
+                key="lean_indicator", display_name="Przechył (Lean)",
+                source="gpmf", category="sensor", unit="°",
+                suggested_form="lean", sample_count=len(tm.gyroscope_samples),
+                value_range=(-90.0, 90.0),
+            ))
         if tm.alt_samples:
             vals = [v for _, v in tm.alt_samples]
             streams.append(DataStream(

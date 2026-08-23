@@ -1007,6 +1007,15 @@ class TelemetryDataManager:
                 label = meta.get("display_name") or field_name.replace("_", " ").title()
                 unit = meta.get("unit") or ""
 
+                # Dystans FIT: próbki są w metrach, ale wartość i skala BAR-a są
+                # zawsze w km (compositor konwertuje /1000). Przelicz zakres i
+                # wymuś unit="km", inaczej 10129 m byłoby pokazywane jako 10129 km.
+                is_dist = "dist" in field_name.lower()
+                if is_dist:
+                    max_val = max_val / 1000.0
+                    min_val = min_val / 1000.0
+                    unit = "km"
+
                 indicators[key] = {
                     "enabled": False,
                     "label": label,

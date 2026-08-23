@@ -455,6 +455,30 @@ def prepare_overlay_frame_data(
                 cfg.get("label") or default_label,
             )
             continue
+        if key == "lean_indicator":
+            # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).  Źródło:
+            # GPMF gyro (wybór osi) lub FIT grade / nachylenie terenu.
+            lsrc = str(cfg.get("source", "gyro")).strip().lower()
+            if lsrc == "grade":
+                value = profiled_resolve(
+                    "slope", cfg.get("slope_source", "gpmf"), key,
+                )
+                extra_indicators[key] = (
+                    value,
+                    cfg.get("unit") or "%",
+                    cfg.get("label") or "Przechył",
+                )
+            else:
+                axis = str(cfg.get("axis", "z")).strip().lower()
+                if axis not in ("x", "y", "z"):
+                    axis = "z"
+                value = profiled_resolve(f"gyro_{axis}", "gpmf", key)
+                extra_indicators[key] = (
+                    value,
+                    cfg.get("unit") or "rad/s",
+                    cfg.get("label") or "Przechył",
+                )
+            continue
         val = None
         unit = cfg.get("unit", "")
         label = cfg.get("label", key)
