@@ -488,8 +488,10 @@ class ProjectMixin:
         snap = ctx.snapshot()
         if not snap["gps_track"] or snap["status"] in ("idle", "error"):
             return
+        # ASCII-safe arrow: the U+2192 glyph is not encodable on the Windows
+        # cp1250 console and would crash the provider switch before it starts.
         print(
-            f"[MapPreload] provider {snap.get('provider')} → {provider} "
+            f"[MapPreload] provider {snap.get('provider')} -> {provider} "
             f"generation={ctx.generation_id + 1}",
             flush=True,
         )

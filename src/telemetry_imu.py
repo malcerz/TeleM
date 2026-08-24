@@ -177,17 +177,29 @@ def compute_roll_timeline(
 def interpolate_roll(
     roll_samples: list[tuple[datetime, float]], target_dt: Optional[datetime]
 ) -> Optional[float]:
-    """Linear interpolation of a precomputed roll timeline (smooth + deterministic)."""
+    """Linear interpolation of a precomputed roll timeline (smooth + deterministic).
+
+    Normalises tz-awareness: GPMF-derived roll samples carry ``tzinfo=utc``
+    while the GUI timeline yields naive-UTC ``target_dt`` (multifile
+    convention).  Stripping the marker (both are the same UTC instant) keeps
+    the comparison robust, consistent with ``telemetry_extract`` helpers.
+    """
     if not roll_samples or target_dt is None:
         return None
-    if target_dt <= roll_samples[0][0]:
+    if target_dt.tzinfo is not None:
+        target_dt = target_dt.replace(tzinfo=None)
+    def _naive(dt):
+        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+    t0_first = _naive(roll_samples[0][0])
+    t_last = _naive(roll_samples[-1][0])
+    if target_dt <= t0_first:
         return float(roll_samples[0][1])
-    if target_dt >= roll_samples[-1][0]:
+    if target_dt >= t_last:
         return float(roll_samples[-1][1])
-    times = [s[0] for s in roll_samples]
+    times = [_naive(s[0]) for s in roll_samples]
     i = bisect.bisect_left(times, target_dt)
-    t0, v0 = roll_samples[i - 1]
-    t1, v1 = roll_samples[i]
+    t0, v0 = _naive(roll_samples[i - 1][0]), roll_samples[i - 1][1]
+    t1, v1 = _naive(roll_samples[i][0]), roll_samples[i][1]
     span = (t1 - t0).total_seconds()
     if span <= 0:
         return float(v0)

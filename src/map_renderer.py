@@ -168,6 +168,36 @@ _TILE_CACHE: dict[str, tuple] = {}
 _TRACK_CACHE: dict[str, tuple] = {}
 
 
+def viewport_tiles_for(
+    lat: float, lon: float, zoom: int, width: int, height: int, margin: int = 4
+) -> list[tuple[int, int, int]]:
+    """Tile plan (z, x, y) covering a ``width x height`` viewport centred at
+    ``(lat, lon)`` at *zoom*.
+
+    Mirrors the tile range computed by ``render_map_overlay`` so the async
+    (GUI preview) map path can measure detail-tile cache coverage and decide
+    whether to render the full detail map or fall back to the prepared
+    overview (Level 1).  Pure computation — never downloads.
+    """
+    target_w = max(1, width - 2 * margin)
+    target_h = max(1, height - 2 * margin)
+    tiles_across = target_w / TILE_SIZE
+    tiles_down = target_h / TILE_SIZE
+    cx_tile = int(lon_to_tile_x(lon, zoom))
+    cy_tile = int(lat_to_tile_y(lat, zoom))
+    half_tiles_x = int(math.ceil(tiles_across / 2))
+    half_tiles_y = int(math.ceil(tiles_down / 2))
+    tx1 = cx_tile - half_tiles_x
+    tx2 = cx_tile + half_tiles_x
+    ty1 = cy_tile - half_tiles_y
+    ty2 = cy_tile + half_tiles_y
+    return [
+        (zoom, tx, ty)
+        for ty in range(ty1, ty2 + 1)
+        for tx in range(tx1, tx2 + 1)
+    ]
+
+
 def _tile_cache_key(zoom: int, tx1: int, tx2: int, ty1: int, ty2: int, style: str) -> str:
     return f"{zoom}_{tx1}_{tx2}_{ty1}_{ty2}_{style}"
 
