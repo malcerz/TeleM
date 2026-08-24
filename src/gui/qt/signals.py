@@ -130,6 +130,13 @@ class AppSignals(QObject):
     # Renderowanie zatrzymane / anulowane (potwierdzone zakończenie workera po cancel)
     sig_render_stopped = Signal()
 
+    # ── Map preload (ETAP MAP PRELOAD) ───────────────────────────────────
+    # Overview map ready / progress.  Emitted from the MapPreload worker;
+    # the controller marshals preview refresh via these (queued) signals.
+    sig_map_ready = Signal()
+    # (loaded_tiles, required_tiles)
+    sig_map_progress = Signal(int, int)
+
 
 # Singleton dla całej aplikacji
 _signals: AppSignals | None = None

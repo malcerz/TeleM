@@ -85,6 +85,27 @@ def _get_clock_icon(icon_name: str, icon_size: int) -> Optional[Image.Image]:
     return ic
 
 
+# ── Global master scale (Rozmiar) ─────────────────────────────────────────
+# Legacy TeleM presets (v1..v10) store ``size`` as a fraction where 0.1 equals
+# the standard scale (the old renderer multiplied it by 10).  The Property
+# Editor now treats ``size`` as a direct master scale (1.0 = standard, 0.5 =
+# half, 2.0 = double).  Normalise the legacy fraction so saved projects keep
+# their exact look while new/edited configs use the intuitive semantics.
+_TIME_DISPLAY_LEGACY_SIZE_MAX = 0.25
+
+
+def _time_display_master_size(cfg: dict[str, Any]) -> float:
+    """Resolve the time-display master scale from ``cfg['size']``.
+
+    - ``size <= 0.25``  → legacy fraction (×10, so 0.1 → 1.0).
+    - ``size >  0.25``  → direct master scale (1.0 = standard).
+    """
+    raw = float(cfg.get("size", 0.1))
+    if raw <= _TIME_DISPLAY_LEGACY_SIZE_MAX:
+        return raw * 10.0
+    return raw
+
+
 def render_time_display(
     canvas_w: int,
     canvas_h: int,
@@ -149,11 +170,25 @@ def render_time_display(
 
     from src.indicators.helpers import _STATIC_CACHE
 
+    # Rozmiar jest teraz globalną skalą master całego bloku.  Klucz cache musi
+    # zawierać wszystkie parametry wpływające na wygląd (size, font_size, ikona,
+    # per-line font sizes/colory/etykiety), inaczej zmiana "Rozmiar" w GUI nie
+    # unieważniałaby cache i nic by się nie odświeżało.
+    master = _time_display_master_size(cfg)
+    _style_parts: list[Any] = []
+    for _p in ("date", "time", "elapsed", "avg_speed"):
+        _style_parts.append(cfg.get(f"{_p}_font_size"))
+        _style_parts.append(cfg.get(f"{_p}_color"))
+        _style_parts.append(cfg.get(f"{_p}_label"))
+        _style_parts.append(cfg.get(f"show_{_p}_label", True))
     cache_key = _static_cache_key(
         "time_display", canvas_w, canvas_h, font_path,
         date_text, time_text, elapsed_str, avg_speed_str,
         show_date, show_time, show_elapsed, show_avg_speed,
-        cfg.get("icon", "none")
+        master,
+        cfg.get("font_size", 0.025),
+        cfg.get("icon", "none"),
+        *_style_parts,
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)
@@ -171,10 +206,10 @@ def render_time_display(
     ]
 
     min_dim = min(canvas_w, canvas_h)
-    outline_raw = int(layout["global"].get("text_outline", 3))
+    _global = layout.get("global", {}) if isinstance(layout, dict) else {}
+    outline_raw = int(_global.get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
     global_fs = max(14, s(cfg.get("font_size", 0.025), min_dim))
-    size_mult = cfg.get("size", 0.1) * 10
 
     # ── First pass: measure every enabled line ────────────────────────
     rendered_lines: list[tuple[str, int, tuple[int, int, int, int], int, int]] = []
@@ -190,7 +225,7 @@ def render_time_display(
         if show_lbl and lbl:
             text = f"{lbl}: {text}"
 
-        fs = max(1, int(s(cfg.get(f"{prefix}_font_size", global_fs), min_dim) * size_mult))
+        fs = max(1, int(s(cfg.get(f"{prefix}_font_size", global_fs), min_dim) * master))
         font = load_font(font_path, fs)
         # Parse colour from config, fall back to default
         color_str = cfg.get(f"{prefix}_color")
@@ -214,8 +249,9 @@ def render_time_display(
     total_h += outline  # bottom padding
 
     # ── Create canvas ─────────────────────────────────────────────────
-    icon = _get_clock_icon(cfg.get("icon"), max(12, int(global_fs * 0.9)))
-    icon_gap = max(2, int(global_fs * 0.18)) if icon else 0
+    # Ikona skaluje się razem z globalnym Rozmiarem (master).
+    icon = _get_clock_icon(cfg.get("icon"), max(12, int(global_fs * master * 0.9)))
+    icon_gap = max(2, int(global_fs * master * 0.18)) if icon else 0
     icon_w = (icon.width + icon_gap) if icon else 0
 
     tmp_w = int(max(max_w + outline * 2 + icon_w, s(0.3, canvas_w)))

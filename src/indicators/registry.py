@@ -65,7 +65,7 @@ HARDCODED_KEYS: frozenset[str] = frozenset({
     "speed_visual", "speed_text", "dist_visual", "dist_text",
     "alt_visual", "alt_text", "iso_text", "exposure_text",
     "temp_text", "power_text", "atemp_text", "hr_text",
-    "cad_text", "battery_text", "compass", "slope_text", "track_map", "time_block",
+    "cad_text", "battery_text", "compass", "slope_text", "track_map",
     "time_display",
 })
 

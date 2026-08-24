@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
@@ -141,7 +142,11 @@ class IndicatorMixin:
         if key in ("dist_visual", "dist_text", "dist_text_gpx"):
             defaults["unit"] = "km"
 
-        # Specjalne domyślne wartości dla time_display
+        # Specjalne domyślne wartości dla time_display.
+        # ETAP 15: bazujemy na sprawdzonym wizualnie baseline z v10
+        # (font_size 1.8, per-line 1.2/1.9/1.5/1.5).  Globalny "size" ustawiamy
+        # poniżej (druga sekcja time_display), bo wcześniejsza linia
+        # ``form=="text" → size=font_size`` nadpisałaby go.
         if key == "time_display":
             defaults["show_date"] = True
             defaults["show_time"] = True
@@ -155,11 +160,11 @@ class IndicatorMixin:
             defaults["elapsed_label"] = "Czas"
             defaults["show_avg_speed_label"] = True
             defaults["avg_speed_label"] = "Średnia prędkość"
-            defaults["font_size"] = 2.0
-            defaults["date_font_size"] = 2.0
-            defaults["time_font_size"] = 2.5
-            defaults["elapsed_font_size"] = 2.5
-            defaults["avg_speed_font_size"] = 2.0
+            defaults["font_size"] = 1.8
+            defaults["date_font_size"] = 1.2
+            defaults["time_font_size"] = 1.9
+            defaults["elapsed_font_size"] = 1.5
+            defaults["avg_speed_font_size"] = 1.5
             defaults["x"] = 2.0
             defaults["y"] = 3.0
 
@@ -171,9 +176,14 @@ class IndicatorMixin:
         if defaults.get("form") == "text":
             defaults["size"] = defaults["font_size"]
 
-        # time_display – własna forma, po get_form_for_key (jak track_map)
+        # time_display – własna forma, po get_form_for_key (jak track_map).
+        # ETAP 15: Rozmiar to teraz globalna skala master (1.0 = standardowy
+        # wygląd, identyczny z legacy size=0.1 z presetów v1..v10), a domyślna
+        # ikona to zegar.
         if key == "time_display":
             defaults["form"] = "time_display"
+            defaults["size"] = 1.0
+            defaults["icon"] = "clock"
 
         if key == "track_map":
             # Mapa – ma własne ustawienia niezależnie od rejestru
@@ -249,13 +259,19 @@ class IndicatorMixin:
 
         if key == "lean_indicator":
             # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).
+            # ETAP 13: źródło IMU = fizyczny roll z complementary filter
+            # (precompute deterministyczny); sensitivity działa NA kącie.
             defaults["label"] = "PRZECHYŁ"
-            defaults["field"] = "gyro_z"
+            defaults["field"] = "lean_roll_x"
             defaults["form"] = "lean"
             defaults["source"] = "gyro"
-            defaults["axis"] = "z"
-            defaults["sensitivity"] = 0.2
-            defaults["max_angle"] = 15.0
+            defaults["axis"] = "x"
+            defaults["zero_offset"] = 0.0
+            defaults["invert_axis"] = False
+            defaults["pivot_x"] = 0.5
+            defaults["pivot_y"] = 1.0
+            defaults["sensitivity"] = 1.0
+            defaults["max_angle"] = 30.0
             defaults["graphic"] = "bike"
             defaults["show_value"] = True
             defaults["decimals"] = 0
@@ -417,15 +433,33 @@ class IndicatorMixin:
         self._render_preview()
 
     def _on_reset_layout(self) -> None:
-        """Resetuje układ — usuwa wszystkie wskaźniki poza time_block."""
-        # Zachowaj time_block jako bazowy wskaźnik daty/czasu, usuń resztę
-        time_block_cfg = self.layout.get("indicators", {}).get(
-            "time_block",
-            {"enabled": True, "label": "Czas", "x": 1.8, "y": 3.0,
-             "rotation": 0, "font_label": 1.25, "font_date": 2.0,
-             "font_time": 2.0},
-        )
-        self.layout["indicators"] = {"time_block": time_block_cfg}
+        """Resetuje układ — tylko nowoczesny time_display (bez legacy time_block).
+
+        Legacy ``time_block`` indicator został zastąpiony przez ``time_display``
+        i NIE jest już tworzony ani przywracany (ETAP 4A.1).
+        """
+        time_cfg = None
+        try:
+            from src.gui.layout_manager import normalize_layout
+            base = getattr(self, "base_dir", None)
+            if base is not None:
+                fresh = normalize_layout(Path(base) / "def_layout.json", 1280, 720)
+                time_cfg = fresh.get("indicators", {}).get("time_display")
+        except Exception:
+            time_cfg = None
+        if not time_cfg:
+            time_cfg = {
+                "enabled": True, "label": "Czas", "x": 2.0, "y": 3.0,
+                "rotation": 0, "form": "time_display", "size": 1.0, "icon": "clock",
+                "show_date": True, "show_time": True, "show_elapsed": True,
+                "show_avg_speed": True, "show_date_label": True, "date_label": "Data",
+                "show_time_label": True, "time_label": "Godzina",
+                "show_elapsed_label": True, "elapsed_label": "Czas",
+                "show_avg_speed_label": True, "avg_speed_label": "Średnia prędkość",
+                "font_size": 1.8, "date_font_size": 1.2, "time_font_size": 1.9,
+                "elapsed_font_size": 1.5, "avg_speed_font_size": 1.5,
+            }
+        self.layout["indicators"] = {"time_display": time_cfg}
         self.layout["custom_texts"] = []
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout

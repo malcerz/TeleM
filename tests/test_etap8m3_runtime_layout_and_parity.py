@@ -96,10 +96,10 @@ def test_canvas_isolation_between_below_and_above_map():
         **frame_kwargs
     )
     
-    # Check that time_block has non-zero alpha in composed_img
+    # Check that time_display has non-zero alpha in composed_img
     crop_before = composed_img.crop((21, 22, 21 + 76, 22 + 46))
     alpha_before = np.count_nonzero(np.asarray(crop_before)[:, :, 3])
-    assert alpha_before > 0, "time_block must have non-zero alpha before above_map render"
+    assert alpha_before > 0, "time_display must have non-zero alpha before above_map render"
     
     # Step 2: Render above layout with reuse_canvas=False (as in amd_native_exporter.py)
     above_bboxes = {}
@@ -117,18 +117,22 @@ def test_canvas_isolation_between_below_and_above_map():
     alpha_after = np.count_nonzero(np.asarray(crop_after)[:, :, 3])
     assert alpha_after == alpha_before, f"composed_img must not be modified by above_full: {alpha_after} vs {alpha_before}"
 
-def test_time_block_defensive_outline():
-    """Verify render_time_block handles missing global section defensively."""
-    from src.indicators.time_block import render_time_block
+def test_time_display_defensive_outline():
+    """Verify render_time_display handles missing global section defensively."""
+    from src.indicators.time_display import render_time_display
     font_path = resolve_font_path("Arial")
     layout_no_global = {
         "indicators": {
-            "time_block": {
-                "enabled": True, "label": "Czas", "x": 1.6, "y": 3.1,
-                "font_label": 1.25, "font_date": 2.0, "font_time": 2.0
+            "time_display": {
+                "enabled": True, "label": "Czas", "x": 2.0, "y": 3.0,
+                "form": "time_display", "show_date": True, "show_time": True,
+                "show_elapsed": False, "show_avg_speed": False,
             }
         }
     }
-    tb, x, y = render_time_block(1280, 720, layout_no_global, font_path, "2026-08-18", "06:46:25")
+    tb, x, y = render_time_display(
+        1280, 720, layout_no_global, font_path,
+        "2026-08-18", "06:46:25", 100.0, 25.0,
+    )
     assert tb is not None
-    assert tb.size == (76, 46) or (tb.width > 0 and tb.height > 0)
+    assert tb.width > 0 and tb.height > 0

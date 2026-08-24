@@ -8,7 +8,7 @@ rendering logic into single-responsibility modules:
 - ``chart_utils.py`` — ``generate_history_chart()``
 - ``rotated_paste.py`` — ``rotated_paste()``
 - ``custom_text.py`` — ``render_custom_text()``
-- ``time_block.py`` — ``render_time_block()``
+- ``time_display.py`` — ``render_time_display()``
 - ``text.py`` — ``_render_text_indicator()``
 - ``bar.py`` — ``_render_bar_indicator()``
 - ``gauge.py`` — ``_render_gauge_indicator()``
@@ -56,7 +56,6 @@ from .chart_utils import generate_history_chart
 # Single-indicator rendering
 from .custom_text import render_custom_text
 from .rotated_paste import rotated_paste
-from .time_block import render_time_block
 
 # Per-form renderers
 from .text import _render_text_indicator

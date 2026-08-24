@@ -21,7 +21,6 @@ from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
 from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color
 from src.indicators.rotated_paste import rotated_paste
-from src.indicators.time_block import render_time_block
 from src.indicators.time_display import render_time_display
 from src.indicators.profiling import get_overlay_profiler, indicator_scope
 
@@ -29,6 +28,11 @@ from src.indicators.profiling import get_overlay_profiler, indicator_scope
 import threading
 
 _THREAD_CANVAS = threading.local()
+
+# Legacy indicator keys that have been removed from the program (ETAP 4A.1).
+# Old saved projects may still contain them; they are skipped (not rendered)
+# so such projects load and render without crashing.
+_REMOVED_LEGACY_KEYS = frozenset({"time_block"})
 
 def _get_reusable_canvas(
     canvas_w: int, canvas_h: int, canvas_type: str = "below"
@@ -105,8 +109,15 @@ def compose_overlay(
     render_keys: Optional[set[str]] = None,
     destination_proven_empty: bool = False,
     map_heading: Optional[float] = None,
+    async_map: bool = False,
 ) -> Image.Image:
-    """Compose the complete HUD overlay image from all indicators."""
+    """Compose the complete HUD overlay image from all indicators.
+
+    ``async_map`` (GUI preview only) makes map indicators render an immediate
+    placeholder/overview and prepare detail tiles in the background instead of
+    downloading synchronously on the GUI thread.  Final render / GPU paths
+    leave it False (unchanged synchronous behaviour).
+    """
     profiler = get_overlay_profiler()
     widget_fonts: dict[str, str] = {}
 
@@ -163,55 +174,8 @@ def compose_overlay(
             for bx, by, bw, bh in _bboxes.values()
         ]
 
-    # Time block
-    if "time_block" in layout.get("indicators", {}) and (
-        render_keys is None or "time_block" in render_keys
-    ):
-        time_block_started = time.perf_counter()
-        with indicator_scope("time_block"):
-            with profiler.measure("indicator.time_block.render"):
-                tb, tbx, tby = render_time_block(
-                    canvas_w, canvas_h, layout, _font_for("time_block"), date_text, time_text
-                )
-        if tb:
-            tb_rotation = layout["indicators"]["time_block"].get("rotation", 0)
-            # Treść jest wklejana środkiem w (cx, cy); pozycja layout x/y to lewy-górny róg.
-            cx = tbx + tb.width // 2
-            cy = tby + tb.height // 2
-            with indicator_scope("time_block"):
-                with profiler.measure("indicator.time_block.paste_composite"):
-                    rotated_paste(
-                        img, tb, cx - origin_x, cy - origin_y, tb_rotation,
-                        prior_bboxes=_paste_prior_bboxes(), cache_key="time_block",
-                        tight_bboxes=_tight_bboxes, tight_key="time_block",
-                    )
-            if tb_rotation in (90, 270):
-                _bboxes["time_block"] = (
-                    int(cx - tb.height // 2),
-                    int(cy - tb.width // 2),
-                    tb.height,
-                    tb.width,
-                )
-            else:
-                _bboxes["time_block"] = (
-                    int(cx - tb.width // 2),
-                    int(cy - tb.height // 2),
-                    tb.width,
-                    tb.height,
-                )
-            profiler.set_indicator_metadata(
-                "time_block", classification="SEMI-DYNAMIC", cacheable="label/date; time changes once per second"
-            )
-            profiler.record_indicator_geometry(
-                "time_block", _bboxes["time_block"], tb.size,
-                (canvas_w, canvas_h), 1, "time_block",
-            )
-        profiler.record(
-            "indicator.time_block.total",
-            (time.perf_counter() - time_block_started) * 1000.0,
-        )
-
-    # Time display (multi-line info block)
+    # Time display (multi-line info block) — the modern replacement for the
+    # removed legacy ``time_block`` indicator.
     if "time_display" in layout.get("indicators", {}) and (
         render_keys is None or "time_display" in render_keys
     ):
@@ -308,7 +272,11 @@ def compose_overlay(
 
     # Render ALL indicators configured in layout (GPMF, FIT, GPX, Custom)
     for key, ind_cfg in layout.get("indicators", {}).items():
-        if key in ("time_block", "time_display"):
+        if key in _REMOVED_LEGACY_KEYS:
+            # Legacy indicator (e.g. time_block) — removed from the program;
+            # old projects keep loading but the indicator is never rendered.
+            continue
+        if key == "time_display":
             continue
         if render_keys is not None and key not in render_keys:
             continue
@@ -431,6 +399,7 @@ def compose_overlay(
                     target_dt=target_dt,
                     split_chart_keys=split_chart_keys,
                     map_heading=map_heading,
+                    async_map=async_map,
                 )
 
         if res:
@@ -671,8 +640,13 @@ def render_preview(
     avg_speed_kmh: float = 0.0,
     inplace: bool = False,
     map_heading: Optional[float] = None,
+    async_map: bool = False,
 ) -> Image.Image:
-    """Render a preview image: source frame with HUD overlay composited on top."""
+    """Render a preview image: source frame with HUD overlay composited on top.
+
+    ``async_map=True`` (GUI preview) renders map widgets via the prepared
+    MapContext overview/placeholder and never blocks the GUI thread.
+    """
     # Avoid a full-resolution copy if the image is already RGBA
     img = src_img if src_img.mode == "RGBA" else src_img.convert("RGBA")
     if not inplace:
@@ -714,6 +688,7 @@ def render_preview(
         avg_speed_kmh=avg_speed_kmh,
         fast_preview=True,
         map_heading=map_heading,
+        async_map=async_map,
     )
     # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)

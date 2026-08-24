@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import threading
+import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from PIL import Image
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
 from src.gui.layout_manager import normalize_layout
+from src.multifile import build_timeline_from_paths, format_timeline_diagnostics
 from src.telemetry_extract import ensure_records_list, load_json_with_fallback
 from src.video_helpers import (
     clear_capture_cache,
@@ -32,16 +34,18 @@ except ImportError:
     _GPMF_AVAILABLE = False
 
 try:
-    from telemetry_gpx import find_gpx_for_video, process_gpx
+    from telemetry_gpx import find_gpx_for_video, parse_gpx as _parse_gpx, process_gpx
     _GPX_AVAILABLE = True
 except ImportError:
     _GPX_AVAILABLE = False
+    _parse_gpx = None
 
 try:
-    from telemetry_fit import find_fit_for_video, process_fit
+    from telemetry_fit import find_fit_for_video, parse_fit as _parse_fit, process_fit
     _FIT_AVAILABLE = True
 except ImportError:
     _FIT_AVAILABLE = False
+    _parse_fit = None
 
 try:
     from PySide6.QtMultimedia import QMediaPlayer
@@ -222,25 +226,124 @@ class ProjectMixin:
                 self._selected_stream_key = ""
                 self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
 
-                # Wczytaj/wygeneruj metadane
+                # ── Map preload (ETAP MAP PRELOAD) — parallel with GPMF ──
+                # Parse FIT/GPX GPS EARLY (fast) so the coarse overview map can
+                # start downloading tiles while GPMF/JSON is still parsing.
+                # The parsed records are REUSED later (no double parsing).
+                self._map_preload_fit_records = None
+                self._map_preload_gpx_points = None
+                map_gps = None
+                map_source = None
+                if fit_path and _FIT_AVAILABLE and _parse_fit is not None:
+                    try:
+                        records = _parse_fit(fit_path)
+                        if records:
+                            self._map_preload_fit_records = records
+                            map_gps = [
+                                (r["timestamp"], r["lat"], r["lon"])
+                                for r in records
+                                if r.get("lat") is not None and r.get("lon") is not None
+                            ]
+                            map_source = "fit"
+                            print(
+                                f"[MapPreload] start source=FIT points={len(map_gps)}",
+                                flush=True,
+                            )
+                    except Exception as exc:
+                        print(f"[MapPreload] FIT preparse failed: {exc}", flush=True)
+                if map_gps is None and gpx_path and _GPX_AVAILABLE and _parse_gpx is not None:
+                    try:
+                        points = _parse_gpx(gpx_path)
+                        if points:
+                            self._map_preload_gpx_points = points
+                            map_gps = [
+                                (p[0], p[1], p[2])
+                                for p in points
+                                if p[1] is not None and p[2] is not None
+                            ]
+                            map_source = "gpx"
+                            print(
+                                f"[MapPreload] start source=GPX points={len(map_gps)}",
+                                flush=True,
+                            )
+                    except Exception as exc:
+                        print(f"[MapPreload] GPX preparse failed: {exc}", flush=True)
+                if map_gps is not None:
+                    self._start_map_preload(map_gps, map_source)
+
+                # Wczytaj/wygeneruj metadane (GPMF — heavy, runs in parallel
+                # with the map preload thread started above)
                 self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
                 self._load_or_generate_telemetry()
 
-                # Wczytaj GPX (jeśli podano)
+                # If no FIT/GPX GPS was available, start the map preload from
+                # the GPMF GPS track once it exists (fallback contract).
+                if map_gps is None and getattr(self.telemetry, "gps_track", None):
+                    print(
+                        f"[MapPreload] start source=GPMF points={len(self.telemetry.gps_track)}",
+                        flush=True,
+                    )
+                    self._start_map_preload(self.telemetry.gps_track, "gpmf")
+
+                # Wczytaj GPX (jeśli podano) — reuse the preparsed points
                 if gpx_path and _GPX_AVAILABLE:
                     self.gpx_path = Path(gpx_path)
                     self.telemetry.load_gpx(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=self.gpx_path,
+                        preparsed=self._map_preload_gpx_points,
                     )
 
-                # Wczytaj FIT (jeśli podano)
+                # Wczytaj FIT (jeśli podano) — reuse the preparsed records
                 if fit_path and _FIT_AVAILABLE:
                     self.fit_path = Path(fit_path)
                     self.telemetry.load_fit(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=self.fit_path,
+                        preparsed=self._map_preload_fit_records,
                     )
+
+                # ── Multi-file timeline (ETAP MULTIFILE) ──────────────────
+                # Build the per-clip model + global timeline now that
+                # telemetry.start_dt_utc (project absolute start) is final.
+                # The timeline maps global_time -> clip -> local -> absolute.
+                # For a single clip it reduces exactly to legacy behavior
+                # (global_to_absolute(t) == start_dt_utc + t).
+                try:
+                    timeline = build_timeline_from_paths(
+                        self.video_paths,
+                        ffmpeg_exe=ffmpeg_exe,
+                        ffprobe_exe=ffprobe_exe,
+                        base_dt=self.telemetry.start_dt_utc,
+                        default_fps=self.fps or 30.0,
+                    )
+                    self.video_timeline = timeline
+                    self.video_clips = list(timeline.clips)
+                    self.video_duration_s = timeline.project_duration_s
+                    # Full per-clip + gap diagnostics (ETAP 3).
+                    for line in format_timeline_diagnostics(timeline):
+                        print(line, flush=True)
+                    missing = [
+                        c.path.name for c in timeline.clips
+                        if c.absolute_start_dt is None
+                    ]
+                    if missing:
+                        print(
+                            f"[MultiFile] WARNING: no reliable absolute start for "
+                            f"{missing}; they are marked "
+                            f"timestamp_source=continuous_fallback and "
+                            f"FIT/GPMF synchronization may be incorrect.", flush=True,
+                        )
+                except Exception as exc:
+                    print(
+                        f"[MultiFile] Timeline build failed, keeping summed "
+                        f"duration: {exc}", flush=True,
+                    )
+                    self.video_timeline = None
+                    self.video_clips = []
+                # The decoder is loaded with clip 0 (first file) at this point.
+                self._active_preview_clip_index = 0
+                self._pending_seek_ms = None
 
                 # Odczytaj cut_regions z layoutu
                 self._cut_regions = self.layout.get("cut_regions", [])
@@ -311,6 +414,86 @@ class ProjectMixin:
                 self.signals.sig_error.emit(str(e))
 
         threading.Thread(target=bg_load, daemon=True).start()
+
+    # ── Map preload (ETAP MAP PRELOAD) ────────────────────────────────────
+    # The coarse/overview map is prepared on a background thread, parallel
+    # with GPMF parsing.  GPS for the bounds comes from FIT (preferred), GPX,
+    # or GPMF — never changing the user-selected source of other indicators.
+
+    def _ensure_map_context(self):
+        if getattr(self, "map_context", None) is None:
+            from src.gui.map_context import MapContext
+            self.map_context = MapContext()
+        return self.map_context
+
+    def _start_map_preload(self, gps_track, source: str, provider: str = "light_all") -> None:
+        """Start a MapPreload worker on a background thread (non-blocking)."""
+        from src.gui.map_preload import MapPreloadWorker
+        ctx = self._ensure_map_context()
+        if not gps_track or len(gps_track) < 2:
+            return
+        generation = ctx.generation_id + 1
+        ctx.gps_source = source
+        ctx.reset(provider=provider, generation=generation)
+
+        def _on_progress(loaded: int, total: int) -> None:
+            try:
+                self.signals.sig_map_progress.emit(loaded, total)
+                self.signals.sig_progress.emit(
+                    32, f"Mapa: {loaded}/{total} kafelków",
+                )
+            except Exception:
+                pass
+
+        def _on_done(ok: bool, message: str) -> None:
+            try:
+                # Marshal to the GUI thread (queued signal) so the preview
+                # can refresh with the ready overview map.
+                self.signals.sig_map_ready.emit()
+                t0 = getattr(self, "_map_preload_t0", {}).get(generation, _time.perf_counter())
+                if ok:
+                    print(
+                        f"[MapPreload] overview ready provider={provider} "
+                        f"elapsed={_time.perf_counter() - t0:.2f}s",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[MapPreload] error provider={provider}: {message}",
+                        flush=True,
+                    )
+            except Exception:
+                pass
+
+        # Track start time for diagnostics (keyed by generation).
+        if not hasattr(self, "_map_preload_t0"):
+            self._map_preload_t0 = {}
+        self._map_preload_t0[generation] = _time.perf_counter()
+
+        worker = MapPreloadWorker(
+            ctx, list(gps_track), provider=provider, generation=generation,
+            done_cb=_on_done, progress_cb=_on_progress,
+        )
+        self._map_preload_worker = worker
+        worker.start()
+
+    def _map_preload_provider_switch(self, provider: str) -> None:
+        """Re-run the preload for a different provider/style (Satellite).
+
+        Same MapContext geometry — only the tile provider/cache namespace
+        changes; the GPS/FIT data is NOT re-parsed (generation bumps so a
+        stale previous job can never overwrite the new result).
+        """
+        ctx = self._ensure_map_context()
+        snap = ctx.snapshot()
+        if not snap["gps_track"] or snap["status"] in ("idle", "error"):
+            return
+        print(
+            f"[MapPreload] provider {snap.get('provider')} → {provider} "
+            f"generation={ctx.generation_id + 1}",
+            flush=True,
+        )
+        self._start_map_preload(snap["gps_track"], snap.get("gps_source") or "gps", provider=provider)
 
     def _load_or_generate_telemetry(self) -> None:
         """Wczytaj istniejący JSON lub wygeneruj synchronicznie (blokada).

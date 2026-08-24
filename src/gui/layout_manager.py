@@ -177,9 +177,16 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
         "global": {"text_outline": 3},
         "custom_texts": [],
         "indicators": {
-            "time_block": {
-                "enabled": True, "label": "Czas", "x": 1.8, "y": 3.0, "rotation": 0,
-                "font_label": 1.25, "font_date": 2.0, "font_time": 2.0
+            "time_display": {
+                "enabled": True, "label": "Czas", "x": 2.0, "y": 3.0,
+                "rotation": 0, "form": "time_display", "size": 1.0, "icon": "clock",
+                "show_date": True, "show_time": True, "show_elapsed": True,
+                "show_avg_speed": True, "show_date_label": True, "date_label": "Data",
+                "show_time_label": True, "time_label": "Godzina",
+                "show_elapsed_label": True, "elapsed_label": "Czas",
+                "show_avg_speed_label": True, "avg_speed_label": "Średnia prędkość",
+                "font_size": 1.8, "date_font_size": 1.2, "time_font_size": 1.9,
+                "elapsed_font_size": 1.5, "avg_speed_font_size": 1.5
             },
             "speed_visual": {
                 "enabled": True, "label": "", "x": 50.0, "y": 78.0, "rotation": 0, "form": "gauge",
@@ -290,6 +297,18 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
             layout["indicators"] = user["indicators"]
         if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
+
+        # ── Legacy indicator migration (ETAP 4A.1) ──────────────────────
+        # ``time_block`` was replaced by ``time_display``.  Old saved projects
+        # may still contain it — it is skipped (never rendered/restored) so
+        # they load without crashing.
+        if "time_block" in layout.get("indicators", {}):
+            print(
+                "[Layout] WARNING: legacy 'time_block' indicator removed — "
+                "use 'time_display' instead.",
+                flush=True,
+            )
+            layout["indicators"].pop("time_block", None)
 
         if user.get("version", 0) < 5:
             old_inds = layout.get("indicators", {})

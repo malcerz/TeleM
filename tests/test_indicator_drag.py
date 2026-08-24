@@ -2,7 +2,7 @@
 
 Weryfikują:
 1. Kotwiczenie przeciągania — wskaźnik NIE przeskakuje o połowę rozmiaru:
-   - forma "text" (i time_block/time_display): pozycja (x,y) = lewy-górny róg
+   - forma "text" (i time_display): pozycja (x,y) = lewy-górny róg
    - pozostałe formy (gauge/bar/chart/map): pozycja (x,y) = środek
 2. Panel właściwości aktualizuje X/Y po przesunięciu (sig_properties_ready
    → update_field_values).

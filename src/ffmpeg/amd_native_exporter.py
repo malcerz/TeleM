@@ -251,7 +251,7 @@ def _ordered_map_layout_parts(layout: dict) -> tuple[dict, dict, list[str]]:
     for key, cfg in layout.get("indicators", {}).items():
         # compose_overlay renders these before the normal indicator loop even
         # if a legacy JSON preset places them later in the dict.
-        if key in {"time_block", "time_display"}:
+        if key == "time_display":
             below_indicators[key] = copy.deepcopy(cfg)
             continue
         if key == "track_map":
@@ -265,7 +265,7 @@ def _ordered_map_layout_parts(layout: dict) -> tuple[dict, dict, list[str]]:
     below["indicators"] = below_indicators
     above["indicators"] = {
         key: cfg for key, cfg in above_indicators.items()
-        if key not in {"time_block", "time_display"}
+        if key != "time_display"
     }
     # custom_texts are rendered after all indicators by Pillow.
     below["custom_texts"] = []

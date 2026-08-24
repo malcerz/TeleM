@@ -166,7 +166,7 @@ def get_layout_hud_bbox(layout: dict[str, Any], canvas_w: int, canvas_h: int) ->
             h_px = max(h_px, int(canvas_h * 0.20))
             x1, y1 = px - 40, py - 40
             x2, y2 = px + w_px + 60, py + h_px + 60
-        elif key in ("time_block", "time_display") or "time" in key:
+        elif key == "time_display" or "time" in key:
             x1, y1 = px - 40, py - 40
             x2, y2 = px + int(canvas_w * 0.25) + 40, py + int(canvas_h * 0.15) + 40
         else:
@@ -369,12 +369,15 @@ def _precise_text_box(
     text_candidates: dict[str, Any] | None, font_path: str,
 ) -> tuple[int, int, int, int] | None:
     """Measure candidate strings with the existing renderer, once per plan."""
-    if key == "time_block":
-        from src.indicators.time_block import render_time_block
+    if key == "time_display":
+        from src.indicators.time_display import render_time_display
         images = []
         for date_text in ("0000-00-00", "8888-88-88", "9999-99-99"):
             for time_text in ("00:00:00", "88:88:88", "99:99:99"):
-                image, _, _ = render_time_block(canvas_w, canvas_h, layout, font_path, date_text, time_text)
+                image, _, _ = render_time_display(
+                    canvas_w, canvas_h, layout, font_path,
+                    date_text, time_text, 0.0, 0.0,
+                )
                 if image is not None:
                     images.append(image)
         if not images:
@@ -507,7 +510,7 @@ def get_layout_hud_regions(
             y1 = py - ch // 2 - 20
             x2 = px + cw // 2 + 20
             y2 = py + ch // 2 + 20
-        elif key in ("time_block", "time_display") or "time" in key:
+        elif key == "time_display" or "time" in key:
             x1 = px - 20
             y1 = py - 20
             x2 = px + int(canvas_w * 0.20) + 20

@@ -522,16 +522,23 @@ def lean_indicator_fields() -> list[FieldSchema]:
         + _form_field([("lean", "Przechył")])
         + [
             FieldSchema("source", "choice", "Źródło danych", tab="Data",
-                        choices=[("gyro", "GPMF Gyro (żyroskop)"),
+                        choices=[("gyro", "IMU GoPro (żyroskop + akcelerometr)"),
                                  ("grade", "FIT Grade / nachylenie terenu")],
                         default="gyro"),
-            FieldSchema("axis", "choice", "Oś żyroskopu", tab="Data",
+            FieldSchema("axis", "choice", "Oś przechyłu", tab="Data",
                         choices=[("x", "X (roll)"), ("y", "Y (pitch)"), ("z", "Z (yaw)")],
-                        default="z"),
+                        default="x"),
+            FieldSchema("zero_offset", "float", "Offset zerowy [°]", tab="Data",
+                        min_val=-90.0, max_val=90.0, step=0.5, default=0.0),
+            FieldSchema("invert_axis", "bool", "Odwróć kierunek", tab="Data", default=False),
+            FieldSchema("pivot_x", "float", "Punkt obrotu X", tab="Data",
+                        min_val=0.0, max_val=1.0, step=0.01, default=0.5),
+            FieldSchema("pivot_y", "float", "Punkt obrotu Y", tab="Data",
+                        min_val=0.0, max_val=1.0, step=0.01, default=1.0),
             FieldSchema("sensitivity", "float", "Mnożnik wychyłu", tab="Data",
-                        min_val=0.0, max_val=20.0, step=0.05, default=0.2),
+                        min_val=0.0, max_val=20.0, step=0.05, default=1.0),
             FieldSchema("max_angle", "float", "Maks. kąt wychyłu [°]", tab="Data",
-                        min_val=1.0, max_val=90.0, step=1.0, default=15.0),
+                        min_val=1.0, max_val=90.0, step=1.0, default=30.0),
             FieldSchema("graphic", "choice", "Grafika", tab="Data",
                         choices=[("bike", "Rower (ikona)"), ("beam", "Belka"), ("none", "Brak")],
                         default="bike"),
@@ -644,10 +651,21 @@ def map_indicator_fields() -> list[FieldSchema]:
 
 
 def time_display_indicator_fields() -> list[FieldSchema]:
-    """TimeDisplay: Header + 4 per-line tabs."""
+    """TimeDisplay: Header + 4 per-line tabs.
+
+    ETAP 15: ``size`` to globalna skala master (1.0 = standardowy wygląd,
+    0.5 = połowa, 2.0 = podwójny).  Legacy presety (v1..v10) zapisują 0.1 —
+    renderer normalizuje je do tej samej skali (patrz
+    ``time_display._time_display_master_size``).  ``icon`` przywrócono do
+    schematu (domyślnie ``clock``) — renderer obsługiwał ikonę od zawsze,
+    ale GUI nie miało pola do jej ustawienia.
+    """
     header = [
         FieldSchema("size", "float", "Rozmiar", tab="",
-                    min_val=0.1, max_val=100.0, step=0.1, default=2.5),
+                    min_val=0.05, max_val=10.0, step=0.05, default=1.0),
+        FieldSchema("icon", "choice", "Ikona", tab="", choices=[
+            "none", "clock", "camera", "temperature", "battery", "solar",
+        ], default="clock"),
         FieldSchema("label", "text", "Etykieta", tab="", default=""),
         FieldSchema("x", "float", "Pozycja X", tab="",
                     min_val=0.0, max_val=100.0, step=0.1, default=50.0),
@@ -662,7 +680,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_date_label", "bool", "Pokaż etykietę", tab="Data", default=True),
         FieldSchema("date_label", "text", "Etykieta", tab="Data", default="Data"),
         FieldSchema("date_font_size", "float", "Rozmiar czcionki",
-                    tab="Data", min_val=0.8, max_val=8.0, step=0.1, default=2.0),
+                    tab="Data", min_val=0.8, max_val=8.0, step=0.1, default=1.2),
         FieldSchema("date_color", "color", "Kolor", tab="Data", default="#D2D2D2"),
     ]
     time_tab = [
@@ -670,7 +688,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_time_label", "bool", "Pokaż etykietę", tab="Czas", default=True),
         FieldSchema("time_label", "text", "Etykieta", tab="Czas", default="Godzina"),
         FieldSchema("time_font_size", "float", "Rozmiar czcionki",
-                    tab="Czas", min_val=0.8, max_val=8.0, step=0.1, default=2.5),
+                    tab="Czas", min_val=0.8, max_val=8.0, step=0.1, default=1.9),
         FieldSchema("time_color", "color", "Kolor", tab="Czas", default="#FFFFFF"),
     ]
     elapsed_tab = [
@@ -678,7 +696,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_elapsed_label", "bool", "Pokaż etykietę", tab="Od początku", default=True),
         FieldSchema("elapsed_label", "text", "Etykieta", tab="Od początku", default="Czas"),
         FieldSchema("elapsed_font_size", "float", "Rozmiar czcionki",
-                    tab="Od początku", min_val=0.8, max_val=8.0, step=0.1, default=2.5),
+                    tab="Od początku", min_val=0.8, max_val=8.0, step=0.1, default=1.5),
         FieldSchema("elapsed_color", "color", "Kolor", tab="Od początku", default="#FFFFFF"),
     ]
     avg_speed_tab = [
@@ -686,7 +704,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
         FieldSchema("show_avg_speed_label", "bool", "Pokaż etykietę", tab="Śr. prędkość", default=True),
         FieldSchema("avg_speed_label", "text", "Etykieta", tab="Śr. prędkość", default="Średnia prędkość"),
         FieldSchema("avg_speed_font_size", "float", "Rozmiar czcionki",
-                    tab="Śr. prędkość", min_val=0.8, max_val=8.0, step=0.1, default=2.0),
+                    tab="Śr. prędkość", min_val=0.8, max_val=8.0, step=0.1, default=1.5),
         FieldSchema("avg_speed_color", "color", "Kolor", tab="Śr. prędkość", default="#FFFFFF"),
     ]
     return header + date_tab + time_tab + elapsed_tab + avg_speed_tab

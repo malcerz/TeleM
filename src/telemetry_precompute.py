@@ -345,18 +345,37 @@ def build_telemetry_cache(
     fit_field_plan: Optional[dict[str, list[str]]] = None,
     total_frames: int = 1,
     target_fps: float = 29.97,
+    video_timeline: Optional[Any] = None,
+    update_rate_step: int = 1,
     subtimer_dict: Optional[dict] = None,
 ) -> TelemetryFrameCache:
     """Build the per-frame telemetry cache for an export (ETAP 8P-B Fast Builder).
 
     Vectorized precomputation over the export timeline while strictly preserving
     the exact same interpolation / resolver contracts.
+
+    ``video_timeline`` (ETAP 4B): when present, the target-datetime grid is
+    built via ``timeline.frame_to_absolute`` so each frame maps to the REAL
+    absolute timestamp of its clip.  This never precomputes the absolute gaps
+    between clips (only target frames of the final movie are generated).
     """
     t_start = time.perf_counter()
 
     # 1. Timeline & Target datetimes
     t0_timeline = time.perf_counter()
-    target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+        target_dts = [
+            video_timeline.frame_to_absolute(i, target_fps, update_rate_step)
+            for i in range(total_frames)
+        ]
+        # Degraded safety fallback for any frame without an absolute start
+        # (e.g. continuous_fallback clip) — keep legacy linear mapping.
+        target_dts = [
+            dt if dt is not None else base_dt + timedelta(seconds=i / target_fps)
+            for i, dt in enumerate(target_dts)
+        ]
+    else:
+        target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
     local_dts = [dt + timedelta(hours=tz_offset_hours) for dt in target_dts]
     date_texts = [dt.strftime("%Y-%m-%d") for dt in local_dts]
     time_texts = [dt.strftime("%H:%M:%S") for dt in local_dts]

@@ -362,9 +362,16 @@ def prepare_overlay_frame_data(
     )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
+    # Normalise tz-awareness: ``start_dt_utc`` may be tz-aware (GPMF anchor /
+    # ExifTool ``parse_exif_datetime`` attaches ``tzinfo=utc``) while the
+    # timeline's ``global_to_absolute`` returns naive-UTC (multifile
+    # convention).  Both represent the same UTC instant; stripping the marker
+    # makes the subtraction robust without changing the computed value.
     elapsed_seconds = 0.0
     if start_dt_utc is not None and target_dt is not None:
-        elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
+        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
+        _td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
+        elapsed_seconds = max(0.0, (_td - _sd).total_seconds())
 
     avg_speed_kmh = 0.0
     if elapsed_seconds > 0 and distance_m is not None and distance_m > 0:
@@ -457,7 +464,8 @@ def prepare_overlay_frame_data(
             continue
         if key == "lean_indicator":
             # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).  Źródło:
-            # GPMF gyro (wybór osi) lub FIT grade / nachylenie terenu.
+            # IMU GoPro (prekomputowany fizyczny roll przez complementary filter
+            # — ``lean_roll_{axis}``, deterministyczny dla seek) lub FIT grade.
             lsrc = str(cfg.get("source", "gyro")).strip().lower()
             if lsrc == "grade":
                 value = profiled_resolve(
@@ -472,10 +480,10 @@ def prepare_overlay_frame_data(
                 axis = str(cfg.get("axis", "z")).strip().lower()
                 if axis not in ("x", "y", "z"):
                     axis = "z"
-                value = profiled_resolve(f"gyro_{axis}", "gpmf", key)
+                value = profiled_resolve(f"lean_roll_{axis}", "gpmf", key)
                 extra_indicators[key] = (
                     value,
-                    cfg.get("unit") or "rad/s",
+                    cfg.get("unit") or "°",
                     cfg.get("label") or "Przechył",
                 )
             continue

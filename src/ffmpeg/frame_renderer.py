@@ -113,7 +113,15 @@ def render_overlay_frame(
         except Exception:
             t0 = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
-    current_dt_utc = t0 + timedelta(seconds=sample_t)
+    # ── ETAP 4B: shared timeline mapping global -> absolute ───────────────
+    # sample_t is the GLOBAL project time.  The shared contract
+    # (VideoTimeline.global_to_absolute) maps it through the active clip so
+    # multi-file telemetry uses real absolute timestamps; single-file / no
+    # timeline falls back to start_dt_utc + sample_t (identical for one clip).
+    from src.multifile import resolve_render_target_dt
+    current_dt_utc = resolve_render_target_dt(
+        WORKER_CACHE.get("video_timeline"), start_dt_utc, sample_t, t0
+    )
 
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
@@ -425,7 +433,7 @@ def render_overlay_job(job: tuple) -> int:
         "speed_visual", "speed_text", "dist_visual", "dist_text",
         "alt_visual", "alt_text", "iso_text", "exposure_text",
         "temp_text", "power_text", "atemp_text", "hr_text",
-        "cad_text", "battery_text", "compass", "track_map", "time_block",
+        "cad_text", "battery_text", "compass", "track_map",
     }
     extra_indicators: dict[str, tuple[float, str, str]] = {}
     # 1) FIT fields – resolve real values from telemetry

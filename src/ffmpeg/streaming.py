@@ -36,6 +36,7 @@ from src.ffmpeg.shared_memory import (
 from src.ffmpeg.frame_renderer import render_frame_bytes_job
 from src.benchmark import BenchmarkTracker
 from src.ffmpeg.pipeline_audit import PipelineAuditRecorder, env_enabled
+from src.multifile import timeline_absolute_end
 
 
 # ETAP 5B.6: the production layout with valid FIT battery/solar fields needs
@@ -378,6 +379,7 @@ def stream_overlay_to_ffmpeg(
     layout: dict[str, Any],
     field_samples: dict[str, Any],
     max_distance_m: float | None = None,
+    video_timeline: Optional[Any] = None,
     target_fps: float = 30.0,
     update_rate_step: int = 1,
     workers: Optional[int] = None,
@@ -430,12 +432,61 @@ def stream_overlay_to_ffmpeg(
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
     _report_phase(on_render_progress, "prep", 0.05, "Przygotowywanie HUD...", time.time() - phase_t0)
 
+    # ── ETAP 4B: multi-file render diagnostics (once per export) ──────────
+    is_multi_file = (
+        video_timeline is not None
+        and getattr(video_timeline, "clip_count", 0) > 1
+    )
+    if is_multi_file:
+        print("[MultiFile Render]", flush=True)
+        print(
+            f"clips={video_timeline.clip_count} "
+            f"global_duration={duration_s:.3f}", flush=True,
+        )
+        for i, clip in enumerate(video_timeline.clips, start=1):
+            abs_start = (
+                clip.absolute_start_dt.isoformat(timespec="milliseconds")
+                if clip.absolute_start_dt else "N/A"
+            )
+            abs_end = (
+                clip.absolute_end_dt.isoformat(timespec="milliseconds")
+                if clip.absolute_end_dt else "N/A"
+            )
+            print(
+                f"clip {i}/{video_timeline.clip_count} "
+                f"global={clip.global_start_s:.3f}-{clip.global_end_s:.3f} "
+                f"absolute={abs_start}-{abs_end} "
+                f"quality={getattr(clip, 'timestamp_quality', '?')}",
+                flush=True,
+            )
+        for i, clip in enumerate(video_timeline.clips, start=1):
+            if getattr(clip, "timestamp_quality", None) == "fallback":
+                print(
+                    f"[MultiFile Render] WARNING: clip {i} uses fallback absolute "
+                    f"timestamp. Telemetry synchronization may be incorrect.",
+                    flush=True,
+                )
+
     indicators = layout.get("indicators", {})
     custom_texts = layout.get("custom_texts", [])
     enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
     is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
 
-    if encoder in ("amd", "amd_native"):
+    # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────
+    # amd_native_exporter uses only input_files[0]; do NOT silently render a
+    # partial movie.  For multi-file the standard AMD (AMF) pipeline — which
+    # uses the shared FFmpeg concat + timeline — remains allowed; only the
+    # AMD_NATIVE_D3D11 exporter is skipped.
+    amd_native_multi_guard = False
+    if encoder in ("amd", "amd_native") and is_multi_file:
+        print(
+            "[MultiFile] AMD_NATIVE_D3D11 multi-file not yet supported "
+            "-> falling back to standard AMD/AMF pipeline",
+            flush=True,
+        )
+        amd_native_multi_guard = True
+
+    if encoder in ("amd", "amd_native") and not amd_native_multi_guard:
         from src.ffmpeg.detection import detect_amd_compose_backend
         if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
             from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
@@ -632,6 +683,7 @@ def stream_overlay_to_ffmpeg(
         hud_bbox=hud_bbox,
         hud_regions=hud_regions,
         hud_rotate_180=nv_rot180_cuda,
+        video_timeline=video_timeline,
     )
 
     if cancel_event is not None and cancel_event.is_set():
@@ -862,7 +914,14 @@ def stream_overlay_to_ffmpeg(
                     _range_cache["max_alt"] = None
 
                 duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
-                end_dt_utc = (start_dt_utc + timedelta(seconds=duration_s)) if (start_dt_utc and duration_s) else None
+                # ETAP 4B: with a multi-file timeline the telemetry/chart range
+                # is the REAL absolute end (max clip absolute_end), never
+                # start_dt_utc + project_duration (wrong with large gaps).
+                end_dt_utc = None
+                if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+                    end_dt_utc = timeline_absolute_end(video_timeline)
+                if end_dt_utc is None and start_dt_utc and duration_s:
+                    end_dt_utc = start_dt_utc + timedelta(seconds=duration_s)
                 source_ranges = {}
                 if fit_data:
                     all_fit_pts = [s for s in fit_data.values() if s]
@@ -941,6 +1000,8 @@ def stream_overlay_to_ffmpeg(
                     _range_cache=_range_cache,
                     total_frames=total_overlay_frames,
                     target_fps=target_fps or 29.97,
+                    video_timeline=video_timeline,
+                    update_rate_step=update_rate_step,
                 )
                 t_pre_build = time.perf_counter() - t_pre_start
                 stats = telemetry_cache.stats()
@@ -975,6 +1036,7 @@ def stream_overlay_to_ffmpeg(
                 cut_regions, effective_rotation, hud_bbox, hud_regions,
                 nv_rot180_cuda,
                 telemetry_cache,
+                video_timeline,
             )
 
             if encoder == "nv":

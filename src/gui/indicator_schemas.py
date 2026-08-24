@@ -67,11 +67,6 @@ def get_value_schema() -> list[tuple]:
 # ── Built-in indicator definitions ───────────────────────────────────────────
 
 BUILTIN_FIELDS: dict[str, list[tuple]] = {
-    "time_block": get_common_schema() + [
-        ("font_label", "float", 0.6, 3.0, 0.1),
-        ("font_date", "float", 0.8, 5.0, 0.1),
-        ("font_time", "float", 0.8, 5.0, 0.1),
-    ],
     "time_display": get_common_schema() + [
         ("font_size", "float", 0.8, 8.0, 0.1),
         ("show_date", "bool", None, None, None),

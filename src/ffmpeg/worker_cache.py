@@ -55,13 +55,20 @@ def init_worker(
     hud_regions: Optional[list[tuple[int, int, int, int, int, int]]] = None,
     hud_rotate_180: bool = False,
     telemetry_cache: Optional[Any] = None,
+    video_timeline: Optional[Any] = None,
 ) -> None:
-    """Initialise WORKER_CACHE with all telemetry data for worker processes."""
+    """Initialise WORKER_CACHE with all telemetry data for worker processes.
+
+    ``video_timeline`` (ETAP 4B) is the shared multi-file time axis; workers use
+    it to map ``global_time -> absolute target_dt``.  It is pickle-friendly
+    (plain dataclasses + datetimes) so it can be passed to process-pool workers.
+    """
     WORKER_CACHE["video_width"] = video_width
     WORKER_CACHE["video_height"] = video_height
     WORKER_CACHE["font_path"] = font_path
     WORKER_CACHE["layout"] = layout
     WORKER_CACHE["_telemetry_cache"] = telemetry_cache
+    WORKER_CACHE["video_timeline"] = video_timeline
     field_samples = field_samples or {}
     WORKER_CACHE["field_samples"] = field_samples
     WORKER_CACHE["max_distance_m"] = max_distance_m or 1000.0
@@ -97,7 +104,17 @@ def init_worker(
 
     # Precompute chart data for workers (identical for every frame)
     duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
-    end_dt_utc = (start_dt_utc + timedelta(seconds=duration_s)) if (start_dt_utc and duration_s) else None
+    # ETAP 4B: with a multi-file timeline use the REAL absolute end (max clip
+    # absolute_end) instead of start_dt_utc + project_duration (wrong with gaps).
+    end_dt_utc = None
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+        try:
+            from src.multifile import timeline_absolute_end
+            end_dt_utc = timeline_absolute_end(video_timeline)
+        except Exception:
+            end_dt_utc = None
+    if end_dt_utc is None and start_dt_utc and duration_s:
+        end_dt_utc = start_dt_utc + timedelta(seconds=duration_s)
     source_ranges = {}
     if fit_data:
         all_fit_pts = [s for s in fit_data.values() if s]
@@ -190,12 +207,43 @@ def _get_source_samples(source_type: str) -> tuple[list, list, list]:
     return (gpmf_spd, gpmf_trk, gpmf_alt)
 
 
+def _worker_lean_roll(axis: str) -> list:
+    """Precomputed roll timeline for the final-render worker (ETAP 13).
+
+    Mirrors ``TelemetryDataManager._get_lean_roll_samples`` so the AMD/NVIDIA/
+    Intel/CPU final path produces the same deterministic roll as preview.
+    """
+    axis = str(axis).strip().lower()
+    if axis not in ("x", "y", "z"):
+        axis = "z"
+    cache: dict = WORKER_CACHE.setdefault("_lean_roll", {})
+    if axis in cache:
+        return cache[axis]
+    from src.telemetry_imu import compute_roll_timeline, merge_axis_samples
+    fs = WORKER_CACHE.get("field_samples", {}) or {}
+    accel = merge_axis_samples(
+        fs.get("accel_x_samples", []), fs.get("accel_y_samples", []),
+        fs.get("accel_z_samples", []),
+    )
+    gyro = merge_axis_samples(
+        fs.get("gyro_x_samples", []), fs.get("gyro_y_samples", []),
+        fs.get("gyro_z_samples", []),
+    )
+    timeline = compute_roll_timeline(accel=accel, gyro=gyro, roll_axis=axis)
+    cache[axis] = timeline
+    return timeline
+
+
 def _resolve_cache_value(
     field_name: str, source: str, target_dt: datetime,
     indicator_key: str | None = None,
 ) -> Any:
     """Resolve one field from one explicit source using the shared contract."""
     del indicator_key
+    if str(field_name).startswith("lean_roll_"):
+        from src.telemetry_imu import interpolate_roll
+        axis = str(field_name).split("_")[-1]
+        return interpolate_roll(_worker_lean_roll(axis), target_dt)
     samples = _resolve_cache_samples(field_name, source)
     if not samples:
         return None

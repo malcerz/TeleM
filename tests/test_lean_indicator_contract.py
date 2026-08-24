@@ -156,8 +156,9 @@ def test_lean_axis_selects_gyro_field():
             speed_samples=[], track_samples=[], alt_samples=[],
             resolve_cache_value=fake_resolve,
         )
-        gyro_calls = [c for c in calls if c.startswith("gyro_")]
-        assert gyro_calls == [f"gyro_{axis}"]
+        # ETAP 13: IMU source resolves the PRECOMPUTED roll timeline field
+        lean_calls = [c for c in calls if c.startswith("lean_roll_")]
+        assert lean_calls == [f"lean_roll_{axis}"]
 
 
 def test_lean_grade_source_resolves_slope():
@@ -183,13 +184,14 @@ def test_lean_grade_source_resolves_slope():
 # ---------------------------------------------------------------------------
 
 def test_raw_to_display_angle_math():
-    # gyro rad/s: raw 1.0 rad/s, sensitivity 0.2 -> ~11.5 deg (rad->deg then *0.2)
+    # ETAP 13: for the IMU source ``raw`` is the PRECOMPUTED physical roll [deg]
+    # (not rad/s).  sensitivity applies ON the angle: 1.0° roll * 0.2 = 0.2°.
     cfg = _lean_cfg(source="gyro", sensitivity=0.2, max_angle=90.0)
     assert lean_angle(0.0, cfg) == 0.0
-    assert lean_angle(1.0, cfg) == pytest.approx(1.0 * (180.0 / math.pi) * 0.2)
-    # grade %: 1:1 scaling (1% -> 1 deg)
+    assert lean_angle(1.0, cfg) == pytest.approx(0.2)
+    # grade %: converted via atan(grade/100), NOT 1:1 (5% -> ~2.86°)
     cfg_g = _lean_cfg(source="grade", sensitivity=1.0, max_angle=90.0)
-    assert lean_angle(5.0, cfg_g) == pytest.approx(5.0)
+    assert lean_angle(5.0, cfg_g) == pytest.approx(math.degrees(math.atan(0.05)))
     # None -> 0 (no deflection)
     assert lean_angle(None, cfg) == 0.0
 
@@ -278,7 +280,7 @@ def test_fit_grade_vs_gyro_not_mixed():
     schema = FORM_SCHEMA_MAP["lean"]()
     src_field = next(f for f in schema if f.name == "source")
     labels = [c[1] if isinstance(c, (tuple, list)) else c for c in src_field.choices]
-    assert any("Gyro" in str(l) for l in labels)
+    assert any("IMU" in str(l) or "GoPro" in str(l) or "Gyro" in str(l) for l in labels)
     assert any("Grade" in str(l) or "nachylenie" in str(l).lower() for l in labels)
 
 

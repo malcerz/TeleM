@@ -802,14 +802,23 @@ class RenderTab(QWidget):
                 base = Image.new("RGBA", (tw, th), (0, 0, 0, 255))
 
             start_dt = telemetry.start_dt_utc
-            if isinstance(start_dt, datetime):
-                target_dt = start_dt + timedelta(seconds=ts)
-                if target_dt.tzinfo is None:
-                    target_dt = target_dt.replace(tzinfo=timezone.utc)
-            elif isinstance(start_dt, (int, float)):
-                target_dt = datetime.fromtimestamp(float(start_dt) + ts, tz=timezone.utc)
-            else:
-                target_dt = datetime.now(timezone.utc)
+            # ETAP 4A: prefer the project timeline for GLOBAL -> ABSOLUTE mapping
+            # (multi-file); fall back to the legacy single-start formula.
+            timeline = getattr(ctrl, "video_timeline", None)
+            target_dt = None
+            if timeline is not None and timeline.clip_count:
+                target_dt = timeline.global_to_absolute(
+                    ts, base_dt=start_dt
+                )
+            if target_dt is None:
+                if isinstance(start_dt, datetime):
+                    target_dt = start_dt + timedelta(seconds=ts)
+                    if target_dt.tzinfo is None:
+                        target_dt = target_dt.replace(tzinfo=timezone.utc)
+                elif isinstance(start_dt, (int, float)):
+                    target_dt = datetime.fromtimestamp(float(start_dt) + ts, tz=timezone.utc)
+                else:
+                    target_dt = datetime.now(timezone.utc)
 
             video_dur = float(getattr(ctrl, "video_duration_s", 0.0) or 0.0)
             overlay_data = prepare_overlay_frame_data(

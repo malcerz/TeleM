@@ -78,11 +78,30 @@ def lat_to_tile_y(lat: float, zoom: int) -> float:
 # ── Tile download with local cache ──────────────────────────────────────────
 
 
-def _cache_path(z: int, x: int, y: int) -> Path:
-    return CACHE_DIR / str(z) / str(x) / f"{y}.png"
+def _cache_path(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE) -> Path:
+    """Disk cache path for a tile (style is part of the path).
+
+    Without the style component, switching e.g. ``light_all`` → ``satellite``
+    would serve the previously cached style from disk and the satellite
+    switch would appear to do nothing (ETAP MAP PRELOAD — Satellite fix).
+    """
+    return CACHE_DIR / str(style) / str(z) / str(x) / f"{y}.png"
 
 
 _last_request_time: float = 0.0
+
+
+def _shared_sqlite_cache_tile(z: int, x: int, y: int, style: str):
+    """Read a tile from the shared moving_map SQLite cache, if present.
+
+    Lets static_map benefit from overview tiles prepared by MapPreload (which
+    writes to the shared SQLite cache) without re-downloading them.
+    """
+    try:
+        from src.moving_map import get_shared_tile_cache
+        return get_shared_tile_cache().get(z, x, y, style)
+    except Exception:
+        return None
 
 
 def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, download: bool = True) -> Optional[Image.Image]:
@@ -94,12 +113,17 @@ def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, downlo
     if Image is None:
         return None
 
-    cp = _cache_path(z, x, y)
+    cp = _cache_path(z, x, y, style)
     if cp.exists():
         try:
             return Image.open(cp).convert("RGBA")
         except Exception:
             pass  # corrupted — re-download
+
+    # Overview tiles prepared by MapPreload live in the shared SQLite cache.
+    shared = _shared_sqlite_cache_tile(z, x, y, style)
+    if shared is not None:
+        return shared
 
     if not download:
         return None  # tylko cache, bez sieci

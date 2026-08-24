@@ -173,6 +173,7 @@ class RenderMixin:
             output_file=output_path,
             duration_s=self.video_duration_s,
             start_dt_utc=self.telemetry.start_dt_utc,
+            video_timeline=getattr(self, "video_timeline", None),
             tz_offset_hours=2,
             speed_samples=speed,
             track_samples=track,

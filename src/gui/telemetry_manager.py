@@ -420,6 +420,10 @@ class TelemetryDataManager:
         # Altitude cache (for preview)
         self._alt_cache: dict[str, Any] = {}
 
+        # Precomputed IMU roll timelines (axis -> [(dt, roll_deg)]) — ETAP 13.
+        # Built once per material so seek/preview/final share the same result.
+        self._lean_roll_cache: dict[str, list] = {}
+
         # Smoothing window
         self.smoothing_window: int = 5
 
@@ -597,11 +601,15 @@ class TelemetryDataManager:
         video_path: Path | str,
         start_dt: Optional[datetime] = None,
         manual_path: Optional[Path] = None,
+        preparsed=None,
     ) -> bool:
         """Load and process GPX data. Returns True if data was loaded.
 
         Extracts GPS track (lat/lon) for map rendering alongside the
         per-field sample streams.  GPS track is stored in ``self.gpx_gps_track``.
+
+        ``preparsed`` — optional already-parsed GPX points (e.g. parsed once by
+        the MapPreload path); when provided ``parse_gpx`` is not called again.
         """
         if not _GPX_AVAILABLE:
             return False
@@ -615,8 +623,9 @@ class TelemetryDataManager:
         if gpx_path is None or not Path(gpx_path).is_file():
             return False
 
-        # Parse raw GPX points (contains lat/lon for GPS track)
-        points = parse_gpx(gpx_path)
+        # Parse raw GPX points (contains lat/lon for GPS track).  Reuse the
+        # MapPreload parse when available (no double parsing).
+        points = preparsed if preparsed is not None else parse_gpx(gpx_path)
         if not points:
             return False
 
@@ -687,11 +696,16 @@ class TelemetryDataManager:
         video_path: Path | str,
         start_dt: Optional[datetime] = None,
         manual_path: Optional[Path] = None,
+        preparsed=None,
     ) -> bool:
         """Load and process FIT data. Returns True if data was loaded.
 
         Extracts GPS track (lat/lon) for map rendering alongside the
         per-field sample dict.  GPS track is stored in ``self.fit_gps_track``.
+
+        ``preparsed`` — optional already-parsed FIT records (e.g. parsed once
+        by the MapPreload path).  When provided, ``parse_fit`` is NOT called
+        again (ETAP MAP PRELOAD — avoid double parsing).
         """
         if not _FIT_AVAILABLE:
             return False
@@ -713,8 +727,9 @@ class TelemetryDataManager:
         if fit_path is None or not Path(fit_path).is_file():
             return False
 
-        # Parse raw FIT records (contains lat/lon for GPS track)
-        records = parse_fit(fit_path)
+        # Parse raw FIT records (contains lat/lon for GPS track).  If the map
+        # preload already parsed the file, reuse those records (no re-parse).
+        records = preparsed if preparsed is not None else parse_fit(fit_path)
         if not records:
             return False
 
@@ -824,6 +839,7 @@ class TelemetryDataManager:
         self.meta_path = None
         self.video_duration_s = 0.0
         self._alt_cache.clear()
+        self._lean_roll_cache.clear()
 
     # ------------------------------------------------------------------
     # Smoothing helper
@@ -871,6 +887,28 @@ class TelemetryDataManager:
             resolve_samples_from_sources("alt", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
         )
 
+    def _get_lean_roll_samples(self, axis: str) -> list:
+        """Precomputed roll timeline for the requested axis (ETAP 13).
+
+        Computed ONCE per material from the full accel/gyro sample arrays with a
+        complementary filter; cached so seek/preview/final interpolate the same
+        deterministic roll.  Falls back honestly when accel or gyro is missing.
+        """
+        axis = str(axis).strip().lower()
+        if axis not in ("x", "y", "z"):
+            axis = "z"
+        cached = self._lean_roll_cache.get(axis)
+        if cached is not None:
+            return cached
+        from src.telemetry_imu import compute_roll_timeline
+        timeline = compute_roll_timeline(
+            accel=self.accelerometer_samples or [],
+            gyro=self.gyroscope_samples or [],
+            roll_axis=axis,
+        )
+        self._lean_roll_cache[axis] = timeline
+        return timeline
+
     def resolve_value(
         self, field_name: str, target_dt: datetime, prefer: str = "fit",
         source: Optional[str] = None, indicator_key: Optional[str] = None,
@@ -882,6 +920,16 @@ class TelemetryDataManager:
         priority chain.
         """
         del indicator_key
+        if str(field_name).startswith("lean_roll_"):
+            from src.telemetry_imu import interpolate_roll, lean_diagnostic
+            axis = str(field_name).split("_")[-1]
+            # ETAP 21: diagnostic log (no-op unless TELEM_LEAN_DEBUG=1)
+            lean_diagnostic(
+                self.accelerometer_samples or [],
+                self.gyroscope_samples or [],
+                target_dt, axis,
+            )
+            return interpolate_roll(self._get_lean_roll_samples(axis), target_dt)
         samples = self.resolve_samples(field_name, source or prefer)
         if not samples:
             return None

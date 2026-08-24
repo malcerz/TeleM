@@ -1,20 +1,26 @@
 """TeleM ``Przechył`` / Lean indicator — animated rotating graphic.
 
 This is a SEPARATE indicator type from BAR/Ruler.  It is NOT a linear bar: it
-rotates a graphic (bike icon or a beam) around its centre according to an
-orientation signal (GPMF gyro axis, or optionally FIT grade / terrain incline),
-with a sensitivity multiplier and a max-angle clamp.
+rotates a graphic (bike icon or a beam) around its centre according to a roll
+angle, with mount calibration (offset / invert), a visual sensitivity
+multiplier and a max-angle clamp.
 
-Motion model (ETAP 12):
-    raw_value
-      -> normalization (radians->degrees for gyro; 1:1 for grade)
-      -> sensitivity multiplier
-      -> clamp [-max_angle, +max_angle]
-      -> final displayed angle (degrees)
+Physics (ETAP 13 — no more "rad/s treated as degrees"):
+    GPMF ACCL (m/s^2) + GPMF GYRO (rad/s)
+        -> complementary filter (src.telemetry_imu) precomputes a DETERMINISTIC
+           roll timeline  timestamp -> physical roll [deg]
+        -> lean_visual_angle(roll, cfg):
+           roll - zero_offset
+           * (invert ? -1 : 1)
+           * sensitivity            (1° real roll = 1° visual by default)
+           clamp [-max_angle, +max_angle]
+        -> graphic rotation + optional numeric readout [deg]
 
-All text (title, tick labels, value readout) is always drawn horizontally —
-the widget raster itself is never rotated; only the graphic is rotated around
-its centre (pivot = centre of the graphic).
+FIT grade source is converted with ``degrees(atan(grade/100))`` (terrain
+incline angle) and is clearly distinct from bike lean.
+
+All text (title, value readout) is always drawn horizontally — the widget
+raster itself is never rotated; only the graphic is rotated around its centre.
 """
 
 from __future__ import annotations
@@ -52,26 +58,41 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(v)))
 
 
-def lean_angle(raw, cfg: dict[str, Any]) -> float:
-    """Raw orientation signal -> final display angle in degrees.
+def lean_visual_angle(roll_deg, cfg: dict[str, Any]) -> float:
+    """Physical roll [deg] -> visual angle [deg].
 
-    ``raw`` is in rad/s for GPMF gyro (degrees_per_unit = 180/pi) or in percent
-    for FIT grade (degrees_per_unit = 1.0).  ``sensitivity`` scales the signal
-    and the result is clamped to ``[-max_angle, +max_angle]``.
+    Pipeline (ETAP 13): roll - zero_offset -> invert -> sensitivity -> clamp.
+    Default sensitivity 1.0 means 1° of real roll = 1° of graphic rotation.
+    """
+    if roll_deg is None:
+        return 0.0
+    offset = float(cfg.get("zero_offset", 0.0))
+    invert = bool(cfg.get("invert_axis", False))
+    sensitivity = float(cfg.get("sensitivity", 1.0))
+    max_angle = abs(float(cfg.get("max_angle", 30.0)))
+    angle = (float(roll_deg) - offset) * (-1.0 if invert else 1.0) * sensitivity
+    return _clamp(angle, -max_angle, max_angle)
+
+
+def lean_angle(raw, cfg: dict[str, Any]) -> float:
+    """Interpret the incoming raw value and return the final visual angle [deg].
+
+    - source == "grade": ``raw`` is a grade percent -> physical angle via
+      ``degrees(atan(grade/100))``.
+    - source == "gyro"/"imu": ``raw`` is the PRECOMPUTED physical roll [deg]
+      from the complementary filter (never raw rad/s).
+
+    Then the common visual pipeline: offset -> invert -> sensitivity -> clamp.
     """
     if raw is None:
         return 0.0
     source = str(cfg.get("source", "gyro")).strip().lower()
     if source == "grade":
-        degrees_per_unit = 1.0
+        from src.telemetry_imu import grade_to_angle_deg
+        roll_deg = grade_to_angle_deg(raw)
     else:
-        degrees_per_unit = 180.0 / math.pi
-    if cfg.get("degrees_per_unit") is not None:
-        degrees_per_unit = float(cfg["degrees_per_unit"])
-    sensitivity = float(cfg.get("sensitivity", 0.2))
-    max_angle = abs(float(cfg.get("max_angle", 15.0)))
-    angle = float(raw) * degrees_per_unit * sensitivity
-    return _clamp(angle, -max_angle, max_angle)
+        roll_deg = float(raw)
+    return lean_visual_angle(roll_deg, cfg)
 
 
 def _load_lean_graphic(cfg: dict[str, Any], size_px: int) -> Optional[Image.Image]:
@@ -121,6 +142,39 @@ def _load_lean_graphic(cfg: dict[str, Any], size_px: int) -> Optional[Image.Imag
     return img
 
 
+def _graphic_pivot(cfg: dict[str, Any], gw: int, gh: int) -> tuple[float, float]:
+    """Pivot point in graphic pixels from normalized config values (0..1).
+
+    ``pivot_x`` / ``pivot_y`` default to 0.5 / 1.0 (bottom-centre — the natural
+    "planted at the ground" point for a bike graphic).  Old configs without the
+    fields get these defaults (backward compatible).
+    """
+    pivot_x = _clamp(float(cfg.get("pivot_x", 0.5)), 0.0, 1.0)
+    pivot_y = _clamp(float(cfg.get("pivot_y", 1.0)), 0.0, 1.0)
+    return pivot_x * gw, pivot_y * gh
+
+
+def _rotate_paste_params(
+    gw: int, gh: int, pivot_px: float, pivot_py: float,
+    raster_w: int, center_y: float,
+) -> tuple[int, float, float, float, float]:
+    """Pad-rotate around the pivot.
+
+    Returns ``(pad, paste_x, paste_y, screen_pivot_x, screen_pivot_y)``.
+
+    The graphic is composited onto a square pad with its pivot at the pad
+    CENTRE, the pad is rotated in place (so the pivot point never moves), and
+    the pad is pasted so the pivot lands where it sat when the graphic was
+    centred in the widget.  This keeps the pivot at the same screen position
+    for every angle — the bike looks "planted" at its pivot instead of
+    rotating around the image centre.
+    """
+    pad = 2 * max(gw, gh) + 4
+    screen_pivot_x = raster_w / 2.0 + (pivot_px - gw / 2.0)
+    screen_pivot_y = center_y + (pivot_py - gh / 2.0)
+    return pad, screen_pivot_x - pad / 2.0, screen_pivot_y - pad / 2.0, screen_pivot_x, screen_pivot_y
+
+
 def _render_lean_indicator(
     canvas_w: int,
     canvas_h: int,
@@ -153,7 +207,7 @@ def _render_lean_indicator(
     show_ticks = bool(cfg.get("show_ticks", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
     decimals = max(0, int(cfg.get("decimals", 0)))
-    max_angle = abs(float(cfg.get("max_angle", 15.0)))
+    max_angle = abs(float(cfg.get("max_angle", 30.0)))
     angle = lean_angle(value, cfg)
     missing = value is None
 
@@ -221,8 +275,19 @@ def _render_lean_indicator(
 
     graphic = _load_lean_graphic(cfg, g)
     if graphic is not None:
-        rotated = graphic.rotate(angle, resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC, expand=True)
-        img.alpha_composite(rotated, (int(round(raster_w / 2.0 - rotated.width / 2.0)), int(round(center_y - rotated.height / 2.0))))
+        gw, gh = graphic.size
+        pivot_px, pivot_py = _graphic_pivot(cfg, gw, gh)
+        pad, paste_x, paste_y, _sx, _sy = _rotate_paste_params(gw, gh, pivot_px, pivot_py, raster_w, center_y)
+        pad_img = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
+        pad_img.alpha_composite(
+            graphic,
+            (int(round(pad / 2.0 - pivot_px)), int(round(pad / 2.0 - pivot_py))),
+        )
+        rotated = pad_img.rotate(
+            angle,
+            resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
+        )
+        img.alpha_composite(rotated, (int(round(paste_x)), int(round(paste_y))))
 
     if value_text:
         _draw_text_bounded_cached(

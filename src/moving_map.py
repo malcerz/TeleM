@@ -160,6 +160,166 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
     return data
 
 
+# ── Shared tile cache + map geometry helpers (MapPreload) ──────────────
+
+_shared_cache: Optional["TileCache"] = None
+
+
+def get_shared_tile_cache() -> "TileCache":
+    """Return the process-wide shared TileCache (SQLite, style-aware).
+
+    The MapPreload worker and every MovingMapRenderer write to the same
+    SQLite file + shared in-memory LRU, so overview tiles prepared during
+    project load are immediately visible to the map indicator.
+    """
+    global _shared_cache
+    if _shared_cache is None:
+        _shared_cache = TileCache()
+    return _shared_cache
+
+
+def download_tile_shared(z: int, x: int, y: int, style: str) -> Image.Image | None:
+    """Download (or load from the shared cache) one tile.
+
+    Runs synchronously — call on a worker thread.  Returns the decoded
+    RGBA image (also cached), or None on network/cache failure.
+    """
+    cache = get_shared_tile_cache()
+    cached = cache.get(z, x, y, style)
+    if cached is not None:
+        return cached
+    data = _download_tile_raw(z, x, y, style)
+    if data is None:
+        return None
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception:
+        return None
+    cache.put(z, x, y, style, data)
+    return img
+
+
+def bounds_from_track(gps_track) -> tuple[float, float, float, float] | None:
+    """Return (min_lat, min_lon, max_lat, max_lon) for a GPS track."""
+    lats = []
+    lons = []
+    for _, lat, lon in gps_track:
+        if lat is None or lon is None:
+            continue
+        lats.append(float(lat))
+        lons.append(float(lon))
+    if not lats:
+        return None
+    return min(lats), min(lons), max(lats), max(lons)
+
+
+def bounds_center(bounds) -> tuple[float, float] | None:
+    if not bounds:
+        return None
+    return (bounds[0] + bounds[2]) / 2.0, (bounds[1] + bounds[3]) / 2.0
+
+
+def _tile_count_for_bounds(bounds, zoom: int) -> int:
+    """Approximate number of tiles covering *bounds* at *zoom*."""
+    min_lat, min_lon, max_lat, max_lon = bounds
+    n = 2 ** zoom
+    tx0 = int((min_lon + 180.0) / 360.0 * n)
+    tx1 = int((max_lon + 180.0) / 360.0 * n)
+    lat_rad0 = math.radians(max_lat)
+    lat_rad1 = math.radians(min_lat)
+    ty0 = int((1.0 - math.log(math.tan(lat_rad0) + 1.0 / math.cos(lat_rad0)) / math.pi) / 2.0 * n)
+    ty1 = int((1.0 - math.log(math.tan(lat_rad1) + 1.0 / math.cos(lat_rad1)) / math.pi) / 2.0 * n)
+    return max(1, abs(tx1 - tx0) + 1) * max(1, abs(ty1 - ty0) + 1)
+
+
+def overview_zoom_for(
+    bounds,
+    max_tiles: int = 16,
+    min_zoom: int = 3,
+    max_zoom: int = 14,
+) -> int:
+    """Pick the highest zoom whose tile count for *bounds* fits in *max_tiles*.
+
+    Used for the fast coarse/overview map prepared during project load.
+    """
+    if not bounds:
+        return min_zoom
+    best = min_zoom
+    for z in range(min_zoom, max_zoom + 1):
+        if _tile_count_for_bounds(bounds, z) <= max_tiles:
+            best = z
+        else:
+            break
+    return best
+
+
+def overview_tile_plan(bounds, zoom: int) -> list[tuple[int, int, int]]:
+    """Return the list of (z, x, y) tiles covering *bounds* at *zoom*."""
+    if not bounds:
+        return []
+    min_lat, min_lon, max_lat, max_lon = bounds
+    n = 2 ** zoom
+    tx0 = int((min_lon + 180.0) / 360.0 * n)
+    tx1 = int((max_lon + 180.0) / 360.0 * n)
+    lat_rad0 = math.radians(max_lat)
+    lat_rad1 = math.radians(min_lat)
+    ty0 = int((1.0 - math.log(math.tan(lat_rad0) + 1.0 / math.cos(lat_rad0)) / math.pi) / 2.0 * n)
+    ty1 = int((1.0 - math.log(math.tan(lat_rad1) + 1.0 / math.cos(lat_rad1)) / math.pi) / 2.0 * n)
+    return [
+        (zoom, tx, ty)
+        for ty in range(min(ty0, ty1), max(ty0, ty1) + 1)
+        for tx in range(min(tx0, tx1), max(tx0, tx1) + 1)
+    ]
+
+
+def build_overview_image(
+    bounds,
+    zoom: int,
+    plan: list[tuple[int, int, int]],
+    gps_track,
+    style: str = DEFAULT_STYLE,
+) -> Image.Image | None:
+    """Stitch the overview tiles + draw the GPS route into one coarse image.
+
+    Returns ``None`` when no tile could be loaded.  Used by MapPreload as the
+    immediate "Level 1" map image (scaled to the widget by the renderer).
+    """
+    if Image is None or not plan:
+        return None
+    cache = get_shared_tile_cache()
+    tiles = {}
+    for z, x, y in plan:
+        t = cache.get(z, x, y, style)
+        if t is not None:
+            tiles[(x, y)] = t
+    if not tiles:
+        return None
+    xs = [x for (x, _) in tiles]
+    ys = [y for (_, y) in tiles]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    cols = max_x - min_x + 1
+    rows = max_y - min_y + 1
+    img = Image.new("RGBA", (cols * TILE_SIZE, rows * TILE_SIZE), (30, 30, 30, 255))
+    for (x, y), t in tiles.items():
+        img.paste(t, ((x - min_x) * TILE_SIZE, (y - min_y) * TILE_SIZE), t)
+    # Draw the GPS route projected to the stitched overview pixels.
+    if gps_track and len(gps_track) >= 2:
+        d = ImageDraw.Draw(img)
+        n = 2 ** zoom
+        pts = []
+        for _, lat, lon in gps_track:
+            if lat is None or lon is None:
+                continue
+            tx_f = (lon + 180.0) / 360.0 * n - min_x
+            lat_rad = math.radians(lat)
+            ty_f = (1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n - min_y
+            pts.append((tx_f * TILE_SIZE, ty_f * TILE_SIZE))
+        if len(pts) >= 2:
+            d.line(pts, fill=(255, 60, 30, 220), width=max(2, TILE_SIZE // 64), joint="curve")
+    return img
+
+
 # ── MovingMapRenderer ───────────────────────────────────────────────────
 
 def draw_position_marker(image, center, radius, *, style="dot", heading=None):
@@ -534,3 +694,50 @@ class MovingMapRenderer:
         for i, (dt, _, _) in enumerate(self._gps):
             if dt.timestamp() >= target: return i
         return len(self._gps) - 1
+
+    # ── Viewport detail support (async GUI path) ───────────────────────
+
+    def _viewport_range(self, ts: float, w: int, h: int):
+        cpx, cpy = self._interp_pos(ts)
+        cx = int(cpx // TILE_SIZE)
+        cy = int(cpy // TILE_SIZE)
+        half_w = int(math.ceil(int(w) / 2 / TILE_SIZE)) + 1
+        half_h = int(math.ceil(int(h) / 2 / TILE_SIZE)) + 1
+        return cx, cy, half_w, half_h
+
+    def viewport_tile_coverage(self, ts: float, w: int, h: int) -> float:
+        """Fraction of the current-viewport tiles present in the cache (0..1)."""
+        cx, cy, half_w, half_h = self._viewport_range(ts, w, h)
+        total = 0
+        cached = 0
+        for ty in range(cy - half_h, cy + half_h + 1):
+            for tx in range(cx - half_w, cx + half_w + 1):
+                total += 1
+                if self._cache.get(self._zoom, tx, ty, self._style) is not None:
+                    cached += 1
+        return (cached / total) if total else 0.0
+
+    def viewport_precache(
+        self,
+        ts: float,
+        w: int,
+        h: int,
+        max_tiles: int = 25,
+    ) -> int:
+        """Download the current-viewport detail tiles (worker thread, bounded)."""
+        cx, cy, half_w, half_h = self._viewport_range(ts, w, h)
+        needed = [
+            (self._zoom, tx, ty)
+            for ty in range(cy - half_h, cy + half_h + 1)
+            for tx in range(cx - half_w, cx + half_w + 1)
+        ]
+        if len(needed) > max_tiles:
+            needed = needed[:max_tiles]
+        downloaded = 0
+        for z, x, y in needed:
+            if not self._cache.get(z, x, y, self._style):
+                d = _download_tile_raw(z, x, y, self._style)
+                if d:
+                    self._cache.put(z, x, y, self._style, d)
+                    downloaded += 1
+        return downloaded

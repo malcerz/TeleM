@@ -112,6 +112,17 @@ class PresetMixin:
         if field_name in ("source", "form", "bar_style", "min_val", "max_val", "chart_time_scope", "chart_window_s", "ticks", "thickness", "major_ticks", "minor_ticks", "segments"):
             self._clear_caches()
 
+        # Map provider/style switch (ETAP MAP PRELOAD): reuse the same
+        # MapContext geometry, restart the overview preload for the new
+        # provider (Standard → Satellite).  FIT/GPS is NOT re-parsed; the
+        # generation bump guarantees a stale job cannot overwrite the new one.
+        if field_name == "map_style" and stream_key == "track_map":
+            try:
+                if hasattr(self, "_map_preload_provider_switch"):
+                    self._map_preload_provider_switch(str(value))
+            except Exception:
+                pass
+
         # Odśwież podgląd
         self._render_preview()
 
