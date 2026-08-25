@@ -85,7 +85,15 @@ class PlaybackMixin:
         if not _MPV_AVAILABLE or not self.mpv_widget:
             return
 
+        # Preserve the ACTIVE clip (multi-file) rather than always clip 0.
         current_file = self.video_path
+        active = getattr(self, "_active_preview_clip_index", None)
+        timeline = getattr(self, "video_timeline", None)
+        if (
+            timeline is not None and timeline.clip_count and active is not None
+            and 0 <= active < timeline.clip_count
+        ):
+            current_file = timeline.clips[active].path
         current_pos = 0.0
 
         if self.mpv_player and current_file:
@@ -110,8 +118,8 @@ class PlaybackMixin:
                 self.mpv_player.time_pos = current_pos
             except Exception:
                 pass
-            # Emit a preview refresh to repaint HUD overlay
-            self._render_preview(current_pos)
+            # Emit a preview refresh to repaint HUD overlay (GLOBAL position).
+            self._render_preview(self._local_to_global(current_pos))
 
     def _on_preview_accel_changed(self, vendor: str) -> None:
         """Handle the preview accelerator combo change from the UI."""
@@ -124,7 +132,10 @@ class PlaybackMixin:
         """Przełącza tryb podglądu (HUD Overlay vs Czyste Wideo GPU)."""
         self._preview_mode = mode
         if self.is_using_mpv():
-            self._render_preview(self.mpv_player.time_pos or 0.0)
+            # mpv reports LOCAL position -> map back to GLOBAL for the HUD.
+            self._render_preview(
+                self._local_to_global(self.mpv_player.time_pos or 0.0)
+            )
             return
 
         if not _QT_MULTIMEDIA_AVAILABLE or not hasattr(self, "media_player"):
@@ -133,7 +144,9 @@ class PlaybackMixin:
             self.media_player.setVideoOutput(self.video_widget)
         else:
             self.media_player.setVideoOutput(self.video_sink)
-            self._render_preview(self.media_player.position() / 1000.0)
+            self._render_preview(
+                self._local_to_global(self.media_player.position() / 1000.0)
+            )
 
     def _setup_media_player(self) -> None:
         """Inicjalizuje QMediaPlayer + QVideoSink do podglądu wideo."""
@@ -149,23 +162,34 @@ class PlaybackMixin:
         self.video_sink = QVideoSink()
         self.video_sink.videoFrameChanged.connect(self._on_video_frame)
         self.media_player.setVideoOutput(self.video_sink)
+        # ETAP 4A: multi-file source switch — apply the pending seek once the
+        # new clip is loaded, and handle end-of-media (next clip / stop).
+        self.media_player.mediaStatusChanged.connect(self._on_media_status_changed)
 
     def _on_seek_changed(self, seconds: float) -> None:
-        """Użytkownik przesunął oś czasu."""
+        """Użytkownik przesunął oś czasu (GLOBAL position of the project)."""
         seconds = self._skip_cut_regions(seconds)
         self._playback_pos = seconds
         self.signals.sig_seek_position.emit(seconds)
 
+        # global -> clip -> local (decoder) / absolute (telemetry)
+        res = self._resolve_preview_time(seconds)
+
         if self.is_using_mpv():
+            # Switch source only when the active clip changed; seek MPV to the
+            # LOCAL time of that clip (never the global project time).
+            self._preview_ensure_active_clip(
+                res["clip_index"], res["clip"], res["local_time"], seconds
+            )
             try:
-                self.mpv_player.time_pos = seconds
+                self.mpv_player.time_pos = res["local_time"]
                 self._render_preview(seconds)
             except Exception as e:
                 print(f"[MPV Seek Error] {e}")
             return
 
-        # _render_preview handles QMediaPlayer seeking internally
-        # (hardware-accelerated frame decode via _on_video_frame callback)
+        # QMediaPlayer seeking (source switch + local seek) is handled inside
+        # _render_preview (hardware-accelerated via _on_video_frame callback).
         self._render_preview(seconds)
 
     def _on_playback_start(self) -> None:
@@ -215,26 +239,58 @@ class PlaybackMixin:
         if not self._playing or not self.is_using_mpv():
             return
         try:
-            pos = self.mpv_player.time_pos or 0.0
+            # MPV reports the LOCAL position of the active clip.
+            local_pos = self.mpv_player.time_pos or 0.0
+            global_pos = self._local_to_global(local_pos)
 
-            # Przeskakuj regiony wycięte
-            nxt = self._skip_cut_regions(pos)
-            if abs(nxt - pos) > 0.1:
-                self.mpv_player.time_pos = nxt
-                pos = nxt
+            # Przeskakuj regiony wycięte (on the GLOBAL axis)
+            nxt = self._skip_cut_regions(global_pos)
+            if abs(nxt - global_pos) > 0.1:
+                res = self._resolve_preview_time(nxt)
+                self._preview_ensure_active_clip(
+                    res["clip_index"], res["clip"], res["local_time"], nxt
+                )
+                self.mpv_player.time_pos = res["local_time"]
+                global_pos = nxt
 
-            # Wykrycie końca wideo
-            if pos >= self.video_duration_s:
-                self._on_playback_stop()
-                self.signals.sig_seek_position.emit(0.0)
-                try:
-                    self.mpv_player.time_pos = 0.0
-                except Exception:
-                    pass
+            # Rozwiąż aktywny clip + local time.
+            res = self._resolve_preview_time(global_pos)
+            clip = res["clip"]
+            clip_idx = res["clip_index"]
+            local = res["local_time"]
+
+            if clip is not None and local >= clip.duration_s - 1e-3:
+                # Koniec bieżącego clipu.
+                timeline = getattr(self, "video_timeline", None)
+                if (
+                    timeline is not None and clip_idx is not None
+                    and clip_idx + 1 < timeline.clip_count
+                ):
+                    # Automatyczne przejście do następnego clipu (local=0),
+                    # globalna oś pozostaje ciągła.
+                    next_idx = clip_idx + 1
+                    next_clip = timeline.clips[next_idx]
+                    self._preview_ensure_active_clip(
+                        next_idx, next_clip, 0.0, next_clip.global_start_s
+                    )
+                    try:
+                        self.mpv_player.time_pos = 0.0
+                    except Exception:
+                        pass
+                    self.signals.sig_seek_position.emit(next_clip.global_start_s)
+                    self._render_preview(next_clip.global_start_s)
+                else:
+                    # Koniec ostatniego clipu = koniec całego projektu.
+                    self._on_playback_stop()
+                    self.signals.sig_seek_position.emit(0.0)
+                    try:
+                        self.mpv_player.time_pos = 0.0
+                    except Exception:
+                        pass
                 return
 
-            self.signals.sig_seek_position.emit(pos)
-            self._render_preview(pos)
+            self.signals.sig_seek_position.emit(global_pos)
+            self._render_preview(global_pos)
         except Exception as e:
             print(f"[MPV Tick Error] {e}")
 
@@ -270,7 +326,8 @@ class PlaybackMixin:
         """Przesuń pozycję i zaplanuj następny krok.
 
         QMediaPlayer gra w tle — klatki płyną z _on_video_frame.
-        Ten timer służy tylko do wyznaczania końca playbacku.
+        Ten timer służy tylko do wyznaczania końca playbacku (GLOBAL axis).
+        Przełączenie na następny clip realizuje _on_media_end.
         """
         if not self._playing:
             return
@@ -281,7 +338,20 @@ class PlaybackMixin:
         nxt = self._skip_cut_regions(raw_next)
         if nxt != raw_next and _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
             self._seek_pending = True
-            self.media_player.setPosition(max(0, int(nxt * 1000)))
+            timeline = getattr(self, "video_timeline", None)
+            if timeline is not None:
+                # Multi-file: seek within/into the active clip uses LOCAL time.
+                res = self._resolve_preview_time(nxt)
+                switched = self._preview_ensure_active_clip(
+                    res["clip_index"], res["clip"], res["local_time"], nxt
+                )
+                if not switched:
+                    self.media_player.setPosition(
+                        max(0, int(res["local_time"] * 1000))
+                    )
+            else:
+                # Legacy single-file: global == local.
+                self.media_player.setPosition(max(0, int(nxt * 1000)))
         if nxt >= self.video_duration_s:
             self._on_playback_stop()
             self._playback_pos = 0.0
@@ -291,3 +361,35 @@ class PlaybackMixin:
         self.signals.sig_seek_position.emit(nxt)
         interval = max(16, int(step * 1000))
         self._playback_timer = QTimer.singleShot(interval, self._playback_step)
+
+    def _on_media_end(self) -> None:
+        """QMediaPlayer reached the end of the active clip's media.
+
+        If there is a next clip, switch to it (local=0) and continue; only the
+        end of the LAST clip stops the whole project.  The GLOBAL axis remains
+        continuous (no gap inserted).
+        """
+        if not self._playing:
+            return
+        idx = getattr(self, "_active_preview_clip_index", 0)
+        timeline = getattr(self, "video_timeline", None)
+        if (
+            timeline is not None and idx is not None
+            and idx + 1 < timeline.clip_count
+        ):
+            next_idx = idx + 1
+            next_clip = timeline.clips[next_idx]
+            self._preview_ensure_active_clip(
+                next_idx, next_clip, 0.0, next_clip.global_start_s
+            )
+            self._pending_seek_ms = 0
+            self._seek_pending = True
+            if not self._playing:
+                self.media_player.play()
+            self._playback_pos = next_clip.global_start_s
+            self.signals.sig_seek_position.emit(next_clip.global_start_s)
+            self._render_preview(next_clip.global_start_s)
+        else:
+            self._on_playback_stop()
+            self._playback_pos = 0.0
+            self.signals.sig_seek_position.emit(0.0)

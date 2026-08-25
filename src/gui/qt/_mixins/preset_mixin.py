@@ -26,7 +26,8 @@ class PresetMixin:
             return
         try:
             # Dołącz cut_regions do zapisywanego layoutu
-            layout_copy = dict(self.layout)
+            from src.indicators.compositor import normalize_layout_for_save
+            layout_copy = normalize_layout_for_save(self.layout)
             if self._cut_regions:
                 layout_copy["cut_regions"] = self._cut_regions
             else:
@@ -57,6 +58,7 @@ class PresetMixin:
             self.indicator_bboxes.clear()
             # Odśwież strumienie danych – DataStreamBar musi się zaktualizować
             if self.telemetry:
+                self.fit_ext_fields = []
                 if self.telemetry.fit_data:
                     fit_keys = self.telemetry.register_fit_fields(
                         self.layout, BUILTIN_FIELDS,
@@ -90,18 +92,37 @@ class PresetMixin:
         # czcionka — muszą być niezależne (patrz _sync_size_font_fields).
         _sync_size_font_fields(cfg, field_name)
 
-        # Jeśli zmieniono formę — wyślij nowy schemat
-        if field_name == "form" and value != old_form:
-            schema = get_schema_for_form(value)
+        # Jeśli zmieniono formę lub styl bara — wyślij nowy schemat
+        if (
+            (field_name == "form" and value != old_form)
+            or (field_name == "bar_style" and cfg.get("form") in ("bar", "segment_bar"))
+            or (field_name == "chart_time_scope" and cfg.get("form") == "chart")
+        ):
+            schema = get_schema_for_form(
+                cfg.get("form", "text"),
+                bar_style=cfg.get("bar_style", "ruler"),
+                chart_time_scope=cfg.get("chart_time_scope", "activity"),
+            )
             self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
 
         # Synchronizuj layout_mgr
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout
 
-        # Inwalidacja cache przygotowania — gdy zmieni się form/source zmieniają dane statyczne
-        if field_name in ("source", "form", "min_val", "max_val"):
+        # Inwalidacja cache przygotowania — gdy zmieni się form/bar_style/source/scope/ticks/thickness zmieniają dane statyczne
+        if field_name in ("source", "form", "bar_style", "min_val", "max_val", "chart_time_scope", "chart_window_s", "ticks", "thickness", "major_ticks", "minor_ticks", "segments"):
             self._clear_caches()
+
+        # Map provider/style switch (ETAP MAP PRELOAD): reuse the same
+        # MapContext geometry, restart the overview preload for the new
+        # provider (Standard → Satellite).  FIT/GPS is NOT re-parsed; the
+        # generation bump guarantees a stale job cannot overwrite the new one.
+        if field_name == "map_style" and stream_key == "track_map":
+            try:
+                if hasattr(self, "_map_preload_provider_switch"):
+                    self._map_preload_provider_switch(str(value))
+            except Exception:
+                pass
 
         # Odśwież podgląd
         self._render_preview()

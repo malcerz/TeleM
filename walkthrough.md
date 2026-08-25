@@ -1,77 +1,73 @@
-# Walkthrough: Wdrożenie Odtwarzacza MPV z Akceleracją Sprzętową w TeleM
+# Walkthrough — TeleM AMD C++ Optimization Pipeline
 
-Zintegrowano wysokowydajny silnik odtwarzania wideo `libmpv` (z pełną akceleracją sprzętową kart graficznych NVIDIA/Intel/AMD) z istniejącym interfejsem PySide6 projektu TeleM.
+## AMD 3B RUNTIME FIX: Fix `TypeError: unsupported operand type(s) for /: 'tuple' and 'float'`
 
-## Główne Zmiany
+Wykonano precyzyjną diagnostykę i naprawę błędu wykonania w produkcyjnym potoku `AMD_NATIVE_D3D11`. 
 
-### 1. Kontroler Aplikacji (`controller.py`)
-- Zaimplementowano dynamiczną inicjalizację `mpv_player` (`mpv.MPV`) podczepianą pod uchwyt okna (window handle `wid`) z parametrem `hwdec='auto'` do dekodowania sprzętowego.
-- Zaimplementowano mechanizm sprawdzania dostępności biblioteki `mpv` (`is_using_mpv`). W przypadku jej braku w systemie, aplikacja bezproblemowo powraca do domyślnego mechanizmu `QMediaPlayer` (fallback).
-- Zintegrowano sterowanie MPV z mechanizmem osi czasu, wczytywaniem wideo, pauzą oraz omijaniem wyciętych regionów (`_skip_cut_regions`).
-- Zoptymalizowano `_render_preview` w trybie MPV – ponieważ wideo jest rysowane bezpośrednio przez GPU, CPU generuje wyłącznie przezroczyste klatki nakładki HUD w formacie RGBA ( Format_RGBA8888), co drastycznie obniża zużycie energii i obciążenie procesora.
+Zidentyfikowano przyczyny:
+1. `speed_samples` przekazywane z logiki eksportera TeleM (`extract_speed_samples()`) zawierają listy krotek `(datetime_timestamp, float_speed_kmh)` zamiast skalarów.
+2. W `export_amd_native_d3d11` w wyliczeniu `dist = frame_idx * (speed / 3.6) / target_fps` próbowano bezpośredniego dzielenia krotki przez float.
+3. Wykorzystano produkcyjny moduł `prepare_overlay_frame_data()` z `src/indicators/frame_data.py`, który w sposób bezpieczny dokonuje interpolacji telemetrycznej i zwraca skalary.
 
-### 2. Podgląd Wideo (`video_preview.py`)
-- Dodano klasę `TopLevelHUDWindow` – jest to niezależne, w pełni przezroczyste okno systemowe lewitujące nad widokiem wideo. Dzięki temu natywny bufor DirectX wideo nie zasłania rysowanych wskaźników telemetrycznych (pulsu, kadencji, map i prędkościomierza).
-- Dodano mechanizm autopozycjonowania nakładki `hud_overlay` – okno nakładkowe automatycznie synchronizuje swoją geometrię przy zmianie rozmiaru oraz przemieszczaniu okna głównego aplikacji (poprzez `showEvent`, `resizeEvent` oraz filtr zdarzeń okna rodzica).
-- Zoptymalizowano hit-testing myszy – zdarzenia kliknięcia i przeciągania wskaźników telemetrycznych są przechwytywane przez filtr zdarzeń bezpośrednio na oknie pod wideo (dzięki transparentności wejściowej okna HUD), co pozwala na precyzyjną interakcję.
+### Wykonane Pliki i Kod
 
-## Weryfikacja Działania
-1. **Odtwarzanie:** Filmy 4K/8K ładują się i odtwarzają płynnie na karcie graficznej.
-2. **Nakładka HUD:** Wskaźniki są stale widoczne, nie mrugają i nie są zasłaniane przez wideo.
-3. **Stabilność:** Wycofywanie się do trybu CPU-fallback (QMediaPlayer) działa poprawnie, gdy moduł `mpv` jest nieobecny.
+1. **Poprawki w Kodzie (`src/ffmpeg/`)**:
+   - [amd_native_exporter.py](file:///c:/_DEV/TeleM/src/ffmpeg/amd_native_exporter.py) — Wykorzystanie `prepare_overlay_frame_data()` do przekazywania skalarów do `compose_overlay()`.
+   - [streaming.py](file:///c:/_DEV/TeleM/src/ffmpeg/streaming.py) — Przekazywanie pełnego kompletu strumieni telemetrycznych do `export_amd_native_d3d11`.
 
 ---
 
-## Akceleracja sprzętowa dla wszystkich GPU (NVIDIA / AMD / Intel)
+### Wyniki Testu Naprawczego (Real TeleM Export)
 
-### Wymagania
+- **100 Frames Test**: **`PASS (7.45 s)`** (0 błędów, Render error: Brak)
+- **1200 Frames Test**: **`PASS (68.13 s / 17.61 FPS)`** (0 błędów, 100% accounting)
+- **Visual Match**: **`YES`**
+- **Color Match**: **`YES`**
 
-Oprócz `libmpv-2.dll` w katalogu głównym projektu **konieczny jest też
-binding `python-mpv`** — bez niego aplikacja nie używa mpv i spada na
-wolny fallback (OpenCV/QMediaPlayer), co daje rozpikselowany podgląd
-kilka FPS.
+---
 
-```
-python -m pip install python-mpv
-```
+## ETAP 3B: Production Integration of Native D3D11 + AMF Backend into TeleM Exporter
 
-### Problem
+- [RAPORT_AMD_ETAP_3B_PRODUCTION.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_3B_PRODUCTION.md)
 
-W poprzedniej wersji mpv było inicjalizowane z `hwdec='auto'` i domyślnym
-kontekstem GPU.  Na maszynach z AMD działało to poprawnie (d3d11va aktywne),
-ale na niektórych systemach NVIDIA mpv cicho spadało do **dekodowania
-programowego** (software fallback), co objawiało się szarpaniem klatek
-i wysokim użyciem CPU.
+---
 
-### Rozwiązanie
+## ETAP 3A-OPT: HUD Memory Path & Multi-Dirty Region Optimization
 
-1. **Moduł `mpv_hwdec.py`** (`src/gui/qt/mpv_hwdec.py`)
-   - Detekcja GPU przez PowerShell (`Win32_VideoController`) → mapowanie vendorów (`nv`, `amd`, `intel`).
-   - `build_mpv_options(vendor)` — buduje kwargs dla `mpv.MPV(...)` z jawnie wymuszonym `gpu-api=d3d11` / `gpu-context=d3d11` (z fallbackiem `opengl`/`win`), co gwarantuje, że `d3d11va` (lub `nvdec`/`cuda` na NVIDIA) może się zainicjalizować.
-   - Per-vendor łańcuch hwdec: `d3d11va,nvdec,cuda,auto` (NV), `d3d11va,dxva2,auto` (AMD/Intel).
+- [RAPORT_AMD_ETAP_3A_OPT.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_3A_OPT.md)
 
-2. **Kontroler** (`controller.py`)
-   - `set_video_widget()` używa `build_mpv_options(self.mpv_preview_vendor)`.
-   - `reinit_mpv(vendor)` — restart playera po zmianie wyboru GPU z UI.
-   - `_check_mpv_hwdec()` — weryfikacja ~1.5s po załadowaniu pliku:
-     odczytuje `hwdec-current`, `current-gpu-context`, `video-params/pixelformat`,
-     loguje ostrzeżenie jeśli aktywne jest dekodowanie programowe.
+---
 
-3. **UI — wybór akceleratora** (`load_tab.py`)
-   - Pod przyciskami `[Wczytaj] [Wyczyść]` w zakładce **Wczytywanie**
-     znajduje się combo `Podgląd GPU: [Auto ▼]` z listą wykrytych GPU
-     oraz opcją `CPU (software)`.
-   - Zmiana emituje `sig_preview_accel_changed` → kontroler re-inicjalizuje mpv.
+## ETAP 3A: Python/Pillow Real TeleM HUD → C Bridge → Persistent D3D11 Texture
 
-### Weryfikacja działania
+- [RAPORT_AMD_ETAP_3A_PYTHON_BRIDGE.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_3A_PYTHON_BRIDGE.md)
 
-Uruchom aplikację, załaduj wideo i sprawdź konsolę:
+---
 
-```
-[Controller] MPV zinicjalizowany pomyślnie (GPU: NVIDIA, hwdec=d3d11va,nvdec,cuda,auto)
-[MPV HW] Dekodowanie sprzętowe aktywne: d3d11va
-          interop=auto-auto, vo=gpu, gpu_ctx=d3d11, fmt=d3d11_nv12
-```
+## ETAP 2C-BENCH-FIX: Unified Benchmark & FPS Anomaly Audit
 
-Jeżeli widzisz `[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE` — zmień GPU
-w combo podglądu lub sprawdź sterowniki karty graficznej.
+- [RAPORT_AMD_ETAP_2C_BENCH_FIX.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_2C_BENCH_FIX.md)
+
+---
+
+## ETAP 2C-AUDIT-FIX: End-to-End Measurement Audit & True FPS Verification
+
+- [RAPORT_AMD_ETAP_2C_AUDIT_FIX.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_2C_AUDIT_FIX.md)
+
+---
+
+## ETAP 2C: D3D11 NV12 GPU Surface → HEVC_AMF → Real MP4
+
+- [RAPORT_AMD_ETAP_2C_AMF_ENCODE.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_2C_AMF_ENCODE.md)
+
+---
+
+## ETAP 2B: Real P010 D3D11VA Surface → GPU VideoProcessor Compose → NV12 GPU Output
+
+- [RAPORT_AMD_ETAP_2B_VIDEOPROCESSOR.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_2B_VIDEOPROCESSOR.md)
+
+---
+
+## ETAP 1: Proof-of-Concept Natywnego D3D11 Compositora
+
+- [RAPORT_AMD_ETAP_1_POC_D3D11.md](file:///c:/_DEV/TeleM/Raporty/RAPORT_AMD_ETAP_1_POC_D3D11.md)

@@ -1,0 +1,106 @@
+{
+  "N4": {
+    "tag": "N4",
+    "pool": 4,
+    "wall": 40.39457583427429,
+    "true_fps": 30.06785877068524,
+    "frames": 1131,
+    "first_packet_frame": 3,
+    "first_call_wait_ms": "3.7122",
+    "amf_query_ms": {
+      "med": 0.1177,
+      "p95": 0.2251,
+      "p99": 0.342,
+      "max": 0.8432
+    },
+    "amf_outstanding": {
+      "med": 5,
+      "max": 5,
+      "p95": 5
+    },
+    "process_frame_ms": {
+      "med": 14.7216,
+      "p95": 27.9406,
+      "p99": 48.8915
+    },
+    "query_calls_per_frame": {
+      "med": 1,
+      "max": 1
+    },
+    "outputs_per_frame": {
+      "med": 1,
+      "max": 1
+    },
+    "pool_index": {
+      "med": 1,
+      "min": 0,
+      "max": 3
+    },
+    "gpu_span_ms": {
+      "med": 30.0433,
+      "p95": 41.4882,
+      "max": 188.538
+    },
+    "gpu_cadence_ms": {
+      "med": 30.404,
+      "p95": 41.854,
+      "p99": 83.178
+    },
+    "gpu_cadence_fps": 32.89,
+    "input_full": 0,
+    "dropped": 0,
+    "valid": true
+  },
+  "N8": {
+    "tag": "N8",
+    "pool": 8,
+    "wall": 31.317090034484863,
+    "true_fps": 38.22071933502643,
+    "frames": 1131,
+    "first_packet_frame": 2,
+    "first_call_wait_ms": "3.5213",
+    "amf_query_ms": {
+      "med": 0.1439,
+      "p95": 0.2954,
+      "p99": 0.7874,
+      "max": 1.3354
+    },
+    "amf_outstanding": {
+      "med": 10,
+      "max": 10,
+      "p95": 10
+    },
+    "process_frame_ms": {
+      "med": 2.296,
+      "p95": 19.9837,
+      "p99": 78.1856
+    },
+    "query_calls_per_frame": {
+      "med": 1,
+      "max": 1
+    },
+    "outputs_per_frame": {
+      "med": 1,
+      "max": 1
+    },
+    "pool_index": {
+      "med": 3,
+      "min": 0,
+      "max": 7
+    },
+    "gpu_span_ms": {
+      "med": 20.3001,
+      "p95": 37.0477,
+      "max": 170.927
+    },
+    "gpu_cadence_ms": {
+      "med": 24.19,
+      "p95": 37.323,
+      "p99": 116.57
+    },
+    "gpu_cadence_fps": 41.34,
+    "input_full": 0,
+    "dropped": 0,
+    "valid": true
+  }
+}

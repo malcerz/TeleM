@@ -55,9 +55,18 @@ struct NativeFrameRec {
     double vpBltMs = 0.0;
     double vpSubmitWindowMs = 0.0;   // Blt end -> HUD end
     double vpRangePassMs = 0.0;
+    double clearPrevAboveMs = 0.0;
     double vpChartBlendMs = 0.0;
+    double chartFlushMs = 0.0;
     double vpGaugeBlendMs = 0.0;
-    double vpMapBlendMs = 0.0;
+    double gaugeFlushMs = 0.0;
+    double mapResampleMs = 0.0;
+    double mapBlendMs = 0.0;
+    double mapFlush1Ms = 0.0;
+    double mapFlush2Ms = 0.0;
+    double aboveBlendMs = 0.0;
+    double aboveFlushMs = 0.0;
+    double flushTotalMs = 0.0;
     double vpHudComposeMs = 0.0;
     double vpReleaseViewMs = 0.0;
     double amfCreateSurfaceMs = 0.0;
@@ -68,6 +77,7 @@ struct NativeFrameRec {
     UINT poolIndex = 0;
     UINT amfQueryCalls = 0;      // ETAP 5U: QueryOutput calls this frame
     UINT amfOutputs = 0;         // ETAP 5U: packets received this frame
+    UINT retriesThisFrame = 0;
     UINT64 decoderTexId = 0;         // ETAP 5S: decoder input texture pointer (low bits)
     UINT64 vpOutTexId = 0;           // ETAP 5S: VP output texture pointer (low bits)
     UINT arrayIndex = 0;             // ETAP 5S: decoder subresource
@@ -261,6 +271,23 @@ TELEM_EXPORT int telem_amd_set_map_filter(void* handle, int filter) {
     return 1;
 }
 
+// ── ETAP 8U-B: Map GPU Path ──────────────────────────────────────────
+// 0 = DIRECT_AUTO (default: 1:1 uses DirectBlend, mismatch uses Reference),
+// 1 = REFERENCE (force two-pass resample + blend),
+// 2 = DIRECT_1TO1 (force direct blend).
+TELEM_EXPORT int telem_amd_set_map_gpu_path(void* handle, int path) {
+    if (!handle || (path < 0 || path > 2)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapGpuPath(path);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_get_map_gpu_path_used(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.IsMapDirectUsed() ? 1 : 0;
+}
+
 // ── ETAP 5O: AMF mode (diagnostic only) ──────────────────────────────
 // 0 = ENCODE (default production), 1 = BYPASS (frontend only, no AMF).
 TELEM_EXPORT int telem_amd_set_amf_mode(void* handle, int mode) {
@@ -296,6 +323,38 @@ TELEM_EXPORT int telem_amd_update_map(
     ctx->mapUploads++;
     ctx->mapUploadedBytes += uploadedBytes;
     return 1;
+}
+
+// ETAP 7B: compact CPU_ABOVE_MAP layer.  It is intentionally a single
+// ordered layer, not a generalized compositor or a second map path.
+TELEM_EXPORT int telem_amd_set_above_map_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetAboveMapGpuEnabled(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_above_regions_count(void* handle, UINT count) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveRegionsCount(count) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_update_above_region(
+    void* handle, UINT index, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT dstX, UINT dstY) {
+    if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveRegion(index, width, height, pRGBA, stride, dstX, dstY) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_update_above_map(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT dstX, UINT dstY, int active) {
+    if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveMapTexture(
+        width, height, pRGBA, stride, dstX, dstY, active != 0) ? 1 : 0;
 }
 
 // Diagnostic A/B readback of the GPU-resampled 691x691 RGBA map.  Not used by
@@ -517,9 +576,8 @@ TELEM_EXPORT int telem_amd_set_decode_mode(void* handle, int mode) {
     if (!handle || (mode != 0 && mode != 1)) return 0;
     TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
     if (mode == 1) {
-        if (!ctx->mfDecoderReady || !ctx->pSourceReader ||
-            ctx->decoderWidth != ctx->width || ctx->decoderHeight != ctx->height) {
-            std::cerr << "[MF DECODER] D3D11VA mode rejected: decoder is not ready or dimensions differ."
+        if (!ctx->mfDecoderReady || !ctx->pSourceReader) {
+            std::cerr << "[MF DECODER] D3D11VA mode rejected: decoder is not ready."
                       << std::endl;
             return 0;
         }
@@ -636,7 +694,7 @@ TELEM_EXPORT int telem_amd_read_video_sample(
     D3D11_TEXTURE2D_DESC desc = {};
     texture->GetDesc(&desc);
     if ((desc.Format != DXGI_FORMAT_P010 && desc.Format != DXGI_FORMAT_NV12) ||
-        desc.Width != ctx->width || desc.Height != ctx->height ||
+        desc.Width == 0 || desc.Height == 0 ||
         subresource >= desc.ArraySize) {
         std::cerr << "[MF DECODER] Unsupported decoder surface: format=" << desc.Format
                   << " size=" << desc.Width << "x" << desc.Height
@@ -883,6 +941,18 @@ TELEM_EXPORT void* telem_amd_create(
     const bool gpuTsEnabled = (gpuTsEnv && gpuTsEnv[0] == '1');
     std::cout << "[TELEM AMD DLL] AMD_GPU_TIMESTAMP_PROFILE="
               << (gpuTsEnabled ? "ON" : "OFF") << std::endl;
+    // ETAP 8K: Unified Fused NV12 Compositor production mode
+    const char* fusedEnv = getenv("AMD_FUSED_COMPOSITOR");
+    const int fusedMode = fusedEnv ? atoi(fusedEnv) : 1;
+    std::cout << "[TELEM AMD DLL] AMD_NV12_COMPOSITOR="
+              << (fusedMode == 1 ? "FUSED (production single-range)" : "LEGACY_SEPARATE (diagnostic)")
+              << std::endl;
+    std::cout << "[TELEM AMD DLL] AMD_RANGE_NORMALIZE="
+              << (fusedMode == 1 ? "FUSED_SINGLE" : "SEPARATE_PASS")
+              << std::endl;
+    std::cout << "[TELEM AMD DLL] AMD_NORMALIZE_PASSES="
+              << (fusedMode == 1 ? 0 : (getenv("AMD_NORMALIZE_PASSES") ? atoi(getenv("AMD_NORMALIZE_PASSES")) : 1))
+              << std::endl;
     // ETAP 5T diagnostic: HUD GPU compositor OFF.
     const char* hudOffEnv = getenv("AMD_GPU_HUD_OFF");
     const bool gpuHudOff = (hudOffEnv && hudOffEnv[0] == '1');
@@ -975,7 +1045,6 @@ TELEM_EXPORT void* telem_amd_create(
                 MFCreateMediaType(&pType);
                 pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                 pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_P010);
-                MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, width, height);
                 hr = ctx->pSourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, pType);
                 if (FAILED(hr)) {
                     pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
@@ -1294,9 +1363,18 @@ TELEM_EXPORT int telem_amd_process_frame(
         rec.vpBltMs = vpStats.blt_ms;
         rec.vpSubmitWindowMs = vpStats.submit_window_ms;
         rec.vpRangePassMs = vpStats.range_pass_ms;
+        rec.clearPrevAboveMs = vpStats.clear_prev_above_ms;
         rec.vpChartBlendMs = vpStats.chart_blend_ms;
+        rec.chartFlushMs = vpStats.chart_flush_ms;
         rec.vpGaugeBlendMs = vpStats.gauge_blend_ms;
-        rec.vpMapBlendMs = vpStats.map_blend_ms;
+        rec.gaugeFlushMs = vpStats.gauge_flush_ms;
+        rec.mapResampleMs = vpStats.map_resample_ms;
+        rec.mapBlendMs = vpStats.map_blend_ms;
+        rec.mapFlush1Ms = vpStats.map_flush1_ms;
+        rec.mapFlush2Ms = vpStats.map_flush2_ms;
+        rec.aboveBlendMs = vpStats.above_blend_ms;
+        rec.aboveFlushMs = vpStats.above_flush_ms;
+        rec.flushTotalMs = vpStats.flush_total_ms;
         rec.vpHudComposeMs = vpStats.hud_compute_ms;
         rec.vpReleaseViewMs = vpStats.release_view_ms;
         rec.poolIndex = vpStats.pool_index;
@@ -1483,6 +1561,7 @@ TELEM_EXPORT int telem_amd_process_frame(
         rec.amfReceived = ctx->framesReceived;
         rec.amfQueryCalls = ctx->amfQueryCalls;
         rec.amfOutputs = ctx->amfOutputsThisFrame;
+        rec.retriesThisFrame = retriesThisFrame;
     }
     }
 
@@ -1678,12 +1757,14 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
         if (trace.is_open()) {
             trace << "frame,surf_acquire,vp_total,vp_setup,vp_create_view,vp_set_stream,"
                      "vp_setter_fmt,vp_setter_src_rect,vp_setter_dst_rect,vp_blt,"
-                     "vp_submit_window,vp_range_pass,"
-                     "vp_chart_blend,vp_gauge_blend,vp_map_blend,vp_hud_compute,"
+                     "vp_submit_window,vp_range_pass,clear_prev_above,"
+                     "vp_chart_blend,chart_flush,vp_gauge_blend,gauge_flush,"
+                     "map_resample,vp_map_blend,map_flush1,map_flush2,"
+                     "above_blend,above_flush,flush_total,vp_hud_compute,"
                      "vp_release_view,amf_create_surface,amf_submit_input,amf_query,"
                      "amf_packet_write,process_frame_total,pool_index,decoder_tex_id,"
                      "vp_out_tex_id,array_index,setters_skipped,state_sig,amf_submitted,"
-                     "amf_received,amf_query_calls,amf_outputs,submit_result,query_result,"
+                     "amf_received,amf_query_calls,amf_outputs,retries,submit_result,query_result,"
                      "decoder_copy\n";
             for (const auto& r : ctx->nativeTrace) {
                 trace << r.frame << ',' << r.surfAcquireMs << ',' << r.vpTotalMs << ','
@@ -1691,7 +1772,13 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                       << r.vpSetterFmtMs << ',' << r.vpSetterSrcRectMs << ','
                       << r.vpSetterDstRectMs << ',' << r.vpBltMs << ','
                       << r.vpSubmitWindowMs << ',' << r.vpRangePassMs << ','
-                      << r.vpChartBlendMs << ',' << r.vpGaugeBlendMs << ',' << r.vpMapBlendMs << ','
+                      << r.clearPrevAboveMs << ','
+                      << r.vpChartBlendMs << ',' << r.chartFlushMs << ','
+                      << r.vpGaugeBlendMs << ',' << r.gaugeFlushMs << ','
+                      << r.mapResampleMs << ',' << r.mapBlendMs << ','
+                      << r.mapFlush1Ms << ',' << r.mapFlush2Ms << ','
+                      << r.aboveBlendMs << ',' << r.aboveFlushMs << ','
+                      << r.flushTotalMs << ','
                       << r.vpHudComposeMs << ',' << r.vpReleaseViewMs << ','
                       << r.amfCreateSurfaceMs << ',' << r.amfSubmitInputMs << ','
                       << r.amfQueryMs << ',' << r.amfPacketWriteMs << ','
@@ -1700,6 +1787,7 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                       << r.arrayIndex << ',' << r.settersSkipped << ',' << r.stateSig << ','
                       << r.amfSubmitted << ',' << r.amfReceived << ','
                       << r.amfQueryCalls << ',' << r.amfOutputs << ','
+                      << r.retriesThisFrame << ','
                       << r.submitResult << ',' << r.queryResult << ',' << r.decoderCopy << '\n';
             }
             trace.close();

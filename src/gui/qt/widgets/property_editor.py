@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QCheckBox, QComboBox,
     QDoubleSpinBox, QSpinBox, QLineEdit,
     QFormLayout, QHBoxLayout, QPushButton, QColorDialog,
-    QSizePolicy, QSpacerItem, QTabWidget,
+    QSizePolicy, QSpacerItem, QTabWidget, QFileDialog,
 )
 
 from src.gui.qt.models import FieldSchema
@@ -103,7 +103,11 @@ class PropertyEditor(QWidget):
                 elif isinstance(w, QCheckBox):
                     w.setChecked(bool(val))
                 elif isinstance(w, QComboBox):
-                    w.setCurrentText(str(val))
+                    idx = w.findData(val)
+                    if idx >= 0:
+                        w.setCurrentIndex(idx)
+                    else:
+                        w.setCurrentText(str(val))
                 elif isinstance(w, QLineEdit):
                     w.setText(str(val))
             if "smoothing" in values and hasattr(self, "_smoothing_spin") and self._smoothing_spin:
@@ -193,7 +197,8 @@ class PropertyEditor(QWidget):
 
         # ── Zakładki ──────────────────────────────────────────────────
         tab_order = ["Text", "Data", "Czas", "Od początku", "Śr. prędkość",
-                     "Labels", "Ticks", "Gauge", "Chart", "Segments", "Path", "Shape"]
+                     "Labels", "Ticks", "Gauge", "Compass", "Chart", "Segments",
+                     "Colors", "Marker", "Range", "Path", "Shape"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
         for field in schema:
             if field.tab in grouped:
@@ -249,8 +254,17 @@ class PropertyEditor(QWidget):
     def _create_field_widget(
         self, field: FieldSchema, value: Any,
     ) -> QWidget | None:
-        """Tworzy widget dla pojedynczego pola schematu."""
+        """Tworzy widget dla pojedynczego pola schematu.
+
+        Gdy pola brakuje w konfiguracji (stary/niepełny projekt), używa
+        kanonicznego ``field.default`` zamiast domyślnych wartości widgetów
+        (0 / False / "" / pierwsza pozycja combo) — dzięki temu wartość
+        pokazana w Właściwościach odpowiada temu, co używa renderer.
+        """
         name = field.name
+        # Kanoniczna wartość: model > default schematu
+        if value is None:
+            value = field.default
 
         res_widget = None
         if field.field_type == "bool":
@@ -264,11 +278,20 @@ class PropertyEditor(QWidget):
         elif field.field_type == "choice":
             cmb = QComboBox()
             if field.choices:
-                cmb.addItems([str(c) for c in field.choices])
+                for c in field.choices:
+                    if isinstance(c, (tuple, list)) and len(c) == 2:
+                        val, label = c
+                        cmb.addItem(str(label), val)
+                    else:
+                        cmb.addItem(str(c), c)
             if value is not None:
-                cmb.setCurrentText(str(value))
-            cmb.currentTextChanged.connect(
-                lambda txt, n=name: self._emit_change(n, txt)
+                idx = cmb.findData(value)
+                if idx >= 0:
+                    cmb.setCurrentIndex(idx)
+                else:
+                    cmb.setCurrentText(str(value))
+            cmb.currentIndexChanged.connect(
+                lambda idx, n=name, c=cmb: self._emit_change(n, c.itemData(idx) if c.itemData(idx) is not None else c.currentText())
             )
             res_widget = cmb
 
@@ -308,10 +331,41 @@ class PropertyEditor(QWidget):
 
         elif field.field_type == "text":
             edit = QLineEdit(str(value) if value is not None else "")
+            if field.placeholder:
+                edit.setPlaceholderText(field.placeholder)
             edit.textChanged.connect(
                 lambda txt, n=name: self._emit_change(n, txt)
             )
             res_widget = edit
+
+        elif field.field_type == "font":
+            row = QWidget()
+            hbox = QHBoxLayout(row)
+            hbox.setContentsMargins(0, 0, 0, 0)
+            edit = QLineEdit(str(value) if value else "")
+            edit.setPlaceholderText("Domyślny")
+            edit.setToolTip("Wpisz nazwę rodziny fontu (np. Digital-7, Comic Sans) lub wskaż plik")
+            try:
+                from PySide6.QtGui import QFontDatabase
+                from PySide6.QtWidgets import QCompleter
+                families = QFontDatabase.families()
+                if families:
+                    completer = QCompleter(families, edit)
+                    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                    edit.setCompleter(completer)
+            except Exception:
+                pass
+            edit.textChanged.connect(
+                lambda txt, n=name: self._emit_change(n, txt or None)
+            )
+            btn = QPushButton("Wybierz plik…")
+            btn.clicked.connect(
+                lambda checked=False, e=edit: self._pick_font(e)
+            )
+            hbox.addWidget(edit, 1)
+            hbox.addWidget(btn)
+            self._field_widgets[name] = edit
+            return row
 
         elif field.field_type == "color":
             row = QWidget()
@@ -360,6 +414,13 @@ class PropertyEditor(QWidget):
                 f"background-color: {color_name}; "
                 f"border: 1px solid #555; border-radius: 2px;"
             )
+
+    def _pick_font(self, edit: QLineEdit) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Wybierz plik fontu", "", "Fonty (*.ttf *.otf *.ttc)"
+        )
+        if path:
+            edit.setText(path)
 
     def _emit_change(self, field_name: str, value: Any) -> None:
         """Emituje sygnał zmiany właściwości."""

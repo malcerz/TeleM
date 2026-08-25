@@ -1,0 +1,47 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "gpu_ts": false,
+      "native_fa": false,
+      "wall": 36.26338338851929,
+      "true_fps": 32.964275774933334,
+      "gpu_timeline_frames": 0,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "gpu_ts": true,
+      "native_fa": false,
+      "wall": 36.29881262779236,
+      "true_fps": 32.68330827901964,
+      "gpu_timeline_frames": 1115,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "gpu_ts": true,
+      "native_fa": false,
+      "wall": 33.995365619659424,
+      "true_fps": 35.214407590958544,
+      "gpu_timeline_frames": 1115,
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "gpu_ts": true,
+      "native_fa": true,
+      "wall": 33.61709928512573,
+      "true_fps": 35.52583500286816,
+      "gpu_timeline_frames": 1115,
+      "valid": true
+    }
+  },
+  "order": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "observer_overhead_pct": -3.0782959572018487
+}

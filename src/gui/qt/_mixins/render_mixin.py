@@ -34,12 +34,14 @@ class RenderMixin:
             self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
             return
 
-        # Zapisz layout
+        # Persist explicit bar/ruler orientation instead of the legacy hack.
+        from src.indicators.compositor import normalize_layout_for_save
         def_layout = self.base_dir / "def_layout.json"
         with open(def_layout, "w", encoding="utf-8") as f:
-            json.dump(self.layout, f, indent=2, ensure_ascii=False)
+            json.dump(normalize_layout_for_save(self.layout), f, indent=2, ensure_ascii=False)
 
         self.render_cancel_event.clear()
+        self.render_process_holder = {}
 
         def worker() -> None:
             try:
@@ -47,25 +49,42 @@ class RenderMixin:
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
                     self.signals.sig_render_finished.emit(stats, output)
+                else:
+                    self.signals.sig_render_stopped.emit()
             except Exception as e:
-                self.signals.sig_error.emit(f"Render error: {e}")
+                if not self.render_cancel_event.is_set():
+                    self.signals.sig_error.emit(f"Render error: {e}")
+                else:
+                    self.signals.sig_render_stopped.emit()
 
-        threading.Thread(target=worker, daemon=True).start()
+        self.render_worker_thread = threading.Thread(
+            target=worker, daemon=True, name="TeleM-RenderWorker",
+        )
+        self.render_worker_thread.start()
 
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
         encoder = options.get("encoder", detect_best_encoder())
+        if encoder == "auto":
+            encoder = detect_best_encoder()
         # Validate that the requested hardware encoder actually works on this GPU
         if encoder == "nv" and not _test_encoder("hevc_nvenc"):
             encoder = detect_best_encoder()
         elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
             encoder = detect_best_encoder()
-        elif encoder == "intel" and not _test_encoder("hevc_qsv"):
-            encoder = detect_best_encoder()
+        elif encoder == "intel":
+            # INTEL_FORCE: no silent cross-GPU fallback.  If the user explicitly
+            # requested Intel, the full controlled resolution (adapter + QSV) is
+            # performed by stream_overlay_to_ffmpeg, which raises a controlled
+            # error (IntelBackendError) when no usable Intel GPU/QSV exists.
+            pass
 
         resolution = options.get("resolution", "source")
         output = options.get("output", "output.mp4")
         video_bitrate = options.get("bitrate", "40M")
+        hud_resolution_scale = float(options.get("hud_resolution_scale", 1.0) or 1.0)
+        if hud_resolution_scale not in (1.0, 0.75, 0.5):
+            hud_resolution_scale = 1.0
 
         meta = self.video_path.with_suffix(".json")
         if not meta.exists():
@@ -82,8 +101,15 @@ class RenderMixin:
             streams[0].get("avg_frame_rate")
             or streams[0].get("r_frame_rate")
         ) if streams else 30.0
-        w = int(streams[0].get("width", 1920)) if streams else 1920
-        h = int(streams[0].get("height", 1080)) if streams else 1080
+        src_w = int(streams[0].get("width", 1920)) if streams else 1920
+        src_h = int(streams[0].get("height", 1080)) if streams else 1080
+
+        from src.ffmpeg.command_builder import RESOLUTION_MAP
+        target_res = RESOLUTION_MAP.get(resolution)
+        if target_res is not None:
+            render_w, render_h = target_res
+        else:
+            render_w, render_h = src_w, src_h
 
         layout = dict(self.layout, cut_regions=list(self._cut_regions))
         records = ensure_records_list(load_json_with_fallback(meta))
@@ -111,22 +137,42 @@ class RenderMixin:
             output_path = self.video_path.parent / output_path
 
         self.signals.sig_progress.emit(5, "Renderowanie HUD...")
+        # Faza "Przygotowywanie HUD" na wspólnym pasku postępu eksportu
+        # (render_mixin przygotowuje dane przed stream_overlay_to_ffmpeg).
+        self.signals.sig_render_progress.emit(
+            0, 0, 0.0, 0.0,
+            {"phase": "prep", "pct": 0.0, "label": "Przygotowywanie HUD..."},
+        )
 
         field_samples = {
             "speed_samples": speed,
             "track_samples": track,
             "alt_samples": alt,
+            "heading_samples": self.telemetry.heading_samples,
+            "gpx_heading_samples": self.telemetry.gpx_heading_samples,
+            "slope_samples": self.telemetry.slope_samples,
+            "gpx_slope_samples": self.telemetry.gpx_slope_samples,
+            "iso_samples": self.telemetry.iso_samples,
+            "exposure_samples": self.telemetry.exposure_samples,
+            "temperature_samples": self.telemetry.temperature_samples,
+            "accel_x_samples": self.telemetry.accel_x_samples,
+            "accel_y_samples": self.telemetry.accel_y_samples,
+            "accel_z_samples": self.telemetry.accel_z_samples,
+            "accel_magnitude_samples": self.telemetry.accel_magnitude_samples,
+            "gyro_x_samples": self.telemetry.gyro_x_samples,
+            "gyro_y_samples": self.telemetry.gyro_y_samples,
+            "gyro_z_samples": self.telemetry.gyro_z_samples,
+            "gyro_magnitude_samples": self.telemetry.gyro_magnitude_samples,
         }
 
-        # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)
-        # FFmpeg will automatically scale the overlay to render_w/render_h
-        max_overlay_w = 1920
-        if w > max_overlay_w:
-            ov_w = max_overlay_w
-            ov_h = int(max_overlay_w * h / w) if w > 0 else 1080
-        else:
-            ov_w = w
-            ov_h = h
+        # HUD is rasterized at an explicit fraction of the export canvas.
+        # Keep dimensions even because the downstream YUV/GPU filters require it.
+        ov_w = max(2, int(round(render_w * hud_resolution_scale)))
+        ov_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if ov_w % 2:
+            ov_w += 1
+        if ov_h % 2:
+            ov_h += 1
 
         stream_overlay_to_ffmpeg(
             ffmpeg_exe=ffmpeg_exe,
@@ -134,6 +180,7 @@ class RenderMixin:
             output_file=output_path,
             duration_s=self.video_duration_s,
             start_dt_utc=self.telemetry.start_dt_utc,
+            video_timeline=getattr(self, "video_timeline", None),
             tz_offset_hours=2,
             speed_samples=speed,
             track_samples=track,
@@ -144,7 +191,10 @@ class RenderMixin:
             target_fps=fps_stream,
             update_rate_step=1,
             max_distance_m=track[-1][1] if track else 0,
-            workers=self.render_threads,
+            # NVIDIA production is intentionally frozen at the validated
+            # four-worker configuration.  GUI preset values must not
+            # accidentally select a slower unbenchmarked worker count.
+            workers=4 if encoder == "nv" else self.render_threads,
             iso_samples=self.telemetry.iso_samples,
             exposure_samples=self.telemetry.exposure_samples,
             temperature_samples=self.telemetry.temperature_samples,
@@ -171,11 +221,33 @@ class RenderMixin:
             container_rotation=container_rotation_arg,
             overlay_w=ov_w,
             overlay_h=ov_h,
-            render_w=w,
-            render_h=h,
+            render_w=render_w,
+            render_h=render_h,
+            hud_resolution_scale=hud_resolution_scale,
+            active_process_holder=self.render_process_holder,
         )
 
         return {"total_overlay_frames": 0, "png_duration": 0}
 
     def _on_render_cancelled(self) -> None:
         self.render_cancel_event.set()
+        # The render worker owns writer -> stdin ordering. Do not close stdin
+        # from the GUI thread while the writer may still be inside write().
+
+    def cancel_render_and_wait(self, timeout: float = 7.0) -> bool:
+        """Request cancellation for app shutdown and wait only bounded time."""
+        worker = getattr(self, "render_worker_thread", None)
+        if worker is None or not worker.is_alive():
+            return True
+        self.render_cancel_event.set()
+        worker.join(timeout=max(0.1, timeout))
+        if worker.is_alive():
+            process = getattr(self, "render_process_holder", {}).get("process")
+            if process is not None:
+                try:
+                    from src.ffmpeg.streaming import _stop_ffmpeg_process
+                    _stop_ffmpeg_process(process, graceful_timeout=0.1)
+                except Exception:
+                    pass
+            worker.join(timeout=2.0)
+        return not worker.is_alive()

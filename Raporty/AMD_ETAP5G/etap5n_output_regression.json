@@ -1,0 +1,46 @@
+{
+  "status": "PASS",
+  "identical": true,
+  "ref": {
+    "tag": "ref",
+    "mode": "REFERENCE",
+    "wall": 41.455493450164795,
+    "true_fps": 28.670167004230912,
+    "telemetry_med_ms": 7.890999997471226,
+    "compose_med_ms": 10.470099998201476,
+    "cadence": 1131,
+    "hr": 1131,
+    "map": 1131,
+    "gauge": 1131,
+    "amf_sub": 1131,
+    "amf_out": 1131,
+    "muxed": 1131,
+    "drops": 0,
+    "cache": null
+  },
+  "pre": {
+    "tag": "pre",
+    "mode": "PRECOMPUTED",
+    "wall": 54.67216515541077,
+    "true_fps": 21.950205076729386,
+    "telemetry_med_ms": 0.035400000342633575,
+    "compose_med_ms": 8.457399999315385,
+    "cadence": 1131,
+    "hr": 1131,
+    "map": 1131,
+    "gauge": 1131,
+    "amf_sub": 1131,
+    "amf_out": 1131,
+    "muxed": 1131,
+    "drops": 0,
+    "cache": {
+      "frames": 1131,
+      "build_ms": 4056.360400001722,
+      "memory_mib": 0.17488861083984375,
+      "structure": "list[slots-FrameRec] + shared static",
+      "resolver_calls_per_frame": 4.0,
+      "interpolation_calls_per_frame": 9.0,
+      "gpmf_lookups_per_frame": 3.0
+    }
+  }
+}

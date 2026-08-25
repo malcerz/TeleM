@@ -17,6 +17,7 @@ from src.indicators.bar import _render_bar_indicator
 from src.indicators.chart import _render_chart_indicator
 from src.indicators.gauge import _render_gauge_indicator
 from src.indicators.helpers import load_font, s
+from src.indicators.lean import _render_lean_indicator
 from src.indicators.moving_map import _render_moving_map_indicator
 from src.indicators.segment_bar import _render_segment_bar_indicator
 from src.indicators.static_map import _render_static_map_indicator
@@ -42,6 +43,8 @@ def render_value_indicator(
     target_dt: Optional[datetime] = None,
     start_dt_utc: Optional[datetime] = None,
     split_chart_keys: Optional[set[str]] = None,
+    map_heading: Optional[float] = None,
+    async_map: bool = False,
 ) -> tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]:
     """Render a single telemetry indicator – dispatcher to per-form helpers."""
     cfg = cfg_override if cfg_override else layout["indicators"].get(key)
@@ -52,7 +55,7 @@ def render_value_indicator(
     _FORM_MAP = {"TEXT": "text", "SUWAK": "bar", "LICZNIK": "text"}
     form = _FORM_MAP.get(form, form)
     min_dim = min(canvas_w, canvas_h)
-    outline_raw = int(layout["global"].get("text_outline", 3))
+    outline_raw = int(layout.get("global", {}).get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
     fs_val = cfg.get("font_size") if "font_size" in cfg else cfg.get("size", 0.02)
     fs = max(8, s(fs_val, min_dim))
@@ -62,11 +65,23 @@ def render_value_indicator(
     val_max = float(cfg.get("max_val", 100))
     ticks = int(cfg.get("ticks", 0))
     _thickness_raw = float(cfg.get("thickness", 1))
-    if _thickness_raw >= 1:
-        _thickness_rel = _thickness_raw / 200.0
+    _bar_ruler = form == "bar" and str(
+        cfg.get("bar_style", cfg.get("style", "ruler"))
+    ).strip().lower() in {"ruler", ""}
+    if _thickness_raw < 1 and _bar_ruler:
+        # Ruler thickness is a fraction of the established thickness=1
+        # baseline. Keep it as a float so 0.25/0.5/0.75 rasterize thinner.
+        _thickness_baseline = s(0.6, min_dim)
+        thickness = max(0.25, float(_thickness_baseline) * _thickness_raw)
+    elif _thickness_raw < 1:
+        # Preserve the legacy sub-unit contract for non-ruler indicators.
+        _thickness_rel = _thickness_raw * 100.0
+        thickness = float(max(1, s(_thickness_rel, min_dim)))
     else:
-        _thickness_rel = _thickness_raw
-    thickness = max(1, s(_thickness_rel, min_dim))
+        # Modern integer format 1..10 from GUI / def_layout.json
+        # 1 -> 0.6% min_dim, 2 -> 0.8% min_dim, ..., 10 -> 2.4% min_dim
+        _thickness_rel = 0.6 + (_thickness_raw - 1) * 0.2
+        thickness = float(max(1, s(_thickness_rel, min_dim)))
     size_px = s(cfg.get("size", 0.1), min_dim if form == "gauge" else canvas_w)
     ss = max(1, supersample)
 
@@ -82,10 +97,14 @@ def render_value_indicator(
 
     if form == "text":
         return _render_text_indicator(**_kwargs, formatted_val=formatted_val)
-    elif form == "bar":
+    elif form in ("bar", "segment_bar"):
+        if form == "segment_bar" and "bar_style" not in cfg:
+            cfg["bar_style"] = "segments"
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "gauge":
         return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
+    elif form == "lean":
+        return _render_lean_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "chart":
         return _render_chart_indicator(
             **_kwargs,
@@ -95,15 +114,16 @@ def render_value_indicator(
             split_mode=bool(
                 split_chart_keys is not None and key in split_chart_keys
             ),
+            target_dt=target_dt,
         )
-    elif form == "segment_bar":
-        return _render_segment_bar_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "static_map":
         return _render_static_map_indicator(
             **_kwargs,
             gps_track=gps_track,
             target_dt=target_dt,
             current_position=current_position,
+            map_heading=map_heading,
+            async_map=async_map,
         )
     elif form == "map":
         return _render_moving_map_indicator(
@@ -111,6 +131,8 @@ def render_value_indicator(
             gps_track=gps_track,
             target_dt=target_dt,
             current_position=current_position,
+            map_heading=map_heading,
+            async_map=async_map,
         )
 
     return None, 0, 0, None

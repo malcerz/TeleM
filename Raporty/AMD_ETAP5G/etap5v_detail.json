@@ -1,0 +1,99 @@
+{
+  "runs": {
+    "P4d": {
+      "tag": "P4d",
+      "pool": 4,
+      "wall": 38.64220952987671,
+      "true_fps": 30.71121145684403,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true,
+      "process_frame_ms": {
+        "med": 14.7746,
+        "p95": 26.0225,
+        "p99": 35.8805
+      },
+      "first_d3d11_wait_ms": {
+        "med": 13.2647,
+        "p95": 24.4859,
+        "p99": 34.0816
+      },
+      "amf_outstanding": {
+        "med": 5,
+        "max": 5
+      },
+      "amf_query_ms": {
+        "med": 0.1255
+      },
+      "frames_pf_gt_10ms": 975
+    },
+    "P8d": {
+      "tag": "P8d",
+      "pool": 8,
+      "wall": 31.800278425216675,
+      "true_fps": 37.73913384643744,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true,
+      "process_frame_ms": {
+        "med": 2.2764,
+        "p95": 14.0428,
+        "p99": 77.296
+      },
+      "first_d3d11_wait_ms": {
+        "med": 0.717,
+        "p95": 12.059,
+        "p99": 75.9002
+      },
+      "amf_outstanding": {
+        "med": 10,
+        "max": 11
+      },
+      "amf_query_ms": {
+        "med": 0.1388
+      },
+      "frames_pf_gt_10ms": 79
+    },
+    "Prod1": {
+      "tag": "Prod1",
+      "pool": null,
+      "wall": 34.670897483825684,
+      "true_fps": 34.534737617754985,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    },
+    "Prod2": {
+      "tag": "Prod2",
+      "pool": null,
+      "wall": 33.88028407096863,
+      "true_fps": 35.17140626243946,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    }
+  },
+  "production_default": {
+    "config": "pool8(default) + compose REFERENCE(default), no env",
+    "fps": [
+      34.534737617754985,
+      35.17140626243946
+    ],
+    "fps_median": 34.85307194009722,
+    "wall_median": 34.275590777397156,
+    "realtime_factor": 1.1629308337345774,
+    "realtime_margin_pct": 16.29308337345774
+  }
+}

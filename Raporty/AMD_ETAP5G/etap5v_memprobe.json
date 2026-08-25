@@ -1,0 +1,44 @@
+{
+  "base_rss": 53174272,
+  "base_objs": 34285,
+  "results": [
+    {
+      "export": 1,
+      "wall": 30.926474809646606,
+      "result": 1131,
+      "rss_after_gc": 562827264,
+      "rss_delta_vs_prev": 509652992,
+      "live_objects_after_gc": 44407,
+      "obj_delta_vs_prev": 10122
+    },
+    {
+      "export": 2,
+      "wall": 30.15639019012451,
+      "result": 1131,
+      "rss_after_gc": 868343808,
+      "rss_delta_vs_prev": 305516544,
+      "live_objects_after_gc": 44420,
+      "obj_delta_vs_prev": 13
+    },
+    {
+      "export": 3,
+      "wall": 30.084954261779785,
+      "result": 1131,
+      "rss_after_gc": 1034620928,
+      "rss_delta_vs_prev": 166277120,
+      "live_objects_after_gc": 44433,
+      "obj_delta_vs_prev": 13
+    },
+    {
+      "export": 4,
+      "wall": 30.098137378692627,
+      "result": 1131,
+      "rss_after_gc": 1238188032,
+      "rss_delta_vs_prev": 203567104,
+      "live_objects_after_gc": 44446,
+      "obj_delta_vs_prev": 13
+    }
+  ],
+  "rss_growth_4_exports": 1185013760,
+  "obj_growth_4_exports": 10161
+}

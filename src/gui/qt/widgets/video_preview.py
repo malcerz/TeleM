@@ -390,7 +390,7 @@ class VideoPreview(QWidget):
                         if bbox and ow > 0 and oh > 0:
                             bx, by, bw, bh = bbox
                             # Semantyka pozycji (x, y) w layoucie zależy od formy:
-                            #   - "text" oraz time_block/time_display → LEWY-GÓRNY róg
+                            #   - "text" oraz time_display → LEWY-GÓRNY róg
                             #   - bar/gauge/chart/segment_bar/map → ŚRODEK
                             # Kotwiczymy na właściwym punkcie (skala 0..100, zgodna
                             # z _norm_from_geometry), żeby wskaźnik nie przeskakiwał
@@ -445,12 +445,12 @@ class VideoPreview(QWidget):
     def _uses_topleft_anchor(self, key: str) -> bool:
         """True gdy pozycja (x, y) w layoucie oznacza LEWY-GÓRNY róg wskaźnika.
 
-        W kompozytorze wskaźniki z formą "text" (oraz specjalne
-        time_block/time_display) są pozycjonowane lewym-górnym rogiem;
-        pozostałe formy (bar, gauge, chart, segment_bar, map, static_map)
-        są pozycjonowane środkiem.
+        W kompozytorze wskaźniki z formą "text" (oraz specjalny
+        time_display) są pozycjonowane lewym-górnym rogiem; pozostałe formy
+        (bar, gauge, chart, segment_bar, map, static_map) są pozycjonowane
+        środkiem.
         """
-        if key in ("time_block", "time_display"):
+        if key == "time_display":
             return True
         ctrl = self._controller
         if ctrl is None:

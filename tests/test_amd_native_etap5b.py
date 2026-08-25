@@ -39,7 +39,7 @@ def test_current_layout_uses_only_four_dynamic_fit_fields() -> None:
     plan = build_active_fit_field_plan(layout, DISCOVERED)
 
     assert plan["active_fit_fields"] == [
-        "cadence", "enhanced_speed", "gopro_battery", "heart_rate"
+        "cadence", "enhanced_speed", "heart_rate", "temperature"
     ]
     assert plan["active_standard_resolve_fields"] == []
     assert set(plan["inactive_fit_fields"]) == DISCOVERED - set(
@@ -91,8 +91,11 @@ def test_duplicate_consumers_resolve_exact_field_once_per_frame() -> None:
     )
 
     assert plan["unique_resolve_fields"] == ["power"]
-    assert calls == ["power"]
-    assert stats == {"calls": 1, "per_field": {"power": 1}}
+    # The two indicators explicitly select different sources (default GPX
+    # for power_text and FIT for fit_power_text), so they are distinct
+    # resolver requests even though the logical field name is the same.
+    assert calls == ["power", "power"]
+    assert stats == {"calls": 2, "per_field": {"power": 2}}
     assert data["power_value"] == 321.0
     assert data["extra_indicators"]["fit_power_text"][0] == 321.0
 
@@ -111,6 +114,5 @@ def test_disabled_fit_indicator_is_not_resolved() -> None:
     assert plan["active_fit_fields"] == []
     assert plan["inactive_fit_fields"] == ["K1"]
     assert calls == []
-    # Existing compatibility behaviour keeps a zero-valued placeholder for
-    # non-hardcoded layout keys; the disabled compositor entry is not rendered.
-    assert data["extra_indicators"]["fit_K1_text"][0] == 0.0
+    # Disabled/missing dynamic fields do not become synthetic zeroes.
+    assert data["extra_indicators"]["fit_K1_text"][0] is None

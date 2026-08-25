@@ -13,7 +13,6 @@ from src.indicators.chart_builder import build_chart_data
 from src.indicators.frame_data import prepare_overlay_frame_data
 from src.indicators.custom_text import render_custom_text
 from src.indicators.rotated_paste import rotated_paste
-from src.indicators.time_block import render_time_block
 from src.indicators.time_display import render_time_display
 from src.indicators.chart_utils import generate_history_chart
 from src.indicators.text import _render_text_indicator

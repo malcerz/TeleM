@@ -22,6 +22,35 @@ from src.telemetry_extract import (
 from src.ffmpeg.worker_cache import WORKER_CACHE, _resolve_cache_value
 
 
+def _direct_region_members(layout: dict[str, Any], hud_regions: list[tuple[int, int, int, int, int, int]]) -> list[set[str]] | None:
+    """Assign each enabled indicator to exactly one planned source region."""
+    phantom = set(layout.get("_nvidia_phantom_keys", ()))
+    members = [set() for _ in hud_regions]
+    for key, cfg in layout.get("indicators", {}).items():
+        if key in phantom or not cfg or not cfg.get("enabled", True):
+            continue
+        lx, ly = cfg.get("x", 0.0), cfg.get("y", 0.0)
+        px = round(lx / 100.0 * WORKER_CACHE["video_width"]) if lx <= 100.0 else round(lx)
+        py = round(ly / 100.0 * WORKER_CACHE["video_height"]) if ly <= 100.0 else round(ly)
+        owner = next((i for i, (dx, dy, _ax, _ay, rw, rh) in enumerate(hud_regions)
+                      if dx <= px < dx + rw and dy <= py < dy + rh), None)
+        if owner is None:
+            return None
+        members[owner].add(key)
+    for index, cfg in enumerate(layout.get("custom_texts", [])):
+        if not cfg or not cfg.get("enabled", True):
+            continue
+        lx, ly = cfg.get("x", 0.0), cfg.get("y", 0.0)
+        px = round(lx / 100.0 * WORKER_CACHE["video_width"]) if lx <= 100.0 else round(lx)
+        py = round(ly / 100.0 * WORKER_CACHE["video_height"]) if ly <= 100.0 else round(ly)
+        owner = next((i for i, (dx, dy, _ax, _ay, rw, rh) in enumerate(hud_regions)
+                      if dx <= px < dx + rw and dy <= py < dy + rh), None)
+        if owner is None:
+            return None
+        members[owner].add(f"custom_text:{index}")
+    return members
+
+
 def render_overlay_frame(
     index: int,
     start_dt_utc: Optional[datetime],
@@ -31,6 +60,7 @@ def render_overlay_frame(
     alt_samples: list,
     target_fps: float,
     update_rate_step: int = 1,
+    target_image: Optional[Image.Image] = None,
 ) -> Any:
     """Render a single overlay frame – returns PIL Image RGBA. Uses WORKER_CACHE."""
     video_width = WORKER_CACHE["video_width"]
@@ -42,6 +72,11 @@ def render_overlay_frame(
     cut_regions = WORKER_CACHE.get("_cut_regions", [])
     for cut_start, cut_end in cut_regions:
         if cut_start <= current_t < cut_end:
+            # The SHM fast path has already cleared its mapped atlas target.
+            # Return that target directly so a cut frame does not allocate a
+            # full-size fallback image or trigger a full-atlas copy.
+            if target_image is not None:
+                return target_image
             return Image.new("RGBA", (video_width, video_height), (0, 0, 0, 0))
 
     font_path = WORKER_CACHE["font_path"]
@@ -78,50 +113,66 @@ def render_overlay_frame(
         except Exception:
             t0 = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
-    current_dt_utc = t0 + timedelta(seconds=sample_t)
+    # ── ETAP 4B: shared timeline mapping global -> absolute ───────────────
+    # sample_t is the GLOBAL project time.  The shared contract
+    # (VideoTimeline.global_to_absolute) maps it through the active clip so
+    # multi-file telemetry uses real absolute timestamps; single-file / no
+    # timeline falls back to start_dt_utc + sample_t (identical for one clip).
+    from src.multifile import resolve_render_target_dt
+    current_dt_utc = resolve_render_target_dt(
+        WORKER_CACHE.get("video_timeline"), start_dt_utc, sample_t, t0
+    )
 
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
 
-    from src.overlay_renderer import prepare_overlay_frame_data
-    data = prepare_overlay_frame_data(
-        layout=layout,
-        target_dt=current_dt_utc,
-        tz_offset_hours=tz_offset_hours,
-        start_dt_utc=start_dt_utc,
-        speed_samples=speed_samples,
-        track_samples=track_samples,
-        alt_samples=alt_samples,
-        iso_samples=iso_samples,
-        exposure_samples=exposure_samples,
-        temperature_samples=temperature_samples,
-        gpx_speed_samples=WORKER_CACHE.get("gpx_speed_samples"),
-        gpx_track_samples=WORKER_CACHE.get("gpx_track_samples"),
-        gpx_alt_samples=WORKER_CACHE.get("gpx_alt_samples"),
-        gpx_power_samples=WORKER_CACHE.get("gpx_power_samples"),
-        gpx_atemp_samples=WORKER_CACHE.get("gpx_atemp_samples"),
-        gpx_hr_samples=WORKER_CACHE.get("gpx_hr_samples"),
-        gpx_cad_samples=WORKER_CACHE.get("gpx_cad_samples"),
-        fit_data=WORKER_CACHE.get("fit_data"),
-        gps_track=WORKER_CACHE.get("gps_track"),
-        total_frames=total_frames,
-        current_index=index,
-        chart_data=chart_data,
-        resolve_cache_value=_resolve_cache_value,
-        _range_cache=WORKER_CACHE.get("_prep_cache"),
-    )
+    telemetry_cache = WORKER_CACHE.get("_telemetry_cache")
+    if telemetry_cache is not None:
+        data = telemetry_cache.lookup(index)
+    else:
+        from src.overlay_renderer import prepare_overlay_frame_data
+        data = prepare_overlay_frame_data(
+            layout=layout,
+            target_dt=current_dt_utc,
+            tz_offset_hours=tz_offset_hours,
+            start_dt_utc=start_dt_utc,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=WORKER_CACHE.get("gpx_speed_samples"),
+            gpx_track_samples=WORKER_CACHE.get("gpx_track_samples"),
+            gpx_alt_samples=WORKER_CACHE.get("gpx_alt_samples"),
+            gpx_power_samples=WORKER_CACHE.get("gpx_power_samples"),
+            gpx_atemp_samples=WORKER_CACHE.get("gpx_atemp_samples"),
+            gpx_hr_samples=WORKER_CACHE.get("gpx_hr_samples"),
+            gpx_cad_samples=WORKER_CACHE.get("gpx_cad_samples"),
+            fit_data=WORKER_CACHE.get("fit_data"),
+            gps_track=WORKER_CACHE.get("gps_track"),
+            total_frames=total_frames,
+            current_index=index,
+            chart_data=chart_data,
+            resolve_cache_value=_resolve_cache_value,
+            _range_cache=WORKER_CACHE.get("_prep_cache"),
+        )
 
     hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")
 
     if hud_regions and len(hud_regions) > 1:
-        atlas_w = max(r[2] + r[4] for r in hud_regions)
-        atlas_h = max(r[3] + r[5] for r in hud_regions)
+        planned_atlas = layout.get("_nvidia_atlas_size")
+        if planned_atlas:
+            atlas_w, atlas_h = planned_atlas
+        else:
+            atlas_w = max(r[2] + r[4] for r in hud_regions)
+            atlas_h = max(r[3] + r[5] for r in hud_regions)
 
         # ── Dirty check: reuse atlas if formatted values unchanged ──
         prev_data = WORKER_CACHE.get("_prev_frame_data")
         prev_atlas = WORKER_CACHE.get("_prev_atlas_img")
-        if prev_data is not None and prev_atlas is not None:
+        if target_image is None and prev_data is not None and prev_atlas is not None:
             is_dirty = False
             if prev_data.get("date_text") != data.get("date_text") or prev_data.get("time_text") != data.get("time_text"):
                 is_dirty = True
@@ -147,6 +198,53 @@ def render_overlay_frame(
             if not is_dirty:
                 return prev_atlas
 
+        direct_members = None
+        if layout.get("_nvidia_direct_region"):
+            direct_members = _direct_region_members(layout, hud_regions)
+            if direct_members is None:
+                if not WORKER_CACHE.get("_direct_region_fallback_logged"):
+                    print("[NVIDIA] HUD producer: LEGACY_FULL_CANVAS fallback: region ownership assertion failed", flush=True)
+                    WORKER_CACHE["_direct_region_fallback_logged"] = True
+            else:
+                atlas_img = target_image
+                if atlas_img is None:
+                    atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
+                rot180 = WORKER_CACHE.get("hud_rotate_180", False)
+                for region_index, r in enumerate(hud_regions):
+                    dest_x, dest_y, atlas_x, atlas_y, rw, rh = r
+                    keys = direct_members[region_index]
+                    if keys:
+                        compose_overlay(
+                            video_width, video_height, layout, font_path,
+                            data["date_text"], data["time_text"],
+                            data["speed_value"], data["distance_m"], data["max_distance_m"],
+                            data["alt_value"], data["min_alt"], data["max_alt"],
+                            data["iso_value"], data["exposure_value"], data["temp_value"],
+                            indicator_values=data["indicator_values"],
+                            max_speed_kmh=data["max_speed_kmh"],
+                            power_value=data["power_value"], atemp_value=data["atemp_value"],
+                            hr_value=data["hr_value"], cad_value=data["cad_value"],
+                            battery_value=data["battery_value"], chart_data=data["chart_data"],
+                            current_position=data["current_position"], extra_indicators=data["extra_indicators"],
+                            gps_track=data["gps_track"], map_heading=data.get("map_heading"), target_dt=data["target_dt"],
+                            start_dt_utc=data["start_dt_utc"], elapsed_seconds=data["elapsed_seconds"],
+                            avg_speed_kmh=data["avg_speed_kmh"], reuse_canvas=False,
+                            target_image=atlas_img,
+                            coordinate_origin=(dest_x - atlas_x, dest_y - atlas_y),
+                            render_keys=keys,
+                            # ``atlas_img`` is freshly allocated above.  The
+                            # compositor still checks every prior widget's
+                            # declared rectangle before using plain paste.
+                            destination_proven_empty=True,
+                        )
+                    if rot180:
+                        region_img = atlas_img.crop((atlas_x, atlas_y, atlas_x + rw, atlas_y + rh))
+                        atlas_img.paste(region_img.transpose(Image.Transpose.ROTATE_180), (atlas_x, atlas_y))
+                WORKER_CACHE["_prev_frame_data"] = data
+                if target_image is None:
+                    WORKER_CACHE["_prev_atlas_img"] = atlas_img
+                return atlas_img
+
         img = compose_overlay(
             video_width, video_height, layout, font_path,
             data["date_text"], data["time_text"],
@@ -164,6 +262,7 @@ def render_overlay_frame(
             current_position=data["current_position"],
             extra_indicators=data["extra_indicators"],
             gps_track=data["gps_track"],
+            map_heading=data.get("map_heading"),
             target_dt=data["target_dt"],
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
@@ -171,10 +270,13 @@ def render_overlay_frame(
         )
 
         atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
+        rot180 = WORKER_CACHE.get("hud_rotate_180", False)
         for r in hud_regions:
-            dest_x, dest_y, src_x, src_y, rw, rh = r
+            dest_x, dest_y, atlas_x, atlas_y, rw, rh = r
             r_crop = img.crop((dest_x, dest_y, dest_x + rw, dest_y + rh))
-            atlas_img.paste(r_crop, (src_x, src_y))
+            if rot180:
+                r_crop = r_crop.transpose(Image.Transpose.ROTATE_180)
+            atlas_img.paste(r_crop, (atlas_x, atlas_y))
 
         WORKER_CACHE["_prev_frame_data"] = data
         WORKER_CACHE["_prev_atlas_img"] = atlas_img
@@ -197,6 +299,7 @@ def render_overlay_frame(
             current_position=data["current_position"],
             extra_indicators=data["extra_indicators"],
             gps_track=data["gps_track"],
+            map_heading=data.get("map_heading"),
             target_dt=data["target_dt"],
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
@@ -247,13 +350,9 @@ def render_overlay_job(job: tuple) -> int:
         fit_trk = WORKER_CACHE.get("fit_data", {}).get("track", [])
         fit_alt = WORKER_CACHE.get("fit_data", {}).get("alt", [])
         if src == "gpx":
-            spd_s = gpx_spd or speed_samples
-            trk_s = gpx_trk or track_samples
-            alt_s = gpx_alt or alt_samples
+            spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
         elif src == "fit":
-            spd_s = fit_spd or speed_samples
-            trk_s = fit_trk or track_samples
-            alt_s = fit_alt or alt_samples
+            spd_s, trk_s, alt_s = fit_spd, fit_trk, fit_alt
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
@@ -267,11 +366,14 @@ def render_overlay_job(job: tuple) -> int:
     exposure_value = interpolate_exposure(exposure_samples, current_dt_utc)
     temp_value = interpolate_temperature(temperature_samples, current_dt_utc)
 
-    power_value = _resolve_cache_value("power", current_dt_utc)
-    atemp_value = _resolve_cache_value("atemp", current_dt_utc)
-    hr_value = _resolve_cache_value("hr", current_dt_utc)
-    cad_value = _resolve_cache_value("cad", current_dt_utc)
-    battery_value = _resolve_cache_value("battery", current_dt_utc)
+    def _source_for(key: str) -> str:
+        return layout.get("indicators", {}).get(key, {}).get("source", "gpmf")
+
+    power_value = _resolve_cache_value("power", _source_for("power_text"), current_dt_utc, "power_text")
+    atemp_value = _resolve_cache_value("atemp", _source_for("atemp_text"), current_dt_utc, "atemp_text")
+    hr_value = _resolve_cache_value("hr", _source_for("hr_text"), current_dt_utc, "hr_text")
+    cad_value = _resolve_cache_value("cad", _source_for("cad_text"), current_dt_utc, "cad_text")
+    battery_value = _resolve_cache_value("battery", _source_for("battery_text"), current_dt_utc, "battery_text")
 
     speed_value = indicator_values.get("speed_visual", interpolate_speed(speed_samples, current_dt_utc))
     distance_m = indicator_values.get("dist_visual", interpolate_distance(track_samples, current_dt_utc))
@@ -291,10 +393,10 @@ def render_overlay_job(job: tuple) -> int:
     spd_src = layout["indicators"].get("speed_visual", {}).get("source", "gpmf")
     if spd_src == "gpx":
         gpx_spd_w = WORKER_CACHE.get("gpx_speed_samples", [])
-        spd_for_range = gpx_spd_w or speed_samples
+        spd_for_range = gpx_spd_w
     elif spd_src == "fit":
         fit_spd_w = WORKER_CACHE.get("fit_data", {}).get("speed", [])
-        spd_for_range = fit_spd_w or speed_samples
+        spd_for_range = fit_spd_w
     else:
         spd_for_range = speed_samples
     if spd_for_range:
@@ -307,10 +409,10 @@ def render_overlay_job(job: tuple) -> int:
     alt_src = layout["indicators"].get("alt_visual", {}).get("source", "gpmf")
     if alt_src == "gpx":
         gpx_alt_w = WORKER_CACHE.get("gpx_alt_samples", [])
-        alt_for_range = gpx_alt_w or alt_samples
+        alt_for_range = gpx_alt_w
     elif alt_src == "fit":
         fit_alt_w = WORKER_CACHE.get("fit_data", {}).get("alt", [])
-        alt_for_range = fit_alt_w or alt_samples
+        alt_for_range = fit_alt_w
     else:
         alt_for_range = alt_samples
     if alt_for_range:
@@ -331,14 +433,16 @@ def render_overlay_job(job: tuple) -> int:
         "speed_visual", "speed_text", "dist_visual", "dist_text",
         "alt_visual", "alt_text", "iso_text", "exposure_text",
         "temp_text", "power_text", "atemp_text", "hr_text",
-        "cad_text", "battery_text", "track_map", "time_block",
+        "cad_text", "battery_text", "compass", "track_map",
     }
     extra_indicators: dict[str, tuple[float, str, str]] = {}
     # 1) FIT fields – resolve real values from telemetry
     for ind_key, ind_cfg in layout.get("indicators", {}).items():
         if ind_key.startswith("fit_") and ind_key.endswith("_text"):
             field_name = ind_key[4:-5]
-            fit_val = _resolve_cache_value(field_name, current_dt_utc) or 0.0
+            fit_val = _resolve_cache_value(field_name, "fit", current_dt_utc, ind_key)
+            if fit_val is None:
+                fit_val = 0.0
             extra_indicators[ind_key] = (fit_val, ind_cfg.get("unit", ""), ind_cfg.get("label", field_name))
     # 2) All remaining dynamic indicators (non-hardcoded, not already captured)
     for ind_key in list(layout.get("indicators", {}).keys()):
@@ -346,6 +450,15 @@ def render_overlay_job(job: tuple) -> int:
             continue
         ind_cfg = layout["indicators"][ind_key]
         extra_indicators[ind_key] = (0.0, ind_cfg.get("unit", ""), ind_cfg.get("label", ind_key))
+    if "compass" in layout.get("indicators", {}):
+        compass_cfg = layout["indicators"]["compass"]
+        if compass_cfg.get("enabled", True):
+            compass_source = compass_cfg.get("source", "gpmf")
+            compass_value = _resolve_cache_value("heading", compass_source, current_dt_utc, "compass")
+            extra_indicators["compass"] = (
+                compass_value, compass_cfg.get("unit", "deg"),
+                compass_cfg.get("label", "GPS Course Over Ground"),
+            )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
     _elapsed = 0.0
@@ -354,6 +467,18 @@ def render_overlay_job(job: tuple) -> int:
     _avg_spd = 0.0
     if _elapsed > 0 and distance_m > 0:
         _avg_spd = (distance_m / _elapsed) * 3.6
+
+    map_heading = None
+    map_cfg = layout.get("indicators", {}).get("track_map", {})
+    if (
+        isinstance(map_cfg, dict)
+        and map_cfg.get("enabled", True)
+        and str(map_cfg.get("map_orientation", "north_up")).strip().lower()
+        == "track_up"
+    ):
+        map_heading = _resolve_cache_value(
+            "heading", map_cfg.get("source", "fit"), current_dt_utc, "track_map"
+        )
 
     img = compose_overlay(
         video_width, video_height, layout, font_path, date_text, time_text,
@@ -366,6 +491,7 @@ def render_overlay_job(job: tuple) -> int:
         chart_data=chart_data, current_position=current_position,
         extra_indicators=extra_indicators,
         gps_track=WORKER_CACHE.get("gps_track", []),
+        map_heading=map_heading,
         target_dt=current_dt_utc,
         start_dt_utc=start_dt_utc,
         elapsed_seconds=_elapsed,

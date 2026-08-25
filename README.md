@@ -37,7 +37,7 @@ Repozytorium dzieli się na katalogi: `src/gui` (interfejs PySide6), `src/indica
 - chart_builder.py / chart_utils.py / chart.py — budowanie danych wykresu i renderowanie wskaźnika typu wykres
 - bar.py, gauge.py, segment_bar.py — renderery pasków, zegarów wskazówkowych i pasków segmentowych
 - text.py, custom_text.py — renderowanie wskaźników tekstowych i tekstu niestandardowego
-- time_block.py — blok wyświetlający czas/datę
+- time_display.py — nowoczesny, wielolinijkowy blok czasu/daty (zastąpił legacy time_block)
 - static_map.py, moving_map.py — wskaźniki mapy statycznej i mapy podążającej za pozycją (korzystają z map_renderer.py)
 - rotated_paste.py — pomocnicza funkcja wklejania obrazu z rotacją
 - helpers.py — cache fontów, parsowanie kolorów hex, wspólne narzędzia

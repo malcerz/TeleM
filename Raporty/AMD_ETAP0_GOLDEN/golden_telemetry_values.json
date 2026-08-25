@@ -1,0 +1,80 @@
+{
+  "reference_only": true,
+  "renderer_hardcoded": false,
+  "frame_indexing": "zero_based",
+  "fps": 29.97,
+  "start_datetime_utc": "2026-08-05T04:28:11",
+  "requested_frames": 1132,
+  "decoded_source_frames": 1131,
+  "notes": {
+    "speed": "Value rendered by the enabled fit_enhanced_speed_text indicator.",
+    "distance_altitude": "Prepared pipeline values retained as regression data; these indicators are not enabled in the golden layout.",
+    "exposure": "Raw GPMF denominator used by the renderer, displayed as 1/value.",
+    "map": "Nearest FIT GPS sample selected by the current static-map implementation. GPS begins at 04:28:26, so earlier frames use track index 0."
+  },
+  "frames": {
+    "30": {
+      "target_datetime_utc": "2026-08-05T04:28:12.001001",
+      "date": "2026-08-05",
+      "time": "04:28:12",
+      "speed_kmh": 5.2065765756,
+      "cadence_rpm": 0.0,
+      "heart_rate_bpm": 80.0,
+      "distance_m": 35.10283021643567,
+      "altitude_m": 40.35329189199998,
+      "iso": 104,
+      "exposure_denominator": 457,
+      "temperature_c": 38,
+      "gopro_battery_percent": 62.0,
+      "map": {
+        "track_index": 0,
+        "track_points": 1677,
+        "latitude": 54.331473307684064,
+        "longitude": 18.601345662027597,
+        "sample_datetime_utc": "2026-08-05T04:28:26"
+      }
+    },
+    "300": {
+      "target_datetime_utc": "2026-08-05T04:28:21.010010",
+      "date": "2026-08-05",
+      "time": "04:28:21",
+      "speed_kmh": 9.54234234,
+      "cadence_rpm": 46.0,
+      "heart_rate_bpm": 78.0,
+      "distance_m": 54.73194230201063,
+      "altitude_m": 36.34067305999998,
+      "iso": 2041,
+      "exposure_denominator": 484,
+      "temperature_c": 38,
+      "gopro_battery_percent": 62.0,
+      "map": {
+        "track_index": 0,
+        "track_points": 1677,
+        "latitude": 54.331473307684064,
+        "longitude": 18.601345662027597,
+        "sample_datetime_utc": "2026-08-05T04:28:26"
+      }
+    },
+    "900": {
+      "target_datetime_utc": "2026-08-05T04:28:41.030030",
+      "date": "2026-08-05",
+      "time": "04:28:41",
+      "speed_kmh": 13.084108092,
+      "cadence_rpm": 51.0,
+      "heart_rate_bpm": 86.0,
+      "distance_m": 191.66925009839878,
+      "altitude_m": 41.561822819999975,
+      "iso": 1506,
+      "exposure_denominator": 66,
+      "temperature_c": 38,
+      "gopro_battery_percent": 62.0,
+      "map": {
+        "track_index": 14,
+        "track_points": 1677,
+        "latitude": 54.33135428465903,
+        "longitude": 18.60090703703463,
+        "sample_datetime_utc": "2026-08-05T04:28:41"
+      }
+    }
+  }
+}

@@ -38,7 +38,7 @@ def get_value_schema() -> list[tuple]:
     return get_common_schema() + [
         ("form", "choice", ["text", "gauge", "bar", "chart", "segment_bar"], None, None),
         ("font_size", "float", 0.5, 10.0, 0.1),
-        ("size", "float", 1.0, 50.0, 0.1),
+        ("size", "float", 1.0, 100.0, 0.1),
         ("thickness", "int", 1, 10, 1),
         ("min_val", "float", 0.0, 1000.0, 1.0),
         ("max_val", "float", 1.0, 10000.0, 1.0),
@@ -49,6 +49,10 @@ def get_value_schema() -> list[tuple]:
         ("chart_color", "color", None, None, None),
         ("fill_color", "color", None, None, None),
         ("fill_alpha", "int", 0, 255, 5),
+        ("chart_time_scope", "choice", ["activity", "video", "window"], None, None),
+        ("chart_window_s", "float", 5.0, 600.0, 1.0),
+        ("show_x_axis_values", "bool", None, None, None),
+        ("show_y_axis_values", "bool", None, None, None),
         # Gauge-specific
         ("start_angle", "int", 0, 360, 5),
         ("sweep_angle", "int", 30, 360, 5),
@@ -63,11 +67,6 @@ def get_value_schema() -> list[tuple]:
 # ── Built-in indicator definitions ───────────────────────────────────────────
 
 BUILTIN_FIELDS: dict[str, list[tuple]] = {
-    "time_block": get_common_schema() + [
-        ("font_label", "float", 0.6, 3.0, 0.1),
-        ("font_date", "float", 0.8, 5.0, 0.1),
-        ("font_time", "float", 0.8, 5.0, 0.1),
-    ],
     "time_display": get_common_schema() + [
         ("font_size", "float", 0.8, 8.0, 0.1),
         ("show_date", "bool", None, None, None),
@@ -117,16 +116,33 @@ BUILTIN_FIELDS: dict[str, list[tuple]] = {
     "alt_text":    get_value_schema() + [
         ("source", "choice", TELEMETRY_SOURCES, None, None),
     ],
-    "iso_text":    get_value_schema(),
-    "exposure_text": get_value_schema(),
-    "temp_text":     get_value_schema(),
-    "power_text":    get_value_schema(),
-    "atemp_text":    get_value_schema(),
-    "hr_text":       get_value_schema(),
-    "cad_text":      get_value_schema(),
-    "battery_text":  get_value_schema(),
+    "iso_text":    get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "exposure_text": get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "temp_text":     get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "power_text":    get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "atemp_text":    get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "hr_text":       get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "cad_text":      get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "battery_text":  get_value_schema() + [("source", "choice", TELEMETRY_SOURCES, None, None)],
+    "compass": get_value_schema() + [
+        ("source", "choice", TELEMETRY_SOURCES, None, None),
+        ("field", "choice", ["heading"], None, None),
+        ("gauge_style", "choice", ["compass"], None, None),
+        ("opacity", "float", 0.0, 1.0, 0.05),
+        ("compass_show_cardinals", "bool", None, None, None),
+        ("compass_show_heading", "bool", None, None, None),
+        ("compass_tick_degrees", "int", 5, 90, 5),
+        ("compass_major_tick_degrees", "int", 15, 90, 15),
+        ("compass_tick_color", "color", None, None, None),
+        ("compass_cardinal_color", "color", None, None, None),
+        ("compass_needle_color", "color", None, None, None),
+        ("compass_ring_color", "color", None, None, None),
+        ("compass_heading_color", "color", None, None, None),
+        ("compass_heading_format", "choice", ["03d", "d"], None, None),
+    ],
     "track_map":     get_common_schema() + [
         ("source", "choice", TELEMETRY_SOURCES, None, None),
+        ("map_orientation", "choice", ["north_up", "track_up"], None, None),
         ("size", "float", 5.0, 40.0, 0.1),
         ("zoom", "int", 10, 20, 1),
         ("map_style", "choice",

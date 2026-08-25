@@ -9,6 +9,16 @@ from src.ffmpeg.detection import (
     _test_encoder,
     detect_best_encoder,
 )
+from src.ffmpeg.intel_backend import (
+    IntelDeviceSelection,
+    intel_device_selection,
+    intel_ffmpeg_device_args,
+    enumerate_d3d11_adapters,
+    find_intel_adapter,
+    resolve_intel_force,
+    IntelBackendError,
+    IntelResolution,
+)
 from src.ffmpeg.worker_cache import (
     WORKER_CACHE,
     init_worker,
@@ -48,6 +58,14 @@ from src.ffmpeg.second_pass import (
 __all__ = [
     "detect_gpu_decoder",
     "detect_best_encoder",
+    "enumerate_d3d11_adapters",
+    "find_intel_adapter",
+    "resolve_intel_force",
+    "IntelDeviceSelection",
+    "intel_device_selection",
+    "intel_ffmpeg_device_args",
+    "IntelBackendError",
+    "IntelResolution",
     "init_worker",
     "render_overlay_frame",
     "render_overlay_job",

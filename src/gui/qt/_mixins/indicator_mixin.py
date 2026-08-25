@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import math
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
-from src.gui.qt.models import DataStream, get_schema_for_form
+from src.gui.qt.models import (
+    DataStream,
+    canonical_defaults,
+    compass_indicator_fields,
+    get_schema_for_form,
+)
 from src.telemetry_extract import interpolate_value
 
 
@@ -16,6 +22,11 @@ class IndicatorMixin:
     def _on_stream_clicked(self, stream_key: str) -> None:
         """Użytkownik kliknął przycisk strumienia danych."""
         self._selected_stream_key = stream_key
+
+        # Invalidate chart and prepare caches so newly added indicators compute freshly
+        self._chart_data_cache = None
+        if hasattr(self, "_prepare_cache") and isinstance(self._prepare_cache, dict):
+            self._prepare_cache.clear()
 
         # Upewnij się, że wskaźnik istnieje w layoucie
         if "indicators" not in self.layout:
@@ -37,7 +48,15 @@ class IndicatorMixin:
             cfg["form"] = "time_display"
 
         form = cfg.get("form", "text")
-        schema = get_schema_for_form(form)
+        bar_style = cfg.get("bar_style", "ruler")
+        schema = (
+            compass_indicator_fields()
+            if stream_key == "compass"
+            else get_schema_for_form(
+                form, bar_style=bar_style,
+                chart_time_scope=cfg.get("chart_time_scope", "activity"),
+            )
+        )
 
         self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
 
@@ -55,7 +74,7 @@ class IndicatorMixin:
         defaults: dict[str, Any] = {
             "enabled": True, "label": key, "x": 50.0, "y": 50.0,
             "rotation": 0, "form": "text", "font_size": 2.5,
-            "size": 10.0, "thickness": 3, "min_val": 0, "max_val": 100,
+            "size": 2.5, "thickness": 3, "min_val": 0, "max_val": 100,
             "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
             # Text
             "text_offset_x": 0.0, "text_offset_y": 0.0,
@@ -64,7 +83,7 @@ class IndicatorMixin:
             "needle_length": 1.1, "needle_width": 4, "needle_color": "#DC3232",
             "marker_size": 6, "marker_color": "#FFFFFF",
             # Chart
-            "window_s": 30.0, "chart_color": "#00AAFF",
+            "chart_window_s": 60.0, "chart_color": "#00AAFF",
             "fill_color": "#00AAFF", "fill_alpha": 80,
             "grid_color": "#444444", "show_grid": True,
             "line_width": 2,
@@ -78,6 +97,36 @@ class IndicatorMixin:
         # Ustal źródło na podstawie klucza
         if key.startswith("fit_"):
             defaults["source"] = "fit"
+            if key.endswith("_text"):
+                field_name = key[4:-5]
+                defaults["field"] = field_name
+                catalog = getattr(getattr(self, "telemetry", None), "fit_data", {})
+                cat_dict = getattr(catalog, "field_catalog", {}) if catalog else {}
+                meta = cat_dict.get(field_name, {})
+                if field_name in ("enhanced_speed", "speed"):
+                    defaults["label"] = "Speed"
+                elif field_name in ("enhanced_altitude", "altitude"):
+                    defaults["label"] = "Altitude"
+                else:
+                    defaults["label"] = meta.get("display_name") or field_name.replace("_", " ").title()
+                defaults["unit"] = meta.get("unit") or ""
+                # Dystans FIT: skala i wartość są zawsze w km (compositor konwertuje
+                # metry -> km przez /1000). Wymuś unit="km" zamiast natywnego "m",
+                # aby uniknąć rozjazdu jednostek (metry traktowane jako km).
+                if "dist" in field_name.lower():
+                    defaults["unit"] = "km"
+                if not defaults["unit"]:
+                    unit_map = {
+                        "heart_rate": "BPM", "cadence": "rpm", "power": "W",
+                        "temperature": "°C", "altitude": "m", "curVpower": "W",
+                        "solar": "%", "solar_pct": "%", "battery": "%", "battery_pct": "%",
+                        "discharge": "%/h", "speed": "km/h", "enhanced_speed": "km/h",
+                        "enhanced_altitude": "m", "distance": "km",
+                    }
+                    defaults["unit"] = unit_map.get(field_name, "")
+                # BAR Ruler używa trybu COUNT (major_ticks) — NIE ustawiamy już
+                # ukrytego major_step>0, który ignorowałby major_ticks w GUI.
+                # Stare projekty z jawnym major_step>0 zachowują tryb STEP.
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
@@ -88,7 +137,16 @@ class IndicatorMixin:
         if key in _label_map:
             defaults["label"] = _label_map[key]
 
-        # Specjalne domyślne wartości dla time_display
+        # Dystans (GPMF/GPX): wartość i skala BAR-a są zawsze w km (compositor
+        # konwertuje /1000) — wymuś unit="km" dla spójnych etykiet zakresu.
+        if key in ("dist_visual", "dist_text", "dist_text_gpx"):
+            defaults["unit"] = "km"
+
+        # Specjalne domyślne wartości dla time_display.
+        # ETAP 15: bazujemy na sprawdzonym wizualnie baseline z v10
+        # (font_size 1.8, per-line 1.2/1.9/1.5/1.5).  Globalny "size" ustawiamy
+        # poniżej (druga sekcja time_display), bo wcześniejsza linia
+        # ``form=="text" → size=font_size`` nadpisałaby go.
         if key == "time_display":
             defaults["show_date"] = True
             defaults["show_time"] = True
@@ -102,11 +160,11 @@ class IndicatorMixin:
             defaults["elapsed_label"] = "Czas"
             defaults["show_avg_speed_label"] = True
             defaults["avg_speed_label"] = "Średnia prędkość"
-            defaults["font_size"] = 2.0
-            defaults["date_font_size"] = 2.0
-            defaults["time_font_size"] = 2.5
-            defaults["elapsed_font_size"] = 2.5
-            defaults["avg_speed_font_size"] = 2.0
+            defaults["font_size"] = 1.8
+            defaults["date_font_size"] = 1.2
+            defaults["time_font_size"] = 1.9
+            defaults["elapsed_font_size"] = 1.5
+            defaults["avg_speed_font_size"] = 1.5
             defaults["x"] = 2.0
             defaults["y"] = 3.0
 
@@ -115,27 +173,138 @@ class IndicatorMixin:
         _form, _form_overrides = get_form_for_key(key)
         defaults["form"] = _form
         defaults.update(_form_overrides)
+        if defaults.get("form") == "text":
+            defaults["size"] = defaults["font_size"]
 
-        # time_display – własna forma, po get_form_for_key (jak track_map)
+        # time_display – własna forma, po get_form_for_key (jak track_map).
+        # ETAP 15: Rozmiar to teraz globalna skala master (1.0 = standardowy
+        # wygląd, identyczny z legacy size=0.1 z presetów v1..v10), a domyślna
+        # ikona to zegar.
         if key == "time_display":
             defaults["form"] = "time_display"
+            defaults["size"] = 1.0
+            defaults["icon"] = "clock"
 
         if key == "track_map":
             # Mapa – ma własne ustawienia niezależnie od rejestru
             defaults["form"] = "map"
             defaults["size"] = 18.0
             defaults["zoom"] = 16
+            defaults["map_orientation"] = "north_up"
             defaults["map_style"] = "light_all"
             defaults["marker_size"] = 7
             defaults["marker_color"] = "#FFFFFF"
             defaults["x"] = 2.0
             defaults["y"] = 15.0
 
+        if key == "compass":
+            defaults["label"] = "COMPASS"
+            defaults["form"] = "gauge"
+            defaults["gauge_style"] = "compass"
+            defaults["field"] = "heading"
+            defaults["source"] = "gpmf"
+            defaults["x"] = 70.65
+            defaults["y"] = 20.0
+            defaults["size"] = 7.8
+            defaults["font_size"] = 1.2
+            defaults["show_value"] = True
+            defaults["unit"] = "°"
+            defaults["opacity"] = 1.0
+            defaults["compass_show_cardinals"] = True
+            defaults["compass_show_heading"] = True
+            defaults["compass_heading_format"] = "03d"
+            defaults["compass_tick_degrees"] = 15
+            defaults["compass_major_tick_degrees"] = 45
+            defaults["compass_tick_color"] = "#DDE7F2"
+            defaults["compass_cardinal_color"] = "#FFFFFF"
+            defaults["compass_needle_color"] = "#FFD42A"
+            defaults["compass_ring_color"] = "#B8C7D9"
+            defaults["compass_heading_color"] = "#FFFFFF"
+
+        if key == "slope_text":
+            defaults["label"] = "SLOPE"
+            defaults["field"] = "slope"
+            defaults["form"] = "bar"
+            # ETAP 11B: Slope NIE jest osobnym stylem — to wspólny Ruler
+            # z orientacją pionową. Nowy wskaźnik zapisuje bar_style="ruler" +
+            # orientation="vertical"; stary bar_style="slope" jest normalizowany
+            # przy renderze (zachowuje wygląd legacy).
+            defaults["bar_style"] = "ruler"
+            defaults["orientation"] = "vertical"
+            defaults["source"] = "gpmf"
+            defaults["x"] = 73.0
+            defaults["y"] = 52.0
+            defaults["size"] = 20.0
+            defaults["font_size"] = 1.35
+            defaults["unit"] = "%"
+            defaults["min_val"] = -20.0
+            defaults["max_val"] = 20.0
+            defaults["major_tick_mode"] = "step"
+            defaults["major_step"] = 5.0
+            defaults["minor_ticks"] = 5
+            defaults["show_tick_labels"] = True
+            defaults["tick_label_signed"] = True
+            defaults["show_range_labels"] = False  # etykiety ticków zamiast min/max
+            defaults["show_value"] = True
+            defaults["show_label"] = True
+            defaults["show_units"] = True
+            defaults["decimals"] = 1
+            defaults["opacity"] = 1.0
+            defaults["track_color"] = "#8D9AA7"
+            defaults["tick_color"] = "#DDE7F2"
+            defaults["zero_tick_color"] = "#FFFFFF"
+            defaults["marker_color"] = "#FFD42A"
+            defaults["marker_border_color"] = "#FFFFFF"
+            defaults["marker_style"] = "line"
+
+        if key == "lean_indicator":
+            # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).
+            # ETAP 13: źródło IMU = fizyczny roll z complementary filter
+            # (precompute deterministyczny); sensitivity działa NA kącie.
+            defaults["label"] = "PRZECHYŁ"
+            defaults["field"] = "lean_roll_x"
+            defaults["form"] = "lean"
+            defaults["source"] = "gyro"
+            defaults["axis"] = "x"
+            defaults["zero_offset"] = 0.0
+            defaults["invert_axis"] = False
+            defaults["pivot_x"] = 0.5
+            defaults["pivot_y"] = 1.0
+            defaults["sensitivity"] = 1.0
+            defaults["max_angle"] = 30.0
+            defaults["graphic"] = "bike"
+            defaults["show_value"] = True
+            defaults["decimals"] = 0
+            defaults["show_reference"] = True
+            defaults["show_ticks"] = True
+            defaults["unit"] = "°"
+            defaults["track_color"] = "#FFFFFF"
+            defaults["marker_color"] = "#FFFFFF"
+            defaults["x"] = 50.0
+            defaults["y"] = 50.0
+            defaults["size"] = 14.0
+
         # Automatycznie ustaw min/max z danych telemetrycznych
         _min_v, _max_v = self._get_indicator_range(key)
         if _min_v is not None and _max_v is not None:
             defaults["min_val"] = _min_v
             defaults["max_val"] = _max_v
+
+        # ── Kompletny config: uzupełnij brakujące pola kanonicznymi
+        # defaultami ze schematu (JEDNO źródło prawdy).
+        # Dzięki temu model == Property Editor == Preview/Renderer od pierwszej
+        # chwili, bez „przeskoku" przy pierwszej edycji właściwości.
+        if key == "compass":
+            _schema = compass_indicator_fields()
+        else:
+            _schema = get_schema_for_form(
+                defaults.get("form", "text"),
+                bar_style=defaults.get("bar_style", "ruler"),
+                chart_time_scope=defaults.get("chart_time_scope", "activity"),
+            )
+        for _field_name, _field_default in canonical_defaults(_schema).items():
+            if _field_name not in defaults:
+                defaults[_field_name] = _field_default
 
         self.layout["indicators"][key] = defaults
 
@@ -145,6 +314,14 @@ class IndicatorMixin:
         Zwraca (min_val, max_val) zaokrąglone do pełnych dziesiątek,
         lub (None, None) gdy brak danych.
         """
+        if key == "slope_text":
+            return -20.0, 20.0
+
+        if key == "lean_indicator":
+            # Skala wskaźnika przechyłu to clamp maksymalnego kąta (max_angle),
+            # nie automatyczny zakres z danych — nie nadpisuj.
+            return None, None
+
         samples: list[tuple] | None = None
 
         # FIT fields: fit_{field_name}_text
@@ -168,7 +345,7 @@ class IndicatorMixin:
         # GPMF fields
         elif key in ("speed_text",):
             samples = self.telemetry.speed_samples
-        elif key in ("dist_text",):
+        elif key in ("dist_text", "dist_visual"):
             samples = self.telemetry.track_samples
         elif key in ("alt_text",):
             samples = self.telemetry.alt_samples
@@ -178,6 +355,11 @@ class IndicatorMixin:
             samples = self.telemetry.exposure_samples
         elif key in ("temp_text",):
             samples = self.telemetry.temperature_samples
+        elif key in {
+            "accel_x_text", "accel_y_text", "accel_z_text", "accel_magnitude_text",
+            "gyro_x_text", "gyro_y_text", "gyro_z_text", "gyro_magnitude_text",
+        }:
+            samples = getattr(self.telemetry, key[:-5] + "_samples", [])
 
         if not samples:
             return None, None
@@ -185,6 +367,17 @@ class IndicatorMixin:
         vals = [v for _, v in samples if v is not None]
         if len(vals) < 2:
             return None, None
+
+        is_distance = key in ("dist_text", "dist_visual", "fit_distance_text") or "distance" in key or "dist_" in key
+        if is_distance:
+            vals = [v / 1000.0 for v in vals]
+            raw_min = min(vals)
+            raw_max = max(vals)
+            min_val = 0.0
+            max_val = math.ceil(raw_max)
+            if max_val <= min_val:
+                max_val = min_val + 5.0
+            return min_val, max_val
 
         raw_min = min(vals)
         raw_max = max(vals)
@@ -217,7 +410,11 @@ class IndicatorMixin:
         cfg["y"] = round(y_norm, 2)
 
         form = cfg.get("form", "text")
-        schema = get_schema_for_form(form)
+        bar_style = cfg.get("bar_style", "ruler")
+        schema = get_schema_for_form(
+            form, bar_style=bar_style,
+            chart_time_scope=cfg.get("chart_time_scope", "activity"),
+        )
         self.signals.sig_properties_ready.emit(key, schema, dict(cfg))
 
         self._render_preview()
@@ -236,15 +433,33 @@ class IndicatorMixin:
         self._render_preview()
 
     def _on_reset_layout(self) -> None:
-        """Resetuje układ — usuwa wszystkie wskaźniki poza time_block."""
-        # Zachowaj time_block jako bazowy wskaźnik daty/czasu, usuń resztę
-        time_block_cfg = self.layout.get("indicators", {}).get(
-            "time_block",
-            {"enabled": True, "label": "Czas", "x": 1.8, "y": 3.0,
-             "rotation": 0, "font_label": 1.25, "font_date": 2.0,
-             "font_time": 2.0},
-        )
-        self.layout["indicators"] = {"time_block": time_block_cfg}
+        """Resetuje układ — tylko nowoczesny time_display (bez legacy time_block).
+
+        Legacy ``time_block`` indicator został zastąpiony przez ``time_display``
+        i NIE jest już tworzony ani przywracany (ETAP 4A.1).
+        """
+        time_cfg = None
+        try:
+            from src.gui.layout_manager import normalize_layout
+            base = getattr(self, "base_dir", None)
+            if base is not None:
+                fresh = normalize_layout(Path(base) / "def_layout.json", 1280, 720)
+                time_cfg = fresh.get("indicators", {}).get("time_display")
+        except Exception:
+            time_cfg = None
+        if not time_cfg:
+            time_cfg = {
+                "enabled": True, "label": "Czas", "x": 2.0, "y": 3.0,
+                "rotation": 0, "form": "time_display", "size": 1.0, "icon": "clock",
+                "show_date": True, "show_time": True, "show_elapsed": True,
+                "show_avg_speed": True, "show_date_label": True, "date_label": "Data",
+                "show_time_label": True, "time_label": "Godzina",
+                "show_elapsed_label": True, "elapsed_label": "Czas",
+                "show_avg_speed_label": True, "avg_speed_label": "Średnia prędkość",
+                "font_size": 1.8, "date_font_size": 1.2, "time_font_size": 1.9,
+                "elapsed_font_size": 1.5, "avg_speed_font_size": 1.5,
+            }
+        self.layout["indicators"] = {"time_display": time_cfg}
         self.layout["custom_texts"] = []
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout
@@ -298,6 +513,47 @@ class IndicatorMixin:
                 ),
                 value_range=(0, 0),
             ))
+        heading_source = None
+        heading_count = 0
+        if tm.heading_samples:
+            heading_source, heading_count = "gpmf", len(tm.heading_samples)
+        elif tm.fit_data.get("heading"):
+            heading_source, heading_count = "fit", len(tm.fit_data["heading"])
+        elif tm.gpx_heading_samples:
+            heading_source, heading_count = "gpx", len(tm.gpx_heading_samples)
+        if heading_source is not None:
+            streams.append(DataStream(
+                key="compass", display_name="Compass / GPS course",
+                source=heading_source, category="gps", unit="°",
+                suggested_form="gauge", sample_count=heading_count,
+                value_range=(0.0, 360.0),
+            ))
+        slope_source = None
+        slope_samples = []
+        if tm.slope_samples:
+            slope_source, slope_samples = "gpmf", tm.slope_samples
+        elif tm.fit_data.get("slope"):
+            slope_source, slope_samples = "fit", tm.fit_data["slope"]
+        elif tm.gpx_slope_samples:
+            slope_source, slope_samples = "gpx", tm.gpx_slope_samples
+        if slope_source is not None:
+            vals = [v for _, v in slope_samples if v is not None]
+            if vals:
+                # ETAP 12: to jest NACHYLENIE TERENU (grade), nie przechył —
+                # nazwa nie może mylić z nowym wskaźnikiem „Przechył" (lean).
+                streams.append(DataStream(
+                    key="slope_text", display_name="Nachylenie trasy (Grade)",
+                    source=slope_source, category="gps", unit="%",
+                    suggested_form="bar", sample_count=len(slope_samples),
+                    value_range=(min(vals), max(vals)),
+                ))
+        if tm.gyroscope_samples:
+            streams.append(DataStream(
+                key="lean_indicator", display_name="Przechył (Lean)",
+                source="gpmf", category="sensor", unit="°",
+                suggested_form="lean", sample_count=len(tm.gyroscope_samples),
+                value_range=(-90.0, 90.0),
+            ))
         if tm.alt_samples:
             vals = [v for _, v in tm.alt_samples]
             streams.append(DataStream(
@@ -333,6 +589,27 @@ class IndicatorMixin:
             ))
 
         # ── GPX ───────────────────────────────────────────────────────
+        imu_streams = (
+            ("accel_x", "Accelerometer X", "m/s"),
+            ("accel_y", "Accelerometer Y", "m/s"),
+            ("accel_z", "Accelerometer Z", "m/s"),
+            ("accel_magnitude", "Accelerometer Magnitude", "m/s"),
+            ("gyro_x", "Gyroscope X", "rad/s"),
+            ("gyro_y", "Gyroscope Y", "rad/s"),
+            ("gyro_z", "Gyroscope Z", "rad/s"),
+            ("gyro_magnitude", "Gyroscope Magnitude", "rad/s"),
+        )
+        for field_name, display_name, unit in imu_streams:
+            samples = getattr(tm, f"{field_name}_samples", [])
+            if samples:
+                vals = [v for _, v in samples]
+                streams.append(DataStream(
+                    key=f"{field_name}_text", display_name=display_name,
+                    source="gpmf", category="sensor", unit=unit,
+                    suggested_form="chart", sample_count=len(samples),
+                    value_range=(min(vals), max(vals)),
+                ))
+
         if tm.gpx_speed_samples:
             vals = [v for _, v in tm.gpx_speed_samples]
             streams.append(DataStream(
@@ -376,27 +653,50 @@ class IndicatorMixin:
             ))
 
         # ── FIT (dynamicznie) ─────────────────────────────────────────
+        from src.indicators import get_form_for_key
         for field_name in sorted(tm.fit_data.keys()):
-            if field_name in ("speed", "alt", "track", "lat", "lon", "timestamp"):
+            if field_name in ("track", "lat", "lon", "timestamp", "heading"):
+                continue
+            if field_name == "speed" and "enhanced_speed" in tm.fit_data:
+                continue
+            if field_name == "alt" and "enhanced_altitude" in tm.fit_data:
                 continue
             samples = tm.fit_data[field_name]
             vals = [v for _, v in samples if v is not None]
-            if not vals:
+            if not vals and not samples:
                 continue
 
-            display = field_name.replace("_", " ").title()
-            unit_map = {
-                "heart_rate": "BPM", "cadence": "rpm", "power": "W",
-                "temperature": "°C", "altitude": "m",
-            }
-            unit = unit_map.get(field_name, "")
+            catalog = getattr(tm.fit_data, "field_catalog", {}) or {}
+            meta = catalog.get(field_name, {})
+            raw_display = meta.get("display_name") or field_name.replace("_", " ").title()
+            unit = meta.get("unit", "")
+            if not unit:
+                unit_map = {
+                    "heart_rate": "BPM", "cadence": "rpm", "power": "W",
+                    "temperature": "°C", "altitude": "m", "curVpower": "W",
+                    "solar": "%", "solar_pct": "%", "battery": "%", "battery_pct": "%",
+                    "discharge": "%/h", "speed": "km/h", "enhanced_speed": "km/h",
+                    "enhanced_altitude": "m",
+                }
+                unit = unit_map.get(field_name, "")
 
             key = f"fit_{field_name}_text"
+            form, _ = get_form_for_key(key)
+            val_min = min(vals) if vals else 0.0
+            val_max = max(vals) if vals else 100.0
+
+            display_suffix = "" if "(FIT)" in raw_display else " (FIT)"
+            display_name = f"{raw_display}{display_suffix}"
+
+            category = "sensor"
+            if field_name in ("speed", "enhanced_speed", "alt", "enhanced_altitude", "distance"):
+                category = "gps"
+
             streams.append(DataStream(
-                key=key, display_name=f"{display} (FIT)", source="fit",
-                category="sensor", unit=unit, suggested_form="text",
+                key=key, display_name=display_name, source="fit",
+                category=category, unit=unit, suggested_form=form,
                 sample_count=len(samples),
-                value_range=(min(vals), max(vals)),
+                value_range=(val_min, val_max),
             ))
 
         return streams
@@ -445,30 +745,40 @@ class IndicatorMixin:
             return self._window_average(alt_s, target_dt, window)
         if "power" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("power"), target_dt, window)
+                self.telemetry.resolve_samples("power", source, indicator_key=ind_key), target_dt, window)
         if "hr" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("hr"), target_dt, window)
+                self.telemetry.resolve_samples("hr", source, indicator_key=ind_key), target_dt, window)
         if "cad" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("cad"), target_dt, window)
+                self.telemetry.resolve_samples("cad", source, indicator_key=ind_key), target_dt, window)
         if "atemp" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("atemp"), target_dt, window)
+                self.telemetry.resolve_samples("atemp", source, indicator_key=ind_key), target_dt, window)
         if "battery" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("battery"), target_dt, window)
+                self.telemetry.resolve_samples("battery", source, indicator_key=ind_key), target_dt, window)
         if "iso" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("iso"), target_dt, window)
+                self.telemetry.resolve_samples("iso", source, indicator_key=ind_key), target_dt, window)
         if "exposure" in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("exposure"), target_dt, window)
+                self.telemetry.resolve_samples("exposure", source, indicator_key=ind_key), target_dt, window)
         if "temp" in ind_key and "atemp" not in ind_key:
             return self._window_average(
-                self.telemetry.resolve_samples("temperature"), target_dt, window)
+                self.telemetry.resolve_samples("temperature", source, indicator_key=ind_key), target_dt, window)
         if ind_key.startswith("fit_") and ind_key.endswith("_text"):
             field_name = ind_key[4:-5]
             return self._window_average(
-                self.telemetry.resolve_samples(field_name), target_dt, window)
+                self.telemetry.resolve_samples(field_name, "fit", indicator_key=ind_key), target_dt, window)
+        imu_field = {
+            "accel_x_text": "accel_x", "accel_y_text": "accel_y",
+            "accel_z_text": "accel_z", "accel_magnitude_text": "accel_magnitude",
+            "gyro_x_text": "gyro_x", "gyro_y_text": "gyro_y",
+            "gyro_z_text": "gyro_z", "gyro_magnitude_text": "gyro_magnitude",
+        }.get(ind_key)
+        if imu_field:
+            return self._window_average(
+                self.telemetry.resolve_samples(imu_field, source, indicator_key=ind_key),
+                target_dt, window)
         return None

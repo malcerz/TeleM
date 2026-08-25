@@ -25,8 +25,13 @@ def _blue_rows(img):
 
 def test_chart_line_aligns_with_axis_labels():
     """A data point at max_val must sit on the top label row, min on the bottom."""
-    # plot geometry for 400x200: left=max(5,48)=48, top=4, bottom=max(6,40)=40, right=4
-    plot_y1, plot_y2 = 4, 200 - 40
+    from src.indicators.chart_utils import get_history_chart_background
+    _, _, plot_y1, plot_y2, _, _ = get_history_chart_background(
+        [0, 100], 400, 200, line_color=(0, 170, 255),
+        line_thickness=2, fill_alpha=40, fill_color=(0, 170, 255),
+        show_axes=True, grid_color=(68, 68, 68, 60), supersample=1,
+        custom_min_val=0.0, custom_max_val=100.0, label_count=2,
+    )
     img = generate_history_chart(
         [0, 100], 400, 200, line_color=(0, 170, 255),
         line_thickness=2, fill_alpha=40, fill_color=(0, 170, 255),
@@ -83,13 +88,21 @@ def test_chart_schema_has_no_dead_fields():
     """Chart Właściwości must not expose controls the renderer ignores."""
     from src.gui.qt.models import chart_indicator_fields
     names = {f.name for f in chart_indicator_fields()}
-    for dead in ("ticks", "window_s"):
+    for dead in ("ticks",):
         assert dead not in names
     for used in ("label_count", "label_font_size", "label_units", "show_average",
                  "thickness", "min_val", "max_val", "line_width", "fill_alpha",
                  "show_grid", "chart_color", "fill_color", "grid_color",
                  "show_value", "show_units", "text_color"):
         assert used in names
+
+
+def test_chart_window_field_is_visible_only_for_window_scope():
+    from src.gui.qt.models import chart_indicator_fields
+    activity = {f.name for f in chart_indicator_fields("activity")}
+    window = {f.name for f in chart_indicator_fields("window")}
+    assert "chart_window_s" not in activity
+    assert "chart_window_s" in window
 
 
 def test_chart_schema_min_val_allows_negative():

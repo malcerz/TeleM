@@ -1,0 +1,14 @@
+{
+  "total_pixels": 8294400,
+  "alpha_0_pct_mean": 94.16347029320987,
+  "alpha_semi_pct_mean": 0.01199170524691358,
+  "alpha_255_pct_mean": 5.82453800154321,
+  "hud_active_pixels_pct_mean": 5.836529706790131,
+  "tile16_active_pct_mean": 6.134074074074074,
+  "tile16_active_count_mean": 1987.4399999999998,
+  "tile32_active_pct_mean": 6.46421568627451,
+  "tile32_active_count_mean": 527.48,
+  "tile64_active_pct_mean": 6.935294117647058,
+  "tile64_active_count_mean": 141.47999999999996,
+  "bbox_union_pct_mean": 44.969521604938265
+}

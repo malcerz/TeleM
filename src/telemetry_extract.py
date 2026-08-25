@@ -11,10 +11,11 @@ import math
 import os
 import subprocess
 import tempfile
-from bisect import bisect_left
+import time as _time
+from bisect import bisect_left, bisect_right
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 try:
     import orjson
@@ -32,12 +33,27 @@ def json_loads(text: str) -> Any:
     return json.loads(text)
 
 
-def load_json_with_fallback(path: Path) -> Any:
-    """Load a JSON file trying multiple encodings."""
+def load_json_with_fallback(
+    path: Path,
+    profile_cb: Optional[Callable[[str, float, Path], None]] = None,
+) -> Any:
+    """Load a JSON file trying multiple encodings.
+
+    ``profile_cb`` is optional so the loading pipeline can distinguish file
+    I/O from JSON parsing without adding per-record diagnostics.
+    """
     last_error = None
     for enc in ("utf-8", "utf-8-sig", "utf-16", "utf-16-le", "cp1252"):
         try:
-            return json.loads(path.read_text(encoding=enc))
+            read_t0 = _time.perf_counter() if profile_cb else 0.0
+            text = path.read_text(encoding=enc)
+            if profile_cb:
+                profile_cb("json_file_read", _time.perf_counter() - read_t0, path)
+            parse_t0 = _time.perf_counter() if profile_cb else 0.0
+            value = json.loads(text)
+            if profile_cb:
+                profile_cb("json_parse", _time.perf_counter() - parse_t0, path)
+            return value
         except Exception as e:
             last_error = e
     raise RuntimeError(
@@ -331,12 +347,178 @@ def write_records_to_json(
 
 # ── Data extraction: ISO ────────────────────────────────────────────────────
 
+def _parse_iso_values(raw: Any) -> list[int]:
+    values = raw if isinstance(raw, (list, tuple)) else str(raw).split()
+    result: list[int] = []
+    for part in values:
+        value = parse_float_maybe(part)
+        if value is not None:
+            result.append(int(round(value)))
+    return result
+
+
+def _parse_exposure_values(raw: Any) -> list[int]:
+    result: list[int] = []
+    for part in (raw if isinstance(raw, (list, tuple)) else str(raw).split()):
+        try:
+            if "/" in str(part):
+                result.append(int(round(float(str(part).split("/", 1)[1]))))
+            else:
+                value = parse_float_maybe(part)
+                if value is not None:
+                    result.append(int(round(value)))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _parse_temperature_values(raw: Any) -> list[float]:
+    value = parse_float_maybe(raw)
+    return [value] if value is not None else []
+
+
+def _extract_gpmf_timed_samples(
+    records: list[dict[str, Any]],
+    marker: str,
+    value_parser: Callable[[Any], list[int]],
+) -> Optional[list[tuple[datetime, int]]]:
+    """Extract ISOE/SHUT using the stream's STMP/TSMP block timing.
+
+    STMP is the GPMF microsecond clock at the first sample of a block; TSMP
+    supplies the corresponding sample counter.  The next block establishes
+    the exact local sample interval, including the 30000/1001 cadence.
+    """
+    blocks: list[tuple[float, float, list[int]]] = []
+    absolute_times: list[datetime] = []
+    value_suffix = {
+        "ISO": "ISO",
+        "SHUT": "ExposureTimes",
+        "TMPC": "CameraTemperature",
+    }.get(marker, marker)
+    for record in ensure_records_list(records):
+        flat = flatten_record(record)
+        for key, raw in flat.items():
+            if not (key.startswith("Doc") and key.endswith(f":{value_suffix}")):
+                continue
+            prefix = key.split(":", 1)[0]
+            stmp = parse_float_maybe(flat.get(f"{prefix}:{marker}_STMP"))
+            tsmp = parse_float_maybe(flat.get(f"{prefix}:{marker}_TSMP"))
+            values = value_parser(raw)
+            if stmp is None or tsmp is None or not values:
+                continue
+            blocks.append((stmp, tsmp, values))
+        for key, raw in flat.items():
+            if key.endswith(":GPSDateTime"):
+                dt = parse_exif_datetime(raw)
+                if dt is not None:
+                    absolute_times.append(dt)
+
+    if not blocks or not absolute_times:
+        return None
+    blocks.sort(key=lambda item: (item[0], item[1]))
+    base_stmp = blocks[0][0]
+    steps: list[float] = []
+    for index, (stmp, tsmp, _values) in enumerate(blocks):
+        if index + 1 < len(blocks):
+            next_stmp, next_tsmp, _ = blocks[index + 1]
+            if next_tsmp > tsmp:
+                steps.append((next_stmp - stmp) / (next_tsmp - tsmp))
+                continue
+        if steps:
+            steps.append(steps[-1])
+        else:
+            return None
+
+    anchor = min(absolute_times)
+    samples: list[tuple[datetime, int]] = []
+    for (stmp, _tsmp, values), step_us in zip(blocks, steps):
+        for index, value in enumerate(values):
+            offset_us = (stmp - base_stmp) + index * step_us
+            sample_dt = anchor + timedelta(microseconds=offset_us)
+            samples.append((sample_dt, value))
+    samples.sort(key=lambda item: item[0])
+    if any(b[0] <= a[0] for a, b in zip(samples, samples[1:])):
+        return None
+    return samples
+
+
+def _extract_gpmf_vector_samples(
+    records: list[dict[str, Any]], marker: str,
+) -> list[tuple[datetime, tuple[float, float, float]]]:
+    """Extract full-resolution 3-axis GPMF vectors with stream timing."""
+    blocks: list[tuple[float, float, list[list[float]]]] = []
+    anchors: list[datetime] = []
+    for record in ensure_records_list(records):
+        flat = flatten_record(record)
+        vector_fields = record if isinstance(record, dict) else flat
+        for key, raw in vector_fields.items():
+            if not (key.startswith("Doc") and key.endswith(f":{marker}")):
+                continue
+            prefix = key.split(":", 1)[0]
+            stmp = parse_float_maybe(flat.get(f"{prefix}:{marker}_STMP"))
+            tsmp = parse_float_maybe(flat.get(f"{prefix}:{marker}_TSMP"))
+            if stmp is None or tsmp is None or not isinstance(raw, list):
+                continue
+            vectors = [list(map(float, item)) for item in raw if isinstance(item, list) and len(item) == 3]
+            if vectors:
+                blocks.append((stmp, tsmp, vectors))
+        for key, raw in flat.items():
+            if key.endswith(":GPSDateTime"):
+                dt = parse_exif_datetime(raw)
+                if dt is not None:
+                    anchors.append(dt)
+    if not blocks or not anchors:
+        return []
+    blocks.sort(key=lambda item: (item[0], item[1]))
+    steps: list[float] = []
+    for index, (stmp, tsmp, vectors) in enumerate(blocks):
+        if index + 1 < len(blocks):
+            next_stmp, next_tsmp, _ = blocks[index + 1]
+            if next_tsmp > tsmp and vectors:
+                # STMP is the block start. Spread the block duration over
+                # its actual payload count; the count can be 198 or 199.
+                steps.append((next_stmp - stmp) / len(vectors))
+                continue
+        if steps:
+            steps.append(steps[-1])
+        else:
+            return []
+    anchor = min(anchors)
+    base_stmp = blocks[0][0]
+    samples: list[tuple[datetime, tuple[float, float, float]]] = []
+    for (stmp, _tsmp, vectors), step_us in zip(blocks, steps):
+        for index, vector in enumerate(vectors):
+            dt = anchor + timedelta(microseconds=(stmp - base_stmp) + index * step_us)
+            # GPMF reports this camera's raw order as ZXY. Expose canonical XYZ.
+            if len(vector) == 3:
+                vector = [vector[1], vector[2], vector[0]]
+            samples.append((dt, (vector[0], vector[1], vector[2])))
+    samples.sort(key=lambda item: item[0])
+    if any(b[0] <= a[0] for a, b in zip(samples, samples[1:])):
+        return []
+    return samples
+
+
+def extract_accelerometer_samples(
+    records: list[dict[str, Any]],
+) -> list[tuple[datetime, tuple[float, float, float]]]:
+    return _extract_gpmf_vector_samples(records, "ACCL")
+
+
+def extract_gyroscope_samples(
+    records: list[dict[str, Any]],
+) -> list[tuple[datetime, tuple[float, float, float]]]:
+    return _extract_gpmf_vector_samples(records, "GYRO")
+
 
 def extract_iso_samples(
     records: list[dict[str, Any]]
 ) -> list[tuple[datetime, int]]:
     """Extract ISO samples from ExifTool records."""
     records = ensure_records_list(records)
+    timed = _extract_gpmf_timed_samples(records, "ISO", _parse_iso_values)
+    if timed is not None:
+        return timed
     samples: list[tuple[datetime, int]] = []
 
     for rec in records:
@@ -395,6 +577,9 @@ def extract_exposure_samples(
 ) -> list[tuple[datetime, int]]:
     """Extract exposure time samples (denominator of '1/xxx') from ExifTool records."""
     records = ensure_records_list(records)
+    timed = _extract_gpmf_timed_samples(records, "SHUT", _parse_exposure_values)
+    if timed is not None:
+        return timed
     samples: list[tuple[datetime, int]] = []
 
     for rec in records:
@@ -450,6 +635,9 @@ def extract_temperature_samples(
 ) -> list[tuple[datetime, int]]:
     """Extract camera temperature samples from ExifTool records."""
     records = ensure_records_list(records)
+    timed = _extract_gpmf_timed_samples(records, "TMPC", _parse_temperature_values)
+    if timed is not None:
+        return timed
     samples: list[tuple[datetime, int]] = []
 
     for rec in records:
@@ -898,60 +1086,45 @@ def interpolate_altitude(
     return s1 + (s2 - s1) * (target_dt - t1).total_seconds() / dt_total
 
 
-def interpolate_iso(
-    samples: list[tuple[datetime, int]], target_dt: datetime
-) -> int:
-    """Step interpolation of ISO at a given timestamp."""
+def _interpolate_step(
+    samples: list[tuple[datetime, Any]], target_dt: datetime
+) -> Any:
+    """Previous-or-equal lookup shared by all STEP telemetry fields."""
+    if not samples:
+        return None
     target_dt = _normalise_dt(target_dt)
     samples = _normalise_samples(samples)
-    if not samples:
-        return 0
     times = [dt for dt, _ in samples]
-    idx = bisect_left(times, target_dt)
-    if idx <= 0:
-        return samples[0][1]
-    if idx >= len(samples):
-        return samples[-1][1]
-    return samples[idx - 1][1]
+    idx = bisect_right(times, target_dt) - 1
+    if idx < 0:
+        return None
+    return samples[idx][1]
+
+
+def interpolate_iso(
+    samples: list[tuple[datetime, int]], target_dt: datetime
+) -> Optional[int]:
+    """Step interpolation of ISO at a given timestamp."""
+    return _interpolate_step(samples, target_dt)
 
 
 def interpolate_exposure(
     samples: list[tuple[datetime, int]], target_dt: datetime
-) -> int:
+) -> Optional[int]:
     """Step interpolation of exposure at a given timestamp."""
-    target_dt = _normalise_dt(target_dt)
-    samples = _normalise_samples(samples)
-    if not samples:
-        return 0
-    times = [dt for dt, _ in samples]
-    idx = bisect_left(times, target_dt)
-    if idx <= 0:
-        return samples[0][1]
-    if idx >= len(samples):
-        return samples[-1][1]
-    return samples[idx - 1][1]
+    return _interpolate_step(samples, target_dt)
 
 
 def interpolate_temperature(
     samples: list[tuple[datetime, int]], target_dt: datetime
-) -> int:
+) -> Optional[int]:
     """Step interpolation of temperature at a given timestamp."""
-    target_dt = _normalise_dt(target_dt)
-    samples = _normalise_samples(samples)
-    if not samples:
-        return 0
-    times = [dt for dt, _ in samples]
-    idx = bisect_left(times, target_dt)
-    if idx <= 0:
-        return samples[0][1]
-    if idx >= len(samples):
-        return samples[-1][1]
-    return samples[idx - 1][1]
+    return _interpolate_step(samples, target_dt)
 
 
 def interpolate_value(
     samples: list[tuple[datetime, float]], target_dt: datetime
-) -> float:
+) -> Optional[float]:
     """Generic step interpolation for scalar values (power, atemp, hr, cad, FIT fields).
 
     Only speed and distance are interpolated linearly (smooth per frame);
@@ -959,17 +1132,7 @@ def interpolate_value(
     battery and every ``fit_*`` field) are shown as steps — the previous
     sample is held until the next one arrives (~1 s for Garmin FIT).
     """
-    if not samples:
-        return 0.0
-    target_dt = _normalise_dt(target_dt)
-    samples = _normalise_samples(samples)
-    times = [dt for dt, _ in samples]
-    idx = bisect_left(times, target_dt)
-    if idx <= 0:
-        return samples[0][1]
-    if idx >= len(samples):
-        return samples[-1][1]
-    return samples[idx - 1][1]
+    return _interpolate_step(samples, target_dt)
 
 
 # ── Timestamp helper ────────────────────────────────────────────────────────

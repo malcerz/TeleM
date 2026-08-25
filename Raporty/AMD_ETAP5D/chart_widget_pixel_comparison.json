@@ -1,0 +1,23 @@
+{
+  "frames_compared_per_indicator": 1131,
+  "total_widgets": 2262,
+  "indicators": {
+    "fit_cadence_text": {
+      "frames": 1131,
+      "mismatching_frames": 0,
+      "first_mismatches": [],
+      "mae": 0,
+      "max": 0,
+      "cursor_indices_match": true
+    },
+    "fit_heart_rate_text": {
+      "frames": 1131,
+      "mismatching_frames": 0,
+      "first_mismatches": [],
+      "mae": 0,
+      "max": 0,
+      "cursor_indices_match": true
+    }
+  },
+  "all_pixel_identical": true
+}

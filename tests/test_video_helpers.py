@@ -242,6 +242,16 @@ def test_intel_and_cpu_pipeline_unchanged():
     assert "overlay_cuda" not in intel_fc_r
     assert "vflip,hflip" in intel_fc_r
 
+    intel_native_cmd, intel_native_fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, intel_gpu_resident=True, **base_kwargs,
+    )
+    assert "overlay_qsv" in intel_native_fc
+    assert "hwupload=derive_device=qsv" in intel_native_fc
+    assert "scale_qsv" not in intel_native_fc
+    assert "overlay_cuda" not in intel_native_fc
+    assert "hwdownload" not in intel_native_fc
+    assert all(token not in intel_native_cmd for token in ("cuda", "nvenc", "amf"))
+
     # CPU (libx265) - rotation must not alter the encoder settings
     cpu_cmd, cpu_fc = _build_stream_ffmpeg_cmd(
         encoder="cpu", rotation_degrees=0, **base_kwargs,
@@ -478,6 +488,4 @@ def test_rot180_injection_failure_is_controlled_error():
         m.return_value = False
         with pytest.raises(RuntimeError):
             _inject_rot180_displaymatrix("out.mp4", 3840, 2160)
-
-
 

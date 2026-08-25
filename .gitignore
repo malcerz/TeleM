@@ -1,6 +1,8 @@
 # Wideo (duże pliki binarne)
 *.mp4
+*.png
 *.MP4
+*.h265
 *.mov
 *.MOV
 *.lrv
@@ -20,5 +22,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+native/d3d11_amf_pipeline/build*/
 .telem_map_tiles/
 *.layout.json

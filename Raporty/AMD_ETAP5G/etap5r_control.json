@@ -1,0 +1,49 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "native_fa": false,
+      "python_fa": false,
+      "wall": 34.68435597419739,
+      "true_fps": 34.2894867269464,
+      "python_process_frame_med": null,
+      "amf_input_full": 0,
+      "amf_retries": 0,
+      "csv_exists": false,
+      "csv_frames": 0,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "native_fa": true,
+      "python_fa": true,
+      "wall": 37.01732039451599,
+      "true_fps": 32.18541787594051,
+      "python_process_frame_med": 13.3355,
+      "amf_input_full": 0,
+      "amf_retries": 0,
+      "csv_exists": true,
+      "csv_frames": 1131,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "native_fa": true,
+      "python_fa": true,
+      "wall": 37.4561722278595,
+      "true_fps": 31.793022398022842,
+      "python_process_frame_med": 14.0572,
+      "amf_input_full": 0,
+      "amf_retries": 0,
+      "csv_exists": true,
+      "csv_frames": 1131,
+      "valid": true
+    }
+  },
+  "order": [
+    "A",
+    "B",
+    "C"
+  ],
+  "overhead_pct": 7.3589094140572975
+}

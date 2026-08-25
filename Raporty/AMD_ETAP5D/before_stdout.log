@@ -1,0 +1,50 @@
+[FIT] Loaded 1704 points from Morning_Ride.fit
+[FIT] Fields discovered: ['K1', 'K2', 'alt', 'cadence', 'curVpower', 'distance', 'enhanced_altitude', 'enhanced_speed', 'fractional_cadence', 'gopro_battery', 'heart_rate', 'lat', 'lon', 'speed', 'temperature']
+[FIT] Synchro: 14 field(s) – {'speed': 1651, 'track': 1683, 'alt': 1704, 'K1': 1703, 'K2': 1703, 'cadence': 1704, 'curVpower': 1704, 'distance': 1704, 'enhanced_altitude': 1704, 'enhanced_speed': 1698, 'fractional_cadence': 1704, 'gopro_battery': 1704, 'heart_rate': 1704, 'temperature': 1704}
+[TelemetryManager] FIT loaded: keys=['speed', 'track', 'alt', 'K1', 'K2', 'cadence', 'curVpower', 'distance', 'enhanced_altitude', 'enhanced_speed', 'fractional_cadence', 'gopro_battery', 'heart_rate', 'temperature'], gps_track=1677 pts
+{
+  "mode": "before",
+  "frames": 1131,
+  "sizes": {
+    "fit_cadence_text": [
+      1160,
+      511
+    ],
+    "fit_heart_rate_text": [
+      1160,
+      511
+    ]
+  },
+  "indicator_timing_ms": {
+    "fit_cadence_text": {
+      "avg": 4.727232183763514,
+      "median": 4.234700027154759,
+      "p95": 6.756199989467859,
+      "p99": 15.78121000493413
+    },
+    "fit_heart_rate_text": {
+      "avg": 4.7515265254619194,
+      "median": 4.251100006513298,
+      "p95": 7.196699996711686,
+      "p99": 15.616399998543788
+    }
+  },
+  "cursor_indices": {
+    "fit_cadence_text": {
+      "0": 0,
+      "30": 45,
+      "300": 452,
+      "600": 904,
+      "900": 1356,
+      "1130": 1703
+    },
+    "fit_heart_rate_text": {
+      "0": 0,
+      "30": 45,
+      "300": 452,
+      "600": 904,
+      "900": 1356,
+      "1130": 1703
+    }
+  }
+}

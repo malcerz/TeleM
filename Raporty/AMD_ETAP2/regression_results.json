@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "result": "PASS",
+  "compositor": "DIRECT_NV12_COMPUTE_SHADER",
+  "cpu_reference_fallback_preserved": true,
+  "vp_stream_1": {
+    "tested": true,
+    "alpha_enabled_result": "VideoProcessorBlt E_FAIL (0x80004005)",
+    "alpha_disabled_result": "renders transparent HUD background as opaque black",
+    "selected": false
+  },
+  "hud_texture": {
+    "python_format": "RGBA straight alpha",
+    "dxgi_format": "DXGI_FORMAT_R8G8B8A8_UNORM",
+    "size": "3840x2160",
+    "persistent": true,
+    "allocations": 1,
+    "uploads": 1131
+  },
+  "full_export": {
+    "frames": 1131,
+    "wall_clock_s": 124.8253441999841,
+    "true_fps": 9.060659974532191,
+    "audio_present": true,
+    "blend_calls": 0,
+    "amf_input_full": 0,
+    "amf_retries": 0,
+    "amf_dropped": 0
+  },
+  "pre_amf_frame_30": {
+    "mae": 0.001990620177469136,
+    "max_pixel_diff": 2,
+    "p95": 0,
+    "p99": 0
+  },
+  "decoded_mp4": {
+    "frame_30": {"mae": 1.4039127604166666, "max_pixel_diff": 56, "p95": 6, "p99": 11, "pass": true},
+    "frame_300": {"mae": 1.5353694460519547, "max_pixel_diff": 55, "p95": 6, "p99": 10, "pass": true},
+    "frame_900": {"mae": 1.188363956404321, "max_pixel_diff": 52, "p95": 5, "p99": 10, "pass": true}
+  },
+  "tests": {
+    "pytest_passed": 153,
+    "pytest_skipped": 17,
+    "deterministic_dll_sha256": "066CDC84EB910D7A800A81255FD2913E7597336E0D4CECDD2901DE69D60C5127"
+  }
+}

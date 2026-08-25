@@ -1,0 +1,462 @@
+{
+  "base_metrics": {
+    "private_bytes": 411475968,
+    "ws_rss": 53481472,
+    "pws_uss": 38199296,
+    "commit_vms": 411475968,
+    "handles": 173,
+    "threads": 15
+  },
+  "base_cache": {
+    "static_cache": 0,
+    "font_cache": 0,
+    "chart_bg_cache": 0,
+    "final_static_chart": 0
+  },
+  "base_objects": 34305,
+  "entries": [
+    {
+      "export": 1,
+      "compose": "REFERENCE",
+      "wall": 37.55887317657471,
+      "metrics": {
+        "private_bytes": 1071849472,
+        "ws_rss": 491315200,
+        "pws_uss": 451248128,
+        "commit_vms": 1071849472,
+        "handles": 519,
+        "threads": 26
+      },
+      "objects": 41802,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 2,
+        "final_static_chart": 2
+      },
+      "native_live": null
+    },
+    {
+      "export": 2,
+      "compose": "REFERENCE",
+      "wall": 33.15071225166321,
+      "metrics": {
+        "private_bytes": 1049063424,
+        "ws_rss": 528015360,
+        "pws_uss": 488038400,
+        "commit_vms": 1049063424,
+        "handles": 537,
+        "threads": 25
+      },
+      "objects": 41817,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 4,
+        "final_static_chart": 4
+      },
+      "native_live": null
+    },
+    {
+      "export": 3,
+      "compose": "REFERENCE",
+      "wall": 34.56276798248291,
+      "metrics": {
+        "private_bytes": 1061236736,
+        "ws_rss": 542879744,
+        "pws_uss": 503939072,
+        "commit_vms": 1061236736,
+        "handles": 548,
+        "threads": 26
+      },
+      "objects": 41832,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 6,
+        "final_static_chart": 6
+      },
+      "native_live": null
+    },
+    {
+      "export": 4,
+      "compose": "REFERENCE",
+      "wall": 33.375394105911255,
+      "metrics": {
+        "private_bytes": 1106669568,
+        "ws_rss": 590110720,
+        "pws_uss": 551120896,
+        "commit_vms": 1106669568,
+        "handles": 561,
+        "threads": 26
+      },
+      "objects": 41847,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 8,
+        "final_static_chart": 8
+      },
+      "native_live": null
+    },
+    {
+      "export": 5,
+      "compose": "REFERENCE",
+      "wall": 32.717979192733765,
+      "metrics": {
+        "private_bytes": 1079369728,
+        "ws_rss": 564154368,
+        "pws_uss": 525156352,
+        "commit_vms": 1079369728,
+        "handles": 579,
+        "threads": 28
+      },
+      "objects": 41862,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 10,
+        "final_static_chart": 10
+      },
+      "native_live": null
+    },
+    {
+      "export": 6,
+      "compose": "REFERENCE",
+      "wall": 34.1783983707428,
+      "metrics": {
+        "private_bytes": 1105539072,
+        "ws_rss": 583344128,
+        "pws_uss": 544321536,
+        "commit_vms": 1105539072,
+        "handles": 591,
+        "threads": 29
+      },
+      "objects": 41877,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 12,
+        "final_static_chart": 12
+      },
+      "native_live": null
+    },
+    {
+      "export": 7,
+      "compose": "REFERENCE",
+      "wall": 31.518895149230957,
+      "metrics": {
+        "private_bytes": 1154187264,
+        "ws_rss": 632971264,
+        "pws_uss": 593977344,
+        "commit_vms": 1154187264,
+        "handles": 608,
+        "threads": 30
+      },
+      "objects": 41892,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 14,
+        "final_static_chart": 14
+      },
+      "native_live": null
+    },
+    {
+      "export": 8,
+      "compose": "REFERENCE",
+      "wall": 33.740880489349365,
+      "metrics": {
+        "private_bytes": 1120624640,
+        "ws_rss": 597778432,
+        "pws_uss": 558870528,
+        "commit_vms": 1120624640,
+        "handles": 621,
+        "threads": 30
+      },
+      "objects": 41907,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 16,
+        "final_static_chart": 16
+      },
+      "native_live": null
+    },
+    {
+      "export": 9,
+      "compose": "REFERENCE",
+      "wall": 29.659096002578735,
+      "metrics": {
+        "private_bytes": 911360000,
+        "ws_rss": 567259136,
+        "pws_uss": 528093184,
+        "commit_vms": 911360000,
+        "handles": 640,
+        "threads": 33
+      },
+      "objects": 41922,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 18,
+        "final_static_chart": 18
+      },
+      "native_live": null
+    },
+    {
+      "export": 10,
+      "compose": "REFERENCE",
+      "wall": 28.87919020652771,
+      "metrics": {
+        "private_bytes": 1194782720,
+        "ws_rss": 671715328,
+        "pws_uss": 632459264,
+        "commit_vms": 1194782720,
+        "handles": 655,
+        "threads": 34
+      },
+      "objects": 41937,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 20,
+        "final_static_chart": 20
+      },
+      "native_live": null
+    },
+    {
+      "export": 11,
+      "compose": "OPTIMIZED",
+      "wall": 28.516847848892212,
+      "metrics": {
+        "private_bytes": 1201856512,
+        "ws_rss": 685424640,
+        "pws_uss": 646053888,
+        "commit_vms": 1201856512,
+        "handles": 668,
+        "threads": 34
+      },
+      "objects": 41952,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 22,
+        "final_static_chart": 22
+      },
+      "native_live": null
+    },
+    {
+      "export": 12,
+      "compose": "OPTIMIZED",
+      "wall": 28.851665258407593,
+      "metrics": {
+        "private_bytes": 1212506112,
+        "ws_rss": 696635392,
+        "pws_uss": 657383424,
+        "commit_vms": 1212506112,
+        "handles": 683,
+        "threads": 35
+      },
+      "objects": 41967,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 24,
+        "final_static_chart": 24
+      },
+      "native_live": null
+    },
+    {
+      "export": 13,
+      "compose": "OPTIMIZED",
+      "wall": 28.957814693450928,
+      "metrics": {
+        "private_bytes": 1224228864,
+        "ws_rss": 704421888,
+        "pws_uss": 665120768,
+        "commit_vms": 1224228864,
+        "handles": 697,
+        "threads": 36
+      },
+      "objects": 41982,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 26,
+        "final_static_chart": 26
+      },
+      "native_live": null
+    },
+    {
+      "export": 14,
+      "compose": "OPTIMIZED",
+      "wall": 28.673402309417725,
+      "metrics": {
+        "private_bytes": 1238269952,
+        "ws_rss": 719118336,
+        "pws_uss": 679698432,
+        "commit_vms": 1238269952,
+        "handles": 711,
+        "threads": 36
+      },
+      "objects": 41997,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 28,
+        "final_static_chart": 28
+      },
+      "native_live": null
+    },
+    {
+      "export": 15,
+      "compose": "OPTIMIZED",
+      "wall": 28.863293647766113,
+      "metrics": {
+        "private_bytes": 1254051840,
+        "ws_rss": 731758592,
+        "pws_uss": 692379648,
+        "commit_vms": 1254051840,
+        "handles": 728,
+        "threads": 38
+      },
+      "objects": 42012,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 30,
+        "final_static_chart": 30
+      },
+      "native_live": null
+    },
+    {
+      "export": 16,
+      "compose": "OPTIMIZED",
+      "wall": 28.938822031021118,
+      "metrics": {
+        "private_bytes": 1264652288,
+        "ws_rss": 742236160,
+        "pws_uss": 702754816,
+        "commit_vms": 1264652288,
+        "handles": 743,
+        "threads": 39
+      },
+      "objects": 42027,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 32,
+        "final_static_chart": 32
+      },
+      "native_live": null
+    },
+    {
+      "export": 17,
+      "compose": "OPTIMIZED",
+      "wall": 30.740267515182495,
+      "metrics": {
+        "private_bytes": 1275793408,
+        "ws_rss": 749666304,
+        "pws_uss": 713838592,
+        "commit_vms": 1275793408,
+        "handles": 641,
+        "threads": 35
+      },
+      "objects": 42042,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 34,
+        "final_static_chart": 34
+      },
+      "native_live": null
+    },
+    {
+      "export": 18,
+      "compose": "OPTIMIZED",
+      "wall": 29.272018909454346,
+      "metrics": {
+        "private_bytes": 1288142848,
+        "ws_rss": 764608512,
+        "pws_uss": 724738048,
+        "commit_vms": 1288142848,
+        "handles": 778,
+        "threads": 44
+      },
+      "objects": 42057,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 36,
+        "final_static_chart": 36
+      },
+      "native_live": null
+    },
+    {
+      "export": 19,
+      "compose": "OPTIMIZED",
+      "wall": 29.161600828170776,
+      "metrics": {
+        "private_bytes": 1297408000,
+        "ws_rss": 775077888,
+        "pws_uss": 735203328,
+        "commit_vms": 1297408000,
+        "handles": 787,
+        "threads": 41
+      },
+      "objects": 42072,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 38,
+        "final_static_chart": 38
+      },
+      "native_live": null
+    },
+    {
+      "export": 20,
+      "compose": "OPTIMIZED",
+      "wall": 28.900389909744263,
+      "metrics": {
+        "private_bytes": 1306804224,
+        "ws_rss": 786477056,
+        "pws_uss": 746618880,
+        "commit_vms": 1306804224,
+        "handles": 802,
+        "threads": 43
+      },
+      "objects": 42087,
+      "cache": {
+        "static_cache": 1074,
+        "font_cache": 7,
+        "chart_bg_cache": 40,
+        "final_static_chart": 40
+      },
+      "native_live": null
+    }
+  ],
+  "trend": {
+    "private_bytes_exports_5_20": [
+      1079.369728,
+      1105.539072,
+      1154.187264,
+      1120.62464,
+      911.36,
+      1194.78272,
+      1201.856512,
+      1212.506112,
+      1224.228864,
+      1238.269952,
+      1254.05184,
+      1264.652288,
+      1275.793408,
+      1288.142848,
+      1297.408,
+      1306.804224
+    ],
+    "slope_mb_per_export": 15.162299733333333,
+    "growth_last_half_mb": 82.57536,
+    "classification": "PLATEAU/BOUNDED"
+  }
+}

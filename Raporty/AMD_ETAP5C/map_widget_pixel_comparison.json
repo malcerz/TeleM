@@ -1,0 +1,28 @@
+{
+  "frames_compared": 1131,
+  "mismatching_frames": 0,
+  "first_mismatches": [],
+  "aggregate_mae": 0.0,
+  "aggregate_max": 0,
+  "reference_frame_metrics": {
+    "30": {
+      "mae": 0.0,
+      "max": 0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "300": {
+      "mae": 0.0,
+      "max": 0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "900": {
+      "mae": 0.0,
+      "max": 0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  },
+  "plan_equal": true
+}

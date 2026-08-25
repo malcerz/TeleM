@@ -19,7 +19,91 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.helpers import load_font, parse_hex_color, s
+from src.indicators.helpers import load_font, parse_hex_color, s, _BoundedStaticCache, _static_cache_key
+from src.indicators.icons import render_icon
+
+# Fast bounded LRU caches for Time Display sub-components
+_LINE_TILE_CACHE = _BoundedStaticCache(max_entries=64)
+_ICON_CACHE = _BoundedStaticCache(max_entries=16)
+_TEXT_METRIC_CACHE: dict[tuple, tuple[int, int]] = {}
+
+
+def _get_text_metrics(font, font_path: str, fs: int, text: str, outline: int) -> tuple[int, int]:
+    key = (font_path, fs, outline, text)
+    m = _TEXT_METRIC_CACHE.get(key)
+    if m is not None:
+        return m
+    tw = int(font.getlength(text) + outline * 4)
+    lh = int(fs * 1.4)
+    if len(_TEXT_METRIC_CACHE) > 256:
+        _TEXT_METRIC_CACHE.clear()
+    _TEXT_METRIC_CACHE[key] = (tw, lh)
+    return tw, lh
+
+
+def _get_line_tile(
+    text: str,
+    font_path: str,
+    fs: int,
+    fill: tuple[int, int, int, int],
+    outline: int,
+    tw: int,
+    lh: int,
+) -> Image.Image:
+    key = _static_cache_key("td_line", font_path, fs, text, fill, outline, tw, lh)
+    tile = _LINE_TILE_CACHE.get(key)
+    if tile is not None:
+        return tile
+
+    font = load_font(font_path, fs)
+    tile_h = int(fs * 2.0) + outline * 4
+    tile_w = tw + outline * 4
+    img = Image.new("RGBA", (tile_w, tile_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.text(
+        (outline, outline),
+        text,
+        font=font,
+        fill=fill,
+        stroke_width=outline,
+        stroke_fill=(0, 0, 0, 255),
+    )
+    _LINE_TILE_CACHE[key] = img
+    return img
+
+
+def _get_clock_icon(icon_name: str, icon_size: int) -> Optional[Image.Image]:
+    if not icon_name or icon_name == "none":
+        return None
+    key = (icon_name, icon_size)
+    ic = _ICON_CACHE.get(key)
+    if ic is not None:
+        return ic
+    ic = render_icon(icon_name, icon_size)
+    if ic is not None:
+        _ICON_CACHE[key] = ic
+    return ic
+
+
+# ── Global master scale (Rozmiar) ─────────────────────────────────────────
+# Legacy TeleM presets (v1..v10) store ``size`` as a fraction where 0.1 equals
+# the standard scale (the old renderer multiplied it by 10).  The Property
+# Editor now treats ``size`` as a direct master scale (1.0 = standard, 0.5 =
+# half, 2.0 = double).  Normalise the legacy fraction so saved projects keep
+# their exact look while new/edited configs use the intuitive semantics.
+_TIME_DISPLAY_LEGACY_SIZE_MAX = 0.25
+
+
+def _time_display_master_size(cfg: dict[str, Any]) -> float:
+    """Resolve the time-display master scale from ``cfg['size']``.
+
+    - ``size <= 0.25``  → legacy fraction (×10, so 0.1 → 1.0).
+    - ``size >  0.25``  → direct master scale (1.0 = standard).
+    """
+    raw = float(cfg.get("size", 0.1))
+    if raw <= _TIME_DISPLAY_LEGACY_SIZE_MAX:
+        return raw * 10.0
+    return raw
 
 
 def render_time_display(
@@ -84,12 +168,27 @@ def render_time_display(
     if show_avg_speed:
         avg_speed_str = f"{avg_speed_kmh:.1f} km/h"
 
-    from src.indicators.helpers import _STATIC_CACHE, _static_cache_key
+    from src.indicators.helpers import _STATIC_CACHE
 
+    # Rozmiar jest teraz globalną skalą master całego bloku.  Klucz cache musi
+    # zawierać wszystkie parametry wpływające na wygląd (size, font_size, ikona,
+    # per-line font sizes/colory/etykiety), inaczej zmiana "Rozmiar" w GUI nie
+    # unieważniałaby cache i nic by się nie odświeżało.
+    master = _time_display_master_size(cfg)
+    _style_parts: list[Any] = []
+    for _p in ("date", "time", "elapsed", "avg_speed"):
+        _style_parts.append(cfg.get(f"{_p}_font_size"))
+        _style_parts.append(cfg.get(f"{_p}_color"))
+        _style_parts.append(cfg.get(f"{_p}_label"))
+        _style_parts.append(cfg.get(f"show_{_p}_label", True))
     cache_key = _static_cache_key(
         "time_display", canvas_w, canvas_h, font_path,
         date_text, time_text, elapsed_str, avg_speed_str,
-        show_date, show_time, show_elapsed, show_avg_speed
+        show_date, show_time, show_elapsed, show_avg_speed,
+        master,
+        cfg.get("font_size", 0.025),
+        cfg.get("icon", "none"),
+        *_style_parts,
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)
@@ -100,25 +199,20 @@ def render_time_display(
     # ── Line definitions ──────────────────────────────────────────────
     # (show_flag, text, config_prefix, default_color_rgb, default_label)
     line_defs: list[tuple[bool, str, str, tuple[int, int, int], str]] = [
-        (show_date,      date_text,   "date",      (210, 210, 210), "Data"),
-        (show_time,      time_text,   "time",      (255, 255, 255), "Godzina"),
-        (show_elapsed,   elapsed_str, "elapsed",   (255, 255, 255), "Czas"),
+        (show_date,      date_text,     "date",      (210, 210, 210), "Data"),
+        (show_time,      time_text,     "time",      (255, 255, 255), "Godzina"),
+        (show_elapsed,   elapsed_str,   "elapsed",   (255, 255, 255), "Czas"),
         (show_avg_speed, avg_speed_str, "avg_speed", (255, 255, 255), "Średnia prędkość"),
     ]
 
     min_dim = min(canvas_w, canvas_h)
-    outline_raw = int(layout["global"].get("text_outline", 3))
+    _global = layout.get("global", {}) if isinstance(layout, dict) else {}
+    outline_raw = int(_global.get("text_outline", 3))
     outline = max(0, int(round(outline_raw * min_dim / 1000)))
     global_fs = max(14, s(cfg.get("font_size", 0.025), min_dim))
 
-    # ── Global size multiplier (Rozmiar w nagłówku) ──────────────────
-    # value 0.001 → 0.01x (1 px),  0.1 → 1.0x (domyślny),
-    # 0.5 → 5.0x,  1.0 → 10.0x (ok. 20% ekranu na linię)
-    size_mult = cfg.get("size", 0.1) * 10
-
     # ── First pass: measure every enabled line ────────────────────────
-    # Stores (text, font, line_height, fill_colour, text_width)
-    rendered_lines: list[tuple[str, Any, int, tuple[int, int, int, int], int]] = []
+    rendered_lines: list[tuple[str, int, tuple[int, int, int, int], int, int]] = []
     total_h = outline  # top padding
     max_w = 0
     for show, text, prefix, default_color, default_label in line_defs:
@@ -131,7 +225,7 @@ def render_time_display(
         if show_lbl and lbl:
             text = f"{lbl}: {text}"
 
-        fs = max(1, int(s(cfg.get(f"{prefix}_font_size", global_fs), min_dim) * size_mult))
+        fs = max(1, int(s(cfg.get(f"{prefix}_font_size", global_fs), min_dim) * master))
         font = load_font(font_path, fs)
         # Parse colour from config, fall back to default
         color_str = cfg.get(f"{prefix}_color")
@@ -143,9 +237,9 @@ def render_time_display(
                 fill = default_color + (255,)
         else:
             fill = default_color + (255,)
-        lh = int(fs * 1.4)
-        tw = int(font.getlength(text) + outline * 4)
-        rendered_lines.append((text, font, lh, fill, tw))
+
+        tw, lh = _get_text_metrics(font, font_path, fs, text, outline)
+        rendered_lines.append((text, fs, fill, tw, lh))
         total_h += lh
         max_w = max(max_w, tw)
 
@@ -155,22 +249,24 @@ def render_time_display(
     total_h += outline  # bottom padding
 
     # ── Create canvas ─────────────────────────────────────────────────
-    tmp_w = int(max(max_w + outline * 2, s(0.3, canvas_w)))
+    # Ikona skaluje się razem z globalnym Rozmiarem (master).
+    icon = _get_clock_icon(cfg.get("icon"), max(12, int(global_fs * master * 0.9)))
+    icon_gap = max(2, int(global_fs * master * 0.18)) if icon else 0
+    icon_w = (icon.width + icon_gap) if icon else 0
+
+    tmp_w = int(max(max_w + outline * 2 + icon_w, s(0.3, canvas_w)))
     tmp_h = max(total_h, 80)
     tmp = Image.new("RGBA", (tmp_w, tmp_h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(tmp)
 
-    # ── Second pass: render each line with its own font & colour ─────
+    if icon:
+        tmp.alpha_composite(icon, (outline, max(0, (tmp_h - icon.height) // 2)))
+
+    # ── Second pass: composite each cached line tile ──────────────────
+    text_x = outline + icon_w
     y = outline
-    for text, font, lh, fill, tw in rendered_lines:
-        draw.text(
-            (outline, y),
-            text,
-            font=font,
-            fill=fill,
-            stroke_width=outline,
-            stroke_fill=(0, 0, 0, 255),
-        )
+    for text, fs, fill, tw, lh in rendered_lines:
+        line_tile = _get_line_tile(text, font_path, fs, fill, outline, tw, lh)
+        tmp.alpha_composite(line_tile, (text_x - outline, y - outline))
         y += lh
 
     bbox = tmp.getbbox()

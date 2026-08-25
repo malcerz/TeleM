@@ -1,0 +1,70 @@
+{
+  "reference_input": {
+    "video": "Video/GX020079.mp4",
+    "gpmf": "Video/GX020079.json",
+    "fit": "Video/Morning_Ride.fit",
+    "layout": "def_layout.json",
+    "start_datetime_utc": "2026-08-05T04:28:11",
+    "fps_argument": 29.97
+  },
+  "pre_etap0": {
+    "file": "golden_pre_etap0.mp4",
+    "bytes": 146593503,
+    "sha256": "78a04269cf9566869dbd1f40a21cf625fa0ecd598aa6d343862a2a96d42213d7",
+    "video": {
+      "resolution": "3840x2160",
+      "codec": "hevc",
+      "profile": "Main",
+      "pixel_format": "yuv420p",
+      "avg_frame_rate": "1000000/33367",
+      "duration_s": 37.704710,
+      "frame_count": 1130
+    },
+    "audio": {
+      "present": true,
+      "codec": "aac",
+      "profile": "LC",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "duration_s": 37.717333,
+      "packet_count": 1768,
+      "adts_sha256": "e7d3fa3df057f0705bf2f8410b6fde44fac298002a55bdb1b6ec403e642d1ff3"
+    }
+  },
+  "post_etap0": {
+    "file": "post_etap0.mp4",
+    "bytes": 146626378,
+    "sha256": "c15e92c2a7926f5599d973b32ba1f373452d69996e4673d5bf50d6376a1dd2d3",
+    "video": {
+      "resolution": "3840x2160",
+      "codec": "hevc",
+      "profile": "Main",
+      "pixel_format": "yuv420p",
+      "avg_frame_rate": "339300000/11321423",
+      "duration_s": 37.738077,
+      "frame_count": 1131
+    },
+    "audio": {
+      "present": true,
+      "codec": "aac",
+      "profile": "LC",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "duration_s": 37.717333,
+      "packet_count": 1768,
+      "adts_sha256": "e7d3fa3df057f0705bf2f8410b6fde44fac298002a55bdb1b6ec403e642d1ff3"
+    }
+  },
+  "intentional_frame_count_delta": "The pre-ETAP0 DLL stopped AMF drain on AMF_REPEAT and omitted the final encoded frame. ETAP0 waits for AMF_EOF, producing all 1131 source frames.",
+  "native_dll": {
+    "path": "C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll",
+    "bytes": 2896122,
+    "sha256": "f194b6b0e647f8cffea65ac60a680379a34158e22c373a7921d178fb52795659",
+    "abi": 1,
+    "build_id": "telem-amd-native/1.0.0+42dc5799a538.src4f556fb41e12",
+    "build_timestamp": "2026-08-14T07:22:26+02:00",
+    "file_timestamp": "2026-08-14T08:35:50+02:00",
+    "git_commit": "42dc5799a53851a7b7ca9216068c9dd082eb496c",
+    "source_hash": "4f556fb41e1264ac792c766e08f4797220d72ab474704e9f61f0f248c3d94f79"
+  }
+}

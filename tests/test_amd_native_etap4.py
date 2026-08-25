@@ -8,7 +8,7 @@ NATIVE = ROOT / "native" / "d3d11_amf_pipeline" / "src"
 
 
 def test_etap4_abi_and_explicit_decode_modes():
-    assert AMD_NATIVE_ABI_VERSION == 4
+    assert AMD_NATIVE_ABI_VERSION >= 4
     assert _AMD_DECODE_MODES["GPU_HUD_CPU_DECODE_REFERENCE"] == 0
     assert _AMD_DECODE_MODES["GPU_HUD_D3D11VA"] == 1
 

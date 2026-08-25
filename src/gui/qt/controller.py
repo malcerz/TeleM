@@ -26,8 +26,10 @@ from src.gui.telemetry_manager import TelemetryDataManager
 from src.telemetry_extract import (
     ensure_records_list,
     extract_altitude_samples,
+    extract_accelerometer_samples,
     extract_exposure_samples,
     extract_gps_track,
+    extract_gyroscope_samples,
     extract_iso_samples,
     extract_speed_samples,
     extract_temperature_samples,
@@ -116,6 +118,18 @@ class AppController(
         # ── Stan ────────────────────────────────────────────────────────
         self.video_paths: list[Path] = []
         self.video_path: Optional[Path] = None
+        # ── Multi-file: per-clip model + global timeline (ETAP MULTIFILE) ─
+        # ``video_clips`` is the ordered list of VideoClip; ``video_timeline``
+        # maps global_time -> clip -> local_time -> absolute_timestamp.
+        # For a single-file project they reduce exactly to the legacy behavior.
+        self.video_clips: list[Any] = []
+        self.video_timeline: Optional[Any] = None
+        # ── Multi-file preview state (ETAP 4A) ───────────────────────────
+        # Index of the clip currently loaded by the preview decoder
+        # (QMediaPlayer / MPV).  Used to switch source only when the clip
+        # actually changes, and to map local <-> global preview times.
+        self._active_preview_clip_index: Optional[int] = None
+        self._pending_seek_ms: Optional[int] = None
         self.meta_path: Optional[Path] = None
         self.gpx_path: Optional[Path] = None
         self.fit_path: Optional[Path] = None
@@ -128,6 +142,13 @@ class AppController(
         self.indicator_bboxes: dict = {}
         self._selected_stream_key: str = ""
         self._cut_regions: list[tuple[float, float]] = []
+
+        # ── Map preload context (ETAP MAP PRELOAD) ─────────────────────
+        # Created lazily by project loading; consumed by the map indicator
+        # so adding a map uses the already-prepared overview instead of
+        # re-analysing FIT/GPS from scratch.
+        self.map_context: Any = None
+        self._map_preload_worker: Any = None
 
         # Wczytaj startowy preset z def_layout.json jeśli istnieje
         self._startup_preset_path: str = ""
@@ -162,6 +183,8 @@ class AppController(
             extract_gps_track_fn=extract_gps_track,
             find_gps_anchor_fn=lambda r: None,
             smooth_values_fn=smooth_speed_values,
+            extract_accelerometer_fn=extract_accelerometer_samples,
+            extract_gyroscope_fn=extract_gyroscope_samples,
         )
 
         self.layout_mgr = LayoutManager(
@@ -247,6 +270,9 @@ class AppController(
         s.sig_preview_mode_changed.connect(self._on_preview_mode_changed)
         s.sig_preview_accel_changed.connect(self._on_preview_accel_changed)
         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
+        # Map preload: refresh the preview when the overview map becomes ready.
+        s.sig_map_ready.connect(lambda: self._render_preview())
+        s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
 
     def _load_startup_preset(self) -> None:
         """Wczytuje def_layout.json oraz _startup_preset jeśli istnieje."""

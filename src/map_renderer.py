@@ -78,11 +78,30 @@ def lat_to_tile_y(lat: float, zoom: int) -> float:
 # ── Tile download with local cache ──────────────────────────────────────────
 
 
-def _cache_path(z: int, x: int, y: int) -> Path:
-    return CACHE_DIR / str(z) / str(x) / f"{y}.png"
+def _cache_path(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE) -> Path:
+    """Disk cache path for a tile (style is part of the path).
+
+    Without the style component, switching e.g. ``light_all`` → ``satellite``
+    would serve the previously cached style from disk and the satellite
+    switch would appear to do nothing (ETAP MAP PRELOAD — Satellite fix).
+    """
+    return CACHE_DIR / str(style) / str(z) / str(x) / f"{y}.png"
 
 
 _last_request_time: float = 0.0
+
+
+def _shared_sqlite_cache_tile(z: int, x: int, y: int, style: str):
+    """Read a tile from the shared moving_map SQLite cache, if present.
+
+    Lets static_map benefit from overview tiles prepared by MapPreload (which
+    writes to the shared SQLite cache) without re-downloading them.
+    """
+    try:
+        from src.moving_map import get_shared_tile_cache
+        return get_shared_tile_cache().get(z, x, y, style)
+    except Exception:
+        return None
 
 
 def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, download: bool = True) -> Optional[Image.Image]:
@@ -94,12 +113,17 @@ def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, downlo
     if Image is None:
         return None
 
-    cp = _cache_path(z, x, y)
+    cp = _cache_path(z, x, y, style)
     if cp.exists():
         try:
             return Image.open(cp).convert("RGBA")
         except Exception:
             pass  # corrupted — re-download
+
+    # Overview tiles prepared by MapPreload live in the shared SQLite cache.
+    shared = _shared_sqlite_cache_tile(z, x, y, style)
+    if shared is not None:
+        return shared
 
     if not download:
         return None  # tylko cache, bez sieci
@@ -142,6 +166,36 @@ _TILE_CACHE: dict[str, tuple] = {}
 
 # Cache: (zoom, track_fingerprint) -> (abs_tx_list, abs_ty_list)  — no trig per frame
 _TRACK_CACHE: dict[str, tuple] = {}
+
+
+def viewport_tiles_for(
+    lat: float, lon: float, zoom: int, width: int, height: int, margin: int = 4
+) -> list[tuple[int, int, int]]:
+    """Tile plan (z, x, y) covering a ``width x height`` viewport centred at
+    ``(lat, lon)`` at *zoom*.
+
+    Mirrors the tile range computed by ``render_map_overlay`` so the async
+    (GUI preview) map path can measure detail-tile cache coverage and decide
+    whether to render the full detail map or fall back to the prepared
+    overview (Level 1).  Pure computation — never downloads.
+    """
+    target_w = max(1, width - 2 * margin)
+    target_h = max(1, height - 2 * margin)
+    tiles_across = target_w / TILE_SIZE
+    tiles_down = target_h / TILE_SIZE
+    cx_tile = int(lon_to_tile_x(lon, zoom))
+    cy_tile = int(lat_to_tile_y(lat, zoom))
+    half_tiles_x = int(math.ceil(tiles_across / 2))
+    half_tiles_y = int(math.ceil(tiles_down / 2))
+    tx1 = cx_tile - half_tiles_x
+    tx2 = cx_tile + half_tiles_x
+    ty1 = cy_tile - half_tiles_y
+    ty2 = cy_tile + half_tiles_y
+    return [
+        (zoom, tx, ty)
+        for ty in range(ty1, ty2 + 1)
+        for tx in range(tx1, tx2 + 1)
+    ]
 
 
 def _tile_cache_key(zoom: int, tx1: int, tx2: int, ty1: int, ty2: int, style: str) -> str:
@@ -217,6 +271,9 @@ def render_map_overlay(
     hide_track: bool = False,
     margin: int = 4,
     download_missing: bool = True,
+    track_antialiasing: int = 1,
+    track_outline_width: int = 0,
+    track_outline_color: tuple[int, int, int, int] = (0, 0, 0, 220),
 ) -> Image.Image:
     """Render a map with GPS track and current-position marker.
 
@@ -236,6 +293,9 @@ def render_map_overlay(
         margin: Padding around the map in pixels.
         download_missing: If True (default), download tiles not yet cached.
             If False, only use tiles already on disk — uncached areas stay dark.
+        track_antialiasing (ETAP 10T): 1/2/4 route supersampling factor (1=off).
+        track_outline_width (ETAP 10T): outline halo width in px (0 = none).
+        track_outline_color (ETAP 10T): outline colour (RGBA).
 
     Returns:
         RGBA PIL.Image containing the rendered map or a placeholder.
@@ -331,14 +391,23 @@ def render_map_overlay(
     # ── Project cached coords to canvas pixels (fast: no trig) ─────────
     origin_tx_f = float(tx1)
     origin_ty_f = float(ty1)
-    track_draw = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    aa = max(1, min(8, int(track_antialiasing or 1)))
+    outline_w = max(0, int(track_outline_width or 0))
+    track_draw = Image.new("RGBA", (width * aa, height * aa), (0, 0, 0, 0))
     td = ImageDraw.Draw(track_draw)
     points_px: list[tuple[int, int] | None] = []
 
     for tx_f, ty_f in zip(abs_tx_list, abs_ty_list):
-        px_i = int(off_x + (tx_f - origin_tx_f) * TILE_SIZE * scale)
-        py_i = int(off_y + (ty_f - origin_ty_f) * TILE_SIZE * scale)
-        if -100 <= px_i <= width + 100 and -100 <= py_i <= height + 100:
+        raw_px = off_x + (tx_f - origin_tx_f) * TILE_SIZE * scale
+        raw_py = off_y + (ty_f - origin_ty_f) * TILE_SIZE * scale
+        if aa == 1:
+            # Legacy path: int() truncation preserved exactly for byte-parity.
+            px_i = int(raw_px)
+            py_i = int(raw_py)
+        else:
+            px_i = int(round(raw_px * aa))
+            py_i = int(round(raw_py * aa))
+        if -100 * aa <= px_i <= width * aa + 100 * aa and -100 * aa <= py_i <= height * aa + 100 * aa:
             points_px.append((px_i, py_i))
         else:
             points_px.append(None)
@@ -348,16 +417,34 @@ def render_map_overlay(
         for pt in points_px:
             if pt is None:
                 if len(segments) >= 2:
-                    td.line(segments, fill=track_color, width=track_width, joint="curve")
+                    if outline_w > 0:
+                        td.line(segments, fill=track_outline_color,
+                                width=max(1, (track_width + 2 * outline_w) * aa), joint="curve")
+                    td.line(segments, fill=track_color,
+                            width=max(1, track_width * aa), joint="curve")
                 segments = []
             else:
                 segments.append(pt)
         if len(segments) >= 2:
-            td.line(segments, fill=track_color, width=track_width, joint="curve")
+            if outline_w > 0:
+                td.line(segments, fill=track_outline_color,
+                        width=max(1, (track_width + 2 * outline_w) * aa), joint="curve")
+            td.line(segments, fill=track_color,
+                    width=max(1, track_width * aa), joint="curve")
 
-    # ── Position marker ─────────────────────────────────────────────────
+    if aa > 1:
+        # ETAP 10T: downsample the supersampled track overlay back to output
+        # size.  Keeps the visual line width and centre coordinates identical;
+        # only the edges become antialiased.
+        resampling = getattr(Image, "Resampling", Image)
+        track_draw = track_draw.resize((width, height), resampling.LANCZOS)
+        td = ImageDraw.Draw(track_draw)
+
+    # ── Position marker (drawn at final resolution so it never blurs) ──
     if not hide_marker and 0 <= ci < len(points_px) and points_px[ci] is not None:
-        mx, my = points_px[ci]
+        mx_f = (points_px[ci][0] + 0.0) / aa
+        my_f = (points_px[ci][1] + 0.0) / aa
+        mx, my = int(round(mx_f)), int(round(my_f))
         for r in range(marker_radius + 4, marker_radius - 1, -1):
             alpha = 80 if r > marker_radius + 1 else 200
             td.ellipse(

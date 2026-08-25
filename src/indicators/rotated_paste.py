@@ -20,6 +20,8 @@ No widget renderer is touched: the input RGBA widget is identical in both modes.
 from __future__ import annotations
 
 import os
+import threading
+import time
 
 try:
     from PIL import Image
@@ -42,6 +44,29 @@ def set_composite_mode(mode: str) -> None:
 # Per-widget minimum alpha, cached once (widget alpha structure is static per
 # indicator type+size). Used to decide the transparent-destination paste path.
 _WIDGET_ALPHA_MIN: dict[tuple, int] = {}
+_WIDGET_CLEAN_TRANSPARENCY: dict[tuple, bool] = {}
+
+# ETAP 10R: per-thread accumulator for the alpha-tight bbox collection time
+# spent inside composite_final when tight_bboxes is requested (only the AMD
+# EXACT path enables it).  The exporter resets it around the ABOVE compose
+# call and reads it back as the above_tight_bbox_collect metric.
+_tight_bbox_collect_local = threading.local()
+
+
+def _tight_collect_accum() -> list[float]:
+    if not hasattr(_tight_bbox_collect_local, "ms"):
+        _tight_bbox_collect_local.ms = [0.0]
+    return _tight_bbox_collect_local.ms
+
+
+def reset_tight_bbox_collect() -> None:
+    """Reset the ETAP 10R tight-bbox collect accumulator (thread-local)."""
+    _tight_collect_accum()[0] = 0.0
+
+
+def get_tight_bbox_collect_ms() -> float:
+    """Return the accumulated tight-bbox collect time in ms (thread-local)."""
+    return _tight_collect_accum()[0]
 
 
 def _alpha_min(overlay: Image.Image, cache_key) -> int:
@@ -96,6 +121,23 @@ def _clean_transparency(overlay: Image.Image) -> bool:
         return False
 
 
+def _plain_paste_safe(overlay: Image.Image, cache_key) -> bool:
+    """Whether plain paste preserves a ready RGBA raster on empty RGBA ROI.
+
+    The result is cached by widget identity/size.  This is deliberately not a
+    per-frame pixel scan: chart rasters have stable transparent-pixel encoding,
+    while their visible chart contents change every frame.
+    """
+    if _alpha_min(overlay, cache_key) > 0:
+        return True
+    if cache_key is None:
+        return False
+    key = (cache_key, overlay.width, overlay.height)
+    if key not in _WIDGET_CLEAN_TRANSPARENCY:
+        _WIDGET_CLEAN_TRANSPARENCY[key] = _clean_transparency(overlay)
+    return _WIDGET_CLEAN_TRANSPARENCY[key]
+
+
 def composite_final(
     base_img: Image.Image,
     overlay: Image.Image,
@@ -103,13 +145,66 @@ def composite_final(
     y: int,
     prior_bboxes=None,
     cache_key=None,
+    destination_proven_empty: bool = False,
+    tight_bboxes=None,
+    tight_key=None,
 ) -> None:
     """Composite the ready RGBA *overlay* onto *base_img* at (x, y) (top-left).
 
     Pixel-exact in both modes; only the amount of Pillow work differs.
+
+    ETAP 10R: when *tight_bboxes* is a dict and *cache_key* is not None, the
+    alpha-tight bbox of the (already rotated) overlay is recorded into
+    ``tight_bboxes[key]`` as ``{"rect": (x, y, w, h) | None, "clipped": bool}``
+    in absolute canvas coordinates.  This is exactly the region that the AMD
+    SCAN path re-derives via ``candidate.getchannel("A").getbbox()`` (the
+    canonical definition: bounding box of pixels where alpha != 0, so a pixel
+    with A == 0 / RGB != 0 is excluded).  ``clipped`` is True when the widget
+    extends past the canvas edge, in which case the EXACT path must fall back
+    to SCAN (the bbox of clipped content can differ from the clipped bbox for
+    irregular content).  When *tight_bboxes* is None the function is 100%
+    unchanged.
     """
+    if tight_bboxes is not None and cache_key is not None:
+        tk = tight_key if tight_key is not None else cache_key
+        acc = _tight_collect_accum()
+        t_tb_start = time.perf_counter()
+        ab = overlay.getchannel("A").getbbox()
+        acc[0] += (time.perf_counter() - t_tb_start) * 1000.0
+        clipped = (
+            x < 0
+            or y < 0
+            or x + overlay.width > base_img.width
+            or y + overlay.height > base_img.height
+        )
+        if ab is None:
+            tight_bboxes[tk] = {"rect": None, "clipped": clipped}
+        else:
+            tight_bboxes[tk] = {
+                "rect": (x + ab[0], y + ab[1], ab[2] - ab[0], ab[3] - ab[1]),
+                "clipped": clipped,
+            }
+
     if _COMPOSITE_MODE != "OPTIMIZED":
         base_img.alpha_composite(overlay, (x, y))
+        return
+
+    # ETAP 5E.5: a planner may explicitly prove that this complete destination
+    # rectangle is empty in a freshly allocated transparent atlas.  With the
+    # cached source-safety proof, plain paste copies the ready RGBA bytes
+    # exactly; unlike ``paste(src, xy, src)`` it does not blend alpha twice.
+    # Rectangle overlap remains a conservative fallback to alpha compositing.
+    if (
+        destination_proven_empty
+        and prior_bboxes is not None
+        and x >= 0
+        and y >= 0
+        and x + overlay.width <= base_img.width
+        and y + overlay.height <= base_img.height
+        and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes)
+        and _plain_paste_safe(overlay, cache_key)
+    ):
+        base_img.paste(overlay, (x, y))
         return
 
     bbox = overlay.getbbox()
@@ -167,9 +262,17 @@ def rotated_paste(
     rotation: int,
     prior_bboxes=None,
     cache_key=None,
+    destination_proven_empty: bool = False,
+    tight_bboxes=None,
+    tight_key=None,
 ) -> None:
     """Paste *overlay* onto *base_img* centred at (center_x, center_y) with rotation.
-    Modifies base_img in place."""
+    Modifies base_img in place.
+
+    ETAP 10R: *tight_bboxes* / *tight_key* are forwarded to composite_final
+    (alpha-tight bbox capture).  When *tight_bboxes* is None behaviour is
+    unchanged.
+    """
     rotation = int(rotation) % 360
     if rotation == 90:
         overlay = overlay.transpose(Image.Transpose.ROTATE_90)
@@ -179,4 +282,9 @@ def rotated_paste(
         overlay = overlay.transpose(Image.Transpose.ROTATE_270)
     x = int(round(center_x - overlay.width / 2))
     y = int(round(center_y - overlay.height / 2))
-    composite_final(base_img, overlay, x, y, prior_bboxes, cache_key)
+    composite_final(
+        base_img, overlay, x, y, prior_bboxes, cache_key,
+        destination_proven_empty=destination_proven_empty,
+        tight_bboxes=tight_bboxes,
+        tight_key=tight_key,
+    )

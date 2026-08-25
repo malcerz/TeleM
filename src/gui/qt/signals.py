@@ -88,6 +88,10 @@ class AppSignals(QObject):
     sig_preview_frame_ready = Signal(object)
     # (qpixmap: QPixmap)
 
+    # Klatka podglądu podczas eksportu (asynchroniczny update)
+    sig_export_preview_ready = Signal(object)
+    # (qimage: QImage)
+
     # Aktualizacja czasu trwania wideo (do suwaka)
     sig_video_duration_ready = Signal(float)
     # (duration_seconds: float)
@@ -119,9 +123,22 @@ class AppSignals(QObject):
     sig_error = Signal(str)
     # (error_message: str)
 
-    # Renderowanie zakończone
+    # Renderowanie zakończone sukcesem
     sig_render_finished = Signal(dict, str)
     # (stats: dict, output_path: str)
+
+    # Renderowanie zatrzymane / anulowane (potwierdzone zakończenie workera po cancel)
+    sig_render_stopped = Signal()
+
+    # ── Map preload (ETAP MAP PRELOAD) ───────────────────────────────────
+    # Overview map ready / progress.  Emitted from the MapPreload worker;
+    # the controller marshals preview refresh via these (queued) signals.
+    sig_map_ready = Signal()
+    # (loaded_tiles, required_tiles)
+    sig_map_progress = Signal(int, int)
+
+    # Request GUI-thread-only deferred MPV diagnostics from a loading worker.
+    sig_schedule_mpv_hwdec_check = Signal()
 
 
 # Singleton dla całej aplikacji

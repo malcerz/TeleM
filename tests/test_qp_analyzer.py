@@ -113,7 +113,7 @@ class TestStatsFromHist:
         hist = {20: 100, 30: 100}
         mean, med, mn, mx = _stats_from_hist(hist)
         assert mean == 25.0
-        assert med == 20
+        assert med == 25.0
         assert mn == 20
         assert mx == 30
 

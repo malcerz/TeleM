@@ -1,0 +1,45 @@
+{
+  "result": "PASS",
+  "abi": 3,
+  "selected_upload_mode": "DIRTY",
+  "selected_dirty_rect_target": 8,
+  "pillow_version": "12.3.0",
+  "pillow_direct_writable_backing": false,
+  "persistent_ctypes_backing": true,
+  "persistent_pointer_stable": true,
+  "image_and_backing_share_memory": false,
+  "full_tobytes_calls_gpu_path": 0,
+  "native_full_memcpy_gpu_path": false,
+  "test_a_full": {
+    "frames": 1131,
+    "wall_clock_s": 128.840,
+    "true_fps": 8.778,
+    "buffer_preparation_avg_ms": 23.243,
+    "native_copy_avg_ms": 0.0,
+    "hud_upload_avg_ms": 3.020,
+    "cpu_to_gpu_mib_per_frame": 31.640625
+  },
+  "test_b_dirty": {
+    "frames": 1131,
+    "wall_clock_s": 107.784,
+    "true_fps": 10.493,
+    "buffer_preparation_avg_ms": 11.619,
+    "python_native_bridge_avg_ms": 0.031,
+    "native_copy_avg_ms": 0.0,
+    "hud_upload_avg_ms": 1.740,
+    "rects_avg": 5.995579133510168,
+    "rects_p95": 6.0,
+    "cpu_to_gpu_mib_avg": 10.291171154018844,
+    "cpu_to_gpu_mib_p95": 10.27227783203125,
+    "amf_dropped": 0
+  },
+  "golden_decoded_mp4": {
+    "frame_30": {"mae": 0.0, "max": 0, "p95": 0.0, "p99": 0.0, "pass": true},
+    "frame_300": {"mae": 0.0, "max": 0, "p95": 0.0, "p99": 0.0, "pass": true},
+    "frame_900": {"mae": 0.0, "max": 0, "p95": 0.0, "p99": 0.0, "pass": true}
+  },
+  "audio_sha256": "E7D3FA3DF057F0705BF2F8410B6FDE44FAC298002A55BDB1B6EC403E642D1FF3",
+  "final_mp4_sha256_etap2_full_dirty": "27DD5B35037CC3E0151A38C8566A592EE9562CD816C54FE05BDEF603AEC0A35A",
+  "dll_sha256": "91A6F9BE8851DA2CB28314FF32303224EDFE814BB31AEF26BA2C4C6BBED43E09",
+  "tests": {"passed": 158, "skipped": 17}
+}

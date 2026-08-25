@@ -3,9 +3,16 @@ GPMF (ExifTool), GPX and FIT sources."""
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import datetime, timedelta
+from statistics import median
 from pathlib import Path
+import time as _time
 from typing import Any, Callable, Optional
+
+from src.telemetry_resolver import resolve_samples_from_sources
+from src.telemetry_heading import derive_heading_samples, interpolate_heading
+from src.telemetry_slope import derive_slope_from_streams, interpolate_slope
 
 # Import telemetry modules (with fallback stubs)
 try:
@@ -34,6 +41,7 @@ except ImportError:
 
 try:
     from telemetry_fit import (
+        FitDataset,
         find_fit_for_video,
         parse_fit,
         process_fit,
@@ -42,6 +50,10 @@ try:
     _FIT_AVAILABLE = True
 except ImportError:
     _FIT_AVAILABLE = False
+
+    class FitDataset(dict):  # type: ignore[no-redef]
+        available_fit_fields = frozenset()
+        field_catalog = {}
 
     def process_fit(video_path, video_start_dt=None):  # noqa: E302
         return None
@@ -70,7 +82,7 @@ _FIT_LOOKUP: dict[str, tuple[str, ...]] = {
 }
 
 # GPS-related fields handled by built-in indicators (not registered as extension)
-_GPS_HANDLED: set[str] = {"speed", "alt", "track", "lat", "lon", "timestamp"}
+_GPS_HANDLED: set[str] = {"speed", "alt", "track", "lat", "lon", "timestamp", "heading", "slope"}
 
 # GPMF-native field names that resolve to GPMF samples directly
 _GPMF_NATIVE: set[str] = {"speed", "alt", "dist", "track", "iso", "exposure", "temperature"}
@@ -84,28 +96,27 @@ _SOURCE_SWITCH_KEYS: tuple[str, ...] = (
 def _align_offset_by_track(
     records: Optional[list[dict]],
     gpmf_track: Optional[list[tuple[datetime, float, float]]],
+    baseline_offset: Optional[timedelta] = None,
 ) -> Optional[timedelta]:
-    """Cross-correlate video (GPMF) GPS positions with FIT/GPX positions to find
-    the true clock offset between the GoPro and the external device.
+    """Find a small FIT-to-video offset from GPS points at common UTC times.
 
-    The GoPro camera clock can drift by minutes or even hours, so time-overlap
-    matching alone (``_compute_smart_time_offset``) is unreliable.  Matching GPS
-    positions is ground truth: for each sampled video GPS point we find the
-    nearest FIT/GPX point and record the time delta.  The most common delta is
-    the clock offset between the two devices.
-
-    Returns the offset to ADD to FIT/GPX record timestamps to bring them onto
-    the video timeline, or None when no confident position-based match exists
-    (no GPS data, or the routes do not overlap).
+    Absolute UTC is the primary alignment.  Candidate offsets are therefore
+    searched around zero, and coverage is measured over the GPMF fragment that
+    actually overlaps the FIT GPS track.  The returned offset is added to FIT
+    timestamps.
     """
     if not records or not gpmf_track:
         return None
+    del baseline_offset  # kept only for backwards-compatible callers
 
-    fit_pts = [
-        (r["timestamp"].replace(tzinfo=None), r["lat"], r["lon"])
-        for r in records
-        if r.get("lat") is not None and r.get("lon") is not None
-    ]
+    fit_pts: list[tuple[datetime, float, float]] = []
+    for r in records:
+        if r.get("timestamp") is None or r.get("lat") is None or r.get("lon") is None:
+            continue
+        dt = r["timestamp"]
+        dt = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+        fit_pts.append((dt, r["lat"], r["lon"]))
+    fit_pts.sort(key=lambda p: p[0])
     if len(fit_pts) < 10 or len(gpmf_track) < 10:
         return None
 
@@ -114,52 +125,138 @@ def _align_offset_by_track(
     except ImportError:
         return None
 
-    # Sample points for speed; for each, find the nearest FIT/GPX point
-    deltas: list[float] = []
-    g_step = max(1, len(gpmf_track) // 80)
-    f_step = max(1, len(fit_pts) // 400)
+    gpmf_pts: list[tuple[datetime, float, float]] = []
+    g_step = max(1, len(gpmf_track) // 120)
     for i in range(0, len(gpmf_track), g_step):
-        gdt, glat, glon = gpmf_track[i]
-        if glat is None or glon is None:
+        dt, lat, lon = gpmf_track[i]
+        if lat is None or lon is None:
             continue
-        gdt = gdt.replace(tzinfo=None) if gdt.tzinfo is not None else gdt
-        best_d = 1e18
-        best_delta = 0.0
-        for j in range(0, len(fit_pts), f_step):
-            fdt, flat, flon = fit_pts[j]
-            d = haversine_m(glat, glon, flat, flon)
-            if d < best_d:
-                best_d = d
-                best_delta = (fdt - gdt).total_seconds()
-        if best_d < 100.0:  # within 100 m -> same route, record candidate delta
-            deltas.append(round(best_delta / 5.0) * 5.0)
+        dt = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+        gpmf_pts.append((dt, lat, lon))
+    if len(gpmf_pts) < 5:
+        return None
 
-    if not deltas:
+    gpmf_first, gpmf_last = gpmf_pts[0][0], gpmf_pts[-1][0]
+    fit_first, fit_last = fit_pts[0][0], fit_pts[-1][0]
+    fit_times = [p[0] for p in fit_pts]
+
+    def interpolate_position(target: datetime) -> Optional[tuple[float, float]]:
+        right = bisect_right(fit_times, target)
+        if right == 0:
+            return None
+        if right == len(fit_pts):
+            if target == fit_pts[-1][0]:
+                return fit_pts[-1][1], fit_pts[-1][2]
+            return None
+        left = right - 1
+        t1, lat1, lon1 = fit_pts[left]
+        t2, lat2, lon2 = fit_pts[right]
+        span = (t2 - t1).total_seconds()
+        if span <= 0:
+            return lat1, lon1
+        ratio = (target - t1).total_seconds() / span
+        return lat1 + (lat2 - lat1) * ratio, lon1 + (lon2 - lon1) * ratio
+
+    # ``baseline_offset`` is retained for API compatibility, but absolute UTC
+    # alignment deliberately starts at zero rather than file-start alignment.
+    baseline_s = 0.0
+
+    def overlap(offset_s: float) -> Optional[tuple[datetime, datetime]]:
+        start = max(gpmf_first, fit_first + timedelta(seconds=offset_s))
+        end = min(gpmf_last, fit_last + timedelta(seconds=offset_s))
+        return (start, end) if end > start else None
+
+    def score(offset_s: float) -> Optional[dict[str, float]]:
+        # Keep one absolute-time comparison window: otherwise a candidate can
+        # improve its score by moving the FIT edge over the worst part of the
+        # short GPMF clip.  The window is the real overlap at offset=0.
+        if not reference_gpmf:
+            return None
+        errors: list[float] = []
+        for gdt, glat, glon in reference_gpmf:
+            fit_pos = interpolate_position(gdt - timedelta(seconds=offset_s))
+            if fit_pos is not None:
+                errors.append(haversine_m(glat, glon, fit_pos[0], fit_pos[1]))
+        coverage = len(errors) / len(reference_gpmf)
+        if len(errors) < 5 or coverage < 0.25:
+            return None
+        ordered = sorted(errors)
+        return {
+            "matched": float(len(errors)),
+            "coverage": coverage,
+            "median": float(median(errors)),
+            "p90": float(ordered[max(0, int(len(ordered) * 0.90) - 1)]),
+        }
+
+    reference_overlap = overlap(0.0)
+    if reference_overlap is None:
+        return None
+    reference_start, reference_end = reference_overlap
+    reference_gpmf = [
+        point for point in gpmf_pts
+        if reference_start <= point[0] <= reference_end
+    ]
+    if len(reference_gpmf) < 5:
+        return None
+
+    baseline_metrics = score(0.0)
+    if baseline_metrics is None:
+        return None
+
+    coarse = [i * 5.0 for i in range(-24, 25)]
+    if 0.0 not in coarse:
+        coarse.append(0.0)
+    valid_coarse = [(s, m) for s in coarse if (m := score(s)) is not None]
+    if not valid_coarse:
+        return None
+
+    def rank(item: tuple[float, dict[str, float]]) -> tuple[float, float]:
+        offset_s, metrics = item
+        return (
+            metrics["median"] + 0.25 * metrics["p90"],
+            abs(offset_s - baseline_s),
+        )
+
+    best_coarse_s, _ = min(valid_coarse, key=rank)
+    fine = [i * 0.1 for i in range(-50, 51)]
+    fine.extend(best_coarse_s + i * 0.1 for i in range(-50, 51))
+    valid_fine = [(s, m) for s in fine if (m := score(s)) is not None]
+    candidates = valid_fine or valid_coarse
+    refinements = [
+        item for item in candidates
+        if abs(item[0]) > 1e-9
+        and item[1]["coverage"] >= 0.75
+        and item[1]["median"] <= baseline_metrics["median"] * 0.80
+    ]
+    if refinements:
+        best_s, metrics = min(refinements, key=rank)
+    else:
+        best_s, metrics = 0.0, baseline_metrics
+    if metrics["median"] > 100.0 or metrics["p90"] > 250.0:
         print(
-            "[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may "
-            "be from a different ride than the video.",
+            "[SmartSync] absolute_overlap=yes "
+            "WARNING: trajectory alignment rejected: "
+            f"baseline=0.000s candidate={best_s:.3f}s "
+            f"matched={int(metrics['matched'])}/{len(reference_gpmf)} "
+            f"coverage={metrics['coverage']:.2f} "
+            f"median_error={metrics['median']:.1f}m p90_error={metrics['p90']:.1f}m",
             flush=True,
         )
         return None
 
-    if len(deltas) < max(5, (len(gpmf_track) // g_step) // 4):
-        return None  # too few confident matches -> fall back to time matching
-
-    from collections import Counter
-
-    offset_s, count = Counter(deltas).most_common(1)[0]
-    if count < 3:
-        return None
-
-    # delta = fit_time - video_time; offset to apply = video - fit = -delta
-    offset = -timedelta(seconds=offset_s)
+    offset = timedelta(seconds=best_s)
+    confidence = "high" if metrics["coverage"] >= 0.5 and metrics["p90"] <= 100.0 else "medium"
     print(
-        f"[SmartSync] GPS track alignment: offset={offset} "
-        f"({count}/{len(deltas)} matched points)",
+        "[SmartSync] absolute_overlap=yes "
+        f"baseline=0.000s candidate={offset.total_seconds():.3f}s "
+        f"matched={int(metrics['matched'])}/{len(reference_gpmf)} "
+        f"median_error={metrics['median']:.1f}m "
+        f"p90_error={metrics['p90']:.1f}m coverage={metrics['coverage']:.2f} "
+        f"confidence={confidence} method=absolute_time_trajectory_refine "
+        "result=ACCEPTED",
         flush=True,
     )
     return offset
-
 
 def _compute_smart_time_offset(
     records_start_ts: datetime,
@@ -180,19 +277,23 @@ def _compute_smart_time_offset(
         return timedelta(0)
 
     # 0. GPS-track-based alignment — ground truth when both tracks are available
-    track_offset = _align_offset_by_track(records, gpmf_track)
-    if track_offset is not None:
-        return track_offset
-
     vid_dt = video_start_dt.replace(tzinfo=None) if video_start_dt.tzinfo is not None else video_start_dt
     fit_start = records_start_ts.replace(tzinfo=None) if records_start_ts.tzinfo is not None else records_start_ts
     fit_end = records_end_ts.replace(tzinfo=None) if records_end_ts.tzinfo is not None else records_end_ts
+
+    track_offset = _align_offset_by_track(records, gpmf_track)
+    if track_offset is not None:
+        return track_offset
 
     margin = timedelta(minutes=5)
 
     # 1. Direct match
     if (fit_start - margin) <= vid_dt <= (fit_end + margin):
-        print(f"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]", flush=True)
+        print(
+            f"[SmartSync] absolute_overlap=no method=absolute_time "
+            f"offset=0.000s vid_dt={vid_dt} inside [{fit_start}..{fit_end}]",
+            flush=True,
+        )
         return timedelta(0)
 
     # 2. Integer hour timezone offset match (e.g. FIT local time vs UTC)
@@ -203,12 +304,18 @@ def _compute_smart_time_offset(
         shifted_fit_end = fit_end - timedelta(hours=tz_h)
         if (shifted_fit_start - margin) <= vid_dt <= (shifted_fit_end + margin):
             offset = -timedelta(hours=tz_h)
-            print(f"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]", flush=True)
+            print(
+                f"[SmartSync] absolute_overlap=no method=timezone_fallback "
+                f"tz_h={tz_h}h offset={offset}", flush=True,
+            )
             return offset
 
     # 3. Fallback: if video_dt does not overlap at all, align FIT start to vid_dt
     fallback_offset = vid_dt - fit_start
-    print(f"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})", flush=True)
+    print(
+        f"[SmartSync] absolute_overlap=no method=align_start_fallback "
+        f"offset={fallback_offset}", flush=True,
+    )
     return fallback_offset
 
 
@@ -216,7 +323,7 @@ class TelemetryDataManager:
     """Manages all telemetry data loading, caching, and source-resolution.
 
     Holds sample data from GPMF (GoPro), GPX, and FIT sources and provides
-    methods to resolve values with configurable priority (FIT > GPX > GPMF).
+    methods to resolve values from an explicitly requested source.
     """
 
     def __init__(
@@ -243,6 +350,8 @@ class TelemetryDataManager:
         extract_gps_track_fn: Optional[Callable] = None,
         find_gps_anchor_fn: Optional[Callable] = None,
         smooth_values_fn: Optional[Callable] = None,
+        extract_accelerometer_fn: Optional[Callable] = None,
+        extract_gyroscope_fn: Optional[Callable] = None,
     ) -> None:
         # GPMF samples
         self.records: list[dict] = []
@@ -252,6 +361,19 @@ class TelemetryDataManager:
         self.iso_samples: SampleList = []
         self.exposure_samples: SampleList = []
         self.temperature_samples: SampleList = []
+        self.slope_samples: list[tuple[datetime, float | None]] = []
+        self.accelerometer_samples: list[tuple[datetime, tuple[float, float, float]]] = []
+        self.gyroscope_samples: list[tuple[datetime, tuple[float, float, float]]] = []
+        self.accel_x_samples: SampleList = []
+        self.accel_y_samples: SampleList = []
+        self.accel_z_samples: SampleList = []
+        self.accel_magnitude_samples: SampleList = []
+        self.gyro_x_samples: SampleList = []
+        self.gyro_y_samples: SampleList = []
+        self.gyro_z_samples: SampleList = []
+        self.gyro_magnitude_samples: SampleList = []
+        self.accel_unit = "m/s"
+        self.gyro_unit = "rad/s"
 
         # GPX samples (separate from GPMF for per-indicator source selection)
         self.gpx_speed_samples: SampleList = []
@@ -261,14 +383,19 @@ class TelemetryDataManager:
         self.gpx_atemp_samples: SampleList = []
         self.gpx_hr_samples: SampleList = []
         self.gpx_cad_samples: SampleList = []
+        self.gpx_battery_samples: SampleList = []
+        self.gpx_heading_samples: list[tuple[datetime, float | None]] = []
+        self.gpx_slope_samples: list[tuple[datetime, float | None]] = []
 
         # GPS track for map rendering (lat/lon points per source)
         self.gps_track: list[tuple[datetime, float, float]] = []
         self.gpx_gps_track: list[tuple[datetime, float, float]] = []
         self.fit_gps_track: list[tuple[datetime, float, float]] = []
+        self.heading_samples: list[tuple[datetime, float | None]] = []
 
         # FIT samples – dict-based (matches telemetry_fit.process_fit return type)
         self.fit_data: dict[str, SampleList] = {}
+        self.available_fit_fields: frozenset[str] = frozenset()
 
         # FIT-registered extension indicator keys (fit_*_text)
         self.fit_ext_fields: list[str] = []
@@ -293,6 +420,10 @@ class TelemetryDataManager:
 
         # Altitude cache (for preview)
         self._alt_cache: dict[str, Any] = {}
+
+        # Precomputed IMU roll timelines (axis -> [(dt, roll_deg)]) — ETAP 13.
+        # Built once per material so seek/preview/final share the same result.
+        self._lean_roll_cache: dict[str, list] = {}
 
         # Smoothing window
         self.smoothing_window: int = 5
@@ -320,6 +451,8 @@ class TelemetryDataManager:
         self._extract_gps_track = extract_gps_track_fn
         self._find_gps_anchor = find_gps_anchor_fn
         self._smooth_values = smooth_values_fn
+        self._extract_accelerometer = extract_accelerometer_fn
+        self._extract_gyroscope = extract_gyroscope_fn
 
         # UI callbacks (set by HudTunerApp)
         self._on_telemetry_loaded: Optional[Callable[[], None]] = None
@@ -389,35 +522,93 @@ class TelemetryDataManager:
             else:
                 self.alt_samples = raw_alt or []
 
-    def load_gpmf_records(self, records: list[dict]) -> None:
+    def load_gpmf_records(self, records: list[dict], profile_cb=None) -> None:
         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
         self.records = records
+
+        def _run(stage, fn):
+            started = _time.perf_counter()
+            result = fn()
+            if profile_cb is not None:
+                try:
+                    profile_cb(stage, _time.perf_counter() - started, len(records), len(result or []))
+                except Exception:
+                    pass
+            return result
 
         # Speed and altitude should come from ExifTool flat dict (load_gpmf_from_exiftool),
         # NOT from records. Only extract them from records if not already populated.
         if not self.speed_samples and self._extract_speed:
-            self.speed_samples = self._extract_speed(records)
+            self.speed_samples = _run("speed_extract", lambda: self._extract_speed(records))
         if not self.alt_samples and self._extract_altitude:
-            self.alt_samples = self._extract_altitude(records)
+            self.alt_samples = _run("altitude_extract", lambda: self._extract_altitude(records))
         if self._extract_track:
-            self.track_samples = self._extract_track(records)
+            self.track_samples = _run("track_extract", lambda: self._extract_track(records))
         if self._extract_iso:
-            self.iso_samples = self._extract_iso(records)
+            self.iso_samples = _run("iso_extract", lambda: self._extract_iso(records))
         if self._extract_exposure:
-            self.exposure_samples = self._extract_exposure(records)
+            self.exposure_samples = _run("exposure_extract", lambda: self._extract_exposure(records))
         if self._extract_temperature:
-            self.temperature_samples = self._extract_temperature(records)
+            self.temperature_samples = _run("temperature_extract", lambda: self._extract_temperature(records))
+        if self._extract_accelerometer:
+            self.accelerometer_samples = _run("accelerometer_extract", lambda: self._extract_accelerometer(records))
+            self._set_vector_series(self.accelerometer_samples, "accel")
+        if self._extract_gyroscope:
+            self.gyroscope_samples = _run("gyroscope_extract", lambda: self._extract_gyroscope(records))
+            self._set_vector_series(self.gyroscope_samples, "gyro")
 
         # Determine start_dt_utc
         if self._find_gps_anchor:
+            anchor_t0 = _time.perf_counter()
             anchor = self._find_gps_anchor(records)
+            if profile_cb is not None:
+                try:
+                    profile_cb("gps_anchor", _time.perf_counter() - anchor_t0, len(records), 1 if anchor else 0)
+                except Exception:
+                    pass
             if anchor:
                 self.start_dt_utc = anchor
         if self.start_dt_utc is None and self.speed_samples:
             self.start_dt_utc = self.speed_samples[0][0]
 
         # Smooth
+        smooth_t0 = _time.perf_counter()
         self.smooth_all_gpmf()
+        if profile_cb is not None:
+            try:
+                profile_cb("smoothing", _time.perf_counter() - smooth_t0, len(records), len(self.speed_samples) + len(self.alt_samples))
+            except Exception:
+                pass
+
+        # Heading is derived from the GPMF GPS track only.  The explicit
+        # load_gps_track call also rebuilds this stream after the track is
+        # available to the map path.
+        if self._extract_gps_track:
+            gps_track_t0 = _time.perf_counter()
+            self.gps_track = self._extract_gps_track(records)
+            if profile_cb is not None:
+                try:
+                    profile_cb("gps_track_extract", _time.perf_counter() - gps_track_t0, len(records), len(self.gps_track))
+                except Exception:
+                    pass
+            heading_t0 = _time.perf_counter()
+            self.heading_samples = derive_heading_samples(
+                self.gps_track, self.speed_samples
+            )
+            if profile_cb is not None:
+                try:
+                    profile_cb("heading_derive", _time.perf_counter() - heading_t0, len(records), len(self.heading_samples))
+                except Exception:
+                    pass
+        slope_t0 = _time.perf_counter()
+        self.slope_samples = derive_slope_from_streams(
+            self.track_samples, self.alt_samples
+        )
+        if profile_cb is not None:
+            try:
+                profile_cb("slope_derive", _time.perf_counter() - slope_t0, len(self.track_samples), len(self.slope_samples))
+            except Exception:
+                pass
 
     def smooth_all_gpmf(self) -> None:
         """Smooth GPMF speed and altitude samples."""
@@ -426,6 +617,22 @@ class TelemetryDataManager:
                 self.speed_samples = self._smooth_fn(self.speed_samples, "moving_average", self.smoothing_window)
             if self.alt_samples:
                 self.alt_samples = self._smooth_fn(self.alt_samples, "moving_average", self.smoothing_window)
+
+    def _set_vector_series(self, samples: list, prefix: str) -> None:
+        """Expose one timestamped vector series as scalar and magnitude series."""
+        axes = [[], [], []]
+        magnitude = []
+        for dt, vector in samples:
+            values = tuple(float(v) for v in vector)
+            if len(values) != 3:
+                continue
+            for i, value in enumerate(values):
+                axes[i].append((dt, value))
+            magnitude.append((dt, sum(v * v for v in values) ** 0.5))
+        setattr(self, f"{prefix}_x_samples", axes[0])
+        setattr(self, f"{prefix}_y_samples", axes[1])
+        setattr(self, f"{prefix}_z_samples", axes[2])
+        setattr(self, f"{prefix}_magnitude_samples", magnitude)
 
     # ------------------------------------------------------------------
     # GPX loading
@@ -436,11 +643,15 @@ class TelemetryDataManager:
         video_path: Path | str,
         start_dt: Optional[datetime] = None,
         manual_path: Optional[Path] = None,
+        preparsed=None,
     ) -> bool:
         """Load and process GPX data. Returns True if data was loaded.
 
         Extracts GPS track (lat/lon) for map rendering alongside the
         per-field sample streams.  GPS track is stored in ``self.gpx_gps_track``.
+
+        ``preparsed`` — optional already-parsed GPX points (e.g. parsed once by
+        the MapPreload path); when provided ``parse_gpx`` is not called again.
         """
         if not _GPX_AVAILABLE:
             return False
@@ -454,8 +665,9 @@ class TelemetryDataManager:
         if gpx_path is None or not Path(gpx_path).is_file():
             return False
 
-        # Parse raw GPX points (contains lat/lon for GPS track)
-        points = parse_gpx(gpx_path)
+        # Parse raw GPX points (contains lat/lon for GPS track).  Reuse the
+        # MapPreload parse when available (no double parsing).
+        points = preparsed if preparsed is not None else parse_gpx(gpx_path)
         if not points:
             return False
 
@@ -500,6 +712,12 @@ class TelemetryDataManager:
         self.gpx_atemp_samples = gpx_atemp or []
         self.gpx_hr_samples = gpx_hr or []
         self.gpx_cad_samples = gpx_cad or []
+        self.gpx_heading_samples = derive_heading_samples(
+            self.gpx_gps_track, self.gpx_speed_samples
+        )
+        self.gpx_slope_samples = derive_slope_from_streams(
+            self.gpx_track_samples, self.gpx_alt_samples
+        )
 
         if self.start_dt_utc is None and gpx_speed:
             self.start_dt_utc = gpx_speed[0][0]
@@ -520,14 +738,27 @@ class TelemetryDataManager:
         video_path: Path | str,
         start_dt: Optional[datetime] = None,
         manual_path: Optional[Path] = None,
+        preparsed=None,
     ) -> bool:
         """Load and process FIT data. Returns True if data was loaded.
 
         Extracts GPS track (lat/lon) for map rendering alongside the
         per-field sample dict.  GPS track is stored in ``self.fit_gps_track``.
+
+        ``preparsed`` — optional already-parsed FIT records (e.g. parsed once
+        by the MapPreload path).  When provided, ``parse_fit`` is NOT called
+        again (ETAP MAP PRELOAD — avoid double parsing).
         """
         if not _FIT_AVAILABLE:
             return False
+
+        # A new FIT load starts a new source state. Do not retain samples or
+        # dynamic availability from the previously opened file if parsing or
+        # alignment fails.
+        self.fit_data.clear()
+        self.available_fit_fields = frozenset()
+        self.fit_ext_fields.clear()
+        self.fit_gps_track.clear()
 
         # Resolve FIT file path
         fit_path: Optional[Path] = manual_path
@@ -538,8 +769,9 @@ class TelemetryDataManager:
         if fit_path is None or not Path(fit_path).is_file():
             return False
 
-        # Parse raw FIT records (contains lat/lon for GPS track)
-        records = parse_fit(fit_path)
+        # Parse raw FIT records (contains lat/lon for GPS track).  If the map
+        # preload already parsed the file, reuse those records (no re-parse).
+        records = preparsed if preparsed is not None else parse_fit(fit_path)
         if not records:
             return False
 
@@ -568,12 +800,25 @@ class TelemetryDataManager:
         if not fit_result:
             return False
 
-        self.fit_data = {}
+        processed_fit: dict[str, SampleList] = {}
         for key, samples in fit_result.items():
             if key in ("speed", "alt"):
-                self.fit_data[key] = self._smooth(samples)
+                processed_fit[key] = self._smooth(samples)
             else:
-                self.fit_data[key] = samples
+                processed_fit[key] = samples
+        fit_heading = derive_heading_samples(
+            self.fit_gps_track, processed_fit.get("speed", [])
+        )
+        if fit_heading:
+            processed_fit["heading"] = fit_heading
+        fit_distance = processed_fit.get("track") or processed_fit.get("distance", [])
+        processed_fit["slope"] = derive_slope_from_streams(
+            fit_distance, processed_fit.get("alt", [])
+        )
+        self.fit_data = FitDataset(
+            processed_fit, catalog=getattr(fit_result, "field_catalog", None)
+        )
+        self.available_fit_fields = self.fit_data.available_fit_fields
 
         if self.start_dt_utc is None and self.fit_data.get("speed"):
             self.start_dt_utc = self.fit_data["speed"][0][0]
@@ -599,10 +844,14 @@ class TelemetryDataManager:
             self.gpx_atemp_samples.clear()
             self.gpx_hr_samples.clear()
             self.gpx_cad_samples.clear()
+            self.gpx_battery_samples.clear()
+            self.gpx_heading_samples.clear()
+            self.gpx_slope_samples.clear()
             self.gpx_gps_track.clear()
             self.gpx_path = None
         elif source == "fit":
             self.fit_data.clear()
+            self.available_fit_fields = frozenset()
             self.fit_ext_fields.clear()
             self.fit_gps_track.clear()
             self.fit_path = None
@@ -616,12 +865,23 @@ class TelemetryDataManager:
         self.iso_samples.clear()
         self.exposure_samples.clear()
         self.temperature_samples.clear()
+        self.heading_samples.clear()
+        self.slope_samples.clear()
+        self.accelerometer_samples.clear()
+        self.gyroscope_samples.clear()
+        for name in (
+            "accel_x_samples", "accel_y_samples", "accel_z_samples",
+            "accel_magnitude_samples", "gyro_x_samples", "gyro_y_samples",
+            "gyro_z_samples", "gyro_magnitude_samples",
+        ):
+            getattr(self, name).clear()
         self.clear_source("gpx")
         self.clear_source("fit")
         self.start_dt_utc = None
         self.meta_path = None
         self.video_duration_s = 0.0
         self._alt_cache.clear()
+        self._lean_roll_cache.clear()
 
     # ------------------------------------------------------------------
     # Smoothing helper
@@ -636,44 +896,97 @@ class TelemetryDataManager:
     # GPS track (for map rendering)
     # ------------------------------------------------------------------
 
-    def load_gps_track(self, records: list[dict]) -> None:
+    def load_gps_track(self, records: list[dict], profile_cb=None) -> None:
         """Extract raw GPS lat/lon track from GPMF records for map rendering."""
         if self._extract_gps_track:
-            self.gps_track = self._extract_gps_track(records)
+            if not self.gps_track:
+                gps_t0 = _time.perf_counter()
+                self.gps_track = self._extract_gps_track(records)
+                if profile_cb is not None:
+                    try:
+                        profile_cb("gps_track_extract", _time.perf_counter() - gps_t0, len(records), len(self.gps_track))
+                    except Exception:
+                        pass
+            if not self.heading_samples:
+                heading_t0 = _time.perf_counter()
+                self.heading_samples = derive_heading_samples(
+                    self.gps_track, self.speed_samples
+                )
+                if profile_cb is not None:
+                    try:
+                        profile_cb("gps_heading_derive", _time.perf_counter() - heading_t0, len(self.gps_track), len(self.heading_samples))
+                    except Exception:
+                        pass
+        else:
+            self.gps_track = []
+            self.heading_samples = []
 
     def get_gps_track_for_source(self, source_type: str) -> list[tuple[datetime, float, float]]:
-        """Return GPS track (lat/lon) for the given source, falling back to GPMF."""
+        """Return GPS track (lat/lon) for exactly the requested source."""
         if source_type == "gpx":
-            return self.gpx_gps_track or self.gps_track
+            return self.gpx_gps_track
         if source_type == "fit":
-            return self.fit_gps_track or self.gps_track
-        return self.gps_track
+            return self.fit_gps_track
+        if source_type == "gpmf":
+            return self.gps_track
+        return []
 
     # ------------------------------------------------------------------
     # Source resolution (per-indicator source selection)
     # ------------------------------------------------------------------
 
     def get_samples_for_source(self, source_type: str) -> tuple[SampleList, SampleList, SampleList]:
-        """Return (speed, track, alt) for *source_type*, falling back to GPMF."""
-        if source_type == "gpx":
-            return (
-                self.gpx_speed_samples or self.speed_samples,
-                self.gpx_track_samples or self.track_samples,
-                self.gpx_alt_samples or self.alt_samples,
-            )
-        if source_type == "fit":
-            return (
-                self.fit_data.get("speed") or self.speed_samples,
-                self.fit_data.get("track") or self.track_samples,
-                self.fit_data.get("alt") or self.alt_samples,
-            )
-        return (self.speed_samples, self.track_samples, self.alt_samples)
+        """Return (speed, track, alt) for exactly *source_type*."""
+        return (
+            resolve_samples_from_sources("speed", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+            resolve_samples_from_sources("track", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+            resolve_samples_from_sources("alt", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+        )
+
+    def _get_lean_roll_samples(self, axis: str) -> list:
+        """Precomputed roll timeline for the requested axis (ETAP 13).
+
+        Computed ONCE per material from the full accel/gyro sample arrays with a
+        complementary filter; cached so seek/preview/final interpolate the same
+        deterministic roll.  Falls back honestly when accel or gyro is missing.
+        """
+        axis = str(axis).strip().lower()
+        if axis not in ("x", "y", "z"):
+            axis = "z"
+        cached = self._lean_roll_cache.get(axis)
+        if cached is not None:
+            return cached
+        from src.telemetry_imu import compute_roll_timeline
+        timeline = compute_roll_timeline(
+            accel=self.accelerometer_samples or [],
+            gyro=self.gyroscope_samples or [],
+            roll_axis=axis,
+        )
+        self._lean_roll_cache[axis] = timeline
+        return timeline
 
     def resolve_value(
-        self, field_name: str, target_dt: datetime, prefer: str = "fit"
+        self, field_name: str, target_dt: datetime, prefer: str = "fit",
+        source: Optional[str] = None, indicator_key: Optional[str] = None,
     ) -> Optional[float]:
-        """Interpolated value with FIT > GPX > GPMF priority."""
-        samples = self._resolve_samples(field_name, prefer)
+        """Resolve an interpolated value from one explicit source.
+
+        ``prefer`` remains as a compatibility parameter for old external
+        callers; it is treated as the requested source and never as a
+        priority chain.
+        """
+        del indicator_key
+        if str(field_name).startswith("lean_roll_"):
+            from src.telemetry_imu import interpolate_roll, lean_diagnostic
+            axis = str(field_name).split("_")[-1]
+            # ETAP 21: diagnostic log (no-op unless TELEM_LEAN_DEBUG=1)
+            lean_diagnostic(
+                self.accelerometer_samples or [],
+                self.gyroscope_samples or [],
+                target_dt, axis,
+            )
+            return interpolate_roll(self._get_lean_roll_samples(axis), target_dt)
+        samples = self.resolve_samples(field_name, source or prefer)
         if not samples:
             return None
         return self._interpolate_field(samples, target_dt, field_name)
@@ -701,48 +1014,34 @@ class TelemetryDataManager:
             return interpolate_distance(samples, target_dt)
         if field_name in ("alt", "enhanced_altitude", "altitude"):
             return interpolate_altitude(samples, target_dt)
+        if field_name == "heading":
+            return interpolate_heading(samples, target_dt)
+        if field_name == "slope":
+            return interpolate_slope(samples, target_dt)
         return self._interpolate(samples, target_dt)
 
-    def resolve_samples(self, field_name: str, prefer: str = "fit") -> SampleList:
-        """Raw sample list with FIT > GPX > GPMF priority."""
-        return self._resolve_samples(field_name, prefer)
+    def resolve_samples(
+        self, field_name: str, source: str = "fit",
+        indicator_key: Optional[str] = None,
+    ) -> SampleList:
+        """Return raw samples from exactly ``source``; never cross-fallback."""
+        del indicator_key
+        return resolve_samples_from_sources(
+            field_name, source, gpmf=self, fit_data=self.fit_data, gpx=self
+        )
 
     def _resolve_samples(self, field_name: str, prefer: str) -> SampleList:
-        """Internal resolver with priority: prefer > alt source > GPMF fallback."""
-        alt_prefix = "gpx" if prefer == "fit" else "fit"
-
-        # Preferred source
-        if prefer == "fit":
-            pref = self.fit_data.get(field_name, [])
-        else:
-            pref = getattr(self, f"gpx_{field_name}_samples", []) or []
-
-        # Alternative source
-        if alt_prefix == "fit":
-            alt = self.fit_data.get(field_name, [])
-        else:
-            alt = getattr(self, f"gpx_{field_name}_samples", []) or []
-
-        samples: SampleList = pref or alt
-
-        # FIT field-name fallback (e.g. "power" -> "curVpower")
-        if not samples and prefer == "fit":
-            for alias in _FIT_LOOKUP.get(field_name, ()):
-                samples = self.fit_data.get(alias, [])
-                if samples:
-                    break
-
-        # GPMF fallback
-        if not samples and field_name in _GPMF_NATIVE:
-            gpmf_attr = "track_samples" if field_name in ("dist", "track") else f"{field_name}_samples"
-            samples = getattr(self, gpmf_attr, []) or []
-
-        return samples
+        """Compatibility adapter for legacy internal callers."""
+        return self.resolve_samples(field_name, prefer)
 
     def _interpolate(self, samples: SampleList, target_dt: datetime) -> Optional[float]:
         if self._interpolate_fn:
             return self._interpolate_fn(samples, target_dt)
-        return None
+        try:
+            from src.telemetry_extract import interpolate_value
+            return interpolate_value(samples, target_dt)
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Altitude cache (for preview rendering)
@@ -807,15 +1106,29 @@ class TelemetryDataManager:
                 max_val = max(vals) if vals else 100
                 min_val = min(vals) if vals else 0
 
+                catalog = getattr(self.fit_data, "field_catalog", {}) or {}
+                meta = catalog.get(field_name, {})
+                label = meta.get("display_name") or field_name.replace("_", " ").title()
+                unit = meta.get("unit") or ""
+
+                # Dystans FIT: próbki są w metrach, ale wartość i skala BAR-a są
+                # zawsze w km (compositor konwertuje /1000). Przelicz zakres i
+                # wymuś unit="km", inaczej 10129 m byłoby pokazywane jako 10129 km.
+                is_dist = "dist" in field_name.lower()
+                if is_dist:
+                    max_val = max_val / 1000.0
+                    min_val = min_val / 1000.0
+                    unit = "km"
+
                 indicators[key] = {
                     "enabled": False,
-                    "label": field_name.replace("_", " ").title(),
+                    "label": label,
                     "x": 50.0, "y": 8.0, "rotation": 0,
                     "form": "text",
                     "font_size": 2.5, "size": 2.5, "thickness": 1,
                     "min_val": min_val, "max_val": max(max_val, min_val + 1),
                     "ticks": 0, "source": "fit",
-                    "unit": "",
+                    "unit": unit,
                 }
                 if get_value_schema_fn:
                     builtin_fields[key] = get_value_schema_fn()

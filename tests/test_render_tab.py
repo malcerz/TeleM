@@ -328,6 +328,9 @@ class TestExportOptions:
         assert hasattr(rt, "cmb_resolution")
         assert hasattr(rt, "cmb_rotation")
         assert hasattr(rt, "cmb_update_rate")
+        assert hasattr(rt, "cmb_hud_resolution")
+        assert [rt.cmb_hud_resolution.itemText(i) for i in range(rt.cmb_hud_resolution.count())] == ["100%", "75%", "50%"]
+        assert rt.cmb_hud_resolution.currentText() == "100%"
         assert hasattr(rt, "edit_bitrate")
         assert hasattr(rt, "edit_output")
         assert hasattr(rt, "btn_render")
@@ -338,7 +341,8 @@ class TestExportOptions:
     def test_encoder_options(self, shared_setup):
         _, rt, _ = shared_setup
         items = [rt.cmb_encoder.itemText(i) for i in range(rt.cmb_encoder.count())]
-        assert items == ["nv", "amd", "intel", "cpu"]
+        # auto = wykryty najlepszy backend; intel = INTEL_FORCE (bez cross-GPU fallback)
+        assert items == ["auto", "amd", "nv", "intel", "cpu"]
 
     def test_render_options_dict(self, shared_setup):
         _, rt, _ = shared_setup
@@ -352,4 +356,4 @@ class TestExportOptions:
             "output": rt.edit_output.text().strip(),
         }
         assert options["output"] == "out.mp4"
-        assert options["encoder"] in ("nv", "amd", "intel", "cpu")
+        assert options["encoder"] in ("auto", "nv", "amd", "intel", "cpu")

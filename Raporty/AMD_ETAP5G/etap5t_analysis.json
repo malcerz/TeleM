@@ -1,0 +1,79 @@
+{
+  "gpu": {
+    "frames": 1115,
+    "ready": 1115,
+    "disjoint": 0,
+    "span": {
+      "median_ms": 20.6599,
+      "p95_ms": 22.2391,
+      "p99_ms": 24.2835,
+      "max_ms": 49.922
+    },
+    "cadence": {
+      "begin_interval_median_ms": 26.741709999999998,
+      "begin_interval_p95_ms": 30.271510000000003,
+      "end_interval_median_ms": 26.77872,
+      "end_interval_p95_ms": 30.9381,
+      "begin_equiv_fps": 37.39476645285586,
+      "end_equiv_fps": 37.34308435952129
+    },
+    "passes": {
+      "VP": {
+        "median_ms": 5.97716,
+        "p95_ms": 10.3659,
+        "p99_ms": 11.2381,
+        "max_ms": 22.3627,
+        "pct_of_span": 30.711511916812363
+      },
+      "NORMALIZE": {
+        "median_ms": 6.53113,
+        "p95_ms": 10.8379,
+        "p99_ms": 12.2603,
+        "max_ms": 18.7528,
+        "pct_of_span": 33.20461997972251
+      },
+      "CHARTS": {
+        "median_ms": 0.742,
+        "p95_ms": 1.62056,
+        "p99_ms": 2.02952,
+        "max_ms": 6.51229,
+        "pct_of_span": 5.813717815101027
+      },
+      "GAUGE": {
+        "median_ms": 0.28752,
+        "p95_ms": 0.66256,
+        "p99_ms": 0.81852,
+        "max_ms": 1.16484,
+        "pct_of_span": 1.8622828726939225
+      },
+      "MAP": {
+        "median_ms": 2.48128,
+        "p95_ms": 5.37349,
+        "p99_ms": 8.50592,
+        "max_ms": 10.578,
+        "pct_of_span": 13.59816626358156
+      },
+      "HUD": {
+        "median_ms": 1.39076,
+        "p95_ms": 2.62684,
+        "p99_ms": 4.60423,
+        "max_ms": 8.12224,
+        "pct_of_span": 7.0075229106825345
+      }
+    },
+    "overlap": {
+      "frames_overlapped": 0,
+      "pct": 0.0,
+      "overlap_ms_median": 0.0,
+      "any": false
+    },
+    "read_latency_median": 16.0,
+    "freq": 100000000.0
+  },
+  "cpu_correlation": {
+    "n": 1114,
+    "wait_vs_prev_gpu_span": 0.12362832652140099,
+    "wait_vs_prev_gpu_end": -0.13392579983598984,
+    "wait_vs_amf_outstanding": 0.0
+  }
+}

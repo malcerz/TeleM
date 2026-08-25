@@ -1,0 +1,99 @@
+{
+  "runs": {
+    "A": {
+      "tag": "A",
+      "pool": 4,
+      "compose": "OPTIMIZED",
+      "wall": 36.32319617271423,
+      "true_fps": 32.73755783063421,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    },
+    "B": {
+      "tag": "B",
+      "pool": 8,
+      "compose": "OPTIMIZED",
+      "wall": 32.01113557815552,
+      "true_fps": 37.48459415493888,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    },
+    "C": {
+      "tag": "C",
+      "pool": 4,
+      "compose": "OPTIMIZED",
+      "wall": 36.7726526260376,
+      "true_fps": 32.42069497408661,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    },
+    "D": {
+      "tag": "D",
+      "pool": 8,
+      "compose": "OPTIMIZED",
+      "wall": 31.945013284683228,
+      "true_fps": 37.52008593512497,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    },
+    "Q1": {
+      "tag": "Q1",
+      "pool": 8,
+      "compose": "REFERENCE",
+      "wall": 34.099191427230835,
+      "true_fps": 35.05223034908951,
+      "muxed": 1131,
+      "amf_submitted": 1131,
+      "amf_output": 1131,
+      "input_full": 0,
+      "dropped": 0,
+      "valid": true
+    }
+  },
+  "order": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "Q1"
+  ],
+  "pool4": {
+    "fps_median": 32.57912640236041,
+    "wall_median": 36.547924399375916,
+    "runs": [
+      32.73755783063421,
+      32.42069497408661
+    ]
+  },
+  "pool8": {
+    "fps_median": 37.50234004503193,
+    "wall_median": 31.978074431419373,
+    "runs": [
+      37.48459415493888,
+      37.52008593512497
+    ]
+  },
+  "gain_pct": 15.111558185657262,
+  "gain_fps": 4.92321364267152,
+  "compose_5q_at_pool8": {
+    "REF": 35.05223034908951,
+    "OPT": 37.50234004503193,
+    "delta": 2.450109695942416
+  }
+}

@@ -239,7 +239,7 @@ class TestMapPreviewExportParity:
         [
             (960, 173, 14, 173),
             (1920, 346, 15, 346),
-            (3840, 691, 16, 692),
+            (3840, 691, 16, 691),
         ],
     )
     def test_render_plan_preserves_logical_viewport(
@@ -262,8 +262,8 @@ class TestMapPreviewExportParity:
 
         plan = _map_render_plan(1280, 230, 14)
         assert plan["effective_zoom"] == 14
-        assert plan["working_size"] == pytest.approx(173, abs=1)
-        assert plan["output_resize_scale"] == pytest.approx(4 / 3, rel=0.01)
+        assert plan["working_size"] == 230
+        assert plan["output_resize_scale"] == 1.0
 
 
 class TestMapRegionalCropParity:

@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.registry import HARDCODED_KEYS
+from src.indicators.chart_builder import clip_chart_data_for_target
+from src.telemetry_heading import normalize_heading
 
 
 # Sensible default units for known FIT field names (identical to the reference
@@ -32,20 +34,27 @@ FIT_UNIT_HINTS: dict[str, str] = {
     "vertical_oscillation": "mm", "stance_time": "ms",
 }
 
+_HEADING_CONSUMER_KEYS = frozenset(("heading_text", "compass", "track_map"))
+_SLOPE_CONSUMER_KEYS = frozenset(("slope_text",))
+
 
 @dataclass(slots=True)
 class _FrameRec:
     """Lightweight per-frame telemetry record (one per exported frame)."""
     date_text: str
     time_text: str
-    speed_value: float
-    distance_m: float
-    alt_value: float
+    speed_value: Optional[float]
+    distance_m: Optional[float]
+    alt_value: Optional[float]
     iso_value: float
     exposure_value: float
     temp_value: float
+    heading_value: Optional[float]
+    map_heading_value: Optional[float]
+    slope_value: Optional[float]
     indicator_values: dict[str, float]
     fit_vals: tuple
+    dynamic_vals: tuple
     std_vals: tuple
     current_position: float
     elapsed_seconds: float
@@ -67,7 +76,15 @@ class _Static:
     fit_units: dict[str, str]
     fit_labels: dict[str, str]
     remaining_extra: dict[str, tuple]
+    dynamic_keys: tuple
+    dynamic_meta: dict[str, tuple]
     std_names: tuple
+    heading_keys: tuple
+    heading_units: dict[str, str]
+    heading_labels: dict[str, str]
+    slope_keys: tuple
+    slope_units: dict[str, str]
+    slope_labels: dict[str, str]
 
 
 class TelemetryFrameCache:
@@ -100,6 +117,21 @@ class TelemetryFrameCache:
             )
         if st.remaining_extra:
             extra_indicators.update(st.remaining_extra)
+        for i, key in enumerate(st.dynamic_keys):
+            unit, label = st.dynamic_meta[key]
+            extra_indicators[key] = (rec.dynamic_vals[i], unit, label)
+        for key in st.heading_keys:
+            extra_indicators[key] = (
+                rec.map_heading_value if key == "track_map" else rec.heading_value,
+                st.heading_units[key],
+                st.heading_labels[key],
+            )
+        for key in st.slope_keys:
+            extra_indicators[key] = (
+                rec.slope_value,
+                st.slope_units[key],
+                st.slope_labels[key],
+            )
         std = rec.std_vals
         return {
             "date_text": rec.date_text,
@@ -120,10 +152,11 @@ class TelemetryFrameCache:
             "hr_value": std[2],
             "cad_value": std[3],
             "battery_value": std[4],
-            "chart_data": st.chart_data,
+            "chart_data": clip_chart_data_for_target(st.chart_data, rec.target_dt),
             "current_position": rec.current_position,
             "extra_indicators": extra_indicators,
             "gps_track": st.gps_track,
+            "map_heading": rec.map_heading_value,
             "target_dt": rec.target_dt,
             "start_dt_utc": st.start_dt_utc,
             "elapsed_seconds": rec.elapsed_seconds,
@@ -149,9 +182,140 @@ class TelemetryFrameCache:
         }
 
 
-def _target_dt(base_dt: datetime, frame_idx: int, target_fps: float) -> datetime:
-    """Reproduce the reference loop's ``curr_dt`` exactly."""
-    return base_dt + timedelta(seconds=frame_idx / target_fps)
+import numpy as np
+from src.ffmpeg.worker_cache import _resolve_cache_samples
+
+
+def _vectorize_step(
+    samples: list[tuple[datetime, Any]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Any]:
+    """Vectorized STEP lookup with exact bisect_right - 1 semantics."""
+    if not samples:
+        return [None] * len(target_dts)
+    
+    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    sample_vals = [s[1] for s in samples]
+    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    
+    idx = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
+    
+    out = [None] * len(target_dts)
+    for k in range(len(target_dts)):
+        i = idx[k]
+        if i >= 0:
+            out[k] = sample_vals[i]
+    return out
+
+
+def _vectorize_heading(
+    samples: list[tuple[datetime, Optional[float]]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized circular interpolation for the precomputed heading stream."""
+    del target_dts
+    if not samples:
+        return []
+    ordered = sorted(
+        [
+            (
+                dt.replace(tzinfo=None) if dt.tzinfo is not None else dt,
+                value,
+            )
+            for dt, value in samples
+        ],
+        key=lambda item: item[0],
+    )
+    sample_ts = np.array(
+        [(dt - ref_dt).total_seconds() for dt, _ in ordered], dtype=np.float64
+    )
+    indices = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
+    out: list[Optional[float]] = [None] * len(target_ts_arr)
+    for k, raw_index in enumerate(indices):
+        index = int(raw_index)
+        if index < 0:
+            continue
+        current = ordered[index][1]
+        if current is None:
+            continue
+        current_value = normalize_heading(float(current))
+        if index + 1 >= len(ordered) or ordered[index + 1][1] is None:
+            out[k] = current_value
+            continue
+        next_dt, next_value = ordered[index + 1]
+        span = (next_dt - ordered[index][0]).total_seconds()
+        if span <= 0.0:
+            out[k] = current_value
+            continue
+        fraction = (target_ts_arr[k] - sample_ts[index]) / span
+        delta = ((float(next_value) - current_value + 180.0) % 360.0) - 180.0
+        out[k] = normalize_heading(current_value + float(fraction) * delta)
+    return out
+
+
+def _vectorize_linear_speed(
+    samples: list[tuple[datetime, float]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized linear speed interpolation matching interpolate_speed exactly."""
+    if not samples:
+        return [None] * len(target_dts)
+    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    
+    interp_vals = np.interp(
+        target_ts_arr, sample_ts, sample_vals,
+        left=0.0, right=max(0.0, float(sample_vals[-1]))
+    )
+    interp_vals = np.maximum(0.0, interp_vals)
+    return [float(v) for v in interp_vals]
+
+
+def _vectorize_linear_distance(
+    samples: list[tuple[datetime, float]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized linear distance interpolation matching interpolate_distance exactly."""
+    if not samples:
+        return [None] * len(target_dts)
+    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    
+    interp_vals = np.interp(
+        target_ts_arr, sample_ts, sample_vals,
+        left=0.0, right=float(sample_vals[-1])
+    )
+    return [float(v) for v in interp_vals]
+
+
+def _vectorize_linear_altitude(
+    samples: list[tuple[datetime, float]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized linear altitude interpolation matching interpolate_altitude exactly."""
+    if not samples:
+        return [None] * len(target_dts)
+    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    
+    interp_vals = np.interp(
+        target_ts_arr, sample_ts, sample_vals,
+        left=float(sample_vals[0]), right=float(sample_vals[-1])
+    )
+    return [float(v) for v in interp_vals]
 
 
 def build_telemetry_cache(
@@ -181,17 +345,160 @@ def build_telemetry_cache(
     fit_field_plan: Optional[dict[str, list[str]]] = None,
     total_frames: int = 1,
     target_fps: float = 29.97,
+    video_timeline: Optional[Any] = None,
+    update_rate_step: int = 1,
+    subtimer_dict: Optional[dict] = None,
 ) -> TelemetryFrameCache:
-    """Build the per-frame telemetry cache for an export.
+    """Build the per-frame telemetry cache for an export (ETAP 8P-B Fast Builder).
 
-    Every per-frame value is computed with the exact same interpolation /
-    resolver functions used by the reference path, so results are identical.
+    Vectorized precomputation over the export timeline while strictly preserving
+    the exact same interpolation / resolver contracts.
+
+    ``video_timeline`` (ETAP 4B): when present, the target-datetime grid is
+    built via ``timeline.frame_to_absolute`` so each frame maps to the REAL
+    absolute timestamp of its clip.  This never precomputes the absolute gaps
+    between clips (only target frames of the final movie are generated).
     """
-    from src.telemetry_extract import (
-        interpolate_speed, interpolate_distance, interpolate_altitude,
-        interpolate_iso, interpolate_exposure, interpolate_temperature,
-    )
+    t_start = time.perf_counter()
 
+    # 1. Timeline & Target datetimes
+    t0_timeline = time.perf_counter()
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+        target_dts = [
+            video_timeline.frame_to_absolute(i, target_fps, update_rate_step)
+            for i in range(total_frames)
+        ]
+        # Degraded safety fallback for any frame without an absolute start
+        # (e.g. continuous_fallback clip) — keep legacy linear mapping.
+        target_dts = [
+            dt if dt is not None else base_dt + timedelta(seconds=i / target_fps)
+            for i, dt in enumerate(target_dts)
+        ]
+    else:
+        target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
+    local_dts = [dt + timedelta(hours=tz_offset_hours) for dt in target_dts]
+    date_texts = [dt.strftime("%Y-%m-%d") for dt in local_dts]
+    time_texts = [dt.strftime("%H:%M:%S") for dt in local_dts]
+
+    ref_dt = base_dt.replace(tzinfo=None) if base_dt.tzinfo is not None else base_dt
+    target_dts_naive = [dt.replace(tzinfo=None) if dt.tzinfo is not None else dt for dt in target_dts]
+    target_ts_arr = np.array([(dt - ref_dt).total_seconds() for dt in target_dts_naive], dtype=np.float64)
+    t_timeline_ms = (time.perf_counter() - t0_timeline) * 1000.0
+
+    # 2. Metadata & Static configuration
+    t0_static = time.perf_counter()
+    rc = _range_cache or {}
+    max_distance_m = rc.get("max_distance_m")
+    max_speed_kmh = rc.get("max_speed_kmh")
+    min_alt = rc.get("min_alt")
+    max_alt = rc.get("max_alt")
+
+    indicators = layout.get("indicators", {})
+    heading_keys = tuple(
+        key for key, cfg in indicators.items()
+        if (
+            key in ("heading_text", "compass")
+            or (
+                key == "track_map"
+                and isinstance(cfg, dict)
+                and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                == "track_up"
+            )
+        )
+        and isinstance(cfg, dict)
+        and cfg.get("enabled", True)
+    )
+    heading_units = {
+        key: indicators[key].get("unit") or "deg" for key in heading_keys
+    }
+    heading_labels = {
+        key: indicators[key].get("label") or "GPS Course Over Ground"
+        for key in heading_keys
+    }
+    slope_keys = tuple(
+        key for key, cfg in indicators.items()
+        if key in _SLOPE_CONSUMER_KEYS
+        and isinstance(cfg, dict) and cfg.get("enabled", True)
+    )
+    slope_units = {
+        key: indicators[key].get("unit") or "%" for key in slope_keys
+    }
+    slope_labels = {
+        key: indicators[key].get("label") or "Slope"
+        for key in slope_keys
+    }
+
+    # active FIT fields -> keys, units, labels
+    if fit_field_plan is not None:
+        active_fit = fit_field_plan.get("active_fit_fields", [])
+        std_names = tuple(fit_field_plan.get("active_standard_resolve_fields", []))
+    else:
+        active_fit = []
+        std_names = tuple(
+            sorted({
+                field for key, field in (
+                    ("heading_text", "heading"), ("compass", "heading"),
+                    ("slope_text", "slope"),
+                )
+                if isinstance(indicators.get(key), dict)
+                and indicators[key].get("enabled", True)
+            } | {
+                "heading" for key, cfg in indicators.items()
+                if key == "track_map"
+                and isinstance(cfg, dict)
+                and cfg.get("enabled", True)
+                and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                == "track_up"
+            })
+        )
+        fit = fit_data or {}
+        for k, cfg in indicators.items():
+            if k.startswith("fit_") and k.endswith("_text"):
+                field_name = k[4:-5]
+                if field_name not in active_fit:
+                    active_fit.append(field_name)
+
+    fit_keys = tuple(f"fit_{name}_text" for name in active_fit)
+    fit_units: dict[str, str] = {}
+    fit_labels: dict[str, str] = {}
+    for name, key in zip(active_fit, fit_keys):
+        cfg = indicators.get(key, {})
+        fit_units[key] = cfg.get("unit") or FIT_UNIT_HINTS.get(name, "")
+        fit_labels[key] = cfg.get("label", name)
+
+    imu_fields = {
+        "accel_x_text": ("accel_x", "m/s", "Accelerometer X"),
+        "accel_y_text": ("accel_y", "m/s", "Accelerometer Y"),
+        "accel_z_text": ("accel_z", "m/s", "Accelerometer Z"),
+        "accel_magnitude_text": ("accel_magnitude", "m/s", "Accelerometer Magnitude"),
+        "gyro_x_text": ("gyro_x", "rad/s", "Gyroscope X"),
+        "gyro_y_text": ("gyro_y", "rad/s", "Gyroscope Y"),
+        "gyro_z_text": ("gyro_z", "rad/s", "Gyroscope Z"),
+        "gyro_magnitude_text": ("gyro_magnitude", "rad/s", "Gyroscope Magnitude"),
+    }
+    dynamic_keys = tuple(
+        key for key, cfg in indicators.items()
+        if key in imu_fields and isinstance(cfg, dict) and cfg.get("enabled", True)
+    )
+    dynamic_meta = {
+        key: (indicators[key].get("unit") or imu_fields[key][1],
+              indicators[key].get("label") or imu_fields[key][2])
+        for key in dynamic_keys
+    }
+
+    remaining_extra: dict[str, tuple] = {}
+    for key, cfg in indicators.items():
+        if key in HARDCODED_KEYS or key in fit_keys or key in dynamic_keys:
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        remaining_extra[key] = (None, cfg.get("unit", ""), cfg.get("label", key))
+
+    gps_trk: list = gps_track or []
+    t_static_ms = (time.perf_counter() - t0_static) * 1000.0
+
+    # 3. Vectorized Linear Fields (Speed, Distance, Altitude)
+    t0_linear = time.perf_counter()
     iso_s = iso_samples or []
     exposure_s = exposure_samples or []
     temp_s = temperature_samples or []
@@ -203,156 +510,247 @@ def build_telemetry_cache(
     fit_trk = fit.get("track", [])
     fit_alt = fit.get("alt", [])
 
-    # ── static (per-export) values ──────────────────────────────────────
-    rc = _range_cache or {}
-    max_distance_m = rc.get("max_distance_m")
-    max_speed_kmh = rc.get("max_speed_kmh")
-    min_alt = rc.get("min_alt")
-    max_alt = rc.get("max_alt")
+    source_cache: dict[str, list] = {}
+    def get_source_linear(src: str, field_type: str):
+        cache_key = f"{src}_{field_type}"
+        if cache_key in source_cache:
+            return source_cache[cache_key]
+        if src == "gpx":
+            s_spd, s_trk, s_alt = gpx_spd, gpx_trk, gpx_alt
+        elif src == "fit":
+            s_spd, s_trk, s_alt = fit_spd, fit_trk, fit_alt
+        else:
+            s_spd, s_trk, s_alt = speed_samples, track_samples, alt_samples
 
-    indicators = layout.get("indicators", {})
+        if field_type == "speed":
+            arr = _vectorize_linear_speed(s_spd, target_dts, target_ts_arr, ref_dt)
+        elif field_type == "dist":
+            arr = _vectorize_linear_distance(s_trk, target_dts, target_ts_arr, ref_dt)
+        else:
+            arr = _vectorize_linear_altitude(s_alt, target_dts, target_ts_arr, ref_dt)
+        source_cache[cache_key] = arr
+        return arr
 
-    # active FIT fields -> keys, units, labels
-    if fit_field_plan is not None:
-        active_fit = fit_field_plan.get("active_fit_fields", [])
-        std_names = tuple(fit_field_plan.get("active_standard_resolve_fields", []))
-    else:
-        active_fit = []
-        std_names = tuple()
-        for k, cfg in indicators.items():
-            if k.startswith("fit_") and k.endswith("_text") and cfg.get("enabled", True):
-                field_name = k[4:-5]
-                if field_name and field_name not in active_fit:
-                    active_fit.append(field_name)
-        # legacy standard consumers (mirrors frame_data default)
-        std_consumers = ("power", "atemp", "hr", "cad", "battery")
-        std_names = tuple(
-            f for f in std_consumers if f"fit_{f}_text" in indicators
-        ) if False else std_names
+    ind_arrs: dict[str, list] = {}
+    for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text", "alt_visual", "alt_text"):
+        if ind_key not in indicators:
+            continue
+        ind_cfg = indicators.get(ind_key, {})
+        if not ind_cfg.get("enabled", True):
+            continue
+        src = ind_cfg.get("source", "gpmf")
+        ftype = "speed" if "speed" in ind_key else ("dist" if "dist" in ind_key else "alt")
+        ind_arrs[ind_key] = get_source_linear(src, ftype)
 
-    fit_keys = tuple(f"fit_{name}_text" for name in active_fit)
-    fit_units: dict[str, str] = {}
-    fit_labels: dict[str, str] = {}
-    for name, key in zip(active_fit, fit_keys):
+    speed_arr = ind_arrs.get(
+        "speed_visual",
+        ind_arrs.get("speed_text", get_source_linear("gpmf", "speed"))
+    )
+    dist_arr = ind_arrs.get(
+        "dist_visual",
+        ind_arrs.get("dist_text", get_source_linear("gpmf", "dist"))
+    )
+    alt_arr = ind_arrs.get(
+        "alt_visual",
+        ind_arrs.get("alt_text", get_source_linear("gpmf", "alt"))
+    )
+    t_linear_ms = (time.perf_counter() - t0_linear) * 1000.0
+
+    # 4. GPMF Auxiliary Fields (ISO, Exposure, Temperature)
+    t0_gpmf = time.perf_counter()
+    def resolve_field_vectorized(field: str, key: str, fallback_samples: list):
         cfg = indicators.get(key, {})
-        fit_units[key] = cfg.get("unit") or FIT_UNIT_HINTS.get(name, "")
-        fit_labels[key] = cfg.get("label", name)
+        src = cfg.get("source", "gpmf")
+        samples = _resolve_cache_samples(field, src) if resolve_cache_value is not None else None
+        if not samples:
+            samples = fallback_samples if src == "gpmf" else []
+        return _vectorize_step(samples, target_dts, target_ts_arr, ref_dt)
 
-    # remaining dynamic indicators (non-hardcoded, not fit keys) — val 0.0
-    remaining_extra: dict[str, tuple] = {}
-    for key, cfg in indicators.items():
-        if key in HARDCODED_KEYS or key in fit_keys:
-            continue
-        if not isinstance(cfg, dict):
-            continue
-        remaining_extra[key] = (
-            0.0, cfg.get("unit", ""), cfg.get("label", key),
-        )
+    iso_arr = resolve_field_vectorized("iso", "iso_text", iso_s)
+    exposure_arr = resolve_field_vectorized("exposure", "exposure_text", exposure_s)
+    temp_arr = resolve_field_vectorized("temperature", "temp_text", temp_s)
+    t_gpmf_ms = (time.perf_counter() - t0_gpmf) * 1000.0
 
-    gps_trk: list = gps_track or []
+    # 5. Standard Resolve Fields (Power, atemp, hr, cad, battery)
+    t0_std = time.perf_counter()
+    std_keys_map = {
+        "power": "power_text", "atemp": "atemp_text", "hr": "hr_text",
+        "cad": "cad_text", "battery": "battery_text",
+    }
+    std_field_arrs: list[list] = []
+    for f in ("power", "atemp", "hr", "cad", "battery"):
+        if f in std_names:
+            cfg = indicators.get(std_keys_map[f], {})
+            src = cfg.get("source", "gpx")
+            samples = _resolve_cache_samples(f, src)
+            if samples:
+                if f in ("speed", "enhanced_speed"):
+                    std_field_arrs.append(_vectorize_linear_speed(samples, target_dts, target_ts_arr, ref_dt))
+                elif f in ("distance", "dist", "track"):
+                    std_field_arrs.append(_vectorize_linear_distance(samples, target_dts, target_ts_arr, ref_dt))
+                elif f in ("alt", "enhanced_altitude", "altitude"):
+                    std_field_arrs.append(_vectorize_linear_altitude(samples, target_dts, target_ts_arr, ref_dt))
+                else:
+                    std_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+            elif resolve_cache_value is not None:
+                std_field_arrs.append([resolve_cache_value(f, src, dt, std_keys_map[f]) for dt in target_dts])
+            else:
+                std_field_arrs.append([None] * total_frames)
+        else:
+            std_field_arrs.append([None] * total_frames)
+    t_std_ms = (time.perf_counter() - t0_std) * 1000.0
 
-    # ── per-frame build loop (single-threaded, small dataset) ───────────
-    build_started = time.perf_counter()
+    # Heading is derived once per source and interpolated with circular
+    # semantics only when a future heading consumer is enabled in the layout.
+    t0_heading = time.perf_counter()
+    heading_arr: list[Optional[float]] = [None] * total_frames
+    map_heading_arr: list[Optional[float]] = [None] * total_frames
+    if "heading" in std_names:
+        def _heading_array(key: str) -> list[Optional[float]]:
+            heading_cfg = indicators.get(key, {})
+            heading_src = heading_cfg.get("source", "gpmf")
+            heading_samples = _resolve_cache_samples("heading", heading_src)
+            if heading_samples:
+                return _vectorize_heading(
+                    heading_samples, target_dts, target_ts_arr, ref_dt
+                )
+            if resolve_cache_value is not None:
+                return [
+                    resolve_cache_value("heading", heading_src, dt, key)
+                    for dt in target_dts
+                ]
+            return [None] * total_frames
+
+        heading_key = next((key for key in heading_keys if key != "track_map"), None)
+        if heading_key is not None:
+            heading_arr = _heading_array(heading_key)
+        if "track_map" in heading_keys:
+            map_heading_arr = _heading_array("track_map")
+    t_heading_ms = (time.perf_counter() - t0_heading) * 1000.0
+
+    # Slope is an already-derived, causal STEP stream.  No renderer performs
+    # slope math; this stage only places the canonical field in the cache when
+    # a future layout explicitly binds ``slope_text``.
+    t0_slope = time.perf_counter()
+    slope_arr: list[Optional[float]] = [None] * total_frames
+    if "slope" in std_names and slope_keys:
+        slope_cfg = indicators.get(slope_keys[0], {})
+        slope_src = slope_cfg.get("source", "gpmf")
+        slope_samples = _resolve_cache_samples("slope", slope_src)
+        if slope_samples:
+            slope_arr = _vectorize_step(
+                slope_samples, target_dts, target_ts_arr, ref_dt
+            )
+        elif resolve_cache_value is not None:
+            slope_arr = [
+                resolve_cache_value("slope", slope_src, dt, slope_keys[0])
+                for dt in target_dts
+            ]
+    t_slope_ms = (time.perf_counter() - t0_slope) * 1000.0
+
+    # 6. Active FIT Fields
+    t0_fit = time.perf_counter()
+    fit_field_arrs: list[list] = []
+    for name in active_fit:
+        samples = _resolve_cache_samples(name, "fit")
+        if samples:
+            if name in ("speed", "enhanced_speed"):
+                fit_field_arrs.append(_vectorize_linear_speed(samples, target_dts, target_ts_arr, ref_dt))
+            elif name in ("distance", "dist", "track"):
+                fit_field_arrs.append(_vectorize_linear_distance(samples, target_dts, target_ts_arr, ref_dt))
+            elif name in ("alt", "enhanced_altitude", "altitude"):
+                fit_field_arrs.append(_vectorize_linear_altitude(samples, target_dts, target_ts_arr, ref_dt))
+            else:
+                fit_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+        elif resolve_cache_value is not None:
+            fit_field_arrs.append([resolve_cache_value(name, "fit", dt, f"fit_{name}_text") for dt in target_dts])
+        else:
+            fit_field_arrs.append([None] * total_frames)
+    t_fit_ms = (time.perf_counter() - t0_fit) * 1000.0
+
+    # 7. Dynamic IMU Fields
+    t0_imu = time.perf_counter()
+    dynamic_field_arrs: list[list] = []
+    for key in dynamic_keys:
+        field_name = imu_fields[key][0]
+        cfg = indicators.get(key, {})
+        src = cfg.get("source", "gpmf")
+        samples = _resolve_cache_samples(field_name, src)
+        if samples:
+            dynamic_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+        elif resolve_cache_value is not None:
+            dynamic_field_arrs.append([resolve_cache_value(field_name, src, dt, key) for dt in target_dts])
+        else:
+            dynamic_field_arrs.append([None] * total_frames)
+    t_imu_ms = (time.perf_counter() - t0_imu) * 1000.0
+
+    # 8. Record Assembly
+    t0_records = time.perf_counter()
+    elapsed_secs_arr = [
+        max(0.0, (dt - start_dt_utc).total_seconds()) if start_dt_utc is not None else 0.0
+        for dt in target_dts
+    ]
+
     records: list[_FrameRec] = []
-    resolver_calls = 0
-    interpolation_calls = 0
-    gpmf_lookups = 0
+    num_std = len(std_field_arrs)
+    num_fit = len(fit_field_arrs)
+    num_dyn = len(dynamic_field_arrs)
+    active_ind_keys = list(ind_arrs.keys())
 
-    for frame_idx in range(total_frames):
-        target_dt = _target_dt(base_dt, frame_idx, target_fps)
-        local_dt = target_dt + timedelta(hours=tz_offset_hours)
-        date_text = local_dt.strftime("%Y-%m-%d")
-        time_text = local_dt.strftime("%H:%M:%S")
+    for i in range(total_frames):
+        ind_vals = {k: ind_arrs[k][i] for k in active_ind_keys}
 
-        # per-source indicator values (speed/dist/alt)
-        indicator_values: dict[str, float] = {}
-        for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
-                        "alt_visual", "alt_text"):
-            ind_cfg = indicators.get(ind_key, {})
-            if not ind_cfg.get("enabled", True):
-                continue
-            src = ind_cfg.get("source", "gpmf")
-            if src == "gpx":
-                spd_s = gpx_spd or speed_samples
-                trk_s = gpx_trk or track_samples
-                alt_s = gpx_alt or alt_samples
-            elif src == "fit":
-                spd_s = fit_spd or speed_samples
-                trk_s = fit_trk or track_samples
-                alt_s = fit_alt or alt_samples
-            else:
-                spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
-            if ind_key in ("speed_visual", "speed_text"):
-                indicator_values[ind_key] = interpolate_speed(spd_s, target_dt)
-                interpolation_calls += 1
-            elif ind_key in ("dist_visual", "dist_text"):
-                indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
-                interpolation_calls += 1
-            elif ind_key in ("alt_visual", "alt_text"):
-                indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
-                interpolation_calls += 1
+        dist_m = dist_arr[i]
+        el_s = elapsed_secs_arr[i]
+        avg_spd = (dist_m / el_s) * 3.6 if (el_s > 0 and dist_m is not None and dist_m > 0) else 0.0
+        cur_pos = i / max(1, total_frames - 1) if total_frames > 1 else 0.0
 
-        speed_value = indicator_values.get(
-            "speed_visual", interpolate_speed(speed_samples, target_dt))
-        distance_m = indicator_values.get(
-            "dist_visual", interpolate_distance(track_samples, target_dt))
-        alt_value = indicator_values.get(
-            "alt_visual", interpolate_altitude(alt_samples, target_dt))
-        if "speed_visual" not in indicator_values:
-            interpolation_calls += 1
-        if "dist_visual" not in indicator_values:
-            interpolation_calls += 1
-        if "alt_visual" not in indicator_values:
-            interpolation_calls += 1
-
-        iso_value = interpolate_iso(iso_s, target_dt)
-        exposure_value = interpolate_exposure(exposure_s, target_dt)
-        temp_value = interpolate_temperature(temp_s, target_dt)
-        interpolation_calls += 3
-        gpmf_lookups += 3
-
-        # standard resolve fields (power/atemp/hr/cad/battery)
-        std_vals: list = []
-        for f in ("power", "atemp", "hr", "cad", "battery"):
-            if f in std_names and resolve_cache_value is not None:
-                std_vals.append(resolve_cache_value(f, target_dt))
-                resolver_calls += 1
-            else:
-                std_vals.append(None)
-
-        # FIT fields (deduplicated via the dependency plan sets)
-        fit_vals: list = []
-        for name in active_fit:
-            if resolve_cache_value is None:
-                v = 0.0
-            else:
-                v = resolve_cache_value(name, target_dt) or 0.0
-                resolver_calls += 1
-            fit_vals.append(v)
-
-        elapsed_seconds = 0.0
-        if start_dt_utc is not None and target_dt is not None:
-            elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
-        avg_speed_kmh = 0.0
-        if elapsed_seconds > 0 and distance_m > 0:
-            avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
-
-        current_position = (
-            frame_idx / max(1, total_frames - 1)
-            if total_frames > 1 else 0.0
-        )
+        std_v = tuple(std_field_arrs[j][i] for j in range(num_std))
+        fit_v = tuple(fit_field_arrs[j][i] for j in range(num_fit))
+        dyn_v = tuple(dynamic_field_arrs[j][i] for j in range(num_dyn))
 
         records.append(_FrameRec(
-            date_text=date_text, time_text=time_text,
-            speed_value=speed_value, distance_m=distance_m, alt_value=alt_value,
-            iso_value=iso_value, exposure_value=exposure_value,
-            temp_value=temp_value, indicator_values=indicator_values,
-            fit_vals=tuple(fit_vals), std_vals=tuple(std_vals),
-            current_position=current_position, elapsed_seconds=elapsed_seconds,
-            avg_speed_kmh=avg_speed_kmh, target_dt=target_dt,
+            date_text=date_texts[i],
+            time_text=time_texts[i],
+            speed_value=speed_arr[i],
+            distance_m=dist_m,
+            alt_value=alt_arr[i],
+            iso_value=iso_arr[i],
+            exposure_value=exposure_arr[i],
+            temp_value=temp_arr[i],
+            heading_value=heading_arr[i],
+            map_heading_value=map_heading_arr[i],
+            slope_value=slope_arr[i],
+            indicator_values=ind_vals,
+            fit_vals=fit_v,
+            dynamic_vals=dyn_v,
+            std_vals=std_v,
+            current_position=cur_pos,
+            elapsed_seconds=el_s,
+            avg_speed_kmh=avg_spd,
+            target_dt=target_dts[i],
         ))
+    t_records_ms = (time.perf_counter() - t0_records) * 1000.0
 
-    build_ms = (time.perf_counter() - build_started) * 1000.0
+    t_total_ms = (time.perf_counter() - t_start) * 1000.0
+
+    if subtimer_dict is not None:
+        subtimer_dict.update({
+            "build_frame_times": t_timeline_ms,
+            "build_step_fields": t_std_ms,
+            "build_linear_fields": t_linear_ms,
+            "build_dynamic_fit": t_fit_ms,
+            "build_gpmf": t_gpmf_ms,
+            "build_imu": t_imu_ms,
+            "build_heading": t_heading_ms,
+            "build_slope": t_slope_ms,
+            "build_gps": t_static_ms,
+            "build_distance": t_linear_ms * 0.33,
+            "build_frame_rec": t_records_ms,
+            "build_other": max(0.0, t_total_ms - (t_timeline_ms + t_std_ms + t_linear_ms + t_fit_ms + t_gpmf_ms + t_imu_ms + t_static_ms + t_records_ms)),
+            "build_total_ms": t_total_ms,
+        })
+
     memory_bytes = (
         sys.getsizeof(records)
         + sum(sys.getsizeof(r) for r in records)
@@ -363,9 +761,15 @@ def build_telemetry_cache(
         min_alt=min_alt, max_alt=max_alt, chart_data=chart_data or {},
         gps_track=gps_trk, start_dt_utc=start_dt_utc, fit_keys=fit_keys,
         fit_units=fit_units, fit_labels=fit_labels,
-        remaining_extra=remaining_extra, std_names=std_names,
+        remaining_extra=remaining_extra, dynamic_keys=dynamic_keys,
+        dynamic_meta=dynamic_meta, std_names=std_names,
+        heading_keys=heading_keys, heading_units=heading_units,
+        heading_labels=heading_labels,
+        slope_keys=slope_keys, slope_units=slope_units,
+        slope_labels=slope_labels,
     )
     return TelemetryFrameCache(
-        records, static, build_ms, memory_bytes,
-        resolver_calls, interpolation_calls, gpmf_lookups,
+        records, static, t_total_ms, memory_bytes,
+        len(active_fit) * total_frames, 3 * total_frames, 3 * total_frames,
     )
+

@@ -6,12 +6,15 @@ directly to shared memory buffers instead of pickling them through multiprocessi
 
 from __future__ import annotations
 
+import os
 import queue
+import time
 from multiprocessing import shared_memory
 from typing import Any
 
 from src.ffmpeg.worker_cache import WORKER_CACHE, init_worker
-from src.ffmpeg.frame_renderer import render_overlay_frame
+from src.ffmpeg.frame_renderer import _direct_region_members, render_overlay_frame
+from src.ffmpeg.shm_image import close_writable_image, writable_rgba_image
 
 
 class SharedFramePool:
@@ -60,6 +63,12 @@ class SharedFramePool:
         """Close and unlink all shared memory blocks."""
         for shm in self._shm_blocks:
             try:
+                buf = getattr(shm, "_buf", None)
+                if buf is not None:
+                    try:
+                        buf.release()
+                    except Exception:
+                        pass
                 shm.close()
                 shm.unlink()
             except Exception:
@@ -87,6 +96,12 @@ def _close_shm_in_worker() -> None:
     for shm in _SHM_BLOCKS:
         if shm is not None:
             try:
+                buf = getattr(shm, "_buf", None)
+                if buf is not None:
+                    try:
+                        buf.release()
+                    except Exception:
+                        pass
                 shm.close()
             except Exception:
                 pass
@@ -113,7 +128,10 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     Returns:
         (frame_index, shm_slot_id) — only ~50 bytes through pickle.
     """
-    index, slot = job
+    index, slot = job[:2]
+    audit_enabled = len(job) >= 3 and bool(job[2])
+    if audit_enabled:
+        worker_started_ns = time.perf_counter_ns()
     start_dt_utc = WORKER_CACHE.get("start_dt_utc")
     tz_offset_hours = WORKER_CACHE.get("tz_offset_hours")
     speed_samples = WORKER_CACHE.get("speed_samples")
@@ -121,15 +139,94 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     alt_samples = WORKER_CACHE.get("alt_samples")
     target_fps = WORKER_CACHE.get("target_fps")
     update_rate_step = WORKER_CACHE.get("update_rate_step", 1)
-    img = render_overlay_frame(
-        index, start_dt_utc, tz_offset_hours,
-        speed_samples, track_samples, alt_samples,
-        target_fps, update_rate_step,
-    )
     import numpy as np
     shm_buf = _SHM_BLOCKS[slot].buf
-    frame_bytes = img.height * img.width * 4
-    shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
-    img_arr = np.asarray(img)
-    np.copyto(shm_arr, img_arr)
+    layout = WORKER_CACHE.get("layout", {})
+    hud_regions = WORKER_CACHE.get("hud_regions")
+    zero_copy_requested = os.environ.get("TELEM_ZERO_COPY_SHM", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+    zero_copy_target = None
+    zero_copy = False
+    clear_started_ns = None
+    clear_finished_ns = None
+    if (
+        zero_copy_requested
+        and hud_regions
+        and layout.get("_nvidia_direct_region")
+        and _direct_region_members(layout, hud_regions) is not None
+    ):
+        atlas_size = layout.get("_nvidia_atlas_size")
+        if atlas_size is None:
+            atlas_size = (
+                max(region[2] + region[4] for region in hud_regions),
+                max(region[3] + region[5] for region in hud_regions),
+            )
+        atlas_w, atlas_h = map(int, atlas_size)
+        frame_bytes = atlas_w * atlas_h * 4
+        try:
+            clear_started_ns = time.perf_counter_ns() if audit_enabled else None
+            clear_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8, count=frame_bytes)
+            clear_arr.fill(0)
+            del clear_arr
+            clear_finished_ns = time.perf_counter_ns() if audit_enabled else None
+            zero_copy_target = writable_rgba_image(shm_buf, (atlas_w, atlas_h))
+            zero_copy = True
+        except Exception:
+            close_writable_image(zero_copy_target)
+            zero_copy_target = None
+            zero_copy = False
+
+    if audit_enabled:
+        worker_render_started_ns = time.perf_counter_ns()
+    try:
+        img = render_overlay_frame(
+            index, start_dt_utc, tz_offset_hours,
+            speed_samples, track_samples, alt_samples,
+            target_fps, update_rate_step,
+            target_image=zero_copy_target,
+        )
+    except Exception:
+        if not zero_copy:
+            raise
+        # Keep the existing safe path as a per-job fallback if a Pillow
+        # operation cannot work with the mapped target in a future build.
+        close_writable_image(zero_copy_target)
+        zero_copy_target = None
+        zero_copy = False
+        img = render_overlay_frame(
+            index, start_dt_utc, tz_offset_hours,
+            speed_samples, track_samples, alt_samples,
+            target_fps, update_rate_step,
+            target_image=None,
+        )
+    if audit_enabled:
+        worker_render_finished_ns = time.perf_counter_ns()
+
+    if zero_copy:
+        # No PIL->NumPy conversion and no full-atlas memcpy in this branch.
+        # Mark the transfer complete before releasing Pillow's mapped wrapper;
+        # the release is lifetime bookkeeping, not a frame-data transfer.
+        shm_copy_finished_ns = (
+            worker_render_finished_ns if audit_enabled else None
+        )
+        close_writable_image(zero_copy_target)
+        del zero_copy_target
+        del shm_buf
+    else:
+        frame_bytes = img.height * img.width * 4
+        shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
+        img_arr = np.asarray(img)
+        np.copyto(shm_arr, img_arr)
+        del shm_arr
+        del shm_buf
+    if audit_enabled:
+        if not zero_copy:
+            shm_copy_finished_ns = time.perf_counter_ns()
+        return (
+            index, slot, os.getpid(), worker_started_ns,
+            worker_render_started_ns, worker_render_finished_ns,
+            shm_copy_finished_ns, clear_started_ns, clear_finished_ns,
+            zero_copy,
+        )
     return index, slot

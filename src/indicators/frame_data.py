@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from src.indicators.profiling import get_overlay_profiler
+from src.indicators.chart_builder import clip_chart_data_for_target
 
 
 _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
@@ -22,6 +23,9 @@ _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
     "hr_text": "hr",
     "cad_text": "cad",
     "battery_text": "battery",
+    "heading_text": "heading",
+    "compass": "heading",
+    "slope_text": "slope",
 }
 
 
@@ -36,7 +40,7 @@ def build_active_fit_field_plan(
     consumers can never cause duplicate per-frame resolution.
     """
     discovered = {str(field) for field in (discovered_fit_fields or [])}
-    active_fit: set[str] = set()
+    configured_fit: set[str] = set()
     active_standard: set[str] = set()
 
     for key, config in layout.get("indicators", {}).items():
@@ -45,19 +49,25 @@ def build_active_fit_field_plan(
         if key.startswith("fit_") and key.endswith("_text"):
             field_name = key[4:-5]
             if field_name:
-                active_fit.add(field_name)
+                configured_fit.add(field_name)
             continue
         standard_field = _STANDARD_RESOLVE_CONSUMERS.get(key)
         if standard_field:
             active_standard.add(standard_field)
+        if (
+            key == "track_map"
+            and str(config.get("map_orientation", "north_up")).strip().lower()
+            == "track_up"
+        ):
+            active_standard.add("heading")
 
     return {
         "discovered_fit_fields": sorted(discovered),
-        "active_fit_fields": sorted(active_fit),
-        "inactive_fit_fields": sorted(discovered - active_fit),
-        "active_fit_fields_missing_samples": sorted(active_fit - discovered),
+        "active_fit_fields": sorted(configured_fit & discovered),
+        "inactive_fit_fields": sorted(discovered - configured_fit),
+        "active_fit_fields_missing_samples": sorted(configured_fit - discovered),
         "active_standard_resolve_fields": sorted(active_standard),
-        "unique_resolve_fields": sorted(active_fit | active_standard),
+        "unique_resolve_fields": sorted((configured_fit & discovered) | active_standard),
     }
 
 
@@ -108,9 +118,13 @@ def prepare_overlay_frame_data(
 
     # ── Time strings ──────────────────────────────────────────────────
     section_started = time.perf_counter()
-    local_dt = target_dt + timedelta(hours=tz_offset_hours)
-    date_text = local_dt.strftime("%Y-%m-%d")
-    time_text = local_dt.strftime("%H:%M:%S")
+    if target_dt is not None:
+        local_dt = target_dt + timedelta(hours=tz_offset_hours)
+        date_text = local_dt.strftime("%Y-%m-%d")
+        time_text = local_dt.strftime("%H:%M:%S")
+    else:
+        date_text = ""
+        time_text = ""
     profiler.record(
         "telemetry.date_time",
         (time.perf_counter() - section_started) * 1000.0,
@@ -121,6 +135,8 @@ def prepare_overlay_frame_data(
     indicator_values: dict[str, float] = {}
     for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
                     "alt_visual", "alt_text"):
+        if ind_key not in layout.get("indicators", {}):
+            continue
         ind_cfg = layout.get("indicators", {}).get(ind_key, {})
         if not ind_cfg.get("enabled", True):
             continue
@@ -132,33 +148,55 @@ def prepare_overlay_frame_data(
         fit_trk = (fit_data or {}).get("track", [])
         fit_alt = (fit_data or {}).get("alt", [])
         if src == "gpx":
-            spd_s = gpx_spd or speed_samples
-            trk_s = gpx_trk or track_samples
-            alt_s = gpx_alt or alt_samples
+            spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
         elif src == "fit":
-            spd_s = fit_spd or speed_samples
-            trk_s = fit_trk or track_samples
-            alt_s = fit_alt or alt_samples
+            spd_s, trk_s, alt_s = fit_spd, fit_trk, fit_alt
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
-            indicator_values[ind_key] = interpolate_speed(spd_s, target_dt)
+            indicator_values[ind_key] = interpolate_speed(spd_s, target_dt) if spd_s else None
         elif ind_key in ("dist_visual", "dist_text"):
-            indicator_values[ind_key] = interpolate_distance(trk_s, target_dt)
+            indicator_values[ind_key] = interpolate_distance(trk_s, target_dt) if trk_s else None
         elif ind_key in ("alt_visual", "alt_text"):
-            indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt)
+            indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt) if alt_s else None
 
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
-        "speed_visual", interpolate_speed(speed_samples, target_dt))
+        "speed_visual",
+        indicator_values.get("speed_text", interpolate_speed(speed_samples, target_dt) if speed_samples else None),
+    )
     distance_m = indicator_values.get(
-        "dist_visual", interpolate_distance(track_samples, target_dt))
+        "dist_visual",
+        indicator_values.get("dist_text", interpolate_distance(track_samples, target_dt) if track_samples else None),
+    )
     alt_value = indicator_values.get(
-        "alt_visual", interpolate_altitude(alt_samples, target_dt))
+        "alt_visual",
+        indicator_values.get("alt_text", interpolate_altitude(alt_samples, target_dt) if alt_samples else None),
+    )
 
-    iso_value = interpolate_iso(iso_samples or [], target_dt)
-    exposure_value = interpolate_exposure(exposure_samples or [], target_dt)
-    temp_value = interpolate_temperature(temperature_samples or [], target_dt)
+    def direct_resolve(field_name: str, source: str, indicator_key: str):
+        cfg = layout.get("indicators", {}).get(indicator_key)
+        if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+            return None
+        if not resolve_cache_value:
+            return None
+        try:
+            return resolve_cache_value(field_name, source, target_dt, indicator_key)
+        except TypeError:
+            return resolve_cache_value(field_name, target_dt)
+
+    iso_source = layout.get("indicators", {}).get("iso_text", {}).get("source", "gpmf")
+    exposure_source = layout.get("indicators", {}).get("exposure_text", {}).get("source", "gpmf")
+    temp_source = layout.get("indicators", {}).get("temp_text", {}).get("source", "gpmf")
+    iso_value = direct_resolve("iso", iso_source, "iso_text")
+    exposure_value = direct_resolve("exposure", exposure_source, "exposure_text")
+    temp_value = direct_resolve("temperature", temp_source, "temp_text")
+    if iso_value is None and iso_source == "gpmf":
+        iso_value = interpolate_iso(iso_samples or [], target_dt) if iso_samples else None
+    if exposure_value is None and exposure_source == "gpmf":
+        exposure_value = interpolate_exposure(exposure_samples or [], target_dt) if exposure_samples else None
+    if temp_value is None and temp_source == "gpmf":
+        temp_value = interpolate_temperature(temperature_samples or [], target_dt) if temperature_samples else None
     profiler.record(
         "telemetry.interpolation_lookups",
         (time.perf_counter() - section_started) * 1000.0,
@@ -170,7 +208,9 @@ def prepare_overlay_frame_data(
         max_distance_m = _range_cache["max_distance_m"]
     else:
         max_distance_m = None
-        dist_src = layout.get("indicators", {}).get("dist_visual", {}).get("source", "gpmf")
+        indic_map = layout.get("indicators", {})
+        dist_ind = indic_map.get("dist_visual") or indic_map.get("dist_text") or indic_map.get("fit_distance_text") or {}
+        dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic_map else "gpmf")
         if dist_src == "gpx":
             gpx_trk_l = gpx_track_samples or []
             if gpx_trk_l:
@@ -179,7 +219,7 @@ def prepare_overlay_frame_data(
             fit_trk_l = (fit_data or {}).get("track", [])
             if fit_trk_l:
                 max_distance_m = fit_trk_l[-1][1]
-        if max_distance_m is None and track_samples:
+        if dist_src == "gpmf" and track_samples:
             max_distance_m = track_samples[-1][1]
 
     # ── max_speed_kmh (per source) ────────────────────────────────────
@@ -189,9 +229,9 @@ def prepare_overlay_frame_data(
         max_speed_kmh = None
         spd_src = layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
         if spd_src == "gpx":
-            spd_for_range = (gpx_speed_samples or []) or speed_samples
+            spd_for_range = gpx_speed_samples or []
         elif spd_src == "fit":
-            spd_for_range = (fit_data or {}).get("speed", []) or speed_samples
+            spd_for_range = (fit_data or {}).get("speed", [])
         else:
             spd_for_range = speed_samples
         if spd_for_range:
@@ -208,9 +248,9 @@ def prepare_overlay_frame_data(
         max_alt = None
         alt_src = layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
         if alt_src == "gpx":
-            alt_for_range = (gpx_alt_samples or []) or alt_samples
+            alt_for_range = gpx_alt_samples or []
         elif alt_src == "fit":
-            alt_for_range = (fit_data or {}).get("alt", []) or alt_samples
+            alt_for_range = (fit_data or {}).get("alt", [])
         else:
             alt_for_range = alt_samples
         if alt_for_range:
@@ -228,19 +268,25 @@ def prepare_overlay_frame_data(
 
     resolved_this_frame: dict[str, Any] = {}
 
-    def profiled_resolve(field_name: str):
-        if field_name in resolved_this_frame:
-            return resolved_this_frame[field_name]
+    def profiled_resolve(field_name: str, source: str, indicator_key: str | None = None):
+        cache_key = (field_name, source, indicator_key)
+        if cache_key in resolved_this_frame:
+            return resolved_this_frame[cache_key]
         if not resolve_cache_value:
-            resolved_this_frame[field_name] = 0.0
-            return 0.0
+            resolved_this_frame[cache_key] = None
+            return None
         resolve_started = time.perf_counter()
-        value = resolve_cache_value(field_name, target_dt)
+        try:
+            value = resolve_cache_value(field_name, source, target_dt, indicator_key)
+        except TypeError:
+            # Compatibility adapter for third-party callers using the old
+            # callback shape.  Production preview/final paths use the new one.
+            value = resolve_cache_value(field_name, target_dt)
         profiler.record(
             "telemetry.resolve_cache_value",
             (time.perf_counter() - resolve_started) * 1000.0,
         )
-        resolved_this_frame[field_name] = value
+        resolved_this_frame[cache_key] = value
         if resolve_stats is not None:
             resolve_stats["calls"] = int(resolve_stats.get("calls", 0)) + 1
             per_field = resolve_stats.setdefault("per_field", {})
@@ -251,24 +297,84 @@ def prepare_overlay_frame_data(
         # Compatibility path for preview and non-AMD exporters.  AMD production
         # always supplies a plan built once from its immutable export snapshot.
         standard_resolve_fields = set(_STANDARD_RESOLVE_CONSUMERS.values())
+        heading_cfg = next(
+            (
+                cfg for key, cfg in layout.get("indicators", {}).items()
+                if isinstance(cfg, dict)
+                and cfg.get("enabled", True)
+                and (
+                    _STANDARD_RESOLVE_CONSUMERS.get(key) == "heading"
+                    or (
+                        key == "track_map"
+                        and str(cfg.get("map_orientation", "north_up")).strip().lower()
+                        == "track_up"
+                    )
+                )
+            ),
+            None,
+        )
+        if heading_cfg is None:
+            standard_resolve_fields.discard("heading")
     else:
         standard_resolve_fields = set(
             fit_field_plan.get("active_standard_resolve_fields", [])
         )
 
-    power_value = profiled_resolve("power") if "power" in standard_resolve_fields else None
-    atemp_value = profiled_resolve("atemp") if "atemp" in standard_resolve_fields else None
-    hr_value = profiled_resolve("hr") if "hr" in standard_resolve_fields else None
-    cad_value = profiled_resolve("cad") if "cad" in standard_resolve_fields else None
-    battery_value = profiled_resolve("battery") if "battery" in standard_resolve_fields else None
+    def configured_source(indicator_key: str) -> str:
+        if indicator_key == "track_map":
+            return layout.get("indicators", {}).get("track_map", {}).get("source", "fit")
+        default = "gpmf" if _STANDARD_RESOLVE_CONSUMERS.get(indicator_key) in ("heading", "slope") else "gpx"
+        return layout.get("indicators", {}).get(indicator_key, {}).get("source", default)
+
+    power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
+    atemp_value = profiled_resolve("atemp", configured_source("atemp_text"), "atemp_text") if "atemp" in standard_resolve_fields else None
+    hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None
+    cad_value = profiled_resolve("cad", configured_source("cad_text"), "cad_text") if "cad" in standard_resolve_fields else None
+    battery_value = profiled_resolve("battery", configured_source("battery_text"), "battery_text") if "battery" in standard_resolve_fields else None
+    heading_consumers = [
+        key for key, field in _STANDARD_RESOLVE_CONSUMERS.items()
+        if field == "heading"
+        and isinstance(layout.get("indicators", {}).get(key), dict)
+        and layout["indicators"][key].get("enabled", True)
+    ]
+    track_map_cfg = layout.get("indicators", {}).get("track_map", {})
+    if (
+        isinstance(track_map_cfg, dict)
+        and track_map_cfg.get("enabled", True)
+        and str(track_map_cfg.get("map_orientation", "north_up")).strip().lower()
+        == "track_up"
+        and "track_map" not in heading_consumers
+    ):
+        heading_consumers.append("track_map")
+    heading_values = {
+        key: profiled_resolve("heading", configured_source(key), key)
+        for key in heading_consumers
+    } if "heading" in standard_resolve_fields else {}
+    slope_consumers = [
+        key for key, field in _STANDARD_RESOLVE_CONSUMERS.items()
+        if field == "slope"
+        and isinstance(layout.get("indicators", {}).get(key), dict)
+        and layout["indicators"][key].get("enabled", True)
+    ]
+    slope_value = (
+        profiled_resolve("slope", configured_source(slope_consumers[0]), slope_consumers[0])
+        if "slope" in standard_resolve_fields and slope_consumers else None
+    )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
+    # Normalise tz-awareness: ``start_dt_utc`` may be tz-aware (GPMF anchor /
+    # ExifTool ``parse_exif_datetime`` attaches ``tzinfo=utc``) while the
+    # timeline's ``global_to_absolute`` returns naive-UTC (multifile
+    # convention).  Both represent the same UTC instant; stripping the marker
+    # makes the subtraction robust without changing the computed value.
     elapsed_seconds = 0.0
     if start_dt_utc is not None and target_dt is not None:
-        elapsed_seconds = max(0.0, (target_dt - start_dt_utc).total_seconds())
+        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
+        _td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
+        elapsed_seconds = max(0.0, (_td - _sd).total_seconds())
 
     avg_speed_kmh = 0.0
-    if elapsed_seconds > 0 and distance_m > 0:
+    if elapsed_seconds > 0 and distance_m is not None and distance_m > 0:
         # average speed = total distance / total time * 3.6 (m/s → km/h)
         avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
 
@@ -283,6 +389,16 @@ def prepare_overlay_frame_data(
         "heart_rate": "BPM", "cadence": "rpm", "power": "W",
         "temperature": "\u00b0C", "torque_effectiveness": "%",
         "vertical_oscillation": "mm", "stance_time": "ms",
+    }
+    GPMF_IMU_FIELDS = {
+        "accel_x_text": ("accel_x", "m/s", "Accelerometer X"),
+        "accel_y_text": ("accel_y", "m/s", "Accelerometer Y"),
+        "accel_z_text": ("accel_z", "m/s", "Accelerometer Z"),
+        "accel_magnitude_text": ("accel_magnitude", "m/s", "Accelerometer Magnitude"),
+        "gyro_x_text": ("gyro_x", "rad/s", "Gyroscope X"),
+        "gyro_y_text": ("gyro_y", "rad/s", "Gyroscope Y"),
+        "gyro_z_text": ("gyro_z", "rad/s", "Gyroscope Z"),
+        "gyro_magnitude_text": ("gyro_magnitude", "rad/s", "Gyroscope Magnitude"),
     }
 
     extra_indicators: dict[str, tuple[float, str, str]] = {}
@@ -308,11 +424,24 @@ def prepare_overlay_frame_data(
 
     for key in fit_keys:
         field_name = key[4:-5]
-        val = profiled_resolve(field_name) or 0.0
+        val = profiled_resolve(field_name, "fit", key)
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
         extra_indicators[key] = (val, unit, label)
+
+    # Keep configured-but-unavailable FIT indicators represented as None so
+    # presentation can hide them without deleting the user's layout config.
+    configured_fit_keys = {
+        k for k, cfg in layout.get("indicators", {}).items()
+        if isinstance(cfg, dict) and cfg.get("enabled", True)
+        and k.startswith("fit_") and k.endswith("_text")
+    }
+    available_fit_keys = set(fit_keys)
+    for key in sorted(configured_fit_keys - available_fit_keys):
+        field_name = key[4:-5]
+        cfg = layout.get("indicators", {}).get(key, {})
+        extra_indicators[key] = (None, cfg.get("unit", ""), cfg.get("label", field_name))
 
     profiler.record(
         "telemetry.dynamic_fit_fields",
@@ -324,10 +453,63 @@ def prepare_overlay_frame_data(
         if key in HARDCODED_KEYS or key in extra_indicators:
             continue
         cfg = layout["indicators"][key]
-        val = 0.0
+        if key in GPMF_IMU_FIELDS:
+            field_name, default_unit, default_label = GPMF_IMU_FIELDS[key]
+            value = profiled_resolve(field_name, cfg.get("source", "gpmf"), key)
+            extra_indicators[key] = (
+                value,
+                cfg.get("unit") or default_unit,
+                cfg.get("label") or default_label,
+            )
+            continue
+        if key == "lean_indicator":
+            # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).  Źródło:
+            # IMU GoPro (prekomputowany fizyczny roll przez complementary filter
+            # — ``lean_roll_{axis}``, deterministyczny dla seek) lub FIT grade.
+            lsrc = str(cfg.get("source", "gyro")).strip().lower()
+            if lsrc == "grade":
+                value = profiled_resolve(
+                    "slope", cfg.get("slope_source", "gpmf"), key,
+                )
+                extra_indicators[key] = (
+                    value,
+                    cfg.get("unit") or "%",
+                    cfg.get("label") or "Przechył",
+                )
+            else:
+                axis = str(cfg.get("axis", "z")).strip().lower()
+                if axis not in ("x", "y", "z"):
+                    axis = "z"
+                value = profiled_resolve(f"lean_roll_{axis}", "gpmf", key)
+                extra_indicators[key] = (
+                    value,
+                    cfg.get("unit") or "°",
+                    cfg.get("label") or "Przechył",
+                )
+            continue
+        val = None
         unit = cfg.get("unit", "")
         label = cfg.get("label", key)
         extra_indicators[key] = (val, unit, label)
+
+    if "heading" in standard_resolve_fields:
+        for heading_key in heading_consumers:
+            if heading_key == "track_map":
+                continue
+            heading_cfg = layout.get("indicators", {}).get(heading_key, {})
+            extra_indicators[heading_key] = (
+                heading_values.get(heading_key),
+                heading_cfg.get("unit") or "deg",
+                heading_cfg.get("label") or "GPS Course Over Ground",
+            )
+    if "slope" in standard_resolve_fields:
+        for slope_key in slope_consumers:
+            slope_cfg = layout.get("indicators", {}).get(slope_key, {})
+            extra_indicators[slope_key] = (
+                slope_value,
+                slope_cfg.get("unit") or "%",
+                slope_cfg.get("label") or "Slope",
+            )
 
     # ── Position / chart data ─────────────────────────────────────────
     section_started = time.perf_counter()
@@ -348,6 +530,8 @@ def prepare_overlay_frame_data(
         (time.perf_counter() - section_started) * 1000.0,
     )
 
+    prepared_chart_data = clip_chart_data_for_target(chart_data, target_dt)
+
     return {
         "date_text": date_text,
         "time_text": time_text,
@@ -367,10 +551,11 @@ def prepare_overlay_frame_data(
         "hr_value": hr_value,
         "cad_value": cad_value,
         "battery_value": battery_value,
-        "chart_data": chart_data or {},
+        "chart_data": prepared_chart_data,
         "current_position": current_position,
         "extra_indicators": extra_indicators,
         "gps_track": gps_trk,
+        "map_heading": heading_values.get("track_map"),
         "target_dt": target_dt,
         "start_dt_utc": start_dt_utc,
         "elapsed_seconds": elapsed_seconds,
