@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import time
+import os
 from datetime import datetime
 from typing import Any, Optional
 
@@ -119,6 +120,9 @@ def compose_overlay(
     leave it False (unchanged synchronous behaviour).
     """
     profiler = get_overlay_profiler()
+    # AMD audit: start above_compose timer if enabled
+    _audit_above = os.getenv("AMD_AUDIT_ABOVE_COMPose", "0").strip().lower() in {"1", "true", "yes", "on"}
+    _above_start = time.perf_counter() if _audit_above else None
     widget_fonts: dict[str, str] = {}
 
     def _font_for(key: str) -> str:
@@ -604,6 +608,9 @@ def compose_overlay(
         if canvas_state is not None:
             canvas_state["is_clean"] = False
 
+        # Record above_compose timing if audit enabled
+    if _audit_above and _above_start is not None:
+        profiler.record("above_compose.total", (time.perf_counter() - _above_start) * 1000.0)
     return img
 
 

@@ -14,6 +14,7 @@ import json
 import copy
 import statistics
 import subprocess
+import tracemalloc
 import ctypes
 import queue
 import threading
@@ -200,14 +201,20 @@ def _chart_gpu_layout_safe(
     if map_dst is not None:
         other_boxes.append(tuple(int(v) for v in map_dst))
     reasons: list[str] = []
+    # AMD_RENDER_PATH_AUDIT_2 (temporary): per-chart GPU_SPLIT decision trace.
+    chart_trace = os.environ.get("AMD_CHART_TRACE", "0") == "1"
     for key, cap in chart_capture.items():
         if "bbox" not in cap:
             reasons.append(f"{key}: no bbox (not rendered)")
+            if chart_trace:
+                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='no bbox (not rendered)'", flush=True)
             continue
         if cap.get("rotation", 0) % 360 != 0:
             # The GPU blend cannot reproduce Pillow's rotation of the widget,
             # so a rotated chart must stay on the CPU path.
             reasons.append(f"{key}: non-zero rotation -> CPU_REFERENCE")
+            if chart_trace:
+                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='non-zero rotation {cap.get('rotation')}'", flush=True)
             continue
         cbox = tuple(int(v) for v in cap["bbox"])
         cx, cy, cw, ch = cbox
@@ -216,9 +223,13 @@ def _chart_gpu_layout_safe(
             if cx < bx + bw and bx < cx + cw and cy < by + bh and by < cy + ch:
                 overlap = True
                 reasons.append(f"{key} overlaps widget bbox=({bx},{by},{bw},{bh})")
+                if chart_trace:
+                    print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='overlaps widget bbox=({bx},{by},{bw},{bh})' map_dst={map_dst}", flush=True)
                 break
         if not overlap:
             safe.add(key)
+            if chart_trace:
+                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=GPU reason='z-order disjoint (bbox={cbox})'", flush=True)
     if not chart_capture:
         return set(), "no active chart widgets"
     if not safe:
@@ -1211,6 +1222,20 @@ def export_amd_native_d3d11(
     diagnostics_enabled = _env_flag("AMD_NATIVE_DIAGNOSTICS", False)
     profiling_enabled = diagnostics_enabled or _env_flag("AMD_NATIVE_PROFILING", False) or _env_flag("AMD_GPU_TIMESTAMP_PROFILE", False)
     overlay_profile_enabled = _env_flag("AMD_OVERLAY_PROFILE", False)
+    # ── AMD RENDER PATH AUDIT (temporary diagnostic instrumentation) ──
+    # AMD_AUDIT_ALLOCS=1 adds cheap per-frame allocation counters
+    # (sys.getallocatedblocks + tracemalloc current bytes) to the producer and
+    # consumer so the audit report can quantify per-frame allocation pressure.
+    # Disabled by default; remove together with the AMD render-path audit.
+    audit_allocs_enabled = _env_flag("AMD_AUDIT_ALLOCS", False)
+    # ── AMD RENDER PATH AUDIT 2 (temporary diagnostic instrumentation) ──
+    # AMD_FRAME_TRACE=1 records a full per-frame wall-clock accounting (frame
+    # total, producer children, consumer children, inter-frame gaps) to a CSV
+    # next to the profile.  AMD_CHART_TRACE=1 logs the GPU_SPLIT chart decision
+    # for HR/Cadence (see _chart_gpu_layout_safe).  Both disabled by default.
+    frame_trace_enabled = _env_flag("AMD_FRAME_TRACE", False)
+    chart_trace_enabled = _env_flag("AMD_CHART_TRACE", False)
+    frame_trace_rows: list[dict[str, Any]] = []
     native_hud_mode = os.environ.get("AMD_NATIVE_HUD_MODE", "GPU_HUD").strip().upper()
     if native_hud_mode not in _AMD_HUD_MODES:
         print(
@@ -2180,6 +2205,7 @@ def export_amd_native_d3d11(
     map_geometry_set_holder = [False]
     last_hud_report_holder = [0.0]
     timeline_trace = [] # First 20 frames trace
+    audit_alloc_frames: list[dict[str, Any]] = []
     
     # Pre-allocate timing sample containers for producer/consumer
     timing_samples["producer_prepare"] = []
@@ -2195,6 +2221,13 @@ def export_amd_native_d3d11(
         sample_time_sec = idx / target_fps
         c_dt = base_dt + timedelta(seconds=sample_time_sec) if base_dt is not None else None
         
+        if audit_allocs_enabled:
+            _aud_blocks0 = sys.getallocatedblocks()
+            _aud_traced0 = tracemalloc.get_traced_memory()[0] if tracemalloc.is_tracing() else 0
+        else:
+            _aud_blocks0 = 0
+            _aud_traced0 = 0
+
         t_samples_p: dict[str, float] = {}
         above_stats_p: dict[str, Any] = {}
         
@@ -2593,6 +2626,12 @@ def export_amd_native_d3d11(
             t_samples_p["PIL/buffer preparation"] = (time.perf_counter() - buffer_prep_start) * 1000.0
             previous_bboxes_holder[0] = dict(_bboxes)
 
+        if audit_allocs_enabled:
+            t_samples_p["producer_alloc_blocks"] = float(sys.getallocatedblocks() - _aud_blocks0)
+            t_samples_p["producer_alloc_traced_bytes"] = float(
+                (tracemalloc.get_traced_memory()[0] - _aud_traced0) if tracemalloc.is_tracing() else 0.0
+            )
+
         t_p_end = time.perf_counter()
         prep_ms = (t_p_end - t_p_start) * 1000.0
         
@@ -2639,11 +2678,17 @@ def export_amd_native_d3d11(
         t_c_start = time.perf_counter()
         if t_first_frame_begin == 0.0:
             t_first_frame_begin = t_c_start
+        if audit_allocs_enabled:
+            _aud_c_blocks0 = sys.getallocatedblocks()
+            _aud_c_traced0 = tracemalloc.get_traced_memory()[0] if tracemalloc.is_tracing() else 0
+        else:
+            _aud_c_blocks0 = 0
+            _aud_c_traced0 = 0
         frame_acct.begin_frame(prepared.frame_idx)
         
         # Merge producer timing samples
         for k_t, v_t in prepared.timing_samples_producer.items():
-            timing_samples[k_t].append(v_t)
+            timing_samples.setdefault(k_t, []).append(v_t)
             
         timing_samples["producer_prepare"].append(prepared.producer_prepare_ms)
         pillow_intermediate_bytes.append(prepared.intermediate_bytes)
@@ -2899,6 +2944,17 @@ def export_amd_native_d3d11(
         pipeline_total_ms = (t_c_end - t_c_start) * 1000.0
         timing_samples["pipeline_total"].append(pipeline_total_ms)
 
+        if audit_allocs_enabled:
+            audit_alloc_frames.append({
+                "frame": prepared.frame_idx,
+                "producer_alloc_blocks": prepared.timing_samples_producer.get("producer_alloc_blocks", 0.0),
+                "producer_alloc_traced_bytes": prepared.timing_samples_producer.get("producer_alloc_traced_bytes", 0.0),
+                "consumer_alloc_blocks": float(sys.getallocatedblocks() - _aud_c_blocks0),
+                "consumer_alloc_traced_bytes": float(
+                    (tracemalloc.get_traced_memory()[0] - _aud_c_traced0) if tracemalloc.is_tracing() else 0.0
+                ),
+            })
+
         if prepared.frame_idx < 20:
             timeline_trace.append({
                 "frame_idx": prepared.frame_idx,
@@ -3015,15 +3071,49 @@ def export_amd_native_d3d11(
                     raise producer_error[0]
         else:
             # SYNC (Production Default / Diagnostic Reference)
+            _ft_prev_end: float | None = None
             for f_idx in range(total_frames):
                 if cancel_event is not None and cancel_event.is_set():
                     print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
                     _cleanup_native_resources()
                     return False
+                if frame_trace_enabled:
+                    _ft_t0 = time.perf_counter()
                 prep = _prepare_frame_cpu(f_idx)
+                if frame_trace_enabled:
+                    _ft_t1 = time.perf_counter()
                 timing_samples["producer_queue_wait"].append(0.0)
                 timing_samples["consumer_queue_wait"].append(0.0)
                 ok = _consume_prepared_frame(prep)
+                if frame_trace_enabled:
+                    _ft_t2 = time.perf_counter()
+                    _ft_gap = (
+                        (_ft_t0 - _ft_prev_end) * 1000.0 if _ft_prev_end is not None else 0.0
+                    )
+                    _ft_prev_end = _ft_t2
+                    _row: dict[str, Any] = {
+                        "frame": f_idx,
+                        "frame_total_ms": (_ft_t2 - _ft_t0) * 1000.0,
+                        "producer_ms": (_ft_t1 - _ft_t0) * 1000.0,
+                        "consumer_ms": (_ft_t2 - _ft_t1) * 1000.0,
+                        "inter_frame_gap_ms": _ft_gap,
+                    }
+                    for _k in ("Telemetry/frame_data", "compose_overlay", "above_total",
+                               "above_compose", "above_region_to_bytes", "above_region_upload",
+                               "map_cpu_upload", "HUD dirty extract", "PIL/buffer preparation",
+                               "chart_cpu_tobytes", "chart_dynamic_tobytes", "gauge_tobytes"):
+                        _v = timing_samples.get(_k)
+                        if _v:
+                            _row["p_" + _k] = _v[-1]
+                    for _k in ("MF ReadSample/decode availability", "consumer_upload",
+                               "consumer_native_call", "VideoProcessor CPU submit",
+                               "VideoProcessor GPU completion", "GPU wait/synchronization",
+                               "AMF submit/backpressure", "AMF QueryOutput", "Packet write",
+                               "pipeline_total"):
+                        _v = timing_samples.get(_k)
+                        if _v:
+                            _row["c_" + _k] = _v[-1]
+                    frame_trace_rows.append(_row)
                 if not ok:
                     # EOS reached normally from decoder
                     break
@@ -3582,6 +3672,16 @@ def export_amd_native_d3d11(
                 if fit_resolve_stats is not None else None
             ),
         },
+        "audit_allocations": (
+            {
+                "frames": len(audit_alloc_frames),
+                "producer_alloc_blocks": _value_summary([f["producer_alloc_blocks"] for f in audit_alloc_frames]),
+                "producer_alloc_traced_bytes": _value_summary([f["producer_alloc_traced_bytes"] for f in audit_alloc_frames]),
+                "consumer_alloc_blocks": _value_summary([f["consumer_alloc_blocks"] for f in audit_alloc_frames]),
+                "consumer_alloc_traced_bytes": _value_summary([f["consumer_alloc_traced_bytes"] for f in audit_alloc_frames]),
+            }
+            if audit_allocs_enabled else None
+        ),
         "timings": timing_summaries,
         "total_wall_clock_s": end_to_end_elapsed,
         "true_fps": true_fps,
@@ -3600,6 +3700,24 @@ def export_amd_native_d3d11(
         print(f"[AMD NATIVE] Profiling JSON: {profile_path}", flush=True)
     except Exception as exc:
         print(f"[AMD NATIVE] WARNING: failed to write profiling JSON: {exc}", flush=True)
+
+    # AMD_RENDER_PATH_AUDIT_2: dump the per-frame wall-clock accounting CSV.
+    if frame_trace_enabled and frame_trace_rows:
+        import csv as _ft_csv
+        ft_path = output_file_str + ".frame_trace.csv"
+        try:
+            _ft_fields: list[str] = []
+            for _r in frame_trace_rows:
+                for _k in _r:
+                    if _k not in _ft_fields:
+                        _ft_fields.append(_k)
+            with open(ft_path, "w", newline="", encoding="utf-8") as ftf:
+                _ft_w = _ft_csv.DictWriter(ftf, fieldnames=_ft_fields, extrasaction="ignore")
+                _ft_w.writeheader()
+                _ft_w.writerows(frame_trace_rows)
+            print(f"[AMD NATIVE] Frame trace CSV: {ft_path}", flush=True)
+        except Exception as exc:
+            print(f"[AMD NATIVE] WARNING: failed to write frame trace CSV: {exc}", flush=True)
 
     # Dump Checkpoint F (Frame 30 from final encoded MP4)
     if diagnostics_enabled and os.path.exists(output_file_str):
