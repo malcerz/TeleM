@@ -1,0 +1,3 @@
+C:\tools\mingw64\bin\cmake.exe -E rm -f CMakeFiles\telem_amd_native.dir/objects.a
+C:\tools\mingw64\bin\ar.exe qc CMakeFiles\telem_amd_native.dir/objects.a @CMakeFiles\telem_amd_native.dir\objects1.rsp
+C:\tools\mingw64\bin\g++.exe -O3 -DNDEBUG -shared -static-libgcc -static-libstdc++ -Wl,--no-insert-timestamp -o C:\_DEV\TeleM\native\d3d11_amf_pipeline\bin\telem_amd_native.dll -Wl,--out-implib,lib\libtelem_amd_native.dll.a -Wl,--major-image-version,0,--minor-image-version,0 -Wl,--whole-archive CMakeFiles\telem_amd_native.dir/objects.a -Wl,--no-whole-archive @CMakeFiles\telem_amd_native.dir\linkLibs.rsp

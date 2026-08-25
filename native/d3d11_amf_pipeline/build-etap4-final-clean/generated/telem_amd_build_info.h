@@ -1,0 +1,8 @@
+#pragma once
+
+#define TELEM_AMD_ABI_VERSION 6u
+#define TELEM_AMD_VERSION "1.0.0"
+#define TELEM_AMD_BUILD_ID "telem-amd-native/1.0.0+db7608a5a715.src6c3a1cdf0f1f"
+#define TELEM_AMD_BUILD_TIMESTAMP "2026-08-15T22:59:46+02:00"
+#define TELEM_AMD_GIT_COMMIT "db7608a5a715a6f8ae4c97a9d91b149fd8af7b5d"
+#define TELEM_AMD_SOURCE_HASH "6c3a1cdf0f1faec7c87ffb4b2f743af9dd7cc540a49f50628a1e86e03d5dff78"

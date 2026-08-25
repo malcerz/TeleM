@@ -21,22 +21,32 @@ def main() -> None:
     # Inicjalizacja kontrolera (most GUI ↔ logika biznesowa)
     _controller = AppController()
     window = MainWindow()
-    window._project_tab.set_controller(_controller)  # noqa: F841
+    window.set_controller(_controller)  # wiąże współdzielony podgląd (jeden raz)
     window.showMaximized()
 
-    # ── Tryb testowy: python TeleMGP0.py -test ──────────────────────────
-    if "-test" in sys.argv:
+    # Zgłoś błąd, jeśli brak bibliotek libmpv (podgląd GPU MPV niedostępny)
+    window.check_mpv_availability()
+
+    # ── Tryb testowy: python TeleMGP.py -test / --test ──────────────────
+    if "-test" in sys.argv or "--test" in sys.argv:
         base_dir = Path(__file__).resolve().parent.parent.parent.parent
-        video_dir = base_dir / "video"
-        video_path = video_dir / "GL010032.mp4"
+        video_dir = base_dir / "Video"
+        if not video_dir.exists():
+            video_dir = base_dir / "video"
+
+        video_path = video_dir / "GX020079.mp4"
+        if not video_path.exists():
+            video_path = video_dir / "GL010032.mp4"
+
         fit_path = video_dir / "Morning_Ride.fit"
 
         if video_path.exists() and fit_path.exists():
+            print(f"[TEST MODE] Wczytywanie plików testowych:\n  MP4: {video_path}\n  FIT: {fit_path}", flush=True)
             QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
                 [str(video_path)], "", str(fit_path),
             ))
         else:
-            print("[test] Brak plików testowych:", flush=True)
+            print("[TEST MODE] Brak plików testowych:", flush=True)
             if not video_path.exists():
                 print(f"  MP4: {video_path} — nie znaleziono", flush=True)
             if not fit_path.exists():

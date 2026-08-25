@@ -1,0 +1,13 @@
+{
+  "test": "static_overlay_cuda",
+  "frame_size_bytes": 33177600,
+  "target_frames": 1131,
+  "wall_s": 29.37415729998611,
+  "true_fps": 38.50323222721133,
+  "full_pipeline_fps": 27.15,
+  "stdin_write_avg_ms": 25.72122263552491,
+  "stdin_write_median_ms": 24.798800004646182,
+  "stdin_write_p95_ms": 29.847199970390648,
+  "stdin_write_p99_ms": 34.27230002125725,
+  "stdin_write_max_ms": 553.7819000310265
+}

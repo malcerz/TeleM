@@ -126,6 +126,10 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
         speed_samples, track_samples, alt_samples,
         target_fps, update_rate_step,
     )
-    raw = img.tobytes()
-    _SHM_BLOCKS[slot].buf[:_SHM_FRAME_SIZE] = raw
+    import numpy as np
+    shm_buf = _SHM_BLOCKS[slot].buf
+    frame_bytes = img.height * img.width * 4
+    shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
+    img_arr = np.asarray(img)
+    np.copyto(shm_arr, img_arr)
     return index, slot

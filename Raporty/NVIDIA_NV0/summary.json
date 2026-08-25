@@ -1,0 +1,12 @@
+{
+  "reference_video": "F:\\_DEV\\TeleM\\Video\\GX020079.MP4",
+  "reference_frame_count": 1131,
+  "source_duration_seconds": 37.7377,
+  "source_fps": 29.97002997002997,
+  "exported_frames": 1131,
+  "export_wall_seconds": 41.664258099975996,
+  "true_fps": 27.145569165928617,
+  "ffmpeg_command": "ffmpeg.EXE -y -hwaccel cuda -hwaccel_output_format cuda -i F:\\_DEV\\TeleM\\Video\\GX020079.MP4 -f rawvideo -pix_fmt rgba -s 3840x2160 -r 29.97002997002997 -i pipe:0 -i F:\\_DEV\\TeleM\\Video\\GX020079.MP4 -filter_complex [0:v]scale_cuda=format=yuv420p[base];[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload_cuda[ov];[base][ov]overlay_cuda=x=0:y=0[vtemp];[vtemp]null[vtemp2];[vtemp2]null[vout] -map [vout] -map 2:a? -map_metadata -1 -metadata:s:v:0 rotate=0 -c:v hevc_nvenc -preset p1 -tune hq -rc vbr -cq 24 -pix_fmt cuda -gpu 0 -c:a copy -b:v 40M -maxrate 40M -bufsize 80M F:\\_DEV\\TeleM\\Raporty\\NVIDIA_NV0\\nv0_output.mp4 -progress pipe:1 -nostats -loglevel error",
+  "output_file": "F:\\_DEV\\TeleM\\Raporty\\NVIDIA_NV0\\nv0_output.mp4",
+  "nvidia_smi_csv": "F:\\_DEV\\TeleM\\Raporty\\NVIDIA_NV0\\nvidia_samples.csv"
+}

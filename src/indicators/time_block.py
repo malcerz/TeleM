@@ -58,9 +58,18 @@ def render_time_block(
     font_date = load_font(font_path, date_px)
     font_time = load_font(font_path, time_px)
 
+    # Ensure sufficient temporary canvas size without hardcoded undersized clipping
+    label_txt = cfg.get("label", "Czas")
+    b_label = font_label.getbbox(label_txt) if hasattr(font_label, "getbbox") else (0, 0, 100, label_px)
+    b_date = font_date.getbbox(date_text) if hasattr(font_date, "getbbox") else (0, 0, 200, date_px)
+    b_time = font_time.getbbox(time_text) if hasattr(font_time, "getbbox") else (0, 0, 200, time_px)
+
+    req_w = max(b_label[2] - b_label[0], b_date[2] - b_date[0], b_time[2] - b_time[0]) + outline * 4 + 50
+    req_h = int(label_px * 1.3) + int(date_px * 1.2) + (b_time[3] - b_time[1]) + outline * 4 + 50
+
     tmp = Image.new(
         "RGBA",
-        (max(200, s(0.25, canvas_w)), max(100, s(0.12, canvas_h))),
+        (max(req_w, s(25.0, canvas_w)), max(req_h, s(15.0, canvas_h))),
         (0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(tmp)

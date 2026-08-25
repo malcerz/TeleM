@@ -1,0 +1,19 @@
+# ninja log v7
+3	17	8083923741698303	clean	d8d2d88be7eb3cfb
+25	2991	8083923742349107	CMakeFiles/telem_amd_native.dir/src/d3d11_amf_encoder.cpp.obj	cd495a4b4103c48e
+10	3082	8083923742199829	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	df0a23d4845cc6d3
+4	4430	8083923742124694	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	2e2c83edfbf6c103
+4432	4793	8083923789774465	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	5978970e6365b941
+4432	4793	8083923789774465	lib/libtelem_amd_native.dll.a	5978970e6365b941
+2	24	8083925409355365	clean	d8d2d88be7eb3cfb
+13	2941	8083925409904694	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	df0a23d4845cc6d3
+30	2989	8083925410069880	CMakeFiles/telem_amd_native.dir/src/d3d11_amf_encoder.cpp.obj	cd495a4b4103c48e
+6	4461	8083925409833505	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	2e2c83edfbf6c103
+4461	4788	8083925457399654	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	4da598c17e2349e2
+4461	4788	8083925457399654	lib/libtelem_amd_native.dll.a	4da598c17e2349e2
+2	18	8083925460451646	clean	d8d2d88be7eb3cfb
+16	3095	8083925461021821	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	df0a23d4845cc6d3
+34	3192	8083925461211776	CMakeFiles/telem_amd_native.dir/src/d3d11_amf_encoder.cpp.obj	cd495a4b4103c48e
+9	4452	8083925460951802	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	2e2c83edfbf6c103
+4453	4791	8083925508518186	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	4da598c17e2349e2
+4453	4791	8083925508518186	lib/libtelem_amd_native.dll.a	4da598c17e2349e2

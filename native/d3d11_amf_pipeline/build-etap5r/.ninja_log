@@ -1,0 +1,25 @@
+# ninja log v7
+4	20	8085953492694422	clean	d8d2d88be7eb3cfb
+61	6586	8085885646191858	CMakeFiles/d3d11_etap2c_poc.dir/src/d3d11_amf_encoder.cpp.obj	7dede2ebb0602af7
+29	3397	8085953493399821	CMakeFiles/telem_amd_native.dir/src/d3d11_amf_encoder.cpp.obj	7cef479a5b656e6d
+51	7256	8085885646097109	CMakeFiles/d3d11_etap2c_poc.dir/src/d3d11_vp_pipeline.cpp.obj	a2d8a1c07c254351
+16	3772	8086042637009157	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	b26ae31f62a2689e
+7	6843	8086046399836415	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	681fb909cd0f5554
+6844	7286	8086046472089823	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+6844	7286	8086046472089823	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669
+9	4609	8086046958975063	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	681fb909cd0f5554
+4611	4945	8086047008090887	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+4611	4945	8086047008090887	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669
+8	4730	8086047613532686	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	681fb909cd0f5554
+4731	5049	8086047663676605	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+4731	5049	8086047663676605	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669
+7	4509	8086048951599166	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	681fb909cd0f5554
+4510	4827	8086048999555930	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+4510	4827	8086048999555930	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669
+8	3539	8086050917985593	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	b26ae31f62a2689e
+3539	3867	8086050956303918	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+3539	3867	8086050956303918	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669
+16	4715	8086087531599309	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	b26ae31f62a2689e
+9	5980	8086087531527254	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	681fb909cd0f5554
+7	385	8086088384079407	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+7	385	8086088384079407	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669

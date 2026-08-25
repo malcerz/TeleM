@@ -1,0 +1,6 @@
+# ninja log v7
+16	2617	8084098752739570	CMakeFiles/telem_amd_native.dir/src/d3d11_amf_encoder.cpp.obj	eed23a9c556c788
+10	2681	8084098752688862	CMakeFiles/telem_amd_native.dir/src/d3d11_vp_pipeline.cpp.obj	dc31ae9b3596e617
+3	4238	8084098752616151	CMakeFiles/telem_amd_native.dir/src/telem_amd_native.cpp.obj	7f63af25a8d5224a
+4241	4769	8084098799906606	C:/_DEV/TeleM/native/d3d11_amf_pipeline/bin/telem_amd_native.dll	a2f3bc3d6dbd6669
+4241	4769	8084098799906606	lib/libtelem_amd_native.dll.a	a2f3bc3d6dbd6669

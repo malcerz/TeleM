@@ -28,21 +28,17 @@ def _nt_startupinfo() -> Any:
 
 
 def _test_hwaccel(hwaccel: str, ffmpeg_exe: str = "ffmpeg") -> bool:
-    """Test whether a given ``-hwaccel`` actually works by running a quick FFmpeg command.
-
-    Returns ``True`` if the device can be initialised, ``False`` otherwise.
-    """
+    """Test whether a given ``-hwaccel`` is supported by the FFmpeg binary."""
     try:
         r = subprocess.run(
-            [
-                ffmpeg_exe, "-hide_banner", "-hwaccel", hwaccel,
-                "-f", "lavfi", "-i", "color=c=black:s=352x288:d=0.1",
-                "-f", "null", "-",
-            ],
-            capture_output=True, timeout=10,
+            [ffmpeg_exe, "-hide_banner", "-hwaccels"],
+            capture_output=True, text=True, timeout=5,
             **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
         )
-        return r.returncode == 0
+        if r.returncode == 0:
+            lines = [line.strip() for line in r.stdout.splitlines()]
+            return hwaccel in lines
+        return False
     except Exception:
         return False
 
@@ -65,12 +61,17 @@ def detect_gpu_decoder(preferred_encoder: str = "", ffmpeg_exe: str = "ffmpeg") 
         _GPU_DECODER_CACHE = {}
 
     selected_hw = None
+    if preferred_encoder == "cpu":
+        _GPU_DECODER_CACHE[cache_key] = None
+        return None
 
     if preferred_encoder == "amd":
-        for hw in ("d3d11va", "dxva2", "vulkan", "vaapi"):
+        for hw in ("d3d11va", "dxva2"):
             if _test_hwaccel(hw, ffmpeg_exe):
                 selected_hw = hw
                 break
+        if selected_hw is None:
+            selected_hw = "d3d11va"
     elif preferred_encoder == "intel":
         # On dual GPU systems (NVIDIA + Intel), '-hwaccel qsv' often locks up FFmpeg
         # when decoding input video in a pipe. 'd3d11va' / 'dxva2' work reliably on Intel GPU.
@@ -177,3 +178,91 @@ def detect_best_encoder(ffmpeg_exe: str = "ffmpeg") -> str:
 
     _BEST_ENCODER_CACHE = "cpu"
     return "cpu"
+
+
+def _test_amd_gpu_compositor(ffmpeg_exe: str = "ffmpeg") -> bool:
+    """Test whether AMD GPU hardware compositing (OpenCL/D3D11) initialises safely.
+
+    Runs a 1-frame test command to verify that OpenCL device creation doesn't fail
+    with queue creation errors on AMD APU/iGPU driver contexts.
+    """
+    try:
+        r = subprocess.run(
+            [
+                ffmpeg_exe, "-hide_banner",
+                "-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl",
+                "-f", "lavfi", "-i", "color=c=black:s=320x240:d=0.1",
+                "-f", "lavfi", "-i", "color=c=white:s=100x100:d=0.1",
+                "-filter_complex", "[0:v]format=nv12,hwupload[b];[1:v]hwupload[o];[b][o]overlay_opencl[v];[v]hwdownload,format=nv12[out]",
+                "-map", "[out]", "-c:v", "hevc_amf", "-f", "null", "-",
+            ],
+            capture_output=True, timeout=5,
+            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def detect_amd_native_support(ffmpeg_exe: str = "ffmpeg") -> bool:
+    """Test whether native AMD C++ D3D11 + AMF pipeline is supported on this system."""
+    if os.name != "nt":
+        return False
+
+    def _release_com(ptr) -> None:
+        """Release an IUnknown COM pointer (ID3D11Device / ID3D11DeviceContext).
+
+        D3D11CreateDevice returns refcounted COM interfaces; every created
+        device/context must be Released or the device leaks driver-side kernel
+        objects.  Release is vtable slot 2 (IUnknown::Release).
+        """
+        if not ptr or not ptr.value:
+            return
+        try:
+            vtbl = ctypes.cast(ptr.value, ctypes.POINTER(ctypes.c_void_p))
+            release = ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_void_p)(vtbl[2])
+            release(ptr.value)
+        except Exception:
+            pass
+
+    pDevice = None
+    pContext = None
+    try:
+        import ctypes
+        d3d11 = ctypes.windll.d3d11
+        amf_dll = ctypes.windll.LoadLibrary("amfrt64.dll")
+
+        pDevice = ctypes.c_void_p()
+        pContext = ctypes.c_void_p()
+        featureLevel = ctypes.c_uint()
+
+        hr = d3d11.D3D11CreateDevice(
+            None, 1, None, 0x8, None, 0, 7,
+            ctypes.byref(pDevice), ctypes.byref(featureLevel), ctypes.byref(pContext)
+        )
+        if hr < 0:
+            return False
+
+        return _test_encoder("hevc_amf", ffmpeg_exe) or _test_encoder("h264_amf", ffmpeg_exe)
+    except Exception:
+        return False
+    finally:
+        # Always release the COM interfaces on success, failure and exception.
+        _release_com(pContext)
+        _release_com(pDevice)
+
+
+def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str = "ffmpeg") -> str:
+    """Select AMD overlay composition backend ('AMD_NATIVE_D3D11', 'D3D11_GPU', or 'SOFTWARE')."""
+    pref = preferred_backend.upper()
+    if pref == "SOFTWARE":
+        return "SOFTWARE"
+    if pref in ("AMD_NATIVE_D3D11", "AUTO", "GPU", "NATIVE"):
+        if detect_amd_native_support(ffmpeg_exe):
+            return "AMD_NATIVE_D3D11"
+        if _test_amd_gpu_compositor(ffmpeg_exe):
+            return "D3D11_GPU"
+        return "SOFTWARE"
+    return "SOFTWARE"
+
+

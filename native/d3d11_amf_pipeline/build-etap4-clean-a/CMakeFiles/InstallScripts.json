@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/_DEV/TeleM/native/d3d11_amf_pipeline/build-etap4-clean-a/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

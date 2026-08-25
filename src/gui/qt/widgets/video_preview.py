@@ -10,6 +10,12 @@ from PySide6.QtWidgets import (
 )
 
 try:
+    import shiboken6
+    _HAS_SHIBOKEN = True
+except ImportError:
+    _HAS_SHIBOKEN = False
+
+try:
     from PySide6.QtMultimediaWidgets import QVideoWidget
     _HAS_VIDEO_WIDGET = True
 except ImportError:
@@ -17,6 +23,25 @@ except ImportError:
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.seek_bar import SeekBar
+
+
+def preview_aspect_size(available_h: int, available_w: int) -> tuple[int, int]:
+    """Wspólny rozmiar podglądu 16:9 (ten sam w Projekt i Rendering).
+
+    Rozmiar wyliczany z wysokości zakładki (0.8 × wysokość), ale ograniczany
+    szerokością dostępną dla podglądu w Renderingu (~70% szerokości zakładki),
+    aby ten sam rozmiar zmieścił się w obu zakładkach (Rendering ma 75% obszaru
+    na podgląd, Projekt całą szerokość minus panel właściwości).
+    """
+    available_h = max(100, int(available_h))
+    available_w = max(300, int(available_w))
+    h = int(available_h * 0.8)
+    w = int(h * 16.0 / 9.0)
+    max_w = int(available_w * 0.70)
+    if w > max_w:
+        w = max_w
+        h = int(w * 9.0 / 16.0)
+    return (w, h)
 
 
 class TopLevelHUDWindow(QWidget):
@@ -200,6 +225,29 @@ class VideoPreview(QWidget):
 
         layout.addLayout(time_row)
 
+    # ── Widoczność narzędzi wycinania (✂/↩/↩) ──────────────────────────
+
+    def set_cut_tools_visible(self, visible: bool) -> None:
+        """Pokaż/ukryj przyciski wycinania.
+
+        Podgląd jest współdzielony między zakładkami Projekt i Rendering;
+        narzędzia wycinania są ukrywane w Projekcie, a pozostają w Rendering.
+        """
+        for btn in (self.cut_btn, self.undo_cut_btn, self.restore_cut_btn):
+            btn.setVisible(visible)
+
+    def _hud_alive(self) -> bool:
+        """Czy obiekt C++ nakładki HUD nadal istnieje (bezpieczeństwo przy zamykaniu)."""
+        hud = getattr(self, "hud_overlay", None)
+        if hud is None:
+            return False
+        if _HAS_SHIBOKEN:
+            try:
+                return shiboken6.isValid(hud)
+            except Exception:
+                return False
+        return True
+
     # ¦¦ Slot: nowa klatka podglądu ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 
     def is_using_mpv(self) -> bool:
@@ -239,7 +287,7 @@ class VideoPreview(QWidget):
 
     def hideEvent(self, event):
         super().hideEvent(event)
-        if hasattr(self, "hud_overlay"):
+        if self._hud_alive():
             self.hud_overlay.hide()
 
     def closeEvent(self, event):
@@ -301,17 +349,19 @@ class VideoPreview(QWidget):
         """Przechwytuje zdarzenia myszy i przemieszczania okna głównego."""
         if obj is self.window():
             if event.type() in (QEvent.Move, QEvent.Resize):
-                if self.is_using_mpv() and self.isVisible():
+                if self.is_using_mpv() and self.isVisible() and self._hud_alive():
                     self.hud_overlay.sync_geometry()
             elif event.type() == QEvent.WindowStateChange:
                 if self.window().isMinimized():
-                    self.hud_overlay.hide()
+                    if self._hud_alive():
+                        self.hud_overlay.hide()
                 else:
-                    if self.is_using_mpv() and self.isVisible():
+                    if self.is_using_mpv() and self.isVisible() and self._hud_alive():
                         self.hud_overlay.show()
                         self.hud_overlay.sync_geometry()
             elif event.type() in (QEvent.Hide, QEvent.Close):
-                self.hud_overlay.hide()
+                if self._hud_alive():
+                    self.hud_overlay.hide()
             elif event.type() == QEvent.Show:
                 if self.is_using_mpv() and self.isVisible():
                     self.hud_overlay.show()

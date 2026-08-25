@@ -16,6 +16,7 @@ except ImportError:
 from src.indicators.helpers import (
     _STATIC_CACHE,
     _static_cache_key,
+    compose_5q_optimized,
     load_font,
     parse_hex_color,
     s,
@@ -208,11 +209,40 @@ def _render_gauge_indicator(
             tw = draw.textbbox((0, 0), txt_main, font=_c_font)[2]
             ox = int(round(cfg.get("text_offset_x", 0.0) * out_gauge_size))
             oy = int(round(cfg.get("text_offset_y", 0.0) * out_gauge_size))
-            draw.text(
-                (_cx - tw // 2 + ox, _cy + int(radius * 0.15 / ss) + oy),
-                txt_main, font=_c_font,
-                fill=(text_color[0], text_color[1], text_color[2], 255),
-                stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
-            )
+            px = _cx - tw // 2 + ox
+            py = _cy + int(radius * 0.15 / ss) + oy
+            if compose_5q_optimized():
+                # ETAP 5Q: value-keyed centre-text tile cache (byte-exact
+                # src-over; tile pixels reproduce the direct draw exactly).
+                text_key = _static_cache_key(
+                    "gauge_value_text", txt_main, _c_font,
+                    text_color, outline,
+                )
+                cached = _STATIC_CACHE.get(text_key)
+                if cached is None:
+                    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+                    sl, st, sr, sb = probe.textbbox(
+                        (0, 0), txt_main, font=_c_font,
+                        stroke_width=max(1, outline),
+                    )
+                    tile = Image.new(
+                        "RGBA", (max(1, sr - sl), max(1, sb - st)), (0, 0, 0, 0)
+                    )
+                    tdraw = ImageDraw.Draw(tile)
+                    tdraw.text(
+                        (-sl, -st), txt_main, font=_c_font,
+                        fill=(text_color[0], text_color[1], text_color[2], 255),
+                        stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
+                    )
+                    cached = (tile, sl, st)
+                    _STATIC_CACHE[text_key] = cached
+                tile, sl, st = cached
+                img.alpha_composite(tile, (px + sl, py + st))
+            else:
+                draw.text(
+                    (px, py), txt_main, font=_c_font,
+                    fill=(text_color[0], text_color[1], text_color[2], 255),
+                    stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
+                )
 
     return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

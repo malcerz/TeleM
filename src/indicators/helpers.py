@@ -6,6 +6,7 @@ indicator modules can import them without circular dependencies.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 try:
@@ -79,15 +80,24 @@ def s(value: float, base: int) -> int:
 
 def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load a font from cache or disk. Falls back to default PIL font on failure."""
+    from src.indicators.profiling import get_overlay_profiler
+    profiler = get_overlay_profiler()
+    lookup_started = time.perf_counter()
     key = (str(font_path), int(size))
     font = FONT_CACHE.get(key)
     if font is not None:
+        profiler.record_operation(
+            "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
+        )
         return font
     try:
         font = ImageFont.truetype(str(font_path), size=int(size))
     except Exception:
         font = ImageFont.load_default()
     FONT_CACHE[key] = font
+    profiler.record_operation(
+        "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
+    )
     return font
 
 
@@ -102,6 +112,29 @@ The key is a tuple of all parameters that affect the static image."""
 def _static_cache_key(*args) -> tuple:
     """Build a hashable cache key from a set of static parameters."""
     return args
+
+
+# ── ETAP 5Q compose optimization toggle ────────────────────────────────────
+_COMPOSE_5Q: Optional[bool] = None
+
+
+def compose_5q_optimized() -> bool:
+    """ETAP 5Q: are the CPU compose optimizations enabled?
+
+    Reads ``AMD_COMPOSE_5Q`` once per process (REFERENCE = current code,
+    OPTIMIZED = value-keyed text-tile caches).  Default OPTIMIZED since ETAP
+    5W: it is byte-exact (pixel-exact gate), its caches are bounded per source
+    (verified constant across a 20-export soak), and at the pool8 production
+    config it is faster (REF ~34.9 FPS vs OPT ~37.5 FPS).  AMD_COMPOSE_5Q
+    override (REFERENCE) remains honored.
+    """
+    global _COMPOSE_5Q
+    if _COMPOSE_5Q is None:
+        import os
+        _COMPOSE_5Q = os.environ.get(
+            "AMD_COMPOSE_5Q", "OPTIMIZED"
+        ).strip().upper() == "OPTIMIZED"
+    return _COMPOSE_5Q
 
 
 _MAP_MASK_CACHE: dict[tuple[int, int], Image.Image] = {}

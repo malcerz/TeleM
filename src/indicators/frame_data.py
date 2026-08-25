@@ -9,8 +9,56 @@ between ``_render_preview`` (controller.py) and ``render_overlay_frame``
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
+
+from src.indicators.profiling import get_overlay_profiler
+
+
+_STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
+    "power_text": "power",
+    "atemp_text": "atemp",
+    "hr_text": "hr",
+    "cad_text": "cad",
+    "battery_text": "battery",
+}
+
+
+def build_active_fit_field_plan(
+    layout: dict[str, Any], discovered_fit_fields: Any
+) -> dict[str, list[str]]:
+    """Build immutable per-export telemetry dependencies from a HUD layout.
+
+    Dynamic FIT indicators encode their selected field in the stable GUI key
+    ``fit_{field_name}_text``.  The form (text/chart/gauge/...) does not alter
+    that dependency.  Exact field names are collected in sets so multiple
+    consumers can never cause duplicate per-frame resolution.
+    """
+    discovered = {str(field) for field in (discovered_fit_fields or [])}
+    active_fit: set[str] = set()
+    active_standard: set[str] = set()
+
+    for key, config in layout.get("indicators", {}).items():
+        if not isinstance(config, dict) or not config.get("enabled", True):
+            continue
+        if key.startswith("fit_") and key.endswith("_text"):
+            field_name = key[4:-5]
+            if field_name:
+                active_fit.add(field_name)
+            continue
+        standard_field = _STANDARD_RESOLVE_CONSUMERS.get(key)
+        if standard_field:
+            active_standard.add(standard_field)
+
+    return {
+        "discovered_fit_fields": sorted(discovered),
+        "active_fit_fields": sorted(active_fit),
+        "inactive_fit_fields": sorted(discovered - active_fit),
+        "active_fit_fields_missing_samples": sorted(active_fit - discovered),
+        "active_standard_resolve_fields": sorted(active_standard),
+        "unique_resolve_fields": sorted(active_fit | active_standard),
+    }
 
 
 def prepare_overlay_frame_data(
@@ -40,6 +88,8 @@ def prepare_overlay_frame_data(
     extra_field_keys: Optional[list[str]] = None,
     resolve_cache_value: Optional[Callable] = None,
     _range_cache: Optional[dict] = None,
+    fit_field_plan: Optional[dict[str, list[str]]] = None,
+    resolve_stats: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Prepare all values needed by ``compose_overlay`` for a single frame.
 
@@ -50,17 +100,24 @@ def prepare_overlay_frame_data(
 
     Returns a dict suitable for ``**kwargs`` to ``compose_overlay``.
     """
+    profiler = get_overlay_profiler()
     from src.telemetry_extract import (
         interpolate_speed, interpolate_distance, interpolate_altitude,
         interpolate_iso, interpolate_exposure, interpolate_temperature,
     )
 
     # ── Time strings ──────────────────────────────────────────────────
+    section_started = time.perf_counter()
     local_dt = target_dt + timedelta(hours=tz_offset_hours)
     date_text = local_dt.strftime("%Y-%m-%d")
     time_text = local_dt.strftime("%H:%M:%S")
+    profiler.record(
+        "telemetry.date_time",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     # ── Per-source indicator values (speed / dist / alt) ──────────────
+    section_started = time.perf_counter()
     indicator_values: dict[str, float] = {}
     for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
                     "alt_visual", "alt_text"):
@@ -102,8 +159,13 @@ def prepare_overlay_frame_data(
     iso_value = interpolate_iso(iso_samples or [], target_dt)
     exposure_value = interpolate_exposure(exposure_samples or [], target_dt)
     temp_value = interpolate_temperature(temperature_samples or [], target_dt)
+    profiler.record(
+        "telemetry.interpolation_lookups",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     # ── max_distance_m (per source) ───────────────────────────────────
+    section_started = time.perf_counter()
     if _range_cache and "max_distance_m" in _range_cache:
         max_distance_m = _range_cache["max_distance_m"]
     else:
@@ -156,13 +218,49 @@ def prepare_overlay_frame_data(
             if alts:
                 min_alt = min(alts)
                 max_alt = max(alts)
+    profiler.record(
+        "telemetry.range_calculations",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     # ── FIT / extra values ────────────────────────────────────────────
-    power_value = resolve_cache_value("power", target_dt) if resolve_cache_value else 0.0
-    atemp_value = resolve_cache_value("atemp", target_dt) if resolve_cache_value else 0.0
-    hr_value = resolve_cache_value("hr", target_dt) if resolve_cache_value else 0.0
-    cad_value = resolve_cache_value("cad", target_dt) if resolve_cache_value else 0.0
-    battery_value = resolve_cache_value("battery", target_dt) if resolve_cache_value else 0.0
+    section_started = time.perf_counter()
+
+    resolved_this_frame: dict[str, Any] = {}
+
+    def profiled_resolve(field_name: str):
+        if field_name in resolved_this_frame:
+            return resolved_this_frame[field_name]
+        if not resolve_cache_value:
+            resolved_this_frame[field_name] = 0.0
+            return 0.0
+        resolve_started = time.perf_counter()
+        value = resolve_cache_value(field_name, target_dt)
+        profiler.record(
+            "telemetry.resolve_cache_value",
+            (time.perf_counter() - resolve_started) * 1000.0,
+        )
+        resolved_this_frame[field_name] = value
+        if resolve_stats is not None:
+            resolve_stats["calls"] = int(resolve_stats.get("calls", 0)) + 1
+            per_field = resolve_stats.setdefault("per_field", {})
+            per_field[field_name] = int(per_field.get(field_name, 0)) + 1
+        return value
+
+    if fit_field_plan is None:
+        # Compatibility path for preview and non-AMD exporters.  AMD production
+        # always supplies a plan built once from its immutable export snapshot.
+        standard_resolve_fields = set(_STANDARD_RESOLVE_CONSUMERS.values())
+    else:
+        standard_resolve_fields = set(
+            fit_field_plan.get("active_standard_resolve_fields", [])
+        )
+
+    power_value = profiled_resolve("power") if "power" in standard_resolve_fields else None
+    atemp_value = profiled_resolve("atemp") if "atemp" in standard_resolve_fields else None
+    hr_value = profiled_resolve("hr") if "hr" in standard_resolve_fields else None
+    cad_value = profiled_resolve("cad") if "cad" in standard_resolve_fields else None
+    battery_value = profiled_resolve("battery") if "battery" in standard_resolve_fields else None
 
     # ── Elapsed time & average speed (for time_display) ───────────────
     elapsed_seconds = 0.0
@@ -190,28 +288,36 @@ def prepare_overlay_frame_data(
     extra_indicators: dict[str, tuple[float, str, str]] = {}
 
     # 1) FIT fields (from extra_field_keys list or from layout keys)
-    raw_fit_keys = extra_field_keys if extra_field_keys is not None else []
-    fit_keys = []
-    for k in raw_fit_keys:
-        if k.startswith("fit_") and k.endswith("_text"):
-            fit_keys.append(k)
-        else:
-            fit_keys.append(f"fit_{k}_text")
-            
-    for k in layout.get("indicators", {}):
-        if k.startswith("fit_") and k.endswith("_text") and k not in fit_keys:
-            fit_keys.append(k)
+    if fit_field_plan is not None:
+        fit_keys = [
+            f"fit_{field_name}_text"
+            for field_name in fit_field_plan.get("active_fit_fields", [])
+        ]
+    else:
+        raw_fit_keys = extra_field_keys if extra_field_keys is not None else []
+        fit_keys = []
+        for k in raw_fit_keys:
+            if k.startswith("fit_") and k.endswith("_text"):
+                fit_keys.append(k)
+            else:
+                fit_keys.append(f"fit_{k}_text")
+
+        for k in layout.get("indicators", {}):
+            if k.startswith("fit_") and k.endswith("_text") and k not in fit_keys:
+                fit_keys.append(k)
 
     for key in fit_keys:
         field_name = key[4:-5]
-        if resolve_cache_value:
-            val = resolve_cache_value(field_name, target_dt) or 0.0
-        else:
-            val = 0.0
+        val = profiled_resolve(field_name) or 0.0
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
         extra_indicators[key] = (val, unit, label)
+
+    profiler.record(
+        "telemetry.dynamic_fit_fields",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     # 2) Remaining dynamic indicators (non-hardcoded, not already captured)
     for key in list(layout.get("indicators", {}).keys()):
@@ -224,13 +330,23 @@ def prepare_overlay_frame_data(
         extra_indicators[key] = (val, unit, label)
 
     # ── Position / chart data ─────────────────────────────────────────
+    section_started = time.perf_counter()
     current_position = (
         current_index / max(1, total_frames - 1)
         if total_frames > 1 else 0.0
     )
+    profiler.record(
+        "telemetry.graph_data",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     # ── GPS track ─────────────────────────────────────────────────────
+    section_started = time.perf_counter()
     gps_trk: list = gps_track or []
+    profiler.record(
+        "telemetry.map_gps_data",
+        (time.perf_counter() - section_started) * 1000.0,
+    )
 
     return {
         "date_text": date_text,

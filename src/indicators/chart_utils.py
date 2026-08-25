@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 try:
@@ -14,9 +15,29 @@ except ImportError:
     ImageDraw = None  # type: ignore
 
 from src.indicators.helpers import load_font, load_font_cache_small
+from src.indicators.profiling import get_overlay_profiler
 
 
 _CHART_BG_CACHE: dict[tuple, tuple[Image.Image, list[tuple[float, float]], float, float]] = {}
+
+
+def _history_chart_cache_key(
+    history_values, width, height, line_color, line_thickness, fill_alpha,
+    fill_color, show_axes, grid_color, time_labels, value_labels, supersample,
+    custom_min_val, custom_max_val, label_count, label_units, unit,
+    show_average, label_font_size, font_path,
+) -> tuple:
+    return (
+        id(history_values) if history_values else None,
+        len(history_values) if history_values else 0,
+        width, height, tuple(line_color), line_thickness, fill_alpha,
+        tuple(fill_color) if fill_color else None, show_axes,
+        tuple(grid_color) if grid_color else None,
+        tuple(time_labels) if time_labels else None,
+        tuple(value_labels) if value_labels else None,
+        supersample, custom_min_val, custom_max_val, label_count,
+        label_units, unit, show_average, label_font_size, font_path,
+    )
 
 
 def generate_history_chart(
@@ -44,22 +65,22 @@ def generate_history_chart(
     font_path: Optional[str] = None,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
-    cache_key = (
-        id(history_values) if history_values else None,
-        len(history_values) if history_values else 0,
-        width, height,
-        tuple(line_color), line_thickness, fill_alpha,
-        tuple(fill_color) if fill_color else None,
-        show_axes,
-        tuple(grid_color) if grid_color else None,
-        tuple(time_labels) if time_labels else None,
-        tuple(value_labels) if value_labels else None,
-        supersample, custom_min_val, custom_max_val, label_count,
-        label_units, unit, show_average, label_font_size, font_path
+    profiler = get_overlay_profiler()
+    lookup_started = time.perf_counter()
+    cache_key = _history_chart_cache_key(
+        history_values, width, height, line_color, line_thickness, fill_alpha,
+        fill_color, show_axes, grid_color, time_labels, value_labels,
+        supersample, custom_min_val, custom_max_val, label_count, label_units,
+        unit, show_average, label_font_size, font_path,
     )
 
     bg_data = _CHART_BG_CACHE.get(cache_key)
+    profiler.record(
+        "graph.background_cache_lookup",
+        (time.perf_counter() - lookup_started) * 1000.0,
+    )
     if bg_data is None:
+        background_started = time.perf_counter()
         bg_data = _build_chart_bg(
             history_values=history_values, width=width, height=height,
             line_color=line_color, line_thickness=line_thickness,
@@ -74,12 +95,17 @@ def generate_history_chart(
         if len(_CHART_BG_CACHE) > 50:
             _CHART_BG_CACHE.clear()
         _CHART_BG_CACHE[cache_key] = bg_data
+        profiler.record(
+            "graph.background_axes_grid_polyline",
+            (time.perf_counter() - background_started) * 1000.0,
+        )
 
     bg_img, points, plot_y1, plot_y2, calc_thickness = bg_data
 
     if current_index is None or not points or not (0 <= current_index < len(points)):
         return bg_img
 
+    cursor_started = time.perf_counter()
     img = bg_img.copy()
     draw = ImageDraw.Draw(img)
     cursor_x, py = points[current_index]
@@ -94,7 +120,41 @@ def generate_history_chart(
         fill=(cursor_color[0], cursor_color[1], cursor_color[2], 255),
         outline=(line_color[0], line_color[1], line_color[2], 255),
     )
+    profiler.record(
+        "graph.current_cursor",
+        (time.perf_counter() - cursor_started) * 1000.0,
+    )
     return img
+
+
+def get_history_chart_background(
+    history_values: list[float], width: int, height: int,
+    line_color=(255, 0, 0), line_thickness=3, fill_alpha=50,
+    fill_color=None, show_axes=True, grid_color=None, time_labels=None,
+    value_labels=None, supersample=1, custom_min_val=None,
+    custom_max_val=None, label_count=2, label_units=False, unit="",
+    show_average=False, label_font_size=None, font_path=None,
+):
+    """Return immutable background geometry and its complete cache identity."""
+    cache_key = _history_chart_cache_key(
+        history_values, width, height, line_color, line_thickness, fill_alpha,
+        fill_color, show_axes, grid_color, time_labels, value_labels,
+        supersample, custom_min_val, custom_max_val, label_count, label_units,
+        unit, show_average, label_font_size, font_path,
+    )
+    if cache_key not in _CHART_BG_CACHE:
+        generate_history_chart(
+            history_values, width, height, line_color=line_color,
+            line_thickness=line_thickness, fill_alpha=fill_alpha,
+            fill_color=fill_color, current_index=None, show_axes=show_axes,
+            grid_color=grid_color, time_labels=time_labels,
+            value_labels=value_labels, supersample=supersample,
+            custom_min_val=custom_min_val, custom_max_val=custom_max_val,
+            label_count=label_count, label_units=label_units, unit=unit,
+            show_average=show_average, label_font_size=label_font_size,
+            font_path=font_path,
+        )
+    return (*_CHART_BG_CACHE[cache_key], cache_key)
 
 
 def _build_chart_bg(
@@ -275,4 +335,3 @@ def _build_chart_bg(
         calc_line_thickness = line_thickness
 
     return img, points, plot_y1, plot_y2, calc_line_thickness
-

@@ -110,6 +110,11 @@ class AppSignals(QObject):
     sig_progress = Signal(int, str)
     # (percent: int, status_text: str)
 
+    # ETAP GUI: backend-agnostic render progress contract.
+    # (completed_frames, total_frames, elapsed_s, fps, hud_state_or_None)
+    # hud_state = {"frame": int, "ts": float} — latest-state snapshot (1 Hz).
+    sig_render_progress = Signal(int, int, float, float, object)
+
     # Błąd
     sig_error = Signal(str)
     # (error_message: str)

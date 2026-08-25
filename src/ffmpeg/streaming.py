@@ -19,7 +19,12 @@ from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
 from src.ffmpeg.worker_cache import init_worker
-from src.ffmpeg.command_builder import _build_stream_ffmpeg_cmd
+from src.ffmpeg.command_builder import (
+    _build_stream_ffmpeg_cmd,
+    get_layout_hud_bbox,
+    get_layout_hud_regions,
+    is_nv_rot180_cuda,
+)
 from src.ffmpeg.shared_memory import (
     SharedFramePool,
     _init_worker_with_shm,
@@ -73,7 +78,8 @@ def _pipe_writer_thread(
 
 
 def _report_stream_progress(
-    done: int, total: int, start_time: float, progress_cb: Optional[Callable]
+    done: int, total: int, start_time: float, progress_cb: Optional[Callable],
+    on_render_progress: Optional[Callable] = None,
 ) -> None:
     """Report streaming progress."""
     elapsed = time.time() - start_time
@@ -83,6 +89,8 @@ def _report_stream_progress(
     stats = f"Stream: {done}/{total} | fps: {fps:.1f} | elapse: {h:02d}:{m:02d}:{s:02d}"
     if progress_cb:
         progress_cb(done, stats)
+    if on_render_progress:
+        on_render_progress(done, total, elapsed, fps, None)
 
 
 def _acquire_shm_slot(
@@ -99,18 +107,10 @@ def _acquire_shm_slot(
     """
     if process.poll() is not None:
         raise RuntimeError(
-            f"FFmpeg exited early (code {process.returncode})\n"
-            f"{chr(10).join(stdout_lines).strip()}"
+            f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
+            f"FFmpeg log output:\n" + "\n".join(stdout_lines[-30:])
         )
-    try:
-        return shm_pool.acquire(timeout=timeout)
-    except queue.Empty:
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"FFmpeg exited early (code {process.returncode})\n"
-                f"{chr(10).join(stdout_lines).strip()}"
-            )
-        raise
+    return shm_pool.acquire(timeout=timeout)
 
 
 def run_ffmpeg_with_progress(
@@ -182,7 +182,7 @@ def run_ffmpeg_with_progress(
 
 def stream_overlay_to_ffmpeg(
     ffmpeg_exe: str,
-    input_files: list,
+    input_files: str | list[str],
     output_file: str,
     duration_s: float,
     start_dt_utc: Optional[datetime],
@@ -193,10 +193,10 @@ def stream_overlay_to_ffmpeg(
     font_path: str,
     layout: dict[str, Any],
     field_samples: dict[str, Any],
+    max_distance_m: float | None = None,
     target_fps: float = 30.0,
     update_rate_step: int = 1,
-    max_distance_m: Optional[float] = None,
-    workers: Optional[int] = None,
+    workers: int = 4,
     iso_samples: Optional[list] = None,
     exposure_samples: Optional[list] = None,
     temperature_samples: Optional[list] = None,
@@ -209,32 +209,103 @@ def stream_overlay_to_ffmpeg(
     gpx_cad_samples: Optional[list] = None,
     fit_data: Optional[dict[str, list]] = None,
     gps_track: Optional[list] = None,
-    progress_cb: Optional[Callable] = None,
-    cancel_event: Optional[Any] = None,
-    active_process_holder: Optional[dict] = None,
     encoder: str = "nv",
     gpu: int = 0,
+    video_bitrate: str = "40M",
+    render_w: int = 3840,
+    render_h: int = 2160,
     resolution_name: str = "source",
-    video_bitrate: str = "",
     rotation_degrees: int = 0,
     container_rotation: int = 0,
-    overlay_w: int = 1920,
-    overlay_h: int = 1080,
-    render_w: int = 1920,
-    render_h: int = 1080,
+    overlay_w: int = 3840,
+    overlay_h: int = 2160,
+    progress_cb: Optional[Callable] = None,
+    on_render_progress: Optional[Callable] = None,
+    cancel_event: Optional[threading.Event] = None,
+    active_process_holder: Optional[dict] = None,
 ) -> int:
-    """
-    Producer-Consumer pipeline:
-    - Producer: ProcessPoolExecutor renders frames in parallel -> (index, bytes)
-    - Consumer: main thread receives, sorts by index, pipes to FFmpeg
-    """
-    # Pobierz cut_regions z layoutu (przekazane przez kontroler)
+    """Stream rendered overlay frames into an FFmpeg process."""
     cut_regions = layout.get("cut_regions", [])
 
     generation_fps = target_fps / update_rate_step
     total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
 
+    indicators = layout.get("indicators", {})
+    custom_texts = layout.get("custom_texts", [])
+    enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+    is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
+
+    if encoder in ("amd", "amd_native"):
+        from src.ffmpeg.detection import detect_amd_compose_backend
+        if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
+            from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
+            print("[STREAM AMD] Dispatching to production AMD_NATIVE_D3D11 GPU pipeline...", flush=True)
+            success = export_amd_native_d3d11(
+                ffmpeg_exe=ffmpeg_exe,
+                input_files=input_files,
+                output_file=str(output_file),
+                duration_s=duration_s,
+                video_width=render_w,
+                video_height=render_h,
+                start_dt_utc=start_dt_utc,
+                tz_offset_hours=tz_offset_hours,
+                speed_samples=speed_samples,
+                track_samples=track_samples,
+                alt_samples=alt_samples,
+                font_path=font_path,
+                layout=layout,
+                field_samples=field_samples,
+                target_fps=target_fps,
+                video_bitrate=video_bitrate,
+                max_distance_m=max_distance_m,
+                iso_samples=iso_samples,
+                exposure_samples=exposure_samples,
+                temperature_samples=temperature_samples,
+                gpx_speed_samples=gpx_speed_samples,
+                gpx_track_samples=gpx_track_samples,
+                gpx_alt_samples=gpx_alt_samples,
+                gpx_power_samples=gpx_power_samples,
+                gpx_atemp_samples=gpx_atemp_samples,
+                gpx_hr_samples=gpx_hr_samples,
+                gpx_cad_samples=gpx_cad_samples,
+                fit_data=fit_data,
+                gps_track=gps_track,
+                progress_cb=progress_cb,
+                on_render_progress=on_render_progress,
+                cancel_event=cancel_event,
+                active_process_holder=active_process_holder,
+            )
+            if success:
+                return total_overlay_frames
+            print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
+
+    hud_x, hud_y = 0, 0
+    stream_w, stream_h = overlay_w, overlay_h
+    hud_bbox: tuple[int, int, int, int] | None = None
+    hud_regions: list[tuple[int, int, int, int, int, int]] | None = None
+
+    if encoder == "amd" and not is_no_hud:
+        stream_w, stream_h, hud_regions = get_layout_hud_regions(layout, overlay_w, overlay_h, max_regions=3)
+        if len(hud_regions) == 1:
+            hud_x, hud_y = hud_regions[0][0], hud_regions[0][1]
+            stream_w, stream_h = hud_regions[0][4], hud_regions[0][5]
+            hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+            hud_regions = None
+            print(
+                f"[STREAM AMD] Single HUD sub-window: {stream_w}x{stream_h} at ({hud_x},{hud_y}) "
+                f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
+                flush=True,
+            )
+        else:
+            hud_bbox = None
+            print(
+                f"[STREAM AMD] Multi-Region HUD Atlas: {len(hud_regions)} regions, Atlas {stream_w}x{stream_h} "
+                f"({(stream_w*stream_h*4)/(1024*1024):.1f} MB vs {(overlay_w*overlay_h*4)/(1024*1024):.1f} MB)",
+                flush=True,
+            )
+
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
+    nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
     init_worker(
         overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
         iso_samples, exposure_samples, temperature_samples,
@@ -247,6 +318,9 @@ def stream_overlay_to_ffmpeg(
         target_fps, update_rate_step, total_overlay_frames,
         cut_regions=cut_regions,
         effective_rotation=effective_rotation,
+        hud_bbox=hud_bbox,
+        hud_regions=hud_regions,
+        hud_rotate_180=nv_rot180_cuda,
     )
 
     if cancel_event is not None and cancel_event.is_set():
@@ -255,8 +329,14 @@ def stream_overlay_to_ffmpeg(
     # Build FFmpeg input args
     hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
     # Manual rotation uses CPU filters (vflip/transpose) which cannot take
-    # CUDA frames, so decoded frames must stay in system memory in that case.
+    # hardware frames, so decoded frames must stay in system memory in that case.
     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+    if nv_rot180_cuda:
+        # NVIDIA rotation=180: handled on the CUDA fast-path (HUD rotated in
+        # Python), so the NVIDIA branch is not forced back to the CPU chain.
+        needs_cpu_rotation = False
+    if encoder == "amd" and needs_cpu_rotation:
+        hwaccel = None
     input_args: list[str] = []
     audio_input_args: list[str] = []
     if hwaccel:
@@ -279,24 +359,56 @@ def stream_overlay_to_ffmpeg(
             input_args.extend(["-i", str(input_file)])
         audio_input_args.extend(["-i", str(input_file)])
 
+    use_gpu_compositor = bool(layout.get("_use_gpu_compositor", False))
+
+    # NVIDIA rotation=180 production log — exactly one readable line.
+    if encoder == "nv" and effective_rotation == 180:
+        if nv_rot180_cuda:
+            print("[NVIDIA] ROT180 CUDA FAST PATH", flush=True)
+        else:
+            print("[NVIDIA] ROT180 CPU FALLBACK", flush=True)
+
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
-        overlay_w, overlay_h, generation_fps,
+        overlay_w, overlay_h, stream_w, stream_h, generation_fps,
         encoder, gpu, video_bitrate,
         render_w, render_h, resolution_name,
         container_rotation, rotation_degrees,
         hwaccel=hwaccel,
         cut_regions=cut_regions,
         audio_input_args=audio_input_args,
+        hud_x=hud_x,
+        hud_y=hud_y,
+        is_no_hud=is_no_hud,
+        hud_regions=hud_regions,
+        use_gpu_compositor=use_gpu_compositor,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
     print(
-        f"[STREAM] overlay={overlay_w}x{overlay_h}  render={render_w}x{render_h}  "
+        f"[STREAM] overlay={stream_w}x{stream_h} at ({hud_x},{hud_y})  render={render_w}x{render_h}  "
         f"gen_fps={generation_fps}  frames={total_overlay_frames}",
         flush=True,
     )
     print(f"[STREAM] filter: {filter_complex}", flush=True)
+
+    if filter_complex.startswith("direct_gpu_passthrough"):
+        print(f"[STREAM AMD] Direct GPU-resident passthrough (NO HUD mode, zero hwdownload, zero pipe write)", flush=True)
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            universal_newlines=True, startupinfo=startupinfo
+        )
+        if active_process_holder is not None:
+            active_process_holder["process"] = process
+
+        for line in process.stdout:
+            pass
+        process.wait()
+        return total_overlay_frames
 
     # Start FFmpeg
     startupinfo = None
@@ -331,7 +443,7 @@ def stream_overlay_to_ffmpeg(
     n_workers = min(workers, total_overlay_frames)
 
     # Frame size in bytes: RGBA = 4 bytes per pixel
-    frame_size = overlay_w * overlay_h * 4
+    frame_size = stream_w * stream_h * 4
 
     shm_pool: SharedFramePool | None = None
     if n_workers > 1:
@@ -363,7 +475,7 @@ def stream_overlay_to_ffmpeg(
                 pipe_queue.put(raw_bytes)
                 total_piped += 1
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb)
+                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
@@ -379,7 +491,8 @@ def stream_overlay_to_ffmpeg(
                 start_dt_utc, tz_offset_hours,
                 speed_samples, track_samples, alt_samples,
                 target_fps, update_rate_step, total_overlay_frames,
-                cut_regions, effective_rotation,
+                cut_regions, effective_rotation, hud_bbox, hud_regions,
+                nv_rot180_cuda,
             )
 
             print(
@@ -424,7 +537,7 @@ def stream_overlay_to_ffmpeg(
                         if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                             _report_stream_progress(
                                 total_piped, total_overlay_frames,
-                                start_time, progress_cb,
+                                start_time, progress_cb, on_render_progress,
                             )
 
                     # Aggressive top-up: fill ALL available slots in the window
@@ -452,7 +565,7 @@ def stream_overlay_to_ffmpeg(
                     next_idx += 1
                     _report_stream_progress(
                         total_piped, total_overlay_frames,
-                        start_time, progress_cb,
+                        start_time, progress_cb, on_render_progress,
                     )
 
         # Signal pipe writer to finish and close stdin
@@ -499,7 +612,44 @@ def stream_overlay_to_ffmpeg(
         if concat_txt.exists():
             concat_txt.unlink()
 
+    if nv_rot180_cuda:
+        # The local FFmpeg drops the display-matrix through overlay_cuda and
+        # cannot write one via -metadata/-display_rotation, so inject the
+        # rotation=180 display matrix into the video track's tkhd and verify it.
+        # Raises on failure so the export is never reported as successful with a
+        # physically-rotated file that is missing the rotation metadata.
+        _inject_rot180_displaymatrix(output_file, render_w, render_h)
+
     # Wydrukuj podsumowanie wydajności renderowania
     BenchmarkTracker.get_instance().print_summary()
 
     return total_piped
+
+
+def _inject_rot180_displaymatrix(
+    output_file: str,
+    render_w: int,
+    render_h: int,
+) -> bool:
+    """Inject and verify the rotation=180 display matrix into the output MP4.
+
+    Runs only in NVIDIA ROT180 CUDA mode (the caller guards with nv_rot180_cuda).
+    Raises RuntimeError if the displaymatrix cannot be written or verified, so the
+    export is reported as an error instead of silently producing a physically
+    rotated file marked as done.
+    """
+    try:
+        from src.ffmpeg.displaymatrix import write_rotation_180_displaymatrix
+
+        ok = write_rotation_180_displaymatrix(output_file, render_w, render_h)
+        if not ok:
+            raise RuntimeError(
+                "displaymatrix rotate=180 could not be written/verified "
+                "(unexpected MP4 structure)"
+            )
+        print("[NVIDIA] displaymatrix rotate=180 injected and verified", flush=True)
+        return True
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"displaymatrix rotate=180 injection failed: {e}") from e

@@ -36,6 +36,20 @@ class CutMixin:
         removed = self._cut_regions.pop()
         self.signals.sig_cut_region_removed.emit(idx)
 
+    def remove_cut_region(self, start_s: float, end_s: float) -> None:
+        """Usuń dokładnie pasujący fragment wycięcia (np. granicę zakresu IN/OUT).
+
+        Dodatkowa, nieinwazyjna pomocnik dla GUI — usuwa region (start_s, end_s),
+        jeżeli istnieje w liście, i emituje aktualizację osi czasu.
+        """
+        target = (float(start_s), float(end_s))
+        if target not in self._cut_regions:
+            return
+        idx = self._cut_regions.index(target)
+        self._cut_regions.pop(idx)
+        self.signals.sig_cut_region_removed.emit(idx)
+        self._render_preview()
+
     def clear_cut_regions(self) -> None:
         """Przywróć wszystkie wycięte fragmenty."""
         if not self._cut_regions:
