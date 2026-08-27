@@ -177,7 +177,7 @@
       "text_color": "#FFFFFF",
       "show_x_axis_values": true,
       "show_y_axis_values": true,
-      "label_count": 4,
+      "label_count": 5,
       "label_font_size": 1.9,
       "label_units": false,
       "show_average": false,
