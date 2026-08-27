@@ -329,8 +329,8 @@ class TestExportOptions:
         assert hasattr(rt, "cmb_rotation")
         assert hasattr(rt, "cmb_update_rate")
         assert hasattr(rt, "cmb_hud_resolution")
-        assert [rt.cmb_hud_resolution.itemText(i) for i in range(rt.cmb_hud_resolution.count())] == ["100%", "75%", "50%"]
-        assert rt.cmb_hud_resolution.currentText() == "100%"
+        assert [rt.cmb_hud_resolution.itemText(i) for i in range(rt.cmb_hud_resolution.count())] == ["Auto", "100%", "75%", "50%"]
+        assert rt.cmb_hud_resolution.currentText() == "Auto"
         assert hasattr(rt, "edit_bitrate")
         assert hasattr(rt, "edit_output")
         assert hasattr(rt, "btn_render")

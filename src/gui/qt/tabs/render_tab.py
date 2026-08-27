@@ -166,11 +166,12 @@ class RenderTab(QWidget):
         form.addRow("Częstotliwość HUD:", self.cmb_update_rate)
 
         self.cmb_hud_resolution = QComboBox()
-        self.cmb_hud_resolution.addItems(["100%", "75%", "50%"])
-        self.cmb_hud_resolution.setCurrentText("100%")
+        self.cmb_hud_resolution.addItems(["Auto", "100%", "75%", "50%"])
+        self.cmb_hud_resolution.setCurrentText("Auto")
         self.cmb_hud_resolution.setToolTip(
             "Rozmiar rastra HUD względem rozdzielczości eksportu; "
-            "nie zmienia częstotliwości HUD ani rozdzielczości filmu."
+            "Auto wybiera zwalidowany 75% dla Intel 4K (2560x1440), "
+            "dla pozostałych 100%."
         )
         form.addRow("Rozdzielczość HUD:", self.cmb_hud_resolution)
 
@@ -457,11 +458,7 @@ class RenderTab(QWidget):
             "resolution": self.cmb_resolution.currentText(),
             "rotation": self.cmb_rotation.currentText(),
             "update_rate": self.cmb_update_rate.currentText(),
-            "hud_resolution_scale": {
-                "100%": 1.0,
-                "75%": 0.75,
-                "50%": 0.5,
-            }.get(self.cmb_hud_resolution.currentText(), 1.0),
+            "hud_resolution_scale": self.cmb_hud_resolution.currentText(),
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
         }
@@ -869,11 +866,13 @@ class RenderTab(QWidget):
             )
             if not overlay_data:
                 return None
-            hud_scale = {
-                "100%": 1.0,
-                "75%": 0.75,
-                "50%": 0.5,
-            }.get(self.cmb_hud_resolution.currentText(), 1.0)
+            from src.ffmpeg.streaming import resolve_hud_resolution_policy
+            hud_scale, _ = resolve_hud_resolution_policy(
+                encoder=self.cmb_encoder.currentText(),
+                render_w=tw,
+                render_h=th,
+                user_option=self.cmb_hud_resolution.currentText(),
+            )
             hud_w = max(2, int(round(tw * hud_scale)))
             hud_h = max(2, int(round(th * hud_scale)))
             if hud_w % 2:

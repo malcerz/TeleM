@@ -693,6 +693,55 @@ def run_ffmpeg_with_progress(
         active_process_holder["process"] = None
 
 
+def resolve_hud_resolution_policy(
+    encoder: str,
+    render_w: int,
+    render_h: int,
+    user_option: Any = "Auto",
+) -> tuple[float, str]:
+    """Resolve the effective HUD resolution scale and generate a diagnostic message.
+
+    Policy:
+    - Manual 100% (1.0) -> 1.0
+    - Manual 75% (0.75) -> 0.75
+    - Manual 50% (0.5) -> 0.5
+    - Auto (or default):
+      - If encoder == "intel" and (render_w, render_h) == (3840, 2160):
+        -> 0.75 (2560x1440 scaled HUD, validated in ETAP 6B with +41.7% speedup)
+      - Otherwise (non-4K Intel, AMD, NVIDIA, CPU):
+        -> 1.0 (reference native canvas)
+    - Fallback: 1.0 if unrecognized.
+    """
+    try:
+        if isinstance(user_option, (int, float)):
+            if abs(user_option - 0.75) < 1e-4:
+                return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+            if abs(user_option - 0.5) < 1e-4:
+                return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+            if abs(user_option - 1.0) < 1e-4:
+                return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+
+        opt_str = str(user_option).strip() if user_option is not None else "Auto"
+        if opt_str == "75%":
+            return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+        if opt_str == "50%":
+            return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+        if opt_str == "100%":
+            return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+
+        # Auto mode
+        if opt_str in ("Auto", "auto", ""):
+            if encoder == "intel" and render_w == 3840 and render_h == 2160:
+                return 0.75, f"[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> {render_w}x{render_h})"
+            elif encoder == "intel":
+                return 1.0, f"[INTEL] HUD resolution policy: AUTO -> 100% ({render_w}x{render_h})"
+            else:
+                return 1.0, ""
+    except Exception:
+        pass
+    return 1.0, "[INTEL] HUD resolution policy: FALLBACK 100%" if encoder == "intel" else ""
+
+
 def stream_overlay_to_ffmpeg(
     ffmpeg_exe: str,
     input_files: str | list[str],
@@ -733,20 +782,31 @@ def stream_overlay_to_ffmpeg(
     container_rotation: int = 0,
     overlay_w: int = 3840,
     overlay_h: int = 2160,
-    hud_resolution_scale: float = 1.0,
+    hud_resolution_scale: Any = 1.0,
     progress_cb: Optional[Callable] = None,
     on_render_progress: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
-    if hud_resolution_scale not in (1.0, 0.75, 0.5):
-        hud_resolution_scale = 1.0
+    hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
+        encoder=encoder,
+        render_w=render_w,
+        render_h=render_h,
+        user_option=hud_resolution_scale,
+    )
+    if policy_msg:
+        print(policy_msg, flush=True)
+
     if hud_resolution_scale != 1.0:
         # Direct callers may not precompute overlay_w/overlay_h. For the
         # scaled modes the export canvas is the source of truth.
-        overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
-        overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
+            overlay_w = 2560
+            overlay_h = 1440
+        else:
+            overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
+            overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
         if overlay_w % 2:
             overlay_w += 1
         if overlay_h % 2:
