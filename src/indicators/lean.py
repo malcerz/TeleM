@@ -25,6 +25,7 @@ raster itself is never rotated; only the graphic is rotated around its centre.
 
 from __future__ import annotations
 
+import os
 import math
 from pathlib import Path
 from typing import Any, Optional
@@ -41,7 +42,18 @@ from src.indicators.helpers import (
 
 _LEAN_BASE_CACHE = _BoundedStaticCache(max_entries=64)
 _LEAN_GRAPHIC_CACHE = _BoundedStaticCache(max_entries=16)
+_LEAN_PAD_CACHE = _BoundedStaticCache(max_entries=32)
+_TEXT_SIZE_CACHE = _BoundedStaticCache(max_entries=256)
 _ROWER_ICO = Path(__file__).resolve().parents[2] / "wzor" / "rower_ico.png"
+
+
+def clear_lean_caches() -> None:
+    """Explicitly clear all lean indicator caches."""
+    _LEAN_BASE_CACHE.clear()
+    _LEAN_GRAPHIC_CACHE.clear()
+    _LEAN_PAD_CACHE.clear()
+    _TEXT_SIZE_CACHE.clear()
+    _TEXT_TILE_CACHE.clear()
 
 
 def _rgb(value: Any, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
@@ -161,18 +173,54 @@ def _rotate_paste_params(
     """Pad-rotate around the pivot.
 
     Returns ``(pad, paste_x, paste_y, screen_pivot_x, screen_pivot_y)``.
-
-    The graphic is composited onto a square pad with its pivot at the pad
-    CENTRE, the pad is rotated in place (so the pivot point never moves), and
-    the pad is pasted so the pivot lands where it sat when the graphic was
-    centred in the widget.  This keeps the pivot at the same screen position
-    for every angle — the bike looks "planted" at its pivot instead of
-    rotating around the image centre.
     """
     pad = 2 * max(gw, gh) + 4
     screen_pivot_x = raster_w / 2.0 + (pivot_px - gw / 2.0)
     screen_pivot_y = center_y + (pivot_py - gh / 2.0)
     return pad, screen_pivot_x - pad / 2.0, screen_pivot_y - pad / 2.0, screen_pivot_x, screen_pivot_y
+
+
+def _get_or_create_padded_graphic(cfg: dict[str, Any], g: int):
+    graphic = _load_lean_graphic(cfg, g)
+    if graphic is None:
+        return None, 0, 0, 0, 0
+    gw, gh = graphic.size
+    pivot_px, pivot_py = _graphic_pivot(cfg, gw, gh)
+    key = (id(graphic), gw, gh, pivot_px, pivot_py)
+    cached = _LEAN_PAD_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    pad = 2 * max(gw, gh) + 4
+    pad_img = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
+    pad_img.alpha_composite(
+        graphic,
+        (int(round(pad / 2.0 - pivot_px)), int(round(pad / 2.0 - pivot_py))),
+    )
+    res = (pad_img, pad, gw, gh, pivot_px, pivot_py)
+    _LEAN_PAD_CACHE[key] = res
+    return res
+
+
+def _cached_text_size_fast(text_str: str, font_path: str, font_size: int, stroke: int, font) -> tuple[int, int]:
+    if not text_str:
+        return 0, 0
+    k = (text_str, font_path, font_size, stroke)
+    cached = _TEXT_SIZE_CACHE.get(k)
+    if cached is not None:
+        return cached
+    tile_data = _TEXT_TILE_CACHE.get((text_str, font_path, font_size, (255, 255, 255, 255), stroke, (0, 0, 0, 230), "ma"))
+    if tile_data is not None:
+        _, b0, b1, b2, b3 = tile_data
+        res = (max(0, b2 - b0), max(0, b3 - b1))
+        _TEXT_SIZE_CACHE[k] = res
+        return res
+    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dummy)
+    box = dd.textbbox((0, 0), text_str, font=font, stroke_width=stroke)
+    res = (max(0, box[2] - box[0]), max(0, box[3] - box[1]))
+    _TEXT_SIZE_CACHE[k] = res
+    return res
 
 
 def _render_lean_indicator(
@@ -221,11 +269,8 @@ def _render_lean_indicator(
     title = raw_title.upper() if uppercase_title else raw_title
     value_text = f"{angle:+.{decimals}f}\u00b0" if (show_value and not missing) else ""
 
-    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    dd = ImageDraw.Draw(dummy)
-    title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label and title else 0
-    value_w = _text_size(dd, value_text, value_font, text_stroke)[0] if value_text else 0
-    value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if value_text else 0
+    title_w, title_h = _cached_text_size_fast(title, font_path, title_fs, text_stroke, title_font) if show_label and title else (0, 0)
+    value_w, value_h = _cached_text_size_fast(value_text, font_path, value_fs, text_stroke, value_font) if value_text else (0, 0)
     title_gap = 5 * ss if title_h else 0
     value_gap = 4 * ss if value_h else 0
 
@@ -271,18 +316,11 @@ def _render_lean_indicator(
         _LEAN_BASE_CACHE[static_key] = base
 
     img = base.copy()
-    d = ImageDraw.Draw(img)
 
-    graphic = _load_lean_graphic(cfg, g)
-    if graphic is not None:
-        gw, gh = graphic.size
-        pivot_px, pivot_py = _graphic_pivot(cfg, gw, gh)
-        pad, paste_x, paste_y, _sx, _sy = _rotate_paste_params(gw, gh, pivot_px, pivot_py, raster_w, center_y)
-        pad_img = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
-        pad_img.alpha_composite(
-            graphic,
-            (int(round(pad / 2.0 - pivot_px)), int(round(pad / 2.0 - pivot_py))),
-        )
+    pad_data = _get_or_create_padded_graphic(cfg, g)
+    if pad_data[0] is not None:
+        pad_img, pad_size, gw, gh, pivot_px, pivot_py = pad_data
+        _, paste_x, paste_y, _sx, _sy = _rotate_paste_params(gw, gh, pivot_px, pivot_py, raster_w, center_y)
         rotated = pad_img.rotate(
             angle,
             resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
