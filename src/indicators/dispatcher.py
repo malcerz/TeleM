@@ -82,7 +82,9 @@ def render_value_indicator(
         # 1 -> 0.6% min_dim, 2 -> 0.8% min_dim, ..., 10 -> 2.4% min_dim
         _thickness_rel = 0.6 + (_thickness_raw - 1) * 0.2
         thickness = float(max(1, s(_thickness_rel, min_dim)))
-    size_px = s(cfg.get("size", 0.1), min_dim if form == "gauge" else canvas_w)
+    is_vert_bar = form in ("bar", "segment_bar") and str(cfg.get("orientation", "horizontal")).strip().lower() == "vertical"
+    size_base = canvas_h if is_vert_bar else (min_dim if form == "gauge" else canvas_w)
+    size_px = s(cfg.get("size", 0.1), size_base)
     ss = max(1, supersample)
 
     _kwargs = dict(

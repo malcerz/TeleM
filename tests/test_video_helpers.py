@@ -234,13 +234,32 @@ def test_intel_and_cpu_pipeline_unchanged():
         encoder="intel", rotation_degrees=0, **base_kwargs,
     )
     intel_cmd_r, intel_fc_r = _build_stream_ffmpeg_cmd(
-        encoder="intel", rotation_degrees=180, **base_kwargs,
+        encoder="intel", rotation_degrees=180,
+        **{**base_kwargs, "container_rotation": 180},
     )
     assert "hevc_qsv" in intel_cmd
     assert intel_cmd[intel_cmd.index("-pix_fmt", intel_cmd.index("-c:v")) + 1] == "nv12"
     assert _encoder_args(intel_cmd) == _encoder_args(intel_cmd_r)
     assert "overlay_cuda" not in intel_fc_r
-    assert "vflip,hflip" in intel_fc_r
+    # ETAP 5D: autorotate contract -- no baked manual flips for Intel.
+    assert "vflip,hflip" not in intel_fc_r
+    assert "hwdownload,format=nv12" in intel_fc
+    assert "overlay_qsv" not in intel_fc
+
+    intel_10_cmd, intel_10_fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, intel_cpu_download_format="p010le", **base_kwargs,
+    )
+    assert "hwdownload,format=p010le" in intel_10_fc
+    assert "-pix_fmt" in intel_10_cmd
+    assert intel_10_cmd[intel_10_cmd.index("-pix_fmt", intel_10_cmd.index("-c:v")) + 1] == "p010le"
+
+    intel_hdr_cmd, intel_hdr_fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, intel_cpu_download_format="p010le",
+        intel_cpu_software_decode=True, **base_kwargs,
+    )
+    assert "[0:v]format=p010le" in intel_hdr_fc
+    assert "hwdownload" not in intel_hdr_fc
+    assert intel_hdr_cmd[intel_hdr_cmd.index("-pix_fmt", intel_hdr_cmd.index("-c:v")) + 1] == "p010le"
 
     intel_native_cmd, intel_native_fc = _build_stream_ffmpeg_cmd(
         encoder="intel", rotation_degrees=0, intel_gpu_resident=True, **base_kwargs,
@@ -251,6 +270,15 @@ def test_intel_and_cpu_pipeline_unchanged():
     assert "overlay_cuda" not in intel_native_fc
     assert "hwdownload" not in intel_native_fc
     assert all(token not in intel_native_cmd for token in ("cuda", "nvenc", "amf"))
+
+    region_cmd, region_fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, intel_gpu_resident=True,
+        stream_w=704, stream_h=410, hud_x=102, hud_y=50, **base_kwargs,
+    )
+    assert "-s" in region_cmd
+    assert region_cmd[region_cmd.index("-s") + 1] == "704x410"
+    assert "overlay_qsv=x=102:y=50" in region_fc
+    assert "hwdownload" not in region_fc
 
     # CPU (libx265) - rotation must not alter the encoder settings
     cpu_cmd, cpu_fc = _build_stream_ffmpeg_cmd(
@@ -264,6 +292,196 @@ def test_intel_and_cpu_pipeline_unchanged():
     assert _encoder_args(cpu_cmd) == _encoder_args(cpu_cmd_r)
     assert "overlay_cuda" not in cpu_fc_r
     assert "vflip,hflip" in cpu_fc_r
+
+
+def _cpu_ref_kwargs(**overrides):
+    base = dict(
+        ffmpeg_exe="ffmpeg",
+        input_args=["-i", "test.mp4"],
+        output_file="out.mp4",
+        overlay_w=1920,
+        overlay_h=1080,
+        generation_fps=30.0,
+        gpu=0,
+        video_bitrate="40M",
+        render_w=1920,
+        render_h=1080,
+        resolution_name="source",
+    )
+    base.update(overrides)
+    return base
+
+
+# ── INTEL ETAP 4A: CPU_REFERENCE bounded-HUD transport ───────────────────────
+
+def test_intel_cpu_ref_region_graph():
+    """CPU_REFERENCE + REGION: rawvideo input shrinks to the bbox and the SW
+    overlay is positioned at the bbox origin; QSV decode/download stays nv12."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=704, stream_h=410, hud_x=102, hud_y=50,
+        intel_gpu_resident=False, **_cpu_ref_kwargs(),
+    )
+    assert "-s" in cmd
+    assert cmd[cmd.index("-s") + 1] == "704x410"
+    assert "overlay=102:50" in fc
+    assert "hwdownload,format=nv12" in fc
+    assert "overlay_qsv" not in fc
+    assert "hevc_qsv" in cmd
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "nv12"
+
+
+def test_intel_cpu_ref_region_rotation_graphs():
+    """ETAP 5D contract: Intel relies on import autorotate -- the REGION graph
+    must NOT bake manual rotation transforms anymore, and the HUD overlay x/y
+    stays in the shared upright coordinate space."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    for rotation, token in ((90, "transpose=1"), (180, "vflip,hflip"), (270, "transpose=2")):
+        cmd, fc = _build_stream_ffmpeg_cmd(
+            encoder="intel", rotation_degrees=rotation, container_rotation=rotation,
+            stream_w=704, stream_h=410, hud_x=102, hud_y=50,
+            intel_gpu_resident=False, **_cpu_ref_kwargs(),
+        )
+        assert token not in fc, rotation
+        assert "overlay=102:50" in fc, rotation
+        assert cmd[cmd.index("-s") + 1] == "704x410", rotation
+
+
+def test_intel_cpu_ref_region_hdr_p010_graph():
+    """HDR/P010 CPU_REFERENCE with REGION: software decode stays hwdownload-free."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=704, stream_h=410, hud_x=102, hud_y=50,
+        intel_gpu_resident=False,
+        intel_cpu_software_decode=True,
+        intel_cpu_download_format="p010le",
+        **_cpu_ref_kwargs(),
+    )
+    assert "hwdownload" not in fc
+    assert "format=p010le[base]" in fc
+    assert "overlay=102:50" in fc
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "p010le"
+
+
+def test_intel_hud_region_gate_switches(monkeypatch):
+    """ETAP 3C/4A gate: native keeps its switch; CPU_REFERENCE has its own
+    switch and is limited to unrotated projects."""
+    from src.ffmpeg.streaming import _intel_hud_region_gate as gate
+
+    monkeypatch.delenv("TELEM_INTEL_HUD_REGION", raising=False)
+    monkeypatch.delenv("TELEM_INTEL_CPU_REF_HUD_REGION", raising=False)
+    # Native: ETAP 3C switch decides; rotation is irrelevant for native.
+    assert gate(True, 180, 180) is True
+    monkeypatch.setenv("TELEM_INTEL_HUD_REGION", "0")
+    assert gate(True, 0, 0) is False
+    monkeypatch.delenv("TELEM_INTEL_HUD_REGION", raising=False)
+
+    # CPU_REFERENCE: default ON.  ETAP 5D: with the Intel autorotate import
+    # contract, source rotation no longer forces FULL_CANVAS; other encoders
+    # (legacy call shape without encoder=) keep the unrotated-only rule.
+    assert gate(False, 0, 0) is True
+    assert gate(False, 180, 180, "intel") is True
+    assert gate(False, 180, 0) is False
+    assert gate(False, 90, 0) is False
+    assert gate(False, 0, 270) is False
+    # Kill switch applies to both shapes.
+    monkeypatch.setenv("TELEM_INTEL_CPU_REF_HUD_REGION", "0")
+    assert gate(False, 0, 0) is False
+    assert gate(False, 180, 180, "intel") is False
+
+
+# ── INTEL ETAP 4B: measured REGION eligibility + scale!=1 graphs ─────────────
+
+def _ratio_layout():
+    """Two corner text indicators -> wide union bbox (>0.85 of 1080p canvas)."""
+    return {"indicators": {
+        "speed_text": {"type": "speed_text", "x": 140, "y": 140,
+                       "width": 220, "height": 80, "enabled": True},
+        "dist_text": {"type": "dist_text", "x": 1560, "y": 1040,
+                      "width": 220, "height": 70, "enabled": True},
+    }}
+
+
+def _small_layout():
+    return {"indicators": {
+        "speed_text": {"type": "speed_text", "x": 200, "y": 200,
+                       "width": 220, "height": 80, "enabled": True},
+    }}
+
+
+def test_intel_hud_region_decision_threshold(monkeypatch):
+    """ETAP 4B policy: default 0.85 gate, env-overridable, even-aligned crop."""
+    from src.ffmpeg.streaming import _intel_hud_region_decision as decide
+
+    monkeypatch.delenv("TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO",
+                       raising=False)
+    # Small cluster -> REGION with an even-aligned rectangle.
+    hx, hy, sw, sh, ratio, mode = decide(_small_layout(), 1920, 1080)
+    assert mode == "region"
+    assert 0.0 < ratio < 0.5
+    assert hx % 2 == 0 and hy % 2 == 0 and sw % 2 == 0 and sh % 2 == 0
+    assert sw <= 1920 and sh <= 1080
+
+    # Corner-spread layout crosses the default threshold -> FULL fallback.
+    _, _, _, _, ratio_big, mode_big = decide(_ratio_layout(), 1920, 1080)
+    assert mode_big == "full_threshold"
+    assert ratio_big >= 0.85
+
+    # Threshold override: raising it re-enables REGION for the same layout;
+    # lowering it forces FULL even for the small cluster.
+    monkeypatch.setenv("TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO", "0.9")
+    assert decide(_ratio_layout(), 1920, 1080)[5] == "region"
+    monkeypatch.setenv("TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO", "0.03")
+    assert decide(_small_layout(), 1920, 1080)[5] == "full_threshold"
+
+
+def test_intel_cpu_ref_region_scale_target_res_graph():
+    """CPU_REFERENCE + REGION + target_res != source: base scales via lanczos
+    after hwdownload while HUD keeps its bbox geometry (canvas == render)."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=476, stream_h=216, hud_x=530, hud_y=280,
+        intel_gpu_resident=False,
+        render_w=1280, render_h=720,
+        resolution_name="720p",
+        overlay_w=1280, overlay_h=720,
+        ffmpeg_exe="ffmpeg", input_args=["-i", "test.mp4"],
+        output_file="out.mp4", generation_fps=30.0, gpu=0,
+        video_bitrate="40M",
+    )
+    assert "hwdownload,format=nv12,scale=1280:720:flags=lanczos" in fc
+    assert "overlay=530:280" in fc
+    assert cmd[cmd.index("-s") + 1] == "476x216"
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "nv12"
+
+
+def test_intel_cpu_ref_region_canvas_scale_graph():
+    """HUD canvas smaller than render: the bbox is bilinear-scaled by
+    scale_x/scale_y and positioned at the rounded scaled origin."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=176, stream_h=108, hud_x=265, hud_y=140,
+        intel_gpu_resident=False,
+        render_w=1280, render_h=720,
+        resolution_name="source",
+        overlay_w=640, overlay_h=360,
+        ffmpeg_exe="ffmpeg", input_args=["-i", "test.mp4"],
+        output_file="out.mp4", generation_fps=30.0, gpu=0,
+        video_bitrate="40M",
+    )
+    # scale_x = render/canvas = 2.0 -> 176*2 x 108*2 and 265*2/140*2
+    assert "format=rgba,scale=352:216:flags=bilinear" in fc
+    assert "overlay=530:280" in fc
+    assert cmd[cmd.index("-s") + 1] == "176x108"
 
 
 # ── NVIDIA ROT180 CUDA fast-path (production default) ────────────────────────
@@ -388,7 +606,8 @@ def test_intel_rotation180_no_nv2(monkeypatch):
         container_rotation=0, rotation_degrees=180,
     )
     assert "overlay_cuda" not in filter_complex
-    assert "vflip,hflip" in filter_complex
+    # ETAP 5D: autorotate contract -- no baked manual flips for Intel.
+    assert "vflip,hflip" not in filter_complex
     assert "hevc_qsv" in cmd
 
 
@@ -488,4 +707,93 @@ def test_rot180_injection_failure_is_controlled_error():
         m.return_value = False
         with pytest.raises(RuntimeError):
             _inject_rot180_displaymatrix("out.mp4", 3840, 2160)
+
+
+# ── INTEL ETAP 4K: RC contract cleanup (dead global_quality removed,
+#    exactly one bitrate target, env override) ──────────────────────────────
+
+def test_intel_hevc_vbr_contract_cleanup():
+    """Intel HDR command must have NO dead -global_quality and EXACTLY one
+    -b:v equal to the application video_bitrate."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    kwargs = _cpu_ref_kwargs()
+    kwargs["video_bitrate"] = "40M"
+    kwargs["intel_cpu_download_format"] = "p010le"
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=808, stream_h=1700, hud_x=3032, hud_y=240,
+        intel_gpu_resident=False, **kwargs)
+    assert "-global_quality" not in cmd
+    assert "-global_quality" not in fc
+    assert cmd.count("-b:v") == 1
+    assert cmd[cmd.index("-b:v") + 1] == "40M"
+    # production HDR pixel format preserved
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "p010le"
+    assert "hwdownload,format=nv12" not in fc
+
+
+def test_intel_qsv_bitrate_env_override(monkeypatch):
+    """TELEM_INTEL_QSV_BITRATE_MBPS overrides the application bitrate for
+    Intel at resolution time; invalid values fall back."""
+    from src.ffmpeg.streaming import resolve_intel_qsv_bitrate as res
+
+    monkeypatch.delenv("TELEM_INTEL_QSV_BITRATE_MBPS", raising=False)
+    assert res("40M") == ("40M", "application")
+
+    monkeypatch.setenv("TELEM_INTEL_QSV_BITRATE_MBPS", "24")
+    assert res("40M") == ("24M", "env_override")
+    monkeypatch.setenv("TELEM_INTEL_QSV_BITRATE_MBPS", "40")
+    assert res("40M") == ("40M", "env_override")
+
+    monkeypatch.setenv("TELEM_INTEL_QSV_BITRATE_MBPS", "garbage")
+    assert res("40M") == ("40M", "application")
+
+
+def test_intel_hevc_env_override_reaches_final_command(monkeypatch):
+    """Full chain: resolve_intel_qsv_bitrate override feeds the builder, so
+    the final Intel command carries EXACTLY ONE -b:v 24M (no 40M remnant)."""
+    from src.ffmpeg.streaming import resolve_intel_qsv_bitrate as res
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    monkeypatch.setenv("TELEM_INTEL_QSV_BITRATE_MBPS", "24")
+    bv, source = res("40M")
+    assert source == "env_override" and bv == "24M"
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=808, stream_h=1700, hud_x=3032, hud_y=240,
+        intel_gpu_resident=False,
+        render_w=3840, render_h=2160,
+        resolution_name="source",
+        overlay_w=3840, overlay_h=2160,
+        ffmpeg_exe="ffmpeg", input_args=["-i", "gx.mp4"],
+        output_file="out.mp4", generation_fps=30.0, gpu=0,
+        video_bitrate=bv,
+        intel_cpu_download_format="p010le",
+    )
+    assert cmd.count("-b:v") == 1
+    assert cmd[cmd.index("-b:v") + 1] == "24M"
+    assert "40M" not in cmd
+    assert "-global_quality" not in cmd
+
+
+def test_intel_sdr_nv12_unchanged_by_rc_cleanup():
+    """Intel SDR keeps nv12 pix_fmt after the RC cleanup (no p010 drift)."""
+    from src.ffmpeg_pipeline import _build_stream_ffmpeg_cmd
+
+    cmd, fc = _build_stream_ffmpeg_cmd(
+        encoder="intel", rotation_degrees=0, container_rotation=0,
+        stream_w=1920, stream_h=1080, hud_x=100, hud_y=50,
+        intel_gpu_resident=False,
+        render_w=1280, render_h=720,
+        resolution_name="720p",
+        overlay_w=1280, overlay_h=720,
+        ffmpeg_exe="ffmpeg", input_args=["-i", "sdr.mp4"],
+        output_file="out.mp4", generation_fps=30.0, gpu=0,
+        video_bitrate="40M",
+        intel_cpu_download_format="nv12",
+    )
+    assert cmd[cmd.index("-pix_fmt", cmd.index("-c:v")) + 1] == "nv12"
+    assert "-global_quality" not in cmd
+    assert cmd.count("-b:v") == 1
 

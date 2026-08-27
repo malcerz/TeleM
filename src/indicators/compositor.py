@@ -360,10 +360,20 @@ def compose_overlay(
             and max_distance_m is not None
         ):
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, max_distance_m / 1000.0)
-        elif key in ("speed_visual", "speed_text") and max_speed_kmh is not None and current_cfg.get("form") in ("bar", "gauge", "segment_bar"):
+        elif (
+            key in ("speed_visual", "speed_text")
+            and current_cfg.get("auto_scale", False)
+            and max_speed_kmh is not None
+            and current_cfg.get("form") in ("bar", "gauge", "segment_bar")
+        ):
             rounded = math.ceil(max_speed_kmh / 10.0) * 10
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, rounded)
-        elif key in ("alt_visual", "alt_text") and min_alt is not None and max_alt is not None:
+        elif (
+            key in ("alt_visual", "alt_text")
+            and current_cfg.get("auto_scale", False)
+            and min_alt is not None
+            and max_alt is not None
+        ):
             current_cfg["min_val"] = min_alt
             current_cfg["max_val"] = max(min_alt + 1.0, max_alt)
 

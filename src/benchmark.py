@@ -57,9 +57,12 @@ class BenchmarkTracker:
             if not values:
                 continue
             arr = np.array(values)
+            # ETAP 4A0: median/p99 added for CPU_REFERENCE HUD-transport A/B.
             summary[name] = {
                 "avg": float(np.mean(arr)),
+                "median": float(np.median(arr)),
                 "p95": float(np.percentile(arr, 95)),
+                "p99": float(np.percentile(arr, 99)),
                 "min": float(np.min(arr)),
                 "max": float(np.max(arr)),
                 "count": len(values),

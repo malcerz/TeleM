@@ -351,7 +351,7 @@ def _render_ruler(
     formatted_val: str | None,
 ):
     ss = max(1, int(ss))
-    width = max(80 * ss, int(size_px * ss))
+    width = max(max(1, s(4.0, canvas_w)) * ss, int(size_px * ss))
 
     title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 1.00)) * fs * ss)))
     label_fs = max(7 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss)))
@@ -667,7 +667,7 @@ def _render_ruler_vertical(
     dim_text = _rgba(cfg.get("range_color", "#DDE7F2"), (221, 231, 242), int(235 * opacity))
     shadow_alpha = int(150 * opacity)
 
-    track_height = max(ss, int(round(max(200 * ss, int(size_px * ss)) * ruler_scale)))
+    track_height = max(ss, int(round(max(max(1, s(18.0, canvas_h)) * ss, int(size_px * ss)) * ruler_scale)))
     track_width = geom(float(cfg.get("track_width", max(1, thickness * 0.45))), 1.0)
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
     tick_w = geom(float(cfg.get("tick_width", max(1, thickness))), 1.0)
@@ -1444,7 +1444,7 @@ def _render_segments(
     # are drawn per frame.
 
     ss = max(1, int(ss))
-    width = max(80 * ss, int(size_px * ss))
+    width = max(max(1, s(4.0, canvas_w)) * ss, int(size_px * ss))
     segments = _resolve_segment_count(cfg)
     gap = max(0, int(round(float(cfg.get("segment_gap", 3)) * ss)))
     decimals = max(0, int(cfg.get("decimals", 1)))

@@ -125,12 +125,18 @@ class RenderMixin:
             container_rotation_arg = 0
 
         SMOOTHING_WINDOW = 5
-        speed = extract_speed_samples(records)
-        speed = smooth_speed_samples(speed, "moving_average", SMOOTHING_WINDOW)
-        track = extract_track_samples(records)
-        alt = extract_altitude_samples(records)
-        if alt:
-            alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
+        speed = getattr(self.telemetry, "speed_samples", None)
+        if not speed and records:
+            speed = extract_speed_samples(records)
+            speed = smooth_speed_samples(speed, "moving_average", SMOOTHING_WINDOW)
+        track = getattr(self.telemetry, "track_samples", None)
+        if not track and records:
+            track = extract_track_samples(records)
+        alt = getattr(self.telemetry, "alt_samples", None)
+        if not alt and records:
+            alt = extract_altitude_samples(records)
+            if alt:
+                alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
 
         output_path = sanitize_output_path(Path(output))
         if not output_path.is_absolute():

@@ -301,7 +301,8 @@ class PreviewMixin:
 
         # max_speed_kmh — per source
         max_spd = None
-        spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+        spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
+        spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
         if spd_src == "gpx":
             spd_for_range = gpx_spd or spd
         elif spd_src == "fit":
@@ -315,7 +316,8 @@ class PreviewMixin:
 
         # min_alt / max_alt — per source
         min_a = max_a = None
-        alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+        alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
+        alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
         if alt_src == "gpx":
             alt_for_range = gpx_alt_s = gpx_alt or alt
         elif alt_src == "fit":

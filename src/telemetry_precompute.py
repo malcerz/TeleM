@@ -16,7 +16,7 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from src.indicators.registry import HARDCODED_KEYS
@@ -376,6 +376,18 @@ def build_telemetry_cache(
         ]
     else:
         target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
+    # ETAP 5D: project-wide absolute-time convention is NAIVE UTC
+    # (src/multifile.py "datetime convention").  VideoTimeline.frame_to_absolute
+    # already returns naive UTC, but the degraded fallback above mixes in
+    # base_dt which real GUI runs pass as AWARE UTC -- that mixed list later
+    # crashed the elapsed-time computation with
+    # "can't subtract offset-naive and offset-aware datetimes" and disabled
+    # the whole precompute.  Normalize once, at this single boundary.
+    target_dts = [
+        dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if (dt is not None and dt.tzinfo is not None) else dt
+        for dt in target_dts
+    ]
     local_dts = [dt + timedelta(hours=tz_offset_hours) for dt in target_dts]
     date_texts = [dt.strftime("%Y-%m-%d") for dt in local_dts]
     time_texts = [dt.strftime("%H:%M:%S") for dt in local_dts]
@@ -478,13 +490,23 @@ def build_telemetry_cache(
     }
     dynamic_keys = tuple(
         key for key, cfg in indicators.items()
-        if key in imu_fields and isinstance(cfg, dict) and cfg.get("enabled", True)
+        if (key in imu_fields or key == "lean_indicator") and isinstance(cfg, dict) and cfg.get("enabled", True)
     )
-    dynamic_meta = {
-        key: (indicators[key].get("unit") or imu_fields[key][1],
-              indicators[key].get("label") or imu_fields[key][2])
-        for key in dynamic_keys
-    }
+    dynamic_meta = {}
+    for key in dynamic_keys:
+        if key == "lean_indicator":
+            cfg = indicators[key]
+            lsrc = str(cfg.get("source", "gyro")).strip().lower()
+            def_unit = "%" if lsrc == "grade" else "°"
+            dynamic_meta[key] = (
+                cfg.get("unit") or def_unit,
+                cfg.get("label") or "Przechył",
+            )
+        else:
+            dynamic_meta[key] = (
+                indicators[key].get("unit") or imu_fields[key][1],
+                indicators[key].get("label") or imu_fields[key][2],
+            )
 
     remaining_extra: dict[str, tuple] = {}
     for key, cfg in indicators.items():
@@ -668,26 +690,58 @@ def build_telemetry_cache(
             fit_field_arrs.append([None] * total_frames)
     t_fit_ms = (time.perf_counter() - t0_fit) * 1000.0
 
-    # 7. Dynamic IMU Fields
+    # 7. Dynamic IMU & Lean Fields
     t0_imu = time.perf_counter()
     dynamic_field_arrs: list[list] = []
     for key in dynamic_keys:
-        field_name = imu_fields[key][0]
         cfg = indicators.get(key, {})
-        src = cfg.get("source", "gpmf")
-        samples = _resolve_cache_samples(field_name, src)
-        if samples:
-            dynamic_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
-        elif resolve_cache_value is not None:
-            dynamic_field_arrs.append([resolve_cache_value(field_name, src, dt, key) for dt in target_dts])
+        if key == "lean_indicator":
+            lsrc = str(cfg.get("source", "gyro")).strip().lower()
+            if lsrc == "grade":
+                slope_src = cfg.get("slope_source", "gpmf")
+                samples = _resolve_cache_samples("slope", slope_src)
+                if samples:
+                    dynamic_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+                elif resolve_cache_value is not None:
+                    dynamic_field_arrs.append([resolve_cache_value("slope", slope_src, dt, key) for dt in target_dts])
+                else:
+                    dynamic_field_arrs.append([None] * total_frames)
+            else:
+                axis = str(cfg.get("axis", "z")).strip().lower()
+                if axis not in ("x", "y", "z"):
+                    axis = "z"
+                field_name = f"lean_roll_{axis}"
+                if resolve_cache_value is not None:
+                    dynamic_field_arrs.append([resolve_cache_value(field_name, "gpmf", dt, key) for dt in target_dts])
+                else:
+                    dynamic_field_arrs.append([None] * total_frames)
         else:
-            dynamic_field_arrs.append([None] * total_frames)
+            field_name = imu_fields[key][0]
+            src = cfg.get("source", "gpmf")
+            samples = _resolve_cache_samples(field_name, src)
+            if samples:
+                dynamic_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+            elif resolve_cache_value is not None:
+                dynamic_field_arrs.append([resolve_cache_value(field_name, src, dt, key) for dt in target_dts])
+            else:
+                dynamic_field_arrs.append([None] * total_frames)
     t_imu_ms = (time.perf_counter() - t0_imu) * 1000.0
 
     # 8. Record Assembly
     t0_records = time.perf_counter()
+    # ETAP 5D: start_dt_utc arrives from real GUI runs as AWARE UTC while
+    # target_dts are naive UTC by project convention -- normalize here (the
+    # narrowest boundary) instead of masking the failure with the live-resolver
+    # fallback.  astimezone(UTC) keeps non-UTC anchors semantically correct.
+    _start_naive_utc = (
+        start_dt_utc.astimezone(timezone.utc).replace(tzinfo=None)
+        if (start_dt_utc is not None and start_dt_utc.tzinfo is not None)
+        else start_dt_utc
+    )
     elapsed_secs_arr = [
-        max(0.0, (dt - start_dt_utc).total_seconds()) if start_dt_utc is not None else 0.0
+        max(0.0, ((dt.replace(tzinfo=None) if dt.tzinfo is not None else dt)
+                  - _start_naive_utc).total_seconds())
+        if _start_naive_utc is not None else 0.0
         for dt in target_dts
     ]
 
