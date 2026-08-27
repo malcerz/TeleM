@@ -1,0 +1,30 @@
+{
+  "1080p": {
+    "CPU_REFERENCE": {
+      "render_fps": 43.37,
+      "above_compose_avg_ms": 0.0,
+      "compose_overlay_avg_ms": 9.68,
+      "producer_prepare_avg_ms": 10.496
+    },
+    "GPU_SPLIT": {
+      "render_fps": 48.01,
+      "above_compose_avg_ms": 0.0,
+      "compose_overlay_avg_ms": 7.653,
+      "producer_prepare_avg_ms": 7.92
+    }
+  },
+  "4K": {
+    "CPU_REFERENCE": {
+      "render_fps": 19.8,
+      "above_compose_avg_ms": 0.0,
+      "compose_overlay_avg_ms": 13.826,
+      "producer_prepare_avg_ms": 17.645
+    },
+    "GPU_SPLIT": {
+      "render_fps": 22.81,
+      "above_compose_avg_ms": 0.0,
+      "compose_overlay_avg_ms": 7.465,
+      "producer_prepare_avg_ms": 7.805
+    }
+  }
+}

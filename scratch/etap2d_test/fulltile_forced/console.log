@@ -1,0 +1,179 @@
+[AMD NATIVE D3D11] AMD_AFTER_MAP_CHART_GPU: ON (env; native after-map chart GPU_SPLIT active)
+[AMD NATIVE D3D11] AMD_AFTER_MAP_GAUGE_GPU: ON (env; gauge AFTER-MAP GPU BlendGauge active)
+[AMD NATIVE D3D11] AMD_GAUGE_DYNAMIC_RECTS: <unset> (full-tile gauge upload every frame; ETAP 2A behavior)
+[AMD GAUGE GPU] mode=FULL_TILE rects=- geometry=- full_refresh=120
+[AMD NATIVE D3D11] AMD_MAP_PATH: GPU (GPU active; reason: single canonical track_map -> ordered CPU_BELOW_MAP/GPU_MAP/CPU_ABOVE_MAP)
+[AMD NATIVE D3D11] GPU map filter: BICUBIC (1) | GPU map path: DIRECT_AUTO (0)
+[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: 1 (flag=True [env], track_up=True)
+[AMD NATIVE D3D11] AMD_MAP_ORDER: CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP (after=['compass', 'slope_text', 'iso_text', 'exposure_text', 'temp_text', 'alt_visual', 'fit_curVpower_text', 'fit_cadence_text', 'fit_enhanced_speed_text', 'fit_heart_rate_text'])
+[AMD NATIVE D3D11] AMD_CHART_PATH: GPU_SPLIT
+[AMD NATIVE D3D11] AMD_GAUGE_PATH: GPU
+[AMD NATIVE D3D11] AMD_TELEMETRY_MODE: PRECOMPUTED
+[AMD NATIVE D3D11] AMD_AMF_MODE: ENCODE  AMD_AMF_DIAG: False
+[AMD NATIVE D3D11] AMD_FRAME_ACCOUNTING: OFF
+[AMD NATIVE D3D11] AMD_ABOVE_DIRTY_MODE: EXACT
+[AMD NATIVE D3D11] AMD_ABOVE_UPLOAD_BUFFER_MODE: DIRECT
+AMD ETAP 5B FIT discovered: K1, K2, alt, battery, battery_pct, battery_pct_2_1, battery_pct_3_2, cadence, curVpower, discharge, distance, enhanced_altitude, enhanced_speed, fractional_cadence, heading, heart_rate, slope, solar, solar_pct, speed, temperature, track
+AMD ETAP 5B FIT active: battery_pct, cadence, curVpower, enhanced_speed, heart_rate, solar_pct
+AMD ETAP 5B FIT skipped: K1, K2, alt, battery, battery_pct_2_1, battery_pct_3_2, discharge, distance, enhanced_altitude, fractional_cadence, heading, slope, solar, speed, temperature, track
+AMD Native DLL path: C:\_DEV\TeleM\native\d3d11_amf_pipeline\bin\telem_amd_native.dll
+AMD Native DLL build ID: telem-amd-native/1.0.0+d9afa75c8402.srcef49e23cc095
+AMD Native DLL build timestamp: 2026-08-25T07:36:40+02:00
+AMD Native DLL file timestamp: 2026-08-25T22:57:49+02:00
+AMD Native DLL ABI: 9
+AMD_NATIVE_DIAGNOSTICS: ON
+AMD_NATIVE_PROFILING: ON
+AMD Native HUD: ON
+AMD Native HUD compositor: GPU_HUD
+AMD Native video decode: GPU_HUD_D3D11VA
+AMD Native source rotation: 180
+AMD Native HUD upload path: DIRTY
+AMD Native dirty rect target: 8
+AMD Native HUD buffer mode: REFERENCE
+
+[TELEMETRY CHANNELS LOG]
+  GPMF records count: 0
+  FIT records count:  4293
+  GPX records count:  0
+[AMD NATIVE D3D11] Initializing telem_amd_native context...
+[AMD NATIVE D3D11] === REAL PRODUCTION CONFIG ===
+  AMD_MAP_PATH effective:   GPU
+  AMD_CHART_PATH effective: GPU_SPLIT
+  AMD_GAUGE_PATH effective: GPU
+  AMD_COMPOSE_5Q:           OPTIMIZED
+  AMD_NATIVE_DECODE_MODE:   GPU_HUD_D3D11VA
+  AMD_NATIVE_HUD_MODE:      GPU_HUD
+  AMD_NATIVE_HUD_UPLOAD:    DIRTY
+  AMD_NV12_COMPOSITOR:      FUSED (production single-range)
+  AMD_NORMALIZE_PASSES:     0
+  AMD_VP_POOL_SIZE:         8 (native default)
+[AMD NATIVE D3D11] SOURCE VIDEO:      3840x2160
+[AMD NATIVE D3D11] REQUESTED OUTPUT:  3840x2160
+[AMD NATIVE D3D11] VP OUTPUT:          3840x2160
+[AMD NATIVE D3D11] AMF OUTPUT:         3840x2160
+[AMD NATIVE D3D11] ===================================
+AMD_OVERLAY_PROFILE: OFF
+[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF
+[AMD Map Preload] provider=satellite zoom=16 margin=3 required=334 cached=334 downloaded=0 missing_before_render=0
+[AMD NATIVE D3D11] AMD_TELEMETRY_MODE=PRECOMPUTED: cache 40 frames, build 20.1 ms, mem 0.009 MiB
+[AMD NATIVE D3D11] AMD_CPU_GPU_PIPELINE=SYNC
+[AMD NATIVE D3D11] Chart classification: BEFORE_MAP=[] (active GPU=[]), AFTER_MAP=['fit_cadence_text', 'fit_heart_rate_text'] (diagnostic GPU-eligible=['fit_cadence_text', 'fit_heart_rate_text']) (GPU_CHART_UNSAFE_LAYOUT -> all charts CPU_REFERENCE: fit_cadence_text overlaps widget bbox=(1373,1549,1095,98); fit_heart_rate_text overlaps widget bbox=(1373,1549,1095,98))
+[AMD NATIVE D3D11] GPU charts fallback -> CPU_REFERENCE (GPU_CHART_UNSAFE_LAYOUT -> all charts CPU_REFERENCE: fit_cadence_text overlaps widget bbox=(1373,1549,1095,98); fit_heart_rate_text overlaps widget bbox=(1373,1549,1095,98))
+[AMD NATIVE D3D11] GPU gauge AFTER-MAP probe deferred (will confirm on first above_full render)
+[AMD NATIVE D3D11] GPU gauge AFTER-MAP active bbox=(1440, 665, 960, 960) (gauge disjoint from after-map widgets -> GPU-AFTER-MAP safe)
+[AMD NATIVE D3D11] Frame 1/17760 (1.7 FPS)
+[AMD NATIVE D3D11] Frame 20/17760 (12.4 FPS)
+[ETAP2A PROBE] f30 compose band 170s=2683
+[AMD NATIVE D3D11] Frame 31/17760 (3.7 FPS)
+[AMD Map Tile Stats] {'tiles_requested': 0, 'memory_hits': 0, 'disk_hits': 0, 'network_misses': 0, 'network_requests': 0}
+[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...
+[AMD NATIVE D3D11] Remux complete. Final output: C:\_DEV\TeleM\scratch\etap2d_test\fulltile_forced\out.mp4
+
+[AMD NATIVE ETAP 0 TIMINGS]
+Stage                                AVG ms     Median        P95        P99
+----------------------------------------------------------------------------
+Decode/pipe wait                      0.000      0.000      0.000      0.000
+MF ReadSample/decode availability      7.025      0.629      1.601    155.314
+MF decoder surface acquisition        0.011      0.009      0.020      0.023
+Decoder surface GPU copy              0.000      0.000      0.000      0.000
+Telemetry/frame_data                  0.032      0.030      0.039      0.066
+telemetry_target_dt                   0.000      0.000      0.000      0.000
+telemetry_cache_lookup                0.030      0.028      0.036      0.063
+telemetry_frame_payload               0.018      0.017      0.022      0.038
+telemetry_shared_objects              0.012      0.011      0.014      0.025
+telemetry_other                       0.002      0.002      0.003      0.003
+compose_overlay                       3.774      3.527      4.993      5.458
+map_cpu_upload                        0.090      0.087      0.110      0.116
+GPU map upload (native)               0.000      0.000      0.000      0.000
+GPU map resize+blend submit           0.000      0.000      0.000      0.000
+chart_cpu_tobytes                     0.000      0.000      0.000      0.000
+chart_python_upload                   0.000      0.000      0.000      0.000
+chart_dynamic_tobytes                 0.000      0.000      0.000      0.000
+chart_dynamic_upload                  0.000      0.000      0.000      0.000
+gauge_tobytes                         1.587      1.489      1.972      2.298
+gauge_upload                          0.828      0.438      0.798      9.065
+gauge_capture                         0.000      0.000      0.000      0.000
+gauge_diff                            0.000      0.000      0.000      0.000
+gauge_bytes_per_frame            3686400.000 3686400.000 3686400.000 3686400.000
+gauge_upload_calls                    1.000      1.000      1.000      1.000
+GPU gauge blend submit                0.000      0.000      0.000      0.000
+GPU chart blend submit                0.000      0.000      0.000      0.000
+chart_plan                            0.000      0.000      0.000      0.000
+chart_rgba_conversion                 0.000      0.000      0.000      0.000
+chart_upload_call                     0.000      0.000      0.000      0.000
+chart_native_submit                   0.000      0.000      0.000      0.000
+chart_gpu_submit                      0.000      0.000      0.000      0.000
+chart_other                           0.000      0.000      0.000      0.000
+above_compose                         9.545      8.582     12.777     18.906
+above_canvas_prepare                  0.000      0.000      0.000      0.000
+above_cache_lookup                    0.000      0.000      0.000      0.000
+above_cache_hit                       0.000      0.000      0.000      0.000
+above_cache_miss_render               0.000      0.000      0.000      0.000
+above_cached_paste                    0.000      0.000      0.000      0.000
+above_compose_total                   0.000      0.000      0.000      0.000
+above_bbox_crop                       0.046      0.038      0.059      0.110
+above_bbox_tracking                   0.046      0.038      0.059      0.110
+above_candidate_crop                  0.000      0.000      0.000      0.000
+above_local_alpha_scan                0.000      0.000      0.000      0.000
+above_final_crop                      0.000      0.000      0.000      0.000
+above_region_to_bytes                 0.814      0.677      1.232      1.610
+above_region_upload                   0.951      1.093      1.373      1.814
+above_upload_buffer_prepare           0.058      0.057      0.092      0.105
+above_tight_bbox_collect              0.313      0.276      0.444      0.609
+above_exact_union                     0.044      0.037      0.062      0.077
+above_exact_crop                      0.651      0.589      0.862      0.886
+above_total                          10.405      9.353     14.540     20.140
+HUD dirty bbox                        0.069      0.064      0.090      0.120
+HUD dirty extract                     0.000      0.000      0.000      0.000
+PIL tobytes                           0.000      0.000      0.000      0.000
+PIL/buffer preparation                1.924      1.020      1.605     22.264
+Python->native bridge                 0.023      0.022      0.042      0.048
+update_hud                            0.990      0.373      0.642     15.476
+Native HUD CPU copy                   0.000      0.000      0.000      0.000
+HUD texture upload                    0.967      0.348      0.616     15.438
+NV12 staging memcpy                   0.000      0.000      0.000      0.000
+BlendRGBAToNV12                       0.000      0.000      0.000      0.000
+CopyResource submission               0.000      0.000      0.000      0.000
+VideoProcessor CPU submit            40.742      0.233      0.735    987.170
+VideoProcessor GPU completion       162.826      8.278     23.523   3729.010
+GPU wait/synchronization             11.427      9.011     24.117     25.126
+AMF submit/backpressure               0.361      0.269      0.512      2.109
+AMF QueryOutput                       0.128      0.116      0.182      0.347
+Packet write                          0.143      0.125      0.268      0.376
+Audio mux                          6147.181   6147.181   6147.181   6147.181
+producer_prepare                     39.207     32.184     57.387    117.686
+producer_queue_wait                   0.000      0.000      0.000      0.000
+consumer_queue_wait                   0.000      0.000      0.000      0.000
+consumer_upload                       3.672      2.474      3.591     32.384
+consumer_native_call                166.237     11.035     27.534   3739.561
+consumer_packet                       0.000      0.000      0.000      0.000
+pipeline_total                      177.089     14.299     47.420   3860.154
+
+[AMD NATIVE TRUE END-TO-END]
+  Total wall-clock: 15.247 s
+  Encoded frames:   40
+  TRUE FPS:         2.623
+  Muxed frames:     40
+  Audio present:    YES
+
+[AMD NATIVE ETAP 8P-A WALL TIMINGS]
+  EXPORT_CLICK / export_start:      0.000 ms (t=0.000 s)
+  PRECOMPUTE_BEGIN:                    513.749 ms
+  PRECOMPUTE_END:                      542.552 ms
+  FIRST_FRAME_BEGIN:                   657.322 ms
+  FIRST_FRAME_ENCODED:                 988.918 ms
+  VIDEO_RENDER_END:                   9222.866 ms
+  MUX_BEGIN:                          9467.138 ms
+  MUX_END:                           15614.319 ms
+  EXPORT_END:                        15656.794 ms
+
+[AMD NATIVE ETAP 8P-A SUMMARY]
+  precompute_build_ms:              28.804 ms (0.029 s)
+  delay_export_to_first_frame_ms:   988.918 ms (0.989 s)
+  video_render_wall_ms:             8565.544 ms (8.566 s)
+  mux_wall_ms:                      6147.181 ms (6.147 s)
+  TOTAL_FROM_EXPORT_START_ms:       15656.794 ms (15.657 s)
+  RENDER FPS:                       4.670 fps
+  USER EFFECTIVE FPS:               2.555 fps
+[AMD NATIVE] Profiling JSON: C:\_DEV\TeleM\scratch\etap2d_test\fulltile_forced\out.mp4.amd_profile.json
+[CHECKPOINT] Saved F_final_mp4.png

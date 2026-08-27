@@ -25,6 +25,90 @@ def _shared_map_renderers() -> dict:
     return _render_moving_map_indicator._map_renderers
 
 
+def map_required_tile_margin(canvas_w: int, map_w: int, track_up: bool = True) -> int:
+    """Return the tile margin required by the renderer geometry."""
+    from src.moving_map import track_up_working_size, TILE_SIZE
+    working_size = track_up_working_size(map_w) if track_up else map_w
+    half_tiles = int(math.ceil(working_size / 2 / TILE_SIZE)) + 1
+    return max(2, half_tiles)
+
+
+def ensure_map_tiles_cached(
+    canvas_w: int,
+    canvas_h: int,
+    layout: dict,
+    key: str = "track_map",
+    gps_track: list | None = None,
+    progress_cb: Any = None,
+    cancel_event: Any = None,
+) -> dict[str, Any]:
+    """Ensure 100% of required map tiles are present in cache before the render loop starts.
+
+    Guarantees that during the frame loop, 0 HTTP network requests will be made.
+    """
+    if not gps_track or len(gps_track) < 2:
+        return {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
+
+    cfg = layout.get("indicators", {}).get(key, {})
+    if not cfg or not cfg.get("enabled", True):
+        return {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
+
+    from src.moving_map import _lat_lon_to_tile, _download_tile_raw, get_shared_tile_cache
+    map_w = s(cfg.get("size", 0.1), canvas_w)
+    render_plan = _map_render_plan(canvas_w, map_w, int(cfg.get("zoom", 14)))
+    effective_zoom = render_plan["effective_zoom"]
+    map_style = cfg.get("map_style", "light_all")
+    is_track_up = str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
+    margin = map_required_tile_margin(canvas_w, map_w, is_track_up)
+
+    needed: set[tuple[int, int, int]] = set()
+    for _, lat, lon in gps_track:
+        tx, ty, _, _ = _lat_lon_to_tile(lat, lon, effective_zoom)
+        for dx in range(-margin, margin + 1):
+            for dy in range(-margin, margin + 1):
+                needed.add((effective_zoom, tx + dx, ty + dy))
+
+    cache = get_shared_tile_cache()
+    missing: list[tuple[int, int, int]] = []
+    cached_count = 0
+    for z, x, y in needed:
+        if cache.has(z, x, y, map_style):
+            cached_count += 1
+        else:
+            missing.append((z, x, y))
+
+    total = len(needed)
+    downloaded = 0
+    if missing:
+        print(
+            f"[Map Preload] Pre-caching {len(missing)}/{total} missing tiles "
+            f"(provider={map_style}, zoom={effective_zoom}, margin={margin})...",
+            flush=True,
+        )
+        for i, (z, x, y) in enumerate(missing, 1):
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            d = _download_tile_raw(z, x, y, map_style)
+            if d:
+                cache.put(z, x, y, map_style, d)
+                downloaded += 1
+            if progress_cb is not None:
+                try:
+                    progress_cb(cached_count + downloaded, total, f"Preload mapy: {cached_count + downloaded}/{total}")
+                except Exception:
+                    pass
+
+    return {
+        "required": total,
+        "cached": cached_count,
+        "downloaded": downloaded,
+        "missing": len(missing) - downloaded,
+        "provider": map_style,
+        "zoom": effective_zoom,
+        "margin": margin,
+    }
+
+
 def render_map_working_image(
     canvas_w: int,
     canvas_h: int,
@@ -47,7 +131,7 @@ def render_map_working_image(
     if not gps_track or len(gps_track) < 2:
         return None, None
     try:
-        from src.moving_map import MovingMapRenderer
+        from src.moving_map import MovingMapRenderer, is_map_network_allowed
 
         cfg = layout["indicators"].get(key)
         if not cfg or not cfg.get("enabled", True):
@@ -89,7 +173,9 @@ def render_map_working_image(
             )
             renderers[cache_key] = renderer
             renderer._is_first_render = True
-            renderer.background_precache(margin=2, zooms=[effective_zoom])
+            is_track_up = str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
+            margin = map_required_tile_margin(canvas_w, map_w, is_track_up)
+            renderer.background_precache(margin=margin, zooms=[effective_zoom])
 
         if target_dt is not None:
             gps0 = gps_track[0][0]
@@ -107,7 +193,7 @@ def render_map_working_image(
             dur = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp())
             ts = (current_position if current_position is not None else 0.0) * dur
 
-        dl_missing = getattr(renderer, '_is_first_render', False)
+        dl_missing = getattr(renderer, '_is_first_render', False) and is_map_network_allowed()
         draw_track = not bool(cfg.get("hide_track", False))
         draw_marker = not bool(cfg.get("hide_marker", False))
         if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
@@ -132,6 +218,148 @@ def render_map_working_image(
         return map_img, dst_bbox
     except Exception:
         return None, None
+
+
+def build_static_map_marker_tile(
+    output_size: int,
+    marker_radius: int,
+    marker_style: str = "directional",
+    marker_color: tuple = (255, 255, 255, 255),
+) -> tuple[Any, tuple[int, int, int, int]]:
+    """Build the static directional marker tile for GPU Track-Up blending."""
+    if marker_style != "directional":
+        return None, (0, 0, 0, 0)
+    try:
+        from PIL import Image, ImageDraw
+        size = output_size
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        c = size / 2.0
+        r = marker_radius
+        tip = (c, c - r * 1.8)
+        left = (c - r * 0.65, c + r * 0.75)
+        right = (c + r * 0.65, c + r * 0.75)
+        d.polygon((tip, left, right), fill=marker_color, outline=(0, 0, 0, 220))
+        bbox = img.getbbox()
+        if not bbox:
+            return None, (0, 0, 0, 0)
+        x1, y1, x2, y2 = bbox
+        cropped = img.crop((x1, y1, x2, y2))
+        return cropped, (x1, y1, x2 - x1, y2 - y1)
+    except Exception:
+        return None, (0, 0, 0, 0)
+
+
+def render_map_unrotated_working_image(
+    canvas_w: int,
+    canvas_h: int,
+    layout: dict,
+    key: str,
+    gps_track,
+    target_dt=None,
+    current_position=None,
+    map_heading=None,
+):
+    """Render the UNROTATED working map image (e.g. 978x978 for 4K) on CPU for GPU Track-Up.
+
+    Eliminates the expensive per-frame Pillow rotate(BICUBIC) from the CPU thread.
+    Returns (unrotated_working_image_RGBA, map_heading, dst_bbox, working_size).
+    """
+    if not gps_track or len(gps_track) < 2:
+        return None, 0.0, None, 0
+    try:
+        from src.moving_map import (
+            MovingMapRenderer, is_map_network_allowed, track_up_working_size,
+            track_up_rotation_degrees,
+        )
+
+        cfg = layout["indicators"].get(key)
+        if not cfg or not cfg.get("enabled", True):
+            return None, 0.0, None, 0
+        map_w = s(cfg.get("size", 0.1), canvas_w)
+        render_plan = _map_render_plan(canvas_w, map_w, int(cfg.get("zoom", 16)))
+        effective_zoom = render_plan["effective_zoom"]
+        working_size = track_up_working_size(map_w)
+        map_style = cfg.get("map_style", "light_all")
+        marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
+        if len(track_color) == 3:
+            track_color = (*track_color, 220)
+        track_width = int(cfg.get("track_width", 3))
+        track_aa = max(1, min(8, int(cfg.get("track_antialiasing", 1) or 1)))
+        track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
+        track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
+        cache_key = (
+            id(gps_track), effective_zoom, map_style, marker_style,
+            track_color, track_width, track_aa, track_outline_w, track_outline_color,
+        )
+        renderers = _shared_map_renderers()
+        renderer = renderers.get(cache_key)
+        if renderer is None:
+            renderer = MovingMapRenderer(
+                gps_track, zoom=effective_zoom, style=map_style,
+                marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
+                marker_radius=max(1, int(round(
+                    float(cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"])
+                ))),
+                track_color=track_color,
+                track_width=max(1, int(round(
+                    track_width * (2.0 ** render_plan["zoom_offset"])
+                ))),
+                marker_style=marker_style,
+                track_antialiasing=track_aa,
+                track_outline_width=track_outline_w,
+                track_outline_color=track_outline_color,
+            )
+            renderers[cache_key] = renderer
+            renderer._is_first_render = True
+            margin = map_required_tile_margin(canvas_w, map_w, True)
+            renderer.background_precache(margin=margin, zooms=[effective_zoom])
+
+        if target_dt is not None:
+            gps0 = gps_track[0][0]
+            if hasattr(gps0, "timestamp"):
+                target_epoch = (target_dt.timestamp()
+                                if target_dt.tzinfo is not None
+                                else target_dt.replace(tzinfo=timezone.utc).timestamp())
+                gps0_ts = (gps0.timestamp()
+                           if gps0.tzinfo is not None
+                           else gps0.replace(tzinfo=timezone.utc).timestamp())
+                ts = target_epoch - gps0_ts
+            else:
+                ts = 0.0
+        else:
+            dur = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp())
+            ts = (current_position if current_position is not None else 0.0) * dur
+
+        dl_missing = getattr(renderer, '_is_first_render', False) and is_map_network_allowed()
+        draw_track = not bool(cfg.get("hide_track", False))
+        angle = track_up_rotation_degrees(map_heading)
+        if angle == 0.0:
+            working_size = map_w
+            draw_marker = not bool(cfg.get("hide_marker", False))
+            heading_val = 0.0
+        else:
+            working_size = track_up_working_size(map_w)
+            draw_marker = not bool(cfg.get("hide_marker", False)) and marker_style != "directional"
+            heading_val = float(map_heading)
+
+        map_img = renderer.render(
+            ts, working_size, working_size,
+            download_missing=dl_missing,
+            draw_track=draw_track,
+            draw_marker=draw_marker,
+            heading=(0.0 if map_heading is not None else None),
+        )
+        if angle == 0.0:
+            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        renderer._is_first_render = False
+        rx = s(cfg["x"], canvas_w)
+        ry = s(cfg["y"], canvas_h)
+        dst_bbox = (int(rx - map_w // 2), int(ry - map_w // 2), int(map_w), int(map_w))
+        return map_img, heading_val, dst_bbox, working_size
+    except Exception:
+        return None, 0.0, None, 0
 
 
 # The GUI renders its interactive preview at this logical width.  A map zoom
@@ -283,7 +511,10 @@ def _render_moving_map_indicator(
                 return _placeholder(label="Ładowanie mapy…")
             if snap["status"] == "error":
                 return _placeholder(error="Nie udało się wczytać mapy")
-            if snap["status"] in ("idle", "preparing"):
+            # An overview is usable map data even while a newer/detail job is
+            # still preparing. Never replace it with the loading placeholder.
+            overview_ready = snap.get("overview_image") is not None
+            if snap["status"] in ("idle", "preparing") and not overview_ready:
                 return _placeholder(
                     progress=snap["progress"],
                     loaded=snap["loaded_tiles"],

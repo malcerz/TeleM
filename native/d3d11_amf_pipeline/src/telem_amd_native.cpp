@@ -186,6 +186,12 @@ struct TelemAMDContext {
     UINT64 chartUploadedBytes[2] = { 0, 0 };
     UINT64 chartGpuFramesCadence = 0;
     UINT64 chartGpuFramesHR = 0;
+    // ETAP 1B: GPU AFTER-MAP chart compositing (HR/Cadence)
+    int afterMapChartCompositeMode = 0;
+    UINT64 afterMapChartUploads[2] = { 0, 0 };
+    UINT64 afterMapChartUploadedBytes[2] = { 0, 0 };
+    UINT64 afterMapChartGpuFramesCadence = 0;
+    UINT64 afterMapChartGpuFramesHR = 0;
     // ETAP 5O diagnostic: 0 = ENCODE (default), 1 = BYPASS (run the whole
     // frontend to the AMF input point but never submit/encode), 2 = reserved.
     int amfMode = 0;
@@ -323,6 +329,28 @@ TELEM_EXPORT int telem_amd_update_map(
     ctx->mapUploads++;
     ctx->mapUploadedBytes += uploadedBytes;
     return 1;
+}
+
+TELEM_EXPORT int telem_amd_set_map_rotate_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapRotateMode(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_set_map_heading(void* handle, float headingDeg) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapHeading(headingDeg);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_map_marker(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT dstX, UINT dstY) {
+    if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateMapMarkerTexture(width, height, pRGBA, stride, dstX, dstY) ? 1 : 0;
 }
 
 // ETAP 7B: compact CPU_ABOVE_MAP layer.  It is intentionally a single
@@ -515,6 +543,79 @@ TELEM_EXPORT int telem_amd_get_chart_static_readback(
     return ctx->vpPipeline.GetChartStaticReadback((UINT)slot, outRGBA, stride) ? 1 : 0;
 }
 
+// ── ETAP 1B: GPU AFTER-MAP chart compositing (HR/Cadence) ──────────────
+// mode: 0 = CPU_REFERENCE (charts stay in CPU_ABOVE_MAP),
+//       2 = GPU_SPLIT (static layer uploaded once + small dynamic cursor/value tiles replaced per frame).
+
+TELEM_EXPORT int telem_amd_set_after_map_chart_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1 && mode != 2)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->afterMapChartCompositeMode = mode;
+    ctx->vpPipeline.SetAfterMapChartGpuEnabled(mode != 0);
+    ctx->vpPipeline.SetAfterMapChartSplitMode(mode == 2);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_after_map_chart_static(
+    void* handle, int slot, const uint8_t* pRGBA, UINT width, UINT height,
+    UINT stride, UINT dstX, UINT dstY,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || slot < 0 || slot > 1 || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->afterMapChartCompositeMode != 2) return 0;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateAfterMapChartStaticTexture(
+            (UINT)slot, width, height, pRGBA, stride, dstX, dstY,
+            &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU after-map chart static upload failed (slot " << slot << ")." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_after_map_chart_dynamic(
+    void* handle, int slot, int region, const uint8_t* pRGBA, UINT width,
+    UINT height, UINT stride, UINT localX, UINT localY,
+    UINT64* outUploadedBytes) {
+    if (!handle || slot < 0 || slot > 1 || region < 0 || region > 1 ||
+        !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (ctx->afterMapChartCompositeMode != 2) return 0;
+    size_t uploadedBytes = 0;
+    if (!ctx->vpPipeline.UpdateAfterMapChartDynamicTile(
+            (UINT)slot, (UINT)region, width, height, pRGBA, stride, localX, localY,
+            &uploadedBytes)) {
+        std::cerr << "[TELEM AMD DLL] GPU after-map chart dynamic upload failed (slot " << slot << ")." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    ctx->afterMapChartUploads[slot]++;
+    ctx->afterMapChartUploadedBytes[slot] += uploadedBytes;
+    if (slot == 0) ctx->afterMapChartGpuFramesCadence++;
+    else ctx->afterMapChartGpuFramesHR++;
+    return 1;
+}
+
+TELEM_EXPORT void telem_amd_get_after_map_chart_stats(
+    void* handle,
+    UINT64* outUploads, UINT64* outUploadedBytes, UINT64* outFrames,
+    double* outBlendMs, UINT64* outStaticBytes, UINT64* outDynamicBytes,
+    UINT64* outStaticUploads, UINT64* outDynamicUploads) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outUploads) *outUploads = ctx->afterMapChartUploads[0] + ctx->afterMapChartUploads[1];
+    if (outUploadedBytes) *outUploadedBytes = ctx->afterMapChartUploadedBytes[0] + ctx->afterMapChartUploadedBytes[1];
+    if (outFrames) *outFrames = ctx->afterMapChartGpuFramesCadence + ctx->afterMapChartGpuFramesHR;
+    if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetAfterMapChartBlendMs();
+    if (outStaticBytes) *outStaticBytes = ctx->vpPipeline.GetAfterMapChartStaticUploadedBytes();
+    if (outDynamicBytes) *outDynamicBytes = ctx->vpPipeline.GetAfterMapChartDynamicUploadedBytes();
+    if (outStaticUploads) *outStaticUploads = ctx->vpPipeline.GetAfterMapChartStaticUploads();
+    if (outDynamicUploads) *outDynamicUploads = ctx->vpPipeline.GetAfterMapChartDynamicUploads();
+}
+
 // ── ETAP 5L: GPU final compositing for the speed gauge ──────────────
 // mode: 0 = CPU_REFERENCE (gauge stays in the Pillow HUD), 1 = GPU (the CPU
 // still renders the exact same gauge RGBA but the GPU blends it into the HUD).
@@ -524,6 +625,32 @@ TELEM_EXPORT int telem_amd_set_gauge_mode(void* handle, int mode) {
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
     ctx->vpPipeline.SetGaugeGpuEnabled(mode == 1);
     return 1;
+}
+
+// ── ETAP 2A: gauge pass placement ─────────────────────────────────────
+// afterMap: 0 = legacy BEFORE-MAP position (ETAP 5L semantics preserved),
+//           1 = AFTER-MAP position (after BlendAboveMap, before
+//           BlendAfterMapCharts) with early previous-region clearing.
+TELEM_EXPORT int telem_amd_set_gauge_after_map(void* handle, int afterMap) {
+    if (!handle || (afterMap != 0 && afterMap != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetGaugeAfterMapPlacement(afterMap == 1);
+    return 1;
+}
+
+// ── ETAP 2A FIX: start-of-frame clears on demand ──────────────────────
+// Runs ClearPreviousAboveMap() (previous ABOVE regions + previous AFTER-MAP
+// gauge tile erase) outside of telem_amd_process_frame so the exporter can
+// order it BEFORE telem_amd_update_hud_regions.  Without this, the early
+// erase of the full previous gauge tile bbox destroys freshly-uploaded
+// BELOW-canvas pixels inside that bbox (e.g. the dist_visual ruler track)
+// because static widgets are not re-uploaded every frame.  The clears are
+// consuming (their state resets), so the internal call inside ProcessFrame
+// becomes a no-op on frames where this export ran — no double clearing.
+TELEM_EXPORT int telem_amd_run_early_clears(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.RunEarlyClears() ? 1 : 0;
 }
 
 TELEM_EXPORT int telem_amd_update_gauge(
@@ -545,6 +672,29 @@ TELEM_EXPORT int telem_amd_update_gauge(
     return 1;
 }
 
+// ── ETAP 2B: partial gauge texture update (dynamic sub-region) ────────
+// Uploads only one dynamic sub-rectangle of the persistent gauge tile.
+// Static dial pixels stay from earlier uploads; BlendGauge is untouched.
+TELEM_EXPORT int telem_amd_update_gauge_region(
+    void* handle, const uint8_t* pRGBA,
+    UINT boxX, UINT boxY, UINT boxW, UINT boxH, UINT srcRowPitch,
+    UINT tileW, UINT tileH, UINT dstX, UINT dstY,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || !pRGBA) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateGaugeRegionTexture(
+            boxX, boxY, boxW, boxH, pRGBA, srcRowPitch,
+            tileW, tileH, dstX, dstY, &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU gauge region upload failed." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    return 1;
+}
+
 // Diagnostic/per-frame stats.  blendMs/clearMs are the last processed frame's
 // GPU gauge blend/clear submit times.  Never used on the production path.
 TELEM_EXPORT void telem_amd_get_gauge_stats(
@@ -558,6 +708,70 @@ TELEM_EXPORT void telem_amd_get_gauge_stats(
     if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetGaugeBlendMs();
     if (outClearMs) *outClearMs = ctx->vpPipeline.GetGaugeClearMs();
     if (outTextureCreates) *outTextureCreates = ctx->vpPipeline.GetGaugeTextureCreates();
+}
+
+// ── ETAP 2G: GPU lean indicator sprite affine transform compositor ──
+TELEM_EXPORT int telem_amd_set_lean_gpu_mode(void* handle, int mode) {
+    if (!handle || (mode != 0 && mode != 1)) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetLeanGpuEnabled(mode == 1);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_update_lean_static_texture(
+    void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
+    UINT64* outUploadedBytes, int* outTextureCreated) {
+    if (!handle || !pRGBA || stride < width * 4) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    size_t uploadedBytes = 0;
+    bool textureCreated = false;
+    if (!ctx->vpPipeline.UpdateLeanStaticTexture(
+            width, height, pRGBA, stride, &uploadedBytes, &textureCreated)) {
+        std::cerr << "[TELEM AMD DLL] GPU lean static texture upload failed." << std::endl;
+        return 0;
+    }
+    if (outUploadedBytes) *outUploadedBytes = uploadedBytes;
+    if (outTextureCreated) *outTextureCreated = textureCreated ? 1 : 0;
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_set_lean_transform(
+    void* handle, float angleDeg, float pivotPx, float pivotPy,
+    float screenPivotX, float screenPivotY,
+    UINT dstX, UINT dstY, UINT tightW, UINT tightH) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.SetLeanTransform(
+        angleDeg, pivotPx, pivotPy, screenPivotX, screenPivotY,
+        dstX, dstY, tightW, tightH) ? 1 : 0;
+}
+
+TELEM_EXPORT void telem_amd_get_lean_stats(
+    void* handle, UINT64* outStaticUploads, UINT64* outStaticUploadedBytes, double* outBlendMs) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outStaticUploads) *outStaticUploads = ctx->vpPipeline.GetLeanStaticUploads();
+    if (outStaticUploadedBytes) *outStaticUploadedBytes = ctx->vpPipeline.GetLeanStaticUploadedBytes();
+    if (outBlendMs) *outBlendMs = ctx->vpPipeline.GetLeanBlendMs();
+}
+
+TELEM_EXPORT int telem_amd_blend_lean_diagnostic(void* handle, double* outBlendMs, double* outFlushMs) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.BlendLean(outBlendMs, outFlushMs) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_clear_previous_above_map(void* handle, double* outClearMs) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.RunEarlyClears(outClearMs) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_reset_previous_above_regions(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.ResetPreviousAboveRegions();
+    return 1;
 }
 
 TELEM_EXPORT int telem_amd_set_source_rotation(void* handle, UINT degrees) {

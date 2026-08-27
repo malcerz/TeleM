@@ -135,6 +135,27 @@ class MapPreloadWorker:
             )
             self.context.set_ready(overview, generation=g)
             self._finish(True, "ready")
+
+            # Level 2: background precache of full route detail tiles (zooms 14..16)
+            try:
+                from src.moving_map import _lat_lon_to_tile, get_shared_tile_cache
+                detail_zooms = sorted({geom["overview_zoom"], 14, 15, 16})
+                detail_needed: set[tuple[int, int, int]] = set()
+                for dz in detail_zooms:
+                    for _, lat, lon in self.gps_track:
+                        tx, ty, _, _ = _lat_lon_to_tile(lat, lon, dz)
+                        for dx in range(-3, 4):
+                            for dy in range(-3, 4):
+                                detail_needed.add((dz, tx + dx, ty + dy))
+
+                cache = get_shared_tile_cache()
+                for dz, dx, dy in detail_needed:
+                    if self._cancel.is_set():
+                        return
+                    if not cache.has(dz, dx, dy, self.provider):
+                        download_tile_shared(dz, dx, dy, self.provider)
+            except Exception:
+                pass
         except Exception as exc:  # pragma: no cover - defensive
             self.context.set_error(str(exc), generation=g)
             self._finish(False, str(exc))

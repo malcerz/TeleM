@@ -2,6 +2,7 @@
 #include <d3dcompiler.h>
 #include "stb_image_write.h"
 #include <fstream>
+#include <cmath>
 
 static std::vector<uint8_t> ConvertNV12ToRGBA_VP(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);
@@ -223,7 +224,9 @@ D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
     if (m_device3) m_device3->Release();
     ReleaseMapResources();
     ReleaseChartResources();
+    ReleaseAfterMapChartResources();
     ReleaseGaugeResources();
+    ReleaseLeanResources();
     if (m_hudShaderView) m_hudShaderView->Release();
     if (m_hudInputView) m_hudInputView->Release();
     if (m_hudTexture) m_hudTexture->Release();
@@ -961,7 +964,8 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
         cbuffer ResampleCB : register(b0) {
             uint srcW; uint srcH;
             uint dstW; uint dstH;
-            uint filter; uint pad;
+            uint filter; uint rotateEnabled;
+            float rotAngleRad; float pad;
         };
 
         float Sinc(float x) {
@@ -983,17 +987,27 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
         [numthreads(16, 16, 1)]
         void CSMain(uint3 tid : SV_DispatchThreadID) {
             if (tid.x >= dstW || tid.y >= dstH) return;
-            float scaleX = float(srcW) / float(dstW);
-            float scaleY = float(srcH) / float(dstH);
-            float cx = (tid.x + 0.5) * scaleX - 0.5;
-            float cy = (tid.y + 0.5) * scaleY - 0.5;
+            float cx, cy;
+            if (rotateEnabled != 0) {
+                float dx = (float(tid.x) + 0.5) - (float(dstW) * 0.5);
+                float dy = (float(tid.y) + 0.5) - (float(dstH) * 0.5);
+                float cosA = cos(rotAngleRad);
+                float sinA = sin(rotAngleRad);
+                cx = (float(srcW) * 0.5) + (cosA * dx + sinA * dy) - 0.5;
+                cy = (float(srcH) * 0.5) + (-sinA * dx + cosA * dy) - 0.5;
+            } else {
+                float scaleX = float(srcW) / float(dstW);
+                float scaleY = float(srcH) / float(dstH);
+                cx = (tid.x + 0.5) * scaleX - 0.5;
+                cy = (tid.y + 0.5) * scaleY - 0.5;
+            }
 
             int baseX, baseY, taps;
             if (filter == 0) { baseX = (int)floor(cx); baseY = (int)floor(cy); taps = 2; }
             else if (filter == 1) { baseX = (int)floor(cx) - 1; baseY = (int)floor(cy) - 1; taps = 4; }
             else { baseX = (int)floor(cx) - 2; baseY = (int)floor(cy) - 2; taps = 6; }
 
-            // Premultiplied-alpha resample (matches Pillow RGBA LANCZOS behaviour).
+            // Premultiplied-alpha resample (matches Pillow RGBA LANCZOS / BICUBIC behaviour).
             float3 premulRgb = 0.0;
             float alphaAcc = 0.0;
             float wsum = 0.0;
@@ -1019,7 +1033,7 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
                     wsum += w;
                 }
             }
-            if (wsum <= 1e-6) { ResampleOut[tid.xy] = float4(0, 0, 0, 0); return; }
+            if (wsum <= 1e-6) { ResampleOut[tid.xy] = float4(0.1176, 0.1176, 0.1176, 1.0); return; }
             float4 result;
             result.a = alphaAcc / wsum;
             if (result.a > 1e-6) result.rgb = premulRgb / alphaAcc;
@@ -1215,6 +1229,45 @@ bool D3D11VideoProcessorPipeline::UpdateMapTexture(
     return true;
 }
 
+bool D3D11VideoProcessorPipeline::UpdateMapMarkerTexture(
+    UINT width, UINT height, const uint8_t* rgbaData, UINT stride, UINT dstX, UINT dstY) {
+    if (!rgbaData || width == 0 || height == 0 || stride < width * 4 || !m_device || !m_context) {
+        m_mapMarkerActive = false;
+        return false;
+    }
+    if (!m_mapMarkerTexture || m_mapMarkerW != width || m_mapMarkerH != height) {
+        ReleaseMapMarkerResources();
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_mapMarkerTexture);
+        if (FAILED(hr)) return false;
+        hr = m_device->CreateShaderResourceView(m_mapMarkerTexture, nullptr, &m_mapMarkerSRV);
+        if (FAILED(hr) || !m_mapMarkerSRV) return false;
+        m_mapMarkerW = width;
+        m_mapMarkerH = height;
+    }
+    m_context->UpdateSubresource(m_mapMarkerTexture, 0, nullptr, rgbaData, stride, 0);
+    m_mapMarkerDstX = dstX;
+    m_mapMarkerDstY = dstY;
+    m_mapMarkerActive = true;
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseMapMarkerResources() {
+    if (m_mapMarkerSRV) { m_mapMarkerSRV->Release(); m_mapMarkerSRV = nullptr; }
+    if (m_mapMarkerTexture) { m_mapMarkerTexture->Release(); m_mapMarkerTexture = nullptr; }
+    m_mapMarkerW = 0;
+    m_mapMarkerH = 0;
+    m_mapMarkerActive = false;
+}
+
 bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
     double* outResampleMs, double* outFlush1Ms, double* outBlendMs, double* outFlush2Ms
 ) {
@@ -1229,9 +1282,10 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         return true;  // nothing to do — not an error
     }
 
-    // ETAP 8U-B: Fast-path Direct 1:1 GPU Blend
-    bool useDirect1to1 = (m_mapGpuPath == 2) ||
-                         (m_mapGpuPath == 0 && m_mapSrcW == m_mapOutW && m_mapSrcH == m_mapOutH);
+    // ETAP 8U-B: Fast-path Direct 1:1 GPU Blend (only if GPU rotation is not active)
+    bool useDirect1to1 = (!m_mapRotateEnabled) &&
+                         ((m_mapGpuPath == 2) ||
+                          (m_mapGpuPath == 0 && m_mapSrcW == m_mapOutW && m_mapSrcH == m_mapOutH));
     m_mapDirectUsed = useDirect1to1;
 
     if (useDirect1to1) {
@@ -1286,9 +1340,16 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
 
     const auto resampleStart = std::chrono::high_resolution_clock::now();
 
-    // Pass 1: 692 -> 691 RGBA resample
-    struct { UINT srcW, srcH, dstW, dstH, filter, pad; } resampleCB = {
-        m_mapSrcW, m_mapSrcH, m_mapOutW, m_mapOutH, (UINT)m_mapFilter, 0 };
+    // Pass 1: unrotated working image -> rotated Track-Up / resampled RGBA
+    float rotRad = (m_mapRotateEnabled ? (m_mapHeadingDeg * 3.14159265358979323846f / 180.0f) : 0.0f);
+    struct {
+        UINT srcW, srcH, dstW, dstH, filter, rotateEnabled;
+        float rotAngleRad, pad;
+    } resampleCB = {
+        m_mapSrcW, m_mapSrcH, m_mapOutW, m_mapOutH,
+        (UINT)m_mapFilter, m_mapRotateEnabled ? 1u : 0u,
+        rotRad, 0.0f
+    };
     m_context->UpdateSubresource(m_mapResampleCB, 0, nullptr, &resampleCB, 0, 0);
     m_context->CSSetShader(m_mapResampleShader, nullptr, 0);
     ID3D11Buffer* resampleCBs[1] = { m_mapResampleCB };
@@ -1318,7 +1379,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         *outFlush1Ms = std::chrono::duration<double, std::milli>(flush1End - flush1Start).count();
     }
 
-    // Pass 2: blend resampled 691 map into the persistent HUD canvas at bbox
+    // Pass 2: blend resampled/rotated map into the persistent HUD canvas at bbox
     const auto blendStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, mapW, mapH; } blendCB = {
         m_mapDstX, m_mapDstY, m_mapOutW, m_mapOutH };
@@ -1334,6 +1395,23 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
     ID3D11ShaderResourceView* nullSRV = nullptr;
     m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    // Pass 2.5: If directional marker is present, blend marker on top of map in screen space
+    if (m_mapMarkerActive && m_mapMarkerSRV && m_mapMarkerW > 0 && m_mapMarkerH > 0) {
+        struct { UINT dstX, dstY, mapW, mapH; } markerBlendCB = {
+            m_mapDstX + m_mapMarkerDstX, m_mapDstY + m_mapMarkerDstY,
+            m_mapMarkerW, m_mapMarkerH
+        };
+        m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &markerBlendCB, 0, 0);
+        m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, blendCBs);
+        ID3D11ShaderResourceView* markerSRV = m_mapMarkerSRV;
+        m_context->CSSetShaderResources(0, 1, &markerSRV);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        m_context->Dispatch((m_mapMarkerW + 15) / 16, (m_mapMarkerH + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        m_context->CSSetShaderResources(0, 1, &nullSRV);
+    }
 
     const auto pass2End = std::chrono::high_resolution_clock::now();
     if (outBlendMs) {
@@ -1395,6 +1473,7 @@ bool D3D11VideoProcessorPipeline::GetMapResampleReadback(uint8_t* outRGBA, UINT 
 }
 
 void D3D11VideoProcessorPipeline::ReleaseMapResources() {
+    ReleaseMapMarkerResources();
     if (m_mapResampleShader) { m_mapResampleShader->Release(); m_mapResampleShader = nullptr; }
     if (m_mapBlendShader) { m_mapBlendShader->Release(); m_mapBlendShader = nullptr; }
     if (m_mapResampleCB) { m_mapResampleCB->Release(); m_mapResampleCB = nullptr; }
@@ -1763,17 +1842,231 @@ void D3D11VideoProcessorPipeline::ReleaseChartResources() {
     if (m_chartBlendShader) { m_chartBlendShader->Release(); m_chartBlendShader = nullptr; }
 }
 
+// ── ETAP 1B: GPU AFTER-MAP chart compositing (HR/Cadence) ──────────────
+
+void D3D11VideoProcessorPipeline::SetAfterMapChartGpuEnabled(bool enabled) {
+    m_afterMapChartGpuEnabled = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+void D3D11VideoProcessorPipeline::SetAfterMapChartSplitMode(bool enabled) {
+    m_afterMapChartSplitMode = enabled;
+    if (enabled) InitializeChartCompositor();
+}
+
+bool D3D11VideoProcessorPipeline::UpdateAfterMapChartStaticTexture(
+    UINT slot, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_afterMapChartGpuEnabled || !m_afterMapChartSplitMode || slot >= CHART_SLOT_COUNT ||
+        !rgbaData || stride < width * 4 || !m_device || !m_context) return false;
+
+    if (!m_afterMapChartStaticTexture[slot] || m_afterMapChartW[slot] != width || m_afterMapChartH[slot] != height) {
+        if (m_afterMapChartStaticTexture[slot]) { m_afterMapChartStaticTexture[slot]->Release(); m_afterMapChartStaticTexture[slot] = nullptr; }
+        if (m_afterMapChartStaticSRV[slot]) { m_afterMapChartStaticSRV[slot]->Release(); m_afterMapChartStaticSRV[slot] = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_afterMapChartStaticTexture[slot]);
+        if (FAILED(hr)) {
+            std::cerr << "[AFTER_MAP_CHART] CreateChartStaticTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_afterMapChartStaticTexture[slot], nullptr, &m_afterMapChartStaticSRV[slot]);
+        if (FAILED(hr) || !m_afterMapChartStaticSRV[slot]) return false;
+        m_afterMapChartW[slot] = width;
+        m_afterMapChartH[slot] = height;
+        m_afterMapChartTextureCreates++;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    m_afterMapChartDstX[slot] = dstX;
+    m_afterMapChartDstY[slot] = dstY;
+    m_context->UpdateSubresource(m_afterMapChartStaticTexture[slot], 0, nullptr, rgbaData, stride, 0);
+    m_afterMapChartActive[slot] = true;
+    m_afterMapChartStaticUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_afterMapChartStaticUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateAfterMapChartDynamicTile(
+    UINT slot, UINT region, UINT width, UINT height, const uint8_t* rgbaData,
+    UINT stride, UINT localX, UINT localY, size_t* uploadedBytes) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (!m_afterMapChartGpuEnabled || !m_afterMapChartSplitMode || slot >= CHART_SLOT_COUNT ||
+        region > 1 || !rgbaData || stride < width * 4 || !m_device || !m_context ||
+        width == 0 || height == 0) return false;
+
+    ID3D11Texture2D** tex = (region == 0) ? &m_afterMapChartCursorTexture[slot] : &m_afterMapChartValueTexture[slot];
+    ID3D11ShaderResourceView** srv = (region == 0) ? &m_afterMapChartCursorSRV[slot] : &m_afterMapChartValueSRV[slot];
+    UINT& tw = (region == 0) ? m_afterMapChartCursorW[slot] : m_afterMapChartValueW[slot];
+    UINT& th = (region == 0) ? m_afterMapChartCursorH[slot] : m_afterMapChartValueH[slot];
+    UINT& tx = (region == 0) ? m_afterMapChartCursorX[slot] : m_afterMapChartValueX[slot];
+    UINT& ty = (region == 0) ? m_afterMapChartCursorY[slot] : m_afterMapChartValueY[slot];
+
+    if (!*tex || tw != width || th != height) {
+        if (*tex) { (*tex)->Release(); *tex = nullptr; }
+        if (*srv) { (*srv)->Release(); *srv = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, tex);
+        if (FAILED(hr)) {
+            std::cerr << "[AFTER_MAP_CHART] CreateChartDynamicTile failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(*tex, nullptr, srv);
+        if (FAILED(hr) || !*srv) return false;
+        tw = width;
+        th = height;
+        m_afterMapChartTextureCreates++;
+    }
+
+    tx = localX;
+    ty = localY;
+    m_context->UpdateSubresource(*tex, 0, nullptr, rgbaData, stride, 0);
+    m_afterMapChartDynamicUploads++;
+    if (uploadedBytes) *uploadedBytes = static_cast<size_t>(width) * height * 4;
+    m_afterMapChartDynamicUploadedBytes += static_cast<size_t>(width) * height * 4;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::BlendAfterMapCharts(double* outBlendMs, double* outFlushMs) {
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlushMs) *outFlushMs = 0.0;
+
+    if (!m_afterMapChartGpuEnabled || !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV) {
+        return true;
+    }
+
+    const auto blendStart = std::chrono::high_resolution_clock::now();
+    struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    UINT zeroCounts[1] = { 0 };
+
+    auto dispatch = [&](UINT dstX, UINT dstY, UINT w, UINT h, UINT mode,
+                        ID3D11ShaderResourceView* srv) {
+        if (w == 0 || h == 0) return;
+        cb = { dstX, dstY, w, h, mode, 0 };
+        ID3D11Buffer* cbs[1] = { m_chartBlendCB };
+        ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+        m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+        m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, cbs);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        if (srv) m_context->CSSetShaderResources(0, 1, &srv);
+        m_context->Dispatch((w + 15) / 16, (h + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+        if (srv) m_context->CSSetShaderResources(0, 1, &nullSRV);
+    };
+
+    for (UINT slot = 0; slot < CHART_SLOT_COUNT; ++slot) {
+        if (!m_afterMapChartActive[slot] || m_afterMapChartW[slot] == 0 || m_afterMapChartH[slot] == 0) {
+            continue;
+        }
+        const UINT cx = m_afterMapChartDstX[slot], cy = m_afterMapChartDstY[slot];
+        const UINT cw = m_afterMapChartW[slot], ch = m_afterMapChartH[slot];
+
+        if (m_afterMapChartSplitMode) {
+            // Straight-alpha blend static chart layer over m_hudTexture (which contains below HUD / dist_visual + map + above text)
+            if (m_afterMapChartStaticTexture[slot] && m_afterMapChartStaticSRV[slot]) {
+                dispatch(cx, cy, cw, ch, 1, m_afterMapChartStaticSRV[slot]);
+            }
+            // Replace dynamic cursor tile at (cx + cursorX, cy + cursorY)
+            if (m_afterMapChartCursorTexture[slot] && m_afterMapChartCursorSRV[slot] &&
+                m_afterMapChartCursorW[slot] > 0 && m_afterMapChartCursorH[slot] > 0) {
+                dispatch(cx + m_afterMapChartCursorX[slot], cy + m_afterMapChartCursorY[slot],
+                         m_afterMapChartCursorW[slot], m_afterMapChartCursorH[slot], 2,
+                         m_afterMapChartCursorSRV[slot]);
+            }
+            // Replace dynamic value text tile at (cx + valueX, cy + valueY)
+            if (m_afterMapChartValueTexture[slot] && m_afterMapChartValueSRV[slot] &&
+                m_afterMapChartValueW[slot] > 0 && m_afterMapChartValueH[slot] > 0) {
+                dispatch(cx + m_afterMapChartValueX[slot], cy + m_afterMapChartValueY[slot],
+                         m_afterMapChartValueW[slot], m_afterMapChartValueH[slot], 2,
+                         m_afterMapChartValueSRV[slot]);
+            }
+        } else {
+            if (!m_afterMapChartTexture[slot] || !m_afterMapChartSRV[slot]) continue;
+            dispatch(cx, cy, cw, ch, 1, m_afterMapChartSRV[slot]);
+        }
+
+        // Register after-map chart bounding box in m_abovePrevRegions so ClearPreviousAboveMap
+        // cleans it at the start of next frame.
+        if (m_abovePrevRegionCount < MAX_ABOVE_REGIONS) {
+            m_abovePrevRegions[m_abovePrevRegionCount].dstX = cx;
+            m_abovePrevRegions[m_abovePrevRegionCount].dstY = cy;
+            m_abovePrevRegions[m_abovePrevRegionCount].w = cw;
+            m_abovePrevRegions[m_abovePrevRegionCount].h = ch;
+            m_abovePrevRegions[m_abovePrevRegionCount].active = true;
+            m_abovePrevRegionCount++;
+        }
+    }
+
+    const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(dispatchesEnd - blendStart).count();
+    }
+
+    const auto flushStart = std::chrono::high_resolution_clock::now();
+    if (m_flushMode == 1) {
+        m_context->Flush();
+    }
+    const auto flushEnd = std::chrono::high_resolution_clock::now();
+    if (outFlushMs) {
+        *outFlushMs = std::chrono::duration<double, std::milli>(flushEnd - flushStart).count();
+    }
+
+    m_afterMapChartBlendMs = std::chrono::duration<double, std::milli>(flushEnd - blendStart).count();
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseAfterMapChartResources() {
+    for (UINT slot = 0; slot < CHART_SLOT_COUNT; ++slot) {
+        if (m_afterMapChartSRV[slot]) { m_afterMapChartSRV[slot]->Release(); m_afterMapChartSRV[slot] = nullptr; }
+        if (m_afterMapChartTexture[slot]) { m_afterMapChartTexture[slot]->Release(); m_afterMapChartTexture[slot] = nullptr; }
+        if (m_afterMapChartStaticSRV[slot]) { m_afterMapChartStaticSRV[slot]->Release(); m_afterMapChartStaticSRV[slot] = nullptr; }
+        if (m_afterMapChartStaticTexture[slot]) { m_afterMapChartStaticTexture[slot]->Release(); m_afterMapChartStaticTexture[slot] = nullptr; }
+        if (m_afterMapChartCursorSRV[slot]) { m_afterMapChartCursorSRV[slot]->Release(); m_afterMapChartCursorSRV[slot] = nullptr; }
+        if (m_afterMapChartCursorTexture[slot]) { m_afterMapChartCursorTexture[slot]->Release(); m_afterMapChartCursorTexture[slot] = nullptr; }
+        if (m_afterMapChartValueSRV[slot]) { m_afterMapChartValueSRV[slot]->Release(); m_afterMapChartValueSRV[slot] = nullptr; }
+        if (m_afterMapChartValueTexture[slot]) { m_afterMapChartValueTexture[slot]->Release(); m_afterMapChartValueTexture[slot] = nullptr; }
+        m_afterMapChartW[slot] = 0;
+        m_afterMapChartH[slot] = 0;
+        m_afterMapChartCursorW[slot] = m_afterMapChartCursorH[slot] = 0;
+        m_afterMapChartValueW[slot] = m_afterMapChartValueH[slot] = 0;
+        m_afterMapChartActive[slot] = false;
+    }
+}
+
 bool D3D11VideoProcessorPipeline::GetHUDCanvasRegionReadback(
     UINT x, UINT y, UINT w, UINT h, uint8_t* outRGBA, UINT stride) {
     // Diagnostic A/B readback of a region of the persistent HUD canvas (the
     // exact composited pixels the video consumes).  Never called on the
     // production export path.
     if (!outRGBA || !m_hudTexture || w == 0 || h == 0 || stride < w * 4) return false;
-    if (x + w > m_hudWidth || y + h > m_hudHeight) return false;
+    if (x >= m_hudWidth || y >= m_hudHeight) return false;
+    UINT copyW = (x + w > m_hudWidth) ? (m_hudWidth - x) : w;
+    UINT copyH = (y + h > m_hudHeight) ? (m_hudHeight - y) : h;
     ID3D11Texture2D* staging = nullptr;
     D3D11_TEXTURE2D_DESC desc = {};
-    desc.Width = w;
-    desc.Height = h;
+    desc.Width = copyW;
+    desc.Height = copyH;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1785,17 +2078,17 @@ bool D3D11VideoProcessorPipeline::GetHUDCanvasRegionReadback(
     box.left = x;
     box.top = y;
     box.front = 0;
-    box.right = x + w;
-    box.bottom = y + h;
+    box.right = x + copyW;
+    box.bottom = y + copyH;
     box.back = 1;
     m_context->CopySubresourceRegion(staging, 0, 0, 0, 0, m_hudTexture, 0, &box);
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     bool ok = false;
     if (SUCCEEDED(m_context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) {
         const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
-        for (UINT row = 0; row < h; ++row) {
+        for (UINT row = 0; row < copyH; ++row) {
             memcpy(outRGBA + static_cast<size_t>(row) * stride,
-                   src + static_cast<size_t>(row) * mapped.RowPitch, w * 4);
+                   src + static_cast<size_t>(row) * mapped.RowPitch, copyW * 4);
         }
         m_context->Unmap(staging, 0);
         ok = true;
@@ -1846,6 +2139,14 @@ void D3D11VideoProcessorPipeline::SetGaugeGpuEnabled(bool enabled) {
     if (enabled) InitializeChartCompositor();
 }
 
+// ETAP 2A: select gauge pass placement.  false (default) keeps the validated
+// ETAP 5L BEFORE-MAP behavior bit-for-bit; true enables the experimental
+// AFTER-MAP pass position with early previous-region clearing.
+void D3D11VideoProcessorPipeline::SetGaugeAfterMapPlacement(bool afterMap) {
+    m_gaugeAfterMapPlacement = afterMap;
+    if (!afterMap) m_gaugePrevValid = false;
+}
+
 bool D3D11VideoProcessorPipeline::UpdateGaugeTexture(
     UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
     UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated) {
@@ -1889,6 +2190,78 @@ bool D3D11VideoProcessorPipeline::UpdateGaugeTexture(
     return true;
 }
 
+// ── ETAP 2B: partial (sub-box) gauge texture update ────────────────────
+// Uploads ONLY a dynamic sub-rectangle of the persistent tile-sized gauge
+// texture (needle band + value digits).  The static dial art keeps its
+// pixels from the last full upload inside the SAME texture, so BlendGauge
+// semantics are unchanged: it always blends the full stored tile at
+// (m_gaugeDstX, m_gaugeDstY).  Texture creation and destination
+// bookkeeping mirror UpdateGaugeTexture exactly.
+bool D3D11VideoProcessorPipeline::UpdateGaugeRegionTexture(
+    UINT boxX, UINT boxY, UINT boxW, UINT boxH,
+    const uint8_t* rgbaData, UINT srcRowPitch,
+    UINT tileW, UINT tileH, UINT dstX, UINT dstY,
+    size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_gaugeGpuEnabled || !rgbaData || boxW == 0 || boxH == 0 ||
+        !m_device || !m_context) return false;
+
+    // Lazily create/resize the persistent tile texture (same description
+    // and bookkeeping as UpdateGaugeTexture).
+    if (!m_gaugeTexture || m_gaugeW != tileW || m_gaugeH != tileH) {
+        if (m_gaugeTexture) { m_gaugeTexture->Release(); m_gaugeTexture = nullptr; }
+        if (m_gaugeSRV) { m_gaugeSRV->Release(); m_gaugeSRV = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = tileW;
+        desc.Height = tileH;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_gaugeTexture);
+        if (FAILED(hr)) {
+            std::cerr << "[GAUGE] CreateGaugeTexture(region) failed: 0x"
+                      << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_gaugeTexture, nullptr, &m_gaugeSRV);
+        if (FAILED(hr) || !m_gaugeSRV) return false;
+        m_gaugeW = tileW;
+        m_gaugeH = tileH;
+        m_gaugeTextureCreates++;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    // Clamp the sub-box into the texture bounds.
+    UINT bx0 = boxX; if (bx0 > m_gaugeW) bx0 = m_gaugeW;
+    UINT by0 = boxY; if (by0 > m_gaugeH) by0 = m_gaugeH;
+    UINT bw = boxW; if (bw > m_gaugeW - bx0) bw = m_gaugeW - bx0;
+    UINT bh = boxH; if (bh > m_gaugeH - by0) bh = m_gaugeH - by0;
+    if (bw == 0 || bh == 0 || srcRowPitch < bw * 4) return false;
+
+    D3D11_BOX box = {};
+    box.left = bx0;
+    box.top = by0;
+    box.front = 0;
+    box.right = bx0 + bw;
+    box.bottom = by0 + bh;
+    box.back = 1;
+    m_context->UpdateSubresource(m_gaugeTexture, 0, &box, rgbaData, srcRowPitch, 0);
+
+    m_gaugeDstX = dstX;
+    m_gaugeDstY = dstY;
+    m_gaugeActive = true;
+    m_gaugeUploads++;
+    m_gaugeRegionUploads++;
+    const size_t bytes = static_cast<size_t>(bw) * bh * 4;
+    if (uploadedBytes) *uploadedBytes = bytes;
+    m_gaugeUploadedBytes += bytes;
+    return true;
+}
+
 bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlushMs) {
     if (outBlendMs) *outBlendMs = 0.0;
     if (outFlushMs) *outFlushMs = 0.0;
@@ -1907,21 +2280,36 @@ bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlus
     ID3D11Buffer* cbs[1] = { m_chartBlendCB };
     ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
 
-    // Pass A: clear the gauge bbox (removes last frame's gauge).
+    // Pass A (LEGACY BEFORE-MAP placement only): clear the gauge bbox while
+    // the map/ABOVE layers have NOT been drawn yet this frame, so the later
+    // passes restore the pixels underneath (exact ETAP 5L semantics).
+    // AFTER-MAP placement must NOT self-clear here: a destructive bbox clear
+    // after ResampleAndBlendMap/BlendAboveMap would erase fresh map/ABOVE
+    // pixels under the transparent parts of the gauge tile.  In that mode the
+    // previous frame's gauge region is erased early instead — see
+    // ClearPreviousAboveMap() and the m_gaugePrev* bookkeeping below.
     const auto clearStart = std::chrono::high_resolution_clock::now();
-    cb = { m_gaugeDstX, m_gaugeDstY, m_gaugeW, m_gaugeH, 0, 0 };
-    m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
-    m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
-    m_context->CSSetConstantBuffers(0, 1, cbs);
-    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
-    m_context->Dispatch((m_gaugeW + 15) / 16, (m_gaugeH + 15) / 16, 1);
-    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    if (!m_gaugeAfterMapPlacement) {
+        cb = { m_gaugeDstX, m_gaugeDstY, m_gaugeW, m_gaugeH, 0, 0 };
+        m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
+        m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, cbs);
+        m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+        m_context->Dispatch((m_gaugeW + 15) / 16, (m_gaugeH + 15) / 16, 1);
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    }
     m_gaugeClearMs = std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - clearStart).count();
 
     // Pass B: straight-alpha "over" of the gauge texture into the bbox
     // (mode 3: drop dirty zeros to match Pillow alpha_composite).
-    cb.mode = 3;
+    // ETAP 2A FIX: populate the FULL constant buffer here.  In AFTER-MAP
+    // placement Pass A is skipped, so cb would otherwise still hold the
+    // zero-initialized struct -> chartW/chartH == 0 makes every shader
+    // thread bail at the bounds check and the gauge silently draws nothing.
+    // Legacy BEFORE-MAP values are identical to the ones Pass A wrote, so
+    // ETAP 5L behavior stays bit-for-bit.
+    cb = { m_gaugeDstX, m_gaugeDstY, m_gaugeW, m_gaugeH, 3, 0 };
     m_context->UpdateSubresource(m_chartBlendCB, 0, nullptr, &cb, 0, 0);
     m_context->CSSetShader(m_chartBlendShader, nullptr, 0);
     m_context->CSSetShaderResources(0, 1, &m_gaugeSRV);
@@ -1929,6 +2317,17 @@ bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlus
     m_context->Dispatch((m_gaugeW + 15) / 16, (m_gaugeH + 15) / 16, 1);
     m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
     m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    // ETAP 2A: remember this frame's gauge rect so the NEXT frame can erase
+    // it early (ClearPreviousAboveMap) before below/map/above rebuild the
+    // background under it.
+    if (m_gaugeAfterMapPlacement) {
+        m_gaugePrevDstX = m_gaugeDstX;
+        m_gaugePrevDstY = m_gaugeDstY;
+        m_gaugePrevW = m_gaugeW;
+        m_gaugePrevH = m_gaugeH;
+        m_gaugePrevValid = true;
+    }
 
     const auto dispatchesEnd = std::chrono::high_resolution_clock::now();
     if (outBlendMs) {
@@ -1952,9 +2351,22 @@ bool D3D11VideoProcessorPipeline::BlendGauge(double* outBlendMs, double* outFlus
 bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap(double* outClearMs) {
     if (outClearMs) *outClearMs = 0.0;
 
-    if (!m_aboveMapGpuEnabled || !m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
+    if (!m_chartBlendShader || !m_chartBlendCB || !m_hudUAV)
         return true;
-    if (m_abovePrevRegionCount == 0) return true;
+
+    // ETAP 2A: erase the previous AFTER-MAP gauge region FIRST — while the
+    // HUD canvas still holds last frame's composite and before the below/map/
+    // above layers are rebuilt over it.  A late clear (after ResampleAndBlend-
+    // Map/BlendAboveMap) would punch a hole through the fresh map/ABOVE pixels
+    // under the transparent parts of the gauge tile.
+    const bool clearPrevGauge =
+        m_gaugeAfterMapPlacement && m_gaugePrevValid &&
+        m_gaugePrevW > 0 && m_gaugePrevH > 0;
+    const bool clearPrevLean =
+        m_leanGpuEnabled && m_leanPrevValid &&
+        m_leanPrevW > 0 && m_leanPrevH > 0;
+    if (!m_aboveMapGpuEnabled && !clearPrevGauge && !clearPrevLean) return true;
+    if (!clearPrevGauge && !clearPrevLean && m_abovePrevRegionCount == 0) return true;
 
     const auto clearStart = std::chrono::high_resolution_clock::now();
     struct { UINT dstX, dstY, chartW, chartH, mode, pad; } cb = {};
@@ -1982,6 +2394,16 @@ bool D3D11VideoProcessorPipeline::ClearPreviousAboveMap(double* outClearMs) {
     // map pass touches the shared HUD canvas.  This is deliberately before
     // those layers: clearing after GPU_MAP would erase pixels underneath an
     // old ABOVE bbox.
+    if (clearPrevGauge) {
+        dispatch(m_gaugePrevDstX, m_gaugePrevDstY, m_gaugePrevW, m_gaugePrevH,
+                 0, nullptr);
+        m_gaugePrevValid = false;
+    }
+    if (clearPrevLean) {
+        dispatch(m_leanPrevDstX, m_leanPrevDstY, m_leanPrevW, m_leanPrevH,
+                 0, nullptr);
+        m_leanPrevValid = false;
+    }
     for (UINT i = 0; i < m_abovePrevRegionCount; ++i) {
         if (m_abovePrevRegions[i].w > 0 && m_abovePrevRegions[i].h > 0) {
             dispatch(m_abovePrevRegions[i].dstX, m_abovePrevRegions[i].dstY,
@@ -2055,6 +2477,274 @@ void D3D11VideoProcessorPipeline::ReleaseGaugeResources() {
     m_gaugeW = 0;
     m_gaugeH = 0;
     m_gaugeActive = false;
+    m_gaugePrevValid = false;  // ETAP 2A
+}
+
+// ── ETAP 2G: GPU lean indicator sprite affine transform compositor ──
+
+void D3D11VideoProcessorPipeline::SetLeanGpuEnabled(bool enabled) {
+    m_leanGpuEnabled = enabled;
+    if (enabled) {
+        InitializeLeanCompositor();
+        InitializeChartCompositor();
+    }
+}
+
+bool D3D11VideoProcessorPipeline::InitializeLeanCompositor() {
+    if (m_leanBlendShader && m_leanBlendCB) return true;
+    if (!m_device) return false;
+
+    const char* leanSource = R"(
+        Texture2D<float4> LeanTex : register(t0);
+        RWTexture2D<float4> HUDCanvas : register(u0);
+        cbuffer LeanCB : register(b0) {
+            uint destX;
+            uint destY;
+            uint tightW;
+            uint tightH;
+            float pivotPx;
+            float pivotPy;
+            float screenPivotX;
+            float screenPivotY;
+            float cosAngle;
+            float sinAngle;
+            uint srcW;
+            uint srcH;
+        };
+
+        float CatmullRom(float x) {
+            float ax = abs(x);
+            if (ax < 1.0) {
+                return 1.5 * ax * ax * ax - 2.5 * ax * ax + 1.0;
+            } else if (ax < 2.0) {
+                return -0.5 * ax * ax * ax + 2.5 * ax * ax - 4.0 * ax + 2.0;
+            }
+            return 0.0;
+        }
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 tid : SV_DispatchThreadID) {
+            if (tid.x >= tightW || tid.y >= tightH) return;
+            uint2 canvasPos = uint2(destX + tid.x, destY + tid.y);
+            float screenX = float(canvasPos.x) + 0.5;
+            float screenY = float(canvasPos.y) + 0.5;
+
+            float dx = screenX - screenPivotX;
+            float dy = screenY - screenPivotY;
+
+            float srcX = cosAngle * dx + sinAngle * dy + pivotPx - 0.5;
+            float srcY = -sinAngle * dx + cosAngle * dy + pivotPy - 0.5;
+
+            int baseX = (int)floor(srcX) - 1;
+            int baseY = (int)floor(srcY) - 1;
+
+            float3 premulRgb = 0.0;
+            float alphaAcc = 0.0;
+            float wsum = 0.0;
+
+            [unroll]
+            for (int j = 0; j < 4; ++j) {
+                int iy = baseY + j;
+                float wy = CatmullRom(srcY - float(iy));
+                if (abs(wy) < 1e-6) continue;
+                [unroll]
+                for (int i = 0; i < 4; ++i) {
+                    int ix = baseX + i;
+                    if (ix < 0 || ix >= (int)srcW || iy < 0 || iy >= (int)srcH) continue;
+                    float wx = CatmullRom(srcX - float(ix));
+                    if (abs(wx) < 1e-6) continue;
+                    float w = wx * wy;
+                    float4 s = LeanTex.Load(int3(ix, iy, 0));
+                    premulRgb += s.rgb * s.a * w;
+                    alphaAcc += s.a * w;
+                    wsum += w;
+                }
+            }
+
+            if (wsum <= 1e-6 || alphaAcc <= 1e-6) return;
+
+            float4 srcF;
+            srcF.a = saturate(alphaAcc / wsum);
+            srcF.rgb = saturate(premulRgb / max(1e-6, alphaAcc));
+
+            uint4 src = (uint4)round(srcF * 255.0);
+            if (src.a == 0) return;
+
+            uint4 dst = (uint4)round(saturate(HUDCanvas.Load(int3(canvasPos, 0))) * 255.0);
+            float invA = (255.0 - float(src.a)) / 255.0;
+            float outAF = float(src.a) + float(dst.a) * invA;
+            uint outA = (uint)round(outAF);
+            if (outA == 0) return;
+
+            uint3 outC;
+            outC.x = (uint)round((float(src.x) * src.a + float(dst.x) * dst.a * invA) / outAF);
+            outC.y = (uint)round((float(src.y) * src.a + float(dst.y) * dst.a * invA) / outAF);
+            outC.z = (uint)round((float(src.z) * src.a + float(dst.z) * dst.a * invA) / outAF);
+            HUDCanvas[canvasPos] = float4(float3(min(outC, 255)), outA) / 255.0;
+        }
+    )";
+
+    ID3DBlob* blob = nullptr;
+    ID3DBlob* errors = nullptr;
+    HRESULT hr = D3DCompile(leanSource, strlen(leanSource), nullptr, nullptr, nullptr,
+                            "CSMain", "cs_5_0", 0, 0, &blob, &errors);
+    if (FAILED(hr)) {
+        if (errors) { std::cerr << "[LEAN] blend shader compile: " << (char*)errors->GetBufferPointer() << std::endl; errors->Release(); }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, &m_leanBlendShader);
+    blob->Release();
+    if (FAILED(hr)) return false;
+
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 48;  // LeanCB: 48 bytes
+    cbDesc.Usage = D3D11_USAGE_DEFAULT;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = m_device->CreateBuffer(&cbDesc, nullptr, &m_leanBlendCB);
+    if (FAILED(hr)) return false;
+
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::UpdateLeanStaticTexture(
+    UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+    size_t* uploadedBytes, bool* textureCreated) {
+    if (uploadedBytes) *uploadedBytes = 0;
+    if (textureCreated) *textureCreated = false;
+    if (!m_leanGpuEnabled || !rgbaData || width == 0 || height == 0 ||
+        stride < width * 4 || !m_device || !m_context) return false;
+
+    if (!m_leanTexture || m_leanSrcW != width || m_leanSrcH != height) {
+        if (m_leanTexture) { m_leanTexture->Release(); m_leanTexture = nullptr; }
+        if (m_leanSRV) { m_leanSRV->Release(); m_leanSRV = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_leanTexture);
+        if (FAILED(hr)) {
+            std::cerr << "[LEAN] CreateLeanTexture failed: 0x" << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        hr = m_device->CreateShaderResourceView(m_leanTexture, nullptr, &m_leanSRV);
+        if (FAILED(hr) || !m_leanSRV) return false;
+        m_leanSrcW = width;
+        m_leanSrcH = height;
+        if (textureCreated) *textureCreated = true;
+    }
+
+    m_context->UpdateSubresource(m_leanTexture, 0, nullptr, rgbaData, stride, 0);
+    m_leanStaticUploads++;
+    const size_t bytes = static_cast<size_t>(width) * height * 4;
+    if (uploadedBytes) *uploadedBytes = bytes;
+    m_leanStaticUploadedBytes += bytes;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::SetLeanTransform(
+    float angleDeg, float pivotPx, float pivotPy,
+    float screenPivotX, float screenPivotY,
+    UINT dstX, UINT dstY, UINT tightW, UINT tightH) {
+    if (!m_leanGpuEnabled) return false;
+    m_leanAngleDeg = angleDeg;
+    m_leanPivotPx = pivotPx;
+    m_leanPivotPy = pivotPy;
+    m_leanScreenPivotX = screenPivotX;
+    m_leanScreenPivotY = screenPivotY;
+    m_leanDstX = dstX;
+    m_leanDstY = dstY;
+    m_leanTightW = tightW;
+    m_leanTightH = tightH;
+    m_leanActive = true;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::BlendLean(double* outBlendMs, double* outFlushMs) {
+    if (outBlendMs) *outBlendMs = 0.0;
+    if (outFlushMs) *outFlushMs = 0.0;
+
+    if (!m_leanGpuEnabled || !m_leanActive || !m_leanTexture || !m_leanSRV ||
+        m_leanTightW == 0 || m_leanTightH == 0 || !m_leanBlendShader || !m_leanBlendCB ||
+        !m_hudUAV) {
+        return true;
+    }
+
+    const auto blendStart = std::chrono::high_resolution_clock::now();
+
+    float rad = -m_leanAngleDeg * 3.14159265358979323846f / 180.0f;
+    float cosA = std::cos(rad);
+    float sinA = std::sin(rad);
+
+    struct {
+        UINT destX;
+        UINT destY;
+        UINT tightW;
+        UINT tightH;
+        float pivotPx;
+        float pivotPy;
+        float screenPivotX;
+        float screenPivotY;
+        float cosAngle;
+        float sinAngle;
+        UINT srcW;
+        UINT srcH;
+    } cb = {
+        m_leanDstX,
+        m_leanDstY,
+        m_leanTightW,
+        m_leanTightH,
+        m_leanPivotPx,
+        m_leanPivotPy,
+        m_leanScreenPivotX,
+        m_leanScreenPivotY,
+        cosA,
+        sinA,
+        m_leanSrcW,
+        m_leanSrcH
+    };
+
+    m_context->UpdateSubresource(m_leanBlendCB, 0, nullptr, &cb, 0, 0);
+    m_context->CSSetShader(m_leanBlendShader, nullptr, 0);
+    ID3D11Buffer* cbs[1] = { m_leanBlendCB };
+    m_context->CSSetConstantBuffers(0, 1, cbs);
+    m_context->CSSetShaderResources(0, 1, &m_leanSRV);
+    ID3D11UnorderedAccessView* hudUAV = m_hudUAV;
+    UINT zeroCounts[1] = { 0 };
+    m_context->CSSetUnorderedAccessViews(0, 1, &hudUAV, zeroCounts);
+    m_context->Dispatch((m_leanTightW + 15) / 16, (m_leanTightH + 15) / 16, 1);
+    ID3D11UnorderedAccessView* nullUAV = nullptr;
+    m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, zeroCounts);
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+    m_leanPrevDstX = m_leanDstX;
+    m_leanPrevDstY = m_leanDstY;
+    m_leanPrevW = m_leanTightW;
+    m_leanPrevH = m_leanTightH;
+    m_leanPrevValid = true;
+
+    const auto blendEnd = std::chrono::high_resolution_clock::now();
+    if (outBlendMs) {
+        *outBlendMs = std::chrono::duration<double, std::milli>(blendEnd - blendStart).count();
+    }
+    m_leanBlendMs = std::chrono::duration<double, std::milli>(blendEnd - blendStart).count();
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleaseLeanResources() {
+    if (m_leanBlendCB) { m_leanBlendCB->Release(); m_leanBlendCB = nullptr; }
+    if (m_leanBlendShader) { m_leanBlendShader->Release(); m_leanBlendShader = nullptr; }
+    if (m_leanSRV) { m_leanSRV->Release(); m_leanSRV = nullptr; }
+    if (m_leanTexture) { m_leanTexture->Release(); m_leanTexture = nullptr; }
+    m_leanActive = false;
+    m_leanSrcW = 0;
+    m_leanSrcH = 0;
+    m_leanPrevValid = false;
 }
 
 bool D3D11VideoProcessorPipeline::CanUseInputSurface(
@@ -2315,16 +3005,16 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     }
     if (tsOn) m_context->End(m_tsQueries[tsSlot][3]);  // after charts blend
 
-    // ETAP 5L: GPU gauge blend (clear bbox + straight-alpha "over") into the
-    // HUD canvas.  Runs after the charts and before the map; the gauge guard
-    // verifies the gauge is disjoint from every other widget and the map, so
-    // the relative order does not change the final image.
-    if (SUCCEEDED(hr) && m_gaugeGpuEnabled &&
+    // ETAP 5L legacy placement (m_gaugeAfterMapPlacement == false): the gauge
+    // blends BEFORE the map so its destructive bbox self-clear cannot damage
+    // map/ABOVE pixels; disjointness is enforced by _gauge_gpu_layout_safe.
+    if (SUCCEEDED(hr) && m_gaugeGpuEnabled && !m_gaugeAfterMapPlacement &&
         !BlendGauge(fa && outStats ? &outStats->gauge_blend_ms : nullptr,
                     fa && outStats ? &outStats->gauge_flush_ms : nullptr)) {
-        hr = E_FAIL; std::cerr << "[VP] gauge blend FAILED" << std::endl;
+        hr = E_FAIL; std::cerr << "[VP] gauge blend (before-map legacy) FAILED" << std::endl;
     }
-    if (tsOn) m_context->End(m_tsQueries[tsSlot][4]);  // after gauge blend
+
+    if (tsOn) m_context->End(m_tsQueries[tsSlot][4]);  // gauge ts slot preserved for both placements
 
     // ETAP 5G: GPU-resident map 692->691 resize + blend into the HUD canvas
     // before the NV12 compositor consumes it (map stays out of the Pillow HUD).
@@ -2343,6 +3033,30 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         !BlendAboveMap(fa && outStats ? &outStats->above_blend_ms : nullptr,
                        fa && outStats ? &outStats->above_flush_ms : nullptr)) {
         hr = E_FAIL; std::cerr << "[VP] map-above blend FAILED" << std::endl;
+    }
+    // ETAP 2A: GPU gauge blend, AFTER-MAP placement only (AMD_AFTER_MAP_
+    // GAUGE_GPU=1).  Runs after BlendAboveMap, before BlendAfterMapCharts —
+    // matching the v10 logical Z-order.  No destructive self-clear here: the
+    // previous frame's gauge region was erased early this frame (see
+    // ClearPreviousAboveMap) and Pass B is a non-destructive straight-alpha
+    // "over" (mode 3), so map/ABOVE pixels under transparent gauge parts
+    // survive.  Its bbox is disjoint from the HR/Cadence chart bboxes
+    // (_gauge_after_map_layout_safe), so Z-order vs BlendAfterMapCharts is
+    // pixel-safe for v10.
+    if (SUCCEEDED(hr) && m_gaugeGpuEnabled && m_gaugeAfterMapPlacement &&
+        !BlendGauge(fa && outStats ? &outStats->gauge_blend_ms : nullptr,
+                    fa && outStats ? &outStats->gauge_flush_ms : nullptr)) {
+        hr = E_FAIL; std::cerr << "[VP] gauge blend (after-map) FAILED" << std::endl;
+    }
+    // ETAP 1B: blend AFTER-MAP charts (HR/Cadence) after BlendAboveMap
+    if (SUCCEEDED(hr) && m_afterMapChartGpuEnabled &&
+        !BlendAfterMapCharts()) {
+        hr = E_FAIL; std::cerr << "[VP] after-map chart blend FAILED" << std::endl;
+    }
+    // ETAP 2G: GPU lean indicator dynamic sprite blend
+    if (SUCCEEDED(hr) && m_leanGpuEnabled &&
+        !BlendLean()) {
+        hr = E_FAIL; std::cerr << "[VP] lean blend FAILED" << std::endl;
     }
     if (fa && outStats) {
         outStats->flush_total_ms = outStats->chart_flush_ms + outStats->gauge_flush_ms +
@@ -2392,7 +3106,25 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         return false;
     }
 
-    if (diagnosticsEnabled && (frameIndex == 30 || frameIndex == 300 || frameIndex == 900)) {
+    // Diagnostic HUD-canvas dumps. Fixed diagnostic frames 30/300/900 plus
+    // an optional env-configurable list (AMD_HUD_DUMP_FRAMES="100,101,102")
+    // used by ETAP validation scripts for ghosting / needle-sweep checks.
+    bool extraDumpFrame = false;
+    {
+        const char* envDumpFrames = getenv("AMD_HUD_DUMP_FRAMES");
+        if (envDumpFrames && *envDumpFrames) {
+            const char* p = envDumpFrames;
+            while (*p) {
+                char* end = nullptr;
+                const long v = strtol(p, &end, 10);
+                if (end == p) break;
+                if ((UINT)frameIndex == (UINT)v) { extraDumpFrame = true; break; }
+                p = (*end == ',') ? end + 1 : end;
+            }
+        }
+    }
+    if (diagnosticsEnabled &&
+        (frameIndex == 30 || frameIndex == 300 || frameIndex == 900 || extraDumpFrame)) {
         char hudPath[560];
         if (m_hudTexture) {
             snprintf(hudPath, sizeof(hudPath), "H_hud_canvas_%u.png", frameIndex);

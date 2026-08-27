@@ -18,7 +18,7 @@ import tracemalloc
 import ctypes
 import queue
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ctypes import byref, c_void_p, c_uint, c_uint64, c_int, c_double, c_uint8, POINTER
 from datetime import datetime, timedelta
 import numpy as np
@@ -31,15 +31,64 @@ except ImportError:
     Image = None
 
 from src.indicators.compositor import compose_overlay
-from src.indicators.moving_map import render_map_working_image
+from src.indicators.moving_map import (
+    render_map_working_image,
+    render_map_unrotated_working_image,
+    build_static_map_marker_tile,
+    _map_render_plan,
+)
+from src.indicators.helpers import s, _parse_marker_color
 from src.indicators.rotated_paste import (
     get_tight_bbox_collect_ms,
     reset_tight_bbox_collect,
 )
+# ETAP 2C: renderer-reported dynamic-support geometry for AUTO gauge regions.
+from src.indicators.gauge import get_gauge_dynamic_info
 from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CACHE
 
 
-AMD_NATIVE_ABI_VERSION = 8
+from ctypes import c_float
+AMD_NATIVE_ABI_VERSION = 9
+
+# ── ETAP 1A: Data contract for AFTER-MAP GPU_SPLIT Chart Capture ──────────────
+@dataclass
+class AfterMapChartTile:
+    """ETAP 1A — Python capture tile and metadata contract for AFTER-MAP charts.
+
+    Contains the static background layer and dynamic cursor/value tiles for a
+    chart placed after the track_map. Prepared for the future native
+    BlendAfterMapCharts pass (ETAP 1B).
+    """
+    chart_key: str
+    slot: int
+    placement: str # "AFTER_MAP"
+    bbox: tuple[int, int, int, int] # (dst_x, dst_y, dst_w, dst_h) in canvas coordinates
+    center: tuple[int, int]
+    rotation: int
+
+    # Static background layer
+    static_bytes: Optional[bytes] # RGBA 8:8:8:8 bytes (populated on initial frame or cache invalidation)
+    static_width: int
+    static_height: int
+    static_stride: int # static_width * 4
+
+    # Dynamic cursor tile
+    cursor_bytes: Optional[bytes] # RGBA bytes
+    cursor_width: int
+    cursor_height: int
+    cursor_stride: int
+    cursor_local: tuple[int, int] # (local_x, local_y) relative to chart top-left
+
+    # Dynamic value text tile
+    value_bytes: Optional[bytes] # RGBA bytes
+    value_width: int
+    value_height: int
+    value_stride: int
+    value_local: tuple[int, int] # (local_x, local_y) relative to chart top-left
+
+    format: str = "DXGI_FORMAT_R8G8B8A8_UNORM"
+    is_valid: bool = True
+
 
 # ── ETAP 8T-B: Asynchronous CPU Producer + Synchronous GPU Consumer Pipeline ──
 _END_OF_STREAM = object()
@@ -79,6 +128,7 @@ class PreparedFrame:
     map_active: bool
     map_data: Optional[tuple[bytes, int, int, tuple[int, int, int, int]]] # (bytes, w, h, dst_rect)
     map_geometry: Optional[tuple[int, int, int, int, int, int]] # (dst_x, dst_y, src_w, src_h, out_w, out_h)
+    map_heading: float
     
     # Diagnostics & Profiling
     timing_samples_producer: dict[str, float]
@@ -89,6 +139,18 @@ class PreparedFrame:
     above_stats: dict[str, Any]
     last_map_img: Optional[Any] = None
     last_map_dst: Optional[Any] = None
+
+    # ETAP 1A: After-Map Chart GPU_SPLIT capture data (diagnostic in 1A)
+    after_map_chart_captures: list[AfterMapChartTile] = field(default_factory=list)
+
+    # ── ETAP 2B: dynamic-region transfer payloads (None => full/legacy path)
+    gauge_region_data: Optional[list[tuple[bytes, int, int, int, int]]] = None # [(bytes, bx, by, bw, bh), ...]
+    gauge_tile_bbox: Optional[tuple[int, int, int, int]] = None # (gx, gy, gw, gh)
+    gauge_clear_only: bool = False # ETAP 2C AUTO: run clears, zero regions to upload
+
+    # ── ETAP 2G: GPU lean indicator dynamic transform payload ──────────
+    lean_active: bool = False
+    lean_transform: Optional[tuple[float, float, float, float, float, int, int, int, int]] = None
 
 
 _AMD_HUD_MODES = {"CPU_REFERENCE": 0, "GPU_HUD": 1}
@@ -147,11 +209,111 @@ _AMD_GAUGE_PATHS = {"CPU_REFERENCE": 0, "GPU": 1}
 _GAUGE_KEY = "fit_enhanced_speed_text"
 
 
+def _resolve_gauge_layout_key(layout: Optional[dict]) -> str:
+    """ETAP 2E: resolve the actual speed-gauge widget key for THIS layout.
+
+    The GPU gauge pipeline historically hard-coded the v10 preset key
+    (``fit_enhanced_speed_text``).  Real user projects may attach the gauge
+    form to a different indicator key (``def_layout.json`` uses
+    ``speed_text``), which made every probe / capture / dynamic-region lookup
+    target a widget that does not exist -> ``bbox=None`` ->
+    ``GPU gauge fallback -> CPU_REFERENCE (gauge not rendered)`` even though a
+    gauge is visibly rendered on the CPU ABOVE layer.
+
+    Resolution: first ENABLED indicator whose config declares
+    ``form == "gauge"`` in layout order.  Falls back to the historical v10 key
+    when nothing matches (legacy behaviour preserved).
+    """
+    indicators = (layout or {}).get("indicators", {})
+    for key, cfg in indicators.items():
+        if not isinstance(cfg, dict):
+            continue
+        if not cfg.get("enabled", True):
+            continue
+        if str(cfg.get("form", "")).strip().lower() == "gauge":
+            return str(key)
+    return _GAUGE_KEY
+
+# ── ETAP 2C: AUTO dynamic-region derivation (renderer-semantics based) ────────
+_GAUGE_AUTO_MAX_RECTS = 8      # hard cap — matches ETAP 2B consumer loop limit
+_GAUGE_REGION_SAFETY_PX = 1    # exporter-side growth beyond renderer support
+
+
+def _support_to_tile_rect(sup, off_x, off_y, gw, gh):
+    """Widget-local float support bbox -> clamped tile-local (x0,y0,x1,y1).
+
+    The renderer reports dynamic-element bounds in UNCLIPPED widget-image
+    coordinates. Tile coordinates subtract the clip offset between the raw
+    widget origin and the on-canvas tile origin, then clamp to the tile and
+    grow by a small safety margin for rasterizer edge rounding.
+    """
+    if sup is None:
+        return None
+    try:
+        x0, y0, x1, y1 = sup
+        ix0 = int(math.floor(float(x0))) - int(off_x) - _GAUGE_REGION_SAFETY_PX
+        iy0 = int(math.floor(float(y0))) - int(off_y) - _GAUGE_REGION_SAFETY_PX
+        ix1 = int(math.ceil(float(x1))) - int(off_x) + _GAUGE_REGION_SAFETY_PX
+        iy1 = int(math.ceil(float(y1))) - int(off_y) + _GAUGE_REGION_SAFETY_PX
+    except (TypeError, ValueError):
+        return None
+    ix0 = max(0, min(ix0, gw))
+    ix1 = max(0, min(ix1, gw))
+    iy0 = max(0, min(iy0, gh))
+    iy1 = max(0, min(iy1, gh))
+    if ix1 <= ix0 or iy1 <= iy0:
+        return None
+    return (ix0, iy0, ix1, iy1)
+
+
+def _union_tile_rects(a, b):
+    """Bounding box of two (x0,y0,x1,y1) rects (None-aware)."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return (min(a[0], b[0]), min(a[1], b[1]),
+            max(a[2], b[2]), max(a[3], b[3]))
+
+
+def _rects_intersect(a, b):
+    return not (a[2] <= b[0] or b[2] <= a[0]
+                or a[3] <= b[1] or b[3] <= a[1])
+
+
+def _merge_tile_rects(rects, max_rects=_GAUGE_AUTO_MAX_RECTS):
+    """Reduce rect list to <= max_rects while keeping every original pixel.
+
+    Overlapping pairs are merged first (minimal area growth); if the list is
+    still too long, the smallest rects are collapsed into bounding boxes.
+    Every returned rect is a union of input rects => superset guarantee.
+    """
+    rs = [tuple(int(v) for v in r) for r in rects if r is not None]
+    merged = True
+    while merged and len(rs) > max_rects:
+        merged = False
+        for i in range(len(rs)):
+            for j in range(i + 1, len(rs)):
+                if _rects_intersect(rs[i], rs[j]):
+                    rs[i] = _union_tile_rects(rs[i], rs[j])
+                    del rs[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    while len(rs) > max_rects:
+        rs.sort(key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+        rs[0] = _union_tile_rects(rs[0], rs[1])
+        del rs[1]
+    return rs
+
+
 def _gauge_gpu_layout_safe(
     gauge_bbox: Optional[tuple[int, int, int, int]],
     other_bboxes: dict[str, tuple[int, int, int, int]],
     chart_capture: dict[str, dict[str, Any]],
     map_dst: Optional[tuple[int, int, int, int]],
+    gauge_key: str = _GAUGE_KEY,
 ) -> tuple[bool, str]:
     """ETAP 5L z-order guard for the GPU gauge composite.
 
@@ -165,7 +327,7 @@ def _gauge_gpu_layout_safe(
         return False, "gauge not rendered"
     boxes: list[tuple[int, int, int, int]] = []
     for key, bbox in other_bboxes.items():
-        if key == _GAUGE_KEY:
+        if key == gauge_key:
             continue
         boxes.append(tuple(int(v) for v in bbox))
     for cap in chart_capture.values():
@@ -178,6 +340,33 @@ def _gauge_gpu_layout_safe(
         if gx < bx + bw and bx < gx + gw and gy < by + bh and by < gy + gh:
             return False, f"gauge overlaps widget bbox=({bx},{by},{bw},{bh})"
     return True, "gauge z-order disjoint -> GPU safe"
+
+
+def _gauge_after_map_layout_safe(
+    gauge_bbox: Optional[tuple[int, int, int, int]],
+    after_map_bboxes: dict[str, tuple[int, int, int, int]],
+) -> tuple[bool, str]:
+    """ETAP 2A z-order guard for the AFTER-MAP GPU gauge composite.
+
+    The GPU gauge blend (BlendGauge) now runs AFTER the map and BlendAboveMap,
+    immediately before BlendAfterMapCharts.  In this position the gauge may
+    legally overlap the map (it is drawn on top of it).
+
+    The only constraint is that the gauge bbox must be disjoint from the
+    other AFTER-MAP chart bboxes (HR / Cadence) to preserve their relative
+    pixel z-order.  In v10 the gauge (center ~50%, 53%) and the charts
+    (bottom 82%) are spatially separated, so this check always passes.
+
+    Unsafe layouts (gauge overlapping an after-map chart) fall back to CPU.
+    """
+    if gauge_bbox is None:
+        return False, "gauge not rendered"
+    gx, gy, gw, gh = tuple(int(v) for v in gauge_bbox)
+    for key, bbox in after_map_bboxes.items():
+        bx, by, bw, bh = tuple(int(v) for v in bbox)
+        if gx < bx + bw and bx < gx + gw and gy < by + bh and by < gy + gh:
+            return False, f"gauge overlaps after-map widget {key} bbox=({bx},{by},{bw},{bh})"
+    return True, "gauge disjoint from after-map widgets -> GPU-AFTER-MAP safe"
 
 
 def _chart_gpu_layout_safe(
@@ -607,27 +796,43 @@ def _extract_above_regions(
     return regions_out, stats
 
 
+class _ImagingMemoryInstance(ctypes.Structure):
+    _fields_ = [
+        ("mode", ctypes.c_char * 5),
+        ("type", ctypes.c_int32),
+        ("depth", ctypes.c_int32),
+        ("bands", ctypes.c_int32),
+        ("xsize", ctypes.c_int32),
+        ("ysize", ctypes.c_int32),
+        ("linesize", ctypes.c_int32),
+        ("pixelsize", ctypes.c_int32),
+        ("image", ctypes.POINTER(ctypes.c_void_p)),
+    ]
+
+
 def _extract_exact_above_regions(
     above_full: "Image.Image",
     clusters_with_members: list[tuple[tuple[int, int, int, int], list[str]]],
     tight_bboxes: dict[str, dict[str, Any]],
     canvas_w: int,
     canvas_h: int,
-) -> tuple[list[tuple[int, int, int, int, bytes]], dict[str, Any]]:
-    """ETAP 10R EXACT: extract ABOVE dirty regions from propagated tight bboxes.
+) -> tuple[list[Any], dict[str, Any]]:
+    """ETAP 10R EXACT + ETAP 4F DIRECT ZERO-COPY: extract ABOVE dirty regions.
 
     For each candidate cluster ``(rect, members)`` the exact upload region is
     the union of the members' alpha-tight bboxes (no extra padding), clipped to
-    the canvas.  This must be geometrically and pixel-identical to the SCAN
-    path's ``candidate.getchannel("A").getbbox()`` result — the exact region is
-    later used by the GPU ``ClearPreviousAboveMap`` erase, so any divergence
-    would change the final raster.
+    the canvas.
+
+    ETAP 4F: uses direct strided memory pointers into ``above_full``'s raw RGBA
+    canvas buffer.  Zero Pillow Image.crop allocations, zero tobytes() calls,
+    and zero Python bytes copies on CPU.  ID3D11DeviceContext::UpdateSubresource
+    reads the sub-rectangle directly from canvas memory with stride=canvas_w*4.
 
     Fallback (fail-safe): if any member has a missing / None / clipped tight
     bbox, or the union is invalid, that single cluster falls back to the SCAN
-    alpha-scan path.  No per-frame log spam; reasons are aggregated in stats.
+    alpha-scan path with a local crop + tobytes().
     """
-    regions_out: list[tuple[int, int, int, int, bytes]] = []
+    regions_out: list[Any] = []
     exact_union_ms = 0.0
     exact_crop_ms = 0.0
     fallback_scan_ms = 0.0
@@ -640,6 +845,22 @@ def _extract_exact_above_regions(
     exact_clusters = 0
     fallback_clusters = 0
     fallback_reasons: dict[str, int] = {}
+
+    row_table_ptr = None
+    canvas_stride = canvas_w * 4
+    if hasattr(above_full, "im") and hasattr(above_full.im, "ptr"):
+        try:
+            ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
+            ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+            ctypes.pythonapi.PyCapsule_GetName.restype = ctypes.c_char_p
+            ctypes.pythonapi.PyCapsule_GetName.argtypes = [ctypes.py_object]
+            cap_name = ctypes.pythonapi.PyCapsule_GetName(above_full.im.ptr)
+            raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(above_full.im.ptr, cap_name)
+            if raw_ptr:
+                # offset 40 (0x28) on x64 Pillow points to void** image row pointers
+                row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
+        except Exception:
+            row_table_ptr = None
 
     for (cx, cy, cw, ch), members in clusters_with_members:
         candidate_pixels += cw * ch
@@ -709,18 +930,29 @@ def _extract_exact_above_regions(
         exact_clusters += 1
         if exact_rect is None:
             # All members fully transparent -> no content -> no region
-            # (matches SCAN: candidate alpha bbox is None).
             continue
         ex, ey, ew, eh = exact_rect
         uploaded_pixels += ew * eh
-        t_crop_start = time.perf_counter()
-        reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
-        exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
-        t_b_start = time.perf_counter()
-        r_bytes = reg_img.tobytes("raw", "RGBA")
-        tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
-        uploaded_bytes += len(r_bytes)
-        regions_out.append((ex, ey, ew, eh, r_bytes))
+        uploaded_bytes += ew * eh * 4
+
+        is_contig = False
+        if row_table_ptr is not None:
+            top_row = ctypes.c_void_p.from_address(row_table_ptr + ey * 8).value
+            bottom_row = ctypes.c_void_p.from_address(row_table_ptr + (ey + eh - 1) * 8).value
+            if top_row and bottom_row and bottom_row == top_row + (eh - 1) * canvas_stride:
+                is_contig = True
+                region_ptr = top_row + ex * 4
+                regions_out.append((ex, ey, ew, eh, None, region_ptr, canvas_stride, above_full))
+
+        if not is_contig:
+            # Fallback when region crosses chunk boundary or Imaging memory instance unavailable
+            t_crop_start = time.perf_counter()
+            reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
+            exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
+            t_b_start = time.perf_counter()
+            r_bytes = reg_img.tobytes("raw", "RGBA")
+            tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+            regions_out.append((ex, ey, ew, eh, r_bytes))
 
     stats: dict[str, Any] = {
         "region_count": len(regions_out),
@@ -740,6 +972,85 @@ def _extract_exact_above_regions(
         "fallback_reason": fallback_reasons,
     }
     return regions_out, stats
+
+
+def _extract_fine_dynamic_above_regions(
+    above_full: "Image.Image",
+    above_bboxes: dict[str, tuple[int, int, int, int]],
+    above_tight_bboxes: dict[str, Any],
+    prev_fine_dirty: dict[str, tuple[int, int, int, int]],
+    canvas_w: int,
+    canvas_h: int,
+    pad: int = 4,
+    merge_dist: int = 16,
+    max_regions: int = 8,
+) -> tuple[list[tuple[int, int, int, int, bytes]], dict[str, Any], dict[str, tuple[int, int, int, int]]]:
+    """ETAP 3H: Extract fine-grained dynamic dirty regions unioned with previous frame's dynamic bbox."""
+    t_start = time.perf_counter()
+    new_prev_dirty: dict[str, tuple[int, int, int, int]] = {}
+    fine_candidate_rects: list[tuple[int, int, int, int]] = []
+
+    for k, box in above_bboxes.items():
+        tight = above_tight_bboxes.get(k)
+        if isinstance(tight, dict) and "bbox" in tight:
+            curr_dyn = tight["bbox"]
+        elif isinstance(tight, (tuple, list)):
+            curr_dyn = tuple(tight)
+        else:
+            curr_dyn = box
+
+        prev_dyn = prev_fine_dirty.get(k, curr_dyn)
+        union_box = _rect_union(prev_dyn, curr_dyn)
+        clipped = _clip_rect(union_box, canvas_w, canvas_h, pad=pad)
+        if clipped is not None and clipped[2] > 0 and clipped[3] > 0:
+            fine_candidate_rects.append(clipped)
+        new_prev_dirty[k] = curr_dyn
+
+    # Merge overlapping or close candidate rectangles using bounded planner
+    merged = _cluster_above_bboxes(
+        {f"dyn_{i}": r for i, r in enumerate(fine_candidate_rects)},
+        canvas_w, canvas_h, pad=0, merge_dist=merge_dist, max_regions=max_regions,
+    )
+
+    plan_ms = (time.perf_counter() - t_start) * 1000.0
+
+    regions_out: list[tuple[int, int, int, int, bytes]] = []
+    crop_ms = 0.0
+    tobytes_ms = 0.0
+    uploaded_pixels = 0
+    uploaded_bytes = 0
+
+    for cx, cy, cw, ch in merged:
+        t_c = time.perf_counter()
+        patch = above_full.crop((cx, cy, cx + cw, cy + ch))
+        crop_ms += (time.perf_counter() - t_c) * 1000.0
+
+        t_b = time.perf_counter()
+        r_bytes = patch.tobytes("raw", "RGBA")
+        tobytes_ms += (time.perf_counter() - t_b) * 1000.0
+
+        uploaded_pixels += cw * ch
+        uploaded_bytes += len(r_bytes)
+        regions_out.append((cx, cy, cw, ch, r_bytes))
+
+    stats: dict[str, Any] = {
+        "region_count": len(regions_out),
+        "candidate_pixels": uploaded_pixels,
+        "scanned_pixels": 0,
+        "uploaded_pixels": uploaded_pixels,
+        "uploaded_bytes": uploaded_bytes,
+        "candidate_crop_ms": 0.0,
+        "alpha_scan_ms": 0.0,
+        "final_crop_ms": 0.0,
+        "exact_crop_ms": crop_ms,
+        "tobytes_ms": tobytes_ms,
+        "tight_bbox_collect_ms": get_tight_bbox_collect_ms(),
+        "exact_union_ms": plan_ms,
+        "exact_clusters": len(merged),
+        "scan_fallback_clusters": 0,
+        "fallback_reason": {},
+    }
+    return regions_out, stats, new_prev_dirty
 
 
 class _FrameAccountant:
@@ -952,6 +1263,15 @@ def _dirty_rects_from_bboxes(
     return _coalesce_dirty_rects(candidates, max_rects=max_rects)
 
 
+# ETAP 3J: production default for AMD_ABOVE_SPARSE_COMPOSE (default OFF).
+_ABOVE_SPARSE_COMPOSE_DEFAULT = False
+
+
+def _resolve_above_sparse_compose() -> bool:
+    """Resolve ``AMD_ABOVE_SPARSE_COMPOSE`` feature flag (0 = OFF, 1 = ON)."""
+    return _env_flag("AMD_ABOVE_SPARSE_COMPOSE", _ABOVE_SPARSE_COMPOSE_DEFAULT)
+
+
 # ETAP 10Q/10R: production default for AMD_ABOVE_DIRTY_MODE.
 #   SCAN      = legacy alpha-scan path (candidate crop -> alpha scan ->
 #               tight crop -> tobytes).  Complete fallback, always available.
@@ -1001,10 +1321,6 @@ def _resolve_above_dirty_mode() -> str:
 #            synchronously before returning (verified in
 #            d3d11_vp_pipeline.cpp), so the pointer only needs to live for
 #            the duration of the call (r_bytes is referenced throughout).
-# ETAP 10U validated DIRECT on the GPU (120-frame COPY vs DIRECT byte-identical
-# parity, runtime byte-integrity check 120/120, region geometry parity, ghosting,
-# frame accounting, SCAN+DIRECT smoke) and flipped the production default to
-# DIRECT.  COPY remains selectable via AMD_ABOVE_UPLOAD_BUFFER_MODE=COPY.
 _ABOVE_UPLOAD_BUFFER_MODE_DEFAULT = "DIRECT"
 
 
@@ -1022,6 +1338,33 @@ def _resolve_above_upload_buffer_mode() -> str:
         flush=True,
     )
     return "COPY"
+
+
+# ETAP 3E/3F: AMD_ABOVE_MULTI_RECT
+# 0           = Single Union Mode (legacy reference ONE UNION RECT)
+# 1 (default) = Cost-aware Bounded Multi-Rect Planner (production default since ETAP 3F)
+_ABOVE_MULTI_RECT_DEFAULT = 1
+
+# ETAP 3H: AMD_ABOVE_FINE_DIRTY
+# 0 (default) = Full-Widget Multi-Rect (production baseline)
+# 1           = Fine-Grained Retained Dynamic Regions (experimental ETAP 3H)
+_ABOVE_FINE_DIRTY_DEFAULT = 0
+
+
+def _resolve_above_multi_rect() -> bool:
+    """Resolve ``AMD_ABOVE_MULTI_RECT`` (0 = Single Union, 1 = Multi-Rect), default 1 (ON)."""
+    raw = os.environ.get("AMD_ABOVE_MULTI_RECT")
+    if raw is None:
+        return bool(_ABOVE_MULTI_RECT_DEFAULT)
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _resolve_above_fine_dirty() -> bool:
+    """Resolve ``AMD_ABOVE_FINE_DIRTY`` (0 = Full-Widget Multi-Rect, 1 = Fine-Grained Retained Dirty), default 0 (OFF)."""
+    raw = os.environ.get("AMD_ABOVE_FINE_DIRTY")
+    if raw is None:
+        return bool(_ABOVE_FINE_DIRTY_DEFAULT)
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _above_region_pointer(r_bytes: bytes, mode: str):
@@ -1235,6 +1578,100 @@ def export_amd_native_d3d11(
     # for HR/Cadence (see _chart_gpu_layout_safe).  Both disabled by default.
     frame_trace_enabled = _env_flag("AMD_FRAME_TRACE", False)
     chart_trace_enabled = _env_flag("AMD_CHART_TRACE", False)
+    # ── ETAP 1A: Feature flag for after-map chart capture (diagnostic in 1A, default OFF) ──
+    after_map_chart_capture_diag = _env_flag("AMD_AFTER_MAP_CHART_CAPTURE_DIAG", False)
+    if after_map_chart_capture_diag:
+        print("[AMD NATIVE D3D11] AMD_AFTER_MAP_CHART_CAPTURE_DIAG: ON (diagnostic after-map chart capture active; native after-map blend: NO)", flush=True)
+    # ── ETAP 1B: Feature flag for native AFTER-MAP GPU_SPLIT charts (default ON) ──
+    after_map_chart_gpu = _env_flag("AMD_AFTER_MAP_CHART_GPU", True)
+    if after_map_chart_gpu:
+        print(f"[AMD NATIVE D3D11] AMD_AFTER_MAP_CHART_GPU: ON ({'env' if 'AMD_AFTER_MAP_CHART_GPU' in os.environ else 'default'}; native after-map chart GPU_SPLIT active)", flush=True)
+    else:
+        print(f"[AMD NATIVE D3D11] AMD_AFTER_MAP_CHART_GPU: OFF ({'env' if 'AMD_AFTER_MAP_CHART_GPU' in os.environ else 'default'}; after-map charts CPU_REFERENCE)", flush=True)
+    # ── ETAP 2A/2D: Feature flag for native AFTER-MAP GPU gauge (default ON) ──
+    # When ON, the speed gauge (fit_enhanced_speed_text) is captured from the
+    # map_above_layout (above-map compositor) and blended by the native
+    # BlendGauge pass AFTER the map and BlendAboveMap — matching v10 Z-order.
+    # When OFF, the gauge stays in above_compose (CPU_REFERENCE).
+    after_map_gauge_gpu = _env_flag("AMD_AFTER_MAP_GAUGE_GPU", True)
+    if after_map_gauge_gpu:
+        print(f"[AMD NATIVE D3D11] AMD_AFTER_MAP_GAUGE_GPU: ON ({'env' if 'AMD_AFTER_MAP_GAUGE_GPU' in os.environ else 'default'}; gauge AFTER-MAP GPU BlendGauge active)", flush=True)
+    else:
+        print(f"[AMD NATIVE D3D11] AMD_AFTER_MAP_GAUGE_GPU: OFF ({'env' if 'AMD_AFTER_MAP_GAUGE_GPU' in os.environ else 'default'}; gauge CPU_REFERENCE in above_compose)", flush=True)
+
+    # ── ETAP 2B/2C: dynamic-region gauge transfer mode selection ─────────────
+    # Transfer mode when AMD_AFTER_MAP_GAUGE_GPU enables the AFTER-MAP GPU
+    # gauge (default ON since ETAP 2D; explicit AMD_AFTER_MAP_GAUGE_GPU=0
+    # restores the legacy CPU gauge path):
+    #   MANUAL_RECTS — AMD_GAUGE_DYNAMIC_RECTS="x,y,w,h;..." set explicitly
+    #                  (ETAP 2B behavior; the env var wins over AUTO so manual
+    #                  experiments stay reproducible).
+    #   AUTO         — ETAP 2C: upload rectangles derived automatically from
+    #                  renderer semantics (gauge.py reports needle/value-text
+    #                  support bboxes + a style signature used as epoch key).
+    #                  AMD_GAUGE_AUTO_REGIONS=0 disables AUTO -> FULL_TILE.
+    #   FULL_TILE    — one full-tile upload per rendered frame (ETAP 2A
+    #                  behavior; also the per-frame SAFE fallback whenever
+    #                  AUTO cannot prove safety: unsupported widget kind,
+    #                  rotation != 0, missing renderer info).
+    # In ALL region modes the first frame of every epoch and every N-th frame
+    # afterwards (AMD_GAUGE_FULL_REFRESH_N, default 120) performs a full-tile
+    # resync upload.
+    gauge_region_mode = "FULL_TILE"
+    gauge_dynamic_rects: list[tuple[int, int, int, int]] = []
+    _gauge_rects_raw = os.environ.get("AMD_GAUGE_DYNAMIC_RECTS", "").strip()
+    if after_map_gauge_gpu and _gauge_rects_raw:
+        try:
+            for _part in _gauge_rects_raw.split(";"):
+                _nums = [int(v) for v in _part.split(",")]
+                if len(_nums) != 4 or any(v < 0 for v in _nums):
+                    raise ValueError(f"bad rect {_part!r}")
+                if _nums[2] == 0 or _nums[3] == 0:
+                    raise ValueError(f"zero-size rect {_part!r}")
+                gauge_dynamic_rects.append(tuple(_nums))
+            if len(gauge_dynamic_rects) > 8:
+                raise ValueError("too many rects (max 8)")
+            gauge_region_mode = "MANUAL_RECTS"
+        except ValueError as exc:
+            print(
+                "[AMD NATIVE D3D11] ERROR: AMD_GAUGE_DYNAMIC_RECTS parse "
+                f"failed ({exc}); ignoring region config.",
+                flush=True,
+            )
+            gauge_dynamic_rects = []
+            gauge_region_mode = "FULL_TILE"
+    if after_map_gauge_gpu and gauge_region_mode == "FULL_TILE":
+        if _env_flag("AMD_GAUGE_AUTO_REGIONS", True):
+            gauge_region_mode = "AUTO"
+    gauge_full_refresh_n = max(1, int(os.environ.get("AMD_GAUGE_FULL_REFRESH_N", "120")))
+    if gauge_region_mode == "MANUAL_RECTS":
+        print(
+            "[AMD NATIVE D3D11] AMD_GAUGE_DYNAMIC_RECTS: " + _gauge_rects_raw
+            + f" (k={len(gauge_dynamic_rects)}; ETAP 2B manual region transfer"
+            f" active, full refresh every {gauge_full_refresh_n} frames)",
+            flush=True,
+        )
+    elif gauge_region_mode == "AUTO":
+        print(
+            "[AMD NATIVE D3D11] AMD_GAUGE_DYNAMIC_RECTS: <unset>"
+            " (ETAP 2C AUTO regions derived from renderer semantics;"
+            f" SAFE/FULL-TILE fallback, full refresh every {gauge_full_refresh_n} frames)",
+            flush=True,
+        )
+    else:
+        print(
+            "[AMD NATIVE D3D11] AMD_GAUGE_DYNAMIC_RECTS: <unset>"
+            " (full-tile gauge upload every frame; ETAP 2A behavior)",
+            flush=True,
+        )
+    print(
+        f"[AMD GAUGE GPU] mode={gauge_region_mode} rects="
+        + (str(len(gauge_dynamic_rects))
+           if gauge_region_mode == "MANUAL_RECTS" else "-")
+        + " geometry=-"
+        + f" full_refresh={gauge_full_refresh_n}",
+        flush=True,
+    )
     frame_trace_rows: list[dict[str, Any]] = []
     native_hud_mode = os.environ.get("AMD_NATIVE_HUD_MODE", "GPU_HUD").strip().upper()
     if native_hud_mode not in _AMD_HUD_MODES:
@@ -1344,6 +1781,12 @@ def export_amd_native_d3d11(
             flush=True,
         )
 
+    gpu_map_rotate_flag = _env_flag("AMD_GPU_MAP_ROTATE", True)
+    map_cfg = layout.get("indicators", {}).get("track_map", {})
+    is_track_up = str(map_cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
+    gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up
+    print(f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} (flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up})", flush=True)
+
     # ETAP 5G: in GPU map mode the track_map widget leaves the Pillow HUD; the
     # CPU still renders its 692x692 working image, which is uploaded and
     # resized/composited on the GPU.  Everything else keeps the 5E path.
@@ -1355,6 +1798,19 @@ def export_amd_native_d3d11(
             "[AMD NATIVE D3D11] AMD_MAP_ORDER: "
             "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP "
             f"(after={map_after_keys or 'empty'})",
+            flush=True,
+        )
+
+    # ── ETAP 2E: resolve the real gauge widget key for this layout ────────
+    # The v10 hard-code (``fit_enhanced_speed_text``) misses user layouts that
+    # attach ``form == "gauge"`` to another key (e.g. ``speed_text``), which
+    # forced the AFTER-MAP gauge probe to report bbox=None and fall back to
+    # CPU_REFERENCE while the gauge was still rendered on the CPU ABOVE layer.
+    gauge_layout_key = _resolve_gauge_layout_key(layout)
+    if gauge_layout_key != _GAUGE_KEY:
+        print(
+            f"[AMD NATIVE D3D11] Gauge widget key: {gauge_layout_key} "
+            f"(layout-resolved; legacy default {_GAUGE_KEY})",
             flush=True,
         )
 
@@ -1388,6 +1844,23 @@ def export_amd_native_d3d11(
         requested_gauge_path = "CPU_REFERENCE"
     gauge_gpu_requested = requested_gauge_path == "GPU"
     print(f"[AMD NATIVE D3D11] AMD_GAUGE_PATH: {requested_gauge_path}", flush=True)
+
+    # ── ETAP 2G/3I: GPU lean indicator dynamic transform ──────────────────
+    # Production default since ETAP 3I (True/1). Explicit AMD_LEAN_GPU=0 restores CPU fallback.
+    lean_gpu_flag = _env_flag("AMD_LEAN_GPU", True)
+    lean_key = "lean_indicator"
+    for _k, _cfg in layout.get("indicators", {}).items():
+        if _k == "lean_indicator" or _cfg.get("form") == "lean":
+            lean_key = _k
+            break
+    lean_in_layout = lean_key in layout.get("indicators", {}) and layout["indicators"][lean_key].get("enabled", True)
+    lean_gpu_enabled = lean_gpu_flag and lean_in_layout and not cpu_reference_hud
+    print(
+        f"[AMD NATIVE D3D11] AMD_LEAN_GPU: {1 if lean_gpu_enabled else 0} "
+        f"(flag={lean_gpu_flag} [{'env' if 'AMD_LEAN_GPU' in os.environ else 'default'}], "
+        f"lean_in_layout={lean_in_layout}, key={lean_key})",
+        flush=True,
+    )
 
     # ── ETAP 8O: telemetry mode (precomputed frame cache is production default) ──
     telemetry_mode = os.environ.get("AMD_TELEMETRY_MODE", "PRECOMPUTED").strip().upper()
@@ -1426,6 +1899,30 @@ def export_amd_native_d3d11(
     above_upload_buffer_mode = _resolve_above_upload_buffer_mode()
     print(
         f"[AMD NATIVE D3D11] AMD_ABOVE_UPLOAD_BUFFER_MODE: {above_upload_buffer_mode}",
+        flush=True,
+    )
+
+    # ── ETAP 3E: ABOVE multi-rect dirty upload mode (0 = Single Union, 1 = Multi-Rect) ──
+    above_multi_rect_enabled = _resolve_above_multi_rect()
+    above_multi_rect_max = int(os.environ.get("AMD_ABOVE_MULTI_RECT_MAX", "8"))
+    print(
+        f"[AMD NATIVE D3D11] AMD_ABOVE_MULTI_RECT: {1 if above_multi_rect_enabled else 0} "
+        f"({'MULTI_RECT' if above_multi_rect_enabled else 'SINGLE_UNION'}, max_rects={above_multi_rect_max})",
+        flush=True,
+    )
+
+    # ── ETAP 3H: ABOVE fine-grained retained dynamic dirty updates ──
+    above_fine_dirty_enabled = _resolve_above_fine_dirty() and above_multi_rect_enabled
+    print(
+        f"[AMD NATIVE D3D11] AMD_ABOVE_FINE_DIRTY: {1 if above_fine_dirty_enabled else 0} "
+        f"({'FINE_DIRTY_RETAINED' if above_fine_dirty_enabled else 'FULL_WIDGET_MULTI_RECT'})",
+        flush=True,
+    )
+
+    # ── ETAP 3J: ABOVE sparse compositor mode ──
+    above_sparse_compose_enabled = _resolve_above_sparse_compose()
+    print(
+        f"[AMD NATIVE D3D11] AMD_ABOVE_SPARSE_COMPOSE: {1 if above_sparse_compose_enabled else 0}",
         flush=True,
     )
 
@@ -1579,8 +2076,19 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_update_map.restype = c_int
     native_dll.telem_amd_update_map.argtypes = [
-        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_void_p, c_void_p, c_uint, c_uint, c_uint,
         POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_set_map_rotate_mode.restype = c_int
+    native_dll.telem_amd_set_map_rotate_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_set_map_heading.restype = c_int
+    native_dll.telem_amd_set_map_heading.argtypes = [c_void_p, c_float]
+
+    native_dll.telem_amd_update_map_marker.restype = c_int
+    native_dll.telem_amd_update_map_marker.argtypes = [
+        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint, c_uint, c_uint,
     ]
 
     native_dll.telem_amd_set_above_map_mode.restype = c_int
@@ -1653,20 +2161,81 @@ def export_amd_native_d3d11(
         c_void_p, c_int, POINTER(c_uint8), c_uint,
     ]
 
+    # ── ETAP 1B — GPU AFTER-MAP chart compositing ───────────────────────
+    native_dll.telem_amd_set_after_map_chart_mode.restype = c_int
+    native_dll.telem_amd_set_after_map_chart_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_update_after_map_chart_static.restype = c_int
+    native_dll.telem_amd_update_after_map_chart_static.argtypes = [
+        c_void_p, c_int, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_update_after_map_chart_dynamic.restype = c_int
+    native_dll.telem_amd_update_after_map_chart_dynamic.argtypes = [
+        c_void_p, c_int, c_int, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_uint, c_uint, POINTER(c_uint64),
+    ]
+
+    native_dll.telem_amd_get_after_map_chart_stats.restype = None
+    native_dll.telem_amd_get_after_map_chart_stats.argtypes = [
+        c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_double), POINTER(c_uint64), POINTER(c_uint64),
+        POINTER(c_uint64), POINTER(c_uint64),
+    ]
+
     # ── ETAP 5L — GPU gauge compositing ────────────────────────────────
     native_dll.telem_amd_set_gauge_mode.restype = c_int
     native_dll.telem_amd_set_gauge_mode.argtypes = [c_void_p, c_int]
 
+    # ── ETAP 2A — gauge pass placement (1 = AFTER-MAP, 0 = legacy BEFORE-MAP) ──
+    native_dll.telem_amd_set_gauge_after_map.restype = c_int
+    native_dll.telem_amd_set_gauge_after_map.argtypes = [c_void_p, c_int]
+
+    # ── ETAP 2A FIX — start-of-frame clears on demand (before HUD upload) ──
+    native_dll.telem_amd_run_early_clears.restype = c_int
+    native_dll.telem_amd_run_early_clears.argtypes = [c_void_p]
+
     native_dll.telem_amd_update_gauge.restype = c_int
     native_dll.telem_amd_update_gauge.argtypes = [
-        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        c_void_p, c_void_p, c_uint, c_uint, c_uint,
         c_uint, c_uint, POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    # ── ETAP 2B — partial gauge texture update (dynamic sub-region) ──
+    native_dll.telem_amd_update_gauge_region.restype = c_int
+    native_dll.telem_amd_update_gauge_region.argtypes = [
+        c_void_p, c_void_p,
+        c_uint, c_uint, c_uint, c_uint, c_uint,
+        c_uint, c_uint, c_uint, c_uint,
+        POINTER(c_uint64), POINTER(c_int),
     ]
 
     native_dll.telem_amd_get_gauge_stats.restype = None
     native_dll.telem_amd_get_gauge_stats.argtypes = [
         c_void_p, POINTER(c_uint64), POINTER(c_uint64),
         POINTER(c_double), POINTER(c_double), POINTER(c_uint64),
+    ]
+
+    # ── ETAP 2G — GPU lean indicator compositing ───────────────────────
+    native_dll.telem_amd_set_lean_gpu_mode.restype = c_int
+    native_dll.telem_amd_set_lean_gpu_mode.argtypes = [c_void_p, c_int]
+
+    native_dll.telem_amd_update_lean_static_texture.restype = c_int
+    native_dll.telem_amd_update_lean_static_texture.argtypes = [
+        c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint,
+        POINTER(c_uint64), POINTER(c_int),
+    ]
+
+    native_dll.telem_amd_set_lean_transform.restype = c_int
+    native_dll.telem_amd_set_lean_transform.argtypes = [
+        c_void_p, c_float, c_float, c_float, c_float, c_float,
+        c_uint, c_uint, c_uint, c_uint,
+    ]
+
+    native_dll.telem_amd_get_lean_stats.restype = None
+    native_dll.telem_amd_get_lean_stats.argtypes = [
+        c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_double),
     ]
 
     native_dll.telem_amd_set_source_rotation.restype = c_int
@@ -1866,6 +2435,20 @@ def export_amd_native_d3d11(
             print("[AMD NATIVE D3D11] ERROR: failed to configure GPU map path.", flush=True)
             _cleanup_native_resources()
             return False
+        if gpu_map_rotate:
+            native_dll.telem_amd_set_map_rotate_mode(h_context, 1)
+            map_w_cfg = s(map_cfg.get("size", 0.1), video_width)
+            render_plan = _map_render_plan(video_width, map_w_cfg, int(map_cfg.get("zoom", 16)))
+            marker_style = str(map_cfg.get("map_marker_style", "dot")).strip().lower()
+            marker_color = _parse_marker_color(map_cfg.get("marker_color", "#FFFFFF"))
+            marker_radius = max(1, int(round(float(map_cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"]))))
+            mkr_tile, mkr_rect = build_static_map_marker_tile(map_w_cfg, marker_radius, marker_style, marker_color)
+            if mkr_tile is not None:
+                mkr_bytes = mkr_tile.tobytes("raw", "RGBA")
+                mx, my, mw, mh = mkr_rect
+                native_dll.telem_amd_update_map_marker(h_context, mkr_bytes, mw, mh, mw * 4, mx, my)
+        else:
+            native_dll.telem_amd_set_map_rotate_mode(h_context, 0)
 
     # ── ETAP 5J / 5K: GPU chart compositing (0 = CPU_REFERENCE, 1 = GPU,
     # 2 = GPU_SPLIT) ───────────────────────────────────────────────────
@@ -1874,11 +2457,58 @@ def export_amd_native_d3d11(
         _cleanup_native_resources()
         return False
 
+    # ── ETAP 1B: GPU AFTER-MAP chart compositing (2 = GPU_SPLIT, 0 = CPU_REFERENCE) ─
+    after_map_chart_mode_val = 2 if after_map_chart_gpu else 0
+    if not native_dll.telem_amd_set_after_map_chart_mode(h_context, after_map_chart_mode_val):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure GPU after-map chart mode.", flush=True)
+        _cleanup_native_resources()
+        return False
+
     # ── ETAP 5L: GPU gauge compositing (1 = GPU, 0 = CPU_REFERENCE) ────
     if not native_dll.telem_amd_set_gauge_mode(h_context, 1 if gauge_gpu_requested else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU gauge mode.", flush=True)
         _cleanup_native_resources()
         return False
+
+    # ── ETAP 2A: gauge pass placement (1 = AFTER-MAP experimental,
+    #    0 = legacy BEFORE-MAP).  Default OFF keeps ETAP 5L semantics. ──
+    if not native_dll.telem_amd_set_gauge_after_map(h_context, 1 if after_map_gauge_gpu else 0):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure gauge placement.", flush=True)
+        _cleanup_native_resources()
+        return False
+
+    # ── ETAP 2G: GPU lean indicator dynamic transform (1 = GPU, 0 = CPU) ─
+    if not native_dll.telem_amd_set_lean_gpu_mode(h_context, 1 if lean_gpu_enabled else 0):
+        print("[AMD NATIVE D3D11] ERROR: failed to configure GPU lean mode.", flush=True)
+        _cleanup_native_resources()
+        return False
+    if lean_gpu_enabled:
+        from src.indicators.lean import _load_lean_rotation_source, get_lean_gpu_transform_info
+        lean_cfg = layout.get("indicators", {}).get(lean_key, {})
+        _size_px = s(lean_cfg.get("size", 0.1), video_width)
+        _g = max(32, int(_size_px))
+        rot_src = _load_lean_rotation_source(lean_cfg, _g)
+        if rot_src is not None:
+            sprite_bytes = rot_src.graphic.tobytes("raw", "RGBA")
+            uploaded_bytes = c_uint64(0)
+            tex_created = c_int(0)
+            native_dll.telem_amd_update_lean_static_texture(
+                h_context,
+                sprite_bytes,
+                rot_src.gw, rot_src.gh, rot_src.gw * 4,
+                byref(uploaded_bytes), byref(tex_created)
+            )
+            print(
+                f"[AMD NATIVE D3D11] GPU lean static sprite uploaded: {rot_src.gw}x{rot_src.gh} "
+                f"({uploaded_bytes.value} bytes, pivot={rot_src.pivot_px},{rot_src.pivot_py})",
+                flush=True,
+            )
+        # Suppress CPU bike dynamic graphic rendering in all compose layouts
+        for _l in (compose_layout, map_above_layout, semantic_layout):
+            if _l is not None and "indicators" in _l:
+                for _k, _c in _l["indicators"].items():
+                    if _k == "lean_indicator" or _c.get("form") == "lean":
+                        _c["_skip_dynamic_graphic"] = True
 
     if not native_dll.telem_amd_set_source_rotation(h_context, source_rotation):
         print("[AMD NATIVE D3D11] ERROR: failed to configure source rotation.", flush=True)
@@ -1948,6 +2578,11 @@ def export_amd_native_d3d11(
         # ETAP 5L — GPU gauge compositing
         "gauge_tobytes": [],
         "gauge_upload": [],
+        # ETAP 2B — gauge capture / diff / byte-rate samples
+        "gauge_capture": [],
+        "gauge_diff": [],
+        "gauge_bytes_per_frame": [],
+        "gauge_upload_calls": [],
         "GPU gauge blend submit": [],
         "GPU chart blend submit": [],
         # ETAP 8B diagnostic decomposition of the former chart_upload bucket.
@@ -2059,6 +2694,27 @@ def export_amd_native_d3d11(
     chart_gpu_frames: dict[str, int] = {"fit_cadence_text": 0, "fit_heart_rate_text": 0}
     chart_uploaded_bytes_total = 0
     chart_geometry_set: set[str] = set()
+    # ETAP 1A — BEFORE-MAP / AFTER-MAP chart classification & diagnostic capture
+    before_map_chart_keys: set[str] = set()
+    after_map_chart_keys: set[str] = set()
+    all_layout_chart_keys: set[str] = set()
+    for _ck in _CHART_GPU_SLOTS.keys():
+        if _ck in layout.get("indicators", {}) and layout["indicators"][_ck].get("enabled", True):
+            all_layout_chart_keys.add(_ck)
+
+    if map_above_layout is not None:
+        for _ck in all_layout_chart_keys:
+            if _ck in map_above_layout.get("indicators", {}):
+                after_map_chart_keys.add(_ck)
+            else:
+                before_map_chart_keys.add(_ck)
+    else:
+        before_map_chart_keys = set(all_layout_chart_keys)
+
+    gpu_chart_keys_before_map: set[str] = set()
+    gpu_chart_keys_after_map: set[str] = set()
+    after_map_chart_static_uploaded: set[str] = set()
+    after_map_captures_performed: int = 0
     # ETAP 5K — GPU_SPLIT counters: static uploaded once per cache
     # invalidation; small dynamic tiles per frame.  The full-size tobytes
     # counter must stay 0 after the one-time static upload in GPU_SPLIT.
@@ -2075,6 +2731,10 @@ def export_amd_native_d3d11(
     gauge_gpu_reason = "disabled"
     gauge_gpu_frames = 0
     gauge_uploaded_bytes_total = 0
+    # ETAP 2B: dynamic-region gauge transfer counters.
+    gauge_upload_calls_total = 0
+    gauge_full_upload_frames = 0
+    gauge_region_upload_frames = 0
     gauge_static_geometry_set = False
     # Diagnostic ETAP 5J chart A/B readback results.
     chart_ab_results: dict[str, dict[str, list]] = {
@@ -2149,6 +2809,26 @@ def export_amd_native_d3d11(
             fit_field_plan=fit_field_plan,
             resolve_stats=fit_resolve_stats,
         )
+    # ── MAP ETAP 1: Ensure 100% of required map tiles are cached before frame loop ──
+    from src.indicators.moving_map import ensure_map_tiles_cached
+    from src.moving_map import set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats
+
+    if layout.get("indicators", {}).get("track_map", {}).get("enabled", True):
+        preload_info = ensure_map_tiles_cached(
+            video_width, video_height, layout, "track_map", gps_track,
+            cancel_event=cancel_event,
+        )
+        print(
+            f"[AMD Map Preload] provider={preload_info.get('provider')} "
+            f"zoom={preload_info.get('zoom')} margin={preload_info.get('margin')} "
+            f"required={preload_info.get('required')} "
+            f"cached={preload_info.get('cached')} downloaded={preload_info.get('downloaded')} "
+            f"missing_before_render={preload_info.get('missing')}",
+            flush=True,
+        )
+
+    reset_map_tile_stats()
+    set_map_network_allowed(False)
 
     telemetry_cache = None
     t_precompute_begin = time.perf_counter()
@@ -2202,6 +2882,72 @@ def export_amd_native_d3d11(
     print(f"[AMD NATIVE D3D11] AMD_CPU_GPU_PIPELINE={pipeline_mode}", flush=True)
 
     previous_bboxes_holder = [{}] # Mutable cell for producer
+    sparse_clusters_holder: list[Any] = [None]
+    sparse_tiles_holder: list[dict[Any, Any]] = [{}]
+    # ETAP 2A FIX: last gauge tile rect sent to the GPU as (x, y, w, h) or
+    # None.  Producer-side cell mirroring the DLL's m_gaugePrev* bookkeeping;
+    # used to force-reupload BELOW widgets intersecting the early-clear erase
+    # region (current ∪ previously sent tile).
+    previous_gauge_tile_holder: list[tuple[int, int, int, int] | None] = [None]
+
+    # ── ETAP 2B/2C: producer-side state for the dynamic-region gauge transfer ──
+    # geom tracks the current epoch key: (gw, gh, gx, gy) for MANUAL_RECTS;
+    # extended with hash(style-signature) for ETAP 2C AUTO ("fallback" marks
+    # unsupported frames sharing one full-tile epoch). The first frame of an
+    # epoch — and every Nth frame after — performs a full-tile upload while
+    # the rest use tight sub-box updates. auto_prev_* cache the PREVIOUS
+    # frame's tile-local dynamic supports so moved elements get erased by the
+    # next frame's crop bytes instead of ghosting over stale art.
+    gauge_region_state: dict[str, Any] = {
+        "geom": None, "frame_in_geom": 0,
+        "epoch_changes": 0, "mode": "-",
+        "auto_prev_needle": None,   # (x0,y0,x1,y1) tile-local or None
+        "auto_prev_text": None,     # (x0,y0,x1,y1) tile-local or None
+    }
+
+    # ── ETAP 2C DIAGNOSTIC (env-gated oracle validator; zero cost when OFF) ──
+    # AMD_GAUGE_REGION_ORACLE=1 diffs consecutive gauge tiles (numpy,
+    # probe-only CPU cost) and asserts that every changed pixel lies inside a
+    # rectangle actually sent to the consumer this frame. MISSED DYNAMIC
+    # PIXELS must remain 0 for the whole run.
+    _gauge_oracle_enabled = _env_flag("AMD_GAUGE_REGION_ORACLE", False)
+    _gauge_oracle_state: dict[str, Any] = {
+        "enabled": bool(_gauge_oracle_enabled),
+        "frames": 0,
+        "region_frames": 0,
+        "full_frames": 0,
+        "changed_pixels": 0,
+        "covered_pixels": 0,
+        "missed_dynamic_pixels": 0,
+        "worst_frame_missed": 0,
+        "violations": [],
+        "prev_arr": None,
+    }
+
+    # ── ETAP 3H: Fine dynamic dirty state tracking ──
+    above_fine_prev_dirty: dict[str, tuple[int, int, int, int]] = {}
+
+    # ── ETAP 2B DIAGNOSTIC (temporary, env-gated) ──
+    # Gauge tile variability measurement: when AMD_GAUGE_VARIABILITY_PROBE=1
+    # the producer diffs consecutive gauge captures (numpy, probe-only CPU
+    # cost) and records changed-pixel / tight-bbox / full-tile-hash statistics
+    # so the 2B transfer design can be built on data instead of guessing.
+    # Inert (zero cost) unless the env flag is set.
+    _gauge_var_probe = _env_flag("AMD_GAUGE_VARIABILITY_PROBE", False)
+    _gauge_var_state: dict[str, Any] = {
+        "geom": None,       # (gw, gh) of last measured capture
+        "prev": None,       # previous frame's HxWx4 uint8 array
+        "union": None,      # accumulated bool mask of all changed pixels
+        "frames": [],       # per-frame records
+        "missing": 0,       # frames where no gauge capture happened
+    }
+    if _gauge_var_probe:
+        print(
+            "[AMD NATIVE D3D11] ETAP 2B DIAGNOSTIC: gauge variability probe "
+            "ACTIVE (AMD_GAUGE_VARIABILITY_PROBE=1)",
+            flush=True,
+        )
+
     map_geometry_set_holder = [False]
     last_hud_report_holder = [0.0]
     timeline_trace = [] # First 20 frames trace
@@ -2296,7 +3042,9 @@ def export_amd_native_d3d11(
         t_samples_p["telemetry_other"] = t_other_ms
         
         nonlocal gpu_chart_keys, gpu_chart_reason, gauge_gpu_active, gauge_gpu_reason
-        if idx == 0 and gpu_charts_requested and not gpu_chart_keys:
+        nonlocal gpu_chart_keys_before_map, gpu_chart_keys_after_map, after_map_captures_performed
+        nonlocal above_fine_prev_dirty
+        if idx == 0 and gpu_charts_requested and not (gpu_chart_keys or gpu_chart_keys_after_map):
             _probe_capture: dict[str, dict[str, Any]] = {}
             _probe_bboxes: dict[str, tuple[int, int, int, int]] = {}
             _probe_render_keys = set(semantic_layout.get("indicators", {})) - {"track_map"}
@@ -2325,38 +3073,92 @@ def export_amd_native_d3d11(
                     map_heading=frame_kwargs.get("map_heading"),
                 )
                 _probe_map_dst = _p_dst
-            gpu_chart_keys, gpu_chart_reason = _chart_gpu_layout_safe(
+            _gpu_chart_keys_all, gpu_chart_reason = _chart_gpu_layout_safe(
                 _probe_bboxes, _probe_capture, _probe_map_dst,
+            )
+            # ETAP 1A & 1B: Strict separation of BEFORE-MAP and AFTER-MAP chart keys.
+            gpu_chart_keys_before_map = _gpu_chart_keys_all & before_map_chart_keys
+            # For AFTER-MAP charts, they are composited via BlendAfterMapCharts after the map/dist_visual,
+            # so they are validly eligible for native AFTER-MAP GPU_SPLIT.
+            gpu_chart_keys_after_map = set(after_map_chart_keys)
+            # Existing native BlendCharts pass runs BEFORE BlendAboveMap, so it
+            # MUST only receive before-map charts to preserve Z-order.
+            gpu_chart_keys = gpu_chart_keys_before_map
+
+            print(
+                f"[AMD NATIVE D3D11] Chart classification: "
+                f"BEFORE_MAP={sorted(before_map_chart_keys)} (active GPU={sorted(gpu_chart_keys_before_map)}), "
+                f"AFTER_MAP={sorted(after_map_chart_keys)} (diagnostic GPU-eligible={sorted(gpu_chart_keys_after_map)}) "
+                f"({gpu_chart_reason})",
+                flush=True,
             )
             if gpu_chart_keys:
                 print(
-                    f"[AMD NATIVE D3D11] GPU charts active: {sorted(gpu_chart_keys)} "
+                    f"[AMD NATIVE D3D11] GPU charts active (BEFORE_MAP): {sorted(gpu_chart_keys)} "
                     f"({gpu_chart_reason})",
                     flush=True,
                 )
-            else:
+            elif (
+                after_map_chart_gpu and gpu_charts_split
+                and gpu_chart_keys_after_map and map_above_layout is not None
+            ):
+                # ETAP 2E: all active charts live AFTER the map -> they are
+                # composited via the native AFTER-MAP GPU_SPLIT pass, so an
+                # empty BEFORE-MAP set is expected and is NOT a fallback.
+                # The old unconditional "GPU charts fallback" message here was
+                # misleading (it logged the whole-layout probe reason while
+                # AFTER-MAP capture ran normally).
+                print(
+                    f"[AMD NATIVE D3D11] GPU charts AFTER-MAP GPU_SPLIT ACTIVE: "
+                    f"{sorted(gpu_chart_keys_after_map)} "
+                    f"(CPU ABOVE HR: NO; CPU ABOVE CADENCE: NO)",
+                    flush=True,
+                )
+            elif gpu_chart_keys_after_map or before_map_chart_keys:
                 print(
                     f"[AMD NATIVE D3D11] GPU charts fallback -> CPU_REFERENCE "
                     f"({gpu_chart_reason})",
                     flush=True,
                 )
-            if gauge_gpu_requested:
-                _g_bbox = _probe_bboxes.get(_GAUGE_KEY)
-                gauge_gpu_active, gauge_gpu_reason = _gauge_gpu_layout_safe(
-                    _g_bbox, _probe_bboxes, _probe_capture, _probe_map_dst,
-                )
+            else:
                 print(
-                    f"[AMD NATIVE D3D11] GPU gauge "
-                    f"{'active' if gauge_gpu_active else 'fallback -> CPU_REFERENCE'} "
-                    f"bbox={_g_bbox} ({gauge_gpu_reason})",
+                    "[AMD NATIVE D3D11] GPU charts: no active chart widgets in layout",
                     flush=True,
                 )
+            if gauge_gpu_requested:
+                if after_map_gauge_gpu and map_above_layout is not None:
+                    # ETAP 2A: gauge is in map_above_layout; probe happens during
+                    # the above_full render on frame 0.  Safety check: disjoint
+                    # from after-map chart bboxes only (map overlap is OK).
+                    # We defer the actual safety check to the first above_full
+                    # render (below), since _probe_bboxes comes from semantic_layout.
+                    # Mark as tentatively active; confirmed in the above-map section.
+                    gauge_gpu_active = True
+                    gauge_gpu_reason = "AFTER-MAP probe deferred to above_full render"
+                    print(
+                        f"[AMD NATIVE D3D11] GPU gauge AFTER-MAP probe deferred "
+                        f"(will confirm on first above_full render)",
+                        flush=True,
+                    )
+                else:
+                    # ETAP 5L legacy: gauge runs BEFORE map, must be disjoint from all.
+                    _g_bbox = _probe_bboxes.get(gauge_layout_key)
+                    gauge_gpu_active, gauge_gpu_reason = _gauge_gpu_layout_safe(
+                        _g_bbox, _probe_bboxes, _probe_capture, _probe_map_dst,
+                        gauge_key=gauge_layout_key,
+                    )
+                    print(
+                        f"[AMD NATIVE D3D11] GPU gauge (BEFORE-MAP legacy) "
+                        f"{'active' if gauge_gpu_active else 'fallback -> CPU_REFERENCE'} "
+                        f"bbox={_g_bbox} ({gauge_gpu_reason})",
+                        flush=True,
+                    )
 
         _bboxes = {}
         gpu_capture: dict[str, dict[str, Any]] = {}
         capture_keys = set(gpu_chart_keys)
         if gauge_gpu_active:
-            capture_keys.add(_GAUGE_KEY)
+            capture_keys.add(gauge_layout_key)
             
         compose_start = time.perf_counter()
         composed_img = compose_overlay(
@@ -2373,6 +3175,25 @@ def export_amd_native_d3d11(
         )
         compose_elapsed_ms = (time.perf_counter() - compose_start) * 1000.0
         t_samples_p["compose_overlay"] = compose_elapsed_ms
+
+        # ETAP 2A DIAGNOSTIC (temporary, env-gated): dump compose ground truth
+        # so HUD-canvas parity diffs can be attributed to source content vs
+        # canvas state.  Value = run tag (e.g. ref / cand).  Dump frame list
+        # follows AMD_HUD_DUMP_FRAMES (comma-separated) when set, else 30/300.
+        _probe_tag = os.environ.get("AMD_ETAP2A_COMPOSE_PROBE")
+        if _probe_tag:
+            _raw_frames = os.environ.get("AMD_HUD_DUMP_FRAMES")
+            _probe_frames = (
+                {int(_t) for _t in _raw_frames.split(",") if _t.strip()}
+                if _raw_frames else {30, 300}
+            )
+            if idx in _probe_frames:
+                composed_img.save(
+                    rf"scratch/etap2a_test/compose_full_{_probe_tag}_f{idx}.png")
+                _band = composed_img.crop((1350, 1530, 2490, 1670))
+                _ba = np.asarray(_band)
+                _n170 = int(np.all(_ba == np.array([0, 0, 0, 170], dtype=np.uint8), axis=-1).sum())
+                print(f"[ETAP2A PROBE] f{idx} compose band 170s={_n170}", flush=True)
 
         # Above Map multi-region
         above_regions_out = []
@@ -2392,8 +3213,13 @@ def export_amd_native_d3d11(
         above_scan_fallback_clusters_frame = 0
         above_exact_fallback_reason_frame: dict[str, int] = {}
         
+        # ETAP 2A: Initialize above_gpu_capture so gauge code below can always
+        # reference it regardless of whether map_above_layout is active.
+        above_gpu_capture: dict[str, dict[str, Any]] = {}
+        above_bboxes: dict[str, tuple[int, int, int, int]] = {}
+
         if map_above_layout is not None:
-            above_bboxes: dict[str, tuple[int, int, int, int]] = {}
+            above_bboxes = {}
             above_tight_bboxes: dict[str, Any] | None = (
                 {} if above_dirty_mode == "EXACT" else None
             )
@@ -2401,71 +3227,286 @@ def export_amd_native_d3d11(
             above_reuse = "above" if above_cache_enabled else False
             above_compose_start = time.perf_counter()
             reset_tight_bbox_collect()
-            above_full = compose_overlay(
-                canvas_w=video_width,
-                canvas_h=video_height,
-                layout=map_above_layout,
-                font_path=font_path,
-                _bboxes=above_bboxes,
-                _tight_bboxes=above_tight_bboxes,
-                gpu_capture_keys=set(),
-                split_chart_keys=None,
-                reuse_canvas=above_reuse,
-                **frame_kwargs,
-            )
-            above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
-            
-            plan_start = time.perf_counter()
-            if above_dirty_mode == "EXACT":
-                clusters_with_members = _cluster_above_bboxes_members(
-                    above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=16
-                )
-                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
-                # ETAP 10R: exact tight-bbox upload (Variant A).  The exact
-                # region must equal SCAN's tight alpha region so that the GPU
-                # ClearPreviousAboveMap erase contract is preserved; any unsafe
-                # cluster falls back to the SCAN alpha-scan path.
-                above_regions_out, above_stats_p = _extract_exact_above_regions(
-                    above_full, clusters_with_members, above_tight_bboxes or {},
-                    video_width, video_height,
-                )
-                above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
-                above_scan_fallback_clusters_frame = above_stats_p.get("scan_fallback_clusters", 0)
-                above_exact_fallback_reason_frame = dict(above_stats_p.get("fallback_reason") or {})
-                above_exact_counters["clusters"] += above_exact_clusters_frame
-                above_exact_counters["fallback_clusters"] += above_scan_fallback_clusters_frame
-                for _reason, _cnt in above_exact_fallback_reason_frame.items():
-                    above_exact_counters["fallback_reason"][_reason] = (
-                        above_exact_counters["fallback_reason"].get(_reason, 0) + _cnt
+
+            # ETAP 1B: When after_map_chart_gpu is active, capture after-map charts and omit them from above_full CPU render
+            # ETAP 2A: When after_map_gauge_gpu is active, also capture gauge from above layout
+            above_gpu_capture = {}  # reset for this frame (was pre-initialized above)
+            above_capture_keys: set[str] = set(gpu_chart_keys_after_map if after_map_chart_gpu else set())
+            # ETAP 2E: gate the gauge capture on the LAYOUT-RESOLVED gauge key,
+            # not the v10 hard-code (user layouts use e.g. ``speed_text``).
+            if after_map_gauge_gpu and gauge_gpu_active and gauge_layout_key in map_above_layout.get("indicators", {}):
+                above_capture_keys.add(gauge_layout_key)
+            above_split_keys = gpu_chart_keys_after_map if (after_map_chart_gpu and gpu_charts_split) else None
+
+            if above_sparse_compose_enabled:
+                # ── ETAP 4B: AMD_ABOVE_SPARSE_COMPOSE ─────────────────────────
+                # Directly render disjoint widgets / clusters into local tiles,
+                # bypassing 3840x2160 full canvas allocations and global crops.
+                if above_capture_keys:
+                    compose_overlay(
+                        canvas_w=video_width,
+                        canvas_h=video_height,
+                        layout=map_above_layout,
+                        font_path=font_path,
+                        _bboxes={},
+                        _tight_bboxes={},
+                        render_keys=above_capture_keys,
+                        gpu_capture_keys=above_capture_keys,
+                        gpu_capture=above_gpu_capture,
+                        split_chart_keys=above_split_keys,
+                        target_image=None,
+                        reuse_canvas=False,
+                        **frame_kwargs,
                     )
-            elif os.getenv("AMD_ABOVE_MULTI_REGION", "1") != "0":
-                candidate_clusters = _cluster_above_bboxes(
-                    above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=16
-                )
-                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
-                above_regions_out, above_stats_p = _extract_above_regions(
-                    above_full, candidate_clusters, above_dirty_mode
-                )
+
+                # Initialize cluster partition from frame 0 layout bboxes if needed
+                if sparse_clusters_holder[0] is None:
+                    _probe_bboxes = {}
+                    compose_overlay(
+                        canvas_w=video_width,
+                        canvas_h=video_height,
+                        layout=map_above_layout,
+                        font_path=font_path,
+                        _bboxes=_probe_bboxes,
+                        gpu_capture_keys=above_capture_keys,
+                        gpu_capture={},
+                        split_chart_keys=above_split_keys,
+                        reuse_canvas=False,
+                        **frame_kwargs,
+                    )
+                    _cpu_boxes = {k: v for k, v in _probe_bboxes.items() if k not in above_capture_keys}
+                    sparse_clusters_holder[0] = _cluster_above_bboxes_members(
+                        _cpu_boxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                    )
+                    sparse_tiles_holder[0] = {
+                        tuple(members): Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+                        for (cx, cy, cw, ch), members in sparse_clusters_holder[0]
+                    }
+
+                clusters_with_members = sparse_clusters_holder[0]
+                above_regions_out = []
+                above_candidate_pixels = 0
+                above_uploaded_pixels = 0
+                above_uploaded_bytes = 0
+                t_tobytes_total = 0.0
+
+                for (cx, cy, cw, ch), members in clusters_with_members:
+                    above_candidate_pixels += cw * ch
+                    tile = sparse_tiles_holder[0][tuple(members)]
+                    tile.paste((0, 0, 0, 0), (0, 0, cw, ch))
+                    sub_tight = {}
+                    compose_overlay(
+                        canvas_w=video_width,
+                        canvas_h=video_height,
+                        layout=map_above_layout,
+                        font_path=font_path,
+                        _bboxes=above_bboxes,
+                        _tight_bboxes=sub_tight,
+                        render_keys=set(members),
+                        target_image=tile,
+                        coordinate_origin=(cx, cy),
+                        reuse_canvas=False,
+                        **frame_kwargs,
+                    )
+                    rects = []
+                    unsafe = False
+                    for m in members:
+                        entry = sub_tight.get(m)
+                        if entry is None or entry.get("clipped"):
+                            unsafe = True
+                            break
+                        r = entry.get("rect")
+                        if r is not None:
+                            rects.append(tuple(int(v) for v in r))
+                    if not unsafe and rects:
+                        left = min(r[0] for r in rects)
+                        top = min(r[1] for r in rects)
+                        right = max(r[0] + r[2] for r in rects)
+                        bottom = max(r[1] + r[3] for r in rects)
+                        exact_rect = _clip_rect((left + cx, top + cy, right - left, bottom - top), video_width, video_height, pad=0)
+                        if exact_rect is not None:
+                            ex, ey, ew, eh = exact_rect
+                            tight_crop = tile.crop((left, top, right, bottom))
+                            t_tb_s = time.perf_counter()
+                            r_bytes = tight_crop.tobytes("raw", "RGBA")
+                            t_tobytes_total += (time.perf_counter() - t_tb_s) * 1000.0
+                            above_regions_out.append((ex, ey, ew, eh, r_bytes))
+                            above_uploaded_pixels += ew * eh
+                            above_uploaded_bytes += len(r_bytes)
+                    elif unsafe:
+                        local_alpha_bbox = tile.getchannel("A").getbbox()
+                        if local_alpha_bbox is not None:
+                            lx, ly, rx, by = local_alpha_bbox
+                            reg_w, reg_h = rx - lx, by - ly
+                            reg_img = tile.crop(local_alpha_bbox)
+                            t_tb_s = time.perf_counter()
+                            r_bytes = reg_img.tobytes("raw", "RGBA")
+                            t_tobytes_total += (time.perf_counter() - t_tb_s) * 1000.0
+                            above_regions_out.append((cx + lx, cy + ly, reg_w, reg_h, r_bytes))
+                            above_uploaded_pixels += reg_w * reg_h
+                            above_uploaded_bytes += len(r_bytes)
+
+                above_compose_ms = max(0.0, (time.perf_counter() - above_compose_start) * 1000.0 - t_tobytes_total)
+                above_region_to_bytes_ms = t_tobytes_total
+                above_stats_p = {
+                    "region_count": len(above_regions_out),
+                    "candidate_pixels": above_candidate_pixels,
+                    "scanned_pixels": 0,
+                    "uploaded_pixels": above_uploaded_pixels,
+                    "uploaded_bytes": above_uploaded_bytes,
+                    "candidate_crop_ms": 0.0,
+                    "alpha_scan_ms": 0.0,
+                    "final_crop_ms": 0.0,
+                    "tobytes_ms": above_region_to_bytes_ms,
+                    "tight_bbox_collect_ms": get_tight_bbox_collect_ms(),
+                    "exact_union_ms": 0.0,
+                    "exact_crop_ms": 0.0,
+                    "exact_clusters": len(above_regions_out),
+                    "scan_fallback_clusters": 0,
+                    "exact_fallback_reason": {},
+                }
             else:
-                cand = _rendered_bbox_union(
-                    above_bboxes, video_width, video_height, pad=64
+                above_full = compose_overlay(
+                    canvas_w=video_width,
+                    canvas_h=video_height,
+                    layout=map_above_layout,
+                    font_path=font_path,
+                    _bboxes=above_bboxes,
+                    _tight_bboxes=above_tight_bboxes,
+                    gpu_capture_keys=above_capture_keys,
+                    gpu_capture=above_gpu_capture,
+                    split_chart_keys=above_split_keys,
+                    reuse_canvas=above_reuse,
+                    **frame_kwargs,
                 )
-                candidate_clusters = [cand] if cand is not None else []
-                above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
-                above_regions_out, above_stats_p = _extract_above_regions(
-                    above_full, candidate_clusters, above_dirty_mode
+                above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
+
+            # ETAP 2A: On frame 0, resolve deferred AFTER-MAP gauge safety check.
+            # The probe phase set gauge_gpu_active=True tentatively; now we have
+            # above_bboxes from the actual map_above_layout render to confirm.
+            if idx == 0 and after_map_gauge_gpu and gauge_gpu_active and \
+               gauge_gpu_reason == "AFTER-MAP probe deferred to above_full render":
+                # ETAP 2A: a captured key leaves compose_overlay's _bboxes
+                # (compositor.py skips the CPU paste), so the gauge bbox lives
+                # in above_gpu_capture[key]["bbox"] — fall back to above_bboxes
+                # only if capture did not happen for any reason.
+                _g_cap_above = above_gpu_capture.get(gauge_layout_key)
+                if _g_cap_above is not None and "bbox" in _g_cap_above:
+                    _g_bbox_above = _g_cap_above["bbox"]
+                else:
+                    _g_bbox_above = above_bboxes.get(gauge_layout_key)
+                _after_chart_bboxes = {
+                    k: above_bboxes[k]
+                    for k in (gpu_chart_keys_after_map or set())
+                    if k in above_bboxes
+                }
+                gauge_gpu_active, gauge_gpu_reason = _gauge_after_map_layout_safe(
+                    _g_bbox_above, _after_chart_bboxes,
                 )
-            above_candidate_crop_ms = above_stats_p["candidate_crop_ms"]
-            above_local_alpha_scan_ms = above_stats_p["alpha_scan_ms"]
-            above_final_crop_ms = above_stats_p["final_crop_ms"]
-            above_region_to_bytes_ms = above_stats_p["tobytes_ms"]
-            above_candidate_pixels = above_stats_p["candidate_pixels"]
-            above_scanned_pixels = above_stats_p["scanned_pixels"]
-            above_uploaded_pixels = above_stats_p["uploaded_pixels"]
-            above_uploaded_bytes = above_stats_p["uploaded_bytes"]
-            t_samples_p["above_tight_bbox_collect"] = above_stats_p.get("tight_bbox_collect_ms", 0.0)
-            t_samples_p["above_exact_union"] = above_stats_p.get("exact_union_ms", 0.0)
-            t_samples_p["above_exact_crop"] = above_stats_p.get("exact_crop_ms", 0.0)
+                print(
+                    f"[AMD NATIVE D3D11] GPU gauge AFTER-MAP "
+                    f"{'active' if gauge_gpu_active else 'fallback -> CPU_REFERENCE'} "
+                    f"key={gauge_layout_key} bbox={_g_bbox_above} ({gauge_gpu_reason})",
+                    flush=True,
+                )
+                if not gauge_gpu_active:
+                    # Fallback: gauge stays in CPU above_compose; remove from
+                    # above_capture_keys so it renders on CPU from the next frame.
+                    above_capture_keys.discard(gauge_layout_key)
+
+            # ── ETAP 2E: one-shot GPU activation summary (frame 0) ─────────
+            if idx == 0:
+                _hr_on_gpu = (
+                    after_map_chart_gpu and gpu_charts_split
+                    and "fit_heart_rate_text" in gpu_chart_keys_after_map
+                )
+                _cad_on_gpu = (
+                    after_map_chart_gpu and gpu_charts_split
+                    and "fit_cadence_text" in gpu_chart_keys_after_map
+                )
+                print(
+                    "[AMD NATIVE D3D11] GPU ACTIVATION SUMMARY: "
+                    f"GPU MAP ACTIVE: {'YES' if gpu_map_enabled else 'NO'} | "
+                    f"HR GPU ACTIVE: {'YES' if _hr_on_gpu else 'NO'} (CPU HR: {'NO' if _hr_on_gpu else 'YES'}) | "
+                    f"CADENCE GPU ACTIVE: {'YES' if _cad_on_gpu else 'NO'} "
+                    f"(CPU CADENCE: {'NO' if _cad_on_gpu else 'YES'}) | "
+                    f"GAUGE GPU ACTIVE: {'YES' if gauge_gpu_active else 'NO'} "
+                    f"(CPU GAUGE: {'NO' if gauge_gpu_active else 'YES'}, key={gauge_layout_key}) | "
+                    f"GAUGE MODE: {gauge_region_mode}",
+                    flush=True,
+                )
+
+            if not above_sparse_compose_enabled:
+                plan_start = time.perf_counter()
+                if above_multi_rect_enabled:
+                    if above_fine_dirty_enabled and idx > 0:
+                        above_region_plan_ms = 0.0
+                        above_regions_out, above_stats_p, above_fine_prev_dirty = _extract_fine_dynamic_above_regions(
+                            above_full, above_bboxes, above_tight_bboxes or {}, above_fine_prev_dirty,
+                            video_width, video_height, max_regions=above_multi_rect_max,
+                        )
+                        above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
+                        above_scan_fallback_clusters_frame = 0
+                        above_exact_fallback_reason_frame = {}
+                        above_exact_counters["clusters"] += above_exact_clusters_frame
+                    elif above_dirty_mode == "EXACT":
+                        clusters_with_members = _cluster_above_bboxes_members(
+                            above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                        )
+                        above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                        above_regions_out, above_stats_p = _extract_exact_above_regions(
+                            above_full, clusters_with_members, above_tight_bboxes or {},
+                            video_width, video_height,
+                        )
+                        if idx == 0 and above_fine_dirty_enabled:
+                            for _k, _box in above_bboxes.items():
+                                _tight = (above_tight_bboxes or {}).get(_k)
+                                above_fine_prev_dirty[_k] = _tight["bbox"] if (isinstance(_tight, dict) and "bbox" in _tight) else (_tight if isinstance(_tight, (tuple, list)) else _box)
+                        above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
+                        above_scan_fallback_clusters_frame = above_stats_p.get("scan_fallback_clusters", 0)
+                        above_exact_fallback_reason_frame = dict(above_stats_p.get("fallback_reason") or {})
+                        above_exact_counters["clusters"] += above_exact_clusters_frame
+                        above_exact_counters["fallback_clusters"] += above_scan_fallback_clusters_frame
+                        for _reason, _cnt in above_exact_fallback_reason_frame.items():
+                            above_exact_counters["fallback_reason"][_reason] = (
+                                above_exact_counters["fallback_reason"].get(_reason, 0) + _cnt
+                            )
+                    else:
+                        candidate_clusters = _cluster_above_bboxes(
+                            above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                        )
+                        above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                        above_regions_out, above_stats_p = _extract_above_regions(
+                            above_full, candidate_clusters, above_dirty_mode
+                        )
+                else:
+                    # AMD ETAP 3E: Single Union mode (legacy reference ONE UNION RECT)
+                    cand = _rendered_bbox_union(
+                        above_bboxes, video_width, video_height, pad=64
+                    )
+                    candidate_clusters = [cand] if cand is not None else []
+                    above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
+                    if above_dirty_mode == "EXACT" and candidate_clusters:
+                        clusters_with_members = [(candidate_clusters[0], list(above_bboxes.keys()))]
+                        above_regions_out, above_stats_p = _extract_exact_above_regions(
+                            above_full, clusters_with_members, above_tight_bboxes or {},
+                            video_width, video_height,
+                        )
+                    else:
+                        above_regions_out, above_stats_p = _extract_above_regions(
+                            above_full, candidate_clusters, above_dirty_mode
+                        )
+                above_candidate_crop_ms = above_stats_p["candidate_crop_ms"]
+                above_local_alpha_scan_ms = above_stats_p["alpha_scan_ms"]
+                above_final_crop_ms = above_stats_p["final_crop_ms"]
+                above_region_to_bytes_ms = above_stats_p["tobytes_ms"]
+                above_candidate_pixels = above_stats_p["candidate_pixels"]
+                above_scanned_pixels = above_stats_p["scanned_pixels"]
+                above_uploaded_pixels = above_stats_p["uploaded_pixels"]
+                above_uploaded_bytes = above_stats_p["uploaded_bytes"]
+                t_samples_p["above_tight_bbox_collect"] = above_stats_p.get("tight_bbox_collect_ms", 0.0)
+                t_samples_p["above_exact_union"] = above_stats_p.get("exact_union_ms", 0.0)
+                t_samples_p["above_exact_crop"] = above_stats_p.get("exact_crop_ms", 0.0)
 
         above_bbox_crop_ms = (
             above_region_plan_ms + above_candidate_crop_ms
@@ -2538,24 +3579,435 @@ def export_amd_native_d3d11(
         t_samples_p["chart_cpu_tobytes"] = chart_to_bytes_ms
         t_samples_p["chart_dynamic_tobytes"] = chart_dyn_tobytes_ms
 
+        # ETAP 1A & 1B: AFTER-MAP chart capture
+        after_map_chart_captures_frame: list[AfterMapChartTile] = []
+        if (after_map_chart_capture_diag or after_map_chart_gpu) and gpu_chart_keys_after_map and map_above_layout is not None:
+            if after_map_chart_gpu and above_gpu_capture:
+                _diag_after_capture = above_gpu_capture
+            else:
+                after_map_capture_layout = {
+                    "indicators": {k: copy.deepcopy(map_above_layout["indicators"][k]) for k in after_map_chart_keys if k in map_above_layout.get("indicators", {})},
+                    "custom_texts": [],
+                }
+                _diag_after_capture = {}
+                compose_overlay(
+                    canvas_w=video_width,
+                    canvas_h=video_height,
+                    layout=after_map_capture_layout,
+                    font_path=font_path,
+                    gpu_capture_keys=after_map_chart_keys,
+                    gpu_capture=_diag_after_capture,
+                    split_chart_keys=(after_map_chart_keys if gpu_charts_split else None),
+                    reuse_canvas=False,
+                    fast_preview=False,
+                    **frame_kwargs,
+                )
+            for _ack in after_map_chart_keys:
+                _cap = _diag_after_capture.get(_ack)
+                if _cap is None:
+                    continue
+                _abx, _aby, _abw, _abh = _cap["bbox"]
+                _aslot = _CHART_GPU_SLOTS.get(_ack, 0)
+                _center = _cap.get("center", (_abx + _abw // 2, _aby + _abh // 2))
+                _rot = _cap.get("rotation", 0)
+
+                _st_bytes = None
+                _st_w, _st_h, _st_stride = 0, 0, 0
+                _c_bytes, _cw, _ch, _c_stride = None, 0, 0, 0
+                _c_local = (0, 0)
+                _v_bytes, _vw, _vh, _v_stride = None, 0, 0, 0
+                _v_local = (0, 0)
+
+                if gpu_charts_split and _cap.get("split"):
+                    _static_img = _cap["static"]
+                    _st_w, _st_h = _static_img.width, _static_img.height
+                    _st_stride = _st_w * 4
+                    if _ack not in after_map_chart_static_uploaded:
+                        after_map_chart_static_uploaded.add(_ack)
+                        _st_bytes = _static_img.tobytes("raw", "RGBA")
+
+                    _ct = _cap.get("cursor_tile")
+                    if _ct is not None:
+                        _c_local = _cap.get("cursor_local", (0, 0))
+                        _cw, _ch = _ct.width, _ct.height
+                        _c_stride = _cw * 4
+                        _c_bytes = _ct.tobytes("raw", "RGBA")
+
+                    _vt = _cap.get("value_tile")
+                    if _vt is not None:
+                        _v_local = _cap.get("value_local", (0, 0))
+                        _vw, _vh = _vt.width, _vt.height
+                        _v_stride = _vw * 4
+                        _v_bytes = _vt.tobytes("raw", "RGBA")
+                else:
+                    _chart_img = _cap.get("image")
+                    if _chart_img is not None:
+                        _st_w, _st_h = _chart_img.width, _chart_img.height
+                        _st_stride = _st_w * 4
+                        _st_bytes = _chart_img.tobytes("raw", "RGBA")
+
+                _tile = AfterMapChartTile(
+                    chart_key=_ack,
+                    slot=_aslot,
+                    placement="AFTER_MAP",
+                    bbox=(_abx, _aby, _abw, _abh),
+                    center=_center,
+                    rotation=_rot,
+                    static_bytes=_st_bytes,
+                    static_width=_st_w,
+                    static_height=_st_h,
+                    static_stride=_st_stride,
+                    cursor_bytes=_c_bytes,
+                    cursor_width=_cw,
+                    cursor_height=_ch,
+                    cursor_stride=_c_stride,
+                    cursor_local=_c_local,
+                    value_bytes=_v_bytes,
+                    value_width=_vw,
+                    value_height=_vh,
+                    value_stride=_v_stride,
+                    value_local=_v_local,
+                    format="DXGI_FORMAT_R8G8B8A8_UNORM",
+                    is_valid=True,
+                )
+                after_map_chart_captures_frame.append(_tile)
+                after_map_captures_performed += 1
+
         # Gauge
         gauge_data = None
+        gauge_region_data: list[tuple[bytes, int, int, int, int]] | None = None
+        gauge_tile_bbox: tuple[int, int, int, int] | None = None
+        gauge_capture_ms = 0.0
+        gauge_diff_ms = 0.0
+        gauge_bytes_frame = 0
         gauge_tobytes_ms = 0.0
+        # ETAP 2C AUTO: set when the persistent GPU texture needs NO byte
+        # updates this frame but start-of-frame HUD clears must still run
+        # (the map moves underneath the erased gauge tile bbox).
+        gauge_clear_only_frame = False
         if gauge_gpu_active:
-            gauge_cap = gpu_capture.get(_GAUGE_KEY)
+            # ETAP 2A: gauge is captured from map_above_layout (above_gpu_capture).
+            # above_gpu_capture is only populated when map_above_layout is not None.
+            _gauge_source = above_gpu_capture if (after_map_gauge_gpu and map_above_layout is not None) else gpu_capture
+            gauge_cap = _gauge_source.get(gauge_layout_key)
             if gauge_cap is not None and "image" in gauge_cap:
                 gauge_img = gauge_cap["image"]
                 gx, gy, gw, gh = gauge_cap["bbox"]
+                # ETAP 2C: raw UNCLIPPED widget origin on the canvas. Region
+                # derivation maps renderer-reported widget-local supports
+                # into tile coordinates via (cx0 - _wgx, cy0 - _wgy).
+                _wgx, _wgy = int(gx), int(gy)
                 cx0, cy0 = max(0, gx), max(0, gy)
                 cx1, cy1 = min(video_width, gx + gw), min(video_height, gy + gh)
                 if cx1 > cx0 and cy1 > cy0:
-                    gauge_img = gauge_img.crop((cx0 - gx, cy0 - gy, cx1 - gx, cy1 - gy))
-                    gx, gy, gw, gh = cx0, cy0, cx1 - cx0, cy1 - cy0
-                    tb_start = time.perf_counter()
-                    gauge_bytes = gauge_img.tobytes("raw", "RGBA")
-                    gauge_tobytes_ms = (time.perf_counter() - tb_start) * 1000.0
-                    gauge_data = (gauge_bytes, gauge_img.width, gauge_img.height, gx, gy)
+                    # ETAP 2B: only clip-copy the widget image when it actually
+                    # leaves the canvas; a full-size crop is a needless tile
+                    # memcpy in the common fully-on-canvas case.
+                    if (cx0 != gx or cy0 != gy
+                            or cx1 - cx0 != gw or cy1 - cy0 != gh):
+                        _cap_start = time.perf_counter()
+                        gauge_img = gauge_img.crop(
+                            (cx0 - gx, cy0 - gy, cx1 - gx, cy1 - gy))
+                        gauge_capture_ms = (
+                            time.perf_counter() - _cap_start) * 1000.0
+                        gw, gh = cx1 - cx0, cy1 - cy0
+                    gx, gy = cx0, cy0
+                    gw, gh = cx1 - cx0, cy1 - cy0
+                    gauge_tile_bbox = (gx, gy, gw, gh)
+
+                    # ── ETAP 2B/2C: dynamic-region transfer ──────────────
+                    # MANUAL_RECTS (ETAP 2B): configured sub-rectangles.
+                    # AUTO (ETAP 2C): rectangles derived from renderer-
+                    # reported dynamic supports; any style/geometry signature
+                    # change resets the epoch and forces a full-tile upload;
+                    # unsupported configs fall back to FULL_TILE — never CPU.
+                    _do_region = bool(
+                        after_map_gauge_gpu
+                        and gauge_region_mode in ("MANUAL_RECTS", "AUTO"))
+                    _auto_info = None
+                    _auto_ok = False
+                    if _do_region and gauge_region_mode == "AUTO":
+                        _auto_info = get_gauge_dynamic_info(gauge_layout_key)
+                        _auto_ok = bool(
+                            isinstance(_auto_info, dict)
+                            and _auto_info.get("supported")
+                            and int(_auto_info.get("rotation", 0)) % 360 == 0)
+                    if _do_region:
+                        if gauge_region_mode == "MANUAL_RECTS":
+                            _epoch: Any = (gw, gh, gx, gy)
+                        elif _auto_ok:
+                            _epoch = (gw, gh, gx, gy,
+                                      hash(_auto_info["sig"]))
+                        else:
+                            # shared fallback epoch: consecutive unsupported
+                            # frames do NOT re-trigger epoch logs/uploads
+                            _epoch = (gw, gh, gx, gy, "fallback")
+                        if gauge_region_state["geom"] != _epoch:
+                            gauge_region_state["geom"] = _epoch
+                            gauge_region_state["frame_in_geom"] = 0
+                            gauge_region_state["auto_prev_needle"] = None
+                            gauge_region_state["auto_prev_text"] = None
+                            gauge_region_state["epoch_changes"] += 1
+                            _mode_label = (
+                                "MANUAL_RECTS"
+                                if gauge_region_mode == "MANUAL_RECTS"
+                                else ("AUTO_SAFE" if _auto_ok
+                                      else "AUTO_FALLBACK_FULLTILE"))
+                            gauge_region_state["mode"] = _mode_label
+                            print(
+                                f"[AMD GAUGE GPU] mode={_mode_label} rects="
+                                + (str(len(gauge_dynamic_rects))
+                                   if gauge_region_mode == "MANUAL_RECTS"
+                                   else "-")
+                                + f" geometry={gw}x{gh}"
+                                + f" full_refresh={gauge_full_refresh_n}",
+                                flush=True)
+                        _fig = gauge_region_state["frame_in_geom"]
+                        _do_region = bool(
+                            _fig > 0
+                            and (gauge_region_mode == "MANUAL_RECTS" or _auto_ok)
+                            and (_fig % max(1, gauge_full_refresh_n)) != 0)
+                    # ETAP 2C: refresh the cached supports EVERY frame (also
+                    # on full/resync frames) so the previous-capture supports
+                    # used for erase coverage are never staler than one frame
+                    # — otherwise the first region frame after a full-tile
+                    # resync could leave stale needle art between positions.
+                    _prev_needle = None
+                    _prev_text = None
+                    if gauge_region_mode == "AUTO" and _auto_ok:
+                        _prev_needle = gauge_region_state["auto_prev_needle"]
+                        _prev_text = gauge_region_state["auto_prev_text"]
+                        gauge_region_state["auto_prev_needle"] = (
+                            _support_to_tile_rect(
+                                _auto_info.get("needle_bbox"),
+                                cx0 - _wgx, cy0 - _wgy, gw, gh))
+                        gauge_region_state["auto_prev_text"] = (
+                            _support_to_tile_rect(
+                                _auto_info.get("text_bbox"),
+                                cx0 - _wgx, cy0 - _wgy, gw, gh))
+                    _oracle_rects: list[tuple[int, int, int, int]] = []
+                    gauge_clear_only_frame = False
+                    gauge_row_table_ptr = None
+                    gauge_stride = gw * 4
+                    if hasattr(gauge_img, "im") and hasattr(gauge_img.im, "ptr"):
+                        try:
+                            cap_name = ctypes.pythonapi.PyCapsule_GetName(gauge_img.im.ptr)
+                            raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(gauge_img.im.ptr, cap_name)
+                            if raw_ptr:
+                                gauge_row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
+                        except Exception:
+                            gauge_row_table_ptr = None
+
+                    if _do_region:
+                        tb_start = time.perf_counter()
+                        _regions: list[Any] = []
+                        if gauge_region_mode == "MANUAL_RECTS":
+                            for (_rx, _ry, _rw, _rh) in gauge_dynamic_rects:
+                                _bx0 = max(0, min(int(_rx), gw))
+                                _by0 = max(0, min(int(_ry), gh))
+                                _bx1 = max(0, min(int(_rx) + int(_rw), gw))
+                                _by1 = max(0, min(int(_ry) + int(_rh), gh))
+                                if _bx1 <= _bx0 or _by1 <= _by0:
+                                    continue
+                                _oracle_rects.append((_bx0, _by0, _bx1, _by1))
+                                _rw_box = _bx1 - _bx0
+                                _rh_box = _by1 - _by0
+                                is_contig = False
+                                if gauge_row_table_ptr is not None:
+                                    top_row = ctypes.c_void_p.from_address(gauge_row_table_ptr + _by0 * 8).value
+                                    bottom_row = ctypes.c_void_p.from_address(gauge_row_table_ptr + (_by1 - 1) * 8).value
+                                    if top_row and bottom_row and bottom_row == top_row + (_rh_box - 1) * gauge_stride:
+                                        is_contig = True
+                                        reg_ptr = top_row + _bx0 * 4
+                                        _regions.append((None, _bx0, _by0, _rw_box, _rh_box, reg_ptr, gauge_stride, gauge_img))
+                                if not is_contig:
+                                    _sub = gauge_img.crop((_bx0, _by0, _bx1, _by1))
+                                    _regions.append((
+                                        _sub.tobytes("raw", "RGBA"),
+                                        _bx0, _by0, _rw_box, _rh_box))
+                        else:
+                            # ETAP 2C AUTO derivation (tile-local): needle
+                            # sweep band ∪ value-text box of THIS frame
+                            # unioned with the PREVIOUS frame's supports so
+                            # moved elements are erased by fresh bytes.
+                            _auto_cur_rects: list[tuple[int, int, int, int]] = []
+                            _u = _union_tile_rects(
+                                _support_to_tile_rect(
+                                    _auto_info.get("needle_bbox"),
+                                    cx0 - _wgx, cy0 - _wgy, gw, gh),
+                                _prev_needle)
+                            if _u is not None:
+                                _auto_cur_rects.append(_u)
+                            _u = _union_tile_rects(
+                                _support_to_tile_rect(
+                                    _auto_info.get("text_bbox"),
+                                    cx0 - _wgx, cy0 - _wgy, gw, gh),
+                                _prev_text)
+                            if _u is not None:
+                                _auto_cur_rects.append(_u)
+                            for (_bx0, _by0, _bx1, _by1) in _merge_tile_rects(
+                                    _auto_cur_rects):
+                                _oracle_rects.append((_bx0, _by0, _bx1, _by1))
+                                _rw_box = _bx1 - _bx0
+                                _rh_box = _by1 - _by0
+                                is_contig = False
+                                if gauge_row_table_ptr is not None:
+                                    top_row = ctypes.c_void_p.from_address(gauge_row_table_ptr + _by0 * 8).value
+                                    bottom_row = ctypes.c_void_p.from_address(gauge_row_table_ptr + (_by1 - 1) * 8).value
+                                    if top_row and bottom_row and bottom_row == top_row + (_rh_box - 1) * gauge_stride:
+                                        is_contig = True
+                                        reg_ptr = top_row + _bx0 * 4
+                                        _regions.append((None, _bx0, _by0, _rw_box, _rh_box, reg_ptr, gauge_stride, gauge_img))
+                                if not is_contig:
+                                    _sub = gauge_img.crop((_bx0, _by0, _bx1, _by1))
+                                    _regions.append((
+                                        _sub.tobytes("raw", "RGBA"),
+                                        _bx0, _by0, _rw_box, _rh_box))
+                        gauge_tobytes_ms = (
+                            time.perf_counter() - tb_start) * 1000.0
+                        if _regions:
+                            gauge_region_data = _regions
+                            gauge_bytes_frame = sum(
+                                len(_r[0]) if _r[0] is not None else (_r[3] * _r[4] * 4)
+                                for _r in _regions)
+                        elif gauge_gpu_active:
+                            # ETAP 2C AUTO: zero dynamic supports this frame —
+                            # no bytes to upload, but start-of-frame HUD
+                            # clears must still run (map moves underneath).
+                            gauge_clear_only_frame = True
+                    if not _do_region:
+                        tb_start = time.perf_counter()
+                        is_contig = False
+                        if gauge_row_table_ptr is not None:
+                            top_row = ctypes.c_void_p.from_address(gauge_row_table_ptr).value
+                            bottom_row = ctypes.c_void_p.from_address(gauge_row_table_ptr + (gh - 1) * 8).value
+                            if top_row and bottom_row and bottom_row == top_row + (gh - 1) * gauge_stride:
+                                is_contig = True
+                                gauge_data = (None, gauge_img.width, gauge_img.height, gx, gy, top_row, gauge_stride, gauge_img)
+                                gauge_bytes_frame = gw * gh * 4
+                        if not is_contig:
+                            gauge_bytes = gauge_img.tobytes("raw", "RGBA")
+                            gauge_bytes_frame = len(gauge_bytes)
+                            gauge_data = (
+                                gauge_bytes, gauge_img.width, gauge_img.height,
+                                gx, gy)
+                        gauge_tobytes_ms = (
+                            time.perf_counter() - tb_start) * 1000.0
+                    gauge_region_state["frame_in_geom"] += 1
+
+                    # ── ETAP 2C DIAGNOSTIC (env-gated oracle validator) ───
+                    # Diffs consecutive gauge tiles (numpy, probe-only cost;
+                    # skipped entirely when AMD_GAUGE_REGION_ORACLE unset) and
+                    # asserts every changed pixel lies inside a rectangle sent
+                    # to the consumer this frame. MISSED must stay 0.
+                    if _gauge_oracle_enabled:
+                        _o_arr = np.asarray(gauge_img)
+                        if (_gauge_oracle_state["prev_arr"] is not None
+                                and _gauge_oracle_state["prev_arr"].shape
+                                == _o_arr.shape):
+                            _diff_mask = np.any(
+                                _o_arr != _gauge_oracle_state["prev_arr"],
+                                axis=2)
+                            _chg = int(np.count_nonzero(_diff_mask))
+                            _gauge_oracle_state["frames"] += 1
+                            _gauge_oracle_state["changed_pixels"] += _chg
+                            if _oracle_rects:
+                                _cov = np.zeros(_diff_mask.shape, dtype=bool)
+                                for (_ox0, _oy0, _ox1, _oy1) in _oracle_rects:
+                                    _cov[_oy0:_oy1, _ox0:_ox1] = True
+                                _missed = int(np.count_nonzero(
+                                    _diff_mask & ~_cov))
+                                _gauge_oracle_state["region_frames"] += 1
+                                _gauge_oracle_state["covered_pixels"] += (
+                                    _chg - _missed)
+                                _gauge_oracle_state[
+                                    "missed_dynamic_pixels"] += _missed
+                                if _missed > _gauge_oracle_state[
+                                        "worst_frame_missed"]:
+                                    _gauge_oracle_state[
+                                        "worst_frame_missed"] = _missed
+                                if _missed and len(
+                                        _gauge_oracle_state["violations"]) < 16:
+                                    _gauge_oracle_state["violations"].append({
+                                        "frame": int(idx),
+                                        "missed": _missed})
+                            else:
+                                _gauge_oracle_state["full_frames"] += 1
+                        elif _gauge_oracle_state["prev_arr"] is not None:
+                            # Tile shape changed => geometry epoch switch:
+                            # the producer forced a full-tile upload, so the
+                            # whole surface is refreshed by definition.
+                            _gauge_oracle_state["full_frames"] += 1
+                        _gauge_oracle_state["prev_arr"] = _o_arr
+
+                    # ETAP 2B DIAGNOSTIC (temporary, env-gated): consecutive
+                    # capture diff for variability statistics.  Probe-only
+                    # numpy cost; skipped entirely when flag unset.
+                    if _gauge_var_probe:
+                        import hashlib
+                        _var_t0 = time.perf_counter()
+                        _var_arr = np.asarray(gauge_img)
+                        _var_asarray_ms = (time.perf_counter() - _var_t0) * 1000.0
+                        _rec: dict[str, Any] = {
+                            "frame": int(idx),
+                            "x": int(gx), "y": int(gy),
+                            "w": int(gw), "h": int(gh),
+                            "md5": hashlib.md5(gauge_bytes).hexdigest(),
+                            "asarray_ms": round(_var_asarray_ms, 4),
+                        }
+                        _geom_key = (int(gw), int(gh))
+                        if _gauge_var_state["geom"] != _geom_key:
+                            _gauge_var_state["geom"] = _geom_key
+                            _gauge_var_state["union"] = np.zeros(
+                                (int(gh), int(gw)), dtype=bool)
+                            _gauge_var_state["prev"] = None
+                            _rec["geometry_reset"] = True
+                        _prev_arr = _gauge_var_state["prev"]
+                        if _prev_arr is not None:
+                            _ne = (
+                                _prev_arr.view(np.uint32).reshape(int(gh), int(gw))
+                                != _var_arr.view(np.uint32).reshape(int(gh), int(gw))
+                            )
+                            _n = int(np.count_nonzero(_ne))
+                            _rec["changed_px"] = _n
+                            if _n:
+                                _ys, _xs = np.nonzero(_ne)
+                                _bx0, _by0 = int(_xs.min()), int(_ys.min())
+                                _bx1, _by1 = int(_xs.max()), int(_ys.max())
+                                _rec["bbox_local"] = [
+                                    _bx0, _by0, _bx1 - _bx0 + 1, _by1 - _by0 + 1]
+                                _rec["bbox_bytes"] = int(
+                                    (_bx1 - _bx0 + 1) * (_by1 - _by0 + 1) * 4)
+                                _gauge_var_state["union"] |= _ne
+                            else:
+                                _rec["bbox_local"] = None
+                                _rec["bbox_bytes"] = 0
+                        _gauge_var_state["prev"] = _var_arr
+                        _gauge_var_state["frames"].append(_rec)
+
+                    # ETAP 2A DIAGNOSTIC (temporary, env-gated): save the gauge
+
+                    # capture so validation can build the expected composited
+                    # canvas (truth + gauge) for ghosting / tile-parity checks.
+                    if os.environ.get("AMD_ETAP2A_COMPOSE_PROBE"):
+                        _raw_frames = os.environ.get("AMD_HUD_DUMP_FRAMES")
+                        _probe_frames = (
+                            {int(_t) for _t in _raw_frames.split(",") if _t.strip()}
+                            if _raw_frames else {30, 300}
+                        )
+                        if idx in _probe_frames:
+                            gauge_img.save(
+                                rf"scratch/etap2a_test/gauge_capture_f{idx}.png")
+                            with open(rf"scratch/etap2a_test/gauge_meta_f{idx}.json",
+                                      "w", encoding="utf-8") as _gf:
+                                _gf.write(json.dumps({"x": int(gx), "y": int(gy),
+                                                      "w": int(gw), "h": int(gh)}))
         t_samples_p["gauge_tobytes"] = gauge_tobytes_ms
+        # ETAP 2B: capture = clip-crop cost (0 in steady state); diff = 0 by
+        # design in fixed-region mode (dirty regions are pre-measured).
+        t_samples_p["gauge_capture"] = gauge_capture_ms
+        t_samples_p["gauge_diff"] = gauge_diff_ms
+        t_samples_p["gauge_bytes_per_frame"] = float(gauge_bytes_frame)
 
         # Map
         map_data = None
@@ -2563,13 +4015,21 @@ def export_amd_native_d3d11(
         last_map_img_out = None
         last_map_dst_out = None
         map_timing_ms = 0.0
+        map_heading_val = 0.0
         if gpu_map_enabled:
             map_start = time.perf_counter()
-            map_img, map_dst = render_map_working_image(
-                video_width, video_height, layout, "track_map",
-                gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
-                map_heading=frame_kwargs.get("map_heading"),
-            )
+            if gpu_map_rotate:
+                map_img, map_heading_val, map_dst, working_size = render_map_unrotated_working_image(
+                    video_width, video_height, layout, "track_map",
+                    gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
+                    map_heading=frame_kwargs.get("map_heading"),
+                )
+            else:
+                map_img, map_dst = render_map_working_image(
+                    video_width, video_height, layout, "track_map",
+                    gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
+                    map_heading=frame_kwargs.get("map_heading"),
+                )
             if map_img is not None and map_dst is not None:
                 last_map_img_out = map_img
                 last_map_dst_out = map_dst
@@ -2578,8 +4038,30 @@ def export_amd_native_d3d11(
                     dst_x, dst_y, out_w, out_h = map_dst
                     src_w, src_h = map_img.size
                     map_geometry = (dst_x, dst_y, src_w, src_h, out_w, out_h)
-                map_bytes = map_img.tobytes("raw", "RGBA")
-                map_data = (map_bytes, map_img.width, map_img.height, map_dst)
+                
+                # Check for direct strided pointer
+                map_row_table_ptr = None
+                mw, mh = map_img.size
+                map_stride = mw * 4
+                if hasattr(map_img, "im") and hasattr(map_img.im, "ptr"):
+                    try:
+                        cap_name = ctypes.pythonapi.PyCapsule_GetName(map_img.im.ptr)
+                        raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(map_img.im.ptr, cap_name)
+                        if raw_ptr:
+                            map_row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
+                    except Exception:
+                        map_row_table_ptr = None
+                
+                is_contig = False
+                if map_row_table_ptr is not None:
+                    top_row = ctypes.c_void_p.from_address(map_row_table_ptr).value
+                    bottom_row = ctypes.c_void_p.from_address(map_row_table_ptr + (mh - 1) * 8).value
+                    if top_row and bottom_row and bottom_row == top_row + (mh - 1) * map_stride:
+                        is_contig = True
+                        map_data = (None, mw, mh, map_dst, top_row, map_stride, map_img)
+                if not is_contig:
+                    map_bytes = map_img.tobytes("raw", "RGBA")
+                    map_data = (map_bytes, mw, mh, map_dst, None, map_stride, map_img)
             map_timing_ms = (time.perf_counter() - map_start) * 1000.0
         t_samples_p["map_cpu_upload"] = map_timing_ms
 
@@ -2613,15 +4095,69 @@ def export_amd_native_d3d11(
                     previous_bboxes_holder[0], _bboxes,
                     video_width, video_height, dirty_max_rects,
                 )
+                if after_map_chart_gpu and "dist_visual" in _bboxes:
+                    dv_rect = _bboxes["dist_visual"]
+                    if dv_rect not in dirty_rects:
+                        dirty_rects.append(dv_rect)
+                # ETAP 2A FIX: the AFTER-MAP GPU gauge erases the previous
+                # frame's FULL gauge tile bbox on the persistent HUD canvas
+                # (telem_amd_run_early_clears -> ClearPreviousAboveMap) BEFORE
+                # these dirty rects are uploaded.  Every BELOW widget whose
+                # bbox intersects the erase region (current ∪ previously sent
+                # gauge tile) must therefore be re-uploaded EVERY frame, or its
+                # pixels are wiped and never restored (observed: missing
+                # dist_visual ruler track under the gauge tile).
+                if after_map_gauge_gpu:
+                    _tiles: list[tuple[int, int, int, int]] = []
+                    if previous_gauge_tile_holder[0] is not None:
+                        _tiles.append(previous_gauge_tile_holder[0])
+                    # ETAP 2B: use the gauge tile bbox (valid for BOTH the
+                    # full-tile and the dynamic-region transfer paths) so
+                    # BELOW widgets under the erase region keep being
+                    # force-reuploaded every frame.
+                    if gauge_tile_bbox is not None:
+                        _tiles.append(gauge_tile_bbox)
+                    if _tiles:
+                        ex0 = min(t[0] for t in _tiles)
+                        ey0 = min(t[1] for t in _tiles)
+                        ex1 = max(t[0] + t[2] for t in _tiles)
+                        ey1 = max(t[1] + t[3] for t in _tiles)
+                        for wx, wy, ww, wh in _bboxes.values():
+                            if wx < ex1 and wy < ey1 and ex0 < wx + ww and ey0 < wy + wh:
+                                wr = (wx, wy, ww, wh)
+                                if wr not in dirty_rects:
+                                    dirty_rects.append(wr)
+                    if gauge_tile_bbox is not None:
+                        previous_gauge_tile_holder[0] = gauge_tile_bbox
                 t_samples_p["HUD dirty bbox"] = (time.perf_counter() - bbox_start) * 1000.0
-                extract_start = time.perf_counter()
-                for x, y, rect_w, rect_h in dirty_rects:
-                    region = composed_img.crop((x, y, x + rect_w, y + rect_h))
-                    region_bytes = region.tobytes("raw", "RGBA")
-                    dirty_rect_slices.append((x, y, rect_w, rect_h, region_bytes))
-                    persistent_copy_bytes += rect_w * rect_h * 4
-                    upload_bytes += rect_w * rect_h * 4
-                t_samples_p["HUD dirty extract"] = (time.perf_counter() - extract_start) * 1000.0
+                dirty_rect_slices = []
+                canvas_row_table_ptr = None
+                canvas_stride = video_width * 4
+                if hasattr(composed_img, "im") and hasattr(composed_img.im, "ptr"):
+                    try:
+                        cap_name = ctypes.pythonapi.PyCapsule_GetName(composed_img.im.ptr)
+                        raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(composed_img.im.ptr, cap_name)
+                        if raw_ptr:
+                            canvas_row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
+                    except Exception:
+                        canvas_row_table_ptr = None
+
+                for rx, ry, rw, rh in dirty_rects:
+                    is_contig = False
+                    if canvas_row_table_ptr is not None:
+                        top_row = ctypes.c_void_p.from_address(canvas_row_table_ptr + ry * 8).value
+                        bottom_row = ctypes.c_void_p.from_address(canvas_row_table_ptr + (ry + rh - 1) * 8).value
+                        if top_row and bottom_row and bottom_row == top_row + (rh - 1) * canvas_stride:
+                            is_contig = True
+                            src_ptr = top_row + rx * 4
+                            dirty_rect_slices.append((rx, ry, rw, rh, None, src_ptr, canvas_stride, composed_img))
+                    if not is_contig:
+                        slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
+                        slice_bytes = slice_img.tobytes("raw", "RGBA")
+                        dirty_rect_slices.append((rx, ry, rw, rh, slice_bytes))
+                    upload_bytes += rw * rh * 4
+                intermediate_bytes = upload_bytes
+                persistent_copy_bytes = upload_bytes
                 rect_count = len(dirty_rects)
             t_samples_p["PIL/buffer preparation"] = (time.perf_counter() - buffer_prep_start) * 1000.0
             previous_bboxes_holder[0] = dict(_bboxes)
@@ -2634,7 +4170,67 @@ def export_amd_native_d3d11(
 
         t_p_end = time.perf_counter()
         prep_ms = (t_p_end - t_p_start) * 1000.0
-        
+
+        lean_transform_info = None
+        if lean_gpu_enabled:
+            _lval = None
+            if "indicator_values" in frame_kwargs and lean_key in frame_kwargs["indicator_values"]:
+                _lval = frame_kwargs["indicator_values"][lean_key]
+            elif "indicator_values" in frame_kwargs and "lean_indicator" in frame_kwargs["indicator_values"]:
+                _lval = frame_kwargs["indicator_values"]["lean_indicator"]
+            elif "lean_indicator" in frame_kwargs.get("extra_indicators", {}):
+                _lval = frame_kwargs["extra_indicators"]["lean_indicator"][0]
+            _min_dim = min(video_width, video_height)
+            _outline_raw = int(semantic_layout.get("global", {}).get("text_outline", 3))
+            _outline = max(0, int(round(_outline_raw * _min_dim / 1000)))
+            _fs_val = lean_cfg.get("font_size") if "font_size" in lean_cfg else lean_cfg.get("size", 0.02)
+            _fs = max(8, s(_fs_val, _min_dim))
+            _size_px = s(lean_cfg.get("size", 0.1), video_width)
+            _thickness = 4
+            _linfo = get_lean_gpu_transform_info(
+                canvas_w=video_width,
+                canvas_h=video_height,
+                layout=semantic_layout,
+                key=lean_key,
+                value=_lval,
+                cfg=lean_cfg,
+                font_path=font_path,
+                label=lean_cfg.get("label", ""),
+                min_dim=_min_dim,
+                fs=_fs,
+                outline=_outline,
+                thickness=_thickness,
+                size_px=_size_px,
+                ss=1,
+            )
+            if _linfo is not None:
+                _ang, _grp, _px, _py, _spx, _spy, _dx, _dy, _tw, _th = _linfo
+                lean_transform_info = (_ang, _px, _py, _spx, _spy, _dx, _dy, _tw, _th)
+
+        if idx == 0:
+            print(
+                f"\nAMD_MAP_PARITY:\n"
+                f"  enabled={1 if gpu_map_enabled else 0}\n"
+                f"  dispatched=1\n"
+                f"  rendered={1 if (gpu_map_enabled and last_map_img_out is not None) else 0}\n"
+                f"  uploaded=1\n"
+                f"  composed=1\n"
+                f"  z_order=GPU_MAP (before CPU_ABOVE)\n"
+                f"  rect={last_map_dst_out}",
+                flush=True,
+            )
+            print(
+                f"AMD_LEAN_PARITY:\n"
+                f"  indicator_present={1 if lean_in_layout else 0}\n"
+                f"  icon_present={1 if (lean_gpu_enabled or not lean_in_layout) else 0}\n"
+                f"  source={lean_cfg.get('source', 'gyro') if lean_in_layout else 'none'}\n"
+                f"  renderer={'GPU_LEAN_AFFINE' if lean_gpu_enabled else 'CPU_REFERENCE'}\n"
+                f"  dynamic_rotation={1 if lean_gpu_enabled else 0}\n"
+                f"  rect={(_linfo[6], _linfo[7], _linfo[8], _linfo[9]) if _linfo else None}\n"
+                f"  composed=1\n",
+                flush=True,
+            )
+
         return PreparedFrame(
             frame_idx=idx,
             sample_time_seconds=sample_time_sec,
@@ -2653,10 +4249,14 @@ def export_amd_native_d3d11(
             chart_dynamic_tiles=chart_dynamic_tiles,
             gauge_active=gauge_gpu_active,
             gauge_data=gauge_data,
+            gauge_region_data=gauge_region_data,
+            gauge_tile_bbox=gauge_tile_bbox,
+            gauge_clear_only=gauge_clear_only_frame,
             above_regions=above_regions_out,
             map_active=gpu_map_enabled,
             map_data=map_data,
             map_geometry=map_geometry,
+            map_heading=map_heading_val,
             timing_samples_producer=t_samples_p,
             intermediate_bytes=intermediate_bytes,
             persistent_copy_bytes=persistent_copy_bytes,
@@ -2665,11 +4265,15 @@ def export_amd_native_d3d11(
             above_stats=above_stats_p,
             last_map_img=last_map_img_out,
             last_map_dst=last_map_dst_out,
+            after_map_chart_captures=after_map_chart_captures_frame,
+            lean_active=lean_gpu_enabled,
+            lean_transform=lean_transform_info,
         )
 
     def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
         nonlocal decoded_frames_python, hud_frames, successful_hud_updates, successful_video_updates
         nonlocal map_uploaded_bytes_total, map_gpu_frames, gauge_gpu_frames, gauge_uploaded_bytes_total
+        nonlocal gauge_upload_calls_total, gauge_full_upload_frames, gauge_region_upload_frames
         nonlocal chart_static_uploads, chart_static_bytes_total, chart_dynamic_uploads, chart_dynamic_bytes_total
         nonlocal chart_full_tobytes_total, chart_split_frames, chart_uploaded_bytes_total
         nonlocal above_map_frames, above_map_visible_frames, above_map_uploaded_bytes_total
@@ -2779,18 +4383,57 @@ def export_amd_native_d3d11(
                 chart_dynamic_bytes_total += int(c_up.value)
 
         # Upload Gauge
-        if prepared.gauge_data is not None:
-            g_bytes, gw, gh, gx, gy = prepared.gauge_data
+        if prepared.gauge_region_data:
+            # ── ETAP 2B: tight sub-box updates of the persistent tile ──
+            gbx, gby, gbw, gbh = prepared.gauge_tile_bbox
+            up_start = time.perf_counter()
+            _g_calls = 0
+            for reg_entry in prepared.gauge_region_data:
+                g_uploaded = c_uint64(0)
+                g_created = c_int(0)
+                if len(reg_entry) == 8:
+                    _, rbx, rby, rbw, rbh, r_ptr_int, r_stride, _ = reg_entry
+                    r_ptr = ctypes.cast(r_ptr_int, POINTER(c_uint8))
+                else:
+                    r_bytes, rbx, rby, rbw, rbh = reg_entry[:5]
+                    r_ptr = r_bytes
+                    r_stride = rbw * 4
+                ok_r = native_dll.telem_amd_update_gauge_region(
+                    h_context, r_ptr, rbx, rby, rbw, rbh, r_stride,
+                    gbw, gbh, gbx, gby,
+                    byref(g_uploaded), byref(g_created),
+                )
+                if ok_r:
+                    _g_calls += 1
+                    gauge_upload_calls_total += 1
+                    gauge_uploaded_bytes_total += int(g_uploaded.value)
+            gauge_upload_ms = (time.perf_counter() - up_start) * 1000.0
+            timing_samples["gauge_upload"].append(gauge_upload_ms)
+            timing_samples["gauge_upload_calls"].append(float(_g_calls))
+            if _g_calls == len(prepared.gauge_region_data):
+                gauge_gpu_frames += 1
+                gauge_region_upload_frames += 1
+        elif prepared.gauge_data is not None:
+            if len(prepared.gauge_data) == 8:
+                _, gw, gh, gx, gy, g_ptr_int, g_stride, _ = prepared.gauge_data
+                g_ptr = ctypes.cast(g_ptr_int, POINTER(c_uint8))
+            else:
+                g_bytes, gw, gh, gx, gy = prepared.gauge_data[:5]
+                g_ptr = g_bytes
+                g_stride = gw * 4
             g_uploaded = c_uint64(0)
             g_created = c_int(0)
             up_start = time.perf_counter()
             ok = native_dll.telem_amd_update_gauge(
-                h_context, g_bytes, gw, gh, gw * 4, gx, gy, byref(g_uploaded), byref(g_created),
+                h_context, g_ptr, gw, gh, g_stride, gx, gy, byref(g_uploaded), byref(g_created),
             )
             gauge_upload_ms = (time.perf_counter() - up_start) * 1000.0
             timing_samples["gauge_upload"].append(gauge_upload_ms)
+            timing_samples["gauge_upload_calls"].append(1.0)
             if ok:
                 gauge_gpu_frames += 1
+                gauge_upload_calls_total += 1
+                gauge_full_upload_frames += 1
                 gauge_uploaded_bytes_total += int(g_uploaded.value)
 
         # Upload Above Regions
@@ -2799,26 +4442,59 @@ def export_amd_native_d3d11(
             native_dll.telem_amd_update_above_regions_count(h_context, reg_count)
             above_up_ms = 0.0
             above_buf_prep_ms = 0.0
-            for r_idx, (rx, ry, rw, rh, r_bytes) in enumerate(prepared.above_regions):
-                t_prep_start = time.perf_counter()
-                # ETAP 10S: DIRECT = zero-copy pointer into the PyBytes payload
-                # (r_bytes stays referenced by this loop variable throughout the
-                # call; native UpdateSubresource copies synchronously).
-                # COPY = historical from_buffer_copy memcpy fallback.
-                r_ptr = _above_region_pointer(r_bytes, above_upload_buffer_mode)
-                above_buf_prep_ms += (time.perf_counter() - t_prep_start) * 1000.0
+            for r_idx, reg_entry in enumerate(prepared.above_regions):
+                if len(reg_entry) == 5:
+                    rx, ry, rw, rh, r_bytes = reg_entry
+                    t_prep_start = time.perf_counter()
+                    r_ptr = _above_region_pointer(r_bytes, above_upload_buffer_mode)
+                    above_buf_prep_ms += (time.perf_counter() - t_prep_start) * 1000.0
+                    r_stride = rw * 4
+                    r_len = len(r_bytes)
+                else:
+                    rx, ry, rw, rh, _, r_ptr_int, r_stride, _ = reg_entry
+                    r_ptr = ctypes.cast(r_ptr_int, POINTER(c_uint8))
+                    r_len = rw * rh * 4
+
                 t_r_start = time.perf_counter()
                 r_ok = native_dll.telem_amd_update_above_region(
-                    h_context, r_idx, r_ptr, rw, rh, rw * 4, rx, ry
+                    h_context, r_idx, r_ptr, rw, rh, r_stride, rx, ry
                 )
                 above_up_ms += (time.perf_counter() - t_r_start) * 1000.0
                 if r_ok:
-                    above_map_uploaded_bytes_total += len(r_bytes)
+                    above_map_uploaded_bytes_total += r_len
             timing_samples["above_region_upload"].append(above_up_ms)
             timing_samples["above_upload_buffer_prepare"].append(above_buf_prep_ms)
             above_map_frames += 1
             if reg_count > 0:
                 above_map_visible_frames += 1
+
+        # Upload AFTER-MAP Charts (ETAP 1B)
+        if after_map_chart_gpu and prepared.after_map_chart_captures:
+            for tile in prepared.after_map_chart_captures:
+                if not tile.is_valid:
+                    continue
+                if tile.static_bytes is not None and tile.static_width > 0 and tile.static_height > 0:
+                    st_uploaded = c_uint64(0)
+                    st_created = c_int(0)
+                    bx, by, _, _ = tile.bbox
+                    native_dll.telem_amd_update_after_map_chart_static(
+                        h_context, tile.slot, tile.static_bytes, tile.static_width, tile.static_height,
+                        tile.static_stride, bx, by, byref(st_uploaded), byref(st_created),
+                    )
+                if tile.cursor_bytes is not None and tile.cursor_width > 0 and tile.cursor_height > 0:
+                    c_up = c_uint64(0)
+                    lx, ly = tile.cursor_local
+                    native_dll.telem_amd_update_after_map_chart_dynamic(
+                        h_context, tile.slot, 0, tile.cursor_bytes, tile.cursor_width, tile.cursor_height,
+                        tile.cursor_stride, lx, ly, byref(c_up),
+                    )
+                if tile.value_bytes is not None and tile.value_width > 0 and tile.value_height > 0:
+                    v_up = c_uint64(0)
+                    lx, ly = tile.value_local
+                    native_dll.telem_amd_update_after_map_chart_dynamic(
+                        h_context, tile.slot, 1, tile.value_bytes, tile.value_width, tile.value_height,
+                        tile.value_stride, lx, ly, byref(v_up),
+                    )
 
         # Upload Map
         if prepared.map_geometry is not None:
@@ -2827,17 +4503,37 @@ def export_amd_native_d3d11(
                 h_context, dst_x, dst_y, src_w, src_h, out_w, out_h,
             )
         if prepared.map_data is not None:
-            m_bytes, mw, mh, mdst = prepared.map_data
+            if len(prepared.map_data) == 7:
+                _, mw, mh, mdst, m_ptr_int, m_stride, _ = prepared.map_data
+                m_ptr = ctypes.cast(m_ptr_int, POINTER(c_uint8)) if m_ptr_int else prepared.map_data[0]
+            else:
+                m_bytes, mw, mh, mdst = prepared.map_data[:4]
+                m_ptr = m_bytes
+                m_stride = mw * 4
             last_map_img = prepared.last_map_img
             last_map_dst = prepared.last_map_dst
+            if gpu_map_rotate:
+                native_dll.telem_amd_set_map_heading(h_context, c_float(prepared.map_heading))
             m_uploaded = c_uint64(0)
             m_created = c_int(0)
             ok = native_dll.telem_amd_update_map(
-                h_context, m_bytes, mw, mh, mw * 4, byref(m_uploaded), byref(m_created),
+                h_context, m_ptr, mw, mh, m_stride, byref(m_uploaded), byref(m_created),
             )
             if ok:
                 map_uploaded_bytes_total += int(m_uploaded.value)
                 map_gpu_frames += 1
+
+        # ETAP 2A FIX: run the start-of-frame HUD-canvas clears (previous
+        # ABOVE regions + previous AFTER-MAP gauge tile) BEFORE the below-canvas
+        # dirty rects reach telem_amd_update_hud_regions, so pixels erased
+        # under the previous gauge tile are restored by this frame's upload
+        # instead of being destroyed by it.  The clears consume their state;
+        # the internal ClearPreviousAboveMap() inside telem_amd_process_frame
+        # then no-ops — each clear still runs exactly once per frame.
+        if (after_map_gauge_gpu and (
+                prepared.gauge_data is not None or prepared.gauge_region_data
+                or prepared.gauge_clear_only)) or (lean_gpu_enabled and prepared.lean_active):
+            native_dll.telem_amd_run_early_clears(h_context)
 
         # Upload HUD Below
         last_hud_call_ms = 0.0
@@ -2858,9 +4554,16 @@ def export_amd_native_d3d11(
                     native_rect_ptr = None
                     native_rect_count = 0
                 else:
-                    for x, y, rect_w, rect_h, r_bytes in prepared.dirty_rect_slices:
-                        r_arr = np.frombuffer(r_bytes, dtype=np.uint8).reshape(rect_h, rect_w, 4)
-                        np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], r_arr)
+                    for entry in prepared.dirty_rect_slices:
+                        if len(entry) == 8:
+                            x, y, rect_w, rect_h, _, src_ptr_int, c_stride, _ = entry
+                            dst_base = hud_backing_address + y * c_stride + x * 4
+                            for r in range(rect_h):
+                                ctypes.memmove(dst_base + r * c_stride, src_ptr_int + r * c_stride, rect_w * 4)
+                        else:
+                            x, y, rect_w, rect_h, r_bytes = entry[:5]
+                            r_arr = np.frombuffer(r_bytes, dtype=np.uint8).reshape(rect_h, rect_w, 4)
+                            np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], r_arr)
                     if prepared.dirty_rects:
                         native_rects = (_HUDDirtyRect * len(prepared.dirty_rects))(
                             *(_HUDDirtyRect(*rect) for rect in prepared.dirty_rects)
@@ -2896,6 +4599,22 @@ def export_amd_native_d3d11(
 
         t_up_stage_ms = (time.perf_counter() - t_up_stage_start) * 1000.0
         timing_samples["consumer_upload"].append(t_up_stage_ms)
+
+        # ETAP 2G: GPU lean indicator dynamic affine transform
+        if prepared.lean_active and prepared.lean_transform is not None:
+            _ang, _px, _py, _spx, _spy, _dx, _dy, _tw, _th = prepared.lean_transform
+            native_dll.telem_amd_set_lean_transform(
+                h_context,
+                c_float(_ang),
+                c_float(_px),
+                c_float(_py),
+                c_float(_spx),
+                c_float(_spy),
+                c_uint(_dx),
+                c_uint(_dy),
+                c_uint(_tw),
+                c_uint(_th),
+            )
 
         # Process Frame
         t_native_start = time.perf_counter()
@@ -3119,6 +4838,9 @@ def export_amd_native_d3d11(
                     break
 
         t_video_render_end = time.perf_counter()
+        set_map_network_allowed(True)
+        _tile_stats = get_map_tile_stats()
+        print(f"[AMD Map Tile Stats] {_tile_stats}", flush=True)
         # GUI phase-report: all frames rendered, final flush/mux starts.
         if on_render_progress is not None:
             on_render_progress(0, 0, time.time() - start_time, 0.0,
@@ -3535,6 +5257,15 @@ def export_amd_native_d3d11(
                 if chart_ab_readback else None
             ),
         },
+        "etap1a": {
+            "after_map_chart_capture_diag": after_map_chart_capture_diag,
+            "before_map_chart_keys": sorted(before_map_chart_keys),
+            "after_map_chart_keys": sorted(after_map_chart_keys),
+            "gpu_chart_keys_before_map": sorted(gpu_chart_keys_before_map),
+            "gpu_chart_keys_after_map": sorted(gpu_chart_keys_after_map),
+            "after_map_captures_performed": after_map_captures_performed,
+            "native_after_map_blend_active": False,
+        },
         "etap5k": {
             "split": gpu_charts_split,
             "static_uploads": chart_static_uploads,
@@ -3564,6 +5295,10 @@ def export_amd_native_d3d11(
                 gauge_uploaded_bytes_total / max(1, gauge_gpu_frames) / (1024.0 * 1024.0)
                 if gauge_gpu_frames else 0.0
             ),
+            "etap2b_dynamic_rects": bool(gauge_dynamic_rects),
+            "etap2b_gauge_upload_calls_total": gauge_upload_calls_total,
+            "etap2b_gauge_full_upload_frames": gauge_full_upload_frames,
+            "etap2b_gauge_region_upload_frames": gauge_region_upload_frames,
             "gauge_gpu_to_cpu_readback": 0,
             "gauge_ab_readback": gauge_ab_readback,
             "gauge_ab": (
@@ -3641,6 +5376,22 @@ def export_amd_native_d3d11(
         "etap8q": {
             "above_text_cache_enabled": os.getenv("AMD_ABOVE_TEXT_CACHE", "1") != "0",
         },
+        "etap2c_gauge_regions": {
+            "mode": gauge_region_mode,
+            "auto_regions_default_on": _env_flag("AMD_GAUGE_AUTO_REGIONS", True),
+            "full_refresh_n": gauge_full_refresh_n,
+            "epoch_changes": int(gauge_region_state.get("epoch_changes", 0)),
+            "last_epoch_mode": gauge_region_state.get("mode", "-"),
+            "oracle_enabled": bool(_gauge_oracle_state["enabled"]),
+            "oracle_frames": _gauge_oracle_state["frames"],
+            "oracle_region_frames": _gauge_oracle_state["region_frames"],
+            "oracle_full_frames": _gauge_oracle_state["full_frames"],
+            "oracle_changed_pixels": _gauge_oracle_state["changed_pixels"],
+            "oracle_covered_pixels": _gauge_oracle_state["covered_pixels"],
+            "missed_dynamic_pixels": _gauge_oracle_state["missed_dynamic_pixels"],
+            "worst_frame_missed": _gauge_oracle_state["worst_frame_missed"],
+            "violations": list(_gauge_oracle_state["violations"]),
+        },
                 "etap8t_b": {
             "pipeline_mode": pipeline_mode,
             "queue_max_depth": 2,
@@ -3700,6 +5451,43 @@ def export_amd_native_d3d11(
         print(f"[AMD NATIVE] Profiling JSON: {profile_path}", flush=True)
     except Exception as exc:
         print(f"[AMD NATIVE] WARNING: failed to write profiling JSON: {exc}", flush=True)
+
+    # ETAP 2B DIAGNOSTIC (temporary): persist gauge variability measurement.
+    if _gauge_var_probe:
+        try:
+            _gv_records = _gauge_var_state["frames"]
+            _gv_summary: dict[str, Any] = {"frames_measured": len(_gv_records)}
+            _u = _gauge_var_state["union"]
+            if _u is not None:
+                _uh, _uw = _u.shape
+                _gv_summary["tile_w"] = int(_uw)
+                _gv_summary["tile_h"] = int(_uh)
+                _gv_summary["union_changed_px"] = int(np.count_nonzero(_u))
+                _gv_summary["union_density_pct"] = round(
+                    100.0 * float(np.count_nonzero(_u)) / float(_uw * _uh), 4)
+                if _u.any():
+                    _uys, _uxs = np.nonzero(_u)
+                    _gv_summary["union_bbox_local"] = [
+                        int(_uxs.min()), int(_uys.min()),
+                        int(_uxs.max() - _uxs.min() + 1),
+                        int(_uys.max() - _uys.min() + 1)]
+            _gv_path = output_file_str + ".gauge_variability.json"
+            with open(_gv_path, "w", encoding="utf-8") as _gv_file:
+                json.dump({"summary": _gv_summary,
+                           "records": _gv_records}, _gv_file)
+            print(
+                f"[AMD NATIVE D3D11] ETAP 2B DIAGNOSTIC: gauge variability "
+                f"JSON -> {_gv_path} (frames={len(_gv_records)}, "
+                f"summary={_gv_summary})",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                "[AMD NATIVE D3D11] WARNING: failed to write gauge "
+                f"variability JSON: {exc}",
+                flush=True,
+            )
+
 
     # AMD_RENDER_PATH_AUDIT_2: dump the per-frame wall-clock accounting CSV.
     if frame_trace_enabled and frame_trace_rows:

@@ -26,6 +26,7 @@ from src.indicators.time_display import render_time_display
 from src.indicators.profiling import get_overlay_profiler, indicator_scope
 
 
+import copy
 import threading
 
 _THREAD_CANVAS = threading.local()
@@ -34,6 +35,42 @@ _THREAD_CANVAS = threading.local()
 # Old saved projects may still contain them; they are skipped (not rendered)
 # so such projects load and render without crashing.
 _REMOVED_LEGACY_KEYS = frozenset({"time_block"})
+
+
+def _is_legacy_vertical_ruler(cfg: dict[str, Any]) -> bool:
+    """Identify the old horizontal-ruler-plus-90-degree layout shape."""
+    return (
+        cfg.get("form", "text") in ("bar", "segment_bar")
+        and str(cfg.get("bar_style", "ruler")).strip().lower() == "ruler"
+        and "orientation" not in cfg
+        and int(cfg.get("rotation", 0) or 0) % 360 in (90, 270)
+    )
+
+
+def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Normalize any legacy Ruler rotation at runtime only.
+
+    Older presets represented a vertical ruler as a horizontal ruler with
+    ``rotation=90``. The current vertical-ruler contract keeps text horizontal,
+    so migrate this semantic shape without mutating the saved layout.
+    """
+    effective = cfg.copy()
+    if (
+        _is_legacy_vertical_ruler(effective)
+    ):
+        effective["orientation"] = "vertical"
+        effective["rotation"] = 0
+    return effective
+
+
+def normalize_layout_for_save(layout: dict[str, Any]) -> dict[str, Any]:
+    """Persist modern orientation fields instead of the legacy rotation hack."""
+    saved = copy.deepcopy(layout)
+    for cfg in saved.get("indicators", {}).values():
+        if isinstance(cfg, dict) and _is_legacy_vertical_ruler(cfg):
+            cfg["orientation"] = "vertical"
+            cfg["rotation"] = 0
+    return saved
 
 def _get_reusable_canvas(
     canvas_w: int, canvas_h: int, canvas_type: str = "below"
@@ -306,7 +343,7 @@ def compose_overlay(
         unit = ind_cfg.get("unit") or default_unit
         label = ind_cfg.get("label", default_label)
 
-        current_cfg = ind_cfg.copy()
+        current_cfg = _effective_indicator_cfg(key, ind_cfg)
         if compass_missing:
             current_cfg["_compass_missing"] = True
         if slope_missing:

@@ -1,0 +1,23 @@
+{
+  "BELOW_MAP": [
+    "time_display [time_display] (always-first)",
+    "dist_visual [bar]",
+    "fit_battery_pct_text [bar]",
+    "fit_solar_pct_text [bar]"
+  ],
+  "MAP": [
+    "track_map [map]"
+  ],
+  "ABOVE_MAP": [
+    "compass [gauge]",
+    "slope_text [bar]",
+    "iso_text [text]",
+    "exposure_text [text]",
+    "temp_text [text]",
+    "alt_visual [bar]",
+    "fit_curVpower_text [bar]",
+    "fit_cadence_text [chart]",
+    "fit_enhanced_speed_text [gauge]",
+    "fit_heart_rate_text [chart]"
+  ]
+}

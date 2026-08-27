@@ -1,0 +1,68 @@
+{
+  "REF": {
+    "ok": true,
+    "wall_s": 50.34,
+    "render_fps": null,
+    "user_effective_fps": null,
+    "mode": "FULL_TILE",
+    "above_total_avg": 21.683338373929516,
+    "compose_avg": 5.636129354536006,
+    "gauge_tobytes_avg": 0.0,
+    "gauge_upload_avg": 0.0,
+    "pipeline_total_avg": 6.021736250889951,
+    "consumer_native_avg": 2.8891817859946696,
+    "region_frames": 0,
+    "full_frames": 0,
+    "bytes_per_frame": {
+      "count": 1131,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    }
+  },
+  "FULL": {
+    "ok": true,
+    "wall_s": 42.34,
+    "render_fps": null,
+    "user_effective_fps": null,
+    "mode": "FULL_TILE",
+    "above_total_avg": 14.139194960924563,
+    "compose_avg": 6.009870114926476,
+    "gauge_tobytes_avg": 1.5886776309536983,
+    "gauge_upload_avg": 0.5333671974651037,
+    "pipeline_total_avg": 6.085464190649508,
+    "consumer_native_avg": 2.5922640148141842,
+    "region_frames": 0,
+    "full_frames": 1131,
+    "bytes_per_frame": {
+      "count": 1131,
+      "avg_ms": 3686400.0,
+      "median_ms": 3686400.0,
+      "p95_ms": 3686400.0,
+      "p99_ms": 3686400.0
+    }
+  },
+  "AUTO": {
+    "ok": true,
+    "wall_s": 38.96,
+    "render_fps": null,
+    "user_effective_fps": null,
+    "mode": "AUTO",
+    "above_total_avg": 13.894546507587236,
+    "compose_avg": 6.019389212857578,
+    "gauge_tobytes_avg": 0.24549823143078092,
+    "gauge_upload_avg": 0.2608554383254405,
+    "pipeline_total_avg": 5.042791335569088,
+    "consumer_native_avg": 2.2708510171072795,
+    "region_frames": 1121,
+    "full_frames": 10,
+    "bytes_per_frame": {
+      "count": 1131,
+      "avg_ms": 351689.90274093725,
+      "median_ms": 329780.0,
+      "p95_ms": 345892.0,
+      "p99_ms": 348208.4000000001
+    }
+  }
+}

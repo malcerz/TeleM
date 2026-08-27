@@ -1,0 +1,2704 @@
+================================================================================
+FILE: src/gui/qt/_mixins/preset_mixin.py
+diff --git a/src/gui/qt/_mixins/preset_mixin.py b/src/gui/qt/_mixins/preset_mixin.py
+index 4fab33d..953ea97 100644
+--- a/src/gui/qt/_mixins/preset_mixin.py
++++ b/src/gui/qt/_mixins/preset_mixin.py
+@@ -26,7 +26,8 @@ class PresetMixin:
+             return
+         try:
+             # Dołącz cut_regions do zapisywanego layoutu
+-            layout_copy = dict(self.layout)
++            from src.indicators.compositor import normalize_layout_for_save
++            layout_copy = normalize_layout_for_save(self.layout)
+             if self._cut_regions:
+                 layout_copy["cut_regions"] = self._cut_regions
+             else:
+
+================================================================================
+FILE: src/gui/qt/_mixins/project_mixin.py
+diff --git a/src/gui/qt/_mixins/project_mixin.py b/src/gui/qt/_mixins/project_mixin.py
+index fd6c57e..dfbd127 100644
+--- a/src/gui/qt/_mixins/project_mixin.py
++++ b/src/gui/qt/_mixins/project_mixin.py
+@@ -18,6 +18,12 @@ from PIL import Image
+ from src.gui.indicator_schemas import BUILTIN_FIELDS
+ from src.gui.layout_manager import normalize_layout
+ from src.multifile import build_timeline_from_paths, format_timeline_diagnostics
++from src.telemetry_processed_cache import (
++    apply_processed_cache,
++    processed_cache_path,
++    read_processed_cache,
++    write_processed_cache,
++)
+ from src.telemetry_extract import ensure_records_list, load_json_with_fallback
+ from src.video_helpers import (
+     clear_capture_cache,
+@@ -27,6 +33,70 @@ from src.video_helpers import (
+     parse_fps,
+ )
+ 
++
++def _map_provider_from_layout(layout: dict) -> str:
++    """Return the saved map provider used for the initial preload job."""
++    return str(
++        (layout or {}).get("indicators", {})
++        .get("track_map", {})
++        .get("map_style", "light_all")
++        or "light_all"
++    )
++
++
++def _profile_load_stage(
++    stage: str,
++    started: float,
++    input_path: Path | None = None,
++    records: int | None = None,
++) -> None:
++    """Emit one compact, ASCII-safe loading profile line per major stage."""
++    try:
++        thread = threading.current_thread()
++        size = input_path.stat().st_size if input_path and input_path.exists() else None
++        fields = [
++            f"stage={stage}",
++            f"elapsed_ms={(_time.perf_counter() - started) * 1000.0:.2f}",
++            f"thread={thread.name}/{thread.ident}",
++        ]
++        if size is not None:
++            fields.append(f"input_bytes={size}")
++        if records is not None:
++            fields.append(f"records={records}")
++        print("[LoadProfile] " + " ".join(fields), flush=True)
++    except Exception:
++        pass
++
++
++def _profile_json_stage(stage: str, elapsed: float, path: Path) -> None:
++    """Adapter for ``load_json_with_fallback`` read/parse callbacks."""
++    try:
++        size = path.stat().st_size if path.exists() else None
++        suffix = f" input_bytes={size}" if size is not None else ""
++        thread = threading.current_thread()
++        print(
++            f"[LoadProfile] stage={stage} elapsed_ms={elapsed * 1000.0:.2f} "
++            f"thread={thread.name}/{thread.ident}{suffix}",
++            flush=True,
++        )
++    except Exception:
++        pass
++
++
++def _profile_gpmf_substage(
++    stage: str, elapsed: float, input_count: int, output_count: int,
++) -> None:
++    try:
++        thread = threading.current_thread()
++        print(
++            f"[LoadProfile:GPMF] stage={stage} elapsed_ms={elapsed * 1000.0:.2f} "
++            f"input_count={input_count} output_count={output_count} "
++            f"thread={thread.name}/{thread.ident}",
++            flush=True,
++        )
++    except Exception:
++        pass
++
+ try:
+     from src.telemetry_gpmf_new import gpmf_to_exiftool_json
+     _GPMF_AVAILABLE = True
+@@ -115,7 +185,9 @@ def _load_valid_gpmf_cache(
+         return None, "legacy_cache_no_version"
+ 
+     try:
+-        metadata = load_json_with_fallback(metadata_path)
++        metadata = load_json_with_fallback(
++            metadata_path, profile_cb=_profile_json_stage,
++        )
+     except Exception:
+         return None, "invalid_metadata"
+ 
+@@ -136,7 +208,9 @@ def _load_valid_gpmf_cache(
+         return None, "source_mtime_changed"
+ 
+     try:
+-        data = load_json_with_fallback(cache_path)
++        data = load_json_with_fallback(
++            cache_path, profile_cb=_profile_json_stage,
++        )
+     except Exception:
+         return None, "invalid_json"
+     if not data:
+@@ -268,8 +342,15 @@ class ProjectMixin:
+                             )
+                     except Exception as exc:
+                         print(f"[MapPreload] GPX preparse failed: {exc}", flush=True)
++                # The saved/default layout is authoritative for the map
++                # provider.  Starting preload with the hard-coded Standard
++                # provider makes a saved Satellite map fail the async
++                # renderer's provider gate and remain on the placeholder.
++                map_provider = _map_provider_from_layout(self.layout)
+                 if map_gps is not None:
+-                    self._start_map_preload(map_gps, map_source)
++                    self._start_map_preload(
++                        map_gps, map_source, provider=map_provider,
++                    )
+ 
+                 # Wczytaj/wygeneruj metadane (GPMF — heavy, runs in parallel
+                 # with the map preload thread started above)
+@@ -283,7 +364,9 @@ class ProjectMixin:
+                         f"[MapPreload] start source=GPMF points={len(self.telemetry.gps_track)}",
+                         flush=True,
+                     )
+-                    self._start_map_preload(self.telemetry.gps_track, "gpmf")
++                    self._start_map_preload(
++                        self.telemetry.gps_track, "gpmf", provider=map_provider,
++                    )
+ 
+                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
+                 if gpx_path and _GPX_AVAILABLE:
+@@ -404,7 +487,9 @@ class ProjectMixin:
+ 
+                 # ── Hwdec diagnostics (deferred, needs main thread) ────
+                 if self.is_using_mpv():
+-                    QTimer.singleShot(1500, self._check_mpv_hwdec)
++                    # bg_load has no Qt event dispatcher. Request the timer
++                    # on the controller's GUI thread through a queued signal.
++                    self.signals.sig_schedule_mpv_hwdec_check.emit()
+ 
+                 self.signals.sig_progress.emit(100, "Gotowe")
+ 
+@@ -415,6 +500,10 @@ class ProjectMixin:
+ 
+         threading.Thread(target=bg_load, daemon=True).start()
+ 
++    def _schedule_mpv_hwdec_check(self) -> None:
++        """Start the MPV diagnostic timer on the GUI thread only."""
++        QTimer.singleShot(1500, self._check_mpv_hwdec)
++
+     # ── Map preload (ETAP MAP PRELOAD) ────────────────────────────────────
+     # The coarse/overview map is prepared on a background thread, parallel
+     # with GPMF parsing.  GPS for the bounds comes from FIT (preferred), GPX,
+@@ -506,7 +595,10 @@ class ProjectMixin:
+             return
+ 
+         meta = self.video_path.with_suffix(".json")
++        self.signals.sig_progress.emit(45, "Odczyt JSON...")
++        cache_t0 = _time.perf_counter()
+         data, cache_reason = _load_valid_gpmf_cache(self.video_path, meta)
++        _profile_load_stage("json_cache_validation", cache_t0, meta)
+         if data is not None:
+             try:
+                 records = ensure_records_list(data)
+@@ -518,11 +610,60 @@ class ProjectMixin:
+                     f"[Telemetry Cache] HIT file={meta.name} "
+                     f"version={GPMF_CACHE_VERSION}", flush=True,
+                 )
+-                self.signals.sig_progress.emit(45, "Wczytywanie JSON...")
+                 self.telemetry.records = records
+-                self.telemetry.load_gpmf_from_exiftool(self.video_path)
+-                self.telemetry.load_gpmf_records(records)
+-                self.telemetry.load_gps_track(records)
++                processed_t0 = _time.perf_counter()
++                processed = read_processed_cache(self.video_path)
++                _profile_load_stage(
++                    "processed_cache_read_decode", processed_t0,
++                    processed_cache_path(self.video_path),
++                    len(records),
++                )
++                if processed is not None:
++                    print(
++                        f"[Telemetry Cache] PROCESSED HIT file="
++                        f"{processed_cache_path(self.video_path).name}",
++                        flush=True,
++                    )
++                    self.signals.sig_progress.emit(
++                        65, "Wczytywanie cache telemetrycznego...",
++                    )
++                    apply_processed_cache(self.telemetry, processed)
++                    self.meta_path = meta
++                    return
++                print(
++                    f"[Telemetry Cache] PROCESSED MISS file="
++                    f"{processed_cache_path(self.video_path).name}",
++                    flush=True,
++                )
++                self.signals.sig_progress.emit(55, "Analiza GPMF...")
++                extract_t0 = _time.perf_counter()
++                # The sidecar already contains the flat ExifTool-compatible
++                # dictionary.  Passing it avoids launching ExifTool again on
++                # every warm load.
++                self.telemetry.load_gpmf_from_exiftool(
++                    self.video_path, flat=data if isinstance(data, dict) else None,
++                )
++                _profile_load_stage(
++                    "gpmf_exiftool_extract", extract_t0, meta, len(records),
++                )
++                records_t0 = _time.perf_counter()
++                self.telemetry.load_gpmf_records(
++                    records, profile_cb=_profile_gpmf_substage,
++                )
++                _profile_load_stage(
++                    "gpmf_records_extract", records_t0, meta, len(records),
++                )
++                gps_t0 = _time.perf_counter()
++                self.telemetry.load_gps_track(
++                    records, profile_cb=_profile_gpmf_substage,
++                )
++                _profile_load_stage("gps_extract", gps_t0, meta, len(records))
++                write_processed_t0 = _time.perf_counter()
++                processed_path = write_processed_cache(self.video_path, self.telemetry)
++                _profile_load_stage(
++                    "processed_cache_write", write_processed_t0,
++                    processed_path,
++                )
+                 self.meta_path = meta
+                 return
+         print(
+@@ -538,10 +679,12 @@ class ProjectMixin:
+         if _GPMF_AVAILABLE and self.ffmpeg_exe and self.ffprobe_exe:
+             try:
+                 self.signals.sig_progress.emit(50, "GPMF: czytanie strumienia...")
++                gpmf_t0 = _time.perf_counter()
+                 data = gpmf_to_exiftool_json(
+                     str(self.video_paths[0]),
+                     self.ffmpeg_exe, self.ffprobe_exe,
+                 )
++                _profile_load_stage("gpmf_convert", gpmf_t0, self.video_path)
+                 if data:
+                     method = "GPMF"
+                     print(f"[GPMF] Succeeded — extracted {len(data[0]) if isinstance(data, list) and data else 0} keys", flush=True)
+@@ -559,14 +702,18 @@ class ProjectMixin:
+             )
+             if not exe:
+                 raise RuntimeError("Nie znaleziono exiftool")
++            exiftool_t0 = _time.perf_counter()
+             proc = subprocess.run(
+                 [exe, "-ee", "-j", "-G3", str(self.video_paths[0])],
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                 text=True,
+             )
++            _profile_load_stage("exiftool_process", exiftool_t0, self.video_path)
+             if proc.returncode != 0:
+                 raise RuntimeError(proc.stderr or "ExifTool error")
++            exiftool_t0 = _time.perf_counter()
+             data = json.loads(proc.stdout)
++            _profile_load_stage("exiftool_json_parse", exiftool_t0, self.video_path)
+             method = "ExifTool"
+ 
+         if data:
+@@ -580,12 +727,32 @@ class ProjectMixin:
+             self.meta_path = json_path
+ 
+             self.signals.sig_progress.emit(65, f"Parsowanie danych ({method})...")
++            records_t0 = _time.perf_counter()
+             records = ensure_records_list([flat])
++            _profile_load_stage(
++                "records_conversion", records_t0, json_path, len(records),
++            )
+             self.telemetry.records = records
+             # Przekazujemy flat zamiast uruchamiać ExifTool ponownie
++            extract_t0 = _time.perf_counter()
+             self.telemetry.load_gpmf_from_exiftool(self.video_path, flat=flat)
+-            self.telemetry.load_gpmf_records(records)
+-            self.telemetry.load_gps_track(records)
++            self.telemetry.load_gpmf_records(
++                records, profile_cb=_profile_gpmf_substage,
++            )
++            _profile_load_stage(
++                "gpmf_records_extract", extract_t0, json_path, len(records),
++            )
++            gps_t0 = _time.perf_counter()
++            self.telemetry.load_gps_track(
++                records, profile_cb=_profile_gpmf_substage,
++            )
++            _profile_load_stage("gps_extract", gps_t0, json_path, len(records))
++
++            write_processed_t0 = _time.perf_counter()
++            processed_path = write_processed_cache(self.video_path, self.telemetry)
++            _profile_load_stage(
++                "processed_cache_write", write_processed_t0, processed_path,
++            )
+ 
+             # Jeśli start_dt_utc wciąż None (brak GPSDateTime w GPMF),
+             # użyj daty z metadanych wideo
+
+================================================================================
+FILE: src/gui/qt/_mixins/render_mixin.py
+diff --git a/src/gui/qt/_mixins/render_mixin.py b/src/gui/qt/_mixins/render_mixin.py
+index 2214522..311a512 100644
+--- a/src/gui/qt/_mixins/render_mixin.py
++++ b/src/gui/qt/_mixins/render_mixin.py
+@@ -34,12 +34,14 @@ class RenderMixin:
+             self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
+             return
+ 
+-        # Zapisz layout
++        # Persist explicit bar/ruler orientation instead of the legacy hack.
++        from src.indicators.compositor import normalize_layout_for_save
+         def_layout = self.base_dir / "def_layout.json"
+         with open(def_layout, "w", encoding="utf-8") as f:
+-            json.dump(self.layout, f, indent=2, ensure_ascii=False)
++            json.dump(normalize_layout_for_save(self.layout), f, indent=2, ensure_ascii=False)
+ 
+         self.render_cancel_event.clear()
++        self.render_process_holder = {}
+ 
+         def worker() -> None:
+             try:
+@@ -55,7 +57,10 @@ class RenderMixin:
+                 else:
+                     self.signals.sig_render_stopped.emit()
+ 
+-        threading.Thread(target=worker, daemon=True).start()
++        self.render_worker_thread = threading.Thread(
++            target=worker, daemon=True, name="TeleM-RenderWorker",
++        )
++        self.render_worker_thread.start()
+ 
+     def _render_pipeline(self, options: dict) -> dict:
+         """Wykonuje pipeline renderowania (istniejąca logika)."""
+@@ -77,6 +82,9 @@ class RenderMixin:
+         resolution = options.get("resolution", "source")
+         output = options.get("output", "output.mp4")
+         video_bitrate = options.get("bitrate", "40M")
++        hud_resolution_scale = float(options.get("hud_resolution_scale", 1.0) or 1.0)
++        if hud_resolution_scale not in (1.0, 0.75, 0.5):
++            hud_resolution_scale = 1.0
+ 
+         meta = self.video_path.with_suffix(".json")
+         if not meta.exists():
+@@ -157,15 +165,14 @@ class RenderMixin:
+             "gyro_magnitude_samples": self.telemetry.gyro_magnitude_samples,
+         }
+ 
+-        # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)
+-        # FFmpeg will automatically scale the overlay to render_w/render_h
+-        max_overlay_w = 1920
+-        if render_w > max_overlay_w:
+-            ov_w = max_overlay_w
+-            ov_h = int(max_overlay_w * render_h / render_w) if render_w > 0 else 1080
+-        else:
+-            ov_w = render_w
+-            ov_h = render_h
++        # HUD is rasterized at an explicit fraction of the export canvas.
++        # Keep dimensions even because the downstream YUV/GPU filters require it.
++        ov_w = max(2, int(round(render_w * hud_resolution_scale)))
++        ov_h = max(2, int(round(render_h * hud_resolution_scale)))
++        if ov_w % 2:
++            ov_w += 1
++        if ov_h % 2:
++            ov_h += 1
+ 
+         stream_overlay_to_ffmpeg(
+             ffmpeg_exe=ffmpeg_exe,
+@@ -216,9 +223,31 @@ class RenderMixin:
+             overlay_h=ov_h,
+             render_w=render_w,
+             render_h=render_h,
++            hud_resolution_scale=hud_resolution_scale,
++            active_process_holder=self.render_process_holder,
+         )
+ 
+         return {"total_overlay_frames": 0, "png_duration": 0}
+ 
+     def _on_render_cancelled(self) -> None:
+         self.render_cancel_event.set()
++        # The render worker owns writer -> stdin ordering. Do not close stdin
++        # from the GUI thread while the writer may still be inside write().
++
++    def cancel_render_and_wait(self, timeout: float = 7.0) -> bool:
++        """Request cancellation for app shutdown and wait only bounded time."""
++        worker = getattr(self, "render_worker_thread", None)
++        if worker is None or not worker.is_alive():
++            return True
++        self.render_cancel_event.set()
++        worker.join(timeout=max(0.1, timeout))
++        if worker.is_alive():
++            process = getattr(self, "render_process_holder", {}).get("process")
++            if process is not None:
++                try:
++                    from src.ffmpeg.streaming import _stop_ffmpeg_process
++                    _stop_ffmpeg_process(process, graceful_timeout=0.1)
++                except Exception:
++                    pass
++            worker.join(timeout=2.0)
++        return not worker.is_alive()
+
+================================================================================
+FILE: src/gui/qt/application.py
+diff --git a/src/gui/qt/application.py b/src/gui/qt/application.py
+index 8cd54dc..7f6da19 100644
+--- a/src/gui/qt/application.py
++++ b/src/gui/qt/application.py
+@@ -22,6 +22,7 @@ def main() -> None:
+     _controller = AppController()
+     window = MainWindow()
+     window.set_controller(_controller)  # wiąże współdzielony podgląd (jeden raz)
++    app.aboutToQuit.connect(_controller.cancel_render_and_wait)
+     window.showMaximized()
+ 
+     # Zgłoś błąd, jeśli brak bibliotek libmpv (podgląd GPU MPV niedostępny)
+
+================================================================================
+FILE: src/gui/qt/controller.py
+diff --git a/src/gui/qt/controller.py b/src/gui/qt/controller.py
+index badb281..f01db0b 100644
+--- a/src/gui/qt/controller.py
++++ b/src/gui/qt/controller.py
+@@ -272,6 +272,7 @@ class AppController(
+         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
+         # Map preload: refresh the preview when the overview map becomes ready.
+         s.sig_map_ready.connect(lambda: self._render_preview())
++        s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
+ 
+     def _load_startup_preset(self) -> None:
+         """Wczytuje def_layout.json oraz _startup_preset jeśli istnieje."""
+
+================================================================================
+FILE: src/gui/qt/models.py
+diff --git a/src/gui/qt/models.py b/src/gui/qt/models.py
+index 9c71391..453aa87 100644
+--- a/src/gui/qt/models.py
++++ b/src/gui/qt/models.py
+@@ -85,12 +85,13 @@ def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
+ 
+ # ── Fabryki pól per-zakładka ────────────────────────────────────────────────
+ 
+-def _header_fields(with_source: bool = True, text_size: bool = False) -> list[FieldSchema]:
++def _header_fields(with_source: bool = True, text_size: bool = False,
++                   allow_small_size: bool = False) -> list[FieldSchema]:
+     """Pola zawsze widoczne nad zakładkami (pozycja, etykieta, rotacja)."""
+     fields = [
+         FieldSchema(
+             "font_size" if text_size else "size", "float", "Rozmiar", tab="",
+-            min_val=0.5 if text_size else 1.0,
++            min_val=0.5 if (text_size or allow_small_size) else 1.0,
+             max_val=10.0 if text_size else 100.0,
+             step=0.1,
+             default=2.5,
+@@ -372,7 +373,7 @@ def _bar_ruler_fields() -> list[FieldSchema]:
+         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
+         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
+         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=100000.0, step=1.0, default=100.0),
+-        FieldSchema("thickness", "int", "Grubość", tab="Gauge", min_val=1, max_val=10, step=1, default=3),
++        FieldSchema("thickness", "float", "Grubość", tab="Gauge", min_val=0.25, max_val=10.0, step=0.25, default=3.0),
+     ]
+ 
+ 
+@@ -501,7 +502,7 @@ def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
+         FieldSchema("bar_style", "choice", "Styl", tab="",
+                     choices=[("ruler", "Ruler"), ("segments", "Segments")], default="ruler"),
+     ]
+-    header = _header_fields() + _form_field() + style_choice
++    header = _header_fields(allow_small_size=True) + _form_field() + style_choice
+     if style in ("segment", "segments", "segmented", "segment_bar"):
+         return header + _bar_segments_fields()
+     if style in ("slope", "grade", "vertical_slope"):
+
+================================================================================
+FILE: src/gui/qt/signals.py
+diff --git a/src/gui/qt/signals.py b/src/gui/qt/signals.py
+index 3cd1eab..83041f8 100644
+--- a/src/gui/qt/signals.py
++++ b/src/gui/qt/signals.py
+@@ -137,6 +137,9 @@ class AppSignals(QObject):
+     # (loaded_tiles, required_tiles)
+     sig_map_progress = Signal(int, int)
+ 
++    # Request GUI-thread-only deferred MPV diagnostics from a loading worker.
++    sig_schedule_mpv_hwdec_check = Signal()
++
+ 
+ # Singleton dla całej aplikacji
+ _signals: AppSignals | None = None
+
+================================================================================
+FILE: src/gui/qt/tabs/render_tab.py
+diff --git a/src/gui/qt/tabs/render_tab.py b/src/gui/qt/tabs/render_tab.py
+index 9143629..afe052c 100644
+--- a/src/gui/qt/tabs/render_tab.py
++++ b/src/gui/qt/tabs/render_tab.py
+@@ -165,6 +165,15 @@ class RenderTab(QWidget):
+         self.cmb_update_rate.addItems(["Full", "Half", "Quarter"])
+         form.addRow("Częstotliwość HUD:", self.cmb_update_rate)
+ 
++        self.cmb_hud_resolution = QComboBox()
++        self.cmb_hud_resolution.addItems(["100%", "75%", "50%"])
++        self.cmb_hud_resolution.setCurrentText("100%")
++        self.cmb_hud_resolution.setToolTip(
++            "Rozmiar rastra HUD względem rozdzielczości eksportu; "
++            "nie zmienia częstotliwości HUD ani rozdzielczości filmu."
++        )
++        form.addRow("Rozdzielczość HUD:", self.cmb_hud_resolution)
++
+         self.edit_bitrate = QLineEdit("40M")
+         form.addRow("Bitrate:", self.edit_bitrate)
+ 
+@@ -448,6 +457,11 @@ class RenderTab(QWidget):
+             "resolution": self.cmb_resolution.currentText(),
+             "rotation": self.cmb_rotation.currentText(),
+             "update_rate": self.cmb_update_rate.currentText(),
++            "hud_resolution_scale": {
++                "100%": 1.0,
++                "75%": 0.75,
++                "50%": 0.5,
++            }.get(self.cmb_hud_resolution.currentText(), 1.0),
+             "bitrate": self.edit_bitrate.text().strip(),
+             "output": self.edit_output.text().strip(),
+         }
+@@ -519,7 +533,9 @@ class RenderTab(QWidget):
+         - raport klatki (completed/total, {"frame","ts"}) — mapowany na zakres
+           10..98% wspólnego paska.
+         """
+-        if self._cancelling:
++        if self._cancelling and not (
++            isinstance(hud_state, dict) and hud_state.get("phase") == "finalize"
++        ):
+             return
+         if hud_state is not None and isinstance(hud_state, dict) and "phase" in hud_state:
+             self._on_render_phase(hud_state, elapsed)
+@@ -853,8 +869,22 @@ class RenderTab(QWidget):
+             )
+             if not overlay_data:
+                 return None
++            hud_scale = {
++                "100%": 1.0,
++                "75%": 0.75,
++                "50%": 0.5,
++            }.get(self.cmb_hud_resolution.currentText(), 1.0)
++            hud_w = max(2, int(round(tw * hud_scale)))
++            hud_h = max(2, int(round(th * hud_scale)))
++            if hud_w % 2:
++                hud_w += 1
++            if hud_h % 2:
++                hud_h += 1
++            preview_base = base if hud_scale == 1.0 else base.resize(
++                (hud_w, hud_h), Image.Resampling.BILINEAR
++            )
+             preview = render_preview(
+-                base, layout, getattr(ctrl, "font_path", None),
++                preview_base, layout, getattr(ctrl, "font_path", None),
+                 overlay_data["date_text"], overlay_data["time_text"],
+                 overlay_data["speed_value"],
+                 overlay_data["distance_m"],
+@@ -885,6 +915,8 @@ class RenderTab(QWidget):
+                 inplace=False,
+             )
+             rgba = preview.convert("RGBA")
++            if hud_scale != 1.0:
++                rgba = rgba.resize((tw, th), Image.Resampling.BILINEAR)
+             data = rgba.tobytes("raw", "RGBA")
+             qimg = QImage(data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888).copy()
+             return qimg
+
+================================================================================
+FILE: src/gui/telemetry_manager.py
+diff --git a/src/gui/telemetry_manager.py b/src/gui/telemetry_manager.py
+index 7a1a635..c7ad89f 100644
+--- a/src/gui/telemetry_manager.py
++++ b/src/gui/telemetry_manager.py
+@@ -7,6 +7,7 @@ from bisect import bisect_right
+ from datetime import datetime, timedelta
+ from statistics import median
+ from pathlib import Path
++import time as _time
+ from typing import Any, Callable, Optional
+ 
+ from src.telemetry_resolver import resolve_samples_from_sources
+@@ -521,52 +522,93 @@ class TelemetryDataManager:
+             else:
+                 self.alt_samples = raw_alt or []
+ 
+-    def load_gpmf_records(self, records: list[dict]) -> None:
++    def load_gpmf_records(self, records: list[dict], profile_cb=None) -> None:
+         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
+         self.records = records
+ 
++        def _run(stage, fn):
++            started = _time.perf_counter()
++            result = fn()
++            if profile_cb is not None:
++                try:
++                    profile_cb(stage, _time.perf_counter() - started, len(records), len(result or []))
++                except Exception:
++                    pass
++            return result
++
+         # Speed and altitude should come from ExifTool flat dict (load_gpmf_from_exiftool),
+         # NOT from records. Only extract them from records if not already populated.
+         if not self.speed_samples and self._extract_speed:
+-            self.speed_samples = self._extract_speed(records)
++            self.speed_samples = _run("speed_extract", lambda: self._extract_speed(records))
+         if not self.alt_samples and self._extract_altitude:
+-            self.alt_samples = self._extract_altitude(records)
++            self.alt_samples = _run("altitude_extract", lambda: self._extract_altitude(records))
+         if self._extract_track:
+-            self.track_samples = self._extract_track(records)
++            self.track_samples = _run("track_extract", lambda: self._extract_track(records))
+         if self._extract_iso:
+-            self.iso_samples = self._extract_iso(records)
++            self.iso_samples = _run("iso_extract", lambda: self._extract_iso(records))
+         if self._extract_exposure:
+-            self.exposure_samples = self._extract_exposure(records)
++            self.exposure_samples = _run("exposure_extract", lambda: self._extract_exposure(records))
+         if self._extract_temperature:
+-            self.temperature_samples = self._extract_temperature(records)
++            self.temperature_samples = _run("temperature_extract", lambda: self._extract_temperature(records))
+         if self._extract_accelerometer:
+-            self.accelerometer_samples = self._extract_accelerometer(records)
++            self.accelerometer_samples = _run("accelerometer_extract", lambda: self._extract_accelerometer(records))
+             self._set_vector_series(self.accelerometer_samples, "accel")
+         if self._extract_gyroscope:
+-            self.gyroscope_samples = self._extract_gyroscope(records)
++            self.gyroscope_samples = _run("gyroscope_extract", lambda: self._extract_gyroscope(records))
+             self._set_vector_series(self.gyroscope_samples, "gyro")
+ 
+         # Determine start_dt_utc
+         if self._find_gps_anchor:
++            anchor_t0 = _time.perf_counter()
+             anchor = self._find_gps_anchor(records)
++            if profile_cb is not None:
++                try:
++                    profile_cb("gps_anchor", _time.perf_counter() - anchor_t0, len(records), 1 if anchor else 0)
++                except Exception:
++                    pass
+             if anchor:
+                 self.start_dt_utc = anchor
+         if self.start_dt_utc is None and self.speed_samples:
+             self.start_dt_utc = self.speed_samples[0][0]
+ 
+         # Smooth
++        smooth_t0 = _time.perf_counter()
+         self.smooth_all_gpmf()
++        if profile_cb is not None:
++            try:
++                profile_cb("smoothing", _time.perf_counter() - smooth_t0, len(records), len(self.speed_samples) + len(self.alt_samples))
++            except Exception:
++                pass
+ 
+         # Heading is derived from the GPMF GPS track only.  The explicit
+         # load_gps_track call also rebuilds this stream after the track is
+         # available to the map path.
+         if self._extract_gps_track:
++            gps_track_t0 = _time.perf_counter()
++            self.gps_track = self._extract_gps_track(records)
++            if profile_cb is not None:
++                try:
++                    profile_cb("gps_track_extract", _time.perf_counter() - gps_track_t0, len(records), len(self.gps_track))
++                except Exception:
++                    pass
++            heading_t0 = _time.perf_counter()
+             self.heading_samples = derive_heading_samples(
+-                self._extract_gps_track(records), self.speed_samples
++                self.gps_track, self.speed_samples
+             )
++            if profile_cb is not None:
++                try:
++                    profile_cb("heading_derive", _time.perf_counter() - heading_t0, len(records), len(self.heading_samples))
++                except Exception:
++                    pass
++        slope_t0 = _time.perf_counter()
+         self.slope_samples = derive_slope_from_streams(
+             self.track_samples, self.alt_samples
+         )
++        if profile_cb is not None:
++            try:
++                profile_cb("slope_derive", _time.perf_counter() - slope_t0, len(self.track_samples), len(self.slope_samples))
++            except Exception:
++                pass
+ 
+     def smooth_all_gpmf(self) -> None:
+         """Smooth GPMF speed and altitude samples."""
+@@ -854,13 +896,27 @@ class TelemetryDataManager:
+     # GPS track (for map rendering)
+     # ------------------------------------------------------------------
+ 
+-    def load_gps_track(self, records: list[dict]) -> None:
++    def load_gps_track(self, records: list[dict], profile_cb=None) -> None:
+         """Extract raw GPS lat/lon track from GPMF records for map rendering."""
+         if self._extract_gps_track:
+-            self.gps_track = self._extract_gps_track(records)
+-            self.heading_samples = derive_heading_samples(
+-                self.gps_track, self.speed_samples
+-            )
++            if not self.gps_track:
++                gps_t0 = _time.perf_counter()
++                self.gps_track = self._extract_gps_track(records)
++                if profile_cb is not None:
++                    try:
++                        profile_cb("gps_track_extract", _time.perf_counter() - gps_t0, len(records), len(self.gps_track))
++                    except Exception:
++                        pass
++            if not self.heading_samples:
++                heading_t0 = _time.perf_counter()
++                self.heading_samples = derive_heading_samples(
++                    self.gps_track, self.speed_samples
++                )
++                if profile_cb is not None:
++                    try:
++                        profile_cb("gps_heading_derive", _time.perf_counter() - heading_t0, len(self.gps_track), len(self.heading_samples))
++                    except Exception:
++                        pass
+         else:
+             self.gps_track = []
+             self.heading_samples = []
+
+================================================================================
+FILE: src/indicators/bar.py
+diff --git a/src/indicators/bar.py b/src/indicators/bar.py
+index 6f449fa..80e0114 100644
+--- a/src/indicators/bar.py
++++ b/src/indicators/bar.py
+@@ -343,7 +343,7 @@ def _render_ruler(
+     val_min: float,
+     val_max: float,
+     ticks: int,
+-    thickness: int,
++    thickness: float,
+     size_px: int,
+     fs: int,
+     outline: int,
+@@ -595,7 +595,7 @@ def _render_ruler_vertical(
+     val_min: float,
+     val_max: float,
+     ticks: int,
+-    thickness: int,
++    thickness: float,
+     size_px: int,
+     fs: int,
+     outline: int,
+@@ -626,13 +626,19 @@ def _render_ruler_vertical(
+     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
+     legacy_slope = bool(cfg.get("_legacy_slope", False))
+ 
+-    title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 0.9)) * fs * ss)))
+-    label_fs = max(7 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss)))
+-    value_fs = max(8 * ss, int(round(float(cfg.get("value_font_scale", 1.0)) * fs * ss)))
++    raw_size = float(cfg.get("size", 1.0))
++    ruler_scale = raw_size if 0.0 < raw_size <= 1.0 else 1.0
++
++    def geom(value: float, minimum: float = 1.0) -> int:
++        return max(int(round(minimum * ss)), int(round(value * ruler_scale * ss)))
++
++    title_fs = max(4 * ss, int(round(float(cfg.get("title_font_scale", 0.9)) * fs * ss * ruler_scale)))
++    label_fs = max(4 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss * ruler_scale)))
++    value_fs = max(4 * ss, int(round(float(cfg.get("value_font_scale", 1.0)) * fs * ss * ruler_scale)))
+     title_font = load_font(font_path, title_fs)
+     tick_font = load_font(font_path, label_fs)
+     value_font = load_font(font_path, value_fs)
+-    text_stroke = max(0, int(round(max(1, outline) * ss)))
++    text_stroke = max(0, int(round(max(1, outline) * ss * ruler_scale)))
+ 
+     raw_title = str(cfg.get("title_text", label or "")).strip()
+     title = raw_title.upper() if uppercase_title else raw_title
+@@ -661,18 +667,18 @@ def _render_ruler_vertical(
+     dim_text = _rgba(cfg.get("range_color", "#DDE7F2"), (221, 231, 242), int(235 * opacity))
+     shadow_alpha = int(150 * opacity)
+ 
+-    track_height = max(200 * ss, int(size_px * ss))
+-    track_width = max(2 * ss, int(round(float(cfg.get("track_width", max(1, thickness * 0.45))) * ss)))
++    track_height = max(ss, int(round(max(200 * ss, int(size_px * ss)) * ruler_scale)))
++    track_width = geom(float(cfg.get("track_width", max(1, thickness * 0.45))), 1.0)
+     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
+-    tick_w = max(1 * ss, int(round(float(cfg.get("tick_width", max(1, thickness))) * ss)))
+-    major_len = max(10 * ss, int(round(float(cfg.get("major_tick_length", 22.0)) * ss)))
+-    minor_len = max(5 * ss, int(round(float(cfg.get("minor_tick_length", 12.0)) * ss)))
++    tick_w = geom(float(cfg.get("tick_width", max(1, thickness))), 1.0)
++    major_len = geom(float(cfg.get("major_tick_length", 22.0)), 1.0)
++    minor_len = geom(float(cfg.get("minor_tick_length", 12.0)), 1.0)
+     if pixel_profile:
+-        major_len = max(10 * ss, int(round(track_height * 0.075)))
+-        minor_len = max(5 * ss, int(round(track_height * 0.038)))
+-    marker_len = max(12 * ss, int(round(float(cfg.get("marker_length", 28.0)) * ss)))
+-    marker_radius = max(3 * ss, int(round(float(cfg.get("marker_size", 6.0)) * ss)))
+-    marker_width = max(1 * ss, int(round(float(cfg.get("marker_width", 3.0)) * ss)))
++        major_len = max(geom(10.0), int(round(track_height * 0.075)))
++        minor_len = max(geom(5.0), int(round(track_height * 0.038)))
++    marker_len = geom(float(cfg.get("marker_length", 28.0)), 1.0)
++    marker_radius = geom(float(cfg.get("marker_size", 6.0)), 1.0)
++    marker_width = geom(float(cfg.get("marker_width", 3.0)), 1.0)
+     marker_style = str(cfg.get("marker_style", "dot")).strip().lower()
+     if marker_style not in ("dot", "line"):
+         marker_style = "dot"
+@@ -726,18 +732,18 @@ def _render_ruler_vertical(
+     label_width = max(label_widths or [0])
+ 
+     title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label and title else 0
+-    title_gap = 5 * ss if title_h else 0
+-    pad_x = 8 * ss
+-    pad_top = 5 * ss
+-    track_x = pad_x + label_width + major_len + 10 * ss
++    title_gap = geom(5.0) if title_h else 0
++    pad_x = geom(8.0)
++    pad_top = geom(5.0)
++    track_x = pad_x + label_width + major_len + geom(10.0)
+     top = pad_top + title_h + title_gap
+     bottom = top + track_height
+     if marker_style == "line":
+-        value_x = track_x + marker_len + 12 * ss
++        value_x = track_x + marker_len + geom(12.0)
+     else:
+-        value_x = track_x + marker_radius + 10 * ss
++        value_x = track_x + marker_radius + geom(10.0)
+     raster_w = max(track_x + track_width + pad_x, value_x + value_width + pad_x)
+-    raster_h = bottom + 8 * ss
++    raster_h = bottom + geom(8.0)
+ 
+     static_key = _static_cache_key(
+         "bar_ruler_v3_vertical", font_path,
+@@ -746,7 +752,7 @@ def _render_ruler_vertical(
+         lo, hi, unit, major_step, major_divisions, minor_per_major, total_divisions,
+         track_color, tick_color, zero_color, text_color, dim_text,
+         track_width, tick_w, major_len, minor_len, marker_len, marker_radius,
+-        marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px,
++        marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px, ruler_scale,
+         value_width, tuple(sorted(label_texts.items())),
+         tuple(range_label_texts), legacy_slope,
+     )
+@@ -1713,7 +1719,7 @@ def _render_slope(
+     cfg: dict[str, Any],
+     val_min: float,
+     val_max: float,
+-    thickness: int,
++    thickness: float,
+     size_px: int,
+     fs: int,
+     outline: int,
+@@ -1741,7 +1747,7 @@ def _render_slope(
+         val_min=float(val_min),
+         val_max=float(val_max),
+         ticks=int(ticks),
+-        thickness=int(thickness),
++        thickness=float(thickness),
+         size_px=int(size_px),
+         fs=int(fs),
+         outline=int(outline),
+@@ -1825,7 +1831,7 @@ def _render_bar_indicator(
+             val_min=float(val_min),
+             val_max=float(val_max),
+             ticks=int(ticks),
+-            thickness=int(thickness),
++            thickness=float(thickness),
+             size_px=int(size_px),
+             fs=int(fs),
+             outline=int(outline),
+@@ -1844,7 +1850,7 @@ def _render_bar_indicator(
+             val_min=float(val_min),
+             val_max=float(val_max),
+             ticks=int(ticks),
+-            thickness=int(thickness),
++            thickness=float(thickness),
+             size_px=int(size_px),
+             fs=int(fs),
+             outline=int(outline),
+
+================================================================================
+FILE: src/indicators/compositor.py
+diff --git a/src/indicators/compositor.py b/src/indicators/compositor.py
+index 1b8aae1..0a8f49b 100644
+--- a/src/indicators/compositor.py
++++ b/src/indicators/compositor.py
+@@ -7,7 +7,7 @@ from __future__ import annotations
+ 
+ import math
+ import time
+-import os
++import copy
+ from datetime import datetime
+ from typing import Any, Optional
+ 
+@@ -35,6 +35,42 @@ _THREAD_CANVAS = threading.local()
+ # so such projects load and render without crashing.
+ _REMOVED_LEGACY_KEYS = frozenset({"time_block"})
+ 
++
++def _is_legacy_vertical_ruler(cfg: dict[str, Any]) -> bool:
++    """Identify the old horizontal-ruler-plus-90-degree layout shape."""
++    return (
++        cfg.get("form", "text") in ("bar", "segment_bar")
++        and str(cfg.get("bar_style", "ruler")).strip().lower() == "ruler"
++        and "orientation" not in cfg
++        and int(cfg.get("rotation", 0) or 0) % 360 in (90, 270)
++    )
++
++
++def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
++    """Normalize any legacy Ruler rotation at runtime only.
++
++    Older presets represented a vertical ruler as a horizontal ruler with
++    ``rotation=90``. The current vertical-ruler contract keeps text horizontal,
++    so migrate this semantic shape without mutating the saved layout.
++    """
++    effective = cfg.copy()
++    if (
++        _is_legacy_vertical_ruler(effective)
++    ):
++        effective["orientation"] = "vertical"
++        effective["rotation"] = 0
++    return effective
++
++
++def normalize_layout_for_save(layout: dict[str, Any]) -> dict[str, Any]:
++    """Persist modern orientation fields instead of the legacy rotation hack."""
++    saved = copy.deepcopy(layout)
++    for cfg in saved.get("indicators", {}).values():
++        if isinstance(cfg, dict) and _is_legacy_vertical_ruler(cfg):
++            cfg["orientation"] = "vertical"
++            cfg["rotation"] = 0
++    return saved
++
+ def _get_reusable_canvas(
+     canvas_w: int, canvas_h: int, canvas_type: str = "below"
+ ) -> tuple[Image.Image, dict[str, tuple[int, int, int, int]], dict[str, Any]]:
+@@ -120,9 +156,6 @@ def compose_overlay(
+     leave it False (unchanged synchronous behaviour).
+     """
+     profiler = get_overlay_profiler()
+-    # AMD audit: start above_compose timer if enabled
+-    _audit_above = os.getenv("AMD_AUDIT_ABOVE_COMPose", "0").strip().lower() in {"1", "true", "yes", "on"}
+-    _above_start = time.perf_counter() if _audit_above else None
+     widget_fonts: dict[str, str] = {}
+ 
+     def _font_for(key: str) -> str:
+@@ -306,7 +339,7 @@ def compose_overlay(
+         unit = ind_cfg.get("unit") or default_unit
+         label = ind_cfg.get("label", default_label)
+ 
+-        current_cfg = ind_cfg.copy()
++        current_cfg = _effective_indicator_cfg(key, ind_cfg)
+         if compass_missing:
+             current_cfg["_compass_missing"] = True
+         if slope_missing:
+@@ -608,9 +641,6 @@ def compose_overlay(
+         if canvas_state is not None:
+             canvas_state["is_clean"] = False
+ 
+-        # Record above_compose timing if audit enabled
+-    if _audit_above and _above_start is not None:
+-        profiler.record("above_compose.total", (time.perf_counter() - _above_start) * 1000.0)
+     return img
+ 
+ 
+
+================================================================================
+FILE: src/indicators/dispatcher.py
+diff --git a/src/indicators/dispatcher.py b/src/indicators/dispatcher.py
+index 4f78ac3..0bf962f 100644
+--- a/src/indicators/dispatcher.py
++++ b/src/indicators/dispatcher.py
+@@ -65,14 +65,23 @@ def render_value_indicator(
+     val_max = float(cfg.get("max_val", 100))
+     ticks = int(cfg.get("ticks", 0))
+     _thickness_raw = float(cfg.get("thickness", 1))
+-    if _thickness_raw < 1:
+-        # Legacy relative format (e.g. 0.007 for arc width) -> percentage of min_dim
++    _bar_ruler = form == "bar" and str(
++        cfg.get("bar_style", cfg.get("style", "ruler"))
++    ).strip().lower() in {"ruler", ""}
++    if _thickness_raw < 1 and _bar_ruler:
++        # Ruler thickness is a fraction of the established thickness=1
++        # baseline. Keep it as a float so 0.25/0.5/0.75 rasterize thinner.
++        _thickness_baseline = s(0.6, min_dim)
++        thickness = max(0.25, float(_thickness_baseline) * _thickness_raw)
++    elif _thickness_raw < 1:
++        # Preserve the legacy sub-unit contract for non-ruler indicators.
+         _thickness_rel = _thickness_raw * 100.0
++        thickness = float(max(1, s(_thickness_rel, min_dim)))
+     else:
+         # Modern integer format 1..10 from GUI / def_layout.json
+         # 1 -> 0.6% min_dim, 2 -> 0.8% min_dim, ..., 10 -> 2.4% min_dim
+         _thickness_rel = 0.6 + (_thickness_raw - 1) * 0.2
+-    thickness = max(1, s(_thickness_rel, min_dim))
++        thickness = float(max(1, s(_thickness_rel, min_dim)))
+     size_px = s(cfg.get("size", 0.1), min_dim if form == "gauge" else canvas_w)
+     ss = max(1, supersample)
+ 
+
+================================================================================
+FILE: src/indicators/moving_map.py
+diff --git a/src/indicators/moving_map.py b/src/indicators/moving_map.py
+index 2eb043d..03225dd 100644
+--- a/src/indicators/moving_map.py
++++ b/src/indicators/moving_map.py
+@@ -281,9 +281,12 @@ def _render_moving_map_indicator(
+                 # A provider switch is in progress (controller restarted the
+                 # preload); keep a placeholder until the new provider is ready.
+                 return _placeholder(label="Ładowanie mapy…")
+-            if snap["status"] == "error":
++            # An overview is usable map data even while a newer/detail job is
++            # still preparing.  Never replace it with the loading placeholder.
++            overview_ready = snap.get("overview_image") is not None
++            if snap["status"] == "error" and not overview_ready:
+                 return _placeholder(error="Nie udało się wczytać mapy")
+-            if snap["status"] in ("idle", "preparing"):
++            if snap["status"] in ("idle", "preparing") and not overview_ready:
+                 return _placeholder(
+                     progress=snap["progress"],
+                     loaded=snap["loaded_tiles"],
+
+================================================================================
+FILE: src/indicators/static_map.py
+diff --git a/src/indicators/static_map.py b/src/indicators/static_map.py
+index 73a19ff..dc502aa 100644
+--- a/src/indicators/static_map.py
++++ b/src/indicators/static_map.py
+@@ -94,9 +94,12 @@ def _render_static_map_indicator(
+             snap = ctx.snapshot()
+             if snap["provider"] != map_style:
+                 return _placeholder()
+-            if snap["status"] == "error":
++            # An overview is usable map data even while a newer/detail job is
++            # still preparing.  Never replace it with the loading placeholder.
++            overview_ready = snap.get("overview_image") is not None
++            if snap["status"] == "error" and not overview_ready:
+                 return _placeholder(error="Nie udało się wczytać mapy")
+-            if snap["status"] in ("idle", "preparing"):
++            if snap["status"] in ("idle", "preparing") and not overview_ready:
+                 return _placeholder(
+                     progress=snap["progress"],
+                     loaded=snap["loaded_tiles"],
+
+================================================================================
+FILE: src/telemetry_extract.py
+diff --git a/src/telemetry_extract.py b/src/telemetry_extract.py
+index b0ae3e3..c02be15 100644
+--- a/src/telemetry_extract.py
++++ b/src/telemetry_extract.py
+@@ -11,6 +11,7 @@ import math
+ import os
+ import subprocess
+ import tempfile
++import time as _time
+ from bisect import bisect_left, bisect_right
+ from datetime import datetime, timedelta, timezone
+ from pathlib import Path
+@@ -32,12 +33,27 @@ def json_loads(text: str) -> Any:
+     return json.loads(text)
+ 
+ 
+-def load_json_with_fallback(path: Path) -> Any:
+-    """Load a JSON file trying multiple encodings."""
++def load_json_with_fallback(
++    path: Path,
++    profile_cb: Optional[Callable[[str, float, Path], None]] = None,
++) -> Any:
++    """Load a JSON file trying multiple encodings.
++
++    ``profile_cb`` is optional so the loading pipeline can distinguish file
++    I/O from JSON parsing without adding per-record diagnostics.
++    """
+     last_error = None
+     for enc in ("utf-8", "utf-8-sig", "utf-16", "utf-16-le", "cp1252"):
+         try:
+-            return json.loads(path.read_text(encoding=enc))
++            read_t0 = _time.perf_counter() if profile_cb else 0.0
++            text = path.read_text(encoding=enc)
++            if profile_cb:
++                profile_cb("json_file_read", _time.perf_counter() - read_t0, path)
++            parse_t0 = _time.perf_counter() if profile_cb else 0.0
++            value = json.loads(text)
++            if profile_cb:
++                profile_cb("json_parse", _time.perf_counter() - parse_t0, path)
++            return value
+         except Exception as e:
+             last_error = e
+     raise RuntimeError(
+
+================================================================================
+FILE: src/telemetry_processed_cache.py
+diff --git a/src/telemetry_processed_cache.py b/src/telemetry_processed_cache.py
+new file mode 100644
+index 0000000..36327d6
+--- /dev/null
++++ b/src/telemetry_processed_cache.py
+@@ -0,0 +1,119 @@
++"""Versioned, data-only cache for processed GPMF telemetry.
++
++The cache deliberately stores canonical samples rather than GUI/controller
++objects. JSON+gzip keeps reads safe (no executable deserialization) and the
++source fingerprint prevents stale results from being reused.
++"""
++
++from __future__ import annotations
++
++import gzip
++import json
++from datetime import datetime
++from pathlib import Path
++from typing import Any
++
++
++PROCESSED_CACHE_VERSION = 1
++PROCESSED_CACHE_SUFFIX = ".telemetry.json.gz"
++
++_FIELDS = (
++    "speed_samples", "alt_samples", "track_samples", "iso_samples",
++    "exposure_samples", "temperature_samples", "slope_samples",
++    "accelerometer_samples", "gyroscope_samples", "gps_track",
++    "heading_samples", "start_dt_utc",
++)
++
++
++def processed_cache_path(source_path: Path) -> Path:
++    return source_path.with_name(source_path.stem + PROCESSED_CACHE_SUFFIX)
++
++
++def _encode(value: Any) -> Any:
++    if isinstance(value, datetime):
++        return {"__datetime__": value.isoformat()}
++    if isinstance(value, tuple):
++        return [_encode(item) for item in value]
++    if isinstance(value, list):
++        return [_encode(item) for item in value]
++    if isinstance(value, dict):
++        return {str(key): _encode(item) for key, item in value.items()}
++    return value
++
++
++def _decode(value: Any) -> Any:
++    if isinstance(value, dict):
++        if set(value) == {"__datetime__"}:
++            return datetime.fromisoformat(value["__datetime__"])
++        return {key: _decode(item) for key, item in value.items()}
++    if isinstance(value, list):
++        return [_decode(item) for item in value]
++    return value
++
++
++def _contract(source_path: Path) -> dict[str, Any]:
++    stat = source_path.stat()
++    return {
++        "version": PROCESSED_CACHE_VERSION,
++        "source_size": stat.st_size,
++        "source_mtime_ns": stat.st_mtime_ns,
++    }
++
++
++def write_processed_cache(source_path: Path, telemetry: Any) -> Path:
++    path = processed_cache_path(source_path)
++    payload = {
++        "_telem_processed_cache": _contract(source_path),
++        "fields": {
++            field: _encode(getattr(telemetry, field, None))
++            for field in _FIELDS
++        },
++    }
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with gzip.open(path, "wt", encoding="utf-8", compresslevel=1) as handle:
++        json.dump(payload, handle, separators=(",", ":"), ensure_ascii=False)
++    return path
++
++
++def read_processed_cache(source_path: Path) -> dict[str, Any] | None:
++    path = processed_cache_path(source_path)
++    if not path.exists():
++        return None
++    try:
++        with gzip.open(path, "rt", encoding="utf-8") as handle:
++            payload = json.load(handle)
++        contract = payload.get("_telem_processed_cache")
++        if contract != _contract(source_path):
++            return None
++        fields = payload.get("fields")
++        if not isinstance(fields, dict):
++            return None
++        return {field: _decode(fields.get(field)) for field in _FIELDS}
++    except (OSError, ValueError, TypeError, KeyError):
++        return None
++
++
++def apply_processed_cache(telemetry: Any, fields: dict[str, Any]) -> None:
++    def _sample_tuples(value):
++        if not isinstance(value, list):
++            return value
++        restored = []
++        for item in value:
++            if isinstance(item, list):
++                item = list(item)
++                if len(item) >= 2 and isinstance(item[1], list):
++                    item[1] = tuple(item[1])
++                restored.append(tuple(item))
++            else:
++                restored.append(item)
++        return restored
++
++    for field in _FIELDS:
++        if field == "start_dt_utc":
++            setattr(telemetry, field, fields.get(field))
++        else:
++            setattr(telemetry, field, _sample_tuples(fields.get(field) or []))
++    if getattr(telemetry, "accelerometer_samples", None):
++        telemetry._set_vector_series(telemetry.accelerometer_samples, "accel")
++    if getattr(telemetry, "gyroscope_samples", None):
++        telemetry._set_vector_series(telemetry.gyroscope_samples, "gyro")
+
+================================================================================
+FILE: src/ffmpeg/__init__.py
+diff --git a/src/ffmpeg/__init__.py b/src/ffmpeg/__init__.py
+index 444a228..6bf654d 100644
+--- a/src/ffmpeg/__init__.py
++++ b/src/ffmpeg/__init__.py
+@@ -10,6 +10,9 @@ from src.ffmpeg.detection import (
+     detect_best_encoder,
+ )
+ from src.ffmpeg.intel_backend import (
++    IntelDeviceSelection,
++    intel_device_selection,
++    intel_ffmpeg_device_args,
+     enumerate_d3d11_adapters,
+     find_intel_adapter,
+     resolve_intel_force,
+@@ -58,6 +61,9 @@ __all__ = [
+     "enumerate_d3d11_adapters",
+     "find_intel_adapter",
+     "resolve_intel_force",
++    "IntelDeviceSelection",
++    "intel_device_selection",
++    "intel_ffmpeg_device_args",
+     "IntelBackendError",
+     "IntelResolution",
+     "init_worker",
+
+================================================================================
+FILE: src/ffmpeg/amd_native_exporter.py
+diff --git a/src/ffmpeg/amd_native_exporter.py b/src/ffmpeg/amd_native_exporter.py
+index 44be918..fcf783e 100644
+--- a/src/ffmpeg/amd_native_exporter.py
++++ b/src/ffmpeg/amd_native_exporter.py
+@@ -14,7 +14,6 @@ import json
+ import copy
+ import statistics
+ import subprocess
+-import tracemalloc
+ import ctypes
+ import queue
+ import threading
+@@ -201,20 +200,14 @@ def _chart_gpu_layout_safe(
+     if map_dst is not None:
+         other_boxes.append(tuple(int(v) for v in map_dst))
+     reasons: list[str] = []
+-    # AMD_RENDER_PATH_AUDIT_2 (temporary): per-chart GPU_SPLIT decision trace.
+-    chart_trace = os.environ.get("AMD_CHART_TRACE", "0") == "1"
+     for key, cap in chart_capture.items():
+         if "bbox" not in cap:
+             reasons.append(f"{key}: no bbox (not rendered)")
+-            if chart_trace:
+-                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='no bbox (not rendered)'", flush=True)
+             continue
+         if cap.get("rotation", 0) % 360 != 0:
+             # The GPU blend cannot reproduce Pillow's rotation of the widget,
+             # so a rotated chart must stay on the CPU path.
+             reasons.append(f"{key}: non-zero rotation -> CPU_REFERENCE")
+-            if chart_trace:
+-                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='non-zero rotation {cap.get('rotation')}'", flush=True)
+             continue
+         cbox = tuple(int(v) for v in cap["bbox"])
+         cx, cy, cw, ch = cbox
+@@ -223,13 +216,9 @@ def _chart_gpu_layout_safe(
+             if cx < bx + bw and bx < cx + cw and cy < by + bh and by < cy + ch:
+                 overlap = True
+                 reasons.append(f"{key} overlaps widget bbox=({bx},{by},{bw},{bh})")
+-                if chart_trace:
+-                    print(f"CHART_TRACE {key} requested=GPU_SPLIT final=CPU_REFERENCE reason='overlaps widget bbox=({bx},{by},{bw},{bh})' map_dst={map_dst}", flush=True)
+                 break
+         if not overlap:
+             safe.add(key)
+-            if chart_trace:
+-                print(f"CHART_TRACE {key} requested=GPU_SPLIT final=GPU reason='z-order disjoint (bbox={cbox})'", flush=True)
+     if not chart_capture:
+         return set(), "no active chart widgets"
+     if not safe:
+@@ -1222,20 +1211,6 @@ def export_amd_native_d3d11(
+     diagnostics_enabled = _env_flag("AMD_NATIVE_DIAGNOSTICS", False)
+     profiling_enabled = diagnostics_enabled or _env_flag("AMD_NATIVE_PROFILING", False) or _env_flag("AMD_GPU_TIMESTAMP_PROFILE", False)
+     overlay_profile_enabled = _env_flag("AMD_OVERLAY_PROFILE", False)
+-    # ── AMD RENDER PATH AUDIT (temporary diagnostic instrumentation) ──
+-    # AMD_AUDIT_ALLOCS=1 adds cheap per-frame allocation counters
+-    # (sys.getallocatedblocks + tracemalloc current bytes) to the producer and
+-    # consumer so the audit report can quantify per-frame allocation pressure.
+-    # Disabled by default; remove together with the AMD render-path audit.
+-    audit_allocs_enabled = _env_flag("AMD_AUDIT_ALLOCS", False)
+-    # ── AMD RENDER PATH AUDIT 2 (temporary diagnostic instrumentation) ──
+-    # AMD_FRAME_TRACE=1 records a full per-frame wall-clock accounting (frame
+-    # total, producer children, consumer children, inter-frame gaps) to a CSV
+-    # next to the profile.  AMD_CHART_TRACE=1 logs the GPU_SPLIT chart decision
+-    # for HR/Cadence (see _chart_gpu_layout_safe).  Both disabled by default.
+-    frame_trace_enabled = _env_flag("AMD_FRAME_TRACE", False)
+-    chart_trace_enabled = _env_flag("AMD_CHART_TRACE", False)
+-    frame_trace_rows: list[dict[str, Any]] = []
+     native_hud_mode = os.environ.get("AMD_NATIVE_HUD_MODE", "GPU_HUD").strip().upper()
+     if native_hud_mode not in _AMD_HUD_MODES:
+         print(
+@@ -2205,7 +2180,6 @@ def export_amd_native_d3d11(
+     map_geometry_set_holder = [False]
+     last_hud_report_holder = [0.0]
+     timeline_trace = [] # First 20 frames trace
+-    audit_alloc_frames: list[dict[str, Any]] = []
+     
+     # Pre-allocate timing sample containers for producer/consumer
+     timing_samples["producer_prepare"] = []
+@@ -2221,13 +2195,6 @@ def export_amd_native_d3d11(
+         sample_time_sec = idx / target_fps
+         c_dt = base_dt + timedelta(seconds=sample_time_sec) if base_dt is not None else None
+         
+-        if audit_allocs_enabled:
+-            _aud_blocks0 = sys.getallocatedblocks()
+-            _aud_traced0 = tracemalloc.get_traced_memory()[0] if tracemalloc.is_tracing() else 0
+-        else:
+-            _aud_blocks0 = 0
+-            _aud_traced0 = 0
+-
+         t_samples_p: dict[str, float] = {}
+         above_stats_p: dict[str, Any] = {}
+         
+@@ -2626,12 +2593,6 @@ def export_amd_native_d3d11(
+             t_samples_p["PIL/buffer preparation"] = (time.perf_counter() - buffer_prep_start) * 1000.0
+             previous_bboxes_holder[0] = dict(_bboxes)
+ 
+-        if audit_allocs_enabled:
+-            t_samples_p["producer_alloc_blocks"] = float(sys.getallocatedblocks() - _aud_blocks0)
+-            t_samples_p["producer_alloc_traced_bytes"] = float(
+-                (tracemalloc.get_traced_memory()[0] - _aud_traced0) if tracemalloc.is_tracing() else 0.0
+-            )
+-
+         t_p_end = time.perf_counter()
+         prep_ms = (t_p_end - t_p_start) * 1000.0
+         
+@@ -2678,17 +2639,11 @@ def export_amd_native_d3d11(
+         t_c_start = time.perf_counter()
+         if t_first_frame_begin == 0.0:
+             t_first_frame_begin = t_c_start
+-        if audit_allocs_enabled:
+-            _aud_c_blocks0 = sys.getallocatedblocks()
+-            _aud_c_traced0 = tracemalloc.get_traced_memory()[0] if tracemalloc.is_tracing() else 0
+-        else:
+-            _aud_c_blocks0 = 0
+-            _aud_c_traced0 = 0
+         frame_acct.begin_frame(prepared.frame_idx)
+         
+         # Merge producer timing samples
+         for k_t, v_t in prepared.timing_samples_producer.items():
+-            timing_samples.setdefault(k_t, []).append(v_t)
++            timing_samples[k_t].append(v_t)
+             
+         timing_samples["producer_prepare"].append(prepared.producer_prepare_ms)
+         pillow_intermediate_bytes.append(prepared.intermediate_bytes)
+@@ -2944,17 +2899,6 @@ def export_amd_native_d3d11(
+         pipeline_total_ms = (t_c_end - t_c_start) * 1000.0
+         timing_samples["pipeline_total"].append(pipeline_total_ms)
+ 
+-        if audit_allocs_enabled:
+-            audit_alloc_frames.append({
+-                "frame": prepared.frame_idx,
+-                "producer_alloc_blocks": prepared.timing_samples_producer.get("producer_alloc_blocks", 0.0),
+-                "producer_alloc_traced_bytes": prepared.timing_samples_producer.get("producer_alloc_traced_bytes", 0.0),
+-                "consumer_alloc_blocks": float(sys.getallocatedblocks() - _aud_c_blocks0),
+-                "consumer_alloc_traced_bytes": float(
+-                    (tracemalloc.get_traced_memory()[0] - _aud_c_traced0) if tracemalloc.is_tracing() else 0.0
+-                ),
+-            })
+-
+         if prepared.frame_idx < 20:
+             timeline_trace.append({
+                 "frame_idx": prepared.frame_idx,
+@@ -3071,49 +3015,15 @@ def export_amd_native_d3d11(
+                     raise producer_error[0]
+         else:
+             # SYNC (Production Default / Diagnostic Reference)
+-            _ft_prev_end: float | None = None
+             for f_idx in range(total_frames):
+                 if cancel_event is not None and cancel_event.is_set():
+                     print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
+                     _cleanup_native_resources()
+                     return False
+-                if frame_trace_enabled:
+-                    _ft_t0 = time.perf_counter()
+                 prep = _prepare_frame_cpu(f_idx)
+-                if frame_trace_enabled:
+-                    _ft_t1 = time.perf_counter()
+                 timing_samples["producer_queue_wait"].append(0.0)
+                 timing_samples["consumer_queue_wait"].append(0.0)
+                 ok = _consume_prepared_frame(prep)
+-                if frame_trace_enabled:
+-                    _ft_t2 = time.perf_counter()
+-                    _ft_gap = (
+-                        (_ft_t0 - _ft_prev_end) * 1000.0 if _ft_prev_end is not None else 0.0
+-                    )
+-                    _ft_prev_end = _ft_t2
+-                    _row: dict[str, Any] = {
+-                        "frame": f_idx,
+-                        "frame_total_ms": (_ft_t2 - _ft_t0) * 1000.0,
+-                        "producer_ms": (_ft_t1 - _ft_t0) * 1000.0,
+-                        "consumer_ms": (_ft_t2 - _ft_t1) * 1000.0,
+-                        "inter_frame_gap_ms": _ft_gap,
+-                    }
+-                    for _k in ("Telemetry/frame_data", "compose_overlay", "above_total",
+-                               "above_compose", "above_region_to_bytes", "above_region_upload",
+-                               "map_cpu_upload", "HUD dirty extract", "PIL/buffer preparation",
+-                               "chart_cpu_tobytes", "chart_dynamic_tobytes", "gauge_tobytes"):
+-                        _v = timing_samples.get(_k)
+-                        if _v:
+-                            _row["p_" + _k] = _v[-1]
+-                    for _k in ("MF ReadSample/decode availability", "consumer_upload",
+-                               "consumer_native_call", "VideoProcessor CPU submit",
+-                               "VideoProcessor GPU completion", "GPU wait/synchronization",
+-                               "AMF submit/backpressure", "AMF QueryOutput", "Packet write",
+-                               "pipeline_total"):
+-                        _v = timing_samples.get(_k)
+-                        if _v:
+-                            _row["c_" + _k] = _v[-1]
+-                    frame_trace_rows.append(_row)
+                 if not ok:
+                     # EOS reached normally from decoder
+                     break
+@@ -3672,16 +3582,6 @@ def export_amd_native_d3d11(
+                 if fit_resolve_stats is not None else None
+             ),
+         },
+-        "audit_allocations": (
+-            {
+-                "frames": len(audit_alloc_frames),
+-                "producer_alloc_blocks": _value_summary([f["producer_alloc_blocks"] for f in audit_alloc_frames]),
+-                "producer_alloc_traced_bytes": _value_summary([f["producer_alloc_traced_bytes"] for f in audit_alloc_frames]),
+-                "consumer_alloc_blocks": _value_summary([f["consumer_alloc_blocks"] for f in audit_alloc_frames]),
+-                "consumer_alloc_traced_bytes": _value_summary([f["consumer_alloc_traced_bytes"] for f in audit_alloc_frames]),
+-            }
+-            if audit_allocs_enabled else None
+-        ),
+         "timings": timing_summaries,
+         "total_wall_clock_s": end_to_end_elapsed,
+         "true_fps": true_fps,
+@@ -3701,24 +3601,6 @@ def export_amd_native_d3d11(
+     except Exception as exc:
+         print(f"[AMD NATIVE] WARNING: failed to write profiling JSON: {exc}", flush=True)
+ 
+-    # AMD_RENDER_PATH_AUDIT_2: dump the per-frame wall-clock accounting CSV.
+-    if frame_trace_enabled and frame_trace_rows:
+-        import csv as _ft_csv
+-        ft_path = output_file_str + ".frame_trace.csv"
+-        try:
+-            _ft_fields: list[str] = []
+-            for _r in frame_trace_rows:
+-                for _k in _r:
+-                    if _k not in _ft_fields:
+-                        _ft_fields.append(_k)
+-            with open(ft_path, "w", newline="", encoding="utf-8") as ftf:
+-                _ft_w = _ft_csv.DictWriter(ftf, fieldnames=_ft_fields, extrasaction="ignore")
+-                _ft_w.writeheader()
+-                _ft_w.writerows(frame_trace_rows)
+-            print(f"[AMD NATIVE] Frame trace CSV: {ft_path}", flush=True)
+-        except Exception as exc:
+-            print(f"[AMD NATIVE] WARNING: failed to write frame trace CSV: {exc}", flush=True)
+-
+     # Dump Checkpoint F (Frame 30 from final encoded MP4)
+     if diagnostics_enabled and os.path.exists(output_file_str):
+         cmd_thumb = [
+
+================================================================================
+FILE: src/ffmpeg/command_builder.py
+diff --git a/src/ffmpeg/command_builder.py b/src/ffmpeg/command_builder.py
+index d075ae2..ad680f2 100644
+--- a/src/ffmpeg/command_builder.py
++++ b/src/ffmpeg/command_builder.py
+@@ -639,6 +639,7 @@ def _build_stream_ffmpeg_cmd(
+     overlay_w: int | None = None,
+     overlay_h: int | None = None,
+     use_gpu_compositor: bool = False,
++    intel_gpu_resident: bool = False,
+ ) -> tuple[list[str], str]:
+     if overlay_w is not None:
+         canvas_w = overlay_w
+@@ -710,6 +711,13 @@ def _build_stream_ffmpeg_cmd(
+             base_filter = "[0:v]format=nv12,transpose=2[base]"
+         else:
+             base_filter = "[0:v]format=nv12[base]"
++    elif encoder == "intel" and intel_gpu_resident:
++        if effective_rotation != 0:
++            raise ValueError("Intel GPU-resident path requires rotation=0")
++        if target_res:
++            base_filter = f"[0:v]scale_qsv={render_w}:{render_h}[base]"
++        else:
++            base_filter = "[0:v]null[base]"
+     elif target_res:
+         if effective_rotation == 180:
+             base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,vflip,hflip[base]"
+@@ -818,6 +826,20 @@ def _build_stream_ffmpeg_cmd(
+             ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload[ov]"
+ 
+         filter_complex = f"{base_filter};{ov_input};[base][ov]overlay_opencl[v_ocl];[v_ocl]hwdownload,format=nv12[vtemp]"
++    elif encoder == "intel" and intel_gpu_resident:
++        if hud_regions and len(hud_regions) > 1:
++            raise ValueError("Intel GPU-resident path does not support HUD regions")
++        scaled_stream_w = int(round(stream_w * scale_x))
++        scaled_stream_h = int(round(stream_h * scale_y))
++        ov_input = (
++            f"[1:v]setpts=PTS-STARTPTS,format=bgra,scale={scaled_stream_w}:{scaled_stream_h},"
++            f"hwupload=derive_device=qsv[ov]"
++        )
++        filter_complex = (
++            f"{base_filter};{ov_input};"
++            f"[base][ov]overlay_qsv=x={int(round(hud_x * scale_x))}:"
++            f"y={int(round(hud_y * scale_y))}:shortest=1[vtemp]"
++        )
+     elif hud_regions and len(hud_regions) > 1:
+         n_reg = len(hud_regions)
+         split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
+@@ -963,6 +985,9 @@ def _build_stream_ffmpeg_cmd(
+             cmd.extend(["-c:a", "copy"])
+     elif encoder == "intel":
+         cmd.extend([
++            # This FFmpeg build accepts a DirectX adapter index for qsv_device.
++            # The index is injected dynamically into input_args by streaming;
++            # do not hard-code a vendor/index here.
+             "-c:v", "hevc_qsv", "-preset", "veryfast",
+             "-global_quality", "24", "-look_ahead", "0",
+             "-async_depth", "4", "-pix_fmt", "nv12",
+
+================================================================================
+FILE: src/ffmpeg/streaming.py
+diff --git a/src/ffmpeg/streaming.py b/src/ffmpeg/streaming.py
+index fa8602e..53215c9 100644
+--- a/src/ffmpeg/streaming.py
++++ b/src/ffmpeg/streaming.py
+@@ -10,16 +10,17 @@ import math
+ import os
+ import queue
+ import copy
++import json
++import shutil
+ import subprocess
+ import threading
+ import time
+-from concurrent.futures import ProcessPoolExecutor
+ from datetime import datetime, timedelta
+ from pathlib import Path
+ from typing import Any, Callable, Optional
+ 
+ from src.ffmpeg.detection import detect_gpu_decoder
+-from src.ffmpeg.intel_backend import resolve_intel_force
++from src.ffmpeg.intel_backend import intel_device_selection, intel_ffmpeg_device_args, resolve_intel_force
+ from src.ffmpeg.worker_cache import init_worker
+ from src.ffmpeg.command_builder import (
+     _build_stream_ffmpeg_cmd,
+@@ -47,6 +48,170 @@ NVIDIA_HUD_MAX_REGIONS = 5
+ NVIDIA_HUD_GRID_PX = 16
+ 
+ 
++def _probe_intel_native_source(input_file: str, ffmpeg_exe: str) -> tuple[bool, str]:
++    """Allow the native slice only for single-file 8-bit SDR input."""
++    ffprobe = str(Path(ffmpeg_exe).with_name("ffprobe.exe"))
++    if not Path(ffprobe).exists():
++        ffprobe = shutil.which("ffprobe") or "ffprobe"
++    try:
++        result = subprocess.run(
++            [ffprobe, "-v", "error", "-select_streams", "v:0",
++             "-show_entries", "stream=pix_fmt,color_space,color_transfer,color_primaries",
++             "-of", "default=nw=1", input_file],
++            capture_output=True, text=True, timeout=8,
++        )
++        if result.returncode != 0:
++            return False, "source_probe_failed"
++        info = result.stdout.lower()
++        if "10le" in info or "10be" in info or "12le" in info or "12be" in info:
++            return False, "hdr_or_non_8bit_source"
++        if any(token in info for token in ("bt2020", "arib-std-b67", "smpte2084", "hlg")):
++            return False, "hdr_or_non_sdr_source"
++        return True, "sdr_8bit_source"
++    except Exception:
++        return False, "source_probe_failed"
++
++
++def _cancel_log(message: str, started: float | None = None, process: Any = None) -> None:
++    """ASCII-safe, bounded-cancel diagnostics."""
++    elapsed = (time.perf_counter() - started) if started is not None else 0.0
++    thread = threading.current_thread().name
++    pid = getattr(process, "pid", None) if process is not None else None
++    pid_text = f" pid={pid}" if pid is not None else ""
++    print(f"[RenderCancel] {message} elapsed={elapsed:.3f}s thread={thread}{pid_text}", flush=True)
++
++
++class _RenderExecutor:
++    """ProcessPoolExecutor context with non-blocking cancellation exit."""
++
++    def __init__(self, *args: Any, cancel_event: Any = None, **kwargs: Any) -> None:
++        from concurrent.futures import ProcessPoolExecutor
++        self._args = args
++        self._kwargs = kwargs
++        self._cancel_event = cancel_event
++        self.executor = ProcessPoolExecutor(*args, **kwargs)
++
++    def __enter__(self):
++        return self.executor
++
++    def __exit__(self, exc_type, exc, tb):
++        cancelled = self._cancel_event is not None and self._cancel_event.is_set()
++        if cancelled:
++            for child in list(getattr(self.executor, "_processes", {}).values()):
++                try:
++                    child.terminate()
++                except Exception:
++                    pass
++            self.executor.shutdown(wait=False, cancel_futures=True)
++        else:
++            self.executor.shutdown(wait=True)
++        return False
++
++
++def _wait_process_bounded(process: Any, timeout: float) -> bool:
++    """Wait without ever allowing process cleanup to become unbounded."""
++    deadline = time.monotonic() + max(0.0, timeout)
++    while process.poll() is None and time.monotonic() < deadline:
++        time.sleep(0.05)
++    return process.poll() is not None
++
++
++def _stop_ffmpeg_process(
++    process: Any, cancel_started: float | None = None,
++    graceful_timeout: float = 10.0,
++) -> int | None:
++    """Graceful stdin close, then bounded terminate/kill process-tree fallback."""
++    if process is None:
++        return None
++    if process.poll() is not None:
++        setattr(process, "_telem_cancel_mode", "graceful")
++        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
++        return process.returncode
++
++    _cancel_log("ffmpeg graceful stop requested", cancel_started, process)
++    try:
++        if process.stdin is not None:
++            process.stdin.close()
++    except Exception:
++        pass
++    _cancel_log("stdin_closed", cancel_started, process)
++    _cancel_log("ffmpeg graceful wait start", cancel_started, process)
++    graceful_deadline = time.monotonic() + max(0.1, graceful_timeout)
++    next_progress = 1
++    while process.poll() is None and time.monotonic() < graceful_deadline:
++        elapsed = time.monotonic() - (graceful_deadline - graceful_timeout)
++        if elapsed >= next_progress:
++            _cancel_log(f"ffmpeg still running after {next_progress}s", cancel_started, process)
++            next_progress += 1
++        time.sleep(0.05)
++    if process.poll() is not None:
++        setattr(process, "_telem_cancel_mode", "graceful")
++        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
++        return process.returncode
++
++    _cancel_log("graceful timeout reached", cancel_started, process)
++    try:
++        process.terminate()
++    except Exception:
++        pass
++    _cancel_log("terminate", cancel_started, process)
++    if _wait_process_bounded(process, 1.0):
++        setattr(process, "_telem_cancel_mode", "terminate")
++        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
++        return process.returncode
++
++    # Windows terminate() is not guaranteed to include descendants.  Use the
++    # built-in process-tree command only for the final hard-cleanup fallback.
++    if os.name == "nt":
++        try:
++            subprocess.run(
++                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
++                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
++                check=False,
++                timeout=2.0,
++            )
++        except Exception:
++            pass
++    else:
++        try:
++            process.kill()
++        except Exception:
++            pass
++    _cancel_log("kill", cancel_started, process)
++    _wait_process_bounded(process, 1.0)
++    setattr(process, "_telem_cancel_mode", "kill")
++    _cancel_log("cleanup done", cancel_started, process)
++    return process.poll()
++
++
++def _validate_partial_mp4(output_file: str | Path) -> bool:
++    """Validate a gracefully closed partial MP4 using the local ffprobe."""
++    ffprobe = shutil.which("ffprobe")
++    if not ffprobe or not Path(output_file).exists():
++        return False
++    try:
++        result = subprocess.run(
++            [ffprobe, "-v", "error", "-show_entries",
++             "format=duration:stream=codec_type", "-of", "json", str(output_file)],
++            capture_output=True, text=True, timeout=5.0, check=False,
++        )
++        if result.returncode != 0:
++            return False
++        data = json.loads(result.stdout or "{}")
++        duration = float((data.get("format") or {}).get("duration") or 0.0)
++        streams = data.get("streams") or []
++        return duration > 0.0 and any(s.get("codec_type") == "video" for s in streams)
++    except Exception:
++        return False
++
++
++def _log_ffmpeg_tail(stdout_lines: list[str], cancel_started: float | None) -> None:
++    for line in stdout_lines[-8:]:
++        safe = str(line).encode("ascii", "replace").decode("ascii").strip()
++        if safe:
++            _cancel_log(f"ffmpeg tail: {safe}", cancel_started)
++
++
+ def _snap_nvidia_hud_layout(layout: dict[str, Any], canvas_w: int, canvas_h: int, grid_px: int) -> dict[str, Any]:
+     """Return a runtime-only NVIDIA layout with indicator anchors snapped to a safe grid."""
+     snapped = copy.deepcopy(layout)
+@@ -81,17 +246,35 @@ def _pipe_writer_thread(
+     Terminates when done_event is set and queue is empty, or on None sentinel.
+     """
+     bt = BenchmarkTracker.get_instance()
++
++    def _release_item(item: Any) -> None:
++        if isinstance(item, tuple):
++            try:
++                item[1].release()
++            except Exception:
++                pass
++            if shm_pool is not None:
++                try:
++                    shm_pool.release(item[0])
++                except Exception:
++                    pass
++
+     if audit is None:
+         # Production hot path: no audit timestamps, qsize sampling, histogram
+         # updates, or diagnostic locks.  The writer receives the SHM memoryview
+         # and performs one direct BufferedWriter.write per frame.
+         try:
+             while True:
++                if done_event.is_set():
++                    while True:
++                        try:
++                            _release_item(write_queue.get_nowait())
++                        except queue.Empty:
++                            break
++                    break
+                 try:
+                     item = write_queue.get(timeout=0.5)
+                 except queue.Empty:
+-                    if done_event.is_set():
+-                        break
+                     continue
+                 if item is None:
+                     break
+@@ -129,6 +312,13 @@ def _pipe_writer_thread(
+ 
+     try:
+         while True:
++            if done_event.is_set():
++                while True:
++                    try:
++                        _release_item(write_queue.get_nowait())
++                    except queue.Empty:
++                        break
++                break
+             get_started_ns = time.perf_counter_ns()
+             queue_was_empty = write_queue.empty()
+             try:
+@@ -272,6 +462,7 @@ def _acquire_shm_slot(
+     process: Any,
+     stdout_lines: list[str],
+     timeout: float = 30.0,
++    cancel_event: Any = None,
+ ) -> int:
+     """Acquire an SHM slot, failing fast if FFmpeg has already exited.
+ 
+@@ -281,6 +472,8 @@ def _acquire_shm_slot(
+     """
+     deadline = time.time() + timeout
+     while time.time() < deadline:
++        if cancel_event is not None and cancel_event.is_set():
++            raise queue.Empty("render cancellation requested")
+         if process.poll() is not None:
+             raise RuntimeError(
+                 f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
+@@ -325,10 +518,7 @@ def run_ffmpeg_with_progress(
+ 
+     for line in process.stdout:
+         if cancel_event is not None and cancel_event.is_set():
+-            try:
+-                process.terminate()
+-            except Exception:
+-                pass
++            _stop_ffmpeg_process(process)
+             break
+         key, _, val = line.partition("=")
+         key, val = key.strip(), val.strip()
+@@ -356,7 +546,8 @@ def run_ffmpeg_with_progress(
+             )
+             if progress_cb:
+                 progress_cb(frame, stats)
+-    process.wait()
++    if process.poll() is None:
++        _stop_ffmpeg_process(process)
+     rc = process.returncode
+     if rc != 0:
+         extra = "\n".join(other_output).strip()
+@@ -405,18 +596,39 @@ def stream_overlay_to_ffmpeg(
+     container_rotation: int = 0,
+     overlay_w: int = 3840,
+     overlay_h: int = 2160,
++    hud_resolution_scale: float = 1.0,
+     progress_cb: Optional[Callable] = None,
+     on_render_progress: Optional[Callable] = None,
+     cancel_event: Optional[threading.Event] = None,
+     active_process_holder: Optional[dict] = None,
+ ) -> int:
+     """Stream rendered overlay frames into an FFmpeg process."""
++    if hud_resolution_scale not in (1.0, 0.75, 0.5):
++        hud_resolution_scale = 1.0
++    if hud_resolution_scale != 1.0:
++        # Direct callers may not precompute overlay_w/overlay_h. For the
++        # scaled modes the export canvas is the source of truth.
++        overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
++        overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
++        if overlay_w % 2:
++            overlay_w += 1
++        if overlay_h % 2:
++            overlay_h += 1
++    # The caller normally supplies the scaled canvas. Keep this diagnostic at
++    # the stream boundary so direct callers are auditable too.
++    print(
++        f"[HUD Resolution] scale={hud_resolution_scale:.2f} "
++        f"canvas={overlay_w}x{overlay_h} output={render_w}x{render_h}",
++        flush=True,
++    )
++
+     if encoder == "intel":
+         # INTEL_FORCE: strictly require a usable Intel GPU + QSV.  No silent
+         # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU
+         # fallback.  On failure resolve_intel_force raises IntelBackendError,
+         # which intentionally stops the Intel backend initialisation.
+-        resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
++        intel_resolution = resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
++        intel_selection = intel_device_selection(intel_resolution)
+ 
+     t_prod_start = time.perf_counter()
+     pipeline_audit = PipelineAuditRecorder() if encoder == "nv" and env_enabled() else None
+@@ -471,6 +683,38 @@ def stream_overlay_to_ffmpeg(
+     custom_texts = layout.get("custom_texts", [])
+     enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
+     is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
++    intel_gpu_resident = (
++        encoder == "intel"
++        and not is_multi_file
++        and rotation_degrees == 0
++        and container_rotation == 0
++        and not bool(cut_regions)
++        and not is_no_hud
++        and resolution_name in ("source", "720p", "1080p")
++        and os.environ.get("TELEM_INTEL_GPU_RESIDENT", "1").strip().lower() not in ("0", "false", "off")
++    )
++    intel_source_file = (
++        input_files if isinstance(input_files, (str, Path))
++        else (input_files[0] if len(input_files) == 1 else None)
++    )
++    if intel_gpu_resident and intel_source_file is not None:
++        probe = _probe_intel_native_source(str(intel_source_file), ffmpeg_exe)
++        if not probe[0]:
++            intel_gpu_resident = False
++            print(f"[INTEL] Fallback reason: {probe[1]}", flush=True)
++    if encoder == "intel":
++        print(
++            f"[INTEL] Render path: {'D3D11_NATIVE' if intel_gpu_resident else 'CPU_REFERENCE'}",
++            flush=True,
++        )
++        print(
++            f"[INTEL] Video frame residency: {'GPU' if intel_gpu_resident else 'CPU_REFERENCE'}",
++            flush=True,
++        )
++        if intel_gpu_resident:
++            print("[INTEL] Overlay source: CPU_RGBA_UPLOAD", flush=True)
++        if not intel_gpu_resident:
++            print("[INTEL] Fallback reason: unsupported native vertical-slice configuration", flush=True)
+ 
+     # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────
+     # amd_native_exporter uses only input_files[0]; do NOT silently render a
+@@ -692,7 +936,15 @@ def stream_overlay_to_ffmpeg(
+     _report_phase(on_render_progress, "prep", 0.70, "Przygotowywanie HUD...", time.time() - phase_t0)
+ 
+     # Build FFmpeg input args
+-    hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
++    if encoder == "intel":
++        # Do not use generic multi-GPU probing for INTEL_FORCE.
++        hwaccel = "qsv"
++        intel_device_args = intel_ffmpeg_device_args(intel_selection)
++        # qsv_device is an encoder option in this FFmpeg build and takes the
++        # DirectX adapter index, not the named qsv device.
++    else:
++        hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
++        intel_device_args = []
+     # Manual rotation uses CPU filters (vflip/transpose) which cannot take
+     # hardware frames, so decoded frames must stay in system memory in that case.
+     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
+@@ -704,7 +956,11 @@ def stream_overlay_to_ffmpeg(
+         hwaccel = None
+     input_args: list[str] = []
+     audio_input_args: list[str] = []
+-    if hwaccel:
++    if intel_device_args:
++        input_args.extend(intel_device_args)
++        if intel_gpu_resident:
++            input_args.extend(["-filter_hw_device", intel_selection.qsv_device_name])
++    elif hwaccel:
+         input_args.extend(["-hwaccel", hwaccel])
+         if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
+             input_args.extend(["-hwaccel_output_format", "cuda"])
+@@ -747,6 +1003,7 @@ def stream_overlay_to_ffmpeg(
+         is_no_hud=is_no_hud,
+         hud_regions=hud_regions,
+         use_gpu_compositor=use_gpu_compositor,
++        intel_gpu_resident=intel_gpu_resident,
+     )
+ 
+     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
+@@ -771,8 +1028,13 @@ def stream_overlay_to_ffmpeg(
+             active_process_holder["process"] = process
+ 
+         for line in process.stdout:
+-            pass
+-        process.wait()
++            if cancel_event is not None and cancel_event.is_set():
++                _stop_ffmpeg_process(process)
++                break
++        if process.poll() is None:
++            _wait_process_bounded(process, 10.0)
++        if active_process_holder is not None:
++            active_process_holder["process"] = None
+         return total_overlay_frames
+ 
+     # Start FFmpeg
+@@ -855,15 +1117,37 @@ def stream_overlay_to_ffmpeg(
+     )
+     writer_t.start()
+     t_ffmpeg_started = time.perf_counter()
++    cancel_started: float | None = None
++
++    def _note_cancel() -> float:
++        nonlocal cancel_started
++        if cancel_started is None:
++            cancel_started = time.perf_counter()
++            _cancel_log("requested", cancel_started, process)
++        return cancel_started
++
++    def _put_frame(item: Any) -> bool:
++        """Put one frame without allowing cancellation to wait on a full queue."""
++        while True:
++            if cancel_event is not None and cancel_event.is_set():
++                _note_cancel()
++                return False
++            try:
++                pipe_queue.put(item, timeout=0.1)
++                return True
++            except queue.Full:
++                continue
+ 
+     try:
+         if n_workers <= 1:
+             # Single worker — no IPC, direct rendering
+             for i in range(total_overlay_frames):
+                 if cancel_event is not None and cancel_event.is_set():
++                    _note_cancel()
+                     break
+                 _, raw_bytes = render_frame_bytes_job((i,))
+-                pipe_queue.put(raw_bytes)
++                if not _put_frame(raw_bytes):
++                    break
+                 total_piped += 1
+                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
+                     _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
+@@ -1053,10 +1337,11 @@ def stream_overlay_to_ffmpeg(
+                     flush=True,
+                 )
+ 
+-            with ProcessPoolExecutor(
++            with _RenderExecutor(
+                 max_workers=n_workers,
+                 initializer=_init_worker_with_shm,
+                 initargs=(shm_names, frame_size, *init_args),
++                cancel_event=cancel_event,
+             ) as ex:
+                 pending: set = set()
+                 reorder_buf: dict[int, int] = {}  # frame_idx -> shm_slot
+@@ -1089,7 +1374,7 @@ def stream_overlay_to_ffmpeg(
+                         pipeline_audit.frame(submitted)
+                         pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
+                         pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
+-                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
++                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines, cancel_event=cancel_event)
+                     pending.add(_submit_audited(submitted, slot))
+                     submitted += 1
+ 
+@@ -1145,7 +1430,9 @@ def stream_overlay_to_ffmpeg(
+                             pipeline_audit.sample_occupancy("in_flight", len(pending) + len(reorder_buf))
+ 
+                     # Drain consecutive frames to pipe writer queue (zero-copy)
+-                    while next_idx in reorder_buf:
++                    while next_idx in reorder_buf and not (
++                        cancel_event is not None and cancel_event.is_set()
++                    ):
+                         slot = reorder_buf.pop(next_idx)
+                         idx = next_idx
+                         if pipeline_audit is not None:
+@@ -1156,7 +1443,13 @@ def stream_overlay_to_ffmpeg(
+                         memview = shm_pool.get_memview(slot)
+                         if pipeline_audit is not None:
+                             pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
+-                        pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
++                        if not _put_frame((slot, memview, idx) if pipeline_audit is not None else (slot, memview)):
++                            try:
++                                memview.release()
++                            except Exception:
++                                pass
++                            shm_pool.release(slot)
++                            break
+                         if pipeline_audit is not None:
+                             pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
+                         total_piped += 1
+@@ -1171,49 +1464,91 @@ def stream_overlay_to_ffmpeg(
+                     while (
+                         submitted < total_overlay_frames
+                         and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
++                        and not (cancel_event is not None and cancel_event.is_set())
+                     ):
+                         if pipeline_audit is not None:
+                             pipeline_audit.frame(submitted)
+                             pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
+                             pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
+-                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
++                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines, cancel_event=cancel_event)
+                         pending.add(_submit_audited(submitted, slot))
+                         submitted += 1
+ 
+                 if cancel_event is not None and cancel_event.is_set():
++                    _note_cancel()
+                     for f in pending:
+                         f.cancel()
++                    _cancel_log("producer stopped", cancel_started, process)
+                     ex.shutdown(wait=False, cancel_futures=True)
+ 
+-                # Drain final reorder buffer (zero-copy)
+-                while next_idx in reorder_buf:
+-                    slot = reorder_buf.pop(next_idx)
+-                    idx = next_idx
+-                    if pipeline_audit is not None:
+-                        pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
+-                        pipeline_audit.mark(idx, "in_flight_at_ordered", len(reorder_buf) + 1)
+-                        pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
+-                        pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
+-                    memview = shm_pool.get_memview(slot)
+-                    if pipeline_audit is not None:
+-                        pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
+-                    pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
+-                    if pipeline_audit is not None:
+-                        pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
+-                    total_piped += 1
+-                    next_idx += 1
+-                    _report_stream_progress(
+-                        total_piped, total_overlay_frames,
+-                        start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
+-                    )
++                # On cancel, discard pending/reordered frames. Never encode
++                # the backlog just to reach a clean queue state.
++                if cancel_event is None or not cancel_event.is_set():
++                    while next_idx in reorder_buf:
++                        slot = reorder_buf.pop(next_idx)
++                        idx = next_idx
++                        if pipeline_audit is not None:
++                            pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
++                            pipeline_audit.mark(idx, "in_flight_at_ordered", len(reorder_buf) + 1)
++                            pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
++                            pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
++                        memview = shm_pool.get_memview(slot)
++                        if pipeline_audit is not None:
++                            pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
++                        if not _put_frame((slot, memview, idx) if pipeline_audit is not None else (slot, memview)):
++                            try:
++                                memview.release()
++                            except Exception:
++                                pass
++                            shm_pool.release(slot)
++                            break
++                        if pipeline_audit is not None:
++                            pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
++                        total_piped += 1
++                        next_idx += 1
++                        _report_stream_progress(
++                            total_piped, total_overlay_frames,
++                            start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
++                        )
++                else:
++                    for slot in reorder_buf.values():
++                        try:
++                            shm_pool.release(slot)
++                        except Exception:
++                            pass
++                    reorder_buf.clear()
++                    pipe_done.set()
++                    _cancel_log("writer stop requested", cancel_started, process)
++                    writer_t.join(timeout=1.0)
++                    _cancel_log("pipe closing", cancel_started, process)
++                    cancel_rc = _stop_ffmpeg_process(process, cancel_started)
++                    cancel_mode = getattr(process, "_telem_cancel_mode", "forced")
++                    if active_process_holder is not None:
++                        active_process_holder["cancel_mode"] = cancel_mode
++                        active_process_holder["cancel_rc"] = cancel_rc
++                    _log_ffmpeg_tail(stdout_lines, cancel_started)
++                    if cancel_mode == "graceful":
++                        valid_partial = _validate_partial_mp4(output_file)
++                        _cancel_log(
++                            f"partial_mp4 graceful valid={valid_partial}",
++                            cancel_started,
++                        )
++                    else:
++                        _cancel_log(
++                            "partial_mp4 not presented as completed export",
++                            cancel_started,
++                        )
+ 
+         _report_phase(on_render_progress, "finalize", 0.0, "Finalizacja...", time.time() - phase_t0)
+ 
+         # Signal pipe writer to finish and close stdin
+         t_drain_start = time.perf_counter()
+         pipe_done.set()
+-        pipe_queue.put(None)  # sentinel
+-        writer_t.join(timeout=30.0)
++        try:
++            pipe_queue.put_nowait(None)  # sentinel
++        except queue.Full:
++            pass
++        writer_t.join(timeout=3.0)
+         try:
+             process.stdin.close()
+         except Exception:
+@@ -1227,9 +1562,12 @@ def stream_overlay_to_ffmpeg(
+         import traceback
+         traceback.print_exc()
+         pipe_done.set()
+-        pipe_queue.put(None)
+         try:
+-            process.terminate()
++            pipe_queue.put_nowait(None)
++        except queue.Full:
++            pass
++        try:
++            _stop_ffmpeg_process(process, cancel_started)
+         except Exception:
+             pass
+         raise
+@@ -1251,8 +1589,9 @@ def stream_overlay_to_ffmpeg(
+         if shm_pool is not None:
+             shm_pool.close()
+ 
+-    stdout_t.join(timeout=10.0)
+-    process.wait()
++    stdout_t.join(timeout=2.0)
++    if process.poll() is None:
++        _stop_ffmpeg_process(process, cancel_started)
+     t_drain_end = time.perf_counter()
+     t_drain_time = t_drain_end - t_drain_start
+ 
+
+================================================================================
+FILE: def_layout.json
+diff --git a/def_layout.json b/def_layout.json
+index 472f00a..f5fc11d 100644
+--- a/def_layout.json
++++ b/def_layout.json
+@@ -70,76 +70,6 @@
+       "elapsed_color": "#FFFFFF",
+       "avg_speed_color": "#FFFFFF"
+     },
+-    "track_map": {
+-      "enabled": true,
+-      "label": "track_map",
+-      "x": 10.31,
+-      "y": 35.8,
+-      "rotation": 0,
+-      "form": "map",
+-      "font_size": 2.5,
+-      "size": 18.0,
+-      "thickness": 3,
+-      "min_val": 0,
+-      "max_val": 100,
+-      "ticks": 0,
+-      "show_value": true,
+-      "source": "fit",
+-      "decimals": 1,
+-      "text_offset_x": 0.0,
+-      "text_offset_y": 0.0,
+-      "start_angle": 180,
+-      "sweep_angle": 180,
+-      "needle_length": 1.1,
+-      "needle_width": 4,
+-      "needle_color": "#DC3232",
+-      "marker_size": 7,
+-      "marker_color": "#FFFFFF",
+-      "chart_window_s": 60.0,
+-      "chart_color": "#00AAFF",
+-      "fill_color": "#00AAFF",
+-      "fill_alpha": 80,
+-      "grid_color": "#444444",
+-      "show_grid": true,
+-      "line_width": 2,
+-      "segments": 30,
+-      "segment_gap": 3,
+-      "segment_radius": 4,
+-      "inactive_alpha": 60,
+-      "inactive_color": "#333333",
+-      "direction": "horizontal",
+-      "grow_height": false,
+-      "show_min": true,
+-      "show_max": true,
+-      "show_label": true,
+-      "zoom": 15,
+-      "map_orientation": "track_up",
+-      "map_style": "satellite",
+-      "unit": "",
+-      "font": "",
+-      "icon": "none",
+-      "show_units": true,
+-      "label_font_size": 1.0,
+-      "text_distance": 0.0,
+-      "hide_marker": false,
+-      "arrow_marker": false,
+-      "hide_track": false,
+-      "track_width": 3,
+-      "track_color": "#FF3C1E",
+-      "track_antialiasing": "1",
+-      "track_outline_width": 0,
+-      "track_outline_color": "#000000",
+-      "map_shape": "square",
+-      "language": "Polski",
+-      "light_mode": "Day",
+-      "opacity": 1.0,
+-      "pitch": 0.0,
+-      "orient": 0.0,
+-      "magnify": 1.0,
+-      "terrain": 0.0,
+-      "highlights": false,
+-      "rotate": 0.0
+-    },
+     "fit_heart_rate_text": {
+       "enabled": true,
+       "label": "Heart Rate",
+@@ -149,8 +79,8 @@
+       "form": "chart",
+       "font_size": 2.5,
+       "size": 30.0,
+-      "thickness": 3,
+-      "min_val": 70.0,
++      "thickness": 5,
++      "min_val": 50.0,
+       "max_val": 120.0,
+       "ticks": 0,
+       "show_value": true,
+@@ -190,8 +120,8 @@
+       "text_color": "#FFFFFF",
+       "show_x_axis_values": true,
+       "show_y_axis_values": true,
+-      "label_count": 2,
+-      "label_font_size": 0.0,
++      "label_count": 5,
++      "label_font_size": 2.1,
+       "label_units": false,
+       "show_average": false,
+       "major_step": 0.0,
+@@ -204,9 +134,9 @@
+       "y": 87.45,
+       "rotation": 0,
+       "form": "chart",
+-      "font_size": 2.5,
++      "font_size": 2.3,
+       "size": 30.0,
+-      "thickness": 3,
++      "thickness": 6,
+       "min_val": 0.0,
+       "max_val": 90.0,
+       "ticks": 0,
+@@ -226,9 +156,9 @@
+       "chart_color": "#ffff7f",
+       "fill_color": "#ffff7f",
+       "fill_alpha": 200,
+-      "grid_color": "#444444",
++      "grid_color": "#000000",
+       "show_grid": true,
+-      "line_width": 2,
++      "line_width": 1,
+       "segments": 30,
+       "segment_gap": 3,
+       "segment_radius": 4,
+@@ -247,18 +177,18 @@
+       "text_color": "#FFFFFF",
+       "show_x_axis_values": true,
+       "show_y_axis_values": true,
+-      "label_count": 2,
+-      "label_font_size": 0.0,
++      "label_count": 4,
++      "label_font_size": 1.9,
+       "label_units": false,
+       "show_average": false,
+-      "major_step": 0.0,
++      "major_step": 0.3,
+       "chart_time_scope": "activity"
+     },
+     "fit_distance_text": {
+       "enabled": true,
+       "label": "Distance",
+-      "x": 52.14,
+-      "y": 9.16,
++      "x": 52.92,
++      "y": 10.71,
+       "rotation": 0,
+       "form": "bar",
+       "font_size": 2.5,
+@@ -520,13 +450,13 @@
+     "alt_text": {
+       "enabled": true,
+       "label": "alt_text",
+-      "x": 93.89,
+-      "y": 53.19,
+-      "rotation": "90",
++      "x": 93.93,
++      "y": 52.59,
++      "rotation": "0",
+       "form": "bar",
+       "font_size": 2.5,
+-      "size": 15.0,
+-      "thickness": 3,
++      "size": 1.0,
++      "thickness": 1,
+       "min_val": 30.0,
+       "max_val": 50.0,
+       "ticks": 0,
+@@ -540,7 +470,7 @@
+       "needle_length": 1.1,
+       "needle_width": 4,
+       "needle_color": "#DC3232",
+-      "marker_size": 6,
++      "marker_size": 6.5,
+       "marker_color": "#FFFFFF",
+       "chart_window_s": 60.0,
+       "chart_color": "#00AAFF",
+@@ -569,11 +499,11 @@
+       "title_with_unit": true,
+       "text_color": "#F4F4F4",
+       "range_color": "#E0E0E0",
+-      "major_tick_mode": "auto",
+-      "major_ticks": 4,
++      "major_tick_mode": "step",
++      "major_ticks": 7,
+       "major_step": 0.0,
+       "minor_ticks": 5,
+-      "show_tick_labels": false,
++      "show_tick_labels": true,
+       "tick_label_signed": false,
+       "track_color": "#F4F4F4",
+       "tick_color": "#F6F6F6",
+@@ -581,14 +511,14 @@
+       "marker_style": "dot",
+       "marker_border_color": "#D8D8D8",
+       "tick_profile": "default",
+-      "orientation": "horizontal",
+-      "auto_scale": false
++      "orientation": "vertical",
++      "auto_scale": true
+     },
+     "lean_indicator": {
+       "enabled": true,
+       "label": "",
+-      "x": 92.36,
+-      "y": 22.63,
++      "x": 93.7,
++      "y": 22.04,
+       "rotation": 0,
+       "form": "lean",
+       "font_size": 2.5,
+@@ -635,13 +565,277 @@
+       "sensitivity": 1.0,
+       "max_angle": 30.0,
+       "graphic": "bike",
+-      "show_reference": true,
+-      "show_ticks": true,
++      "show_reference": false,
++      "show_ticks": false,
+       "unit": "°",
+       "track_color": "#FFFFFF",
+       "font": "",
+       "icon": "none",
+       "smoothing": 1
++    },
++    "fit_K1_text": {
++      "enabled": false,
++      "label": "K1",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 81.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": ""
++    },
++    "fit_K2_text": {
++      "enabled": false,
++      "label": "K2",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 81.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": ""
++    },
++    "fit_battery_text": {
++      "enabled": false,
++      "label": "Battery",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 88.0,
++      "max_val": 89.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "%"
++    },
++    "fit_battery_pct_text": {
++      "enabled": false,
++      "label": "Battery Pct",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 88.0,
++      "max_val": 89.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "%"
++    },
++    "fit_curVpower_text": {
++      "enabled": false,
++      "label": "Curvpower",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 1840.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "W"
++    },
++    "fit_discharge_text": {
++      "enabled": false,
++      "label": "Discharge",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 12.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "%/h"
++    },
++    "fit_enhanced_altitude_text": {
++      "enabled": false,
++      "label": "Altitude (FIT)",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 5.399999999999977,
++      "max_val": 77.20000000000005,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "m"
++    },
++    "fit_enhanced_speed_text": {
++      "enabled": false,
++      "label": "Speed (FIT)",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 45.885600000000004,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "km/h"
++    },
++    "fit_fractional_cadence_text": {
++      "enabled": false,
++      "label": "Fractional Cadence",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 1.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "rpm"
++    },
++    "fit_gopro_battery_text": {
++      "enabled": true,
++      "label": "Gopro Battery",
++      "x": 89.71,
++      "y": 6.9,
++      "rotation": 0,
++      "form": "bar",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 60.0,
++      "max_val": 75.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "%",
++      "icon": "none",
++      "bar_style": "segments"
++    },
++    "fit_solar_text": {
++      "enabled": false,
++      "label": "Solar",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 0.0,
++      "max_val": 20.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "%"
++    },
++    "fit_temperature_text": {
++      "enabled": false,
++      "label": "Temperature",
++      "x": 50.0,
++      "y": 8.0,
++      "rotation": 0,
++      "form": "text",
++      "font_size": 2.5,
++      "size": 2.5,
++      "thickness": 1,
++      "min_val": 17.0,
++      "max_val": 25.0,
++      "ticks": 0,
++      "source": "fit",
++      "unit": "°C"
++    },
++    "track_map": {
++      "enabled": true,
++      "label": "track_map",
++      "x": 11.15,
++      "y": 34.12,
++      "rotation": 0,
++      "form": "map",
++      "font_size": 2.5,
++      "size": 18.0,
++      "thickness": 3,
++      "min_val": 0,
++      "max_val": 100,
++      "ticks": 0,
++      "show_value": true,
++      "source": "fit",
++      "decimals": 1,
++      "text_offset_x": 0.0,
++      "text_offset_y": 0.0,
++      "start_angle": 180,
++      "sweep_angle": 180,
++      "needle_length": 1.1,
++      "needle_width": 4,
++      "needle_color": "#DC3232",
++      "marker_size": 7,
++      "marker_color": "#FFFFFF",
++      "chart_window_s": 60.0,
++      "chart_color": "#00AAFF",
++      "fill_color": "#00AAFF",
++      "fill_alpha": 80,
++      "grid_color": "#444444",
++      "show_grid": true,
++      "line_width": 2,
++      "segments": 30,
++      "segment_gap": 3,
++      "segment_radius": 4,
++      "inactive_alpha": 60,
++      "inactive_color": "#333333",
++      "direction": "horizontal",
++      "grow_height": false,
++      "show_min": true,
++      "show_max": true,
++      "show_label": true,
++      "zoom": 16,
++      "map_orientation": "north_up",
++      "map_style": "satellite",
++      "unit": "",
++      "font": "",
++      "icon": "none",
++      "show_units": true,
++      "label_font_size": 1.0,
++      "text_distance": 0.0,
++      "hide_marker": false,
++      "arrow_marker": false,
++      "hide_track": false,
++      "track_width": 3,
++      "track_color": "#FF3C1E",
++      "track_antialiasing": "1",
++      "track_outline_width": 0,
++      "track_outline_color": "#000000",
++      "map_shape": "square",
++      "language": "English",
++      "light_mode": "Day",
++      "opacity": 1.0,
++      "pitch": 0.0,
++      "orient": 0.0,
++      "magnify": 1.0,
++      "terrain": 0.0,
++      "highlights": false,
++      "rotate": 0.0
+     }
+   },
+   "smoothing": {
+

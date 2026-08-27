@@ -95,51 +95,152 @@ def lean_angle(raw, cfg: dict[str, Any]) -> float:
     return lean_visual_angle(roll_deg, cfg)
 
 
+class _LeanRotationSource:
+    __slots__ = (
+        "graphic",
+        "padded_graphic",
+        "gw",
+        "gh",
+        "pivot_px",
+        "pivot_py",
+        "pad_ref",
+        "gx_ref",
+        "gy_ref",
+        "Cx",
+        "Cy",
+        "Px",
+        "Py",
+        "corners_src_rel",
+    )
+
+    def __init__(
+        self,
+        graphic: Image.Image,
+        padded_graphic: Image.Image,
+        gw: int,
+        gh: int,
+        pivot_px: float,
+        pivot_py: float,
+        pad_ref: int,
+        gx_ref: int,
+        gy_ref: int,
+        Cx: float,
+        Cy: float,
+        Px: float,
+        Py: float,
+        corners_src_rel: tuple[tuple[float, float], ...],
+    ):
+        self.graphic = graphic
+        self.padded_graphic = padded_graphic
+        self.gw = gw
+        self.gh = gh
+        self.pivot_px = pivot_px
+        self.pivot_py = pivot_py
+        self.pad_ref = pad_ref
+        self.gx_ref = gx_ref
+        self.gy_ref = gy_ref
+        self.Cx = Cx
+        self.Cy = Cy
+        self.Px = Px
+        self.Py = Py
+        self.corners_src_rel = corners_src_rel
+
+
 def _load_lean_graphic(cfg: dict[str, Any], size_px: int) -> Optional[Image.Image]:
     """Load (and cache) the rotatable graphic: bike asset or procedural beam."""
-    graphic = str(cfg.get("graphic", "bike")).strip().lower()
-    if graphic == "none":
+    src = _load_lean_rotation_source(cfg, size_px)
+    return src.graphic if src is not None else None
+
+
+def _load_lean_rotation_source(cfg: dict[str, Any], size_px: int) -> Optional[_LeanRotationSource]:
+    """Load (and cache) the rotation source image, padded raster and geometric metadata."""
+    graphic_name = str(cfg.get("graphic", "bike")).strip().lower()
+    if graphic_name == "none":
         return None
     marker = _rgba(cfg.get("marker_color", "#FFFFFF"), (255, 255, 255), 255)
-    key = (graphic, size_px, marker)
+    pivot_x_cfg = _clamp(float(cfg.get("pivot_x", 0.5)), 0.0, 1.0)
+    pivot_y_cfg = _clamp(float(cfg.get("pivot_y", 1.0)), 0.0, 1.0)
+    key = (graphic_name, size_px, marker, pivot_x_cfg, pivot_y_cfg)
     cached = _LEAN_GRAPHIC_CACHE.get(key)
     if cached is not None:
         return cached
 
-    if graphic == "bike" and _ROWER_ICO.exists():
+    icon_img: Optional[Image.Image] = None
+    if graphic_name == "bike" and _ROWER_ICO.exists():
         try:
             icon = Image.open(_ROWER_ICO).convert("RGBA")
-            # Fit into a size_px box preserving aspect ratio.
             scale = size_px / max(1.0, max(icon.width, icon.height))
             new_w = max(1, int(round(icon.width * scale)))
             new_h = max(1, int(round(icon.height * scale)))
-            icon = icon.resize((new_w, new_h), Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS)
-            _LEAN_GRAPHIC_CACHE[key] = icon
-            return icon
+            icon_img = icon.resize(
+                (new_w, new_h),
+                Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
+            )
         except Exception:
-            pass  # fall through to the procedural beam
+            icon_img = None
 
-    # Procedural bike-silhouette beam: two wheels + top tube + pivot dot.
-    w = max(24, size_px)
-    h = max(12, int(size_px * 0.35))
-    img = Image.new("RGBA", (w + 4, h + 4), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    cx = (w + 4) / 2.0
-    cy = (h + 4) / 2.0
-    r = max(3, int(size_px * 0.12))
-    # wheels
-    d.ellipse((cx - w / 2.0, cy - r, cx - w / 2.0 + 2 * r, cy + r), fill=marker)
-    d.ellipse((cx + w / 2.0 - 2 * r, cy - r, cx + w / 2.0, cy + r), fill=marker)
-    # top tube (beam)
-    d.rounded_rectangle(
-        (cx - w / 2.0 + r + 2, cy - 2, cx + w / 2.0 - r - 2, cy + 2),
-        radius=2, fill=marker,
+    if icon_img is None:
+        # Procedural bike-silhouette beam: two wheels + top tube + pivot dot.
+        w = max(24, size_px)
+        h = max(12, int(size_px * 0.35))
+        img = Image.new("RGBA", (w + 4, h + 4), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx = (w + 4) / 2.0
+        cy = (h + 4) / 2.0
+        r = max(3, int(size_px * 0.12))
+        # wheels
+        d.ellipse((cx - w / 2.0, cy - r, cx - w / 2.0 + 2 * r, cy + r), fill=marker)
+        d.ellipse((cx + w / 2.0 - 2 * r, cy - r, cx + w / 2.0, cy + r), fill=marker)
+        # top tube (beam)
+        d.rounded_rectangle(
+            (cx - w / 2.0 + r + 2, cy - 2, cx + w / 2.0 - r - 2, cy + 2),
+            radius=2, fill=marker,
+        )
+        # centre pivot
+        pr = max(2, int(size_px * 0.05))
+        d.ellipse((cx - pr, cy - pr, cx + pr, cy + pr), fill=(255, 255, 255, 255))
+        icon_img = img
+
+    gw, gh = icon_img.size
+    pivot_px = pivot_x_cfg * gw
+    pivot_py = pivot_y_cfg * gh
+    pad_ref = 2 * max(gw, gh) + 4
+    gx_ref = int(round(pad_ref / 2.0 - pivot_px))
+    gy_ref = int(round(pad_ref / 2.0 - pivot_py))
+    Cx = pad_ref / 2.0
+    Cy = pad_ref / 2.0
+
+    pad_margin = 4
+    padded_graphic = Image.new("RGBA", (gw + 2 * pad_margin, gh + 2 * pad_margin), (0, 0, 0, 0))
+    padded_graphic.alpha_composite(icon_img, (pad_margin, pad_margin))
+    Px = (Cx - gx_ref) + pad_margin
+    Py = (Cy - gy_ref) + pad_margin
+
+    corners_src_rel = (
+        (gx_ref - Cx, gy_ref - Cy),
+        (gx_ref + gw - Cx, gy_ref - Cy),
+        (gx_ref + gw - Cx, gy_ref + gh - Cy),
+        (gx_ref - Cx, gy_ref + gh - Cy),
     )
-    # centre pivot
-    pr = max(2, int(size_px * 0.05))
-    d.ellipse((cx - pr, cy - pr, cx + pr, cy + pr), fill=(255, 255, 255, 255))
-    _LEAN_GRAPHIC_CACHE[key] = img
-    return img
+
+    source_obj = _LeanRotationSource(
+        graphic=icon_img,
+        padded_graphic=padded_graphic,
+        gw=gw,
+        gh=gh,
+        pivot_px=pivot_px,
+        pivot_py=pivot_py,
+        pad_ref=pad_ref,
+        gx_ref=gx_ref,
+        gy_ref=gy_ref,
+        Cx=Cx,
+        Cy=Cy,
+        Px=Px,
+        Py=Py,
+        corners_src_rel=corners_src_rel,
+    )
+    _LEAN_GRAPHIC_CACHE[key] = source_obj
+    return source_obj
 
 
 def _graphic_pivot(cfg: dict[str, Any], gw: int, gh: int) -> tuple[float, float]:
@@ -271,23 +372,77 @@ def _render_lean_indicator(
         _LEAN_BASE_CACHE[static_key] = base
 
     img = base.copy()
-    d = ImageDraw.Draw(img)
 
-    graphic = _load_lean_graphic(cfg, g)
-    if graphic is not None:
-        gw, gh = graphic.size
-        pivot_px, pivot_py = _graphic_pivot(cfg, gw, gh)
-        pad, paste_x, paste_y, _sx, _sy = _rotate_paste_params(gw, gh, pivot_px, pivot_py, raster_w, center_y)
-        pad_img = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
-        pad_img.alpha_composite(
-            graphic,
-            (int(round(pad / 2.0 - pivot_px)), int(round(pad / 2.0 - pivot_py))),
+    skip_dynamic_graphic = bool(cfg.get("_skip_dynamic_graphic", False))
+    rot_src = _load_lean_rotation_source(cfg, g)
+    if rot_src is not None and not skip_dynamic_graphic:
+        pad_ref, paste_x_ref, paste_y_ref, _sx, _sy = _rotate_paste_params(
+            rot_src.gw, rot_src.gh, rot_src.pivot_px, rot_src.pivot_py, raster_w, center_y
         )
-        rotated = pad_img.rotate(
-            angle,
-            resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
-        )
-        img.alpha_composite(rotated, (int(round(paste_x)), int(round(paste_y))))
+        px_ref = int(round(paste_x_ref))
+        py_ref = int(round(paste_y_ref))
+
+        if abs(angle) < 1e-6:
+            dest_x = px_ref + rot_src.gx_ref
+            dest_y = py_ref + rot_src.gy_ref
+            cx0 = max(0, dest_x)
+            cy0 = max(0, dest_y)
+            cx1 = min(raster_w, dest_x + rot_src.gw)
+            cy1 = min(raster_h, dest_y + rot_src.gh)
+            if cx1 > cx0 and cy1 > cy0:
+                if (cx0, cy0, cx1, cy1) == (dest_x, dest_y, dest_x + rot_src.gw, dest_y + rot_src.gh):
+                    img.alpha_composite(rot_src.graphic, (dest_x, dest_y))
+                else:
+                    cropped = rot_src.graphic.crop((cx0 - dest_x, cy0 - dest_y, cx1 - dest_x, cy1 - dest_y))
+                    img.alpha_composite(cropped, (cx0, cy0))
+        else:
+            rad = -math.radians(angle)
+            a_mat = round(math.cos(rad), 15)
+            b_mat = round(math.sin(rad), 15)
+            d_mat = round(-math.sin(rad), 15)
+            e_mat = round(math.cos(rad), 15)
+
+            rot_c = [
+                (a_mat * u + d_mat * v + rot_src.Cx, b_mat * u + e_mat * v + rot_src.Cy)
+                for u, v in rot_src.corners_src_rel
+            ]
+            min_xd = min(c[0] for c in rot_c)
+            max_xd = max(c[0] for c in rot_c)
+            min_yd = min(c[1] for c in rot_c)
+            max_yd = max(c[1] for c in rot_c)
+
+            margin = 4
+            xd0 = max(0, int(math.floor(min_xd)) - margin)
+            yd0 = max(0, int(math.floor(min_yd)) - margin)
+            xd1 = min(rot_src.pad_ref, int(math.ceil(max_xd)) + margin)
+            yd1 = min(rot_src.pad_ref, int(math.ceil(max_yd)) + margin)
+
+            tw = xd1 - xd0
+            th = yd1 - yd0
+
+            c_x = a_mat * (xd0 - rot_src.Cx) + b_mat * (yd0 - rot_src.Cy) + rot_src.Px
+            c_y = d_mat * (xd0 - rot_src.Cx) + e_mat * (yd0 - rot_src.Cy) + rot_src.Py
+            matrix = (a_mat, b_mat, c_x, d_mat, e_mat, c_y)
+
+            tight_rot = rot_src.padded_graphic.transform(
+                (tw, th),
+                Image.Transform.AFFINE,
+                matrix,
+                resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
+            )
+
+            dest_x = px_ref + xd0
+            dest_y = py_ref + yd0
+            cx0 = max(0, dest_x)
+            cy0 = max(0, dest_y)
+            cx1 = min(raster_w, dest_x + tw)
+            cy1 = min(raster_h, dest_y + th)
+            if cx1 > cx0 and cy1 > cy0:
+                if (cx0, cy0, cx1, cy1) == (dest_x, dest_y, dest_x + tw, dest_y + th):
+                    img.alpha_composite(tight_rot, (dest_x, dest_y))
+                else:
+                    cropped = tight_rot.crop((cx0 - dest_x, cy0 - dest_y, cx1 - dest_x, cy1 - dest_y))
+                    img.alpha_composite(cropped, (cx0, cy0))
 
     if value_text:
         _draw_text_bounded_cached(
@@ -298,6 +453,116 @@ def _render_lean_indicator(
         )
 
     return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+
+
+def get_lean_gpu_transform_info(
+    canvas_w: int,
+    canvas_h: int,
+    layout: dict[str, Any],
+    key: str,
+    value: float | None,
+    cfg: dict[str, Any],
+    min_dim: int = 1080,
+    fs: int = 24,
+    outline: int = 2,
+    thickness: int = 4,
+    size_px: int = 120,
+    ss: int = 1,
+) -> tuple[float, Image.Image, float, float, float, float, int, int, int, int] | None:
+    """Computes lean indicator transform parameters for native D3D11 GPU rendering.
+
+    Returns:
+        (angle, sprite_graphic, pivot_px, pivot_py, screen_pivot_x, screen_pivot_y, dst_x, dst_y, tight_w, tight_h)
+        or None if no graphic is configured.
+    """
+    ss = max(1, int(ss))
+    pad = 8 * ss
+    g = max(32 * ss, int(size_px * ss))
+
+    show_label = bool(cfg.get("show_label", True))
+    show_value = bool(cfg.get("show_value", True))
+    uppercase_title = bool(cfg.get("uppercase_title", True))
+    decimals = max(0, int(cfg.get("decimals", 0)))
+    angle = lean_angle(value, cfg)
+    missing = value is None
+
+    title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 1.0)) * fs * ss)))
+    value_fs = max(8 * ss, int(round(float(cfg.get("value_font_scale", 0.9)) * fs * ss)))
+    font_path = layout.get("font_path", "")
+    title_font = load_font(font_path, title_fs) if font_path else None
+    value_font = load_font(font_path, value_fs) if font_path else None
+    text_stroke = max(0, int(round(max(1, outline) * ss)))
+
+    raw_title = str(cfg.get("title_text", key)).strip()
+    title = raw_title.upper() if uppercase_title else raw_title
+    value_text = f"{angle:+.{decimals}f}\u00b0" if (show_value and not missing) else ""
+
+    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dummy)
+    title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label and title and title_font else 0
+    value_w = _text_size(dd, value_text, value_font, text_stroke)[0] if value_text and value_font else 0
+    value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if value_text and value_font else 0
+    title_gap = 5 * ss if title_h else 0
+    value_gap = 4 * ss if value_h else 0
+
+    raster_w = max(g + 2 * pad, value_w + 2 * pad, 2 * pad + 40)
+    top = pad + title_h + title_gap
+    center_y = top + g / 2.0
+    raster_h = int(top + g + value_gap + value_h + pad)
+
+    rot_src = _load_lean_rotation_source(cfg, g)
+    if rot_src is None:
+        return None
+
+    pad_ref, paste_x_ref, paste_y_ref, _sx, _sy = _rotate_paste_params(
+        rot_src.gw, rot_src.gh, rot_src.pivot_px, rot_src.pivot_py, raster_w, center_y
+    )
+    px_ref = int(round(paste_x_ref))
+    py_ref = int(round(paste_y_ref))
+
+    screen_x = s(cfg["x"], canvas_w) - raster_w // 2
+    screen_y = s(cfg["y"], canvas_h) - raster_h // 2
+    screen_pivot_x = float(screen_x + px_ref + rot_src.Cx)
+    screen_pivot_y = float(screen_y + py_ref + rot_src.Cy)
+
+    rad = -math.radians(angle)
+    a_mat = round(math.cos(rad), 15)
+    b_mat = round(math.sin(rad), 15)
+    d_mat = round(-math.sin(rad), 15)
+    e_mat = round(math.cos(rad), 15)
+
+    rot_c = [
+        (a_mat * u + d_mat * v + rot_src.Cx, b_mat * u + e_mat * v + rot_src.Cy)
+        for u, v in rot_src.corners_src_rel
+    ]
+    min_xd = min(c[0] for c in rot_c)
+    max_xd = max(c[0] for c in rot_c)
+    min_yd = min(c[1] for c in rot_c)
+    max_yd = max(c[1] for c in rot_c)
+
+    margin = 4
+    xd0 = max(0, int(math.floor(min_xd)) - margin)
+    yd0 = max(0, int(math.floor(min_yd)) - margin)
+    xd1 = min(rot_src.pad_ref, int(math.ceil(max_xd)) + margin)
+    yd1 = min(rot_src.pad_ref, int(math.ceil(max_yd)) + margin)
+
+    tw = xd1 - xd0
+    th = yd1 - yd0
+    dst_x = screen_x + px_ref + xd0
+    dst_y = screen_y + py_ref + yd0
+
+    return (
+        float(angle),
+        rot_src.graphic,
+        float(rot_src.Cx - rot_src.gx_ref),
+        float(rot_src.Cy - rot_src.gy_ref),
+        screen_pivot_x,
+        screen_pivot_y,
+        int(dst_x),
+        int(dst_y),
+        int(tw),
+        int(th),
+    )
 
 
 # ── Small text helpers (mirror bar.py so lean.py stays self-contained) ─────

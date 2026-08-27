@@ -1,0 +1,5 @@
+run_id,variant,lean_gpu,frames,render_wall_s,canonical_fps,producer_avg,producer_p95,below_avg,above_avg,multi_crop_avg,multi_tobytes_avg,multi_upload_avg,consumer_avg,pipeline_total
+cand_1_prod_1000f,CAND_PROD,0,1000,51.428,19.445,31.175,43.841,2.815,24.425,0.991,1.085,0.462,2.246,4.721
+cand_2_prod_1000f,CAND_PROD,0,1000,50.481,19.809,31.284,42.922,2.942,24.175,1.08,1.217,0.487,2.424,4.816
+cand_3_prod_1000f,CAND_PROD,0,1000,53.491,18.695,33.016,47.498,3.406,25.498,1.05,1.188,0.554,2.417,5.016
+cand_gpulean_1000f,CAND_GPULEAN,1,1000,46.359,21.571,25.358,37.125,3.774,17.425,1.069,1.192,0.531,2.532,5.219

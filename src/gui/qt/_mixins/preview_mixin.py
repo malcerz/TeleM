@@ -241,7 +241,16 @@ class PreviewMixin:
         Emituje gotowy QImage z powrotem do GUI (QueuedConnection).
         """
         self.src_img = pil_img
-        self.last_src_pil = pil_img
+        # ETAP 2E: during playback render_preview(inplace=True) alpha-composites
+        # the HUD DIRECTLY onto src_img.  last_src_pil is re-used by _render_preview
+        # while waiting for the next decoder frame — sharing the SAME object meant
+        # every reuse stacked another copy of the overlay on an already composited
+        # frame (duplicate labels / doubled ruler in the GUI preview).  Keep an
+        # UNCOMPOSITED reference instead.
+        if getattr(self, "_playing", False):
+            self.last_src_pil = pil_img.copy()
+        else:
+            self.last_src_pil = pil_img
         self.last_preview_ts = seek_seconds
         self._render_preview(seek_seconds)
 
@@ -403,8 +412,14 @@ class PreviewMixin:
                             self.last_preview_ts = global_time
                             # Use the last available frame while waiting for the
                             # new one to arrive from QMediaPlayer.
+                            # ETAP 2E: give render_preview an EXCLUSIVE copy when
+                            # playback will composite in place — never hand it the
+                            # shared clean reference kept in last_src_pil.
                             if self.last_src_pil is not None:
-                                self.src_img = self.last_src_pil
+                                self.src_img = (
+                                    self.last_src_pil.copy()
+                                    if self._playing else self.last_src_pil
+                                )
                             else:
                                 # No frame yet — create placeholder
                                 self.src_img = Image.new(
@@ -430,7 +445,11 @@ class PreviewMixin:
                                 self.last_src_pil = self.src_img
                                 self.last_preview_ts = global_time
                 elif self.last_src_pil is not None:
-                    self.src_img = self.last_src_pil
+                    # ETAP 2E: exclusive copy for inplace compositing (see above).
+                    self.src_img = (
+                        self.last_src_pil.copy()
+                        if self._playing else self.last_src_pil
+                    )
 
             try:
                 src_w, src_h = self.src_img.size

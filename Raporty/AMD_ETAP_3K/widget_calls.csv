@@ -1,0 +1,6 @@
+widget_key,renderer_function,calls_per_frame_avg,expected_calls_per_frame,total_calls
+fit_distance_text,bar,1.0,1.0,600
+iso_text,text,1.0,1.0,600
+exposure_text,text,1.0,1.0,600
+temp_text,text,1.0,1.0,600
+alt_text,bar,1.0,1.0,600

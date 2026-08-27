@@ -1,0 +1,3 @@
+run_id,variant,frames,render_wall_s,calculated_fps,producer_avg_ms,producer_p95_ms,above_compose_avg_ms,above_crop_ms,above_tobytes_ms,above_upload_ms,rects_avg,rects_p95,bytes_avg,bytes_p95,consumer_upload_ms,consumer_native_ms,pipeline_total_ms
+ref_single_union_2001f,REF,2001,140.295,14.263,47.604,60.206,19.088,4.318,9.003,1.961,1.0,1.0,21765120.0,21765120.0,3.189,6.339,10.662
+cand_multi_rect_2001f,CAND,2001,62.278,32.13,25.782,37.465,18.822,0.939,1.105,0.473,4.0,4.0,2640612.0,2640612.0,1.24,2.416,4.753

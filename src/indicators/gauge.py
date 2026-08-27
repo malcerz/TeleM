@@ -21,6 +21,33 @@ from src.indicators.helpers import (
     parse_hex_color,
     s,
 )
+# ── ETAP 2C: renderer-reported dynamic-support info for AUTO regions ──────────
+# Keyed by indicator key. Updated by EVERY _render_gauge_indicator call so the
+# AMD native exporter can derive ghost-free AUTO upload rectangles from the
+# exact geometry the renderer just painted (needle band, value-text box) plus
+# a style/geometry signature used as the texture epoch key. Purely
+# informational — recording NEVER affects rendered pixels.
+GAUGE_DYNAMIC_INFO: dict = {}
+
+
+def record_gauge_dynamic_info(key, *, kind, supported, rotation=0,
+                              widget_size=None, needle_bbox=None,
+                              text_bbox=None, sig=None):
+    """Store the latest render's dynamic-support geometry for ``key``."""
+    GAUGE_DYNAMIC_INFO[key] = {
+        "kind": kind,
+        "supported": bool(supported),
+        "rotation": int(rotation) % 360,
+        "widget_size": widget_size,
+        "needle_bbox": needle_bbox,
+        "text_bbox": text_bbox,
+        "sig": sig,
+    }
+
+
+def get_gauge_dynamic_info(key):
+    """Return the latest dynamic-support record for ``key`` (or None)."""
+    return GAUGE_DYNAMIC_INFO.get(key)
 
 
 def _gauge_ticks(display_min: float, raw_max: float, ticks: int) -> tuple:
@@ -200,6 +227,13 @@ def _render_gauge_indicator(
 ):
     """Render a gauge-form indicator (background cached)."""
     if cfg.get("gauge_style") == "compass" or cfg.get("gauge_mode") == "compass":
+        # ETAP 2C: a compass dial is fully dynamic (rotating ring, heading
+        # text) — no stable static/dynamic pixel split exists, so AUTO region
+        # derivation reports "unsupported" and the exporter falls back to
+        # full-tile GPU uploads for such widgets.
+        record_gauge_dynamic_info(
+            key, kind="compass", supported=False,
+            rotation=int(cfg.get("rotation", 0)) % 360)
         return _render_compass_indicator(
             canvas_w, canvas_h, layout, font_path, key, value, unit, label,
             cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness,
@@ -363,6 +397,7 @@ def _render_gauge_indicator(
     show_value = cfg.get("show_value", True)
     _fs_ds = max(8, fs)
     _c_font = load_font(font_path, _fs_ds)
+    _text_support = None  # ETAP 2C: dynamic value-text support bbox
     if show_value:
         txt_main = formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")
         if txt_main:
@@ -399,11 +434,65 @@ def _render_gauge_indicator(
                     _STATIC_CACHE[text_key] = cached
                 tile, sl, st = cached
                 img.alpha_composite(tile, (px + sl, py + st))
+                # ETAP 2C: exact dynamic support = composited tile rectangle
+                # (tile pixels are byte-exact, so no margin is required).
+                _text_support = (
+                    float(px + sl), float(py + st),
+                    float(px + sl + tile.width),
+                    float(py + st + tile.height))
             else:
                 draw.text(
                     (px, py), txt_main, font=_c_font,
                     fill=(text_color[0], text_color[1], text_color[2], 255),
                     stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
                 )
+                # ETAP 2C: dynamic support measured with the same metrics PIL
+                # used to rasterize the text above (probe-only cost; this
+                # non-cached path runs on CPU-reference builds only).
+                _tb_probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+                _tb = _tb_probe.textbbox(
+                    (px, py), txt_main, font=_c_font,
+                    stroke_width=max(1, outline))
+                _text_support = (
+                    float(_tb[0]), float(_tb[1]),
+                    float(_tb[2]), float(_tb[3]))
 
+    # ── ETAP 2C: report dynamic-support geometry to the AMD exporter ──────
+    # Purely informational (never affects pixels). The exporter derives AUTO
+    # upload rectangles for the persistent AFTER-MAP GPU gauge texture from
+    # these bboxes: needle triangle sweep band ∪ composited value-text box,
+    # each unioned with the previous frame's supports so moved elements are
+    # erased by fresh crop bytes instead of ghosting over stale art.
+    _needle_support = None
+    if draw_needle:
+        _n_hw = needle_width_px / 2.0
+        _nvx = (base_x + pdx * _n_hw, base_x - pdx * _n_hw, tip_x)
+        _nvy = (base_y + pdy * _n_hw, base_y - pdy * _n_hw, tip_y)
+        _n_margin = 2.0  # PIL polygon rasterizer rounding margin
+        _needle_support = (
+            min(_nvx) - _n_margin, min(_nvy) - _n_margin,
+            max(_nvx) + _n_margin, max(_nvy) + _n_margin)
+    # Signature of every style/geometry parameter deciding which pixels are
+    # static vs dynamic and where they sit inside the widget image. Any
+    # change => new epoch => full-tile upload + region recompute.
+    _sig_2c = (
+        tuple(img.size), out_gauge_size, img_size,
+        start_deg, sweep_deg, display_min, display_max,
+        ticks, thickness, ss, gauge_fs, str(font_path), outline,
+        pixel_profile, needle_len_rel, needle_width_px, needle_fill,
+        show_marker, marker_size, bool(show_value),
+        str(cfg.get("text_color", "#FFFFFF")),
+        float(cfg.get("text_offset_x", 0.0)),
+        float(cfg.get("text_offset_y", 0.0)),
+        bool(compose_5q_optimized()),
+        float(cfg.get("opacity", 1.0)),
+        int(cfg.get("rotation", 0)) % 360,
+    )
+    record_gauge_dynamic_info(
+        key, kind="speed", supported=True,
+        rotation=int(cfg.get("rotation", 0)) % 360,
+        widget_size=tuple(img.size),
+        needle_bbox=_needle_support,
+        text_bbox=_text_support,
+        sig=_sig_2c)
     return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

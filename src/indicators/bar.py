@@ -22,6 +22,7 @@ by the compositor's annotation path.
 
 from __future__ import annotations
 
+import os
 from math import ceil, floor, log10
 from typing import Any, Iterable
 
@@ -151,6 +152,7 @@ _RULER_METRICS_CACHE: dict[tuple, tuple[int, int, int]] = {}
 _TEXT_TILE_CACHE = _BoundedStaticCache(max_entries=256)
 _SLOPE_BASE_CACHE = _BoundedStaticCache(max_entries=32)
 _RULER_BASE_CACHE = _BoundedStaticCache(max_entries=64)
+_RULER_WORKING_BUFFERS = _BoundedStaticCache(max_entries=64)
 
 
 def _draw_text_bounded_cached(
@@ -233,12 +235,16 @@ def _get_ruler_text_metrics(
     show_value: bool,
     text_stroke: int,
 ) -> tuple[int, int, int]:
+    # ETAP 3B: Use font-stable sample string instead of per-frame changing value_text
+    # to keep metrics cached 100% of the time across frames.
+    val_sample = "8888.8" if show_value else ""
     key = (
         font_path,
         title if show_title else "",
         range_sample if show_range else "",
-        value_text if show_value else "",
+        val_sample,
         text_stroke,
+        getattr(value_font, "size", 0) if show_value else 0,
     )
     m = _RULER_METRICS_CACHE.get(key)
     if m is not None:
@@ -248,7 +254,7 @@ def _get_ruler_text_metrics(
     dd = ImageDraw.Draw(dummy)
     title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_title and title else 0
     range_h = _text_size(dd, range_sample, range_font, text_stroke)[1] if show_range else 0
-    value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if show_value else 0
+    value_h = _text_size(dd, val_sample, value_font, text_stroke)[1] if show_value else 0
 
     if len(_RULER_METRICS_CACHE) > 256:
         _RULER_METRICS_CACHE.clear()
@@ -529,7 +535,22 @@ def _render_ruler(
         text_stroke, raster_w, height, ss, val_min, val_max
     ) = base_data
 
-    img = base.copy()
+    use_inplace_buf = os.getenv("AMD_RULER_WORKING_BUFFER", "1") != "0"
+    buf_entry = _RULER_WORKING_BUFFERS.get(static_key) if use_inplace_buf else None
+    if not use_inplace_buf:
+        img = base.copy()
+    elif buf_entry is None:
+        img = base.copy()
+        buf_entry = {"img": img, "dirty": None}
+        _RULER_WORKING_BUFFERS[static_key] = buf_entry
+    else:
+        img = buf_entry["img"]
+        dirty = buf_entry["dirty"]
+        if dirty is not None:
+            bx0, by0, bx1, by1 = dirty
+            patch = base.crop((bx0, by0, bx1, by1))
+            img.paste(patch, (bx0, by0))
+
     d = ImageDraw.Draw(img)
 
     if value is not None:
@@ -554,16 +575,27 @@ def _render_ruler(
             fill=marker_color,
         )
 
+        min_x = marker_x - shadow_r - 4
+        max_x = marker_x + shadow_r + 4 + 2 * ss
+        min_y = track_y - shadow_r - 4
+        max_y = track_y + shadow_r + 4 + 2 * ss
+
         if show_value and value_text:
             value_y = pad_top + title_h + (title_gap if title_h else 0)
             value_offset_x = int(round(float(cfg.get("value_offset_x", 0.0)) * canvas_w / 100.0 * ss))
             value_offset_y = int(round(float(cfg.get("value_offset_y", 0.0)) * canvas_h / 100.0 * ss))
-            _draw_text_bounded_cached(
-                img, (marker_x + value_offset_x, value_y + value_offset_y), value_text,
-                font=value_font, font_path=font_path, fill=text_color,
+            _draw_text_bounded(
+                d, (marker_x + value_offset_x, value_y + value_offset_y), value_text,
+                font=value_font, fill=text_color,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, height), anchor="ma",
             )
+            min_x = min(min_x, marker_x + value_offset_x - 180)
+            max_x = max(max_x, marker_x + value_offset_x + 180)
+        if buf_entry is not None:
+            buf_entry["dirty"] = (max(0, min_x), max(0, min_y), min(raster_w, max_x), min(height, max_y))
+    elif buf_entry is not None:
+        buf_entry["dirty"] = None
 
     return img
 
@@ -685,7 +717,8 @@ def _render_ruler_vertical(
 
     dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
     dd = ImageDraw.Draw(dummy)
-    value_width = _text_size(dd, value_text, value_font, text_stroke)[0] if show_value else 0
+    val_sample = "8888.8" if show_value else ""
+    value_width = _text_size(dd, val_sample, value_font, text_stroke)[0] if show_value else 0
 
     # ── Tick positions in value space ──────────────────────────────────
     total_divisions = major_divisions * minor_per_major
@@ -763,50 +796,43 @@ def _render_ruler_vertical(
 
         if show_label and title:
             _draw_text_bounded(
-                d, (raster_w / 2, pad_top), title,
-                font=title_font, fill=text_color,
+                d, (pad_x, pad_top), title, font=title_font, fill=text_color,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
-                bounds=(raster_w, raster_h), anchor="ma",
+                bounds=(raster_w, raster_h), anchor="la",
             )
 
-        # Track + shadow (vertical)
-        d.line((track_x, top, track_x, bottom), fill=(0, 0, 0, shadow_alpha), width=max(track_width + 2 * ss, 1))
-        d.line((track_x, top, track_x, bottom), fill=track_color, width=track_width)
+        _line_with_shadow(
+            d, (track_x, top, track_x, bottom), fill=track_color,
+            width=track_width, shadow=True,
+        )
 
-        # Ticks (extend left from the track) + tick labels
+        tick_font = load_font(font_path, label_fs)
         for v, is_major in tick_list:
             frac = _fraction(v, lo, hi)
-            y = int(round(bottom - frac * track_height))
-            is_zero = abs(v) < 1e-7
-            length = major_len if is_major else minor_len
-            colour = zero_color if is_zero else (tick_color if is_major else dim_text)
-            d.line(
-                (track_x - length, y, track_x + max(1, track_width // 2), y),
-                fill=(0, 0, 0, shadow_alpha), width=max(tick_w + ss, 1),
+            ty = int(round(bottom - frac * track_height))
+            tl = major_len if is_major else minor_len
+            col = zero_color if (abs(v) < 1e-6 and zero_color is not None) else tick_color
+            _line_with_shadow(
+                d, (track_x - tl, ty, track_x, ty), fill=col, width=tick_w,
+                shadow=(shadow_alpha > 0),
             )
-            d.line(
-                (track_x - length, y, track_x + max(1, track_width // 2), y),
-                fill=colour,
-                width=max(tick_w + (ss if is_zero else 0), 1) if not pixel_profile else max(
-                    (tick_w + 2 * ss) if is_zero else
-                    (int(round(tick_w * 1.25)) if is_major else max(1 * ss, int(round(tick_w * 0.65)))),
-                    1,
-                ),
-            )
-            if is_major and v in label_texts:
+            if is_major and show_tick_labels and v in label_texts:
                 _draw_text_bounded(
-                    d, (track_x - length - 6 * ss, y), label_texts[v],
-                    font=tick_font, fill=zero_color if is_zero else dim_text,
+                    d, (track_x - tl - geom(4.0), ty), label_texts[v],
+                    font=tick_font, fill=dim_text,
                     stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                     bounds=(raster_w, raster_h), anchor="rm",
                 )
 
-        # Range labels (min bottom / max top), always horizontal
-        for v, txt in range_label_texts:
-            frac = _fraction(v, lo, hi)
-            y = int(round(bottom - frac * track_height))
+        if show_range and not show_tick_labels:
             _draw_text_bounded(
-                d, (track_x - major_len - 6 * ss, y), txt,
+                d, (track_x - major_len - geom(4.0), top), range_label_texts[0][1],
+                font=tick_font, fill=dim_text,
+                stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
+                bounds=(raster_w, raster_h), anchor="rm",
+            )
+            _draw_text_bounded(
+                d, (track_x - major_len - geom(4.0), bottom), range_label_texts[1][1],
                 font=tick_font, fill=dim_text,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, raster_h), anchor="rm",
@@ -817,7 +843,7 @@ def _render_ruler_vertical(
             marker_len, marker_width,
             marker_color, marker_border, marker_radius, marker_style,
             pixel_profile, shadow_alpha, text_color, text_stroke, value_font,
-            ss, lo, hi, show_value, value_text, legacy_slope, missing,
+            ss, lo, hi, show_value, legacy_slope, missing,
         )
         _RULER_BASE_CACHE[static_key] = base_data
 
@@ -825,10 +851,25 @@ def _render_ruler_vertical(
         base, track_x, top, bottom, track_height, value_x, raster_w, raster_h,
         marker_len, marker_width, marker_color, marker_border, marker_radius, marker_style,
         pixel_profile, shadow_alpha, text_color, text_stroke, value_font,
-        ss, lo, hi, show_value, value_text, legacy_slope, missing,
+        ss, lo, hi, show_value, legacy_slope, missing,
     ) = base_data
 
-    img = base.copy()
+    use_inplace_buf = os.getenv("AMD_RULER_WORKING_BUFFER", "1") != "0"
+    buf_entry = _RULER_WORKING_BUFFERS.get(static_key) if use_inplace_buf else None
+    if not use_inplace_buf:
+        img = base.copy()
+    elif buf_entry is None:
+        img = base.copy()
+        buf_entry = {"img": img, "dirty": None}
+        _RULER_WORKING_BUFFERS[static_key] = buf_entry
+    else:
+        img = buf_entry["img"]
+        dirty = buf_entry["dirty"]
+        if dirty is not None:
+            bx0, by0, bx1, by1 = dirty
+            patch = base.crop((bx0, by0, bx1, by1))
+            img.paste(patch, (bx0, by0))
+
     d = ImageDraw.Draw(img)
 
     if not missing:
@@ -881,26 +922,41 @@ def _render_ruler_vertical(
                 (track_x - inner, marker_y - inner, track_x + inner, marker_y + inner),
                 fill=marker_color,
             )
+
+        min_x = track_x - marker_len - 4 if marker_style == "line" else track_x - marker_radius - 4
+        max_x = track_x + marker_len + 4 if marker_style == "line" else track_x + marker_radius + 4
+        min_y = marker_y - marker_radius - 4
+        max_y = marker_y + marker_radius + 4
+
         if show_value and value_text:
-            _draw_text_bounded_cached(
-                img, (value_x, marker_y), value_text,
-                font=value_font, font_path=font_path, fill=text_color,
+            _draw_text_bounded(
+                d, (value_x, marker_y), value_text,
+                font=value_font, fill=text_color,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, raster_h), anchor="lm",
             )
+            min_x = min(min_x, value_x - 10)
+            max_x = max(max_x, value_x + 200)
+            min_y = min(min_y, marker_y - 40)
+            max_y = max(max_y, marker_y + 40)
+
+        if buf_entry is not None:
+            buf_entry["dirty"] = (max(0, min_x), max(0, min_y), min(raster_w, max_x), min(raster_h, max_y))
     elif show_value and value_text:
-        _draw_text_bounded_cached(
-            img, (value_x, top + track_height // 2), value_text,
-            font=value_font, font_path=font_path, fill=text_color,
+        _draw_text_bounded(
+            d, (value_x, top + track_height // 2), value_text,
+            font=value_font, fill=text_color,
             stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
             bounds=(raster_w, raster_h), anchor="lm",
         )
+        if buf_entry is not None:
+            buf_entry["dirty"] = (max(0, value_x - 10), max(0, top), min(raster_w, value_x + 200), min(raster_h, bottom))
+    elif buf_entry is not None:
+        buf_entry["dirty"] = None
 
     return img
 
 
-# ---------------------------------------------------------------------------
-# Segmented bar caches and optimized rendering
 # ---------------------------------------------------------------------------
 
 _SEG_BASE_CACHE = _BoundedStaticCache(max_entries=64)

@@ -1,0 +1,1265 @@
+{
+  "schema_version": 1,
+  "backend": "AMD_NATIVE_D3D11_GPU_HUD_GPU_HUD_D3D11VA",
+  "dll": {
+    "path": "C:\\_DEV\\TeleM\\native\\d3d11_amf_pipeline\\bin\\telem_amd_native.dll",
+    "abi_version": 8,
+    "build_info": "version=1.0.0; build_id=telem-amd-native/1.0.0+df260c18a389.src1035730cc448; build_timestamp=2026-08-19T09:45:34+02:00; git_commit=df260c18a389e9627fc03148f144d38e067bbcb6; source_hash=1035730cc448311486705411629d349b61c91d250d0bb704b7a8cc252381b1ce",
+    "build_id": "telem-amd-native/1.0.0+df260c18a389.src1035730cc448",
+    "build_timestamp": "2026-08-19T09:45:34+02:00",
+    "file_timestamp": "2026-08-19T18:02:57+02:00"
+  },
+  "diagnostics_enabled": true,
+  "profiling_enabled": true,
+  "hud_enabled": true,
+  "legacy_no_hud_benchmark": false,
+  "input": {
+    "programs": [],
+    "stream_groups": [
+      {
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "profile": "Main 10",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "pix_fmt": "yuv420p10le",
+            "color_range": "pc",
+            "color_space": "bt2020nc",
+            "color_transfer": "arib-std-b67",
+            "color_primaries": "bt2020",
+            "avg_frame_rate": "30000/1001",
+            "duration": "592.592000",
+            "nb_frames": "17760",
+            "side_data_list": [
+              {
+                "rotation": -180
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "profile": "LC",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2,
+            "avg_frame_rate": "0/0",
+            "duration": "592.597333",
+            "nb_frames": "27778"
+          },
+          {
+            "index": 2,
+            "codec_type": "data",
+            "avg_frame_rate": "30000/1001",
+            "duration": "592.592000",
+            "nb_frames": "1"
+          }
+        ]
+      }
+    ],
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "width": 3840,
+        "height": 2160,
+        "pix_fmt": "yuv420p10le",
+        "color_range": "pc",
+        "color_space": "bt2020nc",
+        "color_transfer": "arib-std-b67",
+        "color_primaries": "bt2020",
+        "avg_frame_rate": "30000/1001",
+        "duration": "592.592000",
+        "nb_frames": "17760",
+        "side_data_list": [
+          {
+            "rotation": -180
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "48000",
+        "channels": 2,
+        "avg_frame_rate": "0/0",
+        "duration": "592.597333",
+        "nb_frames": "27778"
+      },
+      {
+        "index": 2,
+        "codec_type": "data",
+        "avg_frame_rate": "30000/1001",
+        "duration": "592.592000",
+        "nb_frames": "1"
+      },
+      {
+        "index": 3,
+        "codec_name": "bin_data",
+        "codec_type": "data",
+        "avg_frame_rate": "0/0",
+        "duration": "592.597000",
+        "nb_frames": "592"
+      }
+    ],
+    "format": {
+      "duration": "592.597333",
+      "size": "4273725704"
+    }
+  },
+  "output": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "hevc",
+        "profile": "Main",
+        "codec_type": "video",
+        "width": 3840,
+        "height": 2160,
+        "pix_fmt": "yuv420p",
+        "color_range": "tv",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "1000000/16667",
+        "duration": "5.500110",
+        "nb_frames": "330"
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "48000",
+        "channels": 2,
+        "avg_frame_rate": "0/0",
+        "duration": "592.597333",
+        "nb_frames": "27778"
+      }
+    ],
+    "format": {
+      "duration": "592.597333",
+      "size": "68726976"
+    }
+  },
+  "frame_accounting": {
+    "source_frames": 17760,
+    "requested_frames": 330,
+    "decoded_frames": 330,
+    "mf_read_sample_calls": 330,
+    "mf_video_samples": 330,
+    "mf_stream_ticks": 0,
+    "mf_null_samples": 0,
+    "mf_d3d11_surfaces": 330,
+    "hud_frames": 330,
+    "python_hud_updates": 330,
+    "python_video_updates": 0,
+    "native_processed": 330,
+    "native_hud_updates": 330,
+    "native_video_updates": 0,
+    "vp_processed": 330,
+    "amf_submitted": 330,
+    "amf_output": 330,
+    "muxed_frames": 330,
+    "cadence_gpu": 0,
+    "hr_gpu": 0,
+    "map_gpu": 0
+  },
+  "amf": {
+    "input_full_count": 0,
+    "retry_count": 0,
+    "dropped_submissions": 0,
+    "ignored_submissions": 0
+  },
+  "etap1": {
+    "blend_calls": 0,
+    "gpu_profiled_frames": 330,
+    "production_gpu_wait_removed": false
+  },
+  "etap2": {
+    "hud_mode": "GPU_HUD",
+    "native_hud_mode": 1,
+    "gpu_hud_frames": 330,
+    "hud_texture_creates": 1,
+    "hud_texture_uploads": 1,
+    "python_hud_format": "RGBA straight alpha",
+    "hud_upload_format": "RGBA",
+    "hud_texture_format": "DXGI_FORMAT_R8G8B8A8_UNORM",
+    "gpu_compositor": "DIRECT_NV12_COMPUTE_SHADER",
+    "hud_texture_persistent": true
+  },
+  "etap3": {
+    "upload_mode": "DIRTY",
+    "hud_buffer_mode": "REFERENCE",
+    "dirty_max_rects": 8,
+    "full_pil_tobytes_calls": 0,
+    "pillow_buffer_protocol_writable": false,
+    "image_and_backing_share_memory": false,
+    "fallback_reason": "Pillow RGBA frombuffer is readonly and detaches on first draw",
+    "backing_buffer_address": "0x26b2cb97040",
+    "pointer_sent_first": "0x26b2cb97040",
+    "pointer_sent_last": "0x26b2cb97040",
+    "pointer_stable": true,
+    "native_full_memcpy": false,
+    "native_uploaded_bytes_total": 33177600,
+    "native_uploaded_rects_total": 1,
+    "rects_per_frame": {
+      "count": 330,
+      "avg": 0.0030303030303030303,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "requested_upload_bytes_per_frame": {
+      "count": 330,
+      "avg": 100538.18181818182,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pillow_intermediate_bytes_per_frame": {
+      "count": 330,
+      "avg": 100538.18181818182,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "python_persistent_copy_bytes_per_frame": {
+      "count": 330,
+      "avg": 100538.18181818182,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  },
+  "etap4": {
+    "decode_mode": "GPU_HUD_D3D11VA",
+    "native_decode_mode": 1,
+    "hardware_acceleration_confirmed": true,
+    "decoder_output_format": "DXGI_FORMAT_P010",
+    "source_rotation_degrees": 180,
+    "rawvideo_pipe": false,
+    "ffmpeg_rawvideo_frames": 0,
+    "cpu_raw_base_bytes_per_frame": 0,
+    "cpu_to_gpu_base_bytes_per_frame": 0,
+    "gpu_to_cpu_base_bytes_per_frame": 0,
+    "staging_upload": false,
+    "mf_read_sample_calls": 330,
+    "mf_video_samples": 330,
+    "mf_stream_ticks": 0,
+    "mf_null_samples": 0,
+    "mf_d3d11_surfaces": 330,
+    "mf_format_changes": 1,
+    "mf_eos_events": 0,
+    "direct_decoder_surface_to_vp_frames": 330,
+    "decoder_gpu_copy_frames": 0,
+    "selected_timestamps": {
+      "0": {
+        "frame_index": 0,
+        "mf_pts_100ns": 0,
+        "mf_pts_seconds": 0.0,
+        "cpu_reference_seconds": 0.0,
+        "delta_ms": 0.0,
+        "duration_100ns": 333666,
+        "dxgi_format": 104,
+        "subresource": 0,
+        "texture_pointer": "0x26b60d88260"
+      },
+      "30": {
+        "frame_index": 30,
+        "mf_pts_100ns": 10010000,
+        "mf_pts_seconds": 1.001,
+        "cpu_reference_seconds": 0.5,
+        "delta_ms": 500.9999999999999,
+        "duration_100ns": 333666,
+        "dxgi_format": 104,
+        "subresource": 0,
+        "texture_pointer": "0x26b60d88260"
+      },
+      "300": {
+        "frame_index": 300,
+        "mf_pts_100ns": 100100000,
+        "mf_pts_seconds": 10.01,
+        "cpu_reference_seconds": 5.0,
+        "delta_ms": 5010.0,
+        "duration_100ns": 333666,
+        "dxgi_format": 104,
+        "subresource": 0,
+        "texture_pointer": "0x26b60d88260"
+      }
+    }
+  },
+  "etap5g": {
+    "map_path": "GPU",
+    "map_path_requested": "GPU",
+    "map_path_safe_reason": "no active track_map",
+    "map_filter": "LANCZOS",
+    "map_filter_index": 2,
+    "map_gpu_path": "DIRECT_AUTO",
+    "map_gpu_path_index": 0,
+    "map_gpu_direct_used": false,
+    "map_gpu_frames": 0,
+    "map_order": "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP",
+    "map_above_update_frames": 0,
+    "map_above_visible_frames": 0,
+    "map_above_uploaded_bytes_total": 0,
+    "map_upload_frames": 0,
+    "map_upload_bytes_total": 0,
+    "map_upload_mib_per_frame": 0.0,
+    "map_cpu_upload_ms": null,
+    "map_ab_readback": false,
+    "map_ab": null
+  },
+  "etap8c": {
+    "architecture": "rendered indicator bboxes -> cluster regions -> local candidate crops -> local alpha scans -> compact multi-region uploads",
+    "full_frame_alpha_scan": false,
+    "full_frame_alpha_pixels_scanned_per_frame": 0,
+    "candidate_pixels": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "candidate_width": null,
+    "candidate_height": null,
+    "final_width": null,
+    "final_height": null,
+    "candidate_bbox_count": 0,
+    "final_bbox_count": 0,
+    "above_upload_bytes_total": 0,
+    "above_upload_bytes_per_frame": 0.0
+  },
+  "etap8n": {
+    "multi_region_enabled": true,
+    "above_dirty_mode": "EXACT",
+    "above_upload_buffer_mode": "DIRECT",
+    "above_exact_clusters": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "above_scan_fallback_clusters": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "above_exact_fallback_reason": {},
+    "full_frame_alpha_scan": false,
+    "full_frame_alpha_pixels_scanned_per_frame": 0,
+    "regions_per_frame": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "candidate_pixels_per_frame": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "scanned_pixels_per_frame": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "uploaded_pixels_per_frame": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "uploaded_bytes_per_frame": {
+      "count": 330,
+      "avg": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "above_upload_bytes_total": 0
+  },
+  "etap5j": {
+    "chart_path": "GPU_SPLIT",
+    "chart_path_requested": "GPU_SPLIT",
+    "chart_path_safe_reason": "all active charts are z-order disjoint -> GPU safe",
+    "active_gpu_charts": [
+      "fit_cadence_text",
+      "fit_heart_rate_text"
+    ],
+    "chart_gpu_frames_cadence": 0,
+    "chart_gpu_frames_hr": 0,
+    "chart_upload_bytes_total": 0,
+    "chart_upload_mib_per_frame": 0.0,
+    "chart_gpu_to_cpu_readback": 0,
+    "chart_persistent_textures": 2,
+    "chart_ab_readback": false,
+    "chart_ab": null
+  },
+  "etap5k": {
+    "split": true,
+    "static_uploads": 2,
+    "static_bytes_total": 3795440,
+    "static_mib_total": 3.6196136474609375,
+    "dynamic_uploads": 1320,
+    "dynamic_bytes_total": 9783840,
+    "dynamic_mib_per_frame": 0.0,
+    "full_tobytes_total": 0,
+    "full_tobytes_per_frame": -0.006060606060606061,
+    "split_frames": 0,
+    "static_ab": null
+  },
+  "etap5l": {
+    "gauge_path": "GPU",
+    "gauge_path_safe_reason": "gauge not rendered",
+    "gauge_gpu_active": false,
+    "gauge_gpu_frames": 0,
+    "gauge_upload_bytes_total": 0,
+    "gauge_upload_mib_per_frame": 0.0,
+    "gauge_gpu_to_cpu_readback": 0,
+    "gauge_ab_readback": false,
+    "gauge_ab": null
+  },
+  "etap5a": {
+    "enabled": false
+  },
+  "etap5o": {
+    "amf_mode": "ENCODE",
+    "amf_diag_enabled": false
+  },
+  "etap5p": {
+    "enabled": false
+  },
+  "etap5n": {
+    "telemetry_mode": "PRECOMPUTED",
+    "precomputed": {
+      "frames": 330,
+      "build_ms": 39.31350000493694,
+      "memory_mib": 0.062042236328125,
+      "structure": "list[slots-FrameRec] + shared static",
+      "resolver_calls_per_frame": 2.0,
+      "interpolation_calls_per_frame": 3.0,
+      "gpmf_lookups_per_frame": 3.0
+    }
+  },
+  "etap8o": {
+    "telemetry_mode": "PRECOMPUTED",
+    "is_precomputed": true,
+    "precomputed_stats": {
+      "frames": 330,
+      "build_ms": 39.31350000493694,
+      "memory_bytes": 65056,
+      "memory_mib": 0.062042236328125,
+      "structure": "list[slots-FrameRec] + shared static",
+      "resolver_calls_per_frame": 2.0,
+      "interpolation_calls_per_frame": 3.0,
+      "gpmf_lookups_per_frame": 3.0
+    }
+  },
+  "etap8p_a": {
+    "precompute_build_ms": 39.511299997684546,
+    "delay_export_to_first_frame_ms": 855.3685000078985,
+    "video_render_wall_ms": 14465.36339999875,
+    "mux_wall_ms": 6153.427999990527,
+    "total_from_export_start_ms": 21438.8564999972,
+    "render_fps": 22.813115085655472,
+    "effective_fps": 15.392612008016524,
+    "wall_milestones_ms": {
+      "export_start": 0.0,
+      "precompute_begin": 433.3984999975655,
+      "precompute_end": 472.90979999525007,
+      "first_frame_begin": 559.9762000056216,
+      "first_frame_encoded": 855.3685000078985,
+      "video_render_end": 15025.339600004372,
+      "mux_begin": 15213.589000006323,
+      "mux_end": 21367.01699999685,
+      "export_end": 21438.8564999972
+    }
+  },
+  "etap8q": {
+    "above_text_cache_enabled": true
+  },
+  "etap8t_b": {
+    "pipeline_mode": "SYNC",
+    "queue_max_depth": 2,
+    "timeline_trace": [
+      {
+        "frame_idx": 0,
+        "prod_begin": 96823.8352429,
+        "prod_end": 96823.9222035,
+        "cons_begin": 96823.9222864,
+        "cons_end": 96824.2177336,
+        "prod_ms": 86.96060000511352,
+        "cons_ms": 295.44719999830704
+      },
+      {
+        "frame_idx": 1,
+        "prod_begin": 96824.2177644,
+        "prod_end": 96824.2244816,
+        "cons_begin": 96824.2260925,
+        "cons_end": 96824.2555533,
+        "prod_ms": 6.717199998092838,
+        "cons_ms": 29.460799996741116
+      },
+      {
+        "frame_idx": 2,
+        "prod_begin": 96824.2555806,
+        "prod_end": 96824.261016,
+        "cons_begin": 96824.2610355,
+        "cons_end": 96824.2903649,
+        "prod_ms": 5.435400002170354,
+        "cons_ms": 29.329400000278838
+      },
+      {
+        "frame_idx": 3,
+        "prod_begin": 96824.2906698,
+        "prod_end": 96824.3052286,
+        "cons_begin": 96824.3052734,
+        "cons_end": 96824.3318497,
+        "prod_ms": 14.558800001395866,
+        "cons_ms": 26.576300006126985
+      },
+      {
+        "frame_idx": 4,
+        "prod_begin": 96824.3318749,
+        "prod_end": 96824.3373812,
+        "cons_begin": 96824.3374031,
+        "cons_end": 96824.3565372,
+        "prod_ms": 5.506300003617071,
+        "cons_ms": 19.134100002702326
+      },
+      {
+        "frame_idx": 5,
+        "prod_begin": 96824.3565629,
+        "prod_end": 96824.3620496,
+        "cons_begin": 96824.3620685,
+        "cons_end": 96824.3873936,
+        "prod_ms": 5.486699999892153,
+        "cons_ms": 25.32509999582544
+      },
+      {
+        "frame_idx": 6,
+        "prod_begin": 96824.3874346,
+        "prod_end": 96824.3928366,
+        "cons_begin": 96824.3928587,
+        "cons_end": 96824.4217474,
+        "prod_ms": 5.40200000978075,
+        "cons_ms": 28.888700006064028
+      },
+      {
+        "frame_idx": 7,
+        "prod_begin": 96824.4217867,
+        "prod_end": 96824.429482,
+        "cons_begin": 96824.4295025,
+        "cons_end": 96824.4578751,
+        "prod_ms": 7.695300009800121,
+        "cons_ms": 28.372599990689196
+      },
+      {
+        "frame_idx": 8,
+        "prod_begin": 96824.4578999,
+        "prod_end": 96824.463908,
+        "cons_begin": 96824.463927,
+        "cons_end": 96824.4799486,
+        "prod_ms": 6.008100011968054,
+        "cons_ms": 16.021599993109703
+      },
+      {
+        "frame_idx": 9,
+        "prod_begin": 96824.48002,
+        "prod_end": 96824.4885358,
+        "cons_begin": 96824.4885619,
+        "cons_end": 96824.4988209,
+        "prod_ms": 8.515800000168383,
+        "cons_ms": 10.259000002406538
+      },
+      {
+        "frame_idx": 10,
+        "prod_begin": 96824.4988623,
+        "prod_end": 96824.5046583,
+        "cons_begin": 96824.5046843,
+        "cons_end": 96824.52589,
+        "prod_ms": 5.795999997644685,
+        "cons_ms": 21.205700002610683
+      },
+      {
+        "frame_idx": 11,
+        "prod_begin": 96824.5259291,
+        "prod_end": 96824.5341388,
+        "cons_begin": 96824.5341633,
+        "cons_end": 96824.5691464,
+        "prod_ms": 8.209699997678399,
+        "cons_ms": 34.98309999122284
+      },
+      {
+        "frame_idx": 12,
+        "prod_begin": 96824.5692556,
+        "prod_end": 96824.5811995,
+        "cons_begin": 96824.5812298,
+        "cons_end": 96824.5982634,
+        "prod_ms": 11.943899997277185,
+        "cons_ms": 17.033600001013838
+      },
+      {
+        "frame_idx": 13,
+        "prod_begin": 96824.5983002,
+        "prod_end": 96824.6059965,
+        "cons_begin": 96824.6060181,
+        "cons_end": 96824.6148538,
+        "prod_ms": 7.696300002862699,
+        "cons_ms": 8.835699991323054
+      },
+      {
+        "frame_idx": 14,
+        "prod_begin": 96824.6148796,
+        "prod_end": 96824.6202029,
+        "cons_begin": 96824.6202222,
+        "cons_end": 96824.6292847,
+        "prod_ms": 5.323299992596731,
+        "cons_ms": 9.062500001164153
+      },
+      {
+        "frame_idx": 15,
+        "prod_begin": 96824.6293283,
+        "prod_end": 96824.6346396,
+        "cons_begin": 96824.6346596,
+        "cons_end": 96824.6546396,
+        "prod_ms": 5.311300003086217,
+        "cons_ms": 19.980000011855736
+      },
+      {
+        "frame_idx": 16,
+        "prod_begin": 96824.6546672,
+        "prod_end": 96824.660168,
+        "cons_begin": 96824.6601904,
+        "cons_end": 96824.6773723,
+        "prod_ms": 5.500800005393103,
+        "cons_ms": 17.181899995193817
+      },
+      {
+        "frame_idx": 17,
+        "prod_begin": 96824.6774157,
+        "prod_end": 96824.6857948,
+        "cons_begin": 96824.6858176,
+        "cons_end": 96824.7026345,
+        "prod_ms": 8.37909999245312,
+        "cons_ms": 16.81690000987146
+      },
+      {
+        "frame_idx": 18,
+        "prod_begin": 96824.7027038,
+        "prod_end": 96824.7110695,
+        "cons_begin": 96824.7110929,
+        "cons_end": 96824.7199885,
+        "prod_ms": 8.365700006834231,
+        "cons_ms": 8.895599996321835
+      },
+      {
+        "frame_idx": 19,
+        "prod_begin": 96824.7200164,
+        "prod_end": 96824.7253708,
+        "cons_begin": 96824.7253925,
+        "cons_end": 96824.7450192,
+        "prod_ms": 5.354400011128746,
+        "cons_ms": 19.62669999920763
+      }
+    ]
+  },
+  "etap8s": {
+    "flush_mode": "BATCHED"
+  },
+  "etap5b": {
+    "discovered_fit_fields": [
+      "K1",
+      "K2",
+      "alt",
+      "battery",
+      "battery_pct",
+      "battery_pct_2_1",
+      "battery_pct_3_2",
+      "cadence",
+      "curVpower",
+      "discharge",
+      "distance",
+      "enhanced_altitude",
+      "enhanced_speed",
+      "fractional_cadence",
+      "heading",
+      "heart_rate",
+      "slope",
+      "solar",
+      "solar_pct",
+      "speed",
+      "temperature",
+      "track"
+    ],
+    "active_fit_fields": [
+      "cadence",
+      "heart_rate"
+    ],
+    "inactive_fit_fields": [
+      "K1",
+      "K2",
+      "alt",
+      "battery",
+      "battery_pct",
+      "battery_pct_2_1",
+      "battery_pct_3_2",
+      "curVpower",
+      "discharge",
+      "distance",
+      "enhanced_altitude",
+      "enhanced_speed",
+      "fractional_cadence",
+      "heading",
+      "slope",
+      "solar",
+      "solar_pct",
+      "speed",
+      "temperature",
+      "track"
+    ],
+    "active_fit_fields_missing_samples": [],
+    "active_standard_resolve_fields": [],
+    "unique_resolve_fields": [
+      "cadence",
+      "heart_rate"
+    ],
+    "resolve_cache_value_calls": 0,
+    "resolve_cache_value_calls_per_frame": 0.0,
+    "resolve_calls_per_field": {},
+    "duplicate_field_lookups": 0
+  },
+  "audit_allocations": null,
+  "timings": {
+    "Decode/pipe wait": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "MF ReadSample/decode availability": {
+      "count": 330,
+      "avg_ms": 1.476150909090909,
+      "median_ms": 0.63,
+      "p95_ms": 1.2925050000000007,
+      "p99_ms": 2.868148999999994
+    },
+    "MF decoder surface acquisition": {
+      "count": 330,
+      "avg_ms": 0.010518484848484848,
+      "median_ms": 0.0106,
+      "p95_ms": 0.014500000000000002,
+      "p99_ms": 0.02043899999999998
+    },
+    "Decoder surface GPU copy": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "Telemetry/frame_data": {
+      "count": 330,
+      "avg_ms": 0.026494242510208012,
+      "median_ms": 0.024850000045262277,
+      "p95_ms": 0.0431250002293382,
+      "p99_ms": 0.10908399082836695
+    },
+    "telemetry_target_dt": {
+      "count": 330,
+      "avg_ms": 0.00012000025228851221,
+      "median_ms": 0.000100000761449337,
+      "p95_ms": 0.0002549939381424349,
+      "p99_ms": 0.0006709947774652371
+    },
+    "telemetry_cache_lookup": {
+      "count": 330,
+      "avg_ms": 0.024109696801822407,
+      "median_ms": 0.022599997464567423,
+      "p95_ms": 0.03947500154026785,
+      "p99_ms": 0.09919700285536234
+    },
+    "telemetry_frame_payload": {
+      "count": 330,
+      "avg_ms": 0.014465818081093445,
+      "median_ms": 0.013559998478740454,
+      "p95_ms": 0.023685000924160707,
+      "p99_ms": 0.05951820171321741
+    },
+    "telemetry_shared_objects": {
+      "count": 330,
+      "avg_ms": 0.009643878720728962,
+      "median_ms": 0.00903999898582697,
+      "p95_ms": 0.015790000616107136,
+      "p99_ms": 0.03967880114214494
+    },
+    "telemetry_other": {
+      "count": 330,
+      "avg_ms": 0.0022645454560970943,
+      "median_ms": 0.0020500010577961802,
+      "p95_ms": 0.0036550052755046645,
+      "p99_ms": 0.010254999215248962
+    },
+    "compose_overlay": {
+      "count": 330,
+      "avg_ms": 7.4645536361706695,
+      "median_ms": 7.540049999079201,
+      "p95_ms": 14.09162499912782,
+      "p99_ms": 17.587050000001906
+    },
+    "map_cpu_upload": {
+      "count": 330,
+      "avg_ms": 0.005157576753955447,
+      "median_ms": 0.0047000066842883825,
+      "p95_ms": 0.006554991705343129,
+      "p99_ms": 0.013250007468741287
+    },
+    "GPU map upload (native)": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "GPU map resize+blend submit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_cpu_tobytes": {
+      "count": 330,
+      "avg_ms": 0.003980303043852363,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_python_upload": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_dynamic_tobytes": {
+      "count": 330,
+      "avg_ms": 0.03556272748744849,
+      "median_ms": 0.03275000199209899,
+      "p95_ms": 0.04867499228566885,
+      "p99_ms": 0.11849899572552997
+    },
+    "chart_dynamic_upload": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "gauge_tobytes": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "gauge_upload": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "GPU gauge blend submit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "GPU chart blend submit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_plan": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_rgba_conversion": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_upload_call": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_native_submit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_gpu_submit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "chart_other": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_compose": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_canvas_prepare": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_cache_lookup": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_cache_hit": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_cache_miss_render": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_cached_paste": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_compose_total": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_bbox_crop": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_bbox_tracking": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_candidate_crop": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_local_alpha_scan": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_final_crop": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_region_to_bytes": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_region_upload": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_upload_buffer_prepare": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_tight_bbox_collect": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_exact_union": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_exact_crop": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "above_total": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "HUD dirty bbox": {
+      "count": 329,
+      "avg_ms": 0.007017021498071047,
+      "median_ms": 0.006599992047995329,
+      "p95_ms": 0.00966000079642981,
+      "p99_ms": 0.017283994238823586
+    },
+    "HUD dirty extract": {
+      "count": 329,
+      "avg_ms": 0.00028419421595099486,
+      "median_ms": 0.00029998773243278265,
+      "p95_ms": 0.000400003045797348,
+      "p99_ms": 0.0007719954010099143
+    },
+    "PIL tobytes": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "PIL/buffer preparation": {
+      "count": 330,
+      "avg_ms": 0.08725696966531828,
+      "median_ms": 0.007499998901039362,
+      "p95_ms": 0.0113550056994427,
+      "p99_ms": 0.023494998167734503
+    },
+    "Python->native bridge": {
+      "count": 330,
+      "avg_ms": 0.010628787591841748,
+      "median_ms": 0.01010000833477825,
+      "p95_ms": 0.015410004807412628,
+      "p99_ms": 0.03315199710081102
+    },
+    "update_hud": {
+      "count": 330,
+      "avg_ms": 0.06405303001608417,
+      "median_ms": 0.01069999416358769,
+      "p95_ms": 0.01605500583536923,
+      "p99_ms": 0.04481199706788119
+    },
+    "Native HUD CPU copy": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "HUD texture upload": {
+      "count": 330,
+      "avg_ms": 0.05342424242424242,
+      "median_ms": 0.0005,
+      "p95_ms": 0.0009550000000000012,
+      "p99_ms": 0.0013419999999999958
+    },
+    "NV12 staging memcpy": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "BlendRGBAToNV12": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "CopyResource submission": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "VideoProcessor CPU submit": {
+      "count": 330,
+      "avg_ms": 4.04840909090909,
+      "median_ms": 0.2156,
+      "p95_ms": 0.3378650000000002,
+      "p99_ms": 0.9076329999999959
+    },
+    "VideoProcessor GPU completion": {
+      "count": 330,
+      "avg_ms": 32.76973066666667,
+      "median_ms": 14.8843,
+      "p95_ms": 33.616549500000005,
+      "p99_ms": 42.2061231
+    },
+    "GPU wait/synchronization": {
+      "count": 330,
+      "avg_ms": 16.61445181818182,
+      "median_ms": 15.1349,
+      "p95_ms": 33.17683000000001,
+      "p99_ms": 41.165729999999954
+    },
+    "AMF submit/backpressure": {
+      "count": 330,
+      "avg_ms": 0.32066212121212123,
+      "median_ms": 0.2767,
+      "p95_ms": 0.6664450000000005,
+      "p99_ms": 1.3461139999999991
+    },
+    "AMF QueryOutput": {
+      "count": 330,
+      "avg_ms": 0.1568878787878788,
+      "median_ms": 0.1374,
+      "p95_ms": 0.2706950000000001,
+      "p99_ms": 0.6829939999999998
+    },
+    "Packet write": {
+      "count": 330,
+      "avg_ms": 0.16760272727272726,
+      "median_ms": 0.1422,
+      "p95_ms": 0.311555,
+      "p99_ms": 0.9348109999999954
+    },
+    "Audio mux": {
+      "count": 1,
+      "avg_ms": 6153.427999990527,
+      "median_ms": 6153.427999990527,
+      "p95_ms": 6153.427999990527,
+      "p99_ms": 6153.427999990527
+    },
+    "producer_prepare": {
+      "count": 330,
+      "avg_ms": 7.805437272481592,
+      "median_ms": 7.670649996725842,
+      "p95_ms": 14.519650004513096,
+      "p99_ms": 17.750904000859006
+    },
+    "producer_queue_wait": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "consumer_queue_wait": {
+      "count": 330,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "consumer_upload": {
+      "count": 330,
+      "avg_ms": 0.39165636372865376,
+      "median_ms": 0.2591500015114434,
+      "p95_ms": 0.6601849992875943,
+      "p99_ms": 1.4812370053550692
+    },
+    "consumer_native_call": {
+      "count": 330,
+      "avg_ms": 34.20972060588555,
+      "median_ms": 16.476199998578522,
+      "p95_ms": 35.11494000631502,
+      "p99_ms": 43.57214700459735
+    },
+    "consumer_packet": {
+      "count": 0,
+      "avg_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "pipeline_total": {
+      "count": 330,
+      "avg_ms": 36.21510151517048,
+      "median_ms": 17.665300001681317,
+      "p95_ms": 37.10013500385685,
+      "p99_ms": 55.938376998674045
+    }
+  },
+  "total_wall_clock_s": 21.005530300011742,
+  "true_fps": 15.710148484078763,
+  "audio_present": true,
+  "hud_pipeline_calls": {
+    "compose_overlay": 330,
+    "tobytes": 0,
+    "update_hud": 330,
+    "blend_rgba_to_nv12": 0
+  }
+}

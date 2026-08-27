@@ -84,6 +84,61 @@ def _lat_lon_to_tile(lat: float, lon: float, zoom: int):
     return tx, ty, px, py
 
 
+# ── Tile Accounting & Network Policy ─────────────────────────────────────
+
+class MapTileStats:
+    """Thread-safe accounting of tile access patterns during rendering."""
+    tiles_requested: int = 0
+    memory_hits: int = 0
+    disk_hits: int = 0
+    network_misses: int = 0
+    network_requests: int = 0
+    _lock = threading.Lock()
+
+    @classmethod
+    def reset(cls) -> None:
+        with cls._lock:
+            cls.tiles_requested = 0
+            cls.memory_hits = 0
+            cls.disk_hits = 0
+            cls.network_misses = 0
+            cls.network_requests = 0
+
+    @classmethod
+    def get_stats(cls) -> dict[str, int]:
+        with cls._lock:
+            return {
+                "tiles_requested": cls.tiles_requested,
+                "memory_hits": cls.memory_hits,
+                "disk_hits": cls.disk_hits,
+                "network_misses": cls.network_misses,
+                "network_requests": cls.network_requests,
+            }
+
+
+def reset_map_tile_stats() -> None:
+    MapTileStats.reset()
+
+
+def get_map_tile_stats() -> dict[str, int]:
+    return MapTileStats.get_stats()
+
+
+_map_network_allowed: bool = True
+_map_network_lock = threading.Lock()
+
+
+def set_map_network_allowed(allowed: bool) -> None:
+    global _map_network_allowed
+    with _map_network_lock:
+        _map_network_allowed = bool(allowed)
+
+
+def is_map_network_allowed() -> bool:
+    with _map_network_lock:
+        return _map_network_allowed
+
+
 # ── TileCache (SQLite + in-memory LRU) ──────────────────────────────────
 
 class TileCache:
@@ -103,11 +158,29 @@ class TileCache:
                       "style TEXT,data BLOB,PRIMARY KEY(z,x,y,style))")
             c.commit()
 
-    def get(self, z, x, y, style) -> Image.Image | None:
+    def has(self, z: int, x: int, y: int, style: str) -> bool:
+        """Fast check if tile is present in memory or disk without decoding."""
         key = (z, x, y, style)
         with self._lock:
             if key in self._mem:
+                return True
+        try:
+            with sqlite3.connect(str(self._db)) as c:
+                r = c.execute("SELECT 1 FROM tiles WHERE z=? AND x=? "
+                              "AND y=? AND style=? LIMIT 1", key).fetchone()
+                return r is not None
+        except Exception:
+            return False
+
+    def get(self, z, x, y, style) -> Image.Image | None:
+        key = (z, x, y, style)
+        with MapTileStats._lock:
+            MapTileStats.tiles_requested += 1
+        with self._lock:
+            if key in self._mem:
                 self._mem_order.remove(key); self._mem_order.append(key)
+                with MapTileStats._lock:
+                    MapTileStats.memory_hits += 1
                 return self._mem[key].copy()
         try:
             with sqlite3.connect(str(self._db)) as c:
@@ -116,8 +189,13 @@ class TileCache:
             if r:
                 img = Image.open(io.BytesIO(r[0])).convert("RGBA")
                 self._put_mem(key, img)
+                with MapTileStats._lock:
+                    MapTileStats.disk_hits += 1
                 return img.copy()
-        except Exception: pass
+        except Exception:
+            pass
+        with MapTileStats._lock:
+            MapTileStats.network_misses += 1
         return None
 
     def put(self, z, x, y, style, data: bytes):
@@ -147,6 +225,11 @@ _fetch_lock = threading.Lock()
 
 def _download_tile_raw(z, x, y, style) -> bytes | None:
     global _last_fetch
+    if not is_map_network_allowed():
+        print(f"[MAP CACHE MISS DURING RENDER] provider={style} z={z} x={x} y={y}", flush=True)
+        return None
+    with MapTileStats._lock:
+        MapTileStats.network_requests += 1
     url = MAP_STYLES.get(style, MAP_STYLES[DEFAULT_STYLE]).format(z=z, x=x, y=y)
     with _fetch_lock:
         e = time.time() - _last_fetch
@@ -559,6 +642,7 @@ class MovingMapRenderer:
         if x2 > tw: x2 = tw; x1 = max(0, x2 - w)
         if y2 > th: y2 = th; y1 = max(0, y2 - h)
         cropped = img.crop((x1, y1, x2, y2))
+        self._last_crop_key = (grid_key, x1, y1, draw_track, draw_marker, (round(scx, 4), round(scy, 4), heading) if draw_marker else None)
 
         # Draw the dynamic marker only on the cropped working image.  The
         # integer crop translation preserves the exact raster coordinates of

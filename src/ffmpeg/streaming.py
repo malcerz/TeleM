@@ -10,10 +10,11 @@ import math
 import os
 import queue
 import copy
+import json
+import shutil
 import subprocess
 import threading
 import time
-from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -45,6 +46,137 @@ from src.multifile import timeline_absolute_end
 # overrides; the transport threshold itself remains unchanged.
 NVIDIA_HUD_MAX_REGIONS = 5
 NVIDIA_HUD_GRID_PX = 16
+
+
+def _cancel_log(message: str, started: float | None = None, process: Any = None) -> None:
+    """ASCII-safe, bounded-cancel diagnostics."""
+    elapsed = (time.perf_counter() - started) if started is not None else 0.0
+    thread = threading.current_thread().name
+    pid = getattr(process, "pid", None) if process is not None else None
+    pid_text = f" pid={pid}" if pid is not None else ""
+    print(f"[RenderCancel] {message} elapsed={elapsed:.3f}s thread={thread}{pid_text}", flush=True)
+
+
+class _RenderExecutor:
+    """ProcessPoolExecutor context with non-blocking cancellation exit."""
+
+    def __init__(self, *args: Any, cancel_event: Any = None, **kwargs: Any) -> None:
+        from concurrent.futures import ProcessPoolExecutor
+        self._args = args
+        self._kwargs = kwargs
+        self._cancel_event = cancel_event
+        self.executor = ProcessPoolExecutor(*args, **kwargs)
+
+    def __enter__(self):
+        return self.executor
+
+    def __exit__(self, exc_type, exc, tb):
+        cancelled = self._cancel_event is not None and self._cancel_event.is_set()
+        if cancelled:
+            for child in list(getattr(self.executor, "_processes", {}).values()):
+                try:
+                    child.terminate()
+                except Exception:
+                    pass
+            self.executor.shutdown(wait=False, cancel_futures=True)
+        else:
+            self.executor.shutdown(wait=True)
+        return False
+
+
+def _wait_process_bounded(process: Any, timeout: float) -> bool:
+    """Wait without ever allowing process cleanup to become unbounded."""
+    deadline = time.monotonic() + max(0.0, timeout)
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return process.poll() is not None
+
+
+def _stop_ffmpeg_process(
+    process: Any, cancel_started: float | None = None,
+    graceful_timeout: float = 10.0,
+) -> int | None:
+    """Graceful stdin close, then bounded terminate/kill process-tree fallback."""
+    if process is None:
+        return None
+    if process.poll() is not None:
+        setattr(process, "_telem_cancel_mode", "graceful")
+        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
+        return process.returncode
+
+    _cancel_log("ffmpeg graceful stop requested", cancel_started, process)
+    try:
+        if process.stdin is not None:
+            process.stdin.close()
+    except Exception:
+        pass
+    _cancel_log("stdin_closed", cancel_started, process)
+    _cancel_log("ffmpeg graceful wait start", cancel_started, process)
+    graceful_deadline = time.monotonic() + max(0.1, graceful_timeout)
+    next_progress = 1
+    while process.poll() is None and time.monotonic() < graceful_deadline:
+        elapsed = time.monotonic() - (graceful_deadline - graceful_timeout)
+        if elapsed >= next_progress:
+            _cancel_log(f"ffmpeg still running after {next_progress}s", cancel_started, process)
+            next_progress += 1
+        time.sleep(0.05)
+    if process.poll() is not None:
+        setattr(process, "_telem_cancel_mode", "graceful")
+        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
+        return process.returncode
+
+    _cancel_log("graceful timeout reached", cancel_started, process)
+    try:
+        process.terminate()
+    except Exception:
+        pass
+    _cancel_log("terminate", cancel_started, process)
+    if _wait_process_bounded(process, 1.0):
+        setattr(process, "_telem_cancel_mode", "terminate")
+        _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
+        return process.returncode
+
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2.0,
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            process.kill()
+        except Exception:
+            pass
+    _cancel_log("kill", cancel_started, process)
+    _wait_process_bounded(process, 1.0)
+    setattr(process, "_telem_cancel_mode", "kill")
+    _cancel_log("cleanup done", cancel_started, process)
+    return process.poll()
+
+
+def _validate_partial_mp4(output_file: str | Path) -> bool:
+    """Validate a gracefully closed partial MP4 using the local ffprobe."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not Path(output_file).exists():
+        return False
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries",
+             "format=duration:stream=codec_type", "-of", "json", str(output_file)],
+            capture_output=True, text=True, timeout=5.0, check=False,
+        )
+        if result.returncode != 0:
+            return False
+        data = json.loads(result.stdout or "{}")
+        duration = float((data.get("format") or {}).get("duration") or 0.0)
+        streams = data.get("streams") or []
+        return duration > 0.0 and any(s.get("codec_type") == "video" for s in streams)
+    except Exception:
+        return False
 
 
 def _snap_nvidia_hud_layout(layout: dict[str, Any], canvas_w: int, canvas_h: int, grid_px: int) -> dict[str, Any]:
@@ -81,17 +213,35 @@ def _pipe_writer_thread(
     Terminates when done_event is set and queue is empty, or on None sentinel.
     """
     bt = BenchmarkTracker.get_instance()
+
+    def _release_item(item: Any) -> None:
+        if isinstance(item, tuple):
+            try:
+                item[1].release()
+            except Exception:
+                pass
+            if shm_pool is not None:
+                try:
+                    shm_pool.release(item[0])
+                except Exception:
+                    pass
+
     if audit is None:
         # Production hot path: no audit timestamps, qsize sampling, histogram
         # updates, or diagnostic locks.  The writer receives the SHM memoryview
         # and performs one direct BufferedWriter.write per frame.
         try:
             while True:
+                if done_event.is_set():
+                    while True:
+                        try:
+                            _release_item(write_queue.get_nowait())
+                        except queue.Empty:
+                            break
+                    break
                 try:
                     item = write_queue.get(timeout=0.5)
                 except queue.Empty:
-                    if done_event.is_set():
-                        break
                     continue
                 if item is None:
                     break
@@ -405,12 +555,32 @@ def stream_overlay_to_ffmpeg(
     container_rotation: int = 0,
     overlay_w: int = 3840,
     overlay_h: int = 2160,
+    hud_resolution_scale: float = 1.0,
     progress_cb: Optional[Callable] = None,
     on_render_progress: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
+    if hud_resolution_scale not in (1.0, 0.75, 0.5):
+        hud_resolution_scale = 1.0
+    if hud_resolution_scale != 1.0:
+        # Direct callers may not precompute overlay_w/overlay_h. For the
+        # scaled modes the export canvas is the source of truth.
+        overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
+        overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if overlay_w % 2:
+            overlay_w += 1
+        if overlay_h % 2:
+            overlay_h += 1
+    # The caller normally supplies the scaled canvas. Keep this diagnostic at
+    # the stream boundary so direct callers are auditable too.
+    print(
+        f"[HUD Resolution] scale={hud_resolution_scale:.2f} "
+        f"canvas={overlay_w}x{overlay_h} output={render_w}x{render_h}",
+        flush=True,
+    )
+
     if encoder == "intel":
         # INTEL_FORCE: strictly require a usable Intel GPU + QSV.  No silent
         # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU

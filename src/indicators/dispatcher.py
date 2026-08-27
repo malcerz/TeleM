@@ -65,14 +65,23 @@ def render_value_indicator(
     val_max = float(cfg.get("max_val", 100))
     ticks = int(cfg.get("ticks", 0))
     _thickness_raw = float(cfg.get("thickness", 1))
-    if _thickness_raw < 1:
-        # Legacy relative format (e.g. 0.007 for arc width) -> percentage of min_dim
+    _bar_ruler = form == "bar" and str(
+        cfg.get("bar_style", cfg.get("style", "ruler"))
+    ).strip().lower() in {"ruler", ""}
+    if _thickness_raw < 1 and _bar_ruler:
+        # Ruler thickness is a fraction of the established thickness=1
+        # baseline. Keep it as a float so 0.25/0.5/0.75 rasterize thinner.
+        _thickness_baseline = s(0.6, min_dim)
+        thickness = max(0.25, float(_thickness_baseline) * _thickness_raw)
+    elif _thickness_raw < 1:
+        # Preserve the legacy sub-unit contract for non-ruler indicators.
         _thickness_rel = _thickness_raw * 100.0
+        thickness = float(max(1, s(_thickness_rel, min_dim)))
     else:
         # Modern integer format 1..10 from GUI / def_layout.json
         # 1 -> 0.6% min_dim, 2 -> 0.8% min_dim, ..., 10 -> 2.4% min_dim
         _thickness_rel = 0.6 + (_thickness_raw - 1) * 0.2
-    thickness = max(1, s(_thickness_rel, min_dim))
+        thickness = float(max(1, s(_thickness_rel, min_dim)))
     size_px = s(cfg.get("size", 0.1), min_dim if form == "gauge" else canvas_w)
     ss = max(1, supersample)
 

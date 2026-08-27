@@ -1,0 +1,15 @@
+AMD_ETAP_3F CONFIGURATION SNAPSHOT
+====================================
+Workload:             Video/GX030120.MP4 (3840x2160 UHD)
+FIT:                  Video/Jazda_na_rowerze_w_porze_lunchu.fit
+Preset:               def_layout.json
+AMD_GPU_MAP_ROTATE:   1 (ON)
+AMD_AFTER_MAP_CHART:  1 (ON)
+AMD_AFTER_MAP_GAUGE:  1 (ON)
+AMD_LEAN_GPU:         1 in benchmark / 0 (OFF) in default code
+AMD_ABOVE_MULTI_RECT: 1 (ON by default in production since ETAP 3F)
+AMD_ABOVE_MULTI_RECT_MAX: 8
+AMD_NATIVE_DIAGNOSTICS: 0
+GPU EXTRA SHADER PASS: 0
+GPU EXTRA COMPOSITOR PASS: 0
+GPU EXTRA TEXTURES PER RECT: 0

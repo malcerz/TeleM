@@ -1,0 +1,5558 @@
+[
+  {
+    "name": "test_A_1080p_full",
+    "ok": true,
+    "wall_s": 13.695,
+    "width": 1920,
+    "height": 1080,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 17.97075905909836,
+      "true_fps": 7.205890325337562,
+      "mux_wall_ms": 6974.8924000014085,
+      "video_render_wall_ms": 5008.135700001731,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.449,
+          "med": 0.585,
+          "p95": 1.302,
+          "p99": 30.206
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.045,
+          "med": 0.035,
+          "p95": 0.082,
+          "p99": 0.149
+        },
+        "compose_overlay": {
+          "avg": 4.694,
+          "med": 3.94,
+          "p95": 8.495,
+          "p99": 12.563
+        },
+        "above_compose": {
+          "avg": 16.334,
+          "med": 13.984,
+          "p95": 30.479,
+          "p99": 34.54
+        },
+        "above_bbox_crop": {
+          "avg": 0.121,
+          "med": 0.094,
+          "p95": 0.171,
+          "p99": 0.837
+        },
+        "above_region_to_bytes": {
+          "avg": 2.136,
+          "med": 1.937,
+          "p95": 2.929,
+          "p99": 5.357
+        },
+        "above_region_upload": {
+          "avg": 0.676,
+          "med": 0.592,
+          "p95": 0.898,
+          "p99": 2.185
+        },
+        "above_total": {
+          "avg": 18.591,
+          "med": 16.152,
+          "p95": 32.617,
+          "p99": 38.764
+        },
+        "map_cpu_upload": {
+          "avg": 1.418,
+          "med": 1.202,
+          "p95": 2.261,
+          "p99": 4.049
+        },
+        "HUD dirty extract": {
+          "avg": 0.337,
+          "med": 0.3,
+          "p95": 0.5,
+          "p99": 0.923
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.472,
+          "med": 0.348,
+          "p95": 0.626,
+          "p99": 2.428
+        },
+        "update_hud": {
+          "avg": 0.328,
+          "med": 0.121,
+          "p95": 0.953,
+          "p99": 2.084
+        },
+        "HUD texture upload": {
+          "avg": 0.305,
+          "med": 0.105,
+          "p95": 0.902,
+          "p99": 2.032
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.789,
+          "med": 0.209,
+          "p95": 0.8,
+          "p99": 62.961
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 20.427,
+          "med": 4.16,
+          "p95": 9.058,
+          "p99": 171.039
+        },
+        "GPU wait/synchronization": {
+          "avg": 5.981,
+          "med": 5.138,
+          "p95": 9.529,
+          "p99": 20.06
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.418,
+          "med": 0.267,
+          "p95": 1.033,
+          "p99": 1.613
+        },
+        "AMF QueryOutput": {
+          "avg": 0.155,
+          "med": 0.107,
+          "p95": 0.322,
+          "p99": 0.524
+        },
+        "Packet write": {
+          "avg": 0.157,
+          "med": 0.11,
+          "p95": 0.405,
+          "p99": 0.469
+        },
+        "Audio mux": {
+          "avg": 6974.892,
+          "med": 6974.892,
+          "p95": 6974.892,
+          "p99": 6974.892
+        },
+        "producer_prepare": {
+          "avg": 29.403,
+          "med": 23.845,
+          "p95": 47.486,
+          "p99": 77.619
+        },
+        "consumer_upload": {
+          "avg": 1.939,
+          "med": 1.816,
+          "p95": 2.817,
+          "p99": 7.389
+        },
+        "consumer_native_call": {
+          "avg": 23.073,
+          "med": 6.551,
+          "p95": 12.004,
+          "p99": 186.903
+        },
+        "pipeline_total": {
+          "avg": 28.637,
+          "med": 9.067,
+          "p95": 16.348,
+          "p99": 421.51
+        }
+      },
+      "hud_uploaded_bytes_total": 81500460,
+      "rects_per_frame_avg": 2.977777777777778,
+      "requested_upload_bytes_per_frame_avg": 905560.6666666666,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 4807912.0,
+      "above_uploaded_pixels_per_frame_avg": 1201978.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.3833351135253906,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 26.5,
+        "med": 34.0,
+        "max": 34.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 3.7,
+        "med": 7.4,
+        "max": 7.4,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.8,
+        "med": 1.7,
+        "max": 1.7,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 22063.0,
+        "med": 22271.0,
+        "max": 22271.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10075.0,
+        "med": 10283.0,
+        "max": 10283.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 413.0,
+        "med": 416.0,
+        "max": 416.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 785.0,
+        "med": 1049.0,
+        "max": 1049.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "test_B_4k_full",
+    "ok": true,
+    "wall_s": 19.855,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 5.928439115690704,
+      "true_fps": 3.364781553784029,
+      "mux_wall_ms": 7076.3641000085045,
+      "video_render_wall_ms": 10120.707800000673,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.832,
+          "med": 0.653,
+          "p95": 1.53,
+          "p99": 103.254
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.044,
+          "med": 0.035,
+          "p95": 0.083,
+          "p99": 0.156
+        },
+        "compose_overlay": {
+          "avg": 5.676,
+          "med": 4.867,
+          "p95": 11.782,
+          "p99": 13.854
+        },
+        "above_compose": {
+          "avg": 25.915,
+          "med": 23.639,
+          "p95": 39.654,
+          "p99": 52.713
+        },
+        "above_bbox_crop": {
+          "avg": 0.127,
+          "med": 0.102,
+          "p95": 0.171,
+          "p99": 0.628
+        },
+        "above_region_to_bytes": {
+          "avg": 11.66,
+          "med": 10.948,
+          "p95": 16.537,
+          "p99": 23.405
+        },
+        "above_region_upload": {
+          "avg": 2.329,
+          "med": 1.891,
+          "p95": 3.701,
+          "p99": 9.977
+        },
+        "above_total": {
+          "avg": 37.703,
+          "med": 34.658,
+          "p95": 52.401,
+          "p99": 71.143
+        },
+        "map_cpu_upload": {
+          "avg": 2.679,
+          "med": 2.214,
+          "p95": 5.922,
+          "p99": 9.296
+        },
+        "HUD dirty extract": {
+          "avg": 1.069,
+          "med": 0.993,
+          "p95": 1.853,
+          "p99": 2.08
+        },
+        "PIL/buffer preparation": {
+          "avg": 1.602,
+          "med": 1.052,
+          "p95": 2.151,
+          "p99": 13.278
+        },
+        "update_hud": {
+          "avg": 0.827,
+          "med": 0.294,
+          "p95": 0.819,
+          "p99": 13.24
+        },
+        "HUD texture upload": {
+          "avg": 0.804,
+          "med": 0.275,
+          "p95": 0.752,
+          "p99": 13.201
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 26.98,
+          "med": 0.26,
+          "p95": 0.456,
+          "p99": 657.762
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 100.751,
+          "med": 12.051,
+          "p95": 23.412,
+          "p99": 2175.632
+        },
+        "GPU wait/synchronization": {
+          "avg": 13.296,
+          "med": 11.992,
+          "p95": 21.316,
+          "p99": 25.358
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.39,
+          "med": 0.295,
+          "p95": 0.812,
+          "p99": 1.995
+        },
+        "AMF QueryOutput": {
+          "avg": 0.184,
+          "med": 0.133,
+          "p95": 0.518,
+          "p99": 0.75
+        },
+        "Packet write": {
+          "avg": 0.21,
+          "med": 0.135,
+          "p95": 0.53,
+          "p99": 0.88
+        },
+        "Audio mux": {
+          "avg": 7076.364,
+          "med": 7076.364,
+          "p95": 7076.364,
+          "p99": 7076.364
+        },
+        "producer_prepare": {
+          "avg": 57.452,
+          "med": 47.755,
+          "p95": 75.031,
+          "p99": 214.321
+        },
+        "consumer_upload": {
+          "avg": 5.035,
+          "med": 3.279,
+          "p95": 7.875,
+          "p99": 22.846
+        },
+        "consumer_native_call": {
+          "avg": 106.185,
+          "med": 17.274,
+          "p95": 29.201,
+          "p99": 2187.368
+        },
+        "pipeline_total": {
+          "avg": 116.24,
+          "med": 23.242,
+          "p95": 39.656,
+          "p99": 2353.358
+        }
+      },
+      "hud_uploaded_bytes_total": 137600284,
+      "rects_per_frame_avg": 3.95,
+      "requested_upload_bytes_per_frame_avg": 2293338.066666667,
+      "above_regions_per_frame_avg": 2.0,
+      "above_uploaded_bytes_per_frame_avg": 17465736.0,
+      "above_uploaded_pixels_per_frame_avg": 4366434.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 1.5333404541015625,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 23.0,
+        "med": 13.0,
+        "max": 43.0,
+        "n": 3
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 4.0,
+        "med": 5.9,
+        "max": 6.0,
+        "n": 3
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 3
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 3
+      },
+      "gpu_copy": {
+        "avg": 0.2,
+        "med": 0.0,
+        "max": 0.5,
+        "n": 3
+      },
+      "ram_used_mb": {
+        "avg": 22269.0,
+        "med": 22182.0,
+        "max": 22689.0,
+        "n": 3
+      },
+      "ram_avail_mb": {
+        "avg": 9869.0,
+        "med": 9956.0,
+        "max": 10202.0,
+        "n": 3
+      },
+      "vram_ded_mb": {
+        "avg": 412.0,
+        "med": 410.0,
+        "max": 416.0,
+        "n": 3
+      },
+      "vram_shared_mb": {
+        "avg": 716.3,
+        "med": 521.0,
+        "max": 1107.0,
+        "n": 3
+      }
+    }
+  },
+  {
+    "name": "test_C_1080p_nohud",
+    "ok": true,
+    "wall_s": 10.895,
+    "width": 1920,
+    "height": 1080,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 23.61576489276278,
+      "true_fps": 6.27916337808872,
+      "mux_wall_ms": 6732.0526000112295,
+      "video_render_wall_ms": 2540.6757000018843,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.75,
+          "med": 0.663,
+          "p95": 3.275,
+          "p99": 95.609
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "compose_overlay": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "update_hud": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD texture upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 12.603,
+          "med": 0.25,
+          "p95": 1.103,
+          "p99": 304.257
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 35.381,
+          "med": 10.837,
+          "p95": 18.881,
+          "p99": 628.088
+        },
+        "GPU wait/synchronization": {
+          "avg": 10.283,
+          "med": 10.785,
+          "p95": 18.618,
+          "p99": 20.219
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.505,
+          "med": 0.269,
+          "p95": 1.305,
+          "p99": 2.903
+        },
+        "AMF QueryOutput": {
+          "avg": 0.173,
+          "med": 0.102,
+          "p95": 0.562,
+          "p99": 0.792
+        },
+        "Packet write": {
+          "avg": 0.16,
+          "med": 0.1,
+          "p95": 0.508,
+          "p99": 0.852
+        },
+        "Audio mux": {
+          "avg": 6732.053,
+          "med": 6732.053,
+          "p95": 6732.053,
+          "p99": 6732.053
+        },
+        "producer_prepare": {
+          "avg": 0.019,
+          "med": 0.012,
+          "p95": 0.051,
+          "p99": 0.113
+        },
+        "consumer_upload": {
+          "avg": 0.005,
+          "med": 0.004,
+          "p95": 0.009,
+          "p99": 0.012
+        },
+        "consumer_native_call": {
+          "avg": 37.332,
+          "med": 12.101,
+          "p95": 20.638,
+          "p99": 633.183
+        },
+        "pipeline_total": {
+          "avg": 42.243,
+          "med": 13.098,
+          "p95": 21.342,
+          "p99": 766.089
+        }
+      },
+      "hud_uploaded_bytes_total": 0,
+      "rects_per_frame_avg": 0.0,
+      "requested_upload_bytes_per_frame_avg": 0.0,
+      "above_regions_per_frame_avg": null,
+      "above_uploaded_bytes_per_frame_avg": null,
+      "above_uploaded_pixels_per_frame_avg": null,
+      "above_scanned_pixels_per_frame_avg": null,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 25.0,
+        "med": 25.0,
+        "max": 25.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 6.7,
+        "med": 6.7,
+        "max": 6.7,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 6.4,
+        "med": 6.4,
+        "max": 6.4,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 22439.0,
+        "med": 22439.0,
+        "max": 22439.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 9699.0,
+        "med": 9699.0,
+        "max": 9699.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 414.0,
+        "med": 414.0,
+        "max": 414.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 1091.0,
+        "med": 1091.0,
+        "max": 1091.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "test_D_4k_nohud",
+    "ok": true,
+    "wall_s": 15.085,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 9.912636301633066,
+      "true_fps": 4.595980527016096,
+      "mux_wall_ms": 6628.862199999276,
+      "video_render_wall_ms": 6052.880200004438,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.39,
+          "med": 0.677,
+          "p95": 2.177,
+          "p99": 87.407
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "compose_overlay": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "update_hud": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD texture upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 23.211,
+          "med": 0.228,
+          "p95": 0.633,
+          "p99": 566.506
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 93.981,
+          "med": 17.922,
+          "p95": 51.466,
+          "p99": 1857.006
+        },
+        "GPU wait/synchronization": {
+          "avg": 22.233,
+          "med": 17.71,
+          "p95": 45.842,
+          "p99": 149.274
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.706,
+          "med": 0.358,
+          "p95": 2.712,
+          "p99": 4.141
+        },
+        "AMF QueryOutput": {
+          "avg": 0.174,
+          "med": 0.135,
+          "p95": 0.393,
+          "p99": 0.763
+        },
+        "Packet write": {
+          "avg": 0.182,
+          "med": 0.144,
+          "p95": 0.471,
+          "p99": 0.602
+        },
+        "Audio mux": {
+          "avg": 6628.862,
+          "med": 6628.862,
+          "p95": 6628.862,
+          "p99": 6628.862
+        },
+        "producer_prepare": {
+          "avg": 0.016,
+          "med": 0.013,
+          "p95": 0.046,
+          "p99": 0.055
+        },
+        "consumer_upload": {
+          "avg": 0.005,
+          "med": 0.004,
+          "p95": 0.008,
+          "p99": 0.01
+        },
+        "consumer_native_call": {
+          "avg": 96.245,
+          "med": 20.025,
+          "p95": 53.024,
+          "p99": 1862.269
+        },
+        "pipeline_total": {
+          "avg": 100.792,
+          "med": 21.103,
+          "p95": 147.556,
+          "p99": 1917.436
+        }
+      },
+      "hud_uploaded_bytes_total": 0,
+      "rects_per_frame_avg": 0.0,
+      "requested_upload_bytes_per_frame_avg": 0.0,
+      "above_regions_per_frame_avg": null,
+      "above_uploaded_bytes_per_frame_avg": null,
+      "above_uploaded_pixels_per_frame_avg": null,
+      "above_scanned_pixels_per_frame_avg": null,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 10.0,
+        "med": 14.0,
+        "max": 14.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 4.1,
+        "med": 8.2,
+        "max": 8.2,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 21980.0,
+        "med": 22015.0,
+        "max": 22015.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10158.0,
+        "med": 10193.0,
+        "max": 10193.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 411.0,
+        "med": 412.0,
+        "max": 412.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 686.5,
+        "med": 852.0,
+        "max": 852.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "abl_full_720p",
+    "ok": true,
+    "wall_s": 11.28,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 24.738891990152226,
+      "true_fps": 8.602194031643906,
+      "mux_wall_ms": 6414.764200002537,
+      "video_render_wall_ms": 3637.996399993426,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.265,
+          "med": 0.577,
+          "p95": 1.323,
+          "p99": 27.415
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.053,
+          "med": 0.032,
+          "p95": 0.152,
+          "p99": 0.178
+        },
+        "compose_overlay": {
+          "avg": 5.788,
+          "med": 4.099,
+          "p95": 13.386,
+          "p99": 15.402
+        },
+        "above_compose": {
+          "avg": 12.998,
+          "med": 11.654,
+          "p95": 22.328,
+          "p99": 29.223
+        },
+        "above_bbox_crop": {
+          "avg": 0.07,
+          "med": 0.057,
+          "p95": 0.091,
+          "p99": 0.441
+        },
+        "above_region_to_bytes": {
+          "avg": 0.973,
+          "med": 0.907,
+          "p95": 1.22,
+          "p99": 2.136
+        },
+        "above_region_upload": {
+          "avg": 0.424,
+          "med": 0.393,
+          "p95": 0.538,
+          "p99": 0.948
+        },
+        "above_total": {
+          "avg": 14.041,
+          "med": 12.641,
+          "p95": 23.663,
+          "p99": 30.212
+        },
+        "map_cpu_upload": {
+          "avg": 1.161,
+          "med": 1.101,
+          "p95": 1.439,
+          "p99": 2.849
+        },
+        "HUD dirty extract": {
+          "avg": 0.233,
+          "med": 0.223,
+          "p95": 0.318,
+          "p99": 0.355
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.31,
+          "med": 0.269,
+          "p95": 0.391,
+          "p99": 0.773
+        },
+        "update_hud": {
+          "avg": 0.137,
+          "med": 0.064,
+          "p95": 0.517,
+          "p99": 0.835
+        },
+        "HUD texture upload": {
+          "avg": 0.122,
+          "med": 0.051,
+          "p95": 0.493,
+          "p99": 0.802
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.3,
+          "med": 0.192,
+          "p95": 0.327,
+          "p99": 26.238
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 11.638,
+          "med": 2.168,
+          "p95": 4.841,
+          "p99": 97.936
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.145,
+          "med": 2.725,
+          "p95": 5.792,
+          "p99": 7.147
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.474,
+          "med": 0.27,
+          "p95": 1.227,
+          "p99": 1.746
+        },
+        "AMF QueryOutput": {
+          "avg": 0.182,
+          "med": 0.099,
+          "p95": 0.549,
+          "p99": 0.63
+        },
+        "Packet write": {
+          "avg": 0.158,
+          "med": 0.088,
+          "p95": 0.395,
+          "p99": 0.661
+        },
+        "Audio mux": {
+          "avg": 6414.764,
+          "med": 6414.764,
+          "p95": 6414.764,
+          "p99": 6414.764
+        },
+        "producer_prepare": {
+          "avg": 23.736,
+          "med": 19.08,
+          "p95": 34.62,
+          "p99": 59.846
+        },
+        "consumer_upload": {
+          "avg": 1.048,
+          "med": 0.849,
+          "p95": 1.673,
+          "p99": 3.194
+        },
+        "consumer_native_call": {
+          "avg": 13.831,
+          "med": 4.269,
+          "p95": 9.016,
+          "p99": 106.882
+        },
+        "pipeline_total": {
+          "avg": 18.331,
+          "med": 5.972,
+          "p95": 11.161,
+          "p99": 319.304
+        }
+      },
+      "hud_uploaded_bytes_total": 50496128,
+      "rects_per_frame_avg": 2.977777777777778,
+      "requested_upload_bytes_per_frame_avg": 561068.088888889,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 15.5,
+        "med": 28.0,
+        "max": 28.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 2.6,
+        "med": 5.2,
+        "max": 5.2,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.1,
+        "med": 0.1,
+        "max": 0.1,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 21901.5,
+        "med": 21925.0,
+        "max": 21925.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10236.5,
+        "med": 10260.0,
+        "max": 10260.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 410.0,
+        "med": 410.0,
+        "max": 410.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 521.0,
+        "med": 521.0,
+        "max": 521.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "res_720p_full",
+    "ok": true,
+    "wall_s": 10.24,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 22.23401448466104,
+      "true_fps": 6.438940721701369,
+      "mux_wall_ms": 6332.691799994791,
+      "video_render_wall_ms": 2698.5680000070715,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.417,
+          "med": 0.635,
+          "p95": 2.14,
+          "p99": 91.279
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.046,
+          "med": 0.03,
+          "p95": 0.099,
+          "p99": 0.193
+        },
+        "compose_overlay": {
+          "avg": 4.571,
+          "med": 3.119,
+          "p95": 10.397,
+          "p99": 15.588
+        },
+        "above_compose": {
+          "avg": 14.904,
+          "med": 11.282,
+          "p95": 31.424,
+          "p99": 38.914
+        },
+        "above_bbox_crop": {
+          "avg": 0.074,
+          "med": 0.058,
+          "p95": 0.106,
+          "p99": 0.329
+        },
+        "above_region_to_bytes": {
+          "avg": 1.009,
+          "med": 0.888,
+          "p95": 1.529,
+          "p99": 1.781
+        },
+        "above_region_upload": {
+          "avg": 0.458,
+          "med": 0.387,
+          "p95": 0.728,
+          "p99": 2.05
+        },
+        "above_total": {
+          "avg": 15.987,
+          "med": 12.298,
+          "p95": 32.66,
+          "p99": 40.719
+        },
+        "map_cpu_upload": {
+          "avg": 1.367,
+          "med": 1.087,
+          "p95": 2.407,
+          "p99": 5.763
+        },
+        "HUD dirty extract": {
+          "avg": 0.292,
+          "med": 0.221,
+          "p95": 0.509,
+          "p99": 1.236
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.392,
+          "med": 0.267,
+          "p95": 1.099,
+          "p99": 2.06
+        },
+        "update_hud": {
+          "avg": 0.169,
+          "med": 0.068,
+          "p95": 0.779,
+          "p99": 1.153
+        },
+        "HUD texture upload": {
+          "avg": 0.151,
+          "med": 0.055,
+          "p95": 0.755,
+          "p99": 1.097
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 3.797,
+          "med": 0.206,
+          "p95": 0.724,
+          "p99": 88.919
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 13.361,
+          "med": 2.384,
+          "p95": 5.137,
+          "p99": 265.856
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.387,
+          "med": 3.007,
+          "p95": 5.77,
+          "p99": 6.867
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.541,
+          "med": 0.241,
+          "p95": 1.255,
+          "p99": 4.832
+        },
+        "AMF QueryOutput": {
+          "avg": 0.157,
+          "med": 0.09,
+          "p95": 0.609,
+          "p99": 0.686
+        },
+        "Packet write": {
+          "avg": 0.139,
+          "med": 0.099,
+          "p95": 0.376,
+          "p99": 0.645
+        },
+        "Audio mux": {
+          "avg": 6332.692,
+          "med": 6332.692,
+          "p95": 6332.692,
+          "p99": 6332.692
+        },
+        "producer_prepare": {
+          "avg": 23.908,
+          "med": 17.706,
+          "p95": 51.482,
+          "p99": 56.142
+        },
+        "consumer_upload": {
+          "avg": 1.247,
+          "med": 0.928,
+          "p95": 3.301,
+          "p99": 5.024
+        },
+        "consumer_native_call": {
+          "avg": 15.869,
+          "med": 4.314,
+          "p95": 9.332,
+          "p99": 277.477
+        },
+        "pipeline_total": {
+          "avg": 21.712,
+          "med": 6.521,
+          "p95": 13.753,
+          "p99": 407.537
+        }
+      },
+      "hud_uploaded_bytes_total": 34717568,
+      "rects_per_frame_avg": 2.966666666666667,
+      "requested_upload_bytes_per_frame_avg": 578626.1333333333,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 13.0,
+        "med": 13.0,
+        "max": 13.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 6.1,
+        "med": 6.1,
+        "max": 6.1,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21918.0,
+        "med": 21918.0,
+        "max": 21918.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10220.0,
+        "med": 10220.0,
+        "max": 10220.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 411.0,
+        "med": 411.0,
+        "max": 411.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 915.0,
+        "med": 915.0,
+        "max": 915.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "res_1440p_full",
+    "ok": true,
+    "wall_s": 13.554,
+    "width": 2560,
+    "height": 1440,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 10.953775141930906,
+      "true_fps": 4.917778110478104,
+      "mux_wall_ms": 6374.483000006876,
+      "video_render_wall_ms": 5477.563599997666,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 5.922,
+          "med": 0.605,
+          "p95": 1.579,
+          "p99": 129.436
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.046,
+          "med": 0.036,
+          "p95": 0.073,
+          "p99": 0.19
+        },
+        "compose_overlay": {
+          "avg": 5.708,
+          "med": 4.721,
+          "p95": 12.316,
+          "p99": 15.435
+        },
+        "above_compose": {
+          "avg": 18.15,
+          "med": 15.891,
+          "p95": 31.805,
+          "p99": 41.611
+        },
+        "above_bbox_crop": {
+          "avg": 0.103,
+          "med": 0.094,
+          "p95": 0.133,
+          "p99": 0.214
+        },
+        "above_region_to_bytes": {
+          "avg": 3.433,
+          "med": 3.197,
+          "p95": 4.212,
+          "p99": 6.114
+        },
+        "above_region_upload": {
+          "avg": 1.344,
+          "med": 0.978,
+          "p95": 3.506,
+          "p99": 7.577
+        },
+        "above_total": {
+          "avg": 21.686,
+          "med": 19.392,
+          "p95": 34.867,
+          "p99": 48.469
+        },
+        "map_cpu_upload": {
+          "avg": 1.57,
+          "med": 1.325,
+          "p95": 3.32,
+          "p99": 5.872
+        },
+        "HUD dirty extract": {
+          "avg": 0.554,
+          "med": 0.433,
+          "p95": 0.957,
+          "p99": 2.394
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.813,
+          "med": 0.479,
+          "p95": 2.56,
+          "p99": 6.774
+        },
+        "update_hud": {
+          "avg": 0.612,
+          "med": 0.151,
+          "p95": 0.77,
+          "p99": 10.778
+        },
+        "HUD texture upload": {
+          "avg": 0.593,
+          "med": 0.134,
+          "p95": 0.716,
+          "p99": 10.742
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 11.582,
+          "med": 0.232,
+          "p95": 0.42,
+          "p99": 279.763
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 46.066,
+          "med": 5.329,
+          "p95": 13.169,
+          "p99": 975.141
+        },
+        "GPU wait/synchronization": {
+          "avg": 8.488,
+          "med": 6.153,
+          "p95": 20.081,
+          "p99": 24.049
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.407,
+          "med": 0.326,
+          "p95": 1.131,
+          "p99": 1.718
+        },
+        "AMF QueryOutput": {
+          "avg": 0.166,
+          "med": 0.12,
+          "p95": 0.347,
+          "p99": 0.687
+        },
+        "Packet write": {
+          "avg": 0.161,
+          "med": 0.122,
+          "p95": 0.378,
+          "p99": 0.595
+        },
+        "Audio mux": {
+          "avg": 6374.483,
+          "med": 6374.483,
+          "p95": 6374.483,
+          "p99": 6374.483
+        },
+        "producer_prepare": {
+          "avg": 33.394,
+          "med": 28.822,
+          "p95": 63.383,
+          "p99": 84.594
+        },
+        "consumer_upload": {
+          "avg": 2.933,
+          "med": 1.937,
+          "p95": 5.317,
+          "p99": 19.451
+        },
+        "consumer_native_call": {
+          "avg": 50.03,
+          "med": 9.433,
+          "p95": 23.785,
+          "p99": 979.391
+        },
+        "pipeline_total": {
+          "avg": 59.079,
+          "med": 13.115,
+          "p95": 29.423,
+          "p99": 1179.148
+        }
+      },
+      "hud_uploaded_bytes_total": 81088740,
+      "rects_per_frame_avg": 3.95,
+      "requested_upload_bytes_per_frame_avg": 1351479.0,
+      "above_regions_per_frame_avg": 2.0,
+      "above_uploaded_bytes_per_frame_avg": 7826328.0,
+      "above_uploaded_pixels_per_frame_avg": 1956582.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.6793365478515625,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 8.5,
+        "med": 11.0,
+        "max": 11.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 3.0,
+        "med": 6.0,
+        "max": 6.0,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 22109.5,
+        "med": 22144.0,
+        "max": 22144.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10028.5,
+        "med": 10063.0,
+        "max": 10063.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 401.5,
+        "med": 402.0,
+        "max": 402.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 678.5,
+        "med": 843.0,
+        "max": 843.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "soak_720p_600f",
+    "ok": true,
+    "wall_s": 26.459,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 600,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 32.52710423963918,
+      "true_fps": 23.4005062676082,
+      "mux_wall_ms": 6877.391100002569,
+      "video_render_wall_ms": 18446.154799996293,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 1.133,
+          "med": 0.608,
+          "p95": 1.278,
+          "p99": 3.247
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.052,
+          "med": 0.031,
+          "p95": 0.15,
+          "p99": 0.186
+        },
+        "compose_overlay": {
+          "avg": 4.898,
+          "med": 3.339,
+          "p95": 12.31,
+          "p99": 15.074
+        },
+        "above_compose": {
+          "avg": 12.549,
+          "med": 11.139,
+          "p95": 24.829,
+          "p99": 28.83
+        },
+        "above_bbox_crop": {
+          "avg": 0.064,
+          "med": 0.057,
+          "p95": 0.081,
+          "p99": 0.204
+        },
+        "above_region_to_bytes": {
+          "avg": 0.961,
+          "med": 0.901,
+          "p95": 1.283,
+          "p99": 1.69
+        },
+        "above_region_upload": {
+          "avg": 0.374,
+          "med": 0.365,
+          "p95": 0.564,
+          "p99": 0.757
+        },
+        "above_total": {
+          "avg": 13.574,
+          "med": 12.146,
+          "p95": 25.891,
+          "p99": 30.522
+        },
+        "map_cpu_upload": {
+          "avg": 2.659,
+          "med": 1.11,
+          "p95": 7.776,
+          "p99": 17.646
+        },
+        "HUD dirty extract": {
+          "avg": 0.26,
+          "med": 0.231,
+          "p95": 0.394,
+          "p99": 0.649
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.315,
+          "med": 0.276,
+          "p95": 0.457,
+          "p99": 1.11
+        },
+        "update_hud": {
+          "avg": 0.122,
+          "med": 0.062,
+          "p95": 0.447,
+          "p99": 0.81
+        },
+        "HUD texture upload": {
+          "avg": 0.108,
+          "med": 0.05,
+          "p95": 0.421,
+          "p99": 0.771
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 0.527,
+          "med": 0.195,
+          "p95": 0.352,
+          "p99": 1.021
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 3.77,
+          "med": 2.111,
+          "p95": 5.324,
+          "p99": 7.34
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.075,
+          "med": 2.577,
+          "p95": 6.249,
+          "p99": 7.774
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.39,
+          "med": 0.246,
+          "p95": 1.212,
+          "p99": 1.494
+        },
+        "AMF QueryOutput": {
+          "avg": 0.165,
+          "med": 0.093,
+          "p95": 0.55,
+          "p99": 0.68
+        },
+        "Packet write": {
+          "avg": 0.141,
+          "med": 0.088,
+          "p95": 0.37,
+          "p99": 0.656
+        },
+        "Audio mux": {
+          "avg": 6877.391,
+          "med": 6877.391,
+          "p95": 6877.391,
+          "p99": 6877.391
+        },
+        "producer_prepare": {
+          "avg": 22.433,
+          "med": 19.631,
+          "p95": 36.598,
+          "p99": 52.856
+        },
+        "consumer_upload": {
+          "avg": 1.029,
+          "med": 0.832,
+          "p95": 1.79,
+          "p99": 3.976
+        },
+        "consumer_native_call": {
+          "avg": 5.81,
+          "med": 3.99,
+          "p95": 8.87,
+          "p99": 10.037
+        },
+        "pipeline_total": {
+          "avg": 8.159,
+          "med": 5.861,
+          "p95": 11.323,
+          "p99": 13.075
+        }
+      },
+      "hud_uploaded_bytes_total": 318659072,
+      "rects_per_frame_avg": 2.9966666666666666,
+      "requested_upload_bytes_per_frame_avg": 531098.4533333334,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 600,
+        "processed": 600,
+        "amf": 600,
+        "muxed": 600
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 21.7,
+        "med": 19.0,
+        "max": 29.0,
+        "n": 3
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 10.7,
+        "med": 15.8,
+        "max": 16.3,
+        "n": 3
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 3
+      },
+      "gpu_encode": {
+        "avg": 37.8,
+        "med": 55.4,
+        "max": 57.9,
+        "n": 3
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 3
+      },
+      "ram_used_mb": {
+        "avg": 22168.3,
+        "med": 22278.0,
+        "max": 22279.0,
+        "n": 3
+      },
+      "ram_avail_mb": {
+        "avg": 9969.7,
+        "med": 9860.0,
+        "max": 10190.0,
+        "n": 3
+      },
+      "vram_ded_mb": {
+        "avg": 416.3,
+        "med": 424.0,
+        "max": 424.0,
+        "n": 3
+      },
+      "vram_shared_mb": {
+        "avg": 738.0,
+        "med": 850.0,
+        "max": 850.0,
+        "n": 3
+      }
+    }
+  },
+  {
+    "name": "alloc_tracemalloc_720p",
+    "ok": true,
+    "wall_s": 10.263,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 60,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC",
+      "AMD_AUDIT_ALLOCS": "1"
+    },
+    "profile": {
+      "render_fps": 20.702892887650933,
+      "true_fps": 6.374874697858959,
+      "mux_wall_ms": 6232.735700003104,
+      "video_render_wall_ms": 2898.145700004534,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.953,
+          "med": 0.629,
+          "p95": 1.864,
+          "p99": 104.745
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.058,
+          "med": 0.035,
+          "p95": 0.146,
+          "p99": 0.17
+        },
+        "compose_overlay": {
+          "avg": 5.188,
+          "med": 3.655,
+          "p95": 10.882,
+          "p99": 12.68
+        },
+        "above_compose": {
+          "avg": 14.487,
+          "med": 12.238,
+          "p95": 26.014,
+          "p99": 28.404
+        },
+        "above_bbox_crop": {
+          "avg": 0.076,
+          "med": 0.06,
+          "p95": 0.131,
+          "p99": 0.321
+        },
+        "above_region_to_bytes": {
+          "avg": 1.035,
+          "med": 0.981,
+          "p95": 1.388,
+          "p99": 1.822
+        },
+        "above_region_upload": {
+          "avg": 0.523,
+          "med": 0.415,
+          "p95": 0.894,
+          "p99": 2.92
+        },
+        "above_total": {
+          "avg": 15.598,
+          "med": 13.357,
+          "p95": 27.543,
+          "p99": 29.593
+        },
+        "map_cpu_upload": {
+          "avg": 1.314,
+          "med": 1.088,
+          "p95": 1.818,
+          "p99": 4.595
+        },
+        "HUD dirty extract": {
+          "avg": 0.321,
+          "med": 0.243,
+          "p95": 0.665,
+          "p99": 1.379
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.426,
+          "med": 0.293,
+          "p95": 1.631,
+          "p99": 2.078
+        },
+        "update_hud": {
+          "avg": 0.167,
+          "med": 0.066,
+          "p95": 0.581,
+          "p99": 1.427
+        },
+        "HUD texture upload": {
+          "avg": 0.146,
+          "med": 0.055,
+          "p95": 0.545,
+          "p99": 1.361
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 3.502,
+          "med": 0.211,
+          "p95": 0.964,
+          "p99": 81.267
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 13.972,
+          "med": 2.325,
+          "p95": 6.195,
+          "p99": 278.387
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.516,
+          "med": 3.072,
+          "p95": 6.419,
+          "p99": 9.036
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.56,
+          "med": 0.307,
+          "p95": 1.211,
+          "p99": 3.505
+        },
+        "AMF QueryOutput": {
+          "avg": 0.208,
+          "med": 0.12,
+          "p95": 0.557,
+          "p99": 0.7
+        },
+        "Packet write": {
+          "avg": 0.189,
+          "med": 0.101,
+          "p95": 0.644,
+          "p99": 0.943
+        },
+        "Audio mux": {
+          "avg": 6232.736,
+          "med": 6232.736,
+          "p95": 6232.736,
+          "p99": 6232.736
+        },
+        "producer_prepare": {
+          "avg": 24.794,
+          "med": 21.833,
+          "p95": 39.086,
+          "p99": 51.28
+        },
+        "consumer_upload": {
+          "avg": 1.411,
+          "med": 0.886,
+          "p95": 3.842,
+          "p99": 6.161
+        },
+        "consumer_native_call": {
+          "avg": 16.734,
+          "med": 5.02,
+          "p95": 9.021,
+          "p99": 292.234
+        },
+        "pipeline_total": {
+          "avg": 23.535,
+          "med": 7.067,
+          "p95": 12.894,
+          "p99": 445.534
+        }
+      },
+      "hud_uploaded_bytes_total": 34717568,
+      "rects_per_frame_avg": 2.966666666666667,
+      "requested_upload_bytes_per_frame_avg": 578626.1333333333,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 60,
+        "processed": 60,
+        "amf": 60,
+        "muxed": 60
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true,
+      "audit_allocations": {
+        "frames": 60,
+        "producer_alloc_blocks": {
+          "count": 60,
+          "avg": 498.0833333333333,
+          "median": 98.0,
+          "p95": 107.0,
+          "p99": 9926.399999999918
+        },
+        "producer_alloc_traced_bytes": {
+          "count": 60,
+          "avg": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "consumer_alloc_blocks": {
+          "count": 60,
+          "avg": 27.75,
+          "median": 27.0,
+          "p95": 27.099999999999994,
+          "p99": 61.26999999999984
+        },
+        "consumer_alloc_traced_bytes": {
+          "count": 60,
+          "avg": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        }
+      }
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 44.0,
+        "med": 44.0,
+        "max": 44.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21844.0,
+        "med": 21844.0,
+        "max": 21844.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10294.0,
+        "med": 10294.0,
+        "max": 10294.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 527.0,
+        "med": 527.0,
+        "max": 527.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "abl_none_720p",
+    "ok": true,
+    "wall_s": 9.705,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 40.787590239708074,
+      "true_fps": 10.256469749779528,
+      "mux_wall_ms": 6345.650000002934,
+      "video_render_wall_ms": 2206.5535000001546,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.753,
+          "med": 0.745,
+          "p95": 3.399,
+          "p99": 31.177
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "compose_overlay": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "update_hud": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD texture upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.776,
+          "med": 0.23,
+          "p95": 0.797,
+          "p99": 52.321
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 18.746,
+          "med": 8.298,
+          "p95": 11.125,
+          "p99": 119.115
+        },
+        "GPU wait/synchronization": {
+          "avg": 8.01,
+          "med": 8.355,
+          "p95": 10.887,
+          "p99": 11.909
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.44,
+          "med": 0.289,
+          "p95": 1.206,
+          "p99": 2.071
+        },
+        "AMF QueryOutput": {
+          "avg": 0.159,
+          "med": 0.095,
+          "p95": 0.542,
+          "p99": 0.646
+        },
+        "Packet write": {
+          "avg": 0.143,
+          "med": 0.099,
+          "p95": 0.354,
+          "p99": 0.628
+        },
+        "Audio mux": {
+          "avg": 6345.65,
+          "med": 6345.65,
+          "p95": 6345.65,
+          "p99": 6345.65
+        },
+        "producer_prepare": {
+          "avg": 0.019,
+          "med": 0.013,
+          "p95": 0.052,
+          "p99": 0.065
+        },
+        "consumer_upload": {
+          "avg": 0.006,
+          "med": 0.005,
+          "p95": 0.012,
+          "p99": 0.02
+        },
+        "consumer_native_call": {
+          "avg": 20.491,
+          "med": 9.479,
+          "p95": 14.033,
+          "p99": 130.346
+        },
+        "pipeline_total": {
+          "avg": 24.416,
+          "med": 10.426,
+          "p95": 14.906,
+          "p99": 349.657
+        }
+      },
+      "hud_uploaded_bytes_total": 0,
+      "rects_per_frame_avg": 0.0,
+      "requested_upload_bytes_per_frame_avg": 0.0,
+      "above_regions_per_frame_avg": null,
+      "above_uploaded_bytes_per_frame_avg": null,
+      "above_uploaded_pixels_per_frame_avg": null,
+      "above_scanned_pixels_per_frame_avg": null,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 25.0,
+        "med": 31.0,
+        "max": 31.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 3.2,
+        "med": 6.5,
+        "max": 6.5,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.2,
+        "med": 0.4,
+        "max": 0.4,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 21993.5,
+        "med": 22068.0,
+        "max": 22068.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10144.5,
+        "med": 10219.0,
+        "max": 10219.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 523.0,
+        "med": 523.0,
+        "max": 523.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "abl_text_720p",
+    "ok": true,
+    "wall_s": 9.618,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 40.523799830268494,
+      "true_fps": 10.33933383465848,
+      "mux_wall_ms": 6177.813199989032,
+      "video_render_wall_ms": 2220.9170999994967,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.446,
+          "med": 0.697,
+          "p95": 1.626,
+          "p99": 27.785
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.037,
+          "med": 0.02,
+          "p95": 0.087,
+          "p99": 0.11
+        },
+        "compose_overlay": {
+          "avg": 3.83,
+          "med": 2.467,
+          "p95": 10.534,
+          "p99": 12.842
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.006,
+          "med": 0.006,
+          "p95": 0.012,
+          "p99": 0.014
+        },
+        "HUD dirty extract": {
+          "avg": 0.165,
+          "med": 0.143,
+          "p95": 0.331,
+          "p99": 0.395
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.265,
+          "med": 0.194,
+          "p95": 0.492,
+          "p99": 0.896
+        },
+        "update_hud": {
+          "avg": 0.224,
+          "med": 0.178,
+          "p95": 0.368,
+          "p99": 0.899
+        },
+        "HUD texture upload": {
+          "avg": 0.197,
+          "med": 0.153,
+          "p95": 0.339,
+          "p99": 0.859
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.583,
+          "med": 0.205,
+          "p95": 0.366,
+          "p99": 51.783
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 14.585,
+          "med": 5.02,
+          "p95": 8.859,
+          "p99": 107.935
+        },
+        "GPU wait/synchronization": {
+          "avg": 5.012,
+          "med": 5.146,
+          "p95": 8.637,
+          "p99": 10.796
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.525,
+          "med": 0.279,
+          "p95": 1.093,
+          "p99": 3.766
+        },
+        "AMF QueryOutput": {
+          "avg": 0.205,
+          "med": 0.111,
+          "p95": 0.56,
+          "p99": 0.631
+        },
+        "Packet write": {
+          "avg": 0.177,
+          "med": 0.103,
+          "p95": 0.419,
+          "p99": 0.777
+        },
+        "Audio mux": {
+          "avg": 6177.813,
+          "med": 6177.813,
+          "p95": 6177.813,
+          "p99": 6177.813
+        },
+        "producer_prepare": {
+          "avg": 4.825,
+          "med": 2.775,
+          "p95": 11.343,
+          "p99": 19.892
+        },
+        "consumer_upload": {
+          "avg": 0.406,
+          "med": 0.354,
+          "p95": 0.634,
+          "p99": 1.151
+        },
+        "consumer_native_call": {
+          "avg": 16.392,
+          "med": 6.657,
+          "p95": 10.544,
+          "p99": 121.423
+        },
+        "pipeline_total": {
+          "avg": 20.446,
+          "med": 7.858,
+          "p95": 12.258,
+          "p99": 334.945
+        }
+      },
+      "hud_uploaded_bytes_total": 22851304,
+      "rects_per_frame_avg": 1.988888888888889,
+      "requested_upload_bytes_per_frame_avg": 253903.3777777778,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 10.0,
+        "med": 10.0,
+        "max": 10.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 5.7,
+        "med": 5.7,
+        "max": 5.7,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 1.4,
+        "med": 1.4,
+        "max": 1.4,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21851.0,
+        "med": 21851.0,
+        "max": 21851.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10287.0,
+        "med": 10287.0,
+        "max": 10287.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 523.0,
+        "med": 523.0,
+        "max": 523.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "abl_gauge_720p",
+    "ok": true,
+    "wall_s": 9.688,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 42.31212043390887,
+      "true_fps": 10.296093336153026,
+      "mux_wall_ms": 6340.357199995196,
+      "video_render_wall_ms": 2127.050099996268,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.744,
+          "med": 0.835,
+          "p95": 1.608,
+          "p99": 40.517
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.044,
+          "med": 0.025,
+          "p95": 0.102,
+          "p99": 0.133
+        },
+        "compose_overlay": {
+          "avg": 3.16,
+          "med": 1.851,
+          "p95": 7.943,
+          "p99": 9.119
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.009,
+          "med": 0.008,
+          "p95": 0.013,
+          "p99": 0.02
+        },
+        "HUD dirty extract": {
+          "avg": 0.121,
+          "med": 0.1,
+          "p95": 0.218,
+          "p99": 0.308
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.185,
+          "med": 0.127,
+          "p95": 0.274,
+          "p99": 0.778
+        },
+        "update_hud": {
+          "avg": 0.173,
+          "med": 0.058,
+          "p95": 0.581,
+          "p99": 0.914
+        },
+        "HUD texture upload": {
+          "avg": 0.152,
+          "med": 0.034,
+          "p95": 0.551,
+          "p99": 0.883
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 3.509,
+          "med": 0.245,
+          "p95": 0.835,
+          "p99": 38.491
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 12.414,
+          "med": 4.805,
+          "p95": 9.13,
+          "p99": 85.118
+        },
+        "GPU wait/synchronization": {
+          "avg": 4.781,
+          "med": 4.947,
+          "p95": 8.879,
+          "p99": 9.797
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.486,
+          "med": 0.287,
+          "p95": 1.24,
+          "p99": 2.357
+        },
+        "AMF QueryOutput": {
+          "avg": 0.194,
+          "med": 0.103,
+          "p95": 0.544,
+          "p99": 0.753
+        },
+        "Packet write": {
+          "avg": 0.177,
+          "med": 0.119,
+          "p95": 0.412,
+          "p99": 0.683
+        },
+        "Audio mux": {
+          "avg": 6340.357,
+          "med": 6340.357,
+          "p95": 6340.357,
+          "p99": 6340.357
+        },
+        "producer_prepare": {
+          "avg": 3.806,
+          "med": 2.474,
+          "p95": 9.072,
+          "p99": 10.205
+        },
+        "consumer_upload": {
+          "avg": 0.628,
+          "med": 0.538,
+          "p95": 0.965,
+          "p99": 1.743
+        },
+        "consumer_native_call": {
+          "avg": 14.246,
+          "med": 6.543,
+          "p95": 11.203,
+          "p99": 94.599
+        },
+        "pipeline_total": {
+          "avg": 19.836,
+          "med": 8.268,
+          "p95": 12.788,
+          "p99": 406.141
+        }
+      },
+      "hud_uploaded_bytes_total": 18647300,
+      "rects_per_frame_avg": 1.0,
+      "requested_upload_bytes_per_frame_avg": 207192.22222222222,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 13.0,
+        "med": 13.0,
+        "max": 13.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 5.9,
+        "med": 5.9,
+        "max": 5.9,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21798.0,
+        "med": 21798.0,
+        "max": 21798.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10340.0,
+        "med": 10340.0,
+        "max": 10340.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 402.0,
+        "med": 402.0,
+        "max": 402.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 858.0,
+        "med": 858.0,
+        "max": 858.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "abl_chart_720p",
+    "ok": true,
+    "wall_s": 9.975,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 38.368247870495345,
+      "true_fps": 10.102162949428369,
+      "mux_wall_ms": 6298.629099997925,
+      "video_render_wall_ms": 2345.6895999988774,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.401,
+          "med": 0.675,
+          "p95": 1.327,
+          "p99": 28.803
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.039,
+          "med": 0.023,
+          "p95": 0.118,
+          "p99": 0.167
+        },
+        "compose_overlay": {
+          "avg": 7.83,
+          "med": 5.486,
+          "p95": 16.112,
+          "p99": 17.971
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.005,
+          "med": 0.005,
+          "p95": 0.008,
+          "p99": 0.01
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.003
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.043,
+          "med": 0.008,
+          "p95": 0.014,
+          "p99": 0.37
+        },
+        "update_hud": {
+          "avg": 0.022,
+          "med": 0.011,
+          "p95": 0.021,
+          "p99": 0.161
+        },
+        "HUD texture upload": {
+          "avg": 0.009,
+          "med": 0.0,
+          "p95": 0.001,
+          "p99": 0.089
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.841,
+          "med": 0.193,
+          "p95": 0.74,
+          "p99": 51.464
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 12.611,
+          "med": 2.732,
+          "p95": 7.832,
+          "p99": 104.31
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.364,
+          "med": 2.858,
+          "p95": 7.178,
+          "p99": 9.6
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.443,
+          "med": 0.225,
+          "p95": 1.208,
+          "p99": 2.959
+        },
+        "AMF QueryOutput": {
+          "avg": 0.153,
+          "med": 0.082,
+          "p95": 0.505,
+          "p99": 0.589
+        },
+        "Packet write": {
+          "avg": 0.13,
+          "med": 0.075,
+          "p95": 0.344,
+          "p99": 0.681
+        },
+        "Audio mux": {
+          "avg": 6298.629,
+          "med": 6298.629,
+          "p95": 6298.629,
+          "p99": 6298.629
+        },
+        "producer_prepare": {
+          "avg": 8.334,
+          "med": 5.606,
+          "p95": 17.108,
+          "p99": 21.18
+        },
+        "consumer_upload": {
+          "avg": 0.452,
+          "med": 0.27,
+          "p95": 0.641,
+          "p99": 3.951
+        },
+        "consumer_native_call": {
+          "avg": 14.045,
+          "med": 3.933,
+          "p95": 9.544,
+          "p99": 113.005
+        },
+        "pipeline_total": {
+          "avg": 18.065,
+          "med": 5.174,
+          "p95": 11.249,
+          "p99": 331.941
+        }
+      },
+      "hud_uploaded_bytes_total": 3686400,
+      "rects_per_frame_avg": 0.011111111111111112,
+      "requested_upload_bytes_per_frame_avg": 40960.0,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 23.5,
+        "med": 34.0,
+        "max": 34.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 2.7,
+        "med": 5.4,
+        "max": 5.4,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 21810.5,
+        "med": 21845.0,
+        "max": 21845.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10327.5,
+        "med": 10362.0,
+        "max": 10362.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 523.0,
+        "med": 523.0,
+        "max": 523.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "abl_map_720p",
+    "ok": true,
+    "wall_s": 9.506,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 41.524364974655285,
+      "true_fps": 10.40723234192491,
+      "mux_wall_ms": 6165.684600011446,
+      "video_render_wall_ms": 2167.4022000079276,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.615,
+          "med": 0.795,
+          "p95": 1.692,
+          "p99": 29.035
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.044,
+          "med": 0.026,
+          "p95": 0.101,
+          "p99": 0.122
+        },
+        "compose_overlay": {
+          "avg": 0.096,
+          "med": 0.053,
+          "p95": 0.223,
+          "p99": 0.281
+        },
+        "above_compose": {
+          "avg": 0.06,
+          "med": 0.027,
+          "p95": 0.134,
+          "p99": 0.258
+        },
+        "above_bbox_crop": {
+          "avg": 0.005,
+          "med": 0.003,
+          "p95": 0.013,
+          "p99": 0.015
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.065,
+          "med": 0.03,
+          "p95": 0.146,
+          "p99": 0.272
+        },
+        "map_cpu_upload": {
+          "avg": 2.511,
+          "med": 1.541,
+          "p95": 6.041,
+          "p99": 6.247
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.001,
+          "p99": 0.001
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.061,
+          "med": 0.014,
+          "p95": 0.025,
+          "p99": 0.473
+        },
+        "update_hud": {
+          "avg": 0.028,
+          "med": 0.017,
+          "p95": 0.03,
+          "p99": 0.146
+        },
+        "HUD texture upload": {
+          "avg": 0.012,
+          "med": 0.001,
+          "p95": 0.001,
+          "p99": 0.112
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.584,
+          "med": 0.264,
+          "p95": 0.348,
+          "p99": 49.486
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 15.091,
+          "med": 6.438,
+          "p95": 10.931,
+          "p99": 102.79
+        },
+        "GPU wait/synchronization": {
+          "avg": 5.854,
+          "med": 6.367,
+          "p95": 10.717,
+          "p99": 12.369
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.565,
+          "med": 0.32,
+          "p95": 1.109,
+          "p99": 2.006
+        },
+        "AMF QueryOutput": {
+          "avg": 0.211,
+          "med": 0.122,
+          "p95": 0.49,
+          "p99": 0.537
+        },
+        "Packet write": {
+          "avg": 0.195,
+          "med": 0.104,
+          "p95": 0.648,
+          "p99": 0.735
+        },
+        "Audio mux": {
+          "avg": 6165.685,
+          "med": 6165.685,
+          "p95": 6165.685,
+          "p99": 6165.685
+        },
+        "producer_prepare": {
+          "avg": 3.927,
+          "med": 1.76,
+          "p95": 6.868,
+          "p99": 17.541
+        },
+        "consumer_upload": {
+          "avg": 0.375,
+          "med": 0.324,
+          "p95": 0.669,
+          "p99": 1.646
+        },
+        "consumer_native_call": {
+          "avg": 16.937,
+          "med": 8.094,
+          "p95": 12.999,
+          "p99": 117.351
+        },
+        "pipeline_total": {
+          "avg": 21.162,
+          "med": 9.239,
+          "p95": 14.253,
+          "p99": 333.904
+        }
+      },
+      "hud_uploaded_bytes_total": 3686400,
+      "rects_per_frame_avg": 0.011111111111111112,
+      "requested_upload_bytes_per_frame_avg": 40960.0,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 18.0,
+        "med": 18.0,
+        "max": 18.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 5.8,
+        "med": 5.8,
+        "max": 5.8,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.2,
+        "med": 0.2,
+        "max": 0.2,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 22138.0,
+        "med": 22138.0,
+        "max": 22138.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10000.0,
+        "med": 10000.0,
+        "max": 10000.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 421.0,
+        "med": 421.0,
+        "max": 421.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 527.0,
+        "med": 527.0,
+        "max": 527.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "abl_gauge_chart_720p",
+    "ok": true,
+    "wall_s": 11.163,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 32.68115901762311,
+      "true_fps": 8.948538654421826,
+      "mux_wall_ms": 7038.393800001359,
+      "video_render_wall_ms": 2753.8803000061307,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.03,
+          "med": 0.599,
+          "p95": 1.331,
+          "p99": 25.781
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.063,
+          "med": 0.032,
+          "p95": 0.156,
+          "p99": 0.218
+        },
+        "compose_overlay": {
+          "avg": 12.1,
+          "med": 11.8,
+          "p95": 19.884,
+          "p99": 20.745
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.005,
+          "med": 0.005,
+          "p95": 0.007,
+          "p99": 0.009
+        },
+        "HUD dirty extract": {
+          "avg": 1.7,
+          "med": 1.615,
+          "p95": 2.147,
+          "p99": 2.799
+        },
+        "PIL/buffer preparation": {
+          "avg": 1.764,
+          "med": 1.664,
+          "p95": 2.222,
+          "p99": 3.255
+        },
+        "update_hud": {
+          "avg": 0.535,
+          "med": 0.403,
+          "p95": 1.095,
+          "p99": 2.11
+        },
+        "HUD texture upload": {
+          "avg": 0.5,
+          "med": 0.375,
+          "p95": 0.988,
+          "p99": 2.058
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.312,
+          "med": 0.18,
+          "p95": 0.9,
+          "p99": 28.853
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 9.552,
+          "med": 1.997,
+          "p95": 6.431,
+          "p99": 79.02
+        },
+        "GPU wait/synchronization": {
+          "avg": 2.984,
+          "med": 2.373,
+          "p95": 5.627,
+          "p99": 7.735
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.547,
+          "med": 0.275,
+          "p95": 1.36,
+          "p99": 2.063
+        },
+        "AMF QueryOutput": {
+          "avg": 0.223,
+          "med": 0.088,
+          "p95": 0.565,
+          "p99": 0.664
+        },
+        "Packet write": {
+          "avg": 0.195,
+          "med": 0.116,
+          "p95": 0.508,
+          "p99": 0.763
+        },
+        "Audio mux": {
+          "avg": 7038.394,
+          "med": 7038.394,
+          "p95": 7038.394,
+          "p99": 7038.394
+        },
+        "producer_prepare": {
+          "avg": 14.314,
+          "med": 13.679,
+          "p95": 21.822,
+          "p99": 25.176
+        },
+        "consumer_upload": {
+          "avg": 1.13,
+          "med": 0.941,
+          "p95": 2.606,
+          "p99": 3.582
+        },
+        "consumer_native_call": {
+          "avg": 11.918,
+          "med": 4.517,
+          "p95": 9.163,
+          "p99": 87.934
+        },
+        "pipeline_total": {
+          "avg": 16.31,
+          "med": 6.471,
+          "p95": 11.293,
+          "p99": 279.908
+        }
+      },
+      "hud_uploaded_bytes_total": 221756336,
+      "rects_per_frame_avg": 1.0,
+      "requested_upload_bytes_per_frame_avg": 2463959.288888889,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 31.0,
+        "med": 31.0,
+        "max": 31.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 5.9,
+        "med": 5.9,
+        "max": 5.9,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 22037.0,
+        "med": 22037.0,
+        "max": 22037.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10101.0,
+        "med": 10101.0,
+        "max": 10101.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 527.0,
+        "med": 527.0,
+        "max": 527.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "abl_map_gauge_chart_720p",
+    "ok": true,
+    "wall_s": 10.832,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 29.269465365200254,
+      "true_fps": 9.01795492861266,
+      "mux_wall_ms": 6640.881100000115,
+      "video_render_wall_ms": 3074.8768000048585,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.595,
+          "med": 0.596,
+          "p95": 1.883,
+          "p99": 31.863
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.047,
+          "med": 0.03,
+          "p95": 0.131,
+          "p99": 0.14
+        },
+        "compose_overlay": {
+          "avg": 0.087,
+          "med": 0.046,
+          "p95": 0.238,
+          "p99": 0.328
+        },
+        "above_compose": {
+          "avg": 11.259,
+          "med": 8.463,
+          "p95": 20.264,
+          "p99": 21.247
+        },
+        "above_bbox_crop": {
+          "avg": 0.037,
+          "med": 0.03,
+          "p95": 0.059,
+          "p99": 0.216
+        },
+        "above_region_to_bytes": {
+          "avg": 0.817,
+          "med": 0.766,
+          "p95": 1.11,
+          "p99": 1.644
+        },
+        "above_region_upload": {
+          "avg": 0.411,
+          "med": 0.313,
+          "p95": 0.598,
+          "p99": 2.046
+        },
+        "above_total": {
+          "avg": 12.113,
+          "med": 9.283,
+          "p95": 21.15,
+          "p99": 22.249
+        },
+        "map_cpu_upload": {
+          "avg": 1.358,
+          "med": 1.091,
+          "p95": 2.488,
+          "p99": 7.137
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.001,
+          "p99": 0.002
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.043,
+          "med": 0.011,
+          "p95": 0.025,
+          "p99": 0.358
+        },
+        "update_hud": {
+          "avg": 0.025,
+          "med": 0.01,
+          "p95": 0.032,
+          "p99": 0.163
+        },
+        "HUD texture upload": {
+          "avg": 0.013,
+          "med": 0.001,
+          "p95": 0.002,
+          "p99": 0.123
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 4.921,
+          "med": 0.218,
+          "p95": 0.589,
+          "p99": 51.755
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 12.796,
+          "med": 2.561,
+          "p95": 7.206,
+          "p99": 107.315
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.577,
+          "med": 3.015,
+          "p95": 7.266,
+          "p99": 9.302
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.577,
+          "med": 0.283,
+          "p95": 1.422,
+          "p99": 3.568
+        },
+        "AMF QueryOutput": {
+          "avg": 0.197,
+          "med": 0.098,
+          "p95": 0.643,
+          "p99": 0.7
+        },
+        "Packet write": {
+          "avg": 0.176,
+          "med": 0.094,
+          "p95": 0.518,
+          "p99": 0.679
+        },
+        "Audio mux": {
+          "avg": 6640.881,
+          "med": 6640.881,
+          "p95": 6640.881,
+          "p99": 6640.881
+        },
+        "producer_prepare": {
+          "avg": 14.808,
+          "med": 11.475,
+          "p95": 24.174,
+          "p99": 27.537
+        },
+        "consumer_upload": {
+          "avg": 0.748,
+          "med": 0.552,
+          "p95": 1.615,
+          "p99": 2.92
+        },
+        "consumer_native_call": {
+          "avg": 15.038,
+          "med": 4.366,
+          "p95": 10.406,
+          "p99": 118.547
+        },
+        "pipeline_total": {
+          "avg": 19.578,
+          "med": 5.976,
+          "p95": 12.031,
+          "p99": 352.691
+        }
+      },
+      "hud_uploaded_bytes_total": 3686400,
+      "rects_per_frame_avg": 0.011111111111111112,
+      "requested_upload_bytes_per_frame_avg": 40960.0,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 1819232.0,
+      "above_uploaded_pixels_per_frame_avg": 454808.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 31.5,
+        "med": 33.0,
+        "max": 33.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 2.8,
+        "med": 5.6,
+        "max": 5.6,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 2.5,
+        "med": 5.0,
+        "max": 5.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 22145.5,
+        "med": 22391.0,
+        "max": 22391.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 9992.5,
+        "med": 10238.0,
+        "max": 10238.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 411.0,
+        "med": 421.0,
+        "max": 421.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 694.5,
+        "med": 862.0,
+        "max": 862.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "map_cpu_reference_720p",
+    "ok": true,
+    "wall_s": 11.781,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "CPU_REFERENCE",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 23.197114464541702,
+      "true_fps": 8.229266260792677,
+      "mux_wall_ms": 6566.387099999702,
+      "video_render_wall_ms": 3879.792899999302,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 4.048,
+          "med": 0.639,
+          "p95": 1.469,
+          "p99": 37.917
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.057,
+          "med": 0.033,
+          "p95": 0.142,
+          "p99": 0.162
+        },
+        "compose_overlay": {
+          "avg": 22.982,
+          "med": 19.474,
+          "p95": 35.476,
+          "p99": 56.451
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD dirty extract": {
+          "avg": 2.691,
+          "med": 2.493,
+          "p95": 3.373,
+          "p99": 5.13
+        },
+        "PIL/buffer preparation": {
+          "avg": 2.916,
+          "med": 2.687,
+          "p95": 3.859,
+          "p99": 6.355
+        },
+        "update_hud": {
+          "avg": 0.655,
+          "med": 0.592,
+          "p95": 0.862,
+          "p99": 1.887
+        },
+        "HUD texture upload": {
+          "avg": 0.6,
+          "med": 0.55,
+          "p95": 0.768,
+          "p99": 1.782
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.368,
+          "med": 0.17,
+          "p95": 0.33,
+          "p99": 30.18
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 10.162,
+          "med": 2.135,
+          "p95": 4.205,
+          "p99": 83.944
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.255,
+          "med": 2.747,
+          "p95": 5.218,
+          "p99": 6.891
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.592,
+          "med": 0.266,
+          "p95": 1.282,
+          "p99": 2.445
+        },
+        "AMF QueryOutput": {
+          "avg": 0.215,
+          "med": 0.098,
+          "p95": 0.573,
+          "p99": 0.651
+        },
+        "Packet write": {
+          "avg": 0.175,
+          "med": 0.103,
+          "p95": 0.478,
+          "p99": 0.656
+        },
+        "Audio mux": {
+          "avg": 6566.387,
+          "med": 6566.387,
+          "p95": 6566.387,
+          "p99": 6566.387
+        },
+        "producer_prepare": {
+          "avg": 26.497,
+          "med": 22.732,
+          "p95": 39.525,
+          "p99": 65.36
+        },
+        "consumer_upload": {
+          "avg": 1.393,
+          "med": 1.272,
+          "p95": 1.892,
+          "p99": 3.799
+        },
+        "consumer_native_call": {
+          "avg": 12.939,
+          "med": 4.595,
+          "p95": 8.648,
+          "p99": 99.29
+        },
+        "pipeline_total": {
+          "avg": 18.617,
+          "med": 6.945,
+          "p95": 11.953,
+          "p99": 364.39
+        }
+      },
+      "hud_uploaded_bytes_total": 318878120,
+      "rects_per_frame_avg": 1.0,
+      "requested_upload_bytes_per_frame_avg": 3543090.222222222,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "CPU_REFERENCE",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 25.0,
+        "med": 31.0,
+        "max": 31.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 4.1,
+        "med": 8.2,
+        "max": 8.2,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 22305.0,
+        "med": 22638.0,
+        "max": 22638.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 9833.0,
+        "med": 10166.0,
+        "max": 10166.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 409.0,
+        "med": 417.0,
+        "max": 417.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 527.0,
+        "med": 527.0,
+        "max": 527.0,
+        "n": 2
+      }
+    }
+  },
+  {
+    "name": "decode_cpu_reference_720p",
+    "ok": true,
+    "wall_s": 14.262,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "CPU_REFERENCE",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_CPU_DECODE_REFERENCE",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 14.300099732074585,
+      "true_fps": 6.677871640622301,
+      "mux_wall_ms": 6814.725400006864,
+      "video_render_wall_ms": 6293.662399999448,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.048,
+          "med": 0.036,
+          "p95": 0.095,
+          "p99": 0.206
+        },
+        "compose_overlay": {
+          "avg": 28.664,
+          "med": 16.744,
+          "p95": 76.041,
+          "p99": 90.86
+        },
+        "above_compose": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_bbox_crop": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_to_bytes": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_region_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "above_total": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "map_cpu_upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "HUD dirty extract": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "update_hud": {
+          "avg": 0.95,
+          "med": 0.87,
+          "p95": 1.475,
+          "p99": 3.104
+        },
+        "HUD texture upload": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.811,
+          "med": 0.457,
+          "p95": 0.931,
+          "p99": 36.395
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 8.074,
+          "med": 0.554,
+          "p95": 2.421,
+          "p99": 86.238
+        },
+        "GPU wait/synchronization": {
+          "avg": 1.62,
+          "med": 0.819,
+          "p95": 3.021,
+          "p99": 15.245
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.559,
+          "med": 0.279,
+          "p95": 1.054,
+          "p99": 3.564
+        },
+        "AMF QueryOutput": {
+          "avg": 0.125,
+          "med": 0.101,
+          "p95": 0.195,
+          "p99": 0.516
+        },
+        "Packet write": {
+          "avg": 0.12,
+          "med": 0.083,
+          "p95": 0.361,
+          "p99": 0.502
+        },
+        "Audio mux": {
+          "avg": 6814.725,
+          "med": 6814.725,
+          "p95": 6814.725,
+          "p99": 6814.725
+        },
+        "producer_prepare": {
+          "avg": 30.851,
+          "med": 18.454,
+          "p95": 80.915,
+          "p99": 97.565
+        },
+        "consumer_upload": {
+          "avg": 23.828,
+          "med": 23.462,
+          "p95": 26.429,
+          "p99": 30.598
+        },
+        "consumer_native_call": {
+          "avg": 10.324,
+          "med": 2.171,
+          "p95": 10.406,
+          "p99": 107.625
+        },
+        "pipeline_total": {
+          "avg": 39.305,
+          "med": 27.291,
+          "p95": 44.243,
+          "p99": 382.074
+        }
+      },
+      "hud_uploaded_bytes_total": 0,
+      "rects_per_frame_avg": 0.0,
+      "requested_upload_bytes_per_frame_avg": 0.0,
+      "above_regions_per_frame_avg": 0.0,
+      "above_uploaded_bytes_per_frame_avg": 0.0,
+      "above_uploaded_pixels_per_frame_avg": 0.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "CPU_REFERENCE",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.0,
+      "chart_path": "CPU_REFERENCE",
+      "gauge_path": "CPU_REFERENCE",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": false
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 17.0,
+        "med": 17.0,
+        "max": 17.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 6.2,
+        "med": 6.2,
+        "max": 6.2,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.4,
+        "med": 0.4,
+        "max": 0.4,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21778.0,
+        "med": 21778.0,
+        "max": 21778.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10360.0,
+        "med": 10360.0,
+        "max": 10360.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 579.0,
+        "med": 579.0,
+        "max": 579.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "amf_submit_no_mux_720p",
+    "ok": true,
+    "wall_s": 4.436,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC",
+      "AMD_AMF_MODE": "SUBMIT_NO_MUX"
+    },
+    "profile": {
+      "render_fps": 23.913730738104373,
+      "true_fps": 22.465658432837426,
+      "mux_wall_ms": 0.0,
+      "video_render_wall_ms": 3763.5281999973813,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.148,
+          "med": 0.626,
+          "p95": 1.385,
+          "p99": 26.333
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.059,
+          "med": 0.033,
+          "p95": 0.19,
+          "p99": 0.217
+        },
+        "compose_overlay": {
+          "avg": 4.873,
+          "med": 3.445,
+          "p95": 12.08,
+          "p99": 12.748
+        },
+        "above_compose": {
+          "avg": 12.902,
+          "med": 12.279,
+          "p95": 16.747,
+          "p99": 25.797
+        },
+        "above_bbox_crop": {
+          "avg": 0.073,
+          "med": 0.06,
+          "p95": 0.085,
+          "p99": 0.305
+        },
+        "above_region_to_bytes": {
+          "avg": 1.027,
+          "med": 0.947,
+          "p95": 1.374,
+          "p99": 1.849
+        },
+        "above_region_upload": {
+          "avg": 0.468,
+          "med": 0.415,
+          "p95": 0.671,
+          "p99": 1.828
+        },
+        "above_total": {
+          "avg": 14.001,
+          "med": 13.288,
+          "p95": 19.362,
+          "p99": 26.867
+        },
+        "map_cpu_upload": {
+          "avg": 1.18,
+          "med": 1.106,
+          "p95": 1.38,
+          "p99": 3.122
+        },
+        "HUD dirty extract": {
+          "avg": 0.271,
+          "med": 0.241,
+          "p95": 0.362,
+          "p99": 0.521
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.35,
+          "med": 0.292,
+          "p95": 0.464,
+          "p99": 1.746
+        },
+        "update_hud": {
+          "avg": 0.127,
+          "med": 0.068,
+          "p95": 0.366,
+          "p99": 0.864
+        },
+        "HUD texture upload": {
+          "avg": 0.111,
+          "med": 0.055,
+          "p95": 0.343,
+          "p99": 0.836
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 5.267,
+          "med": 0.193,
+          "p95": 0.362,
+          "p99": 55.978
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 13.442,
+          "med": 2.396,
+          "p95": 6.511,
+          "p99": 115.875
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.643,
+          "med": 3.164,
+          "p95": 6.737,
+          "p99": 8.218
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.47,
+          "med": 0.263,
+          "p95": 1.303,
+          "p99": 2.009
+        },
+        "AMF QueryOutput": {
+          "avg": 0.182,
+          "med": 0.102,
+          "p95": 0.555,
+          "p99": 0.695
+        },
+        "Packet write": {
+          "avg": 0.173,
+          "med": 0.09,
+          "p95": 0.527,
+          "p99": 0.776
+        },
+        "Audio mux": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "producer_prepare": {
+          "avg": 21.818,
+          "med": 19.464,
+          "p95": 31.407,
+          "p99": 37.923
+        },
+        "consumer_upload": {
+          "avg": 1.113,
+          "med": 0.904,
+          "p95": 1.901,
+          "p99": 3.3
+        },
+        "consumer_native_call": {
+          "avg": 15.859,
+          "med": 4.673,
+          "p95": 9.331,
+          "p99": 126.687
+        },
+        "pipeline_total": {
+          "avg": 20.325,
+          "med": 6.757,
+          "p95": 11.417,
+          "p99": 327.396
+        }
+      },
+      "hud_uploaded_bytes_total": 50496128,
+      "rects_per_frame_avg": 2.977777777777778,
+      "requested_upload_bytes_per_frame_avg": 561068.088888889,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 34.0,
+        "med": 34.0,
+        "max": 34.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 22279.0,
+        "med": 22279.0,
+        "max": 22279.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 9859.0,
+        "med": 9859.0,
+        "max": 9859.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 421.0,
+        "med": 421.0,
+        "max": 421.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 860.0,
+        "med": 860.0,
+        "max": 860.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "amf_bypass_720p",
+    "ok": true,
+    "wall_s": 3.77,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC",
+      "AMD_AMF_MODE": "BYPASS"
+    },
+    "profile": {
+      "render_fps": 0.0,
+      "true_fps": 26.25767938652323,
+      "mux_wall_ms": 0.0,
+      "video_render_wall_ms": 3228.6645999993198,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.402,
+          "med": 0.631,
+          "p95": 1.727,
+          "p99": 29.022
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.045,
+          "med": 0.027,
+          "p95": 0.148,
+          "p99": 0.159
+        },
+        "compose_overlay": {
+          "avg": 4.412,
+          "med": 2.977,
+          "p95": 12.563,
+          "p99": 13.867
+        },
+        "above_compose": {
+          "avg": 12.827,
+          "med": 11.143,
+          "p95": 24.975,
+          "p99": 27.809
+        },
+        "above_bbox_crop": {
+          "avg": 0.065,
+          "med": 0.057,
+          "p95": 0.082,
+          "p99": 0.209
+        },
+        "above_region_to_bytes": {
+          "avg": 0.903,
+          "med": 0.83,
+          "p95": 1.256,
+          "p99": 1.658
+        },
+        "above_region_upload": {
+          "avg": 0.428,
+          "med": 0.346,
+          "p95": 0.797,
+          "p99": 2.426
+        },
+        "above_total": {
+          "avg": 13.796,
+          "med": 12.017,
+          "p95": 25.959,
+          "p99": 29.111
+        },
+        "map_cpu_upload": {
+          "avg": 1.215,
+          "med": 1.049,
+          "p95": 1.747,
+          "p99": 6.132
+        },
+        "HUD dirty extract": {
+          "avg": 0.26,
+          "med": 0.221,
+          "p95": 0.416,
+          "p99": 1.027
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.344,
+          "med": 0.267,
+          "p95": 0.543,
+          "p99": 2.021
+        },
+        "update_hud": {
+          "avg": 0.118,
+          "med": 0.059,
+          "p95": 0.489,
+          "p99": 0.759
+        },
+        "HUD texture upload": {
+          "avg": 0.102,
+          "med": 0.048,
+          "p95": 0.43,
+          "p99": 0.735
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.18,
+          "med": 0.192,
+          "p95": 0.467,
+          "p99": 25.353
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 9.106,
+          "med": 2.0,
+          "p95": 4.659,
+          "p99": 76.3
+        },
+        "GPU wait/synchronization": {
+          "avg": 2.92,
+          "med": 2.771,
+          "p95": 5.77,
+          "p99": 6.467
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "AMF QueryOutput": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "Packet write": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "Audio mux": {
+          "avg": 0.0,
+          "med": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "producer_prepare": {
+          "avg": 21.066,
+          "med": 17.117,
+          "p95": 35.606,
+          "p99": 45.438
+        },
+        "consumer_upload": {
+          "avg": 1.069,
+          "med": 0.816,
+          "p95": 2.331,
+          "p99": 4.895
+        },
+        "consumer_native_call": {
+          "avg": 10.519,
+          "med": 3.581,
+          "p95": 6.608,
+          "p99": 82.592
+        },
+        "pipeline_total": {
+          "avg": 15.156,
+          "med": 5.237,
+          "p95": 10.71,
+          "p99": 291.426
+        }
+      },
+      "hud_uploaded_bytes_total": 50496128,
+      "rects_per_frame_avg": 2.977777777777778,
+      "requested_upload_bytes_per_frame_avg": 561068.088888889,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 0,
+        "muxed": 0
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 20.0,
+        "med": 20.0,
+        "max": 20.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 12.4,
+        "med": 12.4,
+        "max": 12.4,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 39.4,
+        "med": 39.4,
+        "max": 39.4,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 22230.0,
+        "med": 22230.0,
+        "max": 22230.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 9908.0,
+        "med": 9908.0,
+        "max": 9908.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 424.0,
+        "med": 424.0,
+        "max": 424.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 527.0,
+        "med": 527.0,
+        "max": 527.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "telemetry_reference_720p",
+    "ok": true,
+    "wall_s": 13.439,
+    "width": 1280,
+    "height": 720,
+    "fps": 60.0,
+    "frames": 90,
+    "env": {
+      "AMD_TELEMETRY_MODE": "REFERENCE",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 15.630855600710447,
+      "true_fps": 7.072480072407364,
+      "mux_wall_ms": 6718.00959999382,
+      "video_render_wall_ms": 5757.842200007872,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 3.043,
+          "med": 0.617,
+          "p95": 1.903,
+          "p99": 25.901
+        },
+        "Telemetry/frame_data": {
+          "avg": 24.436,
+          "med": 21.442,
+          "p95": 42.795,
+          "p99": 50.06
+        },
+        "compose_overlay": {
+          "avg": 3.618,
+          "med": 2.924,
+          "p95": 7.98,
+          "p99": 13.805
+        },
+        "above_compose": {
+          "avg": 12.814,
+          "med": 10.954,
+          "p95": 25.258,
+          "p99": 26.345
+        },
+        "above_bbox_crop": {
+          "avg": 0.075,
+          "med": 0.058,
+          "p95": 0.182,
+          "p99": 0.3
+        },
+        "above_region_to_bytes": {
+          "avg": 0.946,
+          "med": 0.862,
+          "p95": 1.385,
+          "p99": 1.719
+        },
+        "above_region_upload": {
+          "avg": 0.418,
+          "med": 0.374,
+          "p95": 0.612,
+          "p99": 0.987
+        },
+        "above_total": {
+          "avg": 13.835,
+          "med": 11.918,
+          "p95": 26.495,
+          "p99": 27.741
+        },
+        "map_cpu_upload": {
+          "avg": 1.302,
+          "med": 1.081,
+          "p95": 2.074,
+          "p99": 6.251
+        },
+        "HUD dirty extract": {
+          "avg": 0.27,
+          "med": 0.226,
+          "p95": 0.477,
+          "p99": 0.893
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.354,
+          "med": 0.272,
+          "p95": 0.674,
+          "p99": 1.717
+        },
+        "update_hud": {
+          "avg": 0.132,
+          "med": 0.067,
+          "p95": 0.319,
+          "p99": 1.093
+        },
+        "HUD texture upload": {
+          "avg": 0.114,
+          "med": 0.052,
+          "p95": 0.294,
+          "p99": 1.047
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 2.894,
+          "med": 0.191,
+          "p95": 0.635,
+          "p99": 32.407
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 13.003,
+          "med": 2.002,
+          "p95": 5.16,
+          "p99": 114.512
+        },
+        "GPU wait/synchronization": {
+          "avg": 3.133,
+          "med": 2.906,
+          "p95": 5.233,
+          "p99": 7.037
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.441,
+          "med": 0.22,
+          "p95": 1.211,
+          "p99": 2.449
+        },
+        "AMF QueryOutput": {
+          "avg": 0.14,
+          "med": 0.087,
+          "p95": 0.486,
+          "p99": 0.541
+        },
+        "Packet write": {
+          "avg": 0.142,
+          "med": 0.085,
+          "p95": 0.524,
+          "p99": 0.829
+        },
+        "Audio mux": {
+          "avg": 6718.01,
+          "med": 6718.01,
+          "p95": 6718.01,
+          "p99": 6718.01
+        },
+        "producer_prepare": {
+          "avg": 44.861,
+          "med": 38.877,
+          "p95": 78.206,
+          "p99": 91.133
+        },
+        "consumer_upload": {
+          "avg": 1.187,
+          "med": 0.916,
+          "p95": 2.491,
+          "p99": 4.92
+        },
+        "consumer_native_call": {
+          "avg": 15.304,
+          "med": 4.12,
+          "p95": 9.048,
+          "p99": 128.299
+        },
+        "pipeline_total": {
+          "avg": 19.704,
+          "med": 5.939,
+          "p95": 11.76,
+          "p99": 316.022
+        }
+      },
+      "hud_uploaded_bytes_total": 50496128,
+      "rects_per_frame_avg": 2.977777777777778,
+      "requested_upload_bytes_per_frame_avg": 561068.088888889,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 2174400.0,
+      "above_uploaded_pixels_per_frame_avg": 543600.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.16983413696289062,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 90,
+        "processed": 90,
+        "amf": 90,
+        "muxed": 90
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 11.0,
+        "med": 11.0,
+        "max": 11.0,
+        "n": 1
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 6.6,
+        "med": 6.6,
+        "max": 6.6,
+        "n": 1
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_encode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 1
+      },
+      "ram_used_mb": {
+        "avg": 21985.0,
+        "med": 21985.0,
+        "max": 21985.0,
+        "n": 1
+      },
+      "ram_avail_mb": {
+        "avg": 10153.0,
+        "med": 10153.0,
+        "max": 10153.0,
+        "n": 1
+      },
+      "vram_ded_mb": {
+        "avg": 401.0,
+        "med": 401.0,
+        "max": 401.0,
+        "n": 1
+      },
+      "vram_shared_mb": {
+        "avg": 553.0,
+        "med": 553.0,
+        "max": 553.0,
+        "n": 1
+      }
+    }
+  },
+  {
+    "name": "sysprobe_1080p_300f",
+    "ok": true,
+    "wall_s": 21.036,
+    "width": 1920,
+    "height": 1080,
+    "fps": 60.0,
+    "frames": 300,
+    "env": {
+      "AMD_TELEMETRY_MODE": "PRECOMPUTED",
+      "AMD_NATIVE_HUD_MODE": "GPU_HUD",
+      "AMD_NATIVE_DECODE_MODE": "GPU_HUD_D3D11VA",
+      "AMD_NATIVE_HUD_UPLOAD_MODE": "DIRTY",
+      "AMD_MAP_PATH": "GPU",
+      "AMD_CHART_PATH": "GPU_SPLIT",
+      "AMD_GAUGE_PATH": "GPU",
+      "AMD_OVERLAY_PROFILE": "1",
+      "AMD_NATIVE_PROFILING": "1",
+      "AMD_NATIVE_DIAGNOSTICS": "1",
+      "AMD_CPU_GPU_PIPELINE": "SYNC"
+    },
+    "profile": {
+      "render_fps": 23.95067827241708,
+      "true_fps": 15.168589314025093,
+      "mux_wall_ms": 6723.524399989401,
+      "video_render_wall_ms": 12525.741300007212,
+      "timings": {
+        "MF ReadSample/decode availability": {
+          "avg": 1.895,
+          "med": 0.582,
+          "p95": 1.23,
+          "p99": 2.285
+        },
+        "Telemetry/frame_data": {
+          "avg": 0.044,
+          "med": 0.033,
+          "p95": 0.099,
+          "p99": 0.15
+        },
+        "compose_overlay": {
+          "avg": 4.635,
+          "med": 3.765,
+          "p95": 9.973,
+          "p99": 13.271
+        },
+        "above_compose": {
+          "avg": 15.915,
+          "med": 14.07,
+          "p95": 28.068,
+          "p99": 32.244
+        },
+        "above_bbox_crop": {
+          "avg": 0.11,
+          "med": 0.095,
+          "p95": 0.149,
+          "p99": 0.353
+        },
+        "above_region_to_bytes": {
+          "avg": 2.064,
+          "med": 1.953,
+          "p95": 2.557,
+          "p99": 3.218
+        },
+        "above_region_upload": {
+          "avg": 0.671,
+          "med": 0.632,
+          "p95": 0.918,
+          "p99": 1.305
+        },
+        "above_total": {
+          "avg": 18.089,
+          "med": 16.163,
+          "p95": 30.559,
+          "p99": 36.568
+        },
+        "map_cpu_upload": {
+          "avg": 1.304,
+          "med": 1.192,
+          "p95": 1.64,
+          "p99": 3.205
+        },
+        "HUD dirty extract": {
+          "avg": 0.337,
+          "med": 0.302,
+          "p95": 0.494,
+          "p99": 1.0
+        },
+        "PIL/buffer preparation": {
+          "avg": 0.412,
+          "med": 0.348,
+          "p95": 0.559,
+          "p99": 1.849
+        },
+        "update_hud": {
+          "avg": 0.198,
+          "med": 0.104,
+          "p95": 0.511,
+          "p99": 1.936
+        },
+        "HUD texture upload": {
+          "avg": 0.179,
+          "med": 0.089,
+          "p95": 0.47,
+          "p99": 1.791
+        },
+        "VideoProcessor CPU submit": {
+          "avg": 1.558,
+          "med": 0.19,
+          "p95": 0.451,
+          "p99": 1.306
+        },
+        "VideoProcessor GPU completion": {
+          "avg": 8.97,
+          "med": 3.661,
+          "p95": 8.506,
+          "p99": 10.116
+        },
+        "GPU wait/synchronization": {
+          "avg": 5.203,
+          "med": 4.526,
+          "p95": 9.081,
+          "p99": 10.686
+        },
+        "AMF submit/backpressure": {
+          "avg": 0.389,
+          "med": 0.264,
+          "p95": 1.001,
+          "p99": 1.331
+        },
+        "AMF QueryOutput": {
+          "avg": 0.151,
+          "med": 0.104,
+          "p95": 0.401,
+          "p99": 0.568
+        },
+        "Packet write": {
+          "avg": 0.14,
+          "med": 0.101,
+          "p95": 0.357,
+          "p99": 0.488
+        },
+        "Audio mux": {
+          "avg": 6723.524,
+          "med": 6723.524,
+          "p95": 6723.524,
+          "p99": 6723.524
+        },
+        "producer_prepare": {
+          "avg": 26.785,
+          "med": 23.025,
+          "p95": 41.314,
+          "p99": 54.477
+        },
+        "consumer_upload": {
+          "avg": 1.755,
+          "med": 1.401,
+          "p95": 3.363,
+          "p99": 5.636
+        },
+        "consumer_native_call": {
+          "avg": 11.51,
+          "med": 6.198,
+          "p95": 11.455,
+          "p99": 13.225
+        },
+        "pipeline_total": {
+          "avg": 15.338,
+          "med": 8.473,
+          "p95": 14.531,
+          "p99": 17.543
+        }
+      },
+      "hud_uploaded_bytes_total": 254233860,
+      "rects_per_frame_avg": 2.993333333333333,
+      "requested_upload_bytes_per_frame_avg": 847446.2,
+      "above_regions_per_frame_avg": 1.0,
+      "above_uploaded_bytes_per_frame_avg": 4807912.0,
+      "above_uploaded_pixels_per_frame_avg": 1201978.0,
+      "above_scanned_pixels_per_frame_avg": 0.0,
+      "map_path": "GPU",
+      "map_gpu_direct_used": false,
+      "map_upload_mib_per_frame": 0.3833351135253906,
+      "chart_path": "GPU_SPLIT",
+      "gauge_path": "GPU",
+      "frame_accounting": {
+        "decoded": 300,
+        "processed": 300,
+        "amf": 300,
+        "muxed": 300
+      },
+      "decoder_output_format": "DXGI_FORMAT_P010",
+      "hardware_accel": true
+    },
+    "system": {
+      "cpu_total": {
+        "avg": 18.5,
+        "med": 24.0,
+        "max": 24.0,
+        "n": 2
+      },
+      "cpu_py_norm": null,
+      "gpu_3d": {
+        "avg": 10.5,
+        "med": 21.0,
+        "max": 21.0,
+        "n": 2
+      },
+      "gpu_decode": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "gpu_encode": {
+        "avg": 27.1,
+        "med": 54.3,
+        "max": 54.3,
+        "n": 2
+      },
+      "gpu_copy": {
+        "avg": 0.0,
+        "med": 0.0,
+        "max": 0.0,
+        "n": 2
+      },
+      "ram_used_mb": {
+        "avg": 22103.0,
+        "med": 22269.0,
+        "max": 22269.0,
+        "n": 2
+      },
+      "ram_avail_mb": {
+        "avg": 10035.0,
+        "med": 10201.0,
+        "max": 10201.0,
+        "n": 2
+      },
+      "vram_ded_mb": {
+        "avg": 423.0,
+        "med": 440.0,
+        "max": 440.0,
+        "n": 2
+      },
+      "vram_shared_mb": {
+        "avg": 698.5,
+        "med": 884.0,
+        "max": 884.0,
+        "n": 2
+      }
+    }
+  }
+]

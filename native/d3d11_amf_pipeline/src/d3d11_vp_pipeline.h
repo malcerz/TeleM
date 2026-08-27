@@ -99,6 +99,12 @@ public:
     void SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH);
     void SetMapFilter(int filter);
     void SetMapGpuEnabled(bool enabled);
+    void SetMapRotateMode(bool enabled) { m_mapRotateEnabled = enabled; }
+    bool GetMapRotateMode() const { return m_mapRotateEnabled; }
+    void SetMapHeading(float headingDeg) { m_mapHeadingDeg = headingDeg; }
+    float GetMapHeading() const { return m_mapHeadingDeg; }
+    bool UpdateMapMarkerTexture(UINT width, UINT height, const uint8_t* rgbaData, UINT stride, UINT dstX, UINT dstY);
+    void ReleaseMapMarkerResources();
     // ETAP 8U-B: Map GPU Path mode: 0 = DIRECT_AUTO (default), 1 = REFERENCE (two-pass), 2 = DIRECT_1TO1 (direct)
     void SetMapGpuPath(int path) { m_mapGpuPath = path; }
     int GetMapGpuPath() const { return m_mapGpuPath; }
@@ -173,6 +179,23 @@ public:
     // exact bytes uploaded once per cache invalidation).  Never production.
     bool GetChartStaticReadback(UINT slot, uint8_t* outRGBA, UINT stride);
 
+    // ── ETAP 1B: GPU final compositing for AFTER-MAP charts (HR/Cadence) ─
+    void SetAfterMapChartGpuEnabled(bool enabled);
+    void SetAfterMapChartSplitMode(bool enabled);
+    bool UpdateAfterMapChartStaticTexture(
+        UINT slot, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+        UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated);
+    bool UpdateAfterMapChartDynamicTile(
+        UINT slot, UINT region, UINT width, UINT height, const uint8_t* rgbaData,
+        UINT stride, UINT localX, UINT localY, size_t* uploadedBytes);
+    bool BlendAfterMapCharts(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
+    void ReleaseAfterMapChartResources();
+    double GetAfterMapChartBlendMs() const { return m_afterMapChartBlendMs; }
+    UINT64 GetAfterMapChartStaticUploads() const { return m_afterMapChartStaticUploads; }
+    UINT64 GetAfterMapChartStaticUploadedBytes() const { return m_afterMapChartStaticUploadedBytes; }
+    UINT64 GetAfterMapChartDynamicUploads() const { return m_afterMapChartDynamicUploads; }
+    UINT64 GetAfterMapChartDynamicUploadedBytes() const { return m_afterMapChartDynamicUploadedBytes; }
+
     // ── ETAP 5L: GPU final compositing for the speed gauge ─────────────
     // The CPU still renders the exact same gauge RGBA widget (final size, 1:1
     // texel, no resample).  The GPU holds one persistent RGBA8 texture and,
@@ -184,13 +207,49 @@ public:
     bool UpdateGaugeTexture(
         UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
         UINT dstX, UINT dstY, size_t* uploadedBytes, bool* textureCreated);
+    // ── ETAP 2B: partial (sub-box) gauge texture update ────────────────
+    // Uploads only a dynamic sub-rectangle of the persistent tile-sized
+    // gauge texture (needle band + value digits).  Texture creation and
+    // destination bookkeeping mirror UpdateGaugeTexture; BlendGauge is
+    // unchanged (it always blends the full stored tile).
+    bool UpdateGaugeRegionTexture(
+        UINT boxX, UINT boxY, UINT boxW, UINT boxH,
+        const uint8_t* rgbaData, UINT srcRowPitch,
+        UINT tileW, UINT tileH, UINT dstX, UINT dstY,
+        size_t* uploadedBytes, bool* textureCreated);
     bool BlendGauge();
+
     void ReleaseGaugeResources();
     double GetGaugeBlendMs() const { return m_gaugeBlendMs; }
     double GetGaugeClearMs() const { return m_gaugeClearMs; }
     UINT64 GetGaugeUploads() const { return m_gaugeUploads; }
     UINT64 GetGaugeUploadedBytes() const { return m_gaugeUploadedBytes; }
     UINT GetGaugeTextureCreates() const { return m_gaugeTextureCreates; }
+    // ── ETAP 2B: dynamic-region (sub-box) upload diagnostics ──────────
+    UINT64 GetGaugeRegionUploads() const { return m_gaugeRegionUploads; }
+
+    // ── ETAP 2A: gauge pass placement (experimental) ───────────────────
+    // false = legacy BEFORE-MAP position (charts -> gauge -> map; exact ETAP
+    //         5L semantics incl. destructive self-clear).
+    // true  = AFTER-MAP position (map -> above -> gauge -> after-map charts)
+    //         with previous-frame region cleared early in
+    //         ClearPreviousAboveMap() instead of a late destructive clear.
+    void SetGaugeAfterMapPlacement(bool afterMap);
+
+    // ── ETAP 2G: GPU lean indicator sprite affine transform compositor ──
+    void SetLeanGpuEnabled(bool enabled);
+    bool UpdateLeanStaticTexture(
+        UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
+        size_t* uploadedBytes = nullptr, bool* textureCreated = nullptr);
+    bool SetLeanTransform(
+        float angleDeg, float pivotPx, float pivotPy,
+        float screenPivotX, float screenPivotY,
+        UINT dstX, UINT dstY, UINT tightW, UINT tightH);
+    bool BlendLean(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
+    void ReleaseLeanResources();
+    double GetLeanBlendMs() const { return m_leanBlendMs; }
+    UINT64 GetLeanStaticUploads() const { return m_leanStaticUploads; }
+    UINT64 GetLeanStaticUploadedBytes() const { return m_leanStaticUploadedBytes; }
 
     bool CanUseInputSurface(ID3D11Texture2D* texture, UINT arrayIndex);
     bool SetStreamRotation(UINT degrees);
@@ -257,6 +316,22 @@ public:
     void SetFlushMode(int mode) { m_flushMode = mode; }
     int GetFlushMode() const { return m_flushMode; }
 
+    // ── ETAP 2A FIX: start-of-frame clears on demand ────────────────────
+    // Runs exactly the clears ProcessFrame performs internally at frame
+    // start (previous ABOVE regions + previous AFTER-MAP gauge tile).  The
+    // exporter invokes this BEFORE telem_amd_update_hud_regions uploads the
+    // below-canvas dirty rects, so BELOW-widget pixels erased underneath the
+    // previous gauge tile are restored by that same frame's upload instead
+    // of being destroyed by it.  Both clear states (m_abovePrevRegions,
+    // m_gaugePrevValid) are consumed here, which makes ProcessFrame's own
+    // ClearPreviousAboveMap() a no-op — each clear still runs once per frame.
+    bool RunEarlyClears(double* outClearMs = nullptr) {
+        return ClearPreviousAboveMap(outClearMs);
+    }
+    void ResetPreviousAboveRegions() {
+        m_abovePrevRegionCount = 0;
+    }
+
 private:
     static const UINT POOL_SIZE_DEFAULT = 8;
     bool InitializeNV12ComputeCompositor();
@@ -269,6 +344,7 @@ private:
     void ReleaseMapResources();
     // ETAP 5J — GPU chart compositor
     bool InitializeChartCompositor();
+    bool InitializeLeanCompositor();
     bool BlendCharts(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
     bool BlendGauge(double* outBlendMs = nullptr, double* outFlushMs = nullptr);
     void ReleaseChartResources();
@@ -315,6 +391,15 @@ private:
     double m_mapResampleMs = 0.0;
     double m_mapBlendMs = 0.0;
     char m_mapDumpPath[512] = { 0 };
+    bool m_mapRotateEnabled = false;
+    float m_mapHeadingDeg = 0.0f;
+    ID3D11Texture2D* m_mapMarkerTexture = nullptr;
+    ID3D11ShaderResourceView* m_mapMarkerSRV = nullptr;
+    UINT m_mapMarkerW = 0;
+    UINT m_mapMarkerH = 0;
+    UINT m_mapMarkerDstX = 0;
+    UINT m_mapMarkerDstY = 0;
+    bool m_mapMarkerActive = false;
 
     // ETAP 8N: Multi-Region CPU_ABOVE_MAP structures
     static constexpr UINT MAX_ABOVE_REGIONS = 16;
@@ -371,6 +456,39 @@ private:
     double m_chartBlendMs = 0.0;
     double m_chartClearMs = 0.0;
 
+    // ── ETAP 1B: GPU AFTER-MAP chart resources per slot ─────────────────
+    UINT m_afterMapChartDstX[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartDstY[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartW[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartH[CHART_SLOT_COUNT] = { 0, 0 };
+    bool m_afterMapChartActive[CHART_SLOT_COUNT] = { false, false };
+    bool m_afterMapChartGpuEnabled = false;
+    bool m_afterMapChartSplitMode = false;
+    ID3D11Texture2D* m_afterMapChartTexture[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11ShaderResourceView* m_afterMapChartSRV[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11Texture2D* m_afterMapChartStaticTexture[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11ShaderResourceView* m_afterMapChartStaticSRV[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11Texture2D* m_afterMapChartCursorTexture[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11ShaderResourceView* m_afterMapChartCursorSRV[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11Texture2D* m_afterMapChartValueTexture[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    ID3D11ShaderResourceView* m_afterMapChartValueSRV[CHART_SLOT_COUNT] = { nullptr, nullptr };
+    UINT m_afterMapChartCursorX[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartCursorY[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartCursorW[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartCursorH[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartValueX[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartValueY[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartValueW[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT m_afterMapChartValueH[CHART_SLOT_COUNT] = { 0, 0 };
+    UINT64 m_afterMapChartUploads = 0;
+    UINT64 m_afterMapChartUploadedBytes = 0;
+    UINT64 m_afterMapChartStaticUploads = 0;
+    UINT64 m_afterMapChartStaticUploadedBytes = 0;
+    UINT64 m_afterMapChartDynamicUploads = 0;
+    UINT64 m_afterMapChartDynamicUploadedBytes = 0;
+    UINT m_afterMapChartTextureCreates = 0;
+    double m_afterMapChartBlendMs = 0.0;
+
     // ── ETAP 5L: GPU gauge compositor resources ────────────────────────
     ID3D11Texture2D* m_gaugeTexture = nullptr;
     ID3D11ShaderResourceView* m_gaugeSRV = nullptr;
@@ -383,8 +501,45 @@ private:
     UINT64 m_gaugeUploads = 0;
     UINT64 m_gaugeUploadedBytes = 0;
     UINT m_gaugeTextureCreates = 0;
+    // ── ETAP 2B: dynamic-region (sub-box) upload counter ──────────────
+    UINT64 m_gaugeRegionUploads = 0;
     double m_gaugeBlendMs = 0.0;
     double m_gaugeClearMs = 0.0;
+    // ETAP 2A: AFTER-MAP placement + previous-frame gauge rect for the early
+    // next-frame clear performed in ClearPreviousAboveMap().
+    bool m_gaugeAfterMapPlacement = false;
+    bool m_gaugePrevValid = false;
+    UINT m_gaugePrevDstX = 0;
+    UINT m_gaugePrevDstY = 0;
+    UINT m_gaugePrevW = 0;
+    UINT m_gaugePrevH = 0;
+
+    // ── ETAP 2G: GPU lean indicator resources ──────────────────────────
+    bool m_leanGpuEnabled = false;
+    bool m_leanActive = false;
+    ID3D11Texture2D* m_leanTexture = nullptr;
+    ID3D11ShaderResourceView* m_leanSRV = nullptr;
+    ID3D11ComputeShader* m_leanBlendShader = nullptr;
+    ID3D11Buffer* m_leanBlendCB = nullptr;
+    UINT m_leanSrcW = 0;
+    UINT m_leanSrcH = 0;
+    float m_leanPivotPx = 0.0f;
+    float m_leanPivotPy = 0.0f;
+    float m_leanScreenPivotX = 0.0f;
+    float m_leanScreenPivotY = 0.0f;
+    float m_leanAngleDeg = 0.0f;
+    UINT m_leanDstX = 0;
+    UINT m_leanDstY = 0;
+    UINT m_leanTightW = 0;
+    UINT m_leanTightH = 0;
+    bool m_leanPrevValid = false;
+    UINT m_leanPrevDstX = 0;
+    UINT m_leanPrevDstY = 0;
+    UINT m_leanPrevW = 0;
+    UINT m_leanPrevH = 0;
+    UINT64 m_leanStaticUploads = 0;
+    UINT64 m_leanStaticUploadedBytes = 0;
+    double m_leanBlendMs = 0.0;
 
     ID3D11Device3* m_device3 = nullptr;
     ID3D11ComputeShader* m_nv12HUDComputeShader = nullptr;

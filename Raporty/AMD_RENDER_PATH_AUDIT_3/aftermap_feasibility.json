@@ -1,0 +1,32 @@
+{
+  "answer": "NO",
+  "reason": "The current GPU compositor pipeline blends charts (BlendCharts) BEFORE the above-map region (BlendAboveMap). Pixel-identical AFTER-MAP GPU_SPLIT would require charts to be blended AFTER BlendAboveMap. Additionally, the Python layer never captures chart GPU data in compose_above (gpu_capture_keys=set()), and _chart_gpu_layout_safe runs only on the BELOW probe layout. Both the GPU pipeline z-order AND the Python capture mechanism must change.",
+  "checks": {
+    "above_compose_gpu_capture_keys_empty": true,
+    "below_has_gpu_capture_keys": true,
+    "layout_safe_guard_exists": true,
+    "above_split_chart_keys_none": true,
+    "blend_charts_before_blend_above": null,
+    "clear_previous_above_map_exists": true,
+    "blend_above_map_exists": false,
+    "compose_hud_direct_nv12": false
+  },
+  "required_changes": [
+    {
+      "file": "src/ffmpeg/amd_native_exporter.py",
+      "change": "Pass non-empty gpu_capture_keys to compose_overlay(..., layout=map_above_layout) so above-map charts get captured"
+    },
+    {
+      "file": "src/ffmpeg/amd_native_exporter.py",
+      "change": "Run _chart_gpu_layout_safe against the ABOVE layout bboxes (not BELOW) so guard checks correct context"
+    },
+    {
+      "file": "native C++ compositor (telem_amd_native.cpp or similar)",
+      "change": "Add a new GPU pass: BlendAfterMapCharts inserted AFTER BlendAboveMap and BEFORE ComposeHUDDirectNV12"
+    },
+    {
+      "file": "native C++ compositor",
+      "change": "Ensure ClearPreviousAboveMap only clears non-chart pixels OR add separate clear for after-map chart region"
+    }
+  ]
+}

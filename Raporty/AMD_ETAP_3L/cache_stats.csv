@@ -1,0 +1,3 @@
+cache_name,entries,bytes_approx,hits,misses,hit_rate_pct,evictions
+TIMESTAMP_GAP_LIMIT,2,128,1998,2,99.9,0
+VALUE_TEXT_TILE,2,4096,1998,2,99.9,0

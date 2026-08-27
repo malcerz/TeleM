@@ -1,0 +1,186 @@
+{
+  "1080p (audit3)": {
+    "above_compose": {
+      "avg": 17.321,
+      "med": 13.839,
+      "p95": 32.784,
+      "p99": 47.773
+    },
+    "above_region_to_bytes": {
+      "avg": 2.121,
+      "med": 1.883,
+      "p95": 3.013,
+      "p99": 5.675
+    },
+    "above_region_upload": {
+      "avg": 0.696,
+      "med": 0.61,
+      "p95": 1.034,
+      "p99": 2.177
+    },
+    "above_tight_bbox_collect": {
+      "avg": 0.484,
+      "med": 0.373,
+      "p95": 0.999,
+      "p99": 1.676
+    },
+    "above_exact_union": {
+      "avg": 0.027,
+      "med": 0.021,
+      "p95": 0.042,
+      "p99": 0.16
+    },
+    "above_exact_crop": {
+      "avg": 1.29,
+      "med": 1.126,
+      "p95": 1.841,
+      "p99": 5.037
+    },
+    "above_bbox_tracking": {
+      "avg": 0.123,
+      "med": 0.093,
+      "p95": 0.188,
+      "p99": 0.931
+    },
+    "above_total": {
+      "avg": 19.566,
+      "med": 15.917,
+      "p95": 36.367,
+      "p99": 50.425
+    },
+    "compose_overlay": {
+      "avg": 5.2,
+      "med": 4.099,
+      "p95": 10.584,
+      "p99": 14.953
+    },
+    "map_cpu_upload": {
+      "avg": 1.59,
+      "med": 1.19,
+      "p95": 4.002,
+      "p99": 8.208
+    },
+    "producer_prepare": {
+      "avg": 29.984,
+      "med": 25.227,
+      "p95": 55.389,
+      "p99": 75.526
+    },
+    "consumer_native_call": {
+      "avg": 13.4,
+      "med": 7.604,
+      "p95": 12.289,
+      "p99": 27.613
+    },
+    "VideoProcessor GPU completion": {
+      "avg": 10.464,
+      "med": 4.445,
+      "p95": 8.939,
+      "p99": 18.363
+    },
+    "GPU wait/synchronization": {
+      "avg": 6.3,
+      "med": 5.303,
+      "p95": 9.648,
+      "p99": 19.276
+    },
+    "consumer_upload": {
+      "avg": 1.726,
+      "med": 1.433,
+      "p95": 3.244,
+      "p99": 6.643
+    }
+  },
+  "4K (audit2-300f)": {
+    "above_compose": {
+      "avg": 23.178,
+      "med": 22.174,
+      "p95": 29.096,
+      "p99": 39.004
+    },
+    "above_region_to_bytes": {
+      "avg": 7.902,
+      "med": 6.95,
+      "p95": 10.956,
+      "p99": 13.734
+    },
+    "above_region_upload": {
+      "avg": 2.066,
+      "med": 1.794,
+      "p95": 2.498,
+      "p99": 5.029
+    },
+    "above_tight_bbox_collect": {
+      "avg": 1.413,
+      "med": 1.337,
+      "p95": 1.821,
+      "p99": 2.77
+    },
+    "above_exact_union": {
+      "avg": 0.033,
+      "med": 0.03,
+      "p95": 0.043,
+      "p99": 0.063
+    },
+    "above_exact_crop": {
+      "avg": 3.902,
+      "med": 3.789,
+      "p95": 4.484,
+      "p99": 5.978
+    },
+    "above_bbox_tracking": {
+      "avg": 0.105,
+      "med": 0.1,
+      "p95": 0.13,
+      "p99": 0.19
+    },
+    "above_total": {
+      "avg": 31.185,
+      "med": 29.577,
+      "p95": 40.458,
+      "p99": 49.645
+    },
+    "compose_overlay": {
+      "avg": 4.718,
+      "med": 4.405,
+      "p95": 7.126,
+      "p99": 11.504
+    },
+    "map_cpu_upload": {
+      "avg": 2.104,
+      "med": 2.004,
+      "p95": 2.565,
+      "p99": 3.237
+    },
+    "producer_prepare": {
+      "avg": 44.935,
+      "med": 41.664,
+      "p95": 54.662,
+      "p99": 65.733
+    },
+    "consumer_native_call": {
+      "avg": 31.258,
+      "med": 14.577,
+      "p95": 23.272,
+      "p99": 34.546
+    },
+    "VideoProcessor GPU completion": {
+      "avg": 27.142,
+      "med": 9.636,
+      "p95": 16.596,
+      "p99": 26.448
+    },
+    "GPU wait/synchronization": {
+      "avg": 11.388,
+      "med": 9.97,
+      "p95": 16.881,
+      "p99": 24.972
+    },
+    "consumer_upload": {
+      "avg": 5.796,
+      "med": 6.314,
+      "p95": 8.465,
+      "p99": 12.112
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "below_map": [
+    {
+      "key": "time_display",
+      "form": "time_display",
+      "bucket": "BELOW_MAP (always first)"
+    },
+    {
+      "key": "dist_visual",
+      "form": "bar",
+      "bucket": "BELOW_MAP"
+    },
+    {
+      "key": "fit_battery_pct_text",
+      "form": "bar",
+      "bucket": "BELOW_MAP"
+    },
+    {
+      "key": "fit_solar_pct_text",
+      "form": "bar",
+      "bucket": "BELOW_MAP"
+    }
+  ],
+  "track_map": {
+    "key": "track_map",
+    "form": "map",
+    "bucket": "MAP"
+  },
+  "above_map": [
+    {
+      "key": "compass",
+      "form": "gauge",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "slope_text",
+      "form": "bar",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "iso_text",
+      "form": "text",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "exposure_text",
+      "form": "text",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "temp_text",
+      "form": "text",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "alt_visual",
+      "form": "bar",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "fit_curVpower_text",
+      "form": "bar",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "fit_cadence_text",
+      "form": "chart",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "fit_enhanced_speed_text",
+      "form": "gauge",
+      "bucket": "ABOVE_MAP"
+    },
+    {
+      "key": "fit_heart_rate_text",
+      "form": "chart",
+      "bucket": "ABOVE_MAP"
+    }
+  ]
+}

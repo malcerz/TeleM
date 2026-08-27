@@ -1,0 +1,30 @@
+{
+  "row": {
+    "ok": true,
+    "frames": 300,
+    "wall_s": 16.63,
+    "render_fps": null,
+    "user_effective_fps": null,
+    "mode": "AUTO",
+    "above_total_avg_ms": 13.950139668013435,
+    "producer_prepare_avg_ms": 23.178895666690853,
+    "gauge_tobytes_avg_ms": 0.3000969988837217,
+    "gauge_upload_avg_ms": 0.3467336668594119,
+    "pipeline_total_avg_ms": 6.5496116677725995,
+    "region_frames": 297,
+    "full_frames": 3,
+    "bytes_per_frame": {
+      "count": 300,
+      "avg_ms": 363759.64,
+      "median_ms": 338612.0,
+      "p95_ms": 347308.0,
+      "p99_ms": 381942.35999996966
+    },
+    "above_total_delta_vs_baseline_ms": 0.05
+  },
+  "gates": {
+    "export_ok": true,
+    "mode_auto": true,
+    "region_frames_pos": true
+  }
+}

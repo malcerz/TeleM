@@ -1,0 +1,96 @@
+[
+  {
+    "case": "cpu_off",
+    "ok": true,
+    "frames": 40,
+    "wall_s": 9.8,
+    "net_requests": 0,
+    "net_misses": 0,
+    "checks": {
+      "export_ok": {
+        "pass": true,
+        "detail": ""
+      },
+      "profile_json": {
+        "pass": true,
+        "detail": ""
+      },
+      "no_cache_miss_log": {
+        "pass": true,
+        "detail": ""
+      },
+      "net_zero": {
+        "pass": true,
+        "detail": "{\"tiles_requested\": 383, \"memory_hits\": 40, \"disk_hits\": 343, \"network_misses\": 0, \"network_requests\": 0}"
+      },
+      "no_traceback": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_gauge_off_env": {
+        "pass": true,
+        "detail": ""
+      },
+      "zero_gpu_uploads": {
+        "pass": true,
+        "detail": "0"
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "case": "fulltile_forced",
+    "ok": true,
+    "frames": 40,
+    "wall_s": 17.2,
+    "net_requests": 0,
+    "net_misses": 0,
+    "checks": {
+      "export_ok": {
+        "pass": true,
+        "detail": ""
+      },
+      "profile_json": {
+        "pass": true,
+        "detail": ""
+      },
+      "no_cache_miss_log": {
+        "pass": true,
+        "detail": ""
+      },
+      "net_zero": {
+        "pass": true,
+        "detail": "{\"tiles_requested\": 0, \"memory_hits\": 0, \"disk_hits\": 0, \"network_misses\": 0, \"network_requests\": 0}"
+      },
+      "no_traceback": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_mode_fulltile": {
+        "pass": true,
+        "detail": ""
+      },
+      "mode_fulltile": {
+        "pass": true,
+        "detail": "FULL_TILE"
+      },
+      "auto_off_recorded": {
+        "pass": true,
+        "detail": ""
+      },
+      "region_zero": {
+        "pass": true,
+        "detail": "0"
+      },
+      "full_uploads_pos": {
+        "pass": true,
+        "detail": "40"
+      },
+      "gauge_visible_in_dump": {
+        "pass": true,
+        "detail": "[{'frame': '30', 'art_pixels': 23253}]"
+      }
+    },
+    "verdict": "PASS"
+  }
+]

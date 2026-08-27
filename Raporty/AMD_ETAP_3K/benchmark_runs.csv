@@ -1,0 +1,4 @@
+run,variant,frames,render_wall,canonical_fps,producer,above_compose,above_total,consumer_native,pipeline_total
+cand_1_long_2001f,CAND_OPT_1,2001,78.667,25.436,19.32,12.15,13.568,4.364,7.293
+cand_2_long_2001f,CAND_OPT_2,2001,78.485,25.495,19.242,11.966,13.423,4.298,7.262
+cand_3_long_2001f,CAND_OPT_3,2001,79.728,25.098,20.505,12.821,14.262,3.747,6.684

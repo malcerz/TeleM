@@ -94,13 +94,16 @@ def _render_static_map_indicator(
             snap = ctx.snapshot()
             if snap["provider"] != map_style:
                 return _placeholder()
-            if snap["status"] == "error":
+            # An overview is usable map data even while a newer/detail job is
+            # still preparing.  Never replace it with the loading placeholder.
+            overview_ready = snap.get("overview_image") is not None
+            if snap["status"] == "error" and not overview_ready:
                 return _placeholder(error="Nie udało się wczytać mapy")
-            if snap["status"] in ("idle", "preparing"):
+            if snap["status"] in ("idle", "preparing") and not overview_ready:
                 return _placeholder(
                     progress=snap["progress"],
                     loaded=snap["loaded_tiles"],
-                    required=snap["required_tiles"],
+                    total=snap["total_tiles"],
                 )
             # Context ready: if detail tiles are cached for the current
             # position, render the real map; otherwise Level 1 overview.

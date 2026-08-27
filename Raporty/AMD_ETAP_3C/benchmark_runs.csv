@@ -1,0 +1,5 @@
+run_id,variant,frames,video_render_wall_s,calculated_fps,producer_avg_ms,above_avg_ms,above_total_ms,consumer_avg_ms
+ref_baseline_2001f,REF_BAR_TEXT,2001,80.006,25.011,25.07,18.16,19.336,2.226
+cand_bar_2001f,CAND_BAR_ONLY,2001,83.516,23.96,25.901,19.169,20.288,2.301
+cand_text_600f,CAND_TEXT_AND_BAR,600,26.528,22.618,26.196,18.244,19.402,2.558
+cand_text_2001f,CAND_TEXT_AND_BAR,2001,87.283,22.925,28.106,20.249,21.473,2.578

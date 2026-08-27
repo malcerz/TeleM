@@ -1,0 +1,191 @@
+[
+  {
+    "case": "A_supported",
+    "ok": true,
+    "frames": 40,
+    "wall_s": 10.01,
+    "net_requests": 0,
+    "net_misses": 0,
+    "checks": {
+      "export_ok": {
+        "pass": true,
+        "detail": ""
+      },
+      "profile_json": {
+        "pass": true,
+        "detail": ""
+      },
+      "no_cache_miss_log": {
+        "pass": true,
+        "detail": ""
+      },
+      "net_zero": {
+        "pass": true,
+        "detail": "{\"tiles_requested\": 383, \"memory_hits\": 39, \"disk_hits\": 344, \"network_misses\": 0, \"network_requests\": 0}"
+      },
+      "no_traceback": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_gauge_gpu_on": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_mode_auto": {
+        "pass": true,
+        "detail": ""
+      },
+      "mode_auto": {
+        "pass": true,
+        "detail": "AUTO"
+      },
+      "oracle_ran": {
+        "pass": true,
+        "detail": "39"
+      },
+      "oracle_missed_0": {
+        "pass": true,
+        "detail": "0"
+      },
+      "region_frames_pos": {
+        "pass": true,
+        "detail": "39"
+      },
+      "gpu_uploads": {
+        "pass": true,
+        "detail": "79"
+      },
+      "gauge_visible_in_dump": {
+        "pass": false,
+        "detail": "missing dump artifacts"
+      }
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "case": "B_rot90",
+    "ok": true,
+    "frames": 40,
+    "wall_s": 9.51,
+    "net_requests": 0,
+    "net_misses": 0,
+    "checks": {
+      "export_ok": {
+        "pass": true,
+        "detail": ""
+      },
+      "profile_json": {
+        "pass": true,
+        "detail": ""
+      },
+      "no_cache_miss_log": {
+        "pass": true,
+        "detail": ""
+      },
+      "net_zero": {
+        "pass": true,
+        "detail": "{\"tiles_requested\": 0, \"memory_hits\": 0, \"disk_hits\": 0, \"network_misses\": 0, \"network_requests\": 0}"
+      },
+      "no_traceback": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_mode_auto_selection": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_fallback_epoch": {
+        "pass": true,
+        "detail": "unsupported (rotation!=0) -> full-tile epoch label"
+      },
+      "mode_still_auto_selected": {
+        "pass": true,
+        "detail": "AUTO"
+      },
+      "no_region_frames": {
+        "pass": true,
+        "detail": "0"
+      },
+      "fulltile_uploads": {
+        "pass": true,
+        "detail": "40"
+      },
+      "oracle_missed_0": {
+        "pass": true,
+        "detail": "0"
+      },
+      "never_cpu": {
+        "pass": true,
+        "detail": "GPU tile uploads present -> not CPU-only"
+      },
+      "gauge_visible_in_dump": {
+        "pass": false,
+        "detail": "missing dump artifacts"
+      }
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "case": "C_compass",
+    "ok": true,
+    "frames": 40,
+    "wall_s": 9.01,
+    "net_requests": 0,
+    "net_misses": 0,
+    "checks": {
+      "export_ok": {
+        "pass": true,
+        "detail": ""
+      },
+      "profile_json": {
+        "pass": true,
+        "detail": ""
+      },
+      "no_cache_miss_log": {
+        "pass": true,
+        "detail": ""
+      },
+      "net_zero": {
+        "pass": true,
+        "detail": "{\"tiles_requested\": 0, \"memory_hits\": 0, \"disk_hits\": 0, \"network_misses\": 0, \"network_requests\": 0}"
+      },
+      "no_traceback": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_mode_auto_selection": {
+        "pass": true,
+        "detail": ""
+      },
+      "log_fallback_epoch": {
+        "pass": true,
+        "detail": "unsupported (compass style) -> full-tile epoch label"
+      },
+      "mode_still_auto_selected": {
+        "pass": true,
+        "detail": "AUTO"
+      },
+      "no_region_frames": {
+        "pass": true,
+        "detail": "0"
+      },
+      "fulltile_uploads": {
+        "pass": true,
+        "detail": "40"
+      },
+      "oracle_missed_0": {
+        "pass": true,
+        "detail": "0"
+      },
+      "never_cpu": {
+        "pass": true,
+        "detail": "GPU tile uploads present -> not CPU-only"
+      },
+      "gauge_visible_in_dump": {
+        "pass": false,
+        "detail": "missing dump artifacts"
+      }
+    },
+    "verdict": "FAIL"
+  }
+]

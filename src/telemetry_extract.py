@@ -11,6 +11,7 @@ import math
 import os
 import subprocess
 import tempfile
+import time as _time
 from bisect import bisect_left, bisect_right
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,18 +27,31 @@ except ImportError:
 
 
 def json_loads(text: str) -> Any:
-    """Load JSON with optional orjson acceleration."""
-    if orjson is not None:
-        return orjson.loads(text)
+    """Convenience alias for test monkeypatching."""
     return json.loads(text)
 
 
-def load_json_with_fallback(path: Path) -> Any:
-    """Load a JSON file trying multiple encodings."""
+def load_json_with_fallback(
+    path: Path,
+    profile_cb: Optional[Callable[[str, float, Path], None]] = None,
+) -> Any:
+    """Load a JSON file trying multiple encodings.
+
+    ``profile_cb`` is optional so the loading pipeline can distinguish file
+    I/O from JSON parsing without adding per-record diagnostics.
+    """
     last_error = None
     for enc in ("utf-8", "utf-8-sig", "utf-16", "utf-16-le", "cp1252"):
         try:
-            return json.loads(path.read_text(encoding=enc))
+            read_t0 = _time.perf_counter() if profile_cb else 0.0
+            text = path.read_text(encoding=enc)
+            if profile_cb:
+                profile_cb("json_file_read", _time.perf_counter() - read_t0, path)
+            parse_t0 = _time.perf_counter() if profile_cb else 0.0
+            value = json.loads(text)
+            if profile_cb:
+                profile_cb("json_parse", _time.perf_counter() - parse_t0, path)
+            return value
         except Exception as e:
             last_error = e
     raise RuntimeError(

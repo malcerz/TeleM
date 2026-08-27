@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 import math
+import os
 import time
 import threading
 try:
@@ -92,6 +93,31 @@ def _prefix_static_buffers():
         _PREFIX_STATIC_BUFFER_LOCAL.buffers = buffers
     return buffers
 _FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
+_TIMESTAMP_GAP_LIMIT_CACHE: dict[tuple[int, int, Any, Any], float | None] = {}
+
+
+def _get_timestamp_gap_limit(timestamps) -> float | None:
+    """Cache the nominal inter-sample gap limit for a timestamp timeline (ETAP 3K/3L)."""
+    if not timestamps or len(timestamps) <= 2:
+        return None
+    use_cache = os.getenv("AMD_CHART_GAP_CACHE", "1") != "0"
+    if use_cache:
+        if hasattr(timestamps, "_gap_limit"):
+            return timestamps._gap_limit
+        k = (id(timestamps), len(timestamps), timestamps[0], timestamps[-1])
+        if k in _TIMESTAMP_GAP_LIMIT_CACHE:
+            return _TIMESTAMP_GAP_LIMIT_CACHE[k]
+    deltas = [
+        (right - left).total_seconds()
+        for left, right in zip(timestamps, timestamps[1:])
+        if (right - left).total_seconds() > 0
+    ]
+    gap_limit = max(5.0, sorted(deltas)[len(deltas) // 2] * 3.0) if deltas else None
+    if use_cache:
+        if len(_TIMESTAMP_GAP_LIMIT_CACHE) >= 128:
+            _TIMESTAMP_GAP_LIMIT_CACHE.clear()
+        _TIMESTAMP_GAP_LIMIT_CACHE[k] = gap_limit
+    return gap_limit
 
 
 def _window_time_labels(duration_s: float) -> list[str]:
@@ -210,31 +236,19 @@ def _draw_post_paste_cursor(
         fill=(*post_rgb, post_alpha), width=max(2, calc_thickness),
     )
     dot_r = max(3, calc_thickness + 1)
-    # Render the opaque dot in a tiny tile so clipping remains identical to
-    # drawing on the old chart-sized image before it was pasted into the widget.
     left = int(math.floor(cursor_x - dot_r))
     top = int(math.floor(py - dot_r))
-    x0 = cursor_x - dot_r - left
-    y0 = py - dot_r - top
-    if x0 == 0.0 and y0 == 0.0:
-        dot_key = (int(dot_r), tuple(cursor_color), tuple(line_color))
-        tile = _DOT_TILES_CACHE.get(dot_key)
-        if tile is None:
-            dim = 2 * int(dot_r) + 1
-            tile = Image.new("RGBA", (dim, dim), (0, 0, 0, 0))
-            tile_draw = ImageDraw.Draw(tile)
-            tile_draw.ellipse(
-                (0, 0, 2 * dot_r, 2 * dot_r),
-                fill=(*cursor_color, 255), outline=(*line_color, 255),
-            )
-            if len(_DOT_TILES_CACHE) >= 32:
-                _DOT_TILES_CACHE.clear()
-            _DOT_TILES_CACHE[dot_key] = tile
-        right = left + 2 * int(dot_r) + 1
-        bottom = top + 2 * int(dot_r) + 1
+    right = math.ceil(cursor_x + dot_r) + 1
+    bottom = math.ceil(py + dot_r) + 1
+    clip_left, clip_top = offset_x, offset_y
+    clip_right, clip_bottom = offset_x + chart_width, offset_y + chart_height
+    if left >= clip_left and top >= clip_top and right <= clip_right and bottom <= clip_bottom:
+        # Fast path: draw directly on target image without intermediate Image allocation
+        draw.ellipse(
+            (cursor_x - dot_r, py - dot_r, cursor_x + dot_r, py + dot_r),
+            fill=(*cursor_color, 255), outline=(*line_color, 255),
+        )
     else:
-        right = math.ceil(cursor_x + dot_r) + 1
-        bottom = math.ceil(py + dot_r) + 1
         tile = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
         tile_draw = ImageDraw.Draw(tile)
         tile_draw.ellipse(
@@ -242,15 +256,13 @@ def _draw_post_paste_cursor(
              cursor_x + dot_r - left, py + dot_r - top),
             fill=(*cursor_color, 255), outline=(*line_color, 255),
         )
-    clip_left, clip_top = offset_x, offset_y
-    clip_right, clip_bottom = offset_x + chart_width, offset_y + chart_height
-    dst_left, dst_top = max(left, clip_left), max(top, clip_top)
-    dst_right, dst_bottom = min(right, clip_right), min(bottom, clip_bottom)
-    if dst_right > dst_left and dst_bottom > dst_top:
-        clipped = tile.crop((
-            dst_left - left, dst_top - top, dst_right - left, dst_bottom - top,
-        ))
-        image.paste(clipped, (dst_left, dst_top), clipped)
+        dst_left, dst_top = max(left, clip_left), max(top, clip_top)
+        dst_right, dst_bottom = min(right, clip_right), min(bottom, clip_bottom)
+        if dst_right > dst_left and dst_bottom > dst_top:
+            clipped = tile.crop((
+                dst_left - left, dst_top - top, dst_right - left, dst_bottom - top,
+            ))
+            image.paste(clipped, (dst_left, dst_top), clipped)
 
 
 def _clip_tile(tile, local, clip_w, clip_h):
@@ -579,15 +591,7 @@ def _render_chart_indicator(
                     if dt1.tzinfo is None:
                         dt1 = dt1.replace(tzinfo=timezone.utc)
                 dt_span = (dt1 - dt0).total_seconds()
-                gap_limit = None
-                if len(timestamps) > 2:
-                    deltas = [
-                        (right - left).total_seconds()
-                        for left, right in zip(timestamps, timestamps[1:])
-                        if (right - left).total_seconds() > 0
-                    ]
-                    if deltas:
-                        gap_limit = max(5.0, sorted(deltas)[len(deltas) // 2] * 3.0)
+                gap_limit = _get_timestamp_gap_limit(timestamps)
                 if (
                     dt_span > 0 and (gap_limit is None or dt_span <= gap_limit)
                     and chart_vals[idx] is not None and chart_vals[idx + 1] is not None
@@ -729,7 +733,7 @@ def _render_chart_indicator(
                 cursor_local = (0, 0)
             else:
                 clx, cly, crx, cry = cursor_bbox
-                cursor_tile = final_static.crop((clx, cly, crx, cry)).copy()
+                cursor_tile = final_static.crop((clx, cly, crx, cry))
                 _draw_post_paste_cursor(
                     cursor_tile, points, ci, plot_y1, plot_y2, calc_thickness,
                     (255, 255, 255), line_clr, 4 - clx, margin_top - cly,

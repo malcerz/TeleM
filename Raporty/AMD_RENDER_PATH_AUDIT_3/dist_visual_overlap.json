@@ -1,0 +1,92 @@
+{
+  "1080p": {
+    "canvas": "1920x1080",
+    "results": {
+      "fit_heart_rate_text": {
+        "dist_visual_bbox": [
+          681,
+          763,
+          558,
+          73
+        ],
+        "chart_bbox": [
+          870,
+          770,
+          526,
+          233
+        ],
+        "bbox_overlap_area_px": 24354,
+        "pixel_overlap_in_intersection_px": 3702,
+        "dist_visual_nontransparent_px": 5213,
+        "chart_nontransparent_px": 47832,
+        "REAL_VISUAL_OVERLAP": "YES",
+        "note": "bbox_overlap > 0 but pixel_overlap accounts for composited alpha in intersection region. Since dist_visual is a bar under the charts and charts overlay it, real visual overlap occurs in the shared y-range."
+      },
+      "fit_cadence_text": {
+        "dist_visual_bbox": [
+          681,
+          763,
+          558,
+          73
+        ],
+        "chart_bbox": [
+          198,
+          770,
+          526,
+          233
+        ],
+        "bbox_overlap_area_px": 2838,
+        "pixel_overlap_in_intersection_px": 681,
+        "dist_visual_nontransparent_px": 5213,
+        "chart_nontransparent_px": 35064,
+        "REAL_VISUAL_OVERLAP": "YES",
+        "note": "bbox_overlap > 0 but pixel_overlap accounts for composited alpha in intersection region. Since dist_visual is a bar under the charts and charts overlay it, real visual overlap occurs in the shared y-range."
+      }
+    }
+  },
+  "4K": {
+    "canvas": "3840x2160",
+    "results": {
+      "fit_heart_rate_text": {
+        "dist_visual_bbox": [
+          1373,
+          1549,
+          1095,
+          98
+        ],
+        "chart_bbox": [
+          1744,
+          1544,
+          1045,
+          454
+        ],
+        "bbox_overlap_area_px": 70952,
+        "pixel_overlap_in_intersection_px": 8327,
+        "dist_visual_nontransparent_px": 11807,
+        "chart_nontransparent_px": 191495,
+        "REAL_VISUAL_OVERLAP": "YES",
+        "note": "bbox_overlap > 0 but pixel_overlap accounts for composited alpha in intersection region. Since dist_visual is a bar under the charts and charts overlay it, real visual overlap occurs in the shared y-range."
+      },
+      "fit_cadence_text": {
+        "dist_visual_bbox": [
+          1373,
+          1549,
+          1095,
+          98
+        ],
+        "chart_bbox": [
+          400,
+          1544,
+          1045,
+          454
+        ],
+        "bbox_overlap_area_px": 7056,
+        "pixel_overlap_in_intersection_px": 1227,
+        "dist_visual_nontransparent_px": 11807,
+        "chart_nontransparent_px": 142794,
+        "REAL_VISUAL_OVERLAP": "YES",
+        "note": "bbox_overlap > 0 but pixel_overlap accounts for composited alpha in intersection region. Since dist_visual is a bar under the charts and charts overlay it, real visual overlap occurs in the shared y-range."
+      }
+    }
+  }
+}

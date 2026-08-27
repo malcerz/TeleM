@@ -55,6 +55,7 @@ class _FrameRec:
     indicator_values: dict[str, float]
     fit_vals: tuple
     dynamic_vals: tuple
+    lean_vals: tuple
     std_vals: tuple
     current_position: float
     elapsed_seconds: float
@@ -78,6 +79,9 @@ class _Static:
     remaining_extra: dict[str, tuple]
     dynamic_keys: tuple
     dynamic_meta: dict[str, tuple]
+    lean_keys: tuple
+    lean_units: dict[str, str]
+    lean_labels: dict[str, str]
     std_names: tuple
     heading_keys: tuple
     heading_units: dict[str, str]
@@ -120,6 +124,17 @@ class TelemetryFrameCache:
         for i, key in enumerate(st.dynamic_keys):
             unit, label = st.dynamic_meta[key]
             extra_indicators[key] = (rec.dynamic_vals[i], unit, label)
+        # ETAP 2E: lean widgets resolve ``lean_roll_{axis}`` (physical roll,
+        # deg) or ``slope`` (grade %) per frame.  Without this block the value
+        # fell through ``remaining_extra`` as a constant None -> the final AMD
+        # render kept the bike icon vertical while the GUI preview (live
+        # resolver) animated it.
+        for i, key in enumerate(st.lean_keys):
+            extra_indicators[key] = (
+                rec.lean_vals[i],
+                st.lean_units[key],
+                st.lean_labels[key],
+            )
         for key in st.heading_keys:
             extra_indicators[key] = (
                 rec.map_heading_value if key == "track_map" else rec.heading_value,
@@ -487,8 +502,26 @@ def build_telemetry_cache(
     }
 
     remaining_extra: dict[str, tuple] = {}
+    # ETAP 2E: lean consumers need per-frame roll/grade values; everything
+    # else that no dedicated plan covers stays a constant None placeholder.
+    lean_keys = tuple(
+        key for key, cfg in indicators.items()
+        if isinstance(cfg, dict)
+        and cfg.get("enabled", True)
+        and str(cfg.get("form", "")).strip().lower() == "lean"
+    )
+    lean_units: dict[str, str] = {}
+    lean_labels: dict[str, str] = {}
+    for key in lean_keys:
+        lcfg = indicators[key]
+        lsrc = str(lcfg.get("source", "gyro")).strip().lower()
+        lean_units[key] = lcfg.get("unit") or ("%" if lsrc == "grade" else "°")
+        lean_labels[key] = lcfg.get("label") or "Przechył"
     for key, cfg in indicators.items():
-        if key in HARDCODED_KEYS or key in fit_keys or key in dynamic_keys:
+        if (
+            key in HARDCODED_KEYS or key in fit_keys or key in dynamic_keys
+            or key in lean_keys
+        ):
             continue
         if not isinstance(cfg, dict):
             continue
@@ -684,6 +717,56 @@ def build_telemetry_cache(
             dynamic_field_arrs.append([None] * total_frames)
     t_imu_ms = (time.perf_counter() - t0_imu) * 1000.0
 
+    # 7b. Lean consumers (ETAP 2E).  Mirrors the reference path exactly:
+    #   source == "gyro"  -> value = interpolate_roll(precomputed roll timeline, t) [deg]
+    #   source == "grade" -> value = slope sample [%] (renderer applies atan)
+    # The roll timeline is computed once via the shared worker contract
+    # (``_worker_lean_roll``), so preview and final share one deterministic
+    # complementary-filter result.
+    t0_lean = time.perf_counter()
+    lean_field_arrs: list[list] = []
+    for key in lean_keys:
+        lcfg = indicators.get(key, {})
+        lsrc = str(lcfg.get("source", "gyro")).strip().lower()
+        if lsrc == "grade":
+            s_src = lcfg.get("slope_source", "gpmf")
+            s_samples = _resolve_cache_samples("slope", s_src)
+            if s_samples:
+                lean_field_arrs.append(
+                    _vectorize_step(s_samples, target_dts, target_ts_arr, ref_dt)
+                )
+            elif resolve_cache_value is not None:
+                lean_field_arrs.append([
+                    resolve_cache_value("slope", s_src, dt, key) for dt in target_dts
+                ])
+            else:
+                lean_field_arrs.append([None] * total_frames)
+        else:
+            axis = str(lcfg.get("axis", "z")).strip().lower()
+            if axis not in ("x", "y", "z"):
+                axis = "z"
+            timeline: list = []
+            _interp_roll = None
+            try:
+                from src.ffmpeg.worker_cache import _worker_lean_roll
+                from src.telemetry_imu import interpolate_roll as _interp_roll_fn
+                timeline = _worker_lean_roll(axis)
+                _interp_roll = _interp_roll_fn
+            except Exception:
+                timeline = []
+            if timeline and _interp_roll is not None:
+                lean_field_arrs.append([
+                    _interp_roll(timeline, dt) for dt in target_dts
+                ])
+            elif resolve_cache_value is not None:
+                lean_field_arrs.append([
+                    resolve_cache_value(f"lean_roll_{axis}", "gpmf", dt, key)
+                    for dt in target_dts
+                ])
+            else:
+                lean_field_arrs.append([None] * total_frames)
+    t_lean_ms = (time.perf_counter() - t0_lean) * 1000.0
+
     # 8. Record Assembly
     t0_records = time.perf_counter()
     elapsed_secs_arr = [
@@ -695,6 +778,7 @@ def build_telemetry_cache(
     num_std = len(std_field_arrs)
     num_fit = len(fit_field_arrs)
     num_dyn = len(dynamic_field_arrs)
+    num_lean = len(lean_field_arrs)
     active_ind_keys = list(ind_arrs.keys())
 
     for i in range(total_frames):
@@ -708,6 +792,7 @@ def build_telemetry_cache(
         std_v = tuple(std_field_arrs[j][i] for j in range(num_std))
         fit_v = tuple(fit_field_arrs[j][i] for j in range(num_fit))
         dyn_v = tuple(dynamic_field_arrs[j][i] for j in range(num_dyn))
+        lean_v = tuple(lean_field_arrs[j][i] for j in range(num_lean))
 
         records.append(_FrameRec(
             date_text=date_texts[i],
@@ -724,6 +809,7 @@ def build_telemetry_cache(
             indicator_values=ind_vals,
             fit_vals=fit_v,
             dynamic_vals=dyn_v,
+            lean_vals=lean_v,
             std_vals=std_v,
             current_position=cur_pos,
             elapsed_seconds=el_s,
@@ -742,12 +828,13 @@ def build_telemetry_cache(
             "build_dynamic_fit": t_fit_ms,
             "build_gpmf": t_gpmf_ms,
             "build_imu": t_imu_ms,
+            "build_lean": t_lean_ms,
             "build_heading": t_heading_ms,
             "build_slope": t_slope_ms,
             "build_gps": t_static_ms,
             "build_distance": t_linear_ms * 0.33,
             "build_frame_rec": t_records_ms,
-            "build_other": max(0.0, t_total_ms - (t_timeline_ms + t_std_ms + t_linear_ms + t_fit_ms + t_gpmf_ms + t_imu_ms + t_static_ms + t_records_ms)),
+            "build_other": max(0.0, t_total_ms - (t_timeline_ms + t_std_ms + t_linear_ms + t_fit_ms + t_gpmf_ms + t_imu_ms + t_lean_ms + t_static_ms + t_records_ms)),
             "build_total_ms": t_total_ms,
         })
 
@@ -762,7 +849,9 @@ def build_telemetry_cache(
         gps_track=gps_trk, start_dt_utc=start_dt_utc, fit_keys=fit_keys,
         fit_units=fit_units, fit_labels=fit_labels,
         remaining_extra=remaining_extra, dynamic_keys=dynamic_keys,
-        dynamic_meta=dynamic_meta, std_names=std_names,
+        dynamic_meta=dynamic_meta, lean_keys=lean_keys,
+        lean_units=lean_units, lean_labels=lean_labels,
+        std_names=std_names,
         heading_keys=heading_keys, heading_units=heading_units,
         heading_labels=heading_labels,
         slope_keys=slope_keys, slope_units=slope_units,

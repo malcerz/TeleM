@@ -639,6 +639,7 @@ def _build_stream_ffmpeg_cmd(
     overlay_w: int | None = None,
     overlay_h: int | None = None,
     use_gpu_compositor: bool = False,
+    intel_gpu_resident: bool = False,
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
