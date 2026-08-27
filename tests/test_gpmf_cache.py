@@ -48,14 +48,15 @@ def test_legacy_cache_is_invalid_and_reopen_is_hit(tmp_path, monkeypatch) -> Non
         def __init__(self):
             self.records = []
             self.start_dt_utc = None
+            self.flat_args = []
 
         def load_gpmf_from_exiftool(self, *_args, **_kwargs):
-            pass
+            self.flat_args.append(_kwargs.get("flat"))
 
-        def load_gpmf_records(self, records):
+        def load_gpmf_records(self, records, **_kwargs):
             self.records = records
 
-        def load_gps_track(self, *_args):
+        def load_gps_track(self, *_args, **_kwargs):
             pass
 
     app = ProjectMixin()
@@ -83,6 +84,7 @@ def test_legacy_cache_is_invalid_and_reopen_is_hit(tmp_path, monkeypatch) -> Non
     app._load_or_generate_telemetry()
     assert calls["count"] == 1
     assert app.telemetry.records[0]["Doc1:GPSDateTime"].endswith("50.800")
+    assert isinstance(app.telemetry.flat_args[-1], dict)
 
 
 def test_cache_fingerprint_and_version_invalidate(tmp_path) -> None:

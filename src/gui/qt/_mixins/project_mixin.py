@@ -18,6 +18,12 @@ from PIL import Image
 from src.gui.indicator_schemas import BUILTIN_FIELDS
 from src.gui.layout_manager import normalize_layout
 from src.multifile import build_timeline_from_paths, format_timeline_diagnostics
+from src.telemetry_processed_cache import (
+    apply_processed_cache,
+    processed_cache_path,
+    read_processed_cache,
+    write_processed_cache,
+)
 from src.telemetry_extract import ensure_records_list, load_json_with_fallback
 from src.video_helpers import (
     clear_capture_cache,
@@ -26,6 +32,70 @@ from src.video_helpers import (
     find_executable,
     parse_fps,
 )
+
+
+def _map_provider_from_layout(layout: dict) -> str:
+    """Return the saved map provider used for the initial preload job."""
+    return str(
+        (layout or {}).get("indicators", {})
+        .get("track_map", {})
+        .get("map_style", "light_all")
+        or "light_all"
+    )
+
+
+def _profile_load_stage(
+    stage: str,
+    started: float,
+    input_path: Path | None = None,
+    records: int | None = None,
+) -> None:
+    """Emit one compact, ASCII-safe loading profile line per major stage."""
+    try:
+        thread = threading.current_thread()
+        size = input_path.stat().st_size if input_path and input_path.exists() else None
+        fields = [
+            f"stage={stage}",
+            f"elapsed_ms={(_time.perf_counter() - started) * 1000.0:.2f}",
+            f"thread={thread.name}/{thread.ident}",
+        ]
+        if size is not None:
+            fields.append(f"input_bytes={size}")
+        if records is not None:
+            fields.append(f"records={records}")
+        print("[LoadProfile] " + " ".join(fields), flush=True)
+    except Exception:
+        pass
+
+
+def _profile_json_stage(stage: str, elapsed: float, path: Path) -> None:
+    """Adapter for ``load_json_with_fallback`` read/parse callbacks."""
+    try:
+        size = path.stat().st_size if path.exists() else None
+        suffix = f" input_bytes={size}" if size is not None else ""
+        thread = threading.current_thread()
+        print(
+            f"[LoadProfile] stage={stage} elapsed_ms={elapsed * 1000.0:.2f} "
+            f"thread={thread.name}/{thread.ident}{suffix}",
+            flush=True,
+        )
+    except Exception:
+        pass
+
+
+def _profile_gpmf_substage(
+    stage: str, elapsed: float, input_count: int, output_count: int,
+) -> None:
+    try:
+        thread = threading.current_thread()
+        print(
+            f"[LoadProfile:GPMF] stage={stage} elapsed_ms={elapsed * 1000.0:.2f} "
+            f"input_count={input_count} output_count={output_count} "
+            f"thread={thread.name}/{thread.ident}",
+            flush=True,
+        )
+    except Exception:
+        pass
 
 try:
     from src.telemetry_gpmf_new import gpmf_to_exiftool_json
@@ -115,7 +185,9 @@ def _load_valid_gpmf_cache(
         return None, "legacy_cache_no_version"
 
     try:
-        metadata = load_json_with_fallback(metadata_path)
+        metadata = load_json_with_fallback(
+            metadata_path, profile_cb=_profile_json_stage,
+        )
     except Exception:
         return None, "invalid_metadata"
 
@@ -136,7 +208,9 @@ def _load_valid_gpmf_cache(
         return None, "source_mtime_changed"
 
     try:
-        data = load_json_with_fallback(cache_path)
+        data = load_json_with_fallback(
+            cache_path, profile_cb=_profile_json_stage,
+        )
     except Exception:
         return None, "invalid_json"
     if not data:
@@ -268,8 +342,15 @@ class ProjectMixin:
                             )
                     except Exception as exc:
                         print(f"[MapPreload] GPX preparse failed: {exc}", flush=True)
+                # The saved/default layout is authoritative for the map
+                # provider.  Starting preload with the hard-coded Standard
+                # provider makes a saved Satellite map fail the async
+                # renderer's provider gate and remain on the placeholder.
+                map_provider = _map_provider_from_layout(self.layout)
                 if map_gps is not None:
-                    self._start_map_preload(map_gps, map_source)
+                    self._start_map_preload(
+                        map_gps, map_source, provider=map_provider,
+                    )
 
                 # Wczytaj/wygeneruj metadane (GPMF — heavy, runs in parallel
                 # with the map preload thread started above)
@@ -283,7 +364,9 @@ class ProjectMixin:
                         f"[MapPreload] start source=GPMF points={len(self.telemetry.gps_track)}",
                         flush=True,
                     )
-                    self._start_map_preload(self.telemetry.gps_track, "gpmf")
+                    self._start_map_preload(
+                        self.telemetry.gps_track, "gpmf", provider=map_provider,
+                    )
 
                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
                 if gpx_path and _GPX_AVAILABLE:
@@ -404,7 +487,9 @@ class ProjectMixin:
 
                 # ── Hwdec diagnostics (deferred, needs main thread) ────
                 if self.is_using_mpv():
-                    QTimer.singleShot(1500, self._check_mpv_hwdec)
+                    # bg_load has no Qt event dispatcher. Request the timer
+                    # on the controller's GUI thread through a queued signal.
+                    self.signals.sig_schedule_mpv_hwdec_check.emit()
 
                 self.signals.sig_progress.emit(100, "Gotowe")
 
@@ -414,6 +499,10 @@ class ProjectMixin:
                 self.signals.sig_error.emit(str(e))
 
         threading.Thread(target=bg_load, daemon=True).start()
+
+    def _schedule_mpv_hwdec_check(self) -> None:
+        """Start the MPV diagnostic timer on the GUI thread only."""
+        QTimer.singleShot(1500, self._check_mpv_hwdec)
 
     # ── Map preload (ETAP MAP PRELOAD) ────────────────────────────────────
     # The coarse/overview map is prepared on a background thread, parallel
@@ -506,7 +595,10 @@ class ProjectMixin:
             return
 
         meta = self.video_path.with_suffix(".json")
+        self.signals.sig_progress.emit(45, "Odczyt JSON...")
+        cache_t0 = _time.perf_counter()
         data, cache_reason = _load_valid_gpmf_cache(self.video_path, meta)
+        _profile_load_stage("json_cache_validation", cache_t0, meta)
         if data is not None:
             try:
                 records = ensure_records_list(data)
@@ -518,11 +610,60 @@ class ProjectMixin:
                     f"[Telemetry Cache] HIT file={meta.name} "
                     f"version={GPMF_CACHE_VERSION}", flush=True,
                 )
-                self.signals.sig_progress.emit(45, "Wczytywanie JSON...")
                 self.telemetry.records = records
-                self.telemetry.load_gpmf_from_exiftool(self.video_path)
-                self.telemetry.load_gpmf_records(records)
-                self.telemetry.load_gps_track(records)
+                processed_t0 = _time.perf_counter()
+                processed = read_processed_cache(self.video_path)
+                _profile_load_stage(
+                    "processed_cache_read_decode", processed_t0,
+                    processed_cache_path(self.video_path),
+                    len(records),
+                )
+                if processed is not None:
+                    print(
+                        f"[Telemetry Cache] PROCESSED HIT file="
+                        f"{processed_cache_path(self.video_path).name}",
+                        flush=True,
+                    )
+                    self.signals.sig_progress.emit(
+                        65, "Wczytywanie cache telemetrycznego...",
+                    )
+                    apply_processed_cache(self.telemetry, processed)
+                    self.meta_path = meta
+                    return
+                print(
+                    f"[Telemetry Cache] PROCESSED MISS file="
+                    f"{processed_cache_path(self.video_path).name}",
+                    flush=True,
+                )
+                self.signals.sig_progress.emit(55, "Analiza GPMF...")
+                extract_t0 = _time.perf_counter()
+                # The sidecar already contains the flat ExifTool-compatible
+                # dictionary.  Passing it avoids launching ExifTool again on
+                # every warm load.
+                self.telemetry.load_gpmf_from_exiftool(
+                    self.video_path, flat=data if isinstance(data, dict) else None,
+                )
+                _profile_load_stage(
+                    "gpmf_exiftool_extract", extract_t0, meta, len(records),
+                )
+                records_t0 = _time.perf_counter()
+                self.telemetry.load_gpmf_records(
+                    records, profile_cb=_profile_gpmf_substage,
+                )
+                _profile_load_stage(
+                    "gpmf_records_extract", records_t0, meta, len(records),
+                )
+                gps_t0 = _time.perf_counter()
+                self.telemetry.load_gps_track(
+                    records, profile_cb=_profile_gpmf_substage,
+                )
+                _profile_load_stage("gps_extract", gps_t0, meta, len(records))
+                write_processed_t0 = _time.perf_counter()
+                processed_path = write_processed_cache(self.video_path, self.telemetry)
+                _profile_load_stage(
+                    "processed_cache_write", write_processed_t0,
+                    processed_path,
+                )
                 self.meta_path = meta
                 return
         print(
@@ -538,10 +679,12 @@ class ProjectMixin:
         if _GPMF_AVAILABLE and self.ffmpeg_exe and self.ffprobe_exe:
             try:
                 self.signals.sig_progress.emit(50, "GPMF: czytanie strumienia...")
+                gpmf_t0 = _time.perf_counter()
                 data = gpmf_to_exiftool_json(
                     str(self.video_paths[0]),
                     self.ffmpeg_exe, self.ffprobe_exe,
                 )
+                _profile_load_stage("gpmf_convert", gpmf_t0, self.video_path)
                 if data:
                     method = "GPMF"
                     print(f"[GPMF] Succeeded — extracted {len(data[0]) if isinstance(data, list) and data else 0} keys", flush=True)
@@ -559,14 +702,18 @@ class ProjectMixin:
             )
             if not exe:
                 raise RuntimeError("Nie znaleziono exiftool")
+            exiftool_t0 = _time.perf_counter()
             proc = subprocess.run(
                 [exe, "-ee", "-j", "-G3", str(self.video_paths[0])],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True,
             )
+            _profile_load_stage("exiftool_process", exiftool_t0, self.video_path)
             if proc.returncode != 0:
                 raise RuntimeError(proc.stderr or "ExifTool error")
+            exiftool_t0 = _time.perf_counter()
             data = json.loads(proc.stdout)
+            _profile_load_stage("exiftool_json_parse", exiftool_t0, self.video_path)
             method = "ExifTool"
 
         if data:
@@ -580,12 +727,32 @@ class ProjectMixin:
             self.meta_path = json_path
 
             self.signals.sig_progress.emit(65, f"Parsowanie danych ({method})...")
+            records_t0 = _time.perf_counter()
             records = ensure_records_list([flat])
+            _profile_load_stage(
+                "records_conversion", records_t0, json_path, len(records),
+            )
             self.telemetry.records = records
             # Przekazujemy flat zamiast uruchamiać ExifTool ponownie
+            extract_t0 = _time.perf_counter()
             self.telemetry.load_gpmf_from_exiftool(self.video_path, flat=flat)
-            self.telemetry.load_gpmf_records(records)
-            self.telemetry.load_gps_track(records)
+            self.telemetry.load_gpmf_records(
+                records, profile_cb=_profile_gpmf_substage,
+            )
+            _profile_load_stage(
+                "gpmf_records_extract", extract_t0, json_path, len(records),
+            )
+            gps_t0 = _time.perf_counter()
+            self.telemetry.load_gps_track(
+                records, profile_cb=_profile_gpmf_substage,
+            )
+            _profile_load_stage("gps_extract", gps_t0, json_path, len(records))
+
+            write_processed_t0 = _time.perf_counter()
+            processed_path = write_processed_cache(self.video_path, self.telemetry)
+            _profile_load_stage(
+                "processed_cache_write", write_processed_t0, processed_path,
+            )
 
             # Jeśli start_dt_utc wciąż None (brak GPSDateTime w GPMF),
             # użyj daty z metadanych wideo

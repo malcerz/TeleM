@@ -34,12 +34,14 @@ class RenderMixin:
             self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
             return
 
-        # Zapisz layout
+        # Persist explicit bar/ruler orientation instead of the legacy hack.
+        from src.indicators.compositor import normalize_layout_for_save
         def_layout = self.base_dir / "def_layout.json"
         with open(def_layout, "w", encoding="utf-8") as f:
-            json.dump(self.layout, f, indent=2, ensure_ascii=False)
+            json.dump(normalize_layout_for_save(self.layout), f, indent=2, ensure_ascii=False)
 
         self.render_cancel_event.clear()
+        self.render_process_holder = {}
 
         def worker() -> None:
             try:
@@ -55,7 +57,10 @@ class RenderMixin:
                 else:
                     self.signals.sig_render_stopped.emit()
 
-        threading.Thread(target=worker, daemon=True).start()
+        self.render_worker_thread = threading.Thread(
+            target=worker, daemon=True, name="TeleM-RenderWorker",
+        )
+        self.render_worker_thread.start()
 
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
@@ -77,6 +82,9 @@ class RenderMixin:
         resolution = options.get("resolution", "source")
         output = options.get("output", "output.mp4")
         video_bitrate = options.get("bitrate", "40M")
+        hud_resolution_scale = float(options.get("hud_resolution_scale", 1.0) or 1.0)
+        if hud_resolution_scale not in (1.0, 0.75, 0.5):
+            hud_resolution_scale = 1.0
 
         meta = self.video_path.with_suffix(".json")
         if not meta.exists():
@@ -157,15 +165,14 @@ class RenderMixin:
             "gyro_magnitude_samples": self.telemetry.gyro_magnitude_samples,
         }
 
-        # Smart Canvas Scaling: limit CPU overlay canvas to 1920 width if target is higher (e.g. 4K)
-        # FFmpeg will automatically scale the overlay to render_w/render_h
-        max_overlay_w = 1920
-        if render_w > max_overlay_w:
-            ov_w = max_overlay_w
-            ov_h = int(max_overlay_w * render_h / render_w) if render_w > 0 else 1080
-        else:
-            ov_w = render_w
-            ov_h = render_h
+        # HUD is rasterized at an explicit fraction of the export canvas.
+        # Keep dimensions even because the downstream YUV/GPU filters require it.
+        ov_w = max(2, int(round(render_w * hud_resolution_scale)))
+        ov_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if ov_w % 2:
+            ov_w += 1
+        if ov_h % 2:
+            ov_h += 1
 
         stream_overlay_to_ffmpeg(
             ffmpeg_exe=ffmpeg_exe,
@@ -216,9 +223,31 @@ class RenderMixin:
             overlay_h=ov_h,
             render_w=render_w,
             render_h=render_h,
+            hud_resolution_scale=hud_resolution_scale,
+            active_process_holder=self.render_process_holder,
         )
 
         return {"total_overlay_frames": 0, "png_duration": 0}
 
     def _on_render_cancelled(self) -> None:
         self.render_cancel_event.set()
+        # The render worker owns writer -> stdin ordering. Do not close stdin
+        # from the GUI thread while the writer may still be inside write().
+
+    def cancel_render_and_wait(self, timeout: float = 7.0) -> bool:
+        """Request cancellation for app shutdown and wait only bounded time."""
+        worker = getattr(self, "render_worker_thread", None)
+        if worker is None or not worker.is_alive():
+            return True
+        self.render_cancel_event.set()
+        worker.join(timeout=max(0.1, timeout))
+        if worker.is_alive():
+            process = getattr(self, "render_process_holder", {}).get("process")
+            if process is not None:
+                try:
+                    from src.ffmpeg.streaming import _stop_ffmpeg_process
+                    _stop_ffmpeg_process(process, graceful_timeout=0.1)
+                except Exception:
+                    pass
+            worker.join(timeout=2.0)
+        return not worker.is_alive()

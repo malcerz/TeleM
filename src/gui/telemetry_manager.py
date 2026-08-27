@@ -7,6 +7,7 @@ from bisect import bisect_right
 from datetime import datetime, timedelta
 from statistics import median
 from pathlib import Path
+import time as _time
 from typing import Any, Callable, Optional
 
 from src.telemetry_resolver import resolve_samples_from_sources
@@ -521,52 +522,93 @@ class TelemetryDataManager:
             else:
                 self.alt_samples = raw_alt or []
 
-    def load_gpmf_records(self, records: list[dict]) -> None:
+    def load_gpmf_records(self, records: list[dict], profile_cb=None) -> None:
         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
         self.records = records
+
+        def _run(stage, fn):
+            started = _time.perf_counter()
+            result = fn()
+            if profile_cb is not None:
+                try:
+                    profile_cb(stage, _time.perf_counter() - started, len(records), len(result or []))
+                except Exception:
+                    pass
+            return result
 
         # Speed and altitude should come from ExifTool flat dict (load_gpmf_from_exiftool),
         # NOT from records. Only extract them from records if not already populated.
         if not self.speed_samples and self._extract_speed:
-            self.speed_samples = self._extract_speed(records)
+            self.speed_samples = _run("speed_extract", lambda: self._extract_speed(records))
         if not self.alt_samples and self._extract_altitude:
-            self.alt_samples = self._extract_altitude(records)
+            self.alt_samples = _run("altitude_extract", lambda: self._extract_altitude(records))
         if self._extract_track:
-            self.track_samples = self._extract_track(records)
+            self.track_samples = _run("track_extract", lambda: self._extract_track(records))
         if self._extract_iso:
-            self.iso_samples = self._extract_iso(records)
+            self.iso_samples = _run("iso_extract", lambda: self._extract_iso(records))
         if self._extract_exposure:
-            self.exposure_samples = self._extract_exposure(records)
+            self.exposure_samples = _run("exposure_extract", lambda: self._extract_exposure(records))
         if self._extract_temperature:
-            self.temperature_samples = self._extract_temperature(records)
+            self.temperature_samples = _run("temperature_extract", lambda: self._extract_temperature(records))
         if self._extract_accelerometer:
-            self.accelerometer_samples = self._extract_accelerometer(records)
+            self.accelerometer_samples = _run("accelerometer_extract", lambda: self._extract_accelerometer(records))
             self._set_vector_series(self.accelerometer_samples, "accel")
         if self._extract_gyroscope:
-            self.gyroscope_samples = self._extract_gyroscope(records)
+            self.gyroscope_samples = _run("gyroscope_extract", lambda: self._extract_gyroscope(records))
             self._set_vector_series(self.gyroscope_samples, "gyro")
 
         # Determine start_dt_utc
         if self._find_gps_anchor:
+            anchor_t0 = _time.perf_counter()
             anchor = self._find_gps_anchor(records)
+            if profile_cb is not None:
+                try:
+                    profile_cb("gps_anchor", _time.perf_counter() - anchor_t0, len(records), 1 if anchor else 0)
+                except Exception:
+                    pass
             if anchor:
                 self.start_dt_utc = anchor
         if self.start_dt_utc is None and self.speed_samples:
             self.start_dt_utc = self.speed_samples[0][0]
 
         # Smooth
+        smooth_t0 = _time.perf_counter()
         self.smooth_all_gpmf()
+        if profile_cb is not None:
+            try:
+                profile_cb("smoothing", _time.perf_counter() - smooth_t0, len(records), len(self.speed_samples) + len(self.alt_samples))
+            except Exception:
+                pass
 
         # Heading is derived from the GPMF GPS track only.  The explicit
         # load_gps_track call also rebuilds this stream after the track is
         # available to the map path.
         if self._extract_gps_track:
+            gps_track_t0 = _time.perf_counter()
+            self.gps_track = self._extract_gps_track(records)
+            if profile_cb is not None:
+                try:
+                    profile_cb("gps_track_extract", _time.perf_counter() - gps_track_t0, len(records), len(self.gps_track))
+                except Exception:
+                    pass
+            heading_t0 = _time.perf_counter()
             self.heading_samples = derive_heading_samples(
-                self._extract_gps_track(records), self.speed_samples
+                self.gps_track, self.speed_samples
             )
+            if profile_cb is not None:
+                try:
+                    profile_cb("heading_derive", _time.perf_counter() - heading_t0, len(records), len(self.heading_samples))
+                except Exception:
+                    pass
+        slope_t0 = _time.perf_counter()
         self.slope_samples = derive_slope_from_streams(
             self.track_samples, self.alt_samples
         )
+        if profile_cb is not None:
+            try:
+                profile_cb("slope_derive", _time.perf_counter() - slope_t0, len(self.track_samples), len(self.slope_samples))
+            except Exception:
+                pass
 
     def smooth_all_gpmf(self) -> None:
         """Smooth GPMF speed and altitude samples."""
@@ -854,13 +896,27 @@ class TelemetryDataManager:
     # GPS track (for map rendering)
     # ------------------------------------------------------------------
 
-    def load_gps_track(self, records: list[dict]) -> None:
+    def load_gps_track(self, records: list[dict], profile_cb=None) -> None:
         """Extract raw GPS lat/lon track from GPMF records for map rendering."""
         if self._extract_gps_track:
-            self.gps_track = self._extract_gps_track(records)
-            self.heading_samples = derive_heading_samples(
-                self.gps_track, self.speed_samples
-            )
+            if not self.gps_track:
+                gps_t0 = _time.perf_counter()
+                self.gps_track = self._extract_gps_track(records)
+                if profile_cb is not None:
+                    try:
+                        profile_cb("gps_track_extract", _time.perf_counter() - gps_t0, len(records), len(self.gps_track))
+                    except Exception:
+                        pass
+            if not self.heading_samples:
+                heading_t0 = _time.perf_counter()
+                self.heading_samples = derive_heading_samples(
+                    self.gps_track, self.speed_samples
+                )
+                if profile_cb is not None:
+                    try:
+                        profile_cb("gps_heading_derive", _time.perf_counter() - heading_t0, len(self.gps_track), len(self.heading_samples))
+                    except Exception:
+                        pass
         else:
             self.gps_track = []
             self.heading_samples = []

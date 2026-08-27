@@ -85,12 +85,13 @@ def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
 
 # ── Fabryki pól per-zakładka ────────────────────────────────────────────────
 
-def _header_fields(with_source: bool = True, text_size: bool = False) -> list[FieldSchema]:
+def _header_fields(with_source: bool = True, text_size: bool = False,
+                   allow_small_size: bool = False) -> list[FieldSchema]:
     """Pola zawsze widoczne nad zakładkami (pozycja, etykieta, rotacja)."""
     fields = [
         FieldSchema(
             "font_size" if text_size else "size", "float", "Rozmiar", tab="",
-            min_val=0.5 if text_size else 1.0,
+            min_val=0.5 if (text_size or allow_small_size) else 1.0,
             max_val=10.0 if text_size else 100.0,
             step=0.1,
             default=2.5,
@@ -372,7 +373,7 @@ def _bar_ruler_fields() -> list[FieldSchema]:
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=100000.0, step=1.0, default=100.0),
-        FieldSchema("thickness", "int", "Grubość", tab="Gauge", min_val=1, max_val=10, step=1, default=3),
+        FieldSchema("thickness", "float", "Grubość", tab="Gauge", min_val=0.25, max_val=10.0, step=0.25, default=3.0),
     ]
 
 
@@ -501,7 +502,7 @@ def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
         FieldSchema("bar_style", "choice", "Styl", tab="",
                     choices=[("ruler", "Ruler"), ("segments", "Segments")], default="ruler"),
     ]
-    header = _header_fields() + _form_field() + style_choice
+    header = _header_fields(allow_small_size=True) + _form_field() + style_choice
     if style in ("segment", "segments", "segmented", "segment_bar"):
         return header + _bar_segments_fields()
     if style in ("slope", "grade", "vertical_slope"):

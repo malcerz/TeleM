@@ -26,7 +26,8 @@ class PresetMixin:
             return
         try:
             # Dołącz cut_regions do zapisywanego layoutu
-            layout_copy = dict(self.layout)
+            from src.indicators.compositor import normalize_layout_for_save
+            layout_copy = normalize_layout_for_save(self.layout)
             if self._cut_regions:
                 layout_copy["cut_regions"] = self._cut_regions
             else:

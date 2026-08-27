@@ -272,6 +272,7 @@ class AppController(
         s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
         # Map preload: refresh the preview when the overview map becomes ready.
         s.sig_map_ready.connect(lambda: self._render_preview())
+        s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
 
     def _load_startup_preset(self) -> None:
         """Wczytuje def_layout.json oraz _startup_preset jeśli istnieje."""

@@ -165,6 +165,15 @@ class RenderTab(QWidget):
         self.cmb_update_rate.addItems(["Full", "Half", "Quarter"])
         form.addRow("Częstotliwość HUD:", self.cmb_update_rate)
 
+        self.cmb_hud_resolution = QComboBox()
+        self.cmb_hud_resolution.addItems(["100%", "75%", "50%"])
+        self.cmb_hud_resolution.setCurrentText("100%")
+        self.cmb_hud_resolution.setToolTip(
+            "Rozmiar rastra HUD względem rozdzielczości eksportu; "
+            "nie zmienia częstotliwości HUD ani rozdzielczości filmu."
+        )
+        form.addRow("Rozdzielczość HUD:", self.cmb_hud_resolution)
+
         self.edit_bitrate = QLineEdit("40M")
         form.addRow("Bitrate:", self.edit_bitrate)
 
@@ -448,6 +457,11 @@ class RenderTab(QWidget):
             "resolution": self.cmb_resolution.currentText(),
             "rotation": self.cmb_rotation.currentText(),
             "update_rate": self.cmb_update_rate.currentText(),
+            "hud_resolution_scale": {
+                "100%": 1.0,
+                "75%": 0.75,
+                "50%": 0.5,
+            }.get(self.cmb_hud_resolution.currentText(), 1.0),
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
         }
@@ -519,7 +533,9 @@ class RenderTab(QWidget):
         - raport klatki (completed/total, {"frame","ts"}) — mapowany na zakres
           10..98% wspólnego paska.
         """
-        if self._cancelling:
+        if self._cancelling and not (
+            isinstance(hud_state, dict) and hud_state.get("phase") == "finalize"
+        ):
             return
         if hud_state is not None and isinstance(hud_state, dict) and "phase" in hud_state:
             self._on_render_phase(hud_state, elapsed)
@@ -853,8 +869,22 @@ class RenderTab(QWidget):
             )
             if not overlay_data:
                 return None
+            hud_scale = {
+                "100%": 1.0,
+                "75%": 0.75,
+                "50%": 0.5,
+            }.get(self.cmb_hud_resolution.currentText(), 1.0)
+            hud_w = max(2, int(round(tw * hud_scale)))
+            hud_h = max(2, int(round(th * hud_scale)))
+            if hud_w % 2:
+                hud_w += 1
+            if hud_h % 2:
+                hud_h += 1
+            preview_base = base if hud_scale == 1.0 else base.resize(
+                (hud_w, hud_h), Image.Resampling.BILINEAR
+            )
             preview = render_preview(
-                base, layout, getattr(ctrl, "font_path", None),
+                preview_base, layout, getattr(ctrl, "font_path", None),
                 overlay_data["date_text"], overlay_data["time_text"],
                 overlay_data["speed_value"],
                 overlay_data["distance_m"],
@@ -885,6 +915,8 @@ class RenderTab(QWidget):
                 inplace=False,
             )
             rgba = preview.convert("RGBA")
+            if hud_scale != 1.0:
+                rgba = rgba.resize((tw, th), Image.Resampling.BILINEAR)
             data = rgba.tobytes("raw", "RGBA")
             qimg = QImage(data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888).copy()
             return qimg

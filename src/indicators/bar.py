@@ -343,7 +343,7 @@ def _render_ruler(
     val_min: float,
     val_max: float,
     ticks: int,
-    thickness: int,
+    thickness: float,
     size_px: int,
     fs: int,
     outline: int,
@@ -595,7 +595,7 @@ def _render_ruler_vertical(
     val_min: float,
     val_max: float,
     ticks: int,
-    thickness: int,
+    thickness: float,
     size_px: int,
     fs: int,
     outline: int,
@@ -626,13 +626,19 @@ def _render_ruler_vertical(
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     legacy_slope = bool(cfg.get("_legacy_slope", False))
 
-    title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 0.9)) * fs * ss)))
-    label_fs = max(7 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss)))
-    value_fs = max(8 * ss, int(round(float(cfg.get("value_font_scale", 1.0)) * fs * ss)))
+    raw_size = float(cfg.get("size", 1.0))
+    ruler_scale = raw_size if 0.0 < raw_size <= 1.0 else 1.0
+
+    def geom(value: float, minimum: float = 1.0) -> int:
+        return max(int(round(minimum * ss)), int(round(value * ruler_scale * ss)))
+
+    title_fs = max(4 * ss, int(round(float(cfg.get("title_font_scale", 0.9)) * fs * ss * ruler_scale)))
+    label_fs = max(4 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss * ruler_scale)))
+    value_fs = max(4 * ss, int(round(float(cfg.get("value_font_scale", 1.0)) * fs * ss * ruler_scale)))
     title_font = load_font(font_path, title_fs)
     tick_font = load_font(font_path, label_fs)
     value_font = load_font(font_path, value_fs)
-    text_stroke = max(0, int(round(max(1, outline) * ss)))
+    text_stroke = max(0, int(round(max(1, outline) * ss * ruler_scale)))
 
     raw_title = str(cfg.get("title_text", label or "")).strip()
     title = raw_title.upper() if uppercase_title else raw_title
@@ -661,18 +667,18 @@ def _render_ruler_vertical(
     dim_text = _rgba(cfg.get("range_color", "#DDE7F2"), (221, 231, 242), int(235 * opacity))
     shadow_alpha = int(150 * opacity)
 
-    track_height = max(200 * ss, int(size_px * ss))
-    track_width = max(2 * ss, int(round(float(cfg.get("track_width", max(1, thickness * 0.45))) * ss)))
+    track_height = max(ss, int(round(max(200 * ss, int(size_px * ss)) * ruler_scale)))
+    track_width = geom(float(cfg.get("track_width", max(1, thickness * 0.45))), 1.0)
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
-    tick_w = max(1 * ss, int(round(float(cfg.get("tick_width", max(1, thickness))) * ss)))
-    major_len = max(10 * ss, int(round(float(cfg.get("major_tick_length", 22.0)) * ss)))
-    minor_len = max(5 * ss, int(round(float(cfg.get("minor_tick_length", 12.0)) * ss)))
+    tick_w = geom(float(cfg.get("tick_width", max(1, thickness))), 1.0)
+    major_len = geom(float(cfg.get("major_tick_length", 22.0)), 1.0)
+    minor_len = geom(float(cfg.get("minor_tick_length", 12.0)), 1.0)
     if pixel_profile:
-        major_len = max(10 * ss, int(round(track_height * 0.075)))
-        minor_len = max(5 * ss, int(round(track_height * 0.038)))
-    marker_len = max(12 * ss, int(round(float(cfg.get("marker_length", 28.0)) * ss)))
-    marker_radius = max(3 * ss, int(round(float(cfg.get("marker_size", 6.0)) * ss)))
-    marker_width = max(1 * ss, int(round(float(cfg.get("marker_width", 3.0)) * ss)))
+        major_len = max(geom(10.0), int(round(track_height * 0.075)))
+        minor_len = max(geom(5.0), int(round(track_height * 0.038)))
+    marker_len = geom(float(cfg.get("marker_length", 28.0)), 1.0)
+    marker_radius = geom(float(cfg.get("marker_size", 6.0)), 1.0)
+    marker_width = geom(float(cfg.get("marker_width", 3.0)), 1.0)
     marker_style = str(cfg.get("marker_style", "dot")).strip().lower()
     if marker_style not in ("dot", "line"):
         marker_style = "dot"
@@ -726,18 +732,18 @@ def _render_ruler_vertical(
     label_width = max(label_widths or [0])
 
     title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label and title else 0
-    title_gap = 5 * ss if title_h else 0
-    pad_x = 8 * ss
-    pad_top = 5 * ss
-    track_x = pad_x + label_width + major_len + 10 * ss
+    title_gap = geom(5.0) if title_h else 0
+    pad_x = geom(8.0)
+    pad_top = geom(5.0)
+    track_x = pad_x + label_width + major_len + geom(10.0)
     top = pad_top + title_h + title_gap
     bottom = top + track_height
     if marker_style == "line":
-        value_x = track_x + marker_len + 12 * ss
+        value_x = track_x + marker_len + geom(12.0)
     else:
-        value_x = track_x + marker_radius + 10 * ss
+        value_x = track_x + marker_radius + geom(10.0)
     raster_w = max(track_x + track_width + pad_x, value_x + value_width + pad_x)
-    raster_h = bottom + 8 * ss
+    raster_h = bottom + geom(8.0)
 
     static_key = _static_cache_key(
         "bar_ruler_v3_vertical", font_path,
@@ -746,7 +752,7 @@ def _render_ruler_vertical(
         lo, hi, unit, major_step, major_divisions, minor_per_major, total_divisions,
         track_color, tick_color, zero_color, text_color, dim_text,
         track_width, tick_w, major_len, minor_len, marker_len, marker_radius,
-        marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px,
+        marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px, ruler_scale,
         value_width, tuple(sorted(label_texts.items())),
         tuple(range_label_texts), legacy_slope,
     )
@@ -1713,7 +1719,7 @@ def _render_slope(
     cfg: dict[str, Any],
     val_min: float,
     val_max: float,
-    thickness: int,
+    thickness: float,
     size_px: int,
     fs: int,
     outline: int,
@@ -1741,7 +1747,7 @@ def _render_slope(
         val_min=float(val_min),
         val_max=float(val_max),
         ticks=int(ticks),
-        thickness=int(thickness),
+        thickness=float(thickness),
         size_px=int(size_px),
         fs=int(fs),
         outline=int(outline),
@@ -1825,7 +1831,7 @@ def _render_bar_indicator(
             val_min=float(val_min),
             val_max=float(val_max),
             ticks=int(ticks),
-            thickness=int(thickness),
+            thickness=float(thickness),
             size_px=int(size_px),
             fs=int(fs),
             outline=int(outline),
@@ -1844,7 +1850,7 @@ def _render_bar_indicator(
             val_min=float(val_min),
             val_max=float(val_max),
             ticks=int(ticks),
-            thickness=int(thickness),
+            thickness=float(thickness),
             size_px=int(size_px),
             fs=int(fs),
             outline=int(outline),

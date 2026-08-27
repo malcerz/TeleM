@@ -137,6 +137,9 @@ class AppSignals(QObject):
     # (loaded_tiles, required_tiles)
     sig_map_progress = Signal(int, int)
 
+    # Request GUI-thread-only deferred MPV diagnostics from a loading worker.
+    sig_schedule_mpv_hwdec_check = Signal()
+
 
 # Singleton dla całej aplikacji
 _signals: AppSignals | None = None

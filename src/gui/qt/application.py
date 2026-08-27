@@ -22,6 +22,7 @@ def main() -> None:
     _controller = AppController()
     window = MainWindow()
     window.set_controller(_controller)  # wiąże współdzielony podgląd (jeden raz)
+    app.aboutToQuit.connect(_controller.cancel_render_and_wait)
     window.showMaximized()
 
     # Zgłoś błąd, jeśli brak bibliotek libmpv (podgląd GPU MPV niedostępny)
