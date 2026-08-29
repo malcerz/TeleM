@@ -23,7 +23,11 @@ from src.indicators.dispatcher import render_value_indicator
 from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_display import render_time_display
-from src.indicators.profiling import get_overlay_profiler, indicator_scope
+from src.indicators.profiling import (
+    get_overlay_profiler,
+    indicator_scope,
+    record_production_accounting,
+)
 
 
 import copy
@@ -148,6 +152,7 @@ def compose_overlay(
     destination_proven_empty: bool = False,
     map_heading: Optional[float] = None,
     async_map: bool = False,
+    _production_accounting_role: Optional[str] = None,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
 
@@ -176,7 +181,7 @@ def compose_overlay(
         img, prev_bboxes, canvas_state = _get_reusable_canvas(canvas_w, canvas_h, canvas_type=c_type)
         if prev_bboxes:
             clear_started = time.perf_counter()
-            pad = 40
+            pad = 2
             for bx, by, bw, bh in prev_bboxes.values():
                 x1 = max(0, bx - pad)
                 y1 = max(0, by - pad)
@@ -189,6 +194,11 @@ def compose_overlay(
                 "canvas.regional_clear",
                 (time.perf_counter() - clear_started) * 1000.0,
             )
+            if _production_accounting_role == "above":
+                record_production_accounting(
+                    "above.regional_clear",
+                    (time.perf_counter() - clear_started) * 1000.0,
+                )
         elif not canvas_state.get("is_clean", False):
             clear_started = time.perf_counter()
             img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
@@ -198,6 +208,11 @@ def compose_overlay(
                 (time.perf_counter() - clear_started) * 1000.0,
                 "Initialize the persistent 3840x2160 RGBA HUD to transparent pixels",
             )
+            if _production_accounting_role == "above":
+                record_production_accounting(
+                    "above.regional_clear",
+                    (time.perf_counter() - clear_started) * 1000.0,
+                )
     else:
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         prev_bboxes = None
@@ -233,9 +248,10 @@ def compose_overlay(
             with indicator_scope("time_display"):
                 with profiler.measure("indicator.time_display.paste_composite"):
                     rotated_paste(
-                        img, td, cx - origin_x, cy - origin_y, td_rotation,
+                        img, td, cx, cy, td_rotation,
                         prior_bboxes=_paste_prior_bboxes(), cache_key="time_display",
                         tight_bboxes=_tight_bboxes, tight_key="time_display",
+                        coordinate_offset=(origin_x, origin_y),
                     )
             if td_rotation in (90, 270):
                 _bboxes["time_display"] = (
@@ -449,11 +465,11 @@ def compose_overlay(
 
             if is_text:
                 if rotation in (90, 270):
-                    center_x = rx + res.height // 2
-                    center_y = ry + res.width // 2
+                    center_x = rx + res.height / 2.0
+                    center_y = ry + res.width / 2.0
                 else:
-                    center_x = rx + res.width // 2
-                    center_y = ry + res.height // 2
+                    center_x = rx + res.width / 2.0
+                    center_y = ry + res.height / 2.0
             else:
                 center_x = rx
                 center_y = ry
@@ -525,13 +541,14 @@ def compose_overlay(
                 with indicator_scope(key):
                     with profiler.measure(f"indicator.{key}.paste_composite"):
                         rotated_paste(
-                            img, res, center_x - origin_x, center_y - origin_y, rotation,
+                            img, res, center_x, center_y, rotation,
                             prior_bboxes=_paste_prior_bboxes(), cache_key=key,
                             destination_proven_empty=(
                                 destination_proven_empty
                                 and current_cfg.get("form", "text") == "chart"
                             ),
                             tight_bboxes=_tight_bboxes, tight_key=key,
+                            coordinate_offset=(origin_x, origin_y),
                         )
 
                 _bboxes[key] = widget_bbox
@@ -607,11 +624,17 @@ def compose_overlay(
             f"indicator.{key}.total",
             (time.perf_counter() - indicator_started) * 1000.0,
         )
+        _widget_ms = (time.perf_counter() - indicator_started) * 1000.0
+        if _production_accounting_role in {"above", "below"}:
+            record_production_accounting(
+                f"{_production_accounting_role}.widget.{key}", _widget_ms
+            )
 
     # Custom texts – use resolution-scaled outline
     ct_outline = max(0, int(round(
         int(layout.get("global", {}).get("text_outline", 3)) * min(canvas_w, canvas_h) / 1000
     )))
+    custom_started = time.perf_counter()
     for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
         if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
             continue
@@ -639,6 +662,11 @@ def compose_overlay(
                 int(ct_w),
                 int(ct_h),
             )
+    if _production_accounting_role in {"above", "below"}:
+        record_production_accounting(
+            f"{_production_accounting_role}.custom_text_loop",
+            (time.perf_counter() - custom_started) * 1000.0,
+        )
 
     if prev_bboxes is not None and _bboxes:
         prev_bboxes.update(_bboxes)
@@ -647,7 +675,10 @@ def compose_overlay(
 
         # Record above_compose timing if audit enabled
     if _audit_above and _above_start is not None:
-        profiler.record("above_compose.total", (time.perf_counter() - _above_start) * 1000.0)
+        _above_total_ms = (time.perf_counter() - _above_start) * 1000.0
+        profiler.record("above_compose.total", _above_total_ms)
+        if _production_accounting_role == "above":
+            record_production_accounting("above.compose_total", _above_total_ms)
     return img
 
 

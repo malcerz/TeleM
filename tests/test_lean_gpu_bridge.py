@@ -13,8 +13,8 @@ from src.indicators.lean import (
 def test_lean_gpu_transform_info_geometry():
     layout = {"font_path": "assets/fonts/Roboto-Bold.ttf"}
     cfg = {
-        "x": 0.5,
-        "y": 0.5,
+        "x": 50.0,
+        "y": 50.0,
         "size": 120,
         "show_label": True,
         "show_value": True,

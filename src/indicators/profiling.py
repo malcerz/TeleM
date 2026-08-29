@@ -352,6 +352,32 @@ class OverlayProfiler:
 
 _PROFILER = OverlayProfiler()
 
+_PRODUCTION_ACCOUNTING = os.environ.get("AMD_PRODUCTION_ACCOUNTING", "0").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+_PRODUCTION_ACCOUNTING_LOCK = threading.Lock()
+_PRODUCTION_ACCOUNTING_TOTALS: dict[str, dict[str, float]] = {}
+
+
+def record_production_accounting(name: str, elapsed_ms: float) -> None:
+    """Debug-only aggregate for the AMD production accounting audit."""
+    if not _PRODUCTION_ACCOUNTING:
+        return
+    with _PRODUCTION_ACCOUNTING_LOCK:
+        entry = _PRODUCTION_ACCOUNTING_TOTALS.setdefault(name, {"total_ms": 0.0, "calls": 0.0})
+        entry["total_ms"] += float(elapsed_ms)
+        entry["calls"] += 1.0
+
+
+def production_accounting_summary() -> dict[str, dict[str, float]]:
+    if not _PRODUCTION_ACCOUNTING:
+        return {"enabled": False}
+    with _PRODUCTION_ACCOUNTING_LOCK:
+        return {
+            "enabled": True,
+            "totals": {key: dict(value) for key, value in _PRODUCTION_ACCOUNTING_TOTALS.items()},
+        }
+
 
 def get_overlay_profiler() -> OverlayProfiler:
     return _PROFILER

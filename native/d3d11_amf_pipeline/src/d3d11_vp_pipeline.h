@@ -25,6 +25,10 @@ struct VPPipelineStats {
     double setter_fmt_ms = 0.0;     // ETAP 5S: VideoProcessorSetStreamFrameFormat
     double setter_src_rect_ms = 0.0; // ETAP 5S: VideoProcessorSetStreamSourceRect
     double setter_dst_rect_ms = 0.0; // ETAP 5S: VideoProcessorSetStreamDestRect
+    int first_vp_api = 0;            // ETAP 5V: 1=FMT, 2=SRC, 3=DST, 4=BLT
+    double first_vp_api_ms = 0.0;
+    double vp_sequence_total_ms = 0.0;
+    double base_convert_compute_ms = 0.0;
     double blt_ms = 0.0;
     double submit_window_ms = 0.0;  // Blt end -> HUD end (whole enqueue window)
     double range_pass_ms = 0.0;
@@ -47,6 +51,13 @@ struct VPPipelineStats {
     UINT array_index = 0;           // ETAP 5S: decoder subresource / array slice
     int setters_skipped = 0;        // ETAP 5S: 1 if STATIC_CACHE skipped setters this frame
     UINT state_sig = 0;             // ETAP 5S: applied stream-state signature
+    UINT64 vp_processor_id = 0;
+    UINT64 vp_enumerator_id = 0;
+    UINT64 vp_context_id = 0;
+    int prev_vp_query_ready = -1;   // ETAP 5V: non-blocking event query status
+    int prev_local_query_ready = -1;
+    UINT64 same_slot_previous_frame = UINT64_MAX;
+    int same_slot_query_ready = -1;
 };
 
 struct HUDDirtyRect {
@@ -117,6 +128,11 @@ public:
     bool UpdateAboveRegion(
         UINT index, UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
         UINT dstX, UINT dstY);
+    bool UpdateAboveRegionsBatch(
+        const uint8_t* const* pRowPointers, UINT canvasStride, const HUDDirtyRect* pRects, UINT count);
+    double GetLastAboveRegionNativeMs() const { return m_lastAboveRegionNativeUs / 1000.0; }
+    double GetLastAboveRegionSubresourceMs() const { return m_lastAboveRegionSubresourceUs / 1000.0; }
+    UINT GetLastAboveRegionSubresourceCalls() const { return m_lastAboveRegionSubresourceCalls; }
     void SetAboveMapGpuEnabled(bool enabled);
     // Diagnostic: dump the GPU-resampled 691x691 RGBA map texture to a PNG
     // right after the resample dispatch (used to debug readback parity).
@@ -283,6 +299,20 @@ public:
     //                     whether the wait follows the FIRST D3D11 VP call)
     void SetVpStateMode(int mode) { m_vpStateMode = mode; }
     int GetVpStateMode() const { return m_vpStateMode; }
+    // ETAP 5U: diagnostic individual setter caches.  These are deliberately
+    // opt-in and only apply to REFERENCE mode; production defaults keep all
+    // three per-frame setters enabled.
+    void SetVpIndividualCaches(bool frameFormat, bool sourceRect, bool destRect) {
+        m_cacheFrameFormat = frameFormat;
+        m_cacheSourceRect = sourceRect;
+        m_cacheDestRect = destRect;
+    }
+    void SetVpSetterOrder(int order) { m_vpSetterOrder = order; }
+    void SetVpCompletionProbe(bool enabled);
+    void SetProcessorRingSize(UINT size) { m_processorRingSize = (size < 1) ? 1 : (size > 3 ? 3 : size); }
+    UINT GetProcessorRingSize() const { return m_processorRingSize; }
+    void SetBaseConvertMode(bool compute) { m_baseConvertCompute = compute; }
+    bool IsBaseConvertCompute() const { return m_baseConvertCompute; }
 
     // ETAP 5T — asynchronous GPU timestamp timeline (zero per-frame wait).
     void SetGpuTimestampProfile(bool enabled);
@@ -357,6 +387,11 @@ private:
     ID3D11VideoContext* m_videoContext = nullptr;
     ID3D11VideoProcessorEnumerator* m_videoEnumerator = nullptr;
     ID3D11VideoProcessor* m_videoProcessor = nullptr;
+    std::vector<ID3D11VideoProcessor*> m_videoProcessorRing;
+    ID3D11VideoProcessor* m_activeVideoProcessor = nullptr;
+    UINT m_processorRingSize = 1;
+    bool m_baseConvertCompute = false;
+    ID3D11ComputeShader* m_baseConvertShader = nullptr;
 
     ID3D11Texture2D* m_hudTexture = nullptr;
     ID3D11VideoProcessorInputView* m_hudInputView = nullptr;
@@ -371,8 +406,11 @@ private:
     ID3D11UnorderedAccessView* m_mapResampleUAV = nullptr;
     ID3D11ComputeShader* m_mapResampleShader = nullptr;
     ID3D11ComputeShader* m_mapBlendShader = nullptr;
+    ID3D11ComputeShader* m_mapFusedShader = nullptr;
+    ID3D11ComputeShader* m_mapFused8x8Shader = nullptr;
     ID3D11Buffer* m_mapResampleCB = nullptr;
     ID3D11Buffer* m_mapBlendCB = nullptr;
+    ID3D11Buffer* m_mapFusedCB = nullptr;
     ID3D11Texture2D* m_mapReadbackStaging = nullptr;
     bool m_mapGpuEnabled = false;
     bool m_mapResampleReady = false;
@@ -545,6 +583,11 @@ private:
     ID3D11ComputeShader* m_nv12HUDComputeShader = nullptr;
     ID3D11ComputeShader* m_nv12RangeComputeShader = nullptr;
     ID3D11ComputeShader* m_nv12FusedComputeShader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedQuad8x8Shader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedQuad16x8Shader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedQuad16x16Shader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedQuad32x8Shader = nullptr;
+    ID3D11ComputeShader* m_nv12FusedQuad8x8OptShader = nullptr;
     std::vector<ID3D11UnorderedAccessView*> m_outputYViews;
     std::vector<ID3D11UnorderedAccessView*> m_outputUVViews;
 
@@ -575,6 +618,16 @@ private:
     bool m_vpStateApplied = false;  // true once the current signature is applied
     UINT m_appliedStateSig = 0;     // last applied stream-state signature
     UINT m_streamRotation = 0;      // cached source rotation (degrees)
+    bool m_cacheFrameFormat = false;
+    bool m_cacheSourceRect = false;
+    bool m_cacheDestRect = false;
+    bool m_frameFormatApplied = false;
+    bool m_sourceRectApplied = false;
+    bool m_destRectApplied = false;
+    UINT m_frameFormatStateSig = 0;
+    UINT m_sourceRectStateSig = 0;
+    UINT m_destRectStateSig = 0;
+    int m_vpSetterOrder = 0;         // 0=FMT,SRC,DST; 1=SRC,FMT,DST; 2=DST,SRC,FMT
 
     // ETAP 5T — async GPU timestamp query ring (persistent, zero per-frame wait).
     static const int GPU_TS_RING = 64;          // slots
@@ -593,9 +646,29 @@ private:
     void ReleaseGPUTimestampRing();
     void ReadFrameTimestamps(UINT frameIndex);
 
+    // ETAP 5V: persistent non-blocking completion markers.  These are
+    // diagnostic-only and are never queried with a flush or a wait loop.
+    static const int VP_EVENT_RING = 64;
+    bool m_vpCompletionProbe = false;
+    bool m_vpEventInitialized = false;
+    ID3D11Query* m_vpEventQueries[VP_EVENT_RING] = { nullptr };
+    ID3D11Query* m_localEventQueries[VP_EVENT_RING] = { nullptr };
+    UINT64 m_eventFrame[VP_EVENT_RING] = {};
+    bool InitVPEventRing();
+    void ReleaseVPEventRing();
+    int ReadEventForFrame(UINT64 frameIndex, bool local);
+    void BeginVPCompletionMarker(UINT frameIndex);
+    void EndLocalCompletionMarker(UINT frameIndex);
+    bool InitializeBaseConvertCompute();
+    bool ConvertP010ToNV12Compute(ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs);
+
     UINT m_width = 3840;
     UINT m_height = 2160;
     UINT m_hudWidth = 1920;
     UINT m_hudHeight = 1264;
+
+    double m_lastAboveRegionNativeUs = 0.0;
+    double m_lastAboveRegionSubresourceUs = 0.0;
+    UINT m_lastAboveRegionSubresourceCalls = 0;
     int m_flushMode = 0;
 };

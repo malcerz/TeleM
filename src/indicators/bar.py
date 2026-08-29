@@ -357,11 +357,13 @@ def _render_ruler(
     formatted_val: str | None,
 ):
     ss = max(1, int(ss))
-    width = max(80 * ss, int(size_px * ss))
+    min_dim = min(canvas_w, canvas_h)
+    scale = min_dim / 1080.0
+    width = max(int(round(80 * ss * scale)), int(size_px * ss))
 
-    title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 1.00)) * fs * ss)))
-    label_fs = max(7 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss)))
-    value_fs = max(8 * ss, int(round(float(cfg.get("value_font_scale", 1.00)) * fs * ss)))
+    title_fs = max(4 * ss, int(round(float(cfg.get("title_font_scale", 1.00)) * fs * ss)))
+    label_fs = max(4 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss)))
+    value_fs = max(4 * ss, int(round(float(cfg.get("value_font_scale", 1.00)) * fs * ss)))
     title_font = load_font(font_path, title_fs)
     range_font = load_font(font_path, label_fs)
     value_font = load_font(font_path, value_fs)
@@ -408,16 +410,16 @@ def _render_ruler(
     text_color = _rgba(cfg.get("text_color", "#F4F4F4"), (244, 244, 244), 255)
     dim_text = _rgba(cfg.get("range_color", cfg.get("text_color", "#E0E0E0")), (224, 224, 224), 255)
 
-    line_w = max(1 * ss, int(round(max(1, thickness) * 0.35 * ss)))
+    line_w = max(1 * ss, int(round(max(1, thickness) * 0.35 * ss * scale)))
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
-    tick_w = max(1 * ss, int(round(float(cfg.get("tick_width", 1.4)) * ss)))
-    major_len = max(8 * ss, int(round(float(cfg.get("major_tick_length", 17)) * ss)))
-    minor_len = max(4 * ss, int(round(float(cfg.get("minor_tick_length", 10)) * ss)))
+    tick_w = max(1 * ss, int(round(float(cfg.get("tick_width", 1.4)) * ss * scale)))
+    major_len = max(int(round(8 * ss * scale)), int(round(float(cfg.get("major_tick_length", 17)) * ss * scale)))
+    minor_len = max(int(round(4 * ss * scale)), int(round(float(cfg.get("minor_tick_length", 10)) * ss * scale)))
     if pixel_profile:
-        major_len = max(8 * ss, int(round(width * 0.040)))
-        minor_len = max(4 * ss, int(round(width * 0.018)))
-    marker_radius = max(3 * ss, int(round(float(cfg.get("marker_size", 7)) * ss)))
-    marker_border_w = max(1 * ss, int(round(float(cfg.get("marker_border_width", 1.5)) * ss)))
+        major_len = max(int(round(8 * ss * scale)), int(round(width * 0.040)))
+        minor_len = max(int(round(4 * ss * scale)), int(round(width * 0.018)))
+    marker_radius = max(int(round(3 * ss * scale)), int(round(float(cfg.get("marker_size", 7)) * ss * scale)))
+    marker_border_w = max(1 * ss, int(round(float(cfg.get("marker_border_width", 1.5)) * ss * scale)))
 
     range_sample = f"{_fmt_number(max(abs(val_min), abs(val_max)), decimals)} {unit}".strip()
     title_h, range_h, value_h = _get_ruler_text_metrics(
@@ -426,13 +428,13 @@ def _render_ruler(
         value_text, value_font, show_value, text_stroke,
     )
 
-    pad_x = max(marker_radius + 4 * ss, 8 * ss)
-    pad_top = 4 * ss
-    title_gap = 5 * ss if title_h else 0
-    value_gap = 4 * ss if value_h else 0
+    pad_x = max(marker_radius + int(round(4 * ss * scale)), int(round(8 * ss * scale)))
+    pad_top = int(round(4 * ss * scale))
+    title_gap = int(round(5 * ss * scale)) if title_h else 0
+    value_gap = int(round(4 * ss * scale)) if value_h else 0
     track_y = pad_top + title_h + title_gap + value_h + value_gap + major_len + marker_radius
-    bottom_gap = 6 * ss
-    height = int(track_y + marker_radius + bottom_gap + range_h + 5 * ss)
+    bottom_gap = int(round(6 * ss * scale))
+    height = int(track_y + marker_radius + bottom_gap + range_h + int(round(5 * ss * scale)))
     raster_w = width + pad_x * 2
 
     static_key = _static_cache_key(
@@ -445,7 +447,15 @@ def _render_ruler(
         marker_radius, marker_border_w, line_w, tick_w, major_len, minor_len,
         pixel_profile, ss, title_h, title_gap, value_h, value_gap,
     )
-    base_data = _RULER_BASE_CACHE.get(static_key)
+    frac_h = _fraction(val_num, val_min, val_max) if value is not None else 0.0
+    marker_x = int(round(pad_x + frac_h * width)) if value is not None else int(round(pad_x))
+
+    dynamic_key = _static_cache_key("ruler_h_dyn", static_key, value is None, marker_x, value_text)
+    cached_dyn = _STATIC_CACHE.get(dynamic_key)
+    if cached_dyn is not None:
+        return cached_dyn
+
+    base_data = _STATIC_CACHE.get(static_key)
     if base_data is None:
         base = Image.new("RGBA", (raster_w, height), (0, 0, 0, 0))
         d = ImageDraw.Draw(base)
@@ -527,7 +537,7 @@ def _render_ruler(
             marker_color, show_value, title_h, title_gap, pad_top, value_font, text_color,
             text_stroke, raster_w, height, ss, val_min, val_max
         )
-        _RULER_BASE_CACHE[static_key] = base_data
+        _STATIC_CACHE[static_key] = base_data
 
     (
         base, pad_x, width, track_y, marker_radius, marker_border_w, marker_border,
@@ -535,22 +545,7 @@ def _render_ruler(
         text_stroke, raster_w, height, ss, val_min, val_max
     ) = base_data
 
-    use_inplace_buf = os.getenv("AMD_RULER_WORKING_BUFFER", "1") != "0"
-    buf_entry = _RULER_WORKING_BUFFERS.get(static_key) if use_inplace_buf else None
-    if not use_inplace_buf:
-        img = base.copy()
-    elif buf_entry is None:
-        img = base.copy()
-        buf_entry = {"img": img, "dirty": None}
-        _RULER_WORKING_BUFFERS[static_key] = buf_entry
-    else:
-        img = buf_entry["img"]
-        dirty = buf_entry["dirty"]
-        if dirty is not None:
-            bx0, by0, bx1, by1 = dirty
-            patch = base.crop((bx0, by0, bx1, by1))
-            img.paste(patch, (bx0, by0))
-
+    img = base.copy()
     d = ImageDraw.Draw(img)
 
     if value is not None:
@@ -590,13 +585,8 @@ def _render_ruler(
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, height), anchor="ma",
             )
-            min_x = min(min_x, marker_x + value_offset_x - 180)
-            max_x = max(max_x, marker_x + value_offset_x + 180)
-        if buf_entry is not None:
-            buf_entry["dirty"] = (max(0, min_x), max(0, min_y), min(raster_w, max_x), min(height, max_y))
-    elif buf_entry is not None:
-        buf_entry["dirty"] = None
 
+    _STATIC_CACHE[dynamic_key] = img
     return img
 
 
@@ -657,12 +647,13 @@ def _render_ruler_vertical(
     missing = bool(cfg.get("_slope_missing", False)) or value is None
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     legacy_slope = bool(cfg.get("_legacy_slope", False))
-
+    min_dim = min(canvas_w, canvas_h)
+    scale = min_dim / 1080.0
     raw_size = float(cfg.get("size", 1.0))
     ruler_scale = raw_size if 0.0 < raw_size <= 1.0 else 1.0
 
     def geom(value: float, minimum: float = 1.0) -> int:
-        return max(int(round(minimum * ss)), int(round(value * ruler_scale * ss)))
+        return max(int(round(minimum * ss * scale)), int(round(value * ruler_scale * ss * scale)))
 
     title_fs = max(4 * ss, int(round(float(cfg.get("title_font_scale", 0.9)) * fs * ss * ruler_scale)))
     label_fs = max(4 * ss, int(round(float(cfg.get("range_font_scale", 0.82)) * fs * ss * ruler_scale)))
@@ -699,7 +690,7 @@ def _render_ruler_vertical(
     dim_text = _rgba(cfg.get("range_color", "#DDE7F2"), (221, 231, 242), int(235 * opacity))
     shadow_alpha = int(150 * opacity)
 
-    track_height = max(ss, int(round(max(200 * ss, int(size_px * ss)) * ruler_scale)))
+    track_height = max(int(round(ss * scale)), int(round(max(200 * ss * scale, int(size_px * ss)) * ruler_scale)))
     track_width = geom(float(cfg.get("track_width", max(1, thickness * 0.45))), 1.0)
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
     tick_w = geom(float(cfg.get("tick_width", max(1, thickness))), 1.0)
@@ -782,14 +773,21 @@ def _render_ruler_vertical(
         "bar_ruler_v3_vertical", font_path,
         title, title_fs, label_fs, value_fs, text_stroke,
         show_label, show_range, show_tick_labels, tick_label_signed, range_units, decimals,
-        lo, hi, unit, major_step, major_divisions, minor_per_major, total_divisions,
+        lo, hi, unit, major_step, major_divisions, minor_per_major,
         track_color, tick_color, zero_color, text_color, dim_text,
         track_width, tick_w, major_len, minor_len, marker_len, marker_radius,
         marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px, ruler_scale,
-        value_width, tuple(sorted(label_texts.items())),
-        tuple(range_label_texts), legacy_slope,
+        legacy_slope,
     )
-    base_data = _RULER_BASE_CACHE.get(static_key)
+    val_frac = _fraction(val_num, lo, hi) if not missing else 0.0
+    marker_y = int(round(bottom - val_frac * track_height)) if not missing else int(round(top + track_height // 2))
+
+    dynamic_key = _static_cache_key("ruler_v_dyn", static_key, missing, marker_y, value_text)
+    cached_dyn = _STATIC_CACHE.get(dynamic_key)
+    if cached_dyn is not None:
+        return cached_dyn
+
+    base_data = _STATIC_CACHE.get(static_key)
     if base_data is None:
         base = Image.new("RGBA", (raster_w, raster_h), (0, 0, 0, 0))
         d = ImageDraw.Draw(base)
@@ -843,33 +841,18 @@ def _render_ruler_vertical(
             marker_len, marker_width,
             marker_color, marker_border, marker_radius, marker_style,
             pixel_profile, shadow_alpha, text_color, text_stroke, value_font,
-            ss, lo, hi, show_value, legacy_slope, missing,
+            ss, lo, hi, show_value, legacy_slope,
         )
-        _RULER_BASE_CACHE[static_key] = base_data
+        _STATIC_CACHE[static_key] = base_data
 
     (
         base, track_x, top, bottom, track_height, value_x, raster_w, raster_h,
         marker_len, marker_width, marker_color, marker_border, marker_radius, marker_style,
         pixel_profile, shadow_alpha, text_color, text_stroke, value_font,
-        ss, lo, hi, show_value, legacy_slope, missing,
+        ss, lo, hi, show_value, legacy_slope,
     ) = base_data
 
-    use_inplace_buf = os.getenv("AMD_RULER_WORKING_BUFFER", "1") != "0"
-    buf_entry = _RULER_WORKING_BUFFERS.get(static_key) if use_inplace_buf else None
-    if not use_inplace_buf:
-        img = base.copy()
-    elif buf_entry is None:
-        img = base.copy()
-        buf_entry = {"img": img, "dirty": None}
-        _RULER_WORKING_BUFFERS[static_key] = buf_entry
-    else:
-        img = buf_entry["img"]
-        dirty = buf_entry["dirty"]
-        if dirty is not None:
-            bx0, by0, bx1, by1 = dirty
-            patch = base.crop((bx0, by0, bx1, by1))
-            img.paste(patch, (bx0, by0))
-
+    img = base.copy()
     d = ImageDraw.Draw(img)
 
     if not missing:
@@ -907,7 +890,7 @@ def _render_ruler_vertical(
                     fill=marker_color,
                 )
         else:  # dot
-            shadow_r = marker_radius + 1 * ss
+            shadow_r = marker_radius + int(round(1 * ss * scale))
             d.ellipse(
                 (track_x - shadow_r, marker_y - shadow_r, track_x + shadow_r, marker_y + shadow_r),
                 fill=(0, 0, 0, shadow_alpha),
@@ -917,16 +900,11 @@ def _render_ruler_vertical(
                  track_x + marker_radius, marker_y + marker_radius),
                 fill=marker_border,
             )
-            inner = max(1, marker_radius - max(1, ss))
+            inner = max(1, marker_radius - max(1, int(round(ss * scale))))
             d.ellipse(
                 (track_x - inner, marker_y - inner, track_x + inner, marker_y + inner),
                 fill=marker_color,
             )
-
-        min_x = track_x - marker_len - 4 if marker_style == "line" else track_x - marker_radius - 4
-        max_x = track_x + marker_len + 4 if marker_style == "line" else track_x + marker_radius + 4
-        min_y = marker_y - marker_radius - 4
-        max_y = marker_y + marker_radius + 4
 
         if show_value and value_text:
             _draw_text_bounded(
@@ -935,13 +913,6 @@ def _render_ruler_vertical(
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, raster_h), anchor="lm",
             )
-            min_x = min(min_x, value_x - 10)
-            max_x = max(max_x, value_x + 200)
-            min_y = min(min_y, marker_y - 40)
-            max_y = max(max_y, marker_y + 40)
-
-        if buf_entry is not None:
-            buf_entry["dirty"] = (max(0, min_x), max(0, min_y), min(raster_w, max_x), min(raster_h, max_y))
     elif show_value and value_text:
         _draw_text_bounded(
             d, (value_x, top + track_height // 2), value_text,
@@ -949,11 +920,8 @@ def _render_ruler_vertical(
             stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
             bounds=(raster_w, raster_h), anchor="lm",
         )
-        if buf_entry is not None:
-            buf_entry["dirty"] = (max(0, value_x - 10), max(0, top), min(raster_w, value_x + 200), min(raster_h, bottom))
-    elif buf_entry is not None:
-        buf_entry["dirty"] = None
 
+    _STATIC_CACHE[dynamic_key] = img
     return img
 
 
@@ -1561,8 +1529,6 @@ def _render_segments(
     elif marker_enabled and marker_position == "bottom":
         marker_zone_bottom = marker_size + marker_offset
 
-    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    dd = ImageDraw.Draw(dummy)
     unit_for_value = str(cfg.get("value_unit", unit or ""))
     if formatted_val is not None:
         value_text = str(formatted_val)
@@ -1573,6 +1539,22 @@ def _render_segments(
     else:
         value_text = "--"
 
+    if value is not None:
+        frac = _fraction(float(value), val_min, val_max)
+        if fill_mode == "partial" and 0.0 < frac < 1.0:
+            scaled = frac * segments
+            active = min(segments, int(floor(scaled)))
+            partial_frac = max(0.0, min(1.0, scaled - active))
+        else:
+            active = 0 if frac <= 0.0 else min(segments, int(ceil(frac * segments - 1e-12)))
+            partial_frac = 0.0
+    else:
+        active = 0
+        partial_frac = 0.0
+        frac = 0.0
+
+    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dummy)
     value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if show_value else 0
     label_h = _text_size(dd, str(label), label_font, text_stroke)[1] if show_label and label else 0
     sample_range = _fmt_number(max(abs(val_min), abs(val_max)), decimals)
@@ -1613,9 +1595,6 @@ def _render_segments(
             gap = 0
             total_gap = 0
         seg_w = (width - total_gap) / segments
-    # ETAP 10T2: a very large segment count can make seg_w < 1 px, which breaks
-    # Pillow's rounded_rectangle (x1 > x2).  Fall back to a 1px-wide segment
-    # with no gap so segment_count up to 100 renders safely.
     if seg_w < 1.0:
         gap = 0
         total_gap = 0
@@ -1623,22 +1602,8 @@ def _render_segments(
         if seg_w < 1.0:
             seg_w = 1.0
 
-    if value is not None:
-        frac = _fraction(float(value), val_min, val_max)
-        if fill_mode == "partial" and 0.0 < frac < 1.0:
-            scaled = frac * segments
-            active = min(segments, int(floor(scaled)))
-            partial_frac = max(0.0, min(1.0, scaled - active))
-        else:
-            active = 0 if frac <= 0.0 else min(segments, int(ceil(frac * segments - 1e-12)))
-            partial_frac = 0.0
-    else:
-        active = 0
-        partial_frac = 0.0
-
     radius = _resolve_segment_radius(cfg, int(round(seg_w)), seg_area_h, ss)
 
-    # 1. Static base layer (inactive segments + labels + range)
     base_key = _static_cache_key(
         "seg_base_v2", font_path, value_font_path, label_font_path, range_font_path,
         raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap,
@@ -1648,6 +1613,16 @@ def _render_segments(
         dim_color, text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
         label_align, marker_zone_top, marker_zone_bottom, label_gap, range_gap
     )
+    dynamic_key = _static_cache_key(
+        "seg_dyn_v2", font_path, value_font_path, label_font_path, range_font_path,
+        canvas_w, canvas_h, val_min, val_max, unit, label, formatted_val,
+        value is None, float(value) if value is not None else 0.0, value_text,
+        tuple(sorted((str(k), str(v)) for k, v in cfg.items() if not str(k).startswith("_"))),
+    )
+    cached_dyn = _SEG_BASE_CACHE.get(dynamic_key)
+    if cached_dyn is not None:
+        return cached_dyn
+
     base_img = _SEG_BASE_CACHE.get(base_key)
     if base_img is None:
         base_img = _build_seg_base_layer(
@@ -1720,6 +1695,7 @@ def _render_segments(
                 bounds=(raster_w, raster_h), anchor="la",
             )
 
+    _SEG_BASE_CACHE[dynamic_key] = out_img
     return out_img
 
 
@@ -1817,6 +1793,31 @@ def _render_slope(
 # ---------------------------------------------------------------------------
 
 
+_BAR_INDICATOR_CACHE = _BoundedStaticCache(max_entries=64)
+
+
+def get_bar_cache_stats() -> dict[str, Any]:
+    """Return bar indicator cache performance diagnostics."""
+    hits = _BAR_INDICATOR_CACHE.hits
+    misses = _BAR_INDICATOR_CACHE.misses
+    total = hits + misses
+    hit_rate = (hits / total * 100.0) if total > 0 else 0.0
+    return {
+        "entries": len(_BAR_INDICATOR_CACHE),
+        "max_entries": _BAR_INDICATOR_CACHE.max_entries,
+        "hits": hits,
+        "misses": misses,
+        "hit_rate_pct": hit_rate,
+    }
+
+
+def clear_bar_cache() -> None:
+    """Clear bar indicator cache."""
+    _BAR_INDICATOR_CACHE.clear()
+    _BAR_INDICATOR_CACHE.hits = 0
+    _BAR_INDICATOR_CACHE.misses = 0
+
+
 def _render_bar_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
@@ -1845,6 +1846,18 @@ def _render_bar_indicator(
     """
     if Image is None or ImageDraw is None:
         return None, 0, 0, None
+
+    v_rounded = round(float(value), 3) if value is not None else None
+    cache_key = _static_cache_key(
+        "bar_ind_v1", canvas_w, canvas_h, font_path, key, v_rounded, str(unit or ""), str(label or ""),
+        str(formatted_val or ""), float(val_min), float(val_max), int(ticks), float(thickness), int(size_px), int(fs), int(outline), int(ss),
+        cfg.get("orientation"), cfg.get("bar_style"), cfg.get("style"), cfg.get("color"), cfg.get("text_color")
+    )
+    px_x = s(cfg["x"], canvas_w)
+    px_y = s(cfg["y"], canvas_h)
+    cached = _BAR_INDICATOR_CACHE.get(cache_key)
+    if cached is not None:
+        return cached, px_x, px_y, None
 
     style = str(cfg.get("bar_style", cfg.get("style", "ruler"))).strip().lower()
     # Legacy ``slope``/``grade``/``vertical_slope`` is NOT a separate style
@@ -1924,4 +1937,6 @@ def _render_bar_indicator(
     # All annotations are local to the raster.  Returning ``None`` prevents the
     # compositor from drawing the legacy out-of-raster value/range labels a
     # second time.
-    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    if img is not None:
+        _BAR_INDICATOR_CACHE[cache_key] = img
+    return img, px_x, px_y, None

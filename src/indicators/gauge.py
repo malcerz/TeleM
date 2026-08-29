@@ -14,6 +14,7 @@ except ImportError:
     ImageDraw = None  # type: ignore
 
 from src.indicators.helpers import (
+    _BoundedStaticCache,
     _STATIC_CACHE,
     _static_cache_key,
     compose_5q_optimized,
@@ -21,6 +22,31 @@ from src.indicators.helpers import (
     parse_hex_color,
     s,
 )
+_GAUGE_RASTER_CACHE = _BoundedStaticCache(max_entries=16)
+_COMPASS_INDICATOR_CACHE = _BoundedStaticCache(max_entries=64)
+_GAUGE_CANVAS_STATE: dict[str, Any] = {"canvas": None, "bg_key": None, "prev_dirty_boxes": []}
+
+
+def get_compass_cache_stats() -> dict[str, Any]:
+    """Return compass indicator cache performance diagnostics."""
+    hits = _COMPASS_INDICATOR_CACHE.hits
+    misses = _COMPASS_INDICATOR_CACHE.misses
+    total = hits + misses
+    hit_rate = (hits / total * 100.0) if total > 0 else 0.0
+    return {
+        "entries": len(_COMPASS_INDICATOR_CACHE),
+        "max_entries": _COMPASS_INDICATOR_CACHE.max_entries,
+        "hits": hits,
+        "misses": misses,
+        "hit_rate_pct": hit_rate,
+    }
+
+
+def clear_compass_cache() -> None:
+    """Clear compass indicator cache."""
+    _COMPASS_INDICATOR_CACHE.clear()
+    _COMPASS_INDICATOR_CACHE.hits = 0
+    _COMPASS_INDICATOR_CACHE.misses = 0
 # ── ETAP 2C: renderer-reported dynamic-support info for AUTO regions ──────────
 # Keyed by indicator key. Updated by EVERY _render_gauge_indicator call so the
 # AMD native exporter can derive ghost-free AUTO upload rectangles from the
@@ -95,24 +121,28 @@ def _render_compass_indicator(
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
-    """Render a lightweight fixed-dial GPS course compass.
-
-    ``value`` is already the canonical telemetry ``heading``.  This function
-    deliberately contains no GPS/source/bearing logic; it only maps the
-    absolute degree value to screen geometry.
-    """
-    del layout, key, unit, label, val_min, val_max, ticks, font
-    ss = max(1, int(ss))
-    radius = max(20, int(round(size_px * ss)))
-    img_size = max(48, int(round(size_px * 2.4 * ss)))
+    """Render a compass dial with rotating needle and cardinal points."""
+    ss = max(1, ss)
+    radius = int(round(size_px * ss))
+    img_size = int(round(radius * 2.4))
     cx = cy = img_size // 2
-    ring_r = max(12, int(round(radius * 0.88)))
+    ring_r = int(round(radius * 0.95))
+
+    heading_key = round(float(value), 1) if (value is not None and not bool(cfg.get("_compass_missing", False))) else None
+    compass_cache_key = _static_cache_key(
+        "compass_full_v1", canvas_w, canvas_h, font_path, key, heading_key, str(formatted_val or ""),
+        int(fs), int(ss), int(outline), int(size_px), float(cfg.get("opacity", 1.0))
+    )
+    cached_compass = _COMPASS_INDICATOR_CACHE.get(compass_cache_key)
+    if cached_compass is not None:
+        return cached_compass
 
     ring_rgb = parse_hex_color(cfg.get("compass_ring_color", "#B8C7D9")) or (184, 199, 217)
     tick_rgb = parse_hex_color(cfg.get("compass_tick_color", "#DDE7F2")) or (221, 231, 242)
     cardinal_rgb = parse_hex_color(cfg.get("compass_cardinal_color", "#FFFFFF")) or (255, 255, 255)
-    needle_rgb = parse_hex_color(cfg.get("compass_needle_color", cfg.get("needle_color", "#FFD42A"))) or (255, 212, 42)
-    heading_rgb = parse_hex_color(cfg.get("compass_heading_color", cfg.get("text_color", "#FFFFFF"))) or (255, 255, 255)
+    needle_rgb = parse_hex_color(cfg.get("compass_needle_color", "#FFD42A")) or (255, 212, 42)
+    heading_rgb = parse_hex_color(cfg.get("compass_heading_color", "#FFFFFF")) or (255, 255, 255)
+
     ring_width = max(1, int(round(float(cfg.get("compass_ring_width", 1.5)) * ss)))
     tick_width = max(1, int(round(float(cfg.get("compass_tick_width", 1.0)) * ss)))
     major_width = max(tick_width, int(round(tick_width * 1.6)))
@@ -217,7 +247,10 @@ def _render_compass_indicator(
     if opacity < 1.0:
         alpha = img.getchannel("A").point(lambda a: int(round(a * opacity)))
         img.putalpha(alpha)
-    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    res = (img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None)
+    if img is not None:
+        _COMPASS_INDICATOR_CACHE[compass_cache_key] = res
+    return res
 
 
 def _render_gauge_indicator(
@@ -338,11 +371,9 @@ def _render_gauge_indicator(
             bg = bg.resize((out_gauge_size, out_gauge_size), Image.LANCZOS)
         _STATIC_CACHE[bg_key] = bg
 
-    # ── Dynamic elements: needle + center text ──
-    img = bg.copy()
-    draw = ImageDraw.Draw(img)
-
+    # ── ETAP 4G: Discrete dynamic raster state memoization ──
     draw_needle = False
+    frac = 0.0
     if value is not None:
         try:
             val_num = float(value)
@@ -350,8 +381,42 @@ def _render_gauge_indicator(
             draw_needle = True
         except (TypeError, ValueError):
             frac = 0.0
+
+    show_value = bool(cfg.get("show_value", True))
+    txt_main = (formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")) if show_value else ""
+
+    needle_state_key = round(frac, 4) if draw_needle else None
+    gauge_raster_key = _static_cache_key(
+        "gauge_dyn_raster", bg_key, needle_state_key, txt_main,
+        bool(cfg.get("show_marker", False)), int(cfg.get("marker_size", 0)),
+        str(cfg.get("marker_color", "#333333")), str(cfg.get("text_color", "#FFFFFF")),
+        float(cfg.get("text_offset_x", 0.0)), float(cfg.get("text_offset_y", 0.0)),
+        int(cfg.get("rotation", 0)) % 360,
+    )
+    cached_gauge = _GAUGE_RASTER_CACHE.get(gauge_raster_key)
+    if cached_gauge is not None:
+        img, dynamic_info = cached_gauge
+        record_gauge_dynamic_info(key, **dynamic_info)
+        return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+
+    # ── Dynamic elements: regional restore or full canvas init ──
+    if _GAUGE_CANVAS_STATE["canvas"] is None or _GAUGE_CANVAS_STATE["bg_key"] != bg_key:
+        img = bg.copy()
+        _GAUGE_CANVAS_STATE["canvas"] = img
+        _GAUGE_CANVAS_STATE["bg_key"] = bg_key
+        _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = []
     else:
-        frac = 0.0
+        img = _GAUGE_CANVAS_STATE["canvas"]
+        for bx0, by0, bx1, by1 in _GAUGE_CANVAS_STATE["prev_dirty_boxes"]:
+            bx0_i = max(0, int(math.floor(bx0)))
+            by0_i = max(0, int(math.floor(by0)))
+            bx1_i = min(img.width, int(math.ceil(bx1)))
+            by1_i = min(img.height, int(math.ceil(by1)))
+            if bx1_i > bx0_i and by1_i > by0_i:
+                img.paste(bg.crop((bx0_i, by0_i, bx1_i, by1_i)), (bx0_i, by0_i))
+        _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = []
+
+    draw = ImageDraw.Draw(img)
 
     ang = math.radians(start_deg + (end_deg - start_deg) * frac)
 
@@ -488,11 +553,26 @@ def _render_gauge_indicator(
         float(cfg.get("opacity", 1.0)),
         int(cfg.get("rotation", 0)) % 360,
     )
-    record_gauge_dynamic_info(
-        key, kind="speed", supported=True,
-        rotation=int(cfg.get("rotation", 0)) % 360,
-        widget_size=tuple(img.size),
-        needle_bbox=_needle_support,
-        text_bbox=_text_support,
-        sig=_sig_2c)
-    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    dynamic_info = {
+        "kind": "speed",
+        "supported": True,
+        "rotation": int(cfg.get("rotation", 0)) % 360,
+        "widget_size": tuple(img.size),
+        "needle_bbox": _needle_support,
+        "text_bbox": _text_support,
+        "sig": _sig_2c,
+    }
+    dirty_boxes = []
+    if _needle_support is not None:
+        dirty_boxes.append(_needle_support)
+    if _text_support is not None:
+        dirty_boxes.append(_text_support)
+    if show_marker and marker_size > 0:
+        m_r = max(1, marker_size)
+        dirty_boxes.append((float(_cx - m_r - 1), float(_cy - m_r - 1), float(_cx + m_r + 2), float(_cy + m_r + 2)))
+    _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = dirty_boxes
+
+    record_gauge_dynamic_info(key, **dynamic_info)
+    img_out = img.copy()
+    _GAUGE_RASTER_CACHE[gauge_raster_key] = (img_out, dynamic_info)
+    return img_out, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

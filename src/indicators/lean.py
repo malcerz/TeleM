@@ -462,6 +462,8 @@ def get_lean_gpu_transform_info(
     key: str,
     value: float | None,
     cfg: dict[str, Any],
+    font_path: str = "",
+    label: str = "",
     min_dim: int = 1080,
     fs: int = 24,
     outline: int = 2,
@@ -488,12 +490,13 @@ def get_lean_gpu_transform_info(
 
     title_fs = max(8 * ss, int(round(float(cfg.get("title_font_scale", 1.0)) * fs * ss)))
     value_fs = max(8 * ss, int(round(float(cfg.get("value_font_scale", 0.9)) * fs * ss)))
-    font_path = layout.get("font_path", "")
+    if not font_path:
+        font_path = layout.get("font_path", "arial.ttf") if isinstance(layout, dict) else "arial.ttf"
     title_font = load_font(font_path, title_fs) if font_path else None
     value_font = load_font(font_path, value_fs) if font_path else None
     text_stroke = max(0, int(round(max(1, outline) * ss)))
 
-    raw_title = str(cfg.get("title_text", key)).strip()
+    raw_title = str(cfg.get("title_text", label or "")).strip()
     title = raw_title.upper() if uppercase_title else raw_title
     value_text = f"{angle:+.{decimals}f}\u00b0" if (show_value and not missing) else ""
 
@@ -522,8 +525,8 @@ def get_lean_gpu_transform_info(
 
     screen_x = s(cfg["x"], canvas_w) - raster_w // 2
     screen_y = s(cfg["y"], canvas_h) - raster_h // 2
-    screen_pivot_x = float(screen_x + px_ref + rot_src.Cx)
-    screen_pivot_y = float(screen_y + py_ref + rot_src.Cy)
+    screen_pivot_x = float(screen_x + _sx)
+    screen_pivot_y = float(screen_y + _sy)
 
     rad = -math.radians(angle)
     a_mat = round(math.cos(rad), 15)
@@ -554,8 +557,8 @@ def get_lean_gpu_transform_info(
     return (
         float(angle),
         rot_src.graphic,
-        float(rot_src.Cx - rot_src.gx_ref),
-        float(rot_src.Cy - rot_src.gy_ref),
+        float(rot_src.pivot_px),
+        float(rot_src.pivot_py),
         screen_pivot_x,
         screen_pivot_y,
         int(dst_x),

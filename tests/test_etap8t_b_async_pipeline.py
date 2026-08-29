@@ -51,6 +51,7 @@ def test_async_prepared_frame_immutable():
         map_active=False,
         map_data=None,
         map_geometry=None,
+        map_heading=0.0,
         timing_samples_producer={},
         intermediate_bytes=0,
         persistent_copy_bytes=64,
@@ -117,9 +118,13 @@ def test_async_visible_none_visible():
     # 1. visible
     img1 = compose_overlay(3840, 2160, layout, "assets/Roboto-Bold.ttf", "2026-08-19", "10:00:00", 0.0, 0.0, reuse_canvas="above", extra_indicators={"fit_solar_pct_text": (50.0, "%", "Solar")})
     assert img1.getbbox() is not None
+    img1_bytes = img1.tobytes()
     # 2. None
     img2 = compose_overlay(3840, 2160, layout, "assets/Roboto-Bold.ttf", "2026-08-19", "10:00:01", 0.0, 0.0, reuse_canvas="above", extra_indicators={"fit_solar_pct_text": None})
-    assert img2.getbbox() is None
+    # Missing telemetry is rendered as the intentional "--" placeholder;
+    # verify the previous numeric glyph is gone without requiring a blank HUD.
+    assert img2.getbbox() is not None
+    assert img2.tobytes() != img1_bytes
     # 3. visible
     img3 = compose_overlay(3840, 2160, layout, "assets/Roboto-Bold.ttf", "2026-08-19", "10:00:02", 0.0, 0.0, reuse_canvas="above", extra_indicators={"fit_solar_pct_text": (60.0, "%", "Solar")})
     assert img3.getbbox() is not None

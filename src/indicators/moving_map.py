@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+import os
 import math
 from datetime import timezone
 
@@ -250,6 +251,25 @@ def build_static_map_marker_tile(
         return None, (0, 0, 0, 0)
 
 
+def _quantize_map_val(val: int, align_spec: str) -> int:
+    spec = str(align_spec).strip().upper()
+    if spec in ("1", "0", "EXACT", "NONE", "OFF", ""):
+        return val
+    if spec.startswith("16_FLOOR"):
+        return (val // 16) * 16
+    elif spec.startswith("16_CEIL"):
+        return ((val + 15) // 16) * 16
+    elif spec.startswith("16"):
+        return int(round(val / 16.0)) * 16
+    elif spec.startswith("8_FLOOR"):
+        return (val // 8) * 8
+    elif spec.startswith("8_CEIL"):
+        return ((val + 7) // 8) * 8
+    elif spec.startswith("8"):
+        return int(round(val / 8.0)) * 8
+    return val
+
+
 def render_map_unrotated_working_image(
     canvas_w: int,
     canvas_h: int,
@@ -276,10 +296,13 @@ def render_map_unrotated_working_image(
         cfg = layout["indicators"].get(key)
         if not cfg or not cfg.get("enabled", True):
             return None, 0.0, None, 0
-        map_w = s(cfg.get("size", 0.1), canvas_w)
+        raw_map_w = s(cfg.get("size", 0.1), canvas_w)
+        align_spec = os.environ.get("AMD_MAP_ALIGN", "1")
+        map_w = _quantize_map_val(int(raw_map_w), align_spec)
         render_plan = _map_render_plan(canvas_w, map_w, int(cfg.get("zoom", 16)))
         effective_zoom = render_plan["effective_zoom"]
-        working_size = track_up_working_size(map_w)
+        raw_working_size = track_up_working_size(map_w)
+        working_size = _quantize_map_val(int(raw_working_size), align_spec)
         map_style = cfg.get("map_style", "light_all")
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
         track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
@@ -292,6 +315,7 @@ def render_map_unrotated_working_image(
         cache_key = (
             id(gps_track), effective_zoom, map_style, marker_style,
             track_color, track_width, track_aa, track_outline_w, track_outline_color,
+            map_w, working_size,
         )
         renderers = _shared_map_renderers()
         renderer = renderers.get(cache_key)
@@ -336,16 +360,16 @@ def render_map_unrotated_working_image(
         draw_track = not bool(cfg.get("hide_track", False))
         angle = track_up_rotation_degrees(map_heading)
         if angle == 0.0:
-            working_size = map_w
+            render_w = map_w
             draw_marker = not bool(cfg.get("hide_marker", False))
             heading_val = 0.0
         else:
-            working_size = track_up_working_size(map_w)
+            render_w = working_size
             draw_marker = not bool(cfg.get("hide_marker", False)) and marker_style != "directional"
             heading_val = float(map_heading)
 
         map_img = renderer.render(
-            ts, working_size, working_size,
+            ts, render_w, render_w,
             download_missing=dl_missing,
             draw_track=draw_track,
             draw_marker=draw_marker,
@@ -354,9 +378,17 @@ def render_map_unrotated_working_image(
         if angle == 0.0:
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         renderer._is_first_render = False
+        crop_key = getattr(renderer, "_last_crop_key", None)
+        if map_img is not None and crop_key is not None:
+            try:
+                setattr(map_img, "_crop_key", crop_key)
+            except Exception:
+                pass
         rx = s(cfg["x"], canvas_w)
         ry = s(cfg["y"], canvas_h)
-        dst_bbox = (int(rx - map_w // 2), int(ry - map_w // 2), int(map_w), int(map_w))
+        dst_x = _quantize_map_val(int(rx - map_w // 2), align_spec)
+        dst_y = _quantize_map_val(int(ry - map_w // 2), align_spec)
+        dst_bbox = (dst_x, dst_y, int(map_w), int(map_w))
         return map_img, heading_val, dst_bbox, working_size
     except Exception:
         return None, 0.0, None, 0
@@ -502,28 +534,7 @@ def _render_moving_map_indicator(
                 )
                 return (ph, _pos_xy[0], _pos_xy[1], None)
 
-            if ctx is None:
-                return _placeholder(label="Ładowanie mapy…")
-            snap = ctx.snapshot()
-            if snap["provider"] != map_style:
-                # A provider switch is in progress (controller restarted the
-                # preload); keep a placeholder until the new provider is ready.
-                return _placeholder(label="Ładowanie mapy…")
-            if snap["status"] == "error":
-                return _placeholder(error="Nie udało się wczytać mapy")
-            # An overview is usable map data even while a newer/detail job is
-            # still preparing. Never replace it with the loading placeholder.
-            overview_ready = snap.get("overview_image") is not None
-            if snap["status"] in ("idle", "preparing") and not overview_ready:
-                return _placeholder(
-                    progress=snap["progress"],
-                    loaded=snap["loaded_tiles"],
-                    required=snap["required_tiles"],
-                )
-
-            # Context is ready for this provider.  Build the renderer for
-            # detail; show the overview (Level 1) until the current viewport
-            # detail tiles are mostly cached (Level 2).
+            # Local Cache First: build/get renderer and check if local cache already has tiles
             if cache_key not in _cache:
                 renderer = MovingMapRenderer(
                     gps_track, zoom=effective_zoom, style=map_style,
@@ -579,6 +590,25 @@ def _render_moving_map_indicator(
                     map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
                 map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
                 return map_img, _pos_xy[0], _pos_xy[1], None
+
+            if ctx is None:
+                return _placeholder(label="Ładowanie mapy…")
+            snap = ctx.snapshot()
+            if snap["provider"] != map_style:
+                # A provider switch is in progress (controller restarted the
+                # preload); keep a placeholder until the new provider is ready.
+                return _placeholder(label="Ładowanie mapy…")
+            if snap["status"] == "error":
+                return _placeholder(error="Nie udało się wczytać mapy")
+            # An overview is usable map data even while a newer/detail job is
+            # still preparing. Never replace it with the loading placeholder.
+            overview_ready = snap.get("overview_image") is not None
+            if snap["status"] in ("idle", "preparing") and not overview_ready:
+                return _placeholder(
+                    progress=snap["progress"],
+                    loaded=snap["loaded_tiles"],
+                    required=snap["required_tiles"],
+                )
 
             # Level 1: overview image + current-position marker.  Detail tiles
             # are fetched in the background (never blocks the GUI thread).

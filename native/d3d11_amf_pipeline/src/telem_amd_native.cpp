@@ -52,6 +52,9 @@ struct NativeFrameRec {
     double vpSetterFmtMs = 0.0;      // ETAP 5S: VideoProcessorSetStreamFrameFormat
     double vpSetterSrcRectMs = 0.0;  // ETAP 5S: VideoProcessorSetStreamSourceRect
     double vpSetterDstRectMs = 0.0;  // ETAP 5S: VideoProcessorSetStreamDestRect
+    int firstVpApi = 0;               // ETAP 5V: 1=FMT, 2=SRC, 3=DST, 4=BLT
+    double firstVpApiMs = 0.0;
+    double vpSequenceTotalMs = 0.0;
     double vpBltMs = 0.0;
     double vpSubmitWindowMs = 0.0;   // Blt end -> HUD end
     double vpRangePassMs = 0.0;
@@ -81,6 +84,9 @@ struct NativeFrameRec {
     UINT64 decoderTexId = 0;         // ETAP 5S: decoder input texture pointer (low bits)
     UINT64 vpOutTexId = 0;           // ETAP 5S: VP output texture pointer (low bits)
     UINT arrayIndex = 0;             // ETAP 5S: decoder subresource
+    UINT64 vpProcessorId = 0;
+    UINT64 vpEnumeratorId = 0;
+    UINT64 vpContextId = 0;
     int settersSkipped = 0;          // ETAP 5S: 1 when STATIC_CACHE skipped setters
     UINT stateSig = 0;               // ETAP 5S: applied stream-state signature
     UINT64 amfSubmitted = 0;
@@ -88,6 +94,10 @@ struct NativeFrameRec {
     int submitResult = 0;
     int queryResult = 0;
     int decoderCopy = 0;
+    int prevVpQueryReady = -1;
+    int prevLocalQueryReady = -1;
+    UINT64 sameSlotPreviousFrame = UINT64_MAX;
+    int sameSlotQueryReady = -1;
 };
 
 struct TelemAMDContext {
@@ -374,6 +384,23 @@ TELEM_EXPORT int telem_amd_update_above_region(
     if (!handle || !pRGBA || stride < width * 4 || width == 0 || height == 0) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
     return ctx->vpPipeline.UpdateAboveRegion(index, width, height, pRGBA, stride, dstX, dstY) ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_update_above_regions_batch(
+    void* handle, const uint8_t* const* pRowPointers, UINT canvasStride,
+    const HUDDirtyRect* pRects, UINT rectCount) {
+    if (!handle || !pRowPointers || !pRects || canvasStride == 0) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.UpdateAboveRegionsBatch(pRowPointers, canvasStride, pRects, rectCount) ? 1 : 0;
+}
+
+TELEM_EXPORT void telem_amd_get_above_region_timings(
+    void* handle, double* outNativeMs, double* outSubresourceMs, UINT* outSubresourceCalls) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outNativeMs) *outNativeMs = ctx->vpPipeline.GetLastAboveRegionNativeMs();
+    if (outSubresourceMs) *outSubresourceMs = ctx->vpPipeline.GetLastAboveRegionSubresourceMs();
+    if (outSubresourceCalls) *outSubresourceCalls = ctx->vpPipeline.GetLastAboveRegionSubresourceCalls();
 }
 
 TELEM_EXPORT int telem_amd_update_above_map(
@@ -1126,15 +1153,58 @@ TELEM_EXPORT void* telem_amd_create(
     std::cout << "[TELEM AMD DLL] AMD_VP_STATE_MODE="
               << (vpMode == 1 ? "STATIC_CACHE" : (vpMode == 2 ? "REORDER" : "REFERENCE"))
               << std::endl;
+    // ETAP 5V: setter ordering diagnostic.  Default is the production order;
+    // only the three known same-semantics permutations are accepted.
+    const char* orderEnv = getenv("AMD_VP_SETTER_ORDER");
+    int setterOrder = 0;
+    if (orderEnv) {
+        std::string order(orderEnv);
+        if (order == "SRC_FORMAT_DST") setterOrder = 1;
+        else if (order == "DST_SRC_FORMAT") setterOrder = 2;
+    }
+    ctx->vpPipeline.SetVpSetterOrder(setterOrder);
+    // ETAP 5U - individual VP setter-cache candidates.  Opt-in only; these
+    // are intentionally independent of STATIC_CACHE and remain disabled by
+    // the canonical production resolver.
+    const auto vpCacheEnabled = [](const char* name) {
+        const char* value = getenv(name);
+        return value && (value[0] == '1' || value[0] == 'y' || value[0] == 'Y');
+    };
+    ctx->vpPipeline.SetVpIndividualCaches(
+        vpCacheEnabled("AMD_VP_CACHE_FRAME_FORMAT"),
+        vpCacheEnabled("AMD_VP_CACHE_SOURCE_RECT"),
+        vpCacheEnabled("AMD_VP_CACHE_DEST_RECT"));
     // ETAP 5U/5V — runtime VP output surface pool size (4..8).  Must be set
     // before vpPipeline.Initialize().  Production default is 8 (ETAP 5V);
     // AMD_VP_POOL_SIZE override honored.  Safe fallback 8->6->4 inside
     // SetupVideoProcessor on allocation/resource-creation failure only.
     const char* poolEnv = getenv("AMD_VP_POOL_SIZE");
     UINT poolSize = 8;
-    if (poolEnv && poolEnv[0] >= '4' && poolEnv[0] <= '8') poolSize = (UINT)(poolEnv[0] - '0');
+    if (poolEnv) {
+        const UINT requested = static_cast<UINT>(atoi(poolEnv));
+        if (requested == 6 || requested == 8 || requested == 10 || requested == 12) {
+            poolSize = requested;
+        }
+    }
     ctx->vpPipeline.SetPoolSize(poolSize);
     std::cout << "[TELEM AMD DLL] AMD_VP_POOL_SIZE=" << poolSize << std::endl;
+    // ETAP 5W: diagnostic-only persistent VideoProcessor object ring.
+    // This is independent from the NV12 output-surface pool.
+    const char* processorRingEnv = getenv("AMD_VP_PROCESSOR_RING_SIZE");
+    UINT processorRingSize = 1;
+    if (processorRingEnv) {
+        const UINT requested = static_cast<UINT>(atoi(processorRingEnv));
+        if (requested >= 1 && requested <= 3) processorRingSize = requested;
+    }
+    ctx->vpPipeline.SetProcessorRingSize(processorRingSize);
+    std::cout << "[TELEM AMD DLL] AMD_VP_PROCESSOR_RING_SIZE="
+              << processorRingSize << std::endl;
+    const char* baseConvertEnv = getenv("AMD_BASE_CONVERT_MODE");
+    const bool baseConvertCompute = baseConvertEnv &&
+        _stricmp(baseConvertEnv, "COMPUTE_P010_NV12") == 0;
+    ctx->vpPipeline.SetBaseConvertMode(baseConvertCompute);
+    std::cout << "[TELEM AMD DLL] AMD_BASE_CONVERT_MODE="
+              << (baseConvertCompute ? "COMPUTE_P010_NV12" : "VP_REFERENCE") << std::endl;
     // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
     const char* plsEnv = getenv("AMD_POOL_LIFECYCLE_STATS");
     const bool poolLs = (plsEnv && plsEnv[0] == '1');
@@ -1155,6 +1225,9 @@ TELEM_EXPORT void* telem_amd_create(
     const bool gpuTsEnabled = (gpuTsEnv && gpuTsEnv[0] == '1');
     std::cout << "[TELEM AMD DLL] AMD_GPU_TIMESTAMP_PROFILE="
               << (gpuTsEnabled ? "ON" : "OFF") << std::endl;
+    // ETAP 5V: persistent non-blocking D3D11_QUERY_EVENT evidence.
+    const char* completionEnv = getenv("AMD_VP_COMPLETION_PROBE");
+    const bool completionProbe = (completionEnv && completionEnv[0] == '1');
     // ETAP 8K: Unified Fused NV12 Compositor production mode
     const char* fusedEnv = getenv("AMD_FUSED_COMPOSITOR");
     const int fusedMode = fusedEnv ? atoi(fusedEnv) : 1;
@@ -1215,6 +1288,7 @@ TELEM_EXPORT void* telem_amd_create(
         }
         // ETAP 5T: enable the GPU timestamp ring now that the device is ready.
         ctx->vpPipeline.SetGpuTimestampProfile(gpuTsEnabled);
+        ctx->vpPipeline.SetVpCompletionProbe(completionProbe);
     }
 
     // 3. Initialize AMF HEVC Encoder on shared D3D11 device
@@ -1574,6 +1648,9 @@ TELEM_EXPORT int telem_amd_process_frame(
         rec.vpSetterFmtMs = vpStats.setter_fmt_ms;
         rec.vpSetterSrcRectMs = vpStats.setter_src_rect_ms;
         rec.vpSetterDstRectMs = vpStats.setter_dst_rect_ms;
+        rec.firstVpApi = vpStats.first_vp_api;
+        rec.firstVpApiMs = vpStats.first_vp_api_ms;
+        rec.vpSequenceTotalMs = vpStats.vp_sequence_total_ms;
         rec.vpBltMs = vpStats.blt_ms;
         rec.vpSubmitWindowMs = vpStats.submit_window_ms;
         rec.vpRangePassMs = vpStats.range_pass_ms;
@@ -1597,6 +1674,13 @@ TELEM_EXPORT int telem_amd_process_frame(
         rec.arrayIndex = vpStats.array_index;
         rec.settersSkipped = vpStats.setters_skipped;
         rec.stateSig = vpStats.state_sig;
+        rec.vpProcessorId = vpStats.vp_processor_id;
+        rec.vpEnumeratorId = vpStats.vp_enumerator_id;
+        rec.vpContextId = vpStats.vp_context_id;
+        rec.prevVpQueryReady = vpStats.prev_vp_query_ready;
+        rec.prevLocalQueryReady = vpStats.prev_local_query_ready;
+        rec.sameSlotPreviousFrame = vpStats.same_slot_previous_frame;
+        rec.sameSlotQueryReady = vpStats.same_slot_query_ready;
     }
     if (d3d11Decode && ctx->pPendingDecodedTex) {
         ctx->pPendingDecodedTex->Release();
@@ -1971,13 +2055,16 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
         if (trace.is_open()) {
             trace << "frame,surf_acquire,vp_total,vp_setup,vp_create_view,vp_set_stream,"
                      "vp_setter_fmt,vp_setter_src_rect,vp_setter_dst_rect,vp_blt,"
+                     "first_vp_api,first_vp_api_us,vp_sequence_total_us,"
                      "vp_submit_window,vp_range_pass,clear_prev_above,"
                      "vp_chart_blend,chart_flush,vp_gauge_blend,gauge_flush,"
                      "map_resample,vp_map_blend,map_flush1,map_flush2,"
                      "above_blend,above_flush,flush_total,vp_hud_compute,"
                      "vp_release_view,amf_create_surface,amf_submit_input,amf_query,"
                      "amf_packet_write,process_frame_total,pool_index,decoder_tex_id,"
-                     "vp_out_tex_id,array_index,setters_skipped,state_sig,amf_submitted,"
+                     "vp_out_tex_id,array_index,setters_skipped,state_sig,vp_processor_id,vp_enumerator_id,vp_context_id,"
+                     "prev_vp_query_ready,prev_local_query_ready,same_slot_previous_frame,same_slot_query_ready,"
+                     "amf_submitted,"
                      "amf_received,amf_query_calls,amf_outputs,retries,submit_result,query_result,"
                      "decoder_copy\n";
             for (const auto& r : ctx->nativeTrace) {
@@ -1985,6 +2072,7 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                       << r.vpSetupMs << ',' << r.vpCreateViewMs << ',' << r.vpSetStreamMs << ','
                       << r.vpSetterFmtMs << ',' << r.vpSetterSrcRectMs << ','
                       << r.vpSetterDstRectMs << ',' << r.vpBltMs << ','
+                      << r.firstVpApi << ',' << r.firstVpApiMs << ',' << r.vpSequenceTotalMs << ','
                       << r.vpSubmitWindowMs << ',' << r.vpRangePassMs << ','
                       << r.clearPrevAboveMs << ','
                       << r.vpChartBlendMs << ',' << r.chartFlushMs << ','
@@ -1999,6 +2087,9 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                       << r.processFrameTotalMs << ',' << r.poolIndex << ','
                       << r.decoderTexId << ',' << r.vpOutTexId << ','
                       << r.arrayIndex << ',' << r.settersSkipped << ',' << r.stateSig << ','
+                      << r.vpProcessorId << ',' << r.vpEnumeratorId << ',' << r.vpContextId << ','
+                      << r.prevVpQueryReady << ',' << r.prevLocalQueryReady << ','
+                      << r.sameSlotPreviousFrame << ',' << r.sameSlotQueryReady << ','
                       << r.amfSubmitted << ',' << r.amfReceived << ','
                       << r.amfQueryCalls << ',' << r.amfOutputs << ','
                       << r.retriesThisFrame << ','

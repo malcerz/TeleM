@@ -31,11 +31,13 @@ except ImportError:
     Image = None
 
 from src.indicators.compositor import compose_overlay
+from src.indicators.profiling import production_accounting_summary, record_production_accounting
 from src.indicators.moving_map import (
     render_map_working_image,
     render_map_unrotated_working_image,
     build_static_map_marker_tile,
     _map_render_plan,
+    _quantize_map_val,
 )
 from src.indicators.helpers import s, _parse_marker_color
 from src.indicators.rotated_paste import (
@@ -48,6 +50,7 @@ from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CA
 
 
 from ctypes import c_float
+from src.ffmpeg.amd_config import make_benchmark_fingerprint, resolve_amd_config
 AMD_NATIVE_ABI_VERSION = 9
 
 # ── ETAP 1A: Data contract for AFTER-MAP GPU_SPLIT Chart Capture ──────────────
@@ -139,6 +142,7 @@ class PreparedFrame:
     above_stats: dict[str, Any]
     last_map_img: Optional[Any] = None
     last_map_dst: Optional[Any] = None
+    map_crop_key: Optional[Any] = None
 
     # ETAP 1A: After-Map Chart GPU_SPLIT capture data (diagnostic in 1A)
     after_map_chart_captures: list[AfterMapChartTile] = field(default_factory=list)
@@ -699,6 +703,53 @@ def _cluster_above_bboxes_members(
     return [(rect, members) for rect, members in zip(m_rects, m_members)]
 
 
+def _cluster_area_cost_members(
+    bboxes: dict[str, tuple[int, int, int, int]],
+    canvas_w: int,
+    canvas_h: int,
+    pad: int = 0,
+    max_regions: int = 8,
+) -> list[tuple[tuple[int, int, int, int], list[str]]]:
+    """ETAP 5J: Area-Cost Aware Bounded Cluster Planner.
+    Merges candidate rects that minimize added empty area: Area(Union(A,B)) - Area(A) - Area(B).
+    """
+    if not bboxes:
+        return []
+    m_rects: list[tuple[int, int, int, int]] = []
+    m_members: list[list[str]] = []
+    for k, box in bboxes.items():
+        clipped = _clip_rect(box, canvas_w, canvas_h, pad=pad)
+        if clipped is not None and clipped[2] > 0 and clipped[3] > 0:
+            m_rects.append(clipped)
+            m_members.append([k])
+
+    while len(m_rects) > max_regions:
+        best_pair = None
+        min_added_area = float("inf")
+        for i in range(len(m_rects)):
+            for j in range(i + 1, len(m_rects)):
+                r1, r2 = m_rects[i], m_rects[j]
+                u_box = _rect_union(r1, r2)
+                u_area = u_box[2] * u_box[3]
+                added_area = u_area - (r1[2] * r1[3]) - (r2[2] * r2[3])
+                if added_area < min_added_area:
+                    min_added_area = added_area
+                    best_pair = (i, j)
+        if best_pair is None:
+            break
+        i, j = best_pair
+        union_box = _rect_union(m_rects[i], m_rects[j])
+        new_members = m_members[i] + m_members[j]
+        m_rects.pop(j)
+        m_rects.pop(i)
+        m_members.pop(j)
+        m_members.pop(i)
+        m_rects.append(union_box)
+        m_members.append(new_members)
+
+    return [(rect, members) for rect, members in zip(m_rects, m_members)]
+
+
 def _extract_above_regions(
     above_full: "Image.Image",
     candidate_clusters: list[tuple[int, int, int, int]],
@@ -810,29 +861,36 @@ class _ImagingMemoryInstance(ctypes.Structure):
     ]
 
 
+class HUDDirtyRect(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_uint),
+        ("y", ctypes.c_uint),
+        ("width", ctypes.c_uint),
+        ("height", ctypes.c_uint),
+    ]
+
+
 def _extract_exact_above_regions(
     above_full: "Image.Image",
     clusters_with_members: list[tuple[tuple[int, int, int, int], list[str]]],
     tight_bboxes: dict[str, dict[str, Any]],
     canvas_w: int,
     canvas_h: int,
-) -> tuple[list[Any], dict[str, Any]]:
-    """ETAP 10R EXACT + ETAP 4F DIRECT ZERO-COPY: extract ABOVE dirty regions.
+    batched_rects_buf: Optional[Any] = None,
+) -> tuple[Any, dict[str, Any]]:
+    """ETAP 10R EXACT + ETAP 4F DIRECT ZERO-COPY + ETAP 5K BATCHED: extract ABOVE dirty regions.
 
     For each candidate cluster ``(rect, members)`` the exact upload region is
     the union of the members' alpha-tight bboxes (no extra padding), clipped to
     the canvas.
 
-    ETAP 4F: uses direct strided memory pointers into ``above_full``'s raw RGBA
-    canvas buffer.  Zero Pillow Image.crop allocations, zero tobytes() calls,
-    and zero Python bytes copies on CPU.  ID3D11DeviceContext::UpdateSubresource
-    reads the sub-rectangle directly from canvas memory with stride=canvas_w*4.
-
-    Fallback (fail-safe): if any member has a missing / None / clipped tight
-    bbox, or the union is invalid, that single cluster falls back to the SCAN
-    alpha-scan path with a local crop + tobytes().
+    ETAP 5K: when ``batched_rects_buf`` is provided and all regions are valid,
+    populates the persistent ctypes array of HUDDirtyRect descriptors and returns
+    a single BATCHED descriptor tuple for 1 native call in C++.
     """
+    t_extract_start = time.perf_counter()
     regions_out: list[Any] = []
+    exact_rects: list[tuple[int, int, int, int]] = []
     exact_union_ms = 0.0
     exact_crop_ms = 0.0
     fallback_scan_ms = 0.0
@@ -844,6 +902,7 @@ def _extract_exact_above_regions(
     uploaded_bytes = 0
     exact_clusters = 0
     fallback_clusters = 0
+    non_contig_regions = 0
     fallback_reasons: dict[str, int] = {}
 
     row_table_ptr = None
@@ -898,8 +957,6 @@ def _extract_exact_above_regions(
         exact_union_ms += (time.perf_counter() - t_union_start) * 1000.0
 
         if unsafe:
-            # SCAN fallback for this single cluster (candidate -> alpha scan
-            # -> tight crop -> tobytes), identical to the SCAN mode.
             fallback_clusters += 1
             fallback_reasons[reason or "unknown"] = (
                 fallback_reasons.get(reason or "unknown", 0) + 1
@@ -934,6 +991,7 @@ def _extract_exact_above_regions(
         ex, ey, ew, eh = exact_rect
         uploaded_pixels += ew * eh
         uploaded_bytes += ew * eh * 4
+        exact_rects.append(exact_rect)
 
         is_contig = False
         if row_table_ptr is not None:
@@ -946,6 +1004,7 @@ def _extract_exact_above_regions(
 
         if not is_contig:
             # Fallback when region crosses chunk boundary or Imaging memory instance unavailable
+            non_contig_regions += 1
             t_crop_start = time.perf_counter()
             reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
             exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
@@ -954,8 +1013,34 @@ def _extract_exact_above_regions(
             tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
             regions_out.append((ex, ey, ew, eh, r_bytes))
 
+    # ETAP 5K Batched Fast-Path:
+    if (
+        batched_rects_buf is not None
+        and fallback_clusters == 0
+        and non_contig_regions == 0
+        and row_table_ptr is not None
+        and len(exact_rects) <= 8
+    ):
+        base_ptr_val = row_table_ptr
+        for i, (ex, ey, ew, eh) in enumerate(exact_rects):
+            batched_rects_buf[i].x = ex
+            batched_rects_buf[i].y = ey
+            batched_rects_buf[i].width = ew
+            batched_rects_buf[i].height = eh
+        final_output: Any = (
+            "BATCHED",
+            base_ptr_val,
+            canvas_stride,
+            batched_rects_buf,
+            len(exact_rects),
+            uploaded_bytes,
+            above_full,
+        )
+    else:
+        final_output = regions_out
+
     stats: dict[str, Any] = {
-        "region_count": len(regions_out),
+        "region_count": len(exact_rects) if batched_rects_buf is not None and fallback_clusters == 0 else len(regions_out),
         "candidate_pixels": candidate_pixels,
         "scanned_pixels": scanned_pixels,
         "uploaded_pixels": uploaded_pixels,
@@ -970,8 +1055,9 @@ def _extract_exact_above_regions(
         "exact_clusters": exact_clusters,
         "scan_fallback_clusters": fallback_clusters,
         "fallback_reason": fallback_reasons,
+        "extract_ms": (time.perf_counter() - t_extract_start) * 1000.0,
     }
-    return regions_out, stats
+    return final_output, stats
 
 
 def _extract_fine_dynamic_above_regions(
@@ -1014,24 +1100,48 @@ def _extract_fine_dynamic_above_regions(
 
     plan_ms = (time.perf_counter() - t_start) * 1000.0
 
-    regions_out: list[tuple[int, int, int, int, bytes]] = []
+    regions_out: list[Any] = []
     crop_ms = 0.0
     tobytes_ms = 0.0
     uploaded_pixels = 0
     uploaded_bytes = 0
 
+    row_table_ptr = None
+    canvas_stride = canvas_w * 4
+    if hasattr(above_full, "im") and hasattr(above_full.im, "ptr"):
+        try:
+            ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
+            ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+            ctypes.pythonapi.PyCapsule_GetName.restype = ctypes.c_char_p
+            ctypes.pythonapi.PyCapsule_GetName.argtypes = [ctypes.py_object]
+            cap_name = ctypes.pythonapi.PyCapsule_GetName(above_full.im.ptr)
+            raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(above_full.im.ptr, cap_name)
+            if raw_ptr:
+                row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
+        except Exception:
+            row_table_ptr = None
+
     for cx, cy, cw, ch in merged:
-        t_c = time.perf_counter()
-        patch = above_full.crop((cx, cy, cx + cw, cy + ch))
-        crop_ms += (time.perf_counter() - t_c) * 1000.0
-
-        t_b = time.perf_counter()
-        r_bytes = patch.tobytes("raw", "RGBA")
-        tobytes_ms += (time.perf_counter() - t_b) * 1000.0
-
         uploaded_pixels += cw * ch
-        uploaded_bytes += len(r_bytes)
-        regions_out.append((cx, cy, cw, ch, r_bytes))
+        uploaded_bytes += cw * ch * 4
+        is_contig = False
+        if row_table_ptr is not None:
+            top_row = ctypes.c_void_p.from_address(row_table_ptr + cy * 8).value
+            bottom_row = ctypes.c_void_p.from_address(row_table_ptr + (cy + ch - 1) * 8).value
+            if top_row and bottom_row and bottom_row == top_row + (ch - 1) * canvas_stride:
+                is_contig = True
+                region_ptr = top_row + cx * 4
+                regions_out.append((cx, cy, cw, ch, None, region_ptr, canvas_stride, above_full))
+
+        if not is_contig:
+            t_c = time.perf_counter()
+            patch = above_full.crop((cx, cy, cx + cw, cy + ch))
+            crop_ms += (time.perf_counter() - t_c) * 1000.0
+
+            t_b = time.perf_counter()
+            r_bytes = patch.tobytes("raw", "RGBA")
+            tobytes_ms += (time.perf_counter() - t_b) * 1000.0
+            regions_out.append((cx, cy, cw, ch, r_bytes))
 
     stats: dict[str, Any] = {
         "region_count": len(regions_out),
@@ -1117,6 +1227,111 @@ class _FrameAccountant:
             "unaccounted_ns": total - measured,
         })
         self.stages = None
+
+
+class _QueueTruth:
+    """ETAP 5Q: in-memory producer/consumer queue truth, no per-frame I/O."""
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+        self.maxsize = 0
+        self.events: dict[int, dict[str, float | int]] = {}
+        self.put_block_ms: list[float] = []
+        self.get_block_ms: list[float] = []
+        self.put_full_frames = 0
+        self.get_empty_frames = 0
+        self.put_sizes_before: dict[int, int] = {}
+        self.put_sizes_after: dict[int, int] = {}
+        self.get_sizes_after: dict[int, int] = {}
+
+    def configure(self, maxsize: int) -> None:
+        self.maxsize = maxsize
+
+    def put_begin(self, frame: int, size: int) -> float:
+        now = time.perf_counter()
+        if self.enabled:
+            self.put_sizes_before[frame] = size
+            self.events.setdefault(frame, {})["producer_put_begin"] = now
+            self.events[frame]["queue_size_before_put"] = size
+            if size >= self.maxsize:
+                self.put_full_frames += 1
+                self.events[frame]["producer_queue_full"] = 1
+        return now
+
+    def put_end(self, frame: int, begin: float, size: int) -> None:
+        if self.enabled:
+            elapsed = (time.perf_counter() - begin) * 1000.0
+            self.put_block_ms.append(elapsed)
+            self.put_sizes_after[frame] = size
+            event = self.events.setdefault(frame, {})
+            event["producer_enqueue_complete"] = time.perf_counter()
+            event["producer_blocked_ms"] = elapsed
+            event["queue_size_after_put"] = size
+
+    def get_begin(self, frame: int, size: int) -> float:
+        now = time.perf_counter()
+        if self.enabled:
+            event = self.events.setdefault(frame, {})
+            event["consumer_get_begin"] = now
+            event["queue_size_before_get"] = size
+            if size == 0:
+                self.get_empty_frames += 1
+                event["consumer_queue_empty"] = 1
+        return now
+
+    def get_end(self, frame: int, begin: float, size_after: int) -> None:
+        if self.enabled:
+            elapsed = (time.perf_counter() - begin) * 1000.0
+            self.get_block_ms.append(elapsed)
+            event = self.events.setdefault(frame, {})
+            event["consumer_dequeue"] = time.perf_counter()
+            event["consumer_blocked_ms"] = elapsed
+            event["queue_size_after_get"] = size_after
+            self.get_sizes_after[frame] = size_after
+
+    def mark(self, frame: int, name: str) -> None:
+        if self.enabled:
+            self.events.setdefault(frame, {})[name] = time.perf_counter()
+
+    @staticmethod
+    def _stats(values: list[float]) -> dict[str, float]:
+        if not values:
+            return {"avg_ms": 0.0, "median_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0, "max_ms": 0.0}
+        ordered = sorted(values)
+        pick = lambda p: ordered[min(len(ordered) - 1, int(len(ordered) * p))]
+        return {
+            "avg_ms": sum(values) / len(values),
+            "median_ms": pick(0.5),
+            "p95_ms": pick(0.95),
+            "p99_ms": pick(0.99),
+            "max_ms": max(values),
+        }
+
+    def summary(self, total_frames: int) -> dict[str, Any]:
+        if not self.enabled:
+            return {"enabled": False, "frames": 0}
+        put_hist = {str(k): sum(1 for v in self.put_sizes_before.values() if v == k) for k in range(self.maxsize + 1)}
+        after_put_hist = {str(k): sum(1 for v in self.put_sizes_after.values() if v == k) for k in range(self.maxsize + 1)}
+        after_get_hist = {str(k): sum(1 for v in self.get_sizes_after.values() if v == k) for k in range(self.maxsize + 1)}
+        return {
+            "enabled": True,
+            "frames": total_frames,
+            "queue_depth": self.maxsize,
+            "queue_size_before_put_histogram": put_hist,
+            "queue_size_after_put_histogram": after_put_hist,
+            "queue_size_after_get_histogram": after_get_hist,
+            "producer_blocked_frames": self.put_full_frames,
+            "producer_blocked_fraction": self.put_full_frames / max(1, len(self.put_sizes_before)),
+            "producer_block": self._stats(self.put_block_ms),
+            "consumer_blocked_frames": self.get_empty_frames,
+            "consumer_blocked_fraction": self.get_empty_frames / max(1, len(self.get_sizes_after)),
+            "consumer_block": self._stats(self.get_block_ms),
+            "queue_full_frames": self.put_full_frames,
+            "queue_full_fraction": self.put_full_frames / max(1, len(self.put_sizes_before)),
+            "queue_empty_frames": self.get_empty_frames,
+            "queue_empty_fraction": self.get_empty_frames / max(1, len(self.get_sizes_after)),
+            "representative_frames": {str(k): self.events[k] for k in sorted(self.events) if k in {0, 1, 2, 30, 100, 300, 500, 750, 900, 1130}},
+        }
 
 
 def _pct_sorted(values: list[float], p: float) -> float:
@@ -1446,6 +1661,94 @@ def _value_summary(values: list[float]) -> dict[str, float | int]:
         "median": statistics.median(values) if values else 0.0,
         "p95": _percentile(values, 0.95),
         "p99": _percentile(values, 0.99),
+    }
+
+
+def _sync_frame_accounting_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize the mutually-exclusive SYNC production-frame parent."""
+    if not records:
+        return {"enabled": False, "frames": 0}
+    parents = [float(row["parent_ms"]) for row in records]
+    stage_names = sorted({name for row in records for name in row["stages"]})
+    stage_values = {
+        name: [float(row["stages"].get(name, 0.0)) for row in records]
+        for name in stage_names
+    }
+    sums = [sum(values[i] for values in stage_values.values()) for i in range(len(records))]
+    residual = [parents[i] - sums[i] for i in range(len(records))]
+    parent_avg = statistics.fmean(parents)
+    sum_avg = statistics.fmean(sums)
+    return {
+        "enabled": True,
+        "frames": len(records),
+        "frame_total_ms": _timing_summary(parents),
+        "children_sum_ms": _timing_summary(sums),
+        "stages": {name: _timing_summary(values) for name, values in stage_values.items()},
+        "residual_other_ms": _timing_summary(residual),
+        "parent_child_error_pct_avg": abs(parent_avg - sum_avg) / parent_avg * 100.0 if parent_avg else 0.0,
+        "method": "one SYNC parent from before CPU preparation through normal synchronous native/output handling; children are sequential wall intervals",
+    }
+
+
+def _exclusive_timing_accounting(
+    parent: list[float], children: dict[str, list[float]], residual_name: str | None = None
+) -> dict[str, Any]:
+    """Summarize same-frame child buckets plus explicit residual/overlap error."""
+    n = len(parent)
+    if not n:
+        return {"frames": 0, "parent": {}, "children_sum": {}, "error": {}}
+    sums = []
+    child_avgs: dict[str, float] = {}
+    for i in range(n):
+        total = 0.0
+        for name, values in children.items():
+            value = float(values[i]) if i < len(values) else 0.0
+            total += value
+            child_avgs[name] = child_avgs.get(name, 0.0) + value
+        if residual_name is not None:
+            residual = float(parent[i]) - total
+            total += residual
+            child_avgs[residual_name] = child_avgs.get(residual_name, 0.0) + residual
+        sums.append(total)
+    for name in child_avgs:
+        child_avgs[name] /= n
+    errors = [sums[i] - float(parent[i]) for i in range(n)]
+    parent_avg = statistics.fmean(parent)
+    sum_avg = statistics.fmean(sums)
+    return {
+        "frames": n,
+        "parent": {"avg_ms": parent_avg, "median_ms": statistics.median(parent)},
+        "children_sum": {"avg_ms": sum_avg, "median_ms": statistics.median(sums), "children_avg_ms": child_avgs},
+        "error": {
+            "avg_ms": statistics.fmean(errors),
+            "median_ms": statistics.median(errors),
+            "pct_of_parent_avg": (abs(sum_avg - parent_avg) / parent_avg * 100.0) if parent_avg else 0.0,
+            "max_abs_ms": max(abs(value) for value in errors),
+        },
+    }
+
+
+def _production_above_accounting(summary: dict[str, Any]) -> dict[str, Any]:
+    totals = summary.get("totals", {}) if summary.get("enabled") else {}
+    parent_entry = totals.get("above.compose_total", {})
+    calls = float(parent_entry.get("calls", 0.0))
+    parent = float(parent_entry.get("total_ms", 0.0)) / calls if calls else 0.0
+    children: dict[str, float] = {}
+    for key, entry in totals.items():
+        if key.startswith("above.widget.") or key == "above.custom_text_loop":
+            count = float(entry.get("calls", 0.0))
+            children[key.removeprefix("above.")] = (
+                float(entry.get("total_ms", 0.0)) / count if count else 0.0
+            )
+    child_sum = sum(children.values())
+    children["other_compose_bookkeeping"] = parent - child_sum
+    child_sum = sum(children.values())
+    error = abs(parent - child_sum) / parent * 100.0 if parent else 0.0
+    return {
+        "parent": {"avg_ms": parent, "calls": calls},
+        "children_sum": {"avg_ms": child_sum, "children_avg_ms": children},
+        "error": {"pct_of_parent": error, "other_compose_bookkeeping_ms": children["other_compose_bookkeeping"]},
+        "method": "actual compose_overlay(map_above_layout) total minus explicitly timed widget/custom buckets; residual is exclusive compositor clear/layout/finalization bucket",
     }
 
 
@@ -1782,10 +2085,16 @@ def export_amd_native_d3d11(
         )
 
     gpu_map_rotate_flag = _env_flag("AMD_GPU_MAP_ROTATE", True)
+    map_source_reuse_enabled = _env_flag("AMD_MAP_SOURCE_REUSE", False)
     map_cfg = layout.get("indicators", {}).get("track_map", {})
     is_track_up = str(map_cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
     gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up
-    print(f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} (flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up})", flush=True)
+    print(
+        f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} "
+        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}) | "
+        f"AMD_MAP_SOURCE_REUSE: {1 if map_source_reuse_enabled else 0}",
+        flush=True,
+    )
 
     # ETAP 5G: in GPU map mode the track_map widget leaves the Pillow HUD; the
     # CPU still renders its 692x692 working image, which is uploaded and
@@ -1944,6 +2253,34 @@ def export_amd_native_d3d11(
         + ", ".join(fit_field_plan["inactive_fit_fields"]),
         flush=True,
     )
+    # ── ETAP 5G.2 / C6: AMD REAL PRODUCTION EFFECTIVE CONFIG LOG ──
+    pipeline_mode_resolved = os.getenv("AMD_CPU_GPU_PIPELINE", "SYNC").upper()
+    if pipeline_mode_resolved not in ("ASYNC", "SYNC"):
+        pipeline_mode_resolved = "SYNC"
+    q_depth_resolved = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2"))) if pipeline_mode_resolved == "ASYNC" else 0
+    vp_state_env = os.getenv("AMD_VP_STATE_MODE", "REFERENCE").upper()
+    vp_pool_env = os.getenv("AMD_VP_POOL_SIZE", "8")
+    amf_query_env = os.getenv("AMD_AMF_QUERY_MODE", "REFERENCE").upper()
+    map_align_env = os.getenv("AMD_MAP_ALIGN", "16")
+    nv12_comp_env = os.getenv("AMD_NV12_COMPOSITOR", "1")
+
+    print("\n=== AMD REAL PRODUCTION EFFECTIVE CONFIG ===", flush=True)
+    print(f"  CPU_GPU_PIPELINE = {pipeline_mode_resolved}", flush=True)
+    print(f"  QUEUE_DEPTH      = {q_depth_resolved}", flush=True)
+    print(f"  VP_STATE         = {vp_state_env}", flush=True)
+    print(f"  VP_POOL          = {vp_pool_env}", flush=True)
+    print(f"  AMF_QUERY        = {amf_query_env}", flush=True)
+    print(f"  MAP_PATH         = {'GPU' if gpu_map_enabled else 'CPU_REFERENCE'}", flush=True)
+    print(f"  MAP_ALIGN        = {map_align_env}", flush=True)
+    print(f"  GAUGE_GPU        = {1 if after_map_gauge_gpu else 0} ({gauge_region_mode})", flush=True)
+    print(f"  CHART_GPU        = {1 if after_map_chart_gpu else 0} ({requested_chart_path})", flush=True)
+    print(f"  LEAN_GPU         = {1 if lean_gpu_enabled else 0}", flush=True)
+    print(f"  HUD_MODE         = {native_hud_mode}", flush=True)
+    print(f"  HUD_UPLOAD       = {hud_upload_mode}", flush=True)
+    print(f"  NV12_COMPOSITOR  = {'FUSED' if nv12_comp_env == '1' else 'REFERENCE'}", flush=True)
+    print(f"  PROFILING        = {1 if profiling_enabled else 0}", flush=True)
+    print("============================================\n", flush=True)
+
     input_probe = _probe_video_summary(ffmpeg_exe, input_file_str)
     source_frames = _stream_frame_count(input_probe, "video")
     source_rotation = _probe_rotation_degrees(input_probe)
@@ -2100,6 +2437,16 @@ def export_amd_native_d3d11(
         c_void_p, c_uint, POINTER(c_uint8), c_uint, c_uint, c_uint,
         c_uint, c_uint,
     ]
+    if hasattr(native_dll, "telem_amd_update_above_regions_batch"):
+        native_dll.telem_amd_update_above_regions_batch.restype = c_int
+        native_dll.telem_amd_update_above_regions_batch.argtypes = [
+            c_void_p, POINTER(c_void_p), c_uint, POINTER(HUDDirtyRect), c_uint,
+        ]
+    if hasattr(native_dll, "telem_amd_get_above_region_timings"):
+        native_dll.telem_amd_get_above_region_timings.restype = None
+        native_dll.telem_amd_get_above_region_timings.argtypes = [
+            c_void_p, POINTER(c_double), POINTER(c_double), POINTER(c_uint),
+        ]
     native_dll.telem_amd_update_above_map.restype = c_int
     native_dll.telem_amd_update_above_map.argtypes = [
         c_void_p, POINTER(c_uint8), c_uint, c_uint, c_uint,
@@ -2331,6 +2678,7 @@ def export_amd_native_d3d11(
             total_overlay_frames=total_frames,
         )
 
+
     fps_num = int(round(target_fps * 1000))
     fps_den = 1000
 
@@ -2437,7 +2785,8 @@ def export_amd_native_d3d11(
             return False
         if gpu_map_rotate:
             native_dll.telem_amd_set_map_rotate_mode(h_context, 1)
-            map_w_cfg = s(map_cfg.get("size", 0.1), video_width)
+            raw_map_w_cfg = s(map_cfg.get("size", 0.1), video_width)
+            map_w_cfg = _quantize_map_val(int(raw_map_w_cfg), os.environ.get("AMD_MAP_ALIGN", "1"))
             render_plan = _map_render_plan(video_width, map_w_cfg, int(map_cfg.get("zoom", 16)))
             marker_style = str(map_cfg.get("map_marker_style", "dot")).strip().lower()
             marker_color = _parse_marker_color(map_cfg.get("marker_color", "#FFFFFF"))
@@ -2482,9 +2831,13 @@ def export_amd_native_d3d11(
         print("[AMD NATIVE D3D11] ERROR: failed to configure GPU lean mode.", flush=True)
         _cleanup_native_resources()
         return False
+    # Keep the diagnostic CPU-HUD reporting path valid even when the GPU lean
+    # path is disabled.  Previously lean_cfg was created only inside the
+    # lean_gpu_enabled branch but referenced later by the shared diagnostics
+    # closure, causing HUD_CPU to fail before its intended measurement.
+    lean_cfg = layout.get("indicators", {}).get(lean_key, {})
     if lean_gpu_enabled:
         from src.indicators.lean import _load_lean_rotation_source, get_lean_gpu_transform_info
-        lean_cfg = layout.get("indicators", {}).get(lean_key, {})
         _size_px = s(lean_cfg.get("size", 0.1), video_width)
         _g = max(32, int(_size_px))
         rot_src = _load_lean_rotation_source(lean_cfg, _g)
@@ -2554,7 +2907,6 @@ def export_amd_native_d3d11(
         f"AMD_OVERLAY_PROFILE: {'ON' if overlay_profile_enabled else 'OFF'}",
         flush=True,
     )
-
     timing_samples: dict[str, list[float]] = {
         "Decode/pipe wait": [],
         "MF ReadSample/decode availability": [],
@@ -2610,6 +2962,11 @@ def export_amd_native_d3d11(
         "above_tight_bbox_collect": [],
         "above_exact_union": [],
         "above_exact_crop": [],
+        "region_pipeline_total": [],
+        "python_control_total": [],
+        "native_region_total": [],
+        "update_subresource_cpu": [],
+        "update_subresource_calls": [],
         "above_total": [],
         "HUD dirty bbox": [],
         "HUD dirty extract": [],
@@ -2683,6 +3040,24 @@ def export_amd_native_d3d11(
     amf_preflush_received = 0
     amf_drain_ms = 0.0
     frame_acct = _FrameAccountant(fa_enabled)
+    sync_frame_accounting_enabled = _env_flag("AMD_SYNC_FRAME_ACCOUNTING", False)
+    sync_frame_records: list[dict[str, Any]] = []
+    sync_frame_current: dict[str, Any] | None = None
+
+    def _sync_frame_mark(name: str) -> None:
+        if not sync_frame_accounting_enabled or sync_frame_current is None:
+            return
+        now_ns = time.perf_counter_ns()
+        elapsed_ms = (now_ns - sync_frame_current["last_ns"]) / 1_000_000.0
+        sync_frame_current["stages"][name] = sync_frame_current["stages"].get(name, 0.0) + elapsed_ms
+        sync_frame_current["last_ns"] = now_ns
+
+    print(
+        f"AMD_SYNC_FRAME_ACCOUNTING: {'ON' if sync_frame_accounting_enabled else 'OFF'}",
+        flush=True,
+    )
+
+    queue_truth = _QueueTruth(_env_flag("AMD_5Q_QUEUE_DIAG", False))
     etap5p = None
     last_map_img = None
     last_map_dst = None
@@ -2948,9 +3323,20 @@ def export_amd_native_d3d11(
             flush=True,
         )
 
+    # ETAP 5K.1: AMD_ABOVE_BATCHED default 0 (OFF / legacy per-region default).
+    # Opt-in experimental batched fast-path via AMD_ABOVE_BATCHED=1.
+    above_batched_requested = os.getenv("AMD_ABOVE_BATCHED", "0").strip().lower() in ("1", "true", "yes", "on")
+    above_batched_supported = hasattr(native_dll, "telem_amd_update_above_regions_batch")
+    above_batched_enabled = above_batched_requested and above_batched_supported
+    batched_above_rects_buf = (HUDDirtyRect * 8)() if above_batched_enabled else None
+    if above_batched_enabled:
+        print("[AMD NATIVE D3D11] AMD_ABOVE_BATCHED = 1 (batched native dirty regions fast-path active)", flush=True)
+    else:
+        print(f"[AMD NATIVE D3D11] AMD_ABOVE_BATCHED = 0 (legacy per-region upload mode, requested={above_batched_requested}, supported={above_batched_supported})", flush=True)
+
     map_geometry_set_holder = [False]
     last_hud_report_holder = [0.0]
-    timeline_trace = [] # First 20 frames trace
+    timeline_trace = [] # Required accounting checkpoints only
     audit_alloc_frames: list[dict[str, Any]] = []
     
     # Pre-allocate timing sample containers for producer/consumer
@@ -2964,6 +3350,8 @@ def export_amd_native_d3d11(
 
     def _prepare_frame_cpu(idx: int) -> PreparedFrame:
         t_p_start = time.perf_counter()
+        if overlay_profile_enabled:
+            overlay_profiler.start_frame(idx, video_width, video_height)
         sample_time_sec = idx / target_fps
         c_dt = base_dt + timedelta(seconds=sample_time_sec) if base_dt is not None else None
         
@@ -2976,9 +3364,21 @@ def export_amd_native_d3d11(
 
         t_samples_p: dict[str, float] = {}
         above_stats_p: dict[str, Any] = {}
+        _producer_accounting_enabled = fa_enabled or _env_flag("AMD_PRODUCTION_ACCOUNTING", False)
+        _producer_accounting_last = t_p_start
+
+        def _producer_stage(name: str) -> None:
+            nonlocal _producer_accounting_last
+            if not _producer_accounting_enabled:
+                return
+            _now = time.perf_counter()
+            t_samples_p[f"producer_active.{name}"] = (_now - _producer_accounting_last) * 1000.0
+            _producer_accounting_last = _now
         
         if not hud_work_enabled:
             t_p_end = time.perf_counter()
+            if overlay_profile_enabled:
+                overlay_profiler.finish_frame()
             return PreparedFrame(
                 frame_idx=idx,
                 sample_time_seconds=sample_time_sec,
@@ -3001,6 +3401,7 @@ def export_amd_native_d3d11(
                 map_active=False,
                 map_data=None,
                 map_geometry=None,
+                map_heading=0.0,
                 timing_samples_producer={},
                 intermediate_bytes=0,
                 persistent_copy_bytes=0,
@@ -3040,6 +3441,7 @@ def export_amd_native_d3d11(
         t_samples_p["telemetry_frame_payload"] = t_payload_ms
         t_samples_p["telemetry_shared_objects"] = t_shared_ms
         t_samples_p["telemetry_other"] = t_other_ms
+        _producer_stage("telemetry_resolve")
         
         nonlocal gpu_chart_keys, gpu_chart_reason, gauge_gpu_active, gauge_gpu_reason
         nonlocal gpu_chart_keys_before_map, gpu_chart_keys_after_map, after_map_captures_performed
@@ -3171,10 +3573,12 @@ def export_amd_native_d3d11(
             gpu_capture=gpu_capture,
             split_chart_keys=(gpu_chart_keys if gpu_charts_split else None),
             reuse_canvas="below",
+            _production_accounting_role="below",
             **frame_kwargs
         )
         compose_elapsed_ms = (time.perf_counter() - compose_start) * 1000.0
         t_samples_p["compose_overlay"] = compose_elapsed_ms
+        _producer_stage("below_map_compose")
 
         # ETAP 2A DIAGNOSTIC (temporary, env-gated): dump compose ground truth
         # so HUD-canvas parity diffs can be attributed to source content vs
@@ -3377,9 +3781,13 @@ def export_amd_native_d3d11(
                     gpu_capture=above_gpu_capture,
                     split_chart_keys=above_split_keys,
                     reuse_canvas=above_reuse,
+                    _production_accounting_role="above",
                     **frame_kwargs,
                 )
                 above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
+
+            if os.environ.get("AMD_PRODUCTION_ACCOUNTING", "0").strip().lower() in {"1", "true", "yes", "on"}:
+                record_production_accounting("above.compose_total", above_compose_ms)
 
             # ETAP 2A: On frame 0, resolve deferred AFTER-MAP gauge safety check.
             # The probe phase set gauge_gpu_active=True tentatively; now we have
@@ -3450,13 +3858,25 @@ def export_amd_native_d3d11(
                         above_exact_fallback_reason_frame = {}
                         above_exact_counters["clusters"] += above_exact_clusters_frame
                     elif above_dirty_mode == "EXACT":
-                        clusters_with_members = _cluster_above_bboxes_members(
-                            above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
-                        )
+                        dirty_strat = os.environ.get("AMD_ABOVE_DIRTY_STRATEGY", "DIST").upper()
+                        if dirty_strat == "AREA_COST":
+                            clusters_with_members = _cluster_area_cost_members(
+                                above_bboxes, video_width, video_height, pad=0, max_regions=above_multi_rect_max
+                            )
+                        elif dirty_strat == "DISCRETE":
+                            clusters_with_members = [
+                                ((box[0], box[1], box[2], box[3]), [k]) for k, box in above_bboxes.items()
+                            ]
+                        else:
+                            # DIST (production default): cost-aware bounded distance merge (6 regions)
+                            clusters_with_members = _cluster_above_bboxes_members(
+                                above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                            )
                         above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
                         above_regions_out, above_stats_p = _extract_exact_above_regions(
                             above_full, clusters_with_members, above_tight_bboxes or {},
                             video_width, video_height,
+                            batched_rects_buf=batched_above_rects_buf,
                         )
                         if idx == 0 and above_fine_dirty_enabled:
                             for _k, _box in above_bboxes.items():
@@ -4010,6 +4430,7 @@ def export_amd_native_d3d11(
         t_samples_p["gauge_bytes_per_frame"] = float(gauge_bytes_frame)
 
         # Map
+        _producer_stage("above_map_compose_and_capture")
         map_data = None
         map_geometry = None
         last_map_img_out = None
@@ -4064,6 +4485,7 @@ def export_amd_native_d3d11(
                     map_data = (map_bytes, mw, mh, map_dst, None, map_stride, map_img)
             map_timing_ms = (time.perf_counter() - map_start) * 1000.0
         t_samples_p["map_cpu_upload"] = map_timing_ms
+        _producer_stage("map_cpu_preparation")
 
         # HUD Below dirty rects & backing
         dirty_rect_slices = []
@@ -4168,10 +4590,13 @@ def export_amd_native_d3d11(
                 (tracemalloc.get_traced_memory()[0] - _aud_traced0) if tracemalloc.is_tracing() else 0.0
             )
 
+        _producer_stage("dirty_region_and_buffer_preparation")
+        _producer_stage("PreparedFrame_construction_boundary")
         t_p_end = time.perf_counter()
         prep_ms = (t_p_end - t_p_start) * 1000.0
 
         lean_transform_info = None
+        _linfo = None
         if lean_gpu_enabled:
             _lval = None
             if "indicator_values" in frame_kwargs and lean_key in frame_kwargs["indicator_values"]:
@@ -4231,6 +4656,8 @@ def export_amd_native_d3d11(
                 flush=True,
             )
 
+        if overlay_profile_enabled:
+            overlay_profiler.finish_frame()
         return PreparedFrame(
             frame_idx=idx,
             sample_time_seconds=sample_time_sec,
@@ -4265,10 +4692,14 @@ def export_amd_native_d3d11(
             above_stats=above_stats_p,
             last_map_img=last_map_img_out,
             last_map_dst=last_map_dst_out,
+            map_crop_key=getattr(last_map_img_out, "_crop_key", None),
             after_map_chart_captures=after_map_chart_captures_frame,
             lean_active=lean_gpu_enabled,
             lean_transform=lean_transform_info,
         )
+
+    last_uploaded_map_source_key = None
+    map_reused_frames = 0
 
     def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
         nonlocal decoded_frames_python, hud_frames, successful_hud_updates, successful_video_updates
@@ -4278,6 +4709,7 @@ def export_amd_native_d3d11(
         nonlocal chart_full_tobytes_total, chart_split_frames, chart_uploaded_bytes_total
         nonlocal above_map_frames, above_map_visible_frames, above_map_uploaded_bytes_total
         nonlocal t_first_frame_begin, t_first_frame_encoded, last_map_img, last_map_dst
+        nonlocal last_uploaded_map_source_key, map_reused_frames
 
         t_c_start = time.perf_counter()
         if t_first_frame_begin == 0.0:
@@ -4289,6 +4721,8 @@ def export_amd_native_d3d11(
             _aud_c_blocks0 = 0
             _aud_c_traced0 = 0
         frame_acct.begin_frame(prepared.frame_idx)
+        frame_acct.mark("consumer_setup_and_producer_merge")
+        _sync_frame_mark("producer_prepare")
         
         # Merge producer timing samples
         for k_t, v_t in prepared.timing_samples_producer.items():
@@ -4310,6 +4744,7 @@ def export_amd_native_d3d11(
             above_scan_fallback_clusters_samples.append(prepared.above_stats.get("scan_fallback_clusters", 0))
 
         # Decode step on consumer
+        _sync_frame_mark("consumer_setup")
         raw_nv12: bytes | None = None
         if use_d3d11va:
             while True:
@@ -4361,6 +4796,8 @@ def export_amd_native_d3d11(
             decoded_frames_python += 1
 
         t_up_stage_start = time.perf_counter()
+        frame_acct.mark("decode_and_read_sample")
+        _sync_frame_mark("decode_read_sample")
         
         # Upload Charts
         for slot, st_bytes, sw, sh, bx, by, ch_key in prepared.chart_static_uploads:
@@ -4438,35 +4875,78 @@ def export_amd_native_d3d11(
 
         # Upload Above Regions
         if map_above_layout is not None:
-            reg_count = len(prepared.above_regions)
-            native_dll.telem_amd_update_above_regions_count(h_context, reg_count)
-            above_up_ms = 0.0
-            above_buf_prep_ms = 0.0
-            for r_idx, reg_entry in enumerate(prepared.above_regions):
-                if len(reg_entry) == 5:
-                    rx, ry, rw, rh, r_bytes = reg_entry
-                    t_prep_start = time.perf_counter()
-                    r_ptr = _above_region_pointer(r_bytes, above_upload_buffer_mode)
-                    above_buf_prep_ms += (time.perf_counter() - t_prep_start) * 1000.0
-                    r_stride = rw * 4
-                    r_len = len(r_bytes)
-                else:
-                    rx, ry, rw, rh, _, r_ptr_int, r_stride, _ = reg_entry
-                    r_ptr = ctypes.cast(r_ptr_int, POINTER(c_uint8))
-                    r_len = rw * rh * 4
-
+            t_dispatch_start = time.perf_counter()
+            if (
+                isinstance(prepared.above_regions, tuple)
+                and len(prepared.above_regions) == 7
+                and prepared.above_regions[0] == "BATCHED"
+            ):
+                _, row_table_ptr_val, r_stride, rects_buf, reg_count, r_bytes_tot, _ = prepared.above_regions
+                row_table_ptr = ctypes.cast(row_table_ptr_val, POINTER(c_void_p))
                 t_r_start = time.perf_counter()
-                r_ok = native_dll.telem_amd_update_above_region(
-                    h_context, r_idx, r_ptr, rw, rh, r_stride, rx, ry
+                r_ok = native_dll.telem_amd_update_above_regions_batch(
+                    h_context, row_table_ptr, r_stride, rects_buf, reg_count
                 )
-                above_up_ms += (time.perf_counter() - t_r_start) * 1000.0
+                above_up_ms = (time.perf_counter() - t_r_start) * 1000.0
                 if r_ok:
-                    above_map_uploaded_bytes_total += r_len
-            timing_samples["above_region_upload"].append(above_up_ms)
-            timing_samples["above_upload_buffer_prepare"].append(above_buf_prep_ms)
-            above_map_frames += 1
-            if reg_count > 0:
-                above_map_visible_frames += 1
+                    above_map_uploaded_bytes_total += r_bytes_tot
+                timing_samples["above_region_upload"].append(above_up_ms)
+                timing_samples["above_upload_buffer_prepare"].append(0.0)
+                above_map_frames += 1
+                if reg_count > 0:
+                    above_map_visible_frames += 1
+            else:
+                reg_count = len(prepared.above_regions)
+                native_dll.telem_amd_update_above_regions_count(h_context, reg_count)
+                above_up_ms = 0.0
+                above_buf_prep_ms = 0.0
+                for r_idx, reg_entry in enumerate(prepared.above_regions):
+                    if len(reg_entry) == 5:
+                        rx, ry, rw, rh, r_bytes = reg_entry
+                        t_prep_start = time.perf_counter()
+                        r_ptr = _above_region_pointer(r_bytes, above_upload_buffer_mode)
+                        above_buf_prep_ms += (time.perf_counter() - t_prep_start) * 1000.0
+                        r_stride = rw * 4
+                        r_len = len(r_bytes)
+                    else:
+                        rx, ry, rw, rh, _, r_ptr_int, r_stride, _ = reg_entry
+                        r_ptr = ctypes.cast(r_ptr_int, POINTER(c_uint8))
+                        r_len = rw * rh * 4
+
+                    t_r_start = time.perf_counter()
+                    r_ok = native_dll.telem_amd_update_above_region(
+                        h_context, r_idx, r_ptr, rw, rh, r_stride, rx, ry
+                    )
+                    above_up_ms += (time.perf_counter() - t_r_start) * 1000.0
+                    if r_ok:
+                        above_map_uploaded_bytes_total += r_len
+                timing_samples["above_region_upload"].append(above_up_ms)
+                timing_samples["above_upload_buffer_prepare"].append(above_buf_prep_ms)
+                above_map_frames += 1
+                if reg_count > 0:
+                    above_map_visible_frames += 1
+
+            dispatch_ms = (time.perf_counter() - t_dispatch_start) * 1000.0
+            n_ms = c_double(0.0)
+            sub_ms = c_double(0.0)
+            sub_calls = c_uint(0)
+            if hasattr(native_dll, "telem_amd_get_above_region_timings"):
+                native_dll.telem_amd_get_above_region_timings(
+                    h_context, byref(n_ms), byref(sub_ms), byref(sub_calls)
+                )
+            native_region_ms = n_ms.value
+            subresource_cpu_ms = sub_ms.value
+            subresource_calls = float(sub_calls.value)
+
+            extract_ms = float(prepared.above_stats.get("extract_ms", 0.0))
+            python_control_ms = extract_ms + max(0.0, dispatch_ms - native_region_ms)
+            region_pipeline_ms = extract_ms + dispatch_ms
+
+            timing_samples["region_pipeline_total"].append(region_pipeline_ms)
+            timing_samples["python_control_total"].append(python_control_ms)
+            timing_samples["native_region_total"].append(native_region_ms)
+            timing_samples["update_subresource_cpu"].append(subresource_cpu_ms)
+            timing_samples["update_subresource_calls"].append(subresource_calls)
 
         # Upload AFTER-MAP Charts (ETAP 1B)
         if after_map_chart_gpu and prepared.after_map_chart_captures:
@@ -4514,13 +4994,28 @@ def export_amd_native_d3d11(
             last_map_dst = prepared.last_map_dst
             if gpu_map_rotate:
                 native_dll.telem_amd_set_map_heading(h_context, c_float(prepared.map_heading))
-            m_uploaded = c_uint64(0)
-            m_created = c_int(0)
-            ok = native_dll.telem_amd_update_map(
-                h_context, m_ptr, mw, mh, m_stride, byref(m_uploaded), byref(m_created),
+
+            # ETAP 5D: GPU Texture Reuse / conditional upload when source bitmap is identical
+            map_source_key = getattr(prepared, "map_crop_key", None)
+            skip_upload = (
+                map_source_reuse_enabled
+                and map_source_key is not None
+                and map_source_key == last_uploaded_map_source_key
+                and map_gpu_frames > 0
             )
-            if ok:
-                map_uploaded_bytes_total += int(m_uploaded.value)
+
+            if not skip_upload:
+                m_uploaded = c_uint64(0)
+                m_created = c_int(0)
+                ok = native_dll.telem_amd_update_map(
+                    h_context, m_ptr, mw, mh, m_stride, byref(m_uploaded), byref(m_created),
+                )
+                if ok:
+                    last_uploaded_map_source_key = map_source_key
+                    map_uploaded_bytes_total += int(m_uploaded.value)
+                    map_gpu_frames += 1
+            else:
+                map_reused_frames += 1
                 map_gpu_frames += 1
 
         # ETAP 2A FIX: run the start-of-frame HUD-canvas clears (previous
@@ -4598,7 +5093,10 @@ def export_amd_native_d3d11(
             successful_video_updates += 1
 
         t_up_stage_ms = (time.perf_counter() - t_up_stage_start) * 1000.0
+        queue_truth.mark(prepared.frame_idx, "upload_end")
         timing_samples["consumer_upload"].append(t_up_stage_ms)
+        frame_acct.mark("consumer_upload")
+        _sync_frame_mark("upload")
 
         # ETAP 2G: GPU lean indicator dynamic affine transform
         if prepared.lean_active and prepared.lean_transform is not None:
@@ -4618,12 +5116,22 @@ def export_amd_native_d3d11(
 
         # Process Frame
         t_native_start = time.perf_counter()
+        queue_truth.mark(prepared.frame_idx, "native_call_begin")
         ret = native_dll.telem_amd_process_frame(h_context, prepared.frame_idx, 1 if hud_enabled else 0)
         t_native_ms = (time.perf_counter() - t_native_start) * 1000.0
+        queue_truth.mark(prepared.frame_idx, "native_call_end")
         timing_samples["consumer_native_call"].append(t_native_ms)
+        frame_acct.mark("native_process_frame")
+        _sync_frame_mark("native_process_call")
         if not ret:
             print(f"[AMD NATIVE D3D11] ERROR: telem_amd_process_frame failed on frame {prepared.frame_idx}", flush=True)
             return False
+
+        chk_frame_env = os.environ.get("AMD_DUMP_CHECKPOINT_FRAME")
+        if chk_frame_env is not None and prepared.frame_idx == int(chk_frame_env):
+            chk_stage = os.environ.get("AMD_DUMP_CHECKPOINT_STAGE", "03_amf_input").encode("utf-8")
+            chk_path = os.environ.get("AMD_DUMP_CHECKPOINT_PATH", "scratch/chk.png")
+            native_dll.telem_amd_dump_checkpoint(h_context, prepared.frame_idx, chk_stage, chk_path)
 
         if t_first_frame_encoded == 0.0:
             t_first_frame_encoded = time.perf_counter()
@@ -4660,6 +5168,10 @@ def export_amd_native_d3d11(
             )
 
         t_c_end = time.perf_counter()
+        _sync_frame_mark("consumer_post_native")
+        queue_truth.mark(prepared.frame_idx, "consumer_end")
+        frame_acct.mark("consumer_post_native_and_bookkeeping")
+        frame_acct.end_frame()
         pipeline_total_ms = (t_c_end - t_c_start) * 1000.0
         timing_samples["pipeline_total"].append(pipeline_total_ms)
 
@@ -4674,7 +5186,7 @@ def export_amd_native_d3d11(
                 ),
             })
 
-        if prepared.frame_idx < 20:
+        if prepared.frame_idx in {0, 1, 30, 100, 300, 500, 750, 900, 1130}:
             timeline_trace.append({
                 "frame_idx": prepared.frame_idx,
                 "prod_begin": prepared.t_prod_begin,
@@ -4722,6 +5234,7 @@ def export_amd_native_d3d11(
         if pipeline_mode == "ASYNC":
             q_depth = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2")))
             frame_queue: queue.Queue = queue.Queue(maxsize=q_depth)
+            queue_truth.configure(q_depth)
             cancel_evt = cancel_event if cancel_event is not None else threading.Event()
             producer_error: list[Exception] = []
 
@@ -4731,11 +5244,12 @@ def export_amd_native_d3d11(
                         if cancel_evt.is_set():
                             break
                         prep = _prepare_frame_cpu(f_idx)
-                        t_put_start = time.perf_counter()
+                        t_put_start = queue_truth.put_begin(f_idx, frame_queue.qsize())
                         while not cancel_evt.is_set():
                             try:
                                 frame_queue.put(prep, timeout=0.05)
                                 t_put_ms = (time.perf_counter() - t_put_start) * 1000.0
+                                queue_truth.put_end(f_idx, t_put_start, frame_queue.qsize())
                                 timing_samples["producer_queue_wait"].append(t_put_ms)
                                 break
                             except queue.Full:
@@ -4756,12 +5270,13 @@ def export_amd_native_d3d11(
             consumed_count = 0
             try:
                 while consumed_count < total_frames:
-                    t_get_start = time.perf_counter()
+                    t_get_start = queue_truth.get_begin(consumed_count, frame_queue.qsize())
                     item = None
                     while not cancel_evt.is_set():
                         try:
                             item = frame_queue.get(timeout=0.05)
                             t_get_ms = (time.perf_counter() - t_get_start) * 1000.0
+                            queue_truth.get_end(consumed_count, t_get_start, frame_queue.qsize())
                             timing_samples["consumer_queue_wait"].append(t_get_ms)
                             break
                         except queue.Empty:
@@ -4776,6 +5291,7 @@ def export_amd_native_d3d11(
                         break
                     assert isinstance(item, PreparedFrame)
                     assert item.frame_idx == consumed_count, f"Frame order violation: expected {consumed_count}, got {item.frame_idx}"
+                    queue_truth.mark(item.frame_idx, "upload_begin")
                     ok = _consume_prepared_frame(item)
                     if not ok:
                         # EOS reached normally from decoder
@@ -4796,6 +5312,13 @@ def export_amd_native_d3d11(
                     print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
                     _cleanup_native_resources()
                     return False
+                if sync_frame_accounting_enabled:
+                    _sync_parent_start = time.perf_counter_ns()
+                    sync_frame_current = {
+                        "frame": f_idx,
+                        "last_ns": _sync_parent_start,
+                        "stages": {},
+                    }
                 if frame_trace_enabled:
                     _ft_t0 = time.perf_counter()
                 prep = _prepare_frame_cpu(f_idx)
@@ -4804,6 +5327,16 @@ def export_amd_native_d3d11(
                 timing_samples["producer_queue_wait"].append(0.0)
                 timing_samples["consumer_queue_wait"].append(0.0)
                 ok = _consume_prepared_frame(prep)
+                if sync_frame_accounting_enabled and sync_frame_current is not None:
+                    _sync_parent_end = time.perf_counter_ns()
+                    _sync_sum = sum(sync_frame_current["stages"].values())
+                    sync_frame_records.append({
+                        "frame": f_idx,
+                        "parent_ms": (_sync_parent_end - _sync_parent_start) / 1_000_000.0,
+                        "stages": dict(sync_frame_current["stages"]),
+                        "residual_ms": (_sync_parent_end - _sync_parent_start) / 1_000_000.0 - _sync_sum,
+                    })
+                    sync_frame_current = None
                 if frame_trace_enabled:
                     _ft_t2 = time.perf_counter()
                     _ft_gap = (
@@ -4838,7 +5371,6 @@ def export_amd_native_d3d11(
                     break
 
         t_video_render_end = time.perf_counter()
-        set_map_network_allowed(True)
         _tile_stats = get_map_tile_stats()
         print(f"[AMD Map Tile Stats] {_tile_stats}", flush=True)
         # GUI phase-report: all frames rendered, final flush/mux starts.
@@ -4933,6 +5465,7 @@ def export_amd_native_d3d11(
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         _cleanup_native_resources()
     finally:
+        set_map_network_allowed(True)
         _cleanup_native_resources()
 
     # 5. Final Fast Remux (Copy Video Stream + Copy Audio Stream - ZERO VIDEO RE-ENCODE)
@@ -5045,6 +5578,24 @@ def export_amd_native_d3d11(
 
     profile = {
         "schema_version": 1,
+        "benchmark": {
+            "mode": resolve_amd_config().get("benchmark_mode", "DIRECT_RUNTIME"),
+            "config": resolve_amd_config(),
+            "config_fingerprint": make_benchmark_fingerprint(
+                resolve_amd_config(),
+                video=os.getenv("AMD_BENCHMARK_VIDEO", input_file_str),
+                fit=os.getenv("AMD_BENCHMARK_FIT"),
+                layout=os.getenv("AMD_BENCHMARK_LAYOUT"),
+                layout_sha256=os.getenv("AMD_BENCHMARK_LAYOUT_SHA256"),
+                output=output_file_str,
+            ),
+            "video": os.getenv("AMD_BENCHMARK_VIDEO", input_file_str),
+            "fit": os.getenv("AMD_BENCHMARK_FIT"),
+            "layout": os.getenv("AMD_BENCHMARK_LAYOUT"),
+            "layout_sha256": os.getenv("AMD_BENCHMARK_LAYOUT_SHA256"),
+            "output_path": output_file_str,
+            "output_drive": Path(output_file_str).drive,
+        },
         "backend": f"AMD_NATIVE_D3D11_{native_hud_mode}_{native_decode_mode}",
         "dll": {
             "path": dll_path,
@@ -5082,6 +5633,8 @@ def export_amd_native_d3d11(
             "cadence_gpu": chart_gpu_frames.get("fit_cadence_text", 0),
             "hr_gpu": chart_gpu_frames.get("fit_heart_rate_text", 0),
             "map_gpu": map_gpu_frames,
+            "map_reused_frames": map_reused_frames,
+            "map_uploaded_bytes": map_uploaded_bytes_total,
         },
         "amf": {
             "input_full_count": c_input_full.value,
@@ -5308,7 +5861,39 @@ def export_amd_native_d3d11(
         },
         "etap5a": overlay_profiler.summary(),
         "etap5o": {"amf_mode": amf_mode, "amf_diag_enabled": amf_diag_enabled},
-        "etap5p": {"enabled": False},
+        "etap5p": {
+            "enabled": bool(fa_enabled or os.getenv("AMD_PRODUCTION_ACCOUNTING", "0") == "1"),
+            "producer_exclusive_accounting": _exclusive_timing_accounting(
+                timing_samples["producer_prepare"],
+                {
+                    # Accounting is debug-gated.  Keep the normal production
+                    # profile writer total even when the optional stage clocks
+                    # were not collected.
+                    "telemetry_resolve": timing_samples.get("producer_active.telemetry_resolve", []),
+                    "below_map_compose": timing_samples.get("producer_active.below_map_compose", []),
+                    "above_map_compose_and_capture": timing_samples.get("producer_active.above_map_compose_and_capture", []),
+                    "map_cpu_preparation": timing_samples.get("producer_active.map_cpu_preparation", []),
+                    "dirty_region_and_buffer_preparation": timing_samples.get("producer_active.dirty_region_and_buffer_preparation", []),
+                    "PreparedFrame_construction": timing_samples.get("producer_active.PreparedFrame_construction_boundary", []),
+                },
+            ),
+            "consumer_exclusive_accounting": _frame_accounting_summary(frame_acct),
+            "production_widget_accounting": production_accounting_summary(),
+            "above_compose_accounting": _production_above_accounting(production_accounting_summary()),
+            "clock": "perf_counter; producer/consumer timestamps are wall-clock thread-local intervals; native CSV uses QueryPerformanceCounter; GPU CSV uses D3D11 timestamp frequency",
+        },
+        "etap5q": {
+            "queue_truth": queue_truth.summary(total_frames),
+            "native_breakdown": {
+                "source": "<output>.frame_accounting.csv when AMD_NATIVE_FRAME_ACCOUNTING=1",
+                "instrumentation": "native QPC/steady_clock wall timings; no synchronized GPU readback",
+                "classification": "CPU API-call wall / CPU active / CPU wait; GPU execution is not inferred from CPU wall",
+            },
+        },
+        "etap5t": {
+            "sync_frame_active": _sync_frame_accounting_summary(sync_frame_records),
+            "enabled": sync_frame_accounting_enabled,
+        },
         "etap5n": {
             "telemetry_mode": telemetry_mode,
             "precomputed": (

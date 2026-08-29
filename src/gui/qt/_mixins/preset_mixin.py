@@ -66,6 +66,9 @@ class PresetMixin:
                     self.fit_ext_fields = list(fit_keys)
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
+            if hasattr(self, "_map_preload_provider_switch"):
+                from src.gui.qt._mixins.project_mixin import _map_provider_from_layout
+                self._map_preload_provider_switch(_map_provider_from_layout(self.layout))
             self._render_preview()
         except Exception as e:
             self.signals.sig_error.emit(f"Błąd wczytania presetu: {e}")

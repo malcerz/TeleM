@@ -48,14 +48,17 @@ def test_distance_dynamic_marker_and_value():
         1280, 720, layout, "", "dist_visual", 1.0, "km", cfg.get("label", ""),
         cfg_override=cfg, formatted_val="1.0 km", supersample=1
     )
+    img_low = img_low.copy()
     img_mid, _, _, _ = render_value_indicator(
         1280, 720, layout, "", "dist_visual", 5.0, "km", cfg.get("label", ""),
         cfg_override=cfg, formatted_val="5.0 km", supersample=1
     )
+    img_mid = img_mid.copy()
     img_high, _, _, _ = render_value_indicator(
         1280, 720, layout, "", "dist_visual", 9.5, "km", cfg.get("label", ""),
         cfg_override=cfg, formatted_val="9.5 km", supersample=1
     )
+    img_high = img_high.copy()
 
     assert not np.array_equal(np.array(img_low), np.array(img_mid))
     assert not np.array_equal(np.array(img_mid), np.array(img_high))
@@ -71,10 +74,12 @@ def test_distance_none_behavior():
         1280, 720, layout, "", "dist_visual", 0.0, "km", cfg.get("label", ""),
         cfg_override=cfg, formatted_val="0.0 km", supersample=1
     )
+    img_val = img_val.copy()
     img_none, _, _, _ = render_value_indicator(
         1280, 720, layout, "", "dist_visual", None, "km", cfg.get("label", ""),
         cfg_override=cfg, formatted_val="--", supersample=1
     )
+    img_none = img_none.copy()
 
     assert not np.array_equal(np.array(img_val), np.array(img_none))
 

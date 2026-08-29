@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.tabs.render_tab import RenderTab
+from src.ffmpeg.amd_native_exporter import AMD_NATIVE_ABI_VERSION
 
 
 @pytest.fixture(scope="module")
@@ -97,7 +98,7 @@ def test_async_producer_exception_cleans_up_resources(monkeypatch, tmp_path):
 
     # Mock native dll
     mock_dll = MagicMock()
-    mock_dll.telem_amd_get_abi_version.return_value = 8
+    mock_dll.telem_amd_get_abi_version.return_value = AMD_NATIVE_ABI_VERSION
     mock_dll.telem_amd_get_build_info.return_value = b"build_id=test,build_timestamp=2026-08-20T00:00:00"
     mock_dll.telem_amd_create.return_value = 12345  # valid fake context handle
     mock_dll.telem_amd_set_diagnostics.return_value = 1
@@ -157,7 +158,7 @@ def test_sync_exception_cleans_up_resources(monkeypatch, tmp_path):
 
     # Mock native dll
     mock_dll = MagicMock()
-    mock_dll.telem_amd_get_abi_version.return_value = 8
+    mock_dll.telem_amd_get_abi_version.return_value = AMD_NATIVE_ABI_VERSION
     mock_dll.telem_amd_get_build_info.return_value = b"build_id=test,build_timestamp=2026-08-20T00:00:00"
     mock_dll.telem_amd_create.return_value = 67890  # valid fake context handle
     mock_dll.telem_amd_set_diagnostics.return_value = 1
@@ -215,7 +216,7 @@ def test_cancel_event_closes_context_and_kills_proc_dec(monkeypatch, tmp_path):
     from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
 
     mock_dll = MagicMock()
-    mock_dll.telem_amd_get_abi_version.return_value = 8
+    mock_dll.telem_amd_get_abi_version.return_value = AMD_NATIVE_ABI_VERSION
     mock_dll.telem_amd_get_build_info.return_value = b"build_id=test,build_timestamp=2026-08-20T00:00:00"
     mock_dll.telem_amd_create.return_value = 11111
     mock_dll.telem_amd_set_diagnostics.return_value = 1
@@ -373,4 +374,3 @@ def test_real_smoke_cancel_and_restart(tmp_path):
     assert res_b is True
     assert os.path.exists(out_restart)
     assert os.path.getsize(out_restart) > 1000
-

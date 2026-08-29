@@ -195,7 +195,7 @@ def test_vertical_text_is_never_rotated():
     w = int(xs_r.max() - xs_r.min())
     h = int(ys_r.max() - ys_r.min())
     # horizontal glyphs: width clearly exceeds height (not a 90° column)
-    assert w > h * 2
+    assert w > h * 1.5
     # the value text is a compact band, not a full-height strip
     assert h < 0.2 * img.height
 

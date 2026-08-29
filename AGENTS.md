@@ -368,28 +368,39 @@ Do not invent new acceptance thresholds.
 
 # 13. Benchmark Discipline
 
-Comparisons must use the same:
+Read `BENCHMARKS.md` before running TeleM benchmarks. The VIDEO/FIT pairing in
+`BENCHMARKS.md` is authoritative.
 
-- source video
-- FIT
-- preset
-- output resolution
-- frame count
-- encoder settings
-- feature flags
+Hard rules:
 
-Current reference workload:
+- Never infer or guess a FIT file from an MP4 filename, activity title,
+  timestamps, metadata dates, or folder order.
+- Never silently substitute a different FIT.
+- The primary AMD single-file benchmark is exactly:
 
 ```text
-Video/GX010115.MP4
-Video/Jazda_na_rowerze_w_porze_lunchu.fit
-presets/cycling_dashboard_v10.json
+Video/GX020079.MP4
+Video/GX020079.fit
+C:\_DEV\TeleM\def_layout.json
 3840x2160
 1131 frames
 AMD_NATIVE_D3D11
 ```
 
-Do not compare different workloads as if they were equivalent.
+- The secondary single-file benchmark is exactly:
+  `Video/GX030120.MP4` + `Video/GX030120.fit`.
+- The canonical multi-file benchmark is exactly:
+  `Video/GX010114.MP4`, `Video/GX010115.MP4`, `Video/GX010116.MP4` plus
+  `Video/GX010114_116.fit`.
+- `GX030120.MP4 + Jazda_na_rowerze_w_porze_lunchu.fit` is an invalid pairing.
+- If a task requires a different dataset, explicitly report the proposed
+  VIDEO/FIT pairing before using it.
+- Code and the working tree take precedence over reports, but benchmark
+  pairings in `BENCHMARKS.md` must not be changed implicitly.
+
+Comparisons must use the same source video, FIT, layout, output resolution,
+frame count, encoder settings, and feature flags. Do not compare different
+workloads as if they were equivalent.
 
 ---
 

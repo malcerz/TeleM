@@ -1,0 +1,72 @@
+{
+  "track_map": {
+    "bbox": [
+      51,
+      428,
+      691,
+      691
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_track_map_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_track_map_frame150.png"
+  },
+  "lean_indicator": {
+    "bbox": [
+      3461,
+      197,
+      323,
+      323
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_lean_indicator_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_lean_indicator_frame150.png"
+  },
+  "fit_distance_text": {
+    "bbox": [
+      830,
+      67,
+      2344,
+      263
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_fit_distance_text_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_fit_distance_text_frame150.png"
+  },
+  "alt_text": {
+    "bbox": [
+      3473,
+      706,
+      365,
+      794
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_alt_text_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_alt_text_frame150.png"
+  },
+  "speed_text": {
+    "bbox": [
+      1607,
+      1588,
+      777,
+      777
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_speed_text_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_speed_text_frame150.png"
+  },
+  "fit_heart_rate_text": {
+    "bbox": [
+      2673,
+      1610,
+      1160,
+      532
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_fit_heart_rate_text_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_fit_heart_rate_text_frame150.png"
+  },
+  "fit_cadence_text": {
+    "bbox": [
+      196,
+      1623,
+      1160,
+      532
+    ],
+    "ref_crop": "tests\\golden_parity\\golden_ref_fit_cadence_text_frame150.png",
+    "amd_crop": "tests\\golden_parity\\golden_amd_fit_cadence_text_frame150.png"
+  }
+}

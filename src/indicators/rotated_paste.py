@@ -72,8 +72,10 @@ def get_tight_bbox_collect_ms() -> float:
 def _alpha_min(overlay: Image.Image, cache_key) -> int:
     """Minimum alpha of *overlay*, cached per widget key+size (alpha is
     rotation-invariant and frame-invariant for the fixed HUD widgets)."""
+    if not hasattr(overlay, "getchannel"):
+        return 0
     if cache_key is not None:
-        k = (cache_key, overlay.width, overlay.height)
+        k = (cache_key, getattr(overlay, "width", 0), getattr(overlay, "height", 0))
         if k in _WIDGET_ALPHA_MIN:
             return _WIDGET_ALPHA_MIN[k]
     value = overlay.getchannel("A").getextrema()[0]
@@ -165,11 +167,27 @@ def composite_final(
     irregular content).  When *tight_bboxes* is None the function is 100%
     unchanged.
     """
+    if not hasattr(overlay, "getbbox"):
+        return
+
     if tight_bboxes is not None and cache_key is not None:
         tk = tight_key if tight_key is not None else cache_key
         acc = _tight_collect_accum()
         t_tb_start = time.perf_counter()
-        ab = overlay.getchannel("A").getbbox()
+        ab = getattr(overlay, "_alpha_bbox", ...)
+        if ab is ...:
+            if not hasattr(overlay, "getbbox"):
+                ab = None
+            elif _plain_paste_safe(overlay, cache_key):
+                ab = overlay.getbbox()
+            elif hasattr(overlay, "getchannel"):
+                ab = overlay.getchannel("A").getbbox()
+            else:
+                ab = overlay.getbbox()
+            try:
+                overlay._alpha_bbox = ab
+            except Exception:
+                pass
         acc[0] += (time.perf_counter() - t_tb_start) * 1000.0
         clipped = (
             x < 0
@@ -189,13 +207,13 @@ def composite_final(
         base_img.alpha_composite(overlay, (x, y))
         return
 
-    # ETAP 5E.5: a planner may explicitly prove that this complete destination
-    # rectangle is empty in a freshly allocated transparent atlas.  With the
-    # cached source-safety proof, plain paste copies the ready RGBA bytes
-    # exactly; unlike ``paste(src, xy, src)`` it does not blend alpha twice.
-    # Rectangle overlap remains a conservative fallback to alpha compositing.
+    # ETAP 4D: clean-transparency widgets over a fully-transparent
+    # destination composite byte-identically with a plain paste (see
+    # _clean_transparency and _plain_paste_safe).  This removes the
+    # alpha_composite blend + its internal dest crop for all non-overlapping
+    # HUD widgets (distance ruler, altitude bar, battery, text).
     if (
-        destination_proven_empty
+        _CLEAN_PASTE_ENABLED
         and prior_bboxes is not None
         and x >= 0
         and y >= 0
@@ -210,20 +228,6 @@ def composite_final(
     bbox = overlay.getbbox()
     if bbox is None:
         # Fully transparent widget — compositing is a no-op on the canvas.
-        return
-
-    # ETAP 5I: small clean-transparency widgets over a fully-transparent
-    # destination composite byte-identically with a plain paste (see
-    # _clean_transparency).  This removes the alpha_composite blend + its
-    # internal dest crop for the small HUD text widgets.
-    if (
-        _CLEAN_PASTE_ENABLED
-        and overlay.width * overlay.height <= _SMALL_CLEAN_LIMIT_PX
-        and prior_bboxes is not None
-        and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes)
-        and (_alpha_min(overlay, cache_key) > 0 or _clean_transparency(overlay))
-    ):
-        base_img.paste(overlay, (x, y))
         return
 
     if bbox != (0, 0, overlay.width, overlay.height):
@@ -257,14 +261,15 @@ def composite_final(
 def rotated_paste(
     base_img: Image.Image,
     overlay: Image.Image,
-    center_x: int,
-    center_y: int,
+    center_x: int | float,
+    center_y: int | float,
     rotation: int,
     prior_bboxes=None,
     cache_key=None,
     destination_proven_empty: bool = False,
     tight_bboxes=None,
     tight_key=None,
+    coordinate_offset: tuple[int, int] = (0, 0),
 ) -> None:
     """Paste *overlay* onto *base_img* centred at (center_x, center_y) with rotation.
     Modifies base_img in place.
@@ -272,6 +277,9 @@ def rotated_paste(
     ETAP 10R: *tight_bboxes* / *tight_key* are forwarded to composite_final
     (alpha-tight bbox capture).  When *tight_bboxes* is None behaviour is
     unchanged.
+
+    ETAP 4B: *coordinate_offset* allows exact sub-tile / cluster rendering
+    without floating-point banker's rounding flips when offsetting coordinates.
     """
     rotation = int(rotation) % 360
     if rotation == 90:
@@ -280,8 +288,8 @@ def rotated_paste(
         overlay = overlay.transpose(Image.Transpose.ROTATE_180)
     elif rotation == 270:
         overlay = overlay.transpose(Image.Transpose.ROTATE_270)
-    x = int(round(center_x - overlay.width / 2))
-    y = int(round(center_y - overlay.height / 2))
+    x = int(round(center_x - overlay.width / 2.0)) - coordinate_offset[0]
+    y = int(round(center_y - overlay.height / 2.0)) - coordinate_offset[1]
     composite_final(
         base_img, overlay, x, y, prior_bboxes, cache_key,
         destination_proven_empty=destination_proven_empty,
