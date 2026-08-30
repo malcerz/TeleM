@@ -319,6 +319,7 @@ class IntelResolution:
 
     requested_backend: str = BACKEND_INTEL
     adapter_found: bool = False
+    adapter_index: int = -1
     adapter_name: str = ""
     vendor_id: int = 0
     d3d11_device_ok: bool = False
@@ -330,7 +331,44 @@ class IntelResolution:
     decode_path: str = "QSV/D3D11VA"
     render_path: str = "D3D11"
     encode_path: str = "QSV"
+    qsv_device_name: str = "intel_qsv"
     adapters: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class IntelDeviceSelection:
+    """Validated Intel adapter details consumed by the FFmpeg path."""
+
+    adapter_index: int
+    adapter_name: str
+    vendor_id: int = VENDOR_ID_INTEL
+    qsv_device_name: str = "intel_qsv"
+
+
+def intel_device_selection(resolution: IntelResolution) -> IntelDeviceSelection:
+    """Convert a successful INTEL_FORCE resolution into a device contract."""
+    if not resolution.adapter_found or resolution.adapter_index < 0:
+        raise IntelBackendError("INTEL_FORCE_FAILED: Intel adapter is not selected.")
+    return IntelDeviceSelection(
+        adapter_index=resolution.adapter_index,
+        adapter_name=resolution.adapter_name,
+        vendor_id=resolution.vendor_id,
+        qsv_device_name=resolution.qsv_device_name,
+    )
+
+
+def intel_ffmpeg_device_args(selection: IntelDeviceSelection) -> list[str]:
+    """Build explicit QSV/D3D11 device-pinning arguments for Intel only."""
+    if selection.vendor_id != VENDOR_ID_INTEL or selection.adapter_index < 0:
+        raise IntelBackendError("INTEL_FORCE_FAILED: invalid Intel device selection.")
+    return [
+        "-init_hw_device",
+        f"qsv={selection.qsv_device_name},child_device={selection.adapter_index},child_device_type=d3d11va",
+        "-hwaccel", "qsv",
+        "-hwaccel_device", selection.qsv_device_name,
+        "-hwaccel_output_format", "qsv",
+        "-qsv_device", str(selection.adapter_index),
+    ]
 
 
 class IntelBackendError(RuntimeError):
@@ -388,10 +426,12 @@ def resolve_intel_force(
         )
 
     res.adapter_found = True
+    res.adapter_index = int(intel.get("index", -1))
     res.adapter_name = str(intel.get("name", ""))
     res.vendor_id = int(intel.get("vendor_id", 0))
     res.d3d11_device_ok = bool(intel.get("d3d11_device_ok", False))
     log(f"[INTEL] Selected adapter: {res.adapter_name}")
+    log(f"[INTEL] Selected adapter index: {res.adapter_index}")
     log(f"[INTEL] Vendor ID: 0x{res.vendor_id:04X}")
 
     # Foreign adapters are ignored, never selected, under INTEL_FORCE.

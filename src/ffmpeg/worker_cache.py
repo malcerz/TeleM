@@ -137,7 +137,8 @@ def init_worker(
     trk = track_samples or []
     gpx_trk = gpx_track_samples or []
     fit_trk = fit_data.get("track", []) if fit_data else []
-    dist_src = indic.get("dist_visual", {}).get("source", "gpmf")
+    dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
+    dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
     if dist_src == "gpx":
         trk_for_range = gpx_trk
     elif dist_src == "fit":
@@ -150,7 +151,8 @@ def init_worker(
     spd = speed_samples or []
     gpx_spd = gpx_speed_samples or []
     fit_spd = fit_data.get("speed", []) if fit_data else []
-    spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+    spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
+    spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
     if spd_src == "gpx":
         spd_for_range = gpx_spd
     elif spd_src == "fit":
@@ -167,7 +169,8 @@ def init_worker(
     alt_s = alt_samples or []
     gpx_alt_s = gpx_alt_samples or []
     fit_alt_s = fit_data.get("alt", []) if fit_data else []
-    alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+    alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
+    alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
     if alt_src == "gpx":
         alt_for_range = gpx_alt_s
     elif alt_src == "fit":

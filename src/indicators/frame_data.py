@@ -227,7 +227,9 @@ def prepare_overlay_frame_data(
         max_speed_kmh = _range_cache["max_speed_kmh"]
     else:
         max_speed_kmh = None
-        spd_src = layout.get("indicators", {}).get("speed_visual", {}).get("source", "gpmf")
+        indic_map = layout.get("indicators", {})
+        spd_ind = indic_map.get("speed_visual") or indic_map.get("speed_text") or indic_map.get("fit_speed_text") or indic_map.get("fit_enhanced_speed_text") or {}
+        spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic_map or "fit_enhanced_speed_text" in indic_map) else "gpmf")
         if spd_src == "gpx":
             spd_for_range = gpx_speed_samples or []
         elif spd_src == "fit":
@@ -246,7 +248,9 @@ def prepare_overlay_frame_data(
     else:
         min_alt = None
         max_alt = None
-        alt_src = layout.get("indicators", {}).get("alt_visual", {}).get("source", "gpmf")
+        indic_map = layout.get("indicators", {})
+        alt_ind = indic_map.get("alt_visual") or indic_map.get("alt_text") or indic_map.get("fit_altitude_text") or indic_map.get("fit_enhanced_altitude_text") or {}
+        alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic_map or "fit_enhanced_altitude_text" in indic_map) else "gpmf")
         if alt_src == "gpx":
             alt_for_range = gpx_alt_samples or []
         elif alt_src == "fit":

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
-from src.ffmpeg.intel_backend import resolve_intel_force
+from src.ffmpeg.intel_backend import intel_device_selection, intel_ffmpeg_device_args, resolve_intel_force
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
@@ -46,6 +46,152 @@ from src.multifile import timeline_absolute_end
 # overrides; the transport threshold itself remains unchanged.
 NVIDIA_HUD_MAX_REGIONS = 5
 NVIDIA_HUD_GRID_PX = 16
+
+
+def _probe_intel_native_source(input_file: str, ffmpeg_exe: str) -> tuple[bool, str]:
+    """Allow the native slice only for single-file 8-bit SDR input."""
+    ffprobe = str(Path(ffmpeg_exe).with_name("ffprobe.exe"))
+    if not Path(ffprobe).exists():
+        ffprobe = shutil.which("ffprobe") or "ffprobe"
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt,color_space,color_transfer,color_primaries",
+             "-of", "default=nw=1", input_file],
+            capture_output=True, text=True, timeout=8,
+        )
+        if result.returncode != 0:
+            return False, "source_probe_failed"
+        info = result.stdout.lower()
+        if "10le" in info or "10be" in info or "12le" in info or "12be" in info:
+            return False, "hdr_or_non_8bit_source"
+        if any(token in info for token in ("bt2020", "arib-std-b67", "smpte2084", "hlg")):
+            return False, "hdr_or_non_sdr_source"
+        return True, "sdr_8bit_source"
+    except Exception:
+        return False, "source_probe_failed"
+
+
+def _probe_intel_cpu_download_format(input_file: str, ffmpeg_exe: str) -> str:
+    """Select a CPU-compatible download format without narrowing HDR to 8-bit."""
+    ffprobe = str(Path(ffmpeg_exe).with_name("ffprobe.exe"))
+    if not Path(ffprobe).exists():
+        ffprobe = shutil.which("ffprobe") or "ffprobe"
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt", "-of", "default=nw=1", input_file],
+            capture_output=True, text=True, timeout=8,
+        )
+        pix_fmt = result.stdout.lower()
+        if any(token in pix_fmt for token in ("10le", "10be", "12le", "12be", "p010", "p016")):
+            return "p010le"
+    except Exception:
+        pass
+    return "nv12"
+
+
+def _flag_on_env(name: str) -> bool:
+    """ASCII-safe env flag: default ON, accepts 0/false/off as OFF."""
+    return os.environ.get(name, "1").strip().lower() not in ("0", "false", "off")
+
+
+def resolve_intel_qsv_bitrate(video_bitrate: str):
+    """ETAP 4K: single source of truth for the Intel QSV target bitrate.
+
+    Returns (effective_bitrate, rc_source):
+      - rc_source="application"  -> GUI/CLI video_bitrate unchanged
+      - rc_source="env_override" -> TELEM_INTEL_QSV_BITRATE_MBPS wins
+        (Intel-only diagnostic/experimental override; invalid values are
+        ignored and fall back to the application bitrate).
+    """
+    raw = os.environ.get("TELEM_INTEL_QSV_BITRATE_MBPS", "").strip()
+    if raw:
+        try:
+            float(raw)
+            return f"{raw}M", "env_override"
+        except ValueError:
+            pass
+    return video_bitrate, "application"
+
+
+def _intel_hud_region_decision(
+    layout: dict,
+    canvas_w: int,
+    canvas_h: int,
+) -> tuple[int, int, int, int, float, str]:
+    """ETAP 4B: bounded-HUD transport decision for the Intel paths.
+
+    Returns ``(hud_x, hud_y, stream_w, stream_h, bbox_ratio, mode)``
+    where ``mode`` is ``"region"``, ``"full_threshold"`` or ``"full_geometry"``.
+
+    The default threshold 0.85 was confirmed by the ETAP 4B break-even
+    benchmark (scratch/intel_etap4bc/breakeven_*.json): REGION stays at or
+    above FULL speed up to the measured maximum ratios on both 1080p and 4K,
+    so the conservative geometric gate is kept. Override only for experiments:
+
+        TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO=0.0..1.0
+    """
+    bx, by, bw, bh = get_layout_hud_bbox(layout, canvas_w, canvas_h)
+    x1 = max(0, min(canvas_w, int(bx)))
+    y1 = max(0, min(canvas_h, int(by)))
+    x2 = max(x1, min(canvas_w, int(bx + bw)))
+    y2 = max(y1, min(canvas_h, int(by + bh)))
+    if x1 % 2:
+        x1 = max(0, x1 - 1)
+    if y1 % 2:
+        y1 = max(0, y1 - 1)
+    if (x2 - x1) % 2:
+        x2 = min(canvas_w, x2 + 1)
+    if (y2 - y1) % 2:
+        y2 = min(canvas_h, y2 + 1)
+    region_area = max(0, x2 - x1) * max(0, y2 - y1)
+    full_area = canvas_w * canvas_h
+    ratio = region_area / full_area if full_area else 1.0
+    try:
+        threshold = float(os.environ.get(
+            "TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO", "0.85"))
+    except ValueError:
+        threshold = 0.85
+    if region_area <= 0:
+        return 0, 0, canvas_w, canvas_h, ratio, "full_geometry"
+    if ratio >= threshold:
+        return 0, 0, canvas_w, canvas_h, ratio, "full_threshold"
+    return x1, y1, max(2, x2 - x1), max(2, y2 - y1), ratio, "region"
+
+
+def _intel_hud_region_gate(
+    intel_gpu_resident: bool,
+    rotation_degrees: int,
+    container_rotation: int,
+    encoder: str = "",
+) -> bool:
+    """ETAP 3C/4A shared bounded-HUD gate for the Intel paths.
+
+    - Native (GPU-resident): ETAP 3C switch ``TELEM_INTEL_HUD_REGION``
+      (default ON), unchanged.
+    - CPU_REFERENCE (ETAP 4A): own switch ``TELEM_INTEL_CPU_REF_HUD_REGION``
+      (default ON).
+      ETAP 5D: the Intel pipeline imports sources with autorotate ON (no
+      ``-noautorotate``, no manual vflip/hflip), so the base video enters the
+      filter graph already upright and the HUD canvas crop shares coordinates
+      with the overlay destination for ANY source rotation.  The former
+      rotation!=0 exclusion (which silently forced FULL_CANVAS for every
+      rotated GoPro in real GUI runs) therefore no longer applies to Intel;
+      other encoders keep the conservative unrotated-only rule.
+
+    Called once per render -- no per-frame logging, ASCII-safe.
+    """
+
+    if intel_gpu_resident:
+        return _flag_on_env("TELEM_INTEL_HUD_REGION")
+    if encoder == "intel":
+        return _flag_on_env("TELEM_INTEL_CPU_REF_HUD_REGION")
+    return (
+        rotation_degrees == 0
+        and container_rotation == 0
+        and _flag_on_env("TELEM_INTEL_CPU_REF_HUD_REGION")
+    )
 
 
 def _cancel_log(message: str, started: float | None = None, process: Any = None) -> None:
@@ -136,6 +282,8 @@ def _stop_ffmpeg_process(
         _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
         return process.returncode
 
+    # Windows terminate() is not guaranteed to include descendants.  Use the
+    # built-in process-tree command only for the final hard-cleanup fallback.
     if os.name == "nt":
         try:
             subprocess.run(
@@ -179,6 +327,13 @@ def _validate_partial_mp4(output_file: str | Path) -> bool:
         return False
 
 
+def _log_ffmpeg_tail(stdout_lines: list[str], cancel_started: float | None) -> None:
+    for line in stdout_lines[-8:]:
+        safe = str(line).encode("ascii", "replace").decode("ascii").strip()
+        if safe:
+            _cancel_log(f"ffmpeg tail: {safe}", cancel_started)
+
+
 def _snap_nvidia_hud_layout(layout: dict[str, Any], canvas_w: int, canvas_h: int, grid_px: int) -> dict[str, Any]:
     """Return a runtime-only NVIDIA layout with indicator anchors snapped to a safe grid."""
     snapped = copy.deepcopy(layout)
@@ -206,11 +361,14 @@ def _pipe_writer_thread(
     shm_pool: SharedFramePool | None = None,
     writer_stats: dict[str, Any] | None = None,
     audit: PipelineAuditRecorder | None = None,
+    writer_failed: threading.Event | None = None,
+    discard_pending: threading.Event | None = None,
 ) -> None:
     """Background thread that drains frame bytes to FFmpeg stdin pipe.
 
     Receives bytes or (slot, memoryview) from write_queue and writes to stdin_buffer.
-    Terminates when done_event is set and queue is empty, or on None sentinel.
+    Terminates on the None sentinel, when done_event is set and the queue is
+    empty, or immediately (discarding queued frames) when discard_pending is set.
     """
     bt = BenchmarkTracker.get_instance()
 
@@ -230,9 +388,15 @@ def _pipe_writer_thread(
         # Production hot path: no audit timestamps, qsize sampling, histogram
         # updates, or diagnostic locks.  The writer receives the SHM memoryview
         # and performs one direct BufferedWriter.write per frame.
+        #
+        # EOF contract: done_event means "producer finished submitting", NOT
+        # "drop whatever is still queued".  The writer must write every frame
+        # already enqueued before exiting (sentinel None, or empty queue after
+        # done_event).  Queued frames are discarded ONLY when an explicit
+        # cancel/error requested it via discard_pending (ETAP 5B tail-loss fix).
         try:
             while True:
-                if done_event.is_set():
+                if discard_pending is not None and discard_pending.is_set():
                     while True:
                         try:
                             _release_item(write_queue.get_nowait())
@@ -242,6 +406,8 @@ def _pipe_writer_thread(
                 try:
                     item = write_queue.get(timeout=0.5)
                 except queue.Empty:
+                    if done_event.is_set():
+                        break
                     continue
                 if item is None:
                     break
@@ -269,6 +435,8 @@ def _pipe_writer_thread(
                         writer_stats["last_frame_time"] = now
                         writer_stats["frames_written"] += 1
         except (BrokenPipeError, OSError):
+            if writer_failed is not None:
+                writer_failed.set()
             pass
         return
 
@@ -279,6 +447,13 @@ def _pipe_writer_thread(
 
     try:
         while True:
+            if discard_pending is not None and discard_pending.is_set():
+                while True:
+                    try:
+                        _release_item(write_queue.get_nowait())
+                    except queue.Empty:
+                        break
+                break
             get_started_ns = time.perf_counter_ns()
             queue_was_empty = write_queue.empty()
             try:
@@ -355,6 +530,8 @@ def _pipe_writer_thread(
                     writer_stats["last_frame_time"] = now
                     writer_stats["frames_written"] += 1
     except (BrokenPipeError, OSError):
+        if writer_failed is not None:
+            writer_failed.set()
         pass
     finally:
         if writer_stats is not None:
@@ -422,6 +599,7 @@ def _acquire_shm_slot(
     process: Any,
     stdout_lines: list[str],
     timeout: float = 30.0,
+    cancel_event: Any = None,
 ) -> int:
     """Acquire an SHM slot, failing fast if FFmpeg has already exited.
 
@@ -431,6 +609,8 @@ def _acquire_shm_slot(
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if cancel_event is not None and cancel_event.is_set():
+            raise queue.Empty("render cancellation requested")
         if process.poll() is not None:
             raise RuntimeError(
                 f"FFmpeg process died unexpectedly (exit code {process.returncode}). "
@@ -475,10 +655,7 @@ def run_ffmpeg_with_progress(
 
     for line in process.stdout:
         if cancel_event is not None and cancel_event.is_set():
-            try:
-                process.terminate()
-            except Exception:
-                pass
+            _stop_ffmpeg_process(process)
             break
         key, _, val = line.partition("=")
         key, val = key.strip(), val.strip()
@@ -506,13 +683,63 @@ def run_ffmpeg_with_progress(
             )
             if progress_cb:
                 progress_cb(frame, stats)
-    process.wait()
+    if process.poll() is None:
+        _stop_ffmpeg_process(process)
     rc = process.returncode
     if rc != 0:
         extra = "\n".join(other_output).strip()
         raise RuntimeError(f"FFmpeg process failed with exit code {rc}\n{extra}")
     if active_process_holder is not None:
         active_process_holder["process"] = None
+
+
+def resolve_hud_resolution_policy(
+    encoder: str,
+    render_w: int,
+    render_h: int,
+    user_option: Any = "Auto",
+) -> tuple[float, str]:
+    """Resolve the effective HUD resolution scale and generate a diagnostic message.
+
+    Policy:
+    - Manual 100% (1.0) -> 1.0
+    - Manual 75% (0.75) -> 0.75
+    - Manual 50% (0.5) -> 0.5
+    - Auto (or default):
+      - If encoder == "intel" and (render_w, render_h) == (3840, 2160):
+        -> 0.75 (2560x1440 scaled HUD, validated in ETAP 6B with +41.7% speedup)
+      - Otherwise (non-4K Intel, AMD, NVIDIA, CPU):
+        -> 1.0 (reference native canvas)
+    - Fallback: 1.0 if unrecognized.
+    """
+    try:
+        if isinstance(user_option, (int, float)):
+            if abs(user_option - 0.75) < 1e-4:
+                return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+            if abs(user_option - 0.5) < 1e-4:
+                return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+            if abs(user_option - 1.0) < 1e-4:
+                return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+
+        opt_str = str(user_option).strip() if user_option is not None else "Auto"
+        if opt_str == "75%":
+            return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+        if opt_str == "50%":
+            return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+        if opt_str == "100%":
+            return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+
+        # Auto mode
+        if opt_str in ("Auto", "auto", ""):
+            if encoder == "intel" and render_w == 3840 and render_h == 2160:
+                return 0.75, f"[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> {render_w}x{render_h})"
+            elif encoder == "intel":
+                return 1.0, f"[INTEL] HUD resolution policy: AUTO -> 100% ({render_w}x{render_h})"
+            else:
+                return 1.0, ""
+    except Exception:
+        pass
+    return 1.0, "[INTEL] HUD resolution policy: FALLBACK 100%" if encoder == "intel" else ""
 
 
 def stream_overlay_to_ffmpeg(
@@ -555,20 +782,31 @@ def stream_overlay_to_ffmpeg(
     container_rotation: int = 0,
     overlay_w: int = 3840,
     overlay_h: int = 2160,
-    hud_resolution_scale: float = 1.0,
+    hud_resolution_scale: Any = 1.0,
     progress_cb: Optional[Callable] = None,
     on_render_progress: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
-    if hud_resolution_scale not in (1.0, 0.75, 0.5):
-        hud_resolution_scale = 1.0
+    hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
+        encoder=encoder,
+        render_w=render_w,
+        render_h=render_h,
+        user_option=hud_resolution_scale,
+    )
+    if policy_msg:
+        print(policy_msg, flush=True)
+
     if hud_resolution_scale != 1.0:
         # Direct callers may not precompute overlay_w/overlay_h. For the
         # scaled modes the export canvas is the source of truth.
-        overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
-        overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
+            overlay_w = 2560
+            overlay_h = 1440
+        else:
+            overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
+            overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
         if overlay_w % 2:
             overlay_w += 1
         if overlay_h % 2:
@@ -586,10 +824,14 @@ def stream_overlay_to_ffmpeg(
         # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU
         # fallback.  On failure resolve_intel_force raises IntelBackendError,
         # which intentionally stops the Intel backend initialisation.
-        resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
+        intel_resolution = resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
+        intel_selection = intel_device_selection(intel_resolution)
 
     t_prod_start = time.perf_counter()
-    pipeline_audit = PipelineAuditRecorder() if encoder == "nv" and env_enabled() else None
+    # ETAP 4A0: opt-in pipeline audit is also available for the Intel
+    # CPU_REFERENCE path so FULL_CANVAS vs REGION transport can be measured.
+    # Inert unless TELEM_PIPELINE_AUDIT is enabled; NVIDIA behaviour unchanged.
+    pipeline_audit = PipelineAuditRecorder() if encoder in ("nv", "intel") and env_enabled() else None
     if pipeline_audit is not None:
         pipeline_audit.start(time.perf_counter_ns())
     t_prep_start = t_prod_start
@@ -641,6 +883,66 @@ def stream_overlay_to_ffmpeg(
     custom_texts = layout.get("custom_texts", [])
     enabled_indicators = {k: v for k, v in indicators.items() if v and v.get("enabled", True)}
     is_no_hud = not bool(enabled_indicators) and not bool(custom_texts)
+    intel_gpu_resident = (
+        encoder == "intel"
+        and not is_multi_file
+        and rotation_degrees == 0
+        and container_rotation == 0
+        and not bool(cut_regions)
+        and not is_no_hud
+        and resolution_name in ("source", "720p", "1080p")
+        and os.environ.get("TELEM_INTEL_GPU_RESIDENT", "1").strip().lower() not in ("0", "false", "off")
+    )
+    intel_source_file = (
+        input_files if isinstance(input_files, (str, Path))
+        else (input_files[0] if len(input_files) == 1 else None)
+    )
+    if intel_gpu_resident and intel_source_file is not None:
+        probe = _probe_intel_native_source(str(intel_source_file), ffmpeg_exe)
+        if not probe[0]:
+            intel_gpu_resident = False
+            print(f"[INTEL] Fallback reason: {probe[1]}", flush=True)
+    intel_cpu_download_format = "nv12"
+    if encoder == "intel" and not intel_gpu_resident and intel_source_file is not None:
+        intel_cpu_download_format = _probe_intel_cpu_download_format(str(intel_source_file), ffmpeg_exe)
+        print(f"[INTEL] CPU_REFERENCE download format: {intel_cpu_download_format}", flush=True)
+    intel_cpu_software_decode = (
+        encoder == "intel" and not intel_gpu_resident
+        and intel_cpu_download_format == "p010le"
+    )
+    if encoder == "intel":
+        print(
+            f"[INTEL] Render path: {'D3D11_NATIVE' if intel_gpu_resident else 'CPU_REFERENCE'}",
+            flush=True,
+        )
+        print(
+            f"[INTEL] Video frame residency: {'GPU' if intel_gpu_resident else 'CPU_REFERENCE'}",
+            flush=True,
+        )
+        if intel_gpu_resident:
+            print("[INTEL] Overlay source: CPU_RGBA_UPLOAD", flush=True)
+        if not intel_gpu_resident and intel_cpu_software_decode:
+            print("[INTEL] Fallback reason: unsupported native vertical-slice configuration", flush=True)
+            print("[INTEL] Decode path: SOFTWARE", flush=True)
+            print(f"[INTEL] CPU working format: {'10-bit' if intel_cpu_download_format == 'p010le' else '8-bit'}", flush=True)
+            print("[INTEL] HWDownload used: NO", flush=True)
+        elif not intel_gpu_resident:
+            print("[INTEL] Fallback reason: unsupported native vertical-slice configuration", flush=True)
+            print("[INTEL] Decode path: QSV/D3D11VA", flush=True)
+            print(f"[INTEL] CPU working format: {'10-bit' if intel_cpu_download_format == 'p010le' else '8-bit'}", flush=True)
+            print("[INTEL] HWDownload used: YES", flush=True)
+
+        # ETAP 4K: single bitrate source of truth + one-shot RC contract
+        # diagnostics (GUI video_bitrate wins unless the diagnostic env
+        # override TELEM_INTEL_QSV_BITRATE_MBPS is set; Intel-only).
+        video_bitrate, intel_rc_source = resolve_intel_qsv_bitrate(
+            video_bitrate)
+        print("[INTEL] QSV encoder: HEVC", flush=True)
+        print("[INTEL] QSV preset: veryfast", flush=True)
+        print(f"[INTEL] QSV rate-control source: {intel_rc_source}",
+              flush=True)
+        print(f"[INTEL] QSV target bitrate: {video_bitrate}", flush=True)
+        print("[INTEL] QSV look_ahead: 0 | async_depth: 4", flush=True)
 
     # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────
     # amd_native_exporter uses only input_files[0]; do NOT silently render a
@@ -720,6 +1022,40 @@ def stream_overlay_to_ffmpeg(
     stream_w, stream_h = overlay_w, overlay_h
     hud_bbox: tuple[int, int, int, int] | None = None
     hud_regions: list[tuple[int, int, int, int, int, int]] | None = None
+
+    if encoder == "intel" and not is_no_hud and _intel_hud_region_gate(
+        intel_gpu_resident, rotation_degrees, container_rotation, encoder):
+        # ETAP 4B: bbox crop + threshold decision lives in the unit-tested
+        # _intel_hud_region_decision(). The shared layout bbox stays
+        # deliberately conservative (glyph bearings, outlines, shadows,
+        # rotating/gauge geometry) and the rectangle is expanded outward to
+        # even coordinates/dimensions required by common YUV/D3D11 surfaces.
+        hud_x, hud_y, stream_w, stream_h, ratio, mode = \
+            _intel_hud_region_decision(layout, overlay_w, overlay_h)
+        full_area = overlay_w * overlay_h
+        threshold_txt = os.environ.get(
+            "TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO", "0.85")
+        if mode == "region":
+            hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+            print("[INTEL] HUD upload path: REGION", flush=True)
+        elif mode == "full_threshold":
+            stream_w, stream_h = overlay_w, overlay_h
+            print(f"[INTEL] HUD upload path: FULL_CANVAS "
+                  f"reason=ratio_above_threshold({ratio:.3f}>={threshold_txt})",
+                  flush=True)
+        else:
+            stream_w, stream_h = overlay_w, overlay_h
+            print("[INTEL] HUD upload path: FULL_CANVAS "
+                  "reason=empty_bbox_geometry", flush=True)
+        print(f"[INTEL] HUD bbox ratio: {max(0.0, min(1.0, ratio)):.3f}", flush=True)
+        print(f"[INTEL] threshold: {threshold_txt}", flush=True)
+        print(f"[INTEL] HUD full canvas: {overlay_w}x{overlay_h}", flush=True)
+        print(f"[INTEL] HUD region: x={hud_x} y={hud_y} w={stream_w} h={stream_h}", flush=True)
+        upload_bytes = stream_w * stream_h * 4
+        full_bytes = full_area * 4
+        reduction = 100.0 * (1.0 - upload_bytes / full_bytes) if full_bytes else 0.0
+        print(f"[INTEL] HUD upload bytes/frame: {upload_bytes}", flush=True)
+        print(f"[INTEL] HUD transfer reduction: {reduction:.1f}%", flush=True)
 
     if encoder == "amd" and not is_no_hud:
         stream_w, stream_h, hud_regions = get_layout_hud_regions(layout, overlay_w, overlay_h, max_regions=3)
@@ -862,7 +1198,29 @@ def stream_overlay_to_ffmpeg(
     _report_phase(on_render_progress, "prep", 0.70, "Przygotowywanie HUD...", time.time() - phase_t0)
 
     # Build FFmpeg input args
-    hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
+    if encoder == "intel":
+        # Do not use generic multi-GPU probing for INTEL_FORCE.
+        intel_cpu_software_decode = (
+            not intel_gpu_resident and intel_cpu_download_format == "p010le"
+        )
+        hwaccel = None if intel_cpu_software_decode else "qsv"
+        full_intel_device_args = intel_ffmpeg_device_args(intel_selection)
+        if not intel_cpu_software_decode:
+            intel_device_args = full_intel_device_args
+        else:
+            # CPU_REFERENCE HDR fallback: do not submit decoded frames to QSV.
+            # Keep only device creation and qsv_device so the encoder remains
+            # pinned to the selected Intel adapter.
+            intel_device_args = []
+            for i, arg in enumerate(full_intel_device_args):
+                if arg in ("-init_hw_device", "-qsv_device"):
+                    intel_device_args.extend(full_intel_device_args[i:i + 2])
+        # qsv_device is an encoder option in this FFmpeg build and takes the
+        # DirectX adapter index, not the named qsv device.
+    else:
+        hwaccel = detect_gpu_decoder(encoder, ffmpeg_exe=ffmpeg_exe)
+        intel_device_args = []
+        intel_cpu_software_decode = False
     # Manual rotation uses CPU filters (vflip/transpose) which cannot take
     # hardware frames, so decoded frames must stay in system memory in that case.
     needs_cpu_rotation = rotation_degrees in (90, 180, 270)
@@ -874,7 +1232,11 @@ def stream_overlay_to_ffmpeg(
         hwaccel = None
     input_args: list[str] = []
     audio_input_args: list[str] = []
-    if hwaccel:
+    if intel_device_args:
+        input_args.extend(intel_device_args)
+        if intel_gpu_resident:
+            input_args.extend(["-filter_hw_device", intel_selection.qsv_device_name])
+    elif hwaccel:
         input_args.extend(["-hwaccel", hwaccel])
         if hwaccel == "cuda" and encoder == "nv" and not needs_cpu_rotation:
             input_args.extend(["-hwaccel_output_format", "cuda"])
@@ -888,7 +1250,13 @@ def stream_overlay_to_ffmpeg(
         audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
-        if container_rotation != 0:
+        if container_rotation != 0 and encoder != "intel":
+            # ETAP 5D rotation contract: the Intel pipeline relies on FFmpeg
+            # autorotate (display matrix applied at decode) and does NOT bake
+            # manual flips -- baking while the MP4 display matrix is still
+            # copied to the output produced double-rotated final files.
+            # NVIDIA/AMD/CPU keep the previous -noautorotate + manual transform
+            # contract untouched.
             input_args.extend(["-noautorotate", "-i", str(input_file)])
         else:
             input_args.extend(["-i", str(input_file)])
@@ -917,6 +1285,9 @@ def stream_overlay_to_ffmpeg(
         is_no_hud=is_no_hud,
         hud_regions=hud_regions,
         use_gpu_compositor=use_gpu_compositor,
+        intel_gpu_resident=intel_gpu_resident,
+        intel_cpu_download_format=intel_cpu_download_format,
+        intel_cpu_software_decode=intel_cpu_software_decode,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
@@ -925,6 +1296,9 @@ def stream_overlay_to_ffmpeg(
         f"gen_fps={generation_fps}  frames={total_overlay_frames}",
         flush=True,
     )
+    if encoder == "intel":
+        hud_bytes_per_frame = int(stream_w) * int(stream_h) * 4
+        print(f"[INTEL] HUD upload bytes/frame: {hud_bytes_per_frame}", flush=True)
     print(f"[STREAM] filter: {filter_complex}", flush=True)
 
     if filter_complex.startswith("direct_gpu_passthrough"):
@@ -941,8 +1315,13 @@ def stream_overlay_to_ffmpeg(
             active_process_holder["process"] = process
 
         for line in process.stdout:
-            pass
-        process.wait()
+            if cancel_event is not None and cancel_event.is_set():
+                _stop_ffmpeg_process(process)
+                break
+        if process.poll() is None:
+            _wait_process_bounded(process, 10.0)
+        if active_process_holder is not None:
+            active_process_holder["process"] = None
         return total_overlay_frames
 
     # Start FFmpeg
@@ -1018,22 +1397,50 @@ def stream_overlay_to_ffmpeg(
         })
     pipe_queue: queue.Queue = queue.Queue(maxsize=max(8, n_workers * 2))
     pipe_done = threading.Event()
+    writer_failed = threading.Event()
+    writer_discard_pending = threading.Event()
     writer_t = threading.Thread(
         target=_pipe_writer_thread,
-        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool, writer_stats, pipeline_audit),
+        args=(pipe_queue, process.stdin.buffer, pipe_done, shm_pool, writer_stats, pipeline_audit, writer_failed,
+              writer_discard_pending),
         daemon=True,
     )
     writer_t.start()
     t_ffmpeg_started = time.perf_counter()
+    cancel_started: float | None = None
+
+    def _note_cancel() -> float:
+        nonlocal cancel_started
+        if cancel_started is None:
+            cancel_started = time.perf_counter()
+            _cancel_log("requested", cancel_started, process)
+        return cancel_started
+
+    def _put_frame(item: Any) -> bool:
+        """Put one frame without allowing cancellation to wait on a full queue."""
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                _note_cancel()
+                return False
+            if writer_failed.is_set():
+                print("[STREAM] FFmpeg stdin writer failed; stopping frame producer", flush=True)
+                return False
+            try:
+                pipe_queue.put(item, timeout=0.1)
+                return True
+            except queue.Full:
+                continue
 
     try:
         if n_workers <= 1:
             # Single worker — no IPC, direct rendering
             for i in range(total_overlay_frames):
                 if cancel_event is not None and cancel_event.is_set():
+                    _note_cancel()
                     break
                 _, raw_bytes = render_frame_bytes_job((i,))
-                pipe_queue.put(raw_bytes)
+                if not _put_frame(raw_bytes):
+                    break
                 total_piped += 1
                 if total_piped % 50 == 0 or total_piped == total_overlay_frames:
                     _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
@@ -1055,7 +1462,8 @@ def stream_overlay_to_ffmpeg(
                 _range_cache["max_distance_m"] = max_distance_m
                 
                 indic = layout.get("indicators", {})
-                spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+                spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
+                spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
                 if spd_src == "gpx":
                     spd_for_range = gpx_speed_samples
                 elif spd_src == "fit":
@@ -1068,7 +1476,8 @@ def stream_overlay_to_ffmpeg(
                 else:
                     _range_cache["max_speed_kmh"] = None
 
-                alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+                alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
+                alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
                 if alt_src == "gpx":
                     alt_for_range = gpx_alt_samples
                 elif alt_src == "fit":
@@ -1223,10 +1632,11 @@ def stream_overlay_to_ffmpeg(
                     flush=True,
                 )
 
-            with ProcessPoolExecutor(
+            with _RenderExecutor(
                 max_workers=n_workers,
                 initializer=_init_worker_with_shm,
                 initargs=(shm_names, frame_size, *init_args),
+                cancel_event=cancel_event,
             ) as ex:
                 pending: set = set()
                 reorder_buf: dict[int, int] = {}  # frame_idx -> shm_slot
@@ -1259,7 +1669,7 @@ def stream_overlay_to_ffmpeg(
                         pipeline_audit.frame(submitted)
                         pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
                         pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
-                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
+                    slot = _acquire_shm_slot(shm_pool, process, stdout_lines, cancel_event=cancel_event)
                     pending.add(_submit_audited(submitted, slot))
                     submitted += 1
 
@@ -1315,7 +1725,9 @@ def stream_overlay_to_ffmpeg(
                             pipeline_audit.sample_occupancy("in_flight", len(pending) + len(reorder_buf))
 
                     # Drain consecutive frames to pipe writer queue (zero-copy)
-                    while next_idx in reorder_buf:
+                    while next_idx in reorder_buf and not (
+                        cancel_event is not None and cancel_event.is_set()
+                    ):
                         slot = reorder_buf.pop(next_idx)
                         idx = next_idx
                         if pipeline_audit is not None:
@@ -1326,7 +1738,13 @@ def stream_overlay_to_ffmpeg(
                         memview = shm_pool.get_memview(slot)
                         if pipeline_audit is not None:
                             pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
-                        pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
+                        if not _put_frame((slot, memview, idx) if pipeline_audit is not None else (slot, memview)):
+                            try:
+                                memview.release()
+                            except Exception:
+                                pass
+                            shm_pool.release(slot)
+                            break
                         if pipeline_audit is not None:
                             pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                         total_piped += 1
@@ -1341,49 +1759,102 @@ def stream_overlay_to_ffmpeg(
                     while (
                         submitted < total_overlay_frames
                         and len(pending) + len(reorder_buf) < MAX_IN_FLIGHT
+                        and not (cancel_event is not None and cancel_event.is_set())
                     ):
                         if pipeline_audit is not None:
                             pipeline_audit.frame(submitted)
                             pipeline_audit.mark(submitted, "frame_scheduled_ns", time.perf_counter_ns())
                             pipeline_audit.mark(submitted, "in_flight_at_schedule", len(pending) + len(reorder_buf))
-                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines)
+                        slot = _acquire_shm_slot(shm_pool, process, stdout_lines, cancel_event=cancel_event)
                         pending.add(_submit_audited(submitted, slot))
                         submitted += 1
 
                 if cancel_event is not None and cancel_event.is_set():
+                    _note_cancel()
                     for f in pending:
                         f.cancel()
+                    _cancel_log("producer stopped", cancel_started, process)
                     ex.shutdown(wait=False, cancel_futures=True)
 
-                # Drain final reorder buffer (zero-copy)
-                while next_idx in reorder_buf:
-                    slot = reorder_buf.pop(next_idx)
-                    idx = next_idx
-                    if pipeline_audit is not None:
-                        pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
-                        pipeline_audit.mark(idx, "in_flight_at_ordered", len(reorder_buf) + 1)
-                        pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
-                        pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
-                    memview = shm_pool.get_memview(slot)
-                    if pipeline_audit is not None:
-                        pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
-                    pipe_queue.put((slot, memview, idx) if pipeline_audit is not None else (slot, memview))
-                    if pipeline_audit is not None:
-                        pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
-                    total_piped += 1
-                    next_idx += 1
-                    _report_stream_progress(
-                        total_piped, total_overlay_frames,
-                        start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
-                    )
+                # On cancel, discard pending/reordered frames. Never encode
+                # the backlog just to reach a clean queue state.
+                if cancel_event is None or not cancel_event.is_set():
+                    while next_idx in reorder_buf:
+                        slot = reorder_buf.pop(next_idx)
+                        idx = next_idx
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "ordered_output_ns", time.perf_counter_ns())
+                            pipeline_audit.mark(idx, "in_flight_at_ordered", len(reorder_buf) + 1)
+                            pipeline_audit.mark(idx, "queue_put_started_ns", time.perf_counter_ns())
+                            pipeline_audit.sample_occupancy("writer_queue", pipe_queue.qsize())
+                        memview = shm_pool.get_memview(slot)
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "shm_view_ready_ns", time.perf_counter_ns())
+                        if not _put_frame((slot, memview, idx) if pipeline_audit is not None else (slot, memview)):
+                            try:
+                                memview.release()
+                            except Exception:
+                                pass
+                            shm_pool.release(slot)
+                            break
+                        if pipeline_audit is not None:
+                            pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
+                        total_piped += 1
+                        next_idx += 1
+                        _report_stream_progress(
+                            total_piped, total_overlay_frames,
+                            start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
+                        )
+                else:
+                    for slot in reorder_buf.values():
+                        try:
+                            shm_pool.release(slot)
+                        except Exception:
+                            pass
+                    reorder_buf.clear()
+                    # Cancel: explicitly ask the writer to DROP whatever is
+                    # still queued (old done_event-only semantics).  Normal EOF
+                    # must never take this path (ETAP 5B tail-loss fix).
+                    writer_discard_pending.set()
+                    pipe_done.set()
+                    _cancel_log("writer stop requested", cancel_started, process)
+                    writer_t.join(timeout=1.0)
+                    _cancel_log("pipe closing", cancel_started, process)
+                    cancel_rc = _stop_ffmpeg_process(process, cancel_started)
+                    cancel_mode = getattr(process, "_telem_cancel_mode", "forced")
+                    if active_process_holder is not None:
+                        active_process_holder["cancel_mode"] = cancel_mode
+                        active_process_holder["cancel_rc"] = cancel_rc
+                    _log_ffmpeg_tail(stdout_lines, cancel_started)
+                    if cancel_mode == "graceful":
+                        valid_partial = _validate_partial_mp4(output_file)
+                        _cancel_log(
+                            f"partial_mp4 graceful valid={valid_partial}",
+                            cancel_started,
+                        )
+                    else:
+                        _cancel_log(
+                            "partial_mp4 not presented as completed export",
+                            cancel_started,
+                        )
 
         _report_phase(on_render_progress, "finalize", 0.0, "Finalizacja...", time.time() - phase_t0)
 
-        # Signal pipe writer to finish and close stdin
+        # Signal pipe writer to finish and close stdin.
+        # The sentinel is FIFO-after all frame messages, so the writer writes
+        # every queued frame before it sees None.  done_event alone no longer
+        # discards the backlog (ETAP 5B tail-loss fix).  join() waits until the
+        # queue is really drained; the deadline is only a hang safety-net (a
+        # healthy writer needs ms per frame, but FFmpeg backpressure can make
+        # individual writes take seconds).
         t_drain_start = time.perf_counter()
+        pipe_queue.put_nowait(None)  # sentinel (FIFO after final frames)
         pipe_done.set()
-        pipe_queue.put(None)  # sentinel
-        writer_t.join(timeout=30.0)
+        writer_t.join(timeout=60.0)
+        if writer_t.is_alive():
+            print("[STREAM] WARNING: pipe writer still alive after 60s; "
+                  "closing stdin anyway (possible FFmpeg backpressure hang)",
+                  flush=True)
         try:
             process.stdin.close()
         except Exception:
@@ -1396,10 +1867,16 @@ def stream_overlay_to_ffmpeg(
         print(f"[STREAM] FFmpeg Output Log:\n{extra}", flush=True)
         import traceback
         traceback.print_exc()
+        # Error path: discard the queued backlog like cancel does (pre-5B
+        # behavior), instead of trying to write frames into a broken pipe.
+        writer_discard_pending.set()
         pipe_done.set()
-        pipe_queue.put(None)
         try:
-            process.terminate()
+            pipe_queue.put_nowait(None)
+        except queue.Full:
+            pass
+        try:
+            _stop_ffmpeg_process(process, cancel_started)
         except Exception:
             pass
         raise
@@ -1421,8 +1898,9 @@ def stream_overlay_to_ffmpeg(
         if shm_pool is not None:
             shm_pool.close()
 
-    stdout_t.join(timeout=10.0)
-    process.wait()
+    stdout_t.join(timeout=2.0)
+    if process.poll() is None:
+        _stop_ffmpeg_process(process, cancel_started)
     t_drain_end = time.perf_counter()
     t_drain_time = t_drain_end - t_drain_start
 

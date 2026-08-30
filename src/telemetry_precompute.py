@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import timezone
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
@@ -391,6 +392,14 @@ def build_telemetry_cache(
         ]
     else:
         target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
+    # Keep the cache timeline in naive UTC.  GUI anchors are often aware UTC,
+    # while VideoTimeline's fallback is naive; mixing them breaks precompute
+    # during real GUI exports.
+    target_dts = [
+        dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if dt is not None and dt.tzinfo is not None else dt
+        for dt in target_dts
+    ]
     local_dts = [dt + timedelta(hours=tz_offset_hours) for dt in target_dts]
     date_texts = [dt.strftime("%Y-%m-%d") for dt in local_dts]
     time_texts = [dt.strftime("%H:%M:%S") for dt in local_dts]
@@ -508,7 +517,10 @@ def build_telemetry_cache(
         key for key, cfg in indicators.items()
         if isinstance(cfg, dict)
         and cfg.get("enabled", True)
-        and str(cfg.get("form", "")).strip().lower() == "lean"
+        and (
+            str(cfg.get("form", "")).strip().lower() == "lean"
+            or key == "lean_indicator"
+        )
     )
     lean_units: dict[str, str] = {}
     lean_labels: dict[str, str] = {}
@@ -769,8 +781,14 @@ def build_telemetry_cache(
 
     # 8. Record Assembly
     t0_records = time.perf_counter()
+    start_dt_ref = (
+        start_dt_utc.astimezone(timezone.utc).replace(tzinfo=None)
+        if start_dt_utc is not None and start_dt_utc.tzinfo is not None
+        else start_dt_utc
+    )
     elapsed_secs_arr = [
-        max(0.0, (dt - start_dt_utc).total_seconds()) if start_dt_utc is not None else 0.0
+        max(0.0, (dt - start_dt_ref).total_seconds())
+        if start_dt_ref is not None else 0.0
         for dt in target_dts
     ]
 

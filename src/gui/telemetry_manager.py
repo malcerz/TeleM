@@ -1120,6 +1120,13 @@ class TelemetryDataManager:
                     min_val = min_val / 1000.0
                     unit = "km"
 
+                # Bateria FIT: semantyczny zakres baterii to 0..100%, a nie min/max z sesji.
+                is_battery = "battery" in field_name.lower() or (unit == "%" and "battery" in label.lower())
+                if is_battery:
+                    min_val = 0.0
+                    max_val = 100.0
+                    unit = "%"
+
                 indicators[key] = {
                     "enabled": False,
                     "label": label,

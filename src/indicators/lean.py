@@ -44,6 +44,15 @@ _LEAN_GRAPHIC_CACHE = _BoundedStaticCache(max_entries=16)
 _ROWER_ICO = Path(__file__).resolve().parents[2] / "wzor" / "rower_ico.png"
 
 
+def clear_lean_caches() -> None:
+    """Clear all process-local lean caches between exports/tests."""
+    _LEAN_BASE_CACHE.clear()
+    _LEAN_GRAPHIC_CACHE.clear()
+    cache = globals().get("_TEXT_TILE_CACHE")
+    if cache is not None:
+        cache.clear()
+
+
 def _rgb(value: Any, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
     c = parse_hex_color(value) if isinstance(value, str) else None
     return c or fallback

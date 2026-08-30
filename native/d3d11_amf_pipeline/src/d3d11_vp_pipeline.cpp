@@ -3,6 +3,7 @@
 #include "stb_image_write.h"
 #include <fstream>
 #include <cmath>
+#include <string>
 
 static std::vector<uint8_t> ConvertNV12ToRGBA_VP(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);

@@ -575,15 +575,7 @@ class ProjectMixin:
         """
         ctx = self._ensure_map_context()
         snap = ctx.snapshot()
-        if snap.get("provider") == provider and snap.get("status") == "ready":
-            return
-        gps_track = snap.get("gps_track")
-        gps_source = snap.get("gps_source") or "fit"
-        if not gps_track and getattr(self, "telemetry", None):
-            source = (self.layout or {}).get("indicators", {}).get("track_map", {}).get("source", "fit")
-            gps_track = self.telemetry.get_gps_track_for_source(source)
-            gps_source = source
-        if not gps_track:
+        if not snap["gps_track"] or snap["status"] in ("idle", "error"):
             return
         # ASCII-safe arrow: the U+2192 glyph is not encodable on the Windows
         # cp1250 console and would crash the provider switch before it starts.
@@ -592,7 +584,7 @@ class ProjectMixin:
             f"generation={ctx.generation_id + 1}",
             flush=True,
         )
-        self._start_map_preload(gps_track, gps_source, provider=provider)
+        self._start_map_preload(snap["gps_track"], snap.get("gps_source") or "gps", provider=provider)
 
     def _load_or_generate_telemetry(self) -> None:
         """Wczytaj istniejący JSON lub wygeneruj synchronicznie (blokada).

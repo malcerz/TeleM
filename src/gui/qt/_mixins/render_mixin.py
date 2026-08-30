@@ -82,9 +82,7 @@ class RenderMixin:
         resolution = options.get("resolution", "source")
         output = options.get("output", "output.mp4")
         video_bitrate = options.get("bitrate", "40M")
-        hud_resolution_scale = float(options.get("hud_resolution_scale", 1.0) or 1.0)
-        if hud_resolution_scale not in (1.0, 0.75, 0.5):
-            hud_resolution_scale = 1.0
+        hud_option = options.get("hud_resolution_scale", "Auto")
 
         meta = self.video_path.with_suffix(".json")
         if not meta.exists():
@@ -125,12 +123,18 @@ class RenderMixin:
             container_rotation_arg = 0
 
         SMOOTHING_WINDOW = 5
-        speed = extract_speed_samples(records)
-        speed = smooth_speed_samples(speed, "moving_average", SMOOTHING_WINDOW)
-        track = extract_track_samples(records)
-        alt = extract_altitude_samples(records)
-        if alt:
-            alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
+        speed = getattr(self.telemetry, "speed_samples", None)
+        if not speed and records:
+            speed = extract_speed_samples(records)
+            speed = smooth_speed_samples(speed, "moving_average", SMOOTHING_WINDOW)
+        track = getattr(self.telemetry, "track_samples", None)
+        if not track and records:
+            track = extract_track_samples(records)
+        alt = getattr(self.telemetry, "alt_samples", None)
+        if not alt and records:
+            alt = extract_altitude_samples(records)
+            if alt:
+                alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
 
         output_path = sanitize_output_path(Path(output))
         if not output_path.is_absolute():
@@ -165,10 +169,25 @@ class RenderMixin:
             "gyro_magnitude_samples": self.telemetry.gyro_magnitude_samples,
         }
 
+        # Resolve HUD resolution scale policy (Auto -> 75% for Intel 4K, 100% for other)
+        from src.ffmpeg.streaming import resolve_hud_resolution_policy
+        hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
+            encoder=encoder,
+            render_w=render_w,
+            render_h=render_h,
+            user_option=hud_option,
+        )
+        if policy_msg:
+            print(policy_msg, flush=True)
+
         # HUD is rasterized at an explicit fraction of the export canvas.
         # Keep dimensions even because the downstream YUV/GPU filters require it.
-        ov_w = max(2, int(round(render_w * hud_resolution_scale)))
-        ov_h = max(2, int(round(render_h * hud_resolution_scale)))
+        if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
+            ov_w = 2560
+            ov_h = 1440
+        else:
+            ov_w = max(2, int(round(render_w * hud_resolution_scale)))
+            ov_h = max(2, int(round(render_h * hud_resolution_scale)))
         if ov_w % 2:
             ov_w += 1
         if ov_h % 2:

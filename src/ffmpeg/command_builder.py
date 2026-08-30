@@ -4,8 +4,30 @@
 from __future__ import annotations
 
 import os
+from fractions import Fraction
 from typing import Any
 from src.ffmpeg.detection import _test_encoder
+
+
+def _fps_rational_arg(fps: float) -> str:
+    """Render a generation FPS as an exact rational string for FFmpeg ``-r``.
+
+    ETAP 5B tail-loss fix: a float repr like ``29.97002997002997`` makes the
+    rawvideo demuxer build a HUD PTS grid that drifts against a 30000/1001
+    base stream; with ``overlay ... shortest=1`` the final HUD frame then
+    falls between base ticks and is dropped (209 of 210 frames).
+    ``limit_denominator(1001)`` restores exact camera rationals
+    (30000/1001, 60000/1001, 24000/1001, ...) while integer rates
+    (25/30/50/60) stay plain integers.  This only changes how the HUD
+    rawvideo input rate is *declared* to FFmpeg; timeline timestamps,
+    frame counts computed from the same float, and encoder settings are
+    untouched.
+    """
+    frac = Fraction(float(fps)).limit_denominator(1001)
+    if frac.denominator == 1:
+        return str(frac.numerator)
+    return f"{frac.numerator}/{frac.denominator}"
+
 
 RESOLUTION_MAP: dict[str, tuple[int, int] | None] = {
     "source": None,
@@ -640,6 +662,8 @@ def _build_stream_ffmpeg_cmd(
     overlay_h: int | None = None,
     use_gpu_compositor: bool = False,
     intel_gpu_resident: bool = False,
+    intel_cpu_download_format: str = "nv12",
+    intel_cpu_software_decode: bool = False,
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
@@ -711,6 +735,35 @@ def _build_stream_ffmpeg_cmd(
             base_filter = "[0:v]format=nv12,transpose=2[base]"
         else:
             base_filter = "[0:v]format=nv12[base]"
+    elif encoder == "intel" and intel_gpu_resident:
+        if effective_rotation != 0:
+            raise ValueError("Intel GPU-resident path requires rotation=0")
+        if target_res:
+            base_filter = f"[0:v]scale_qsv={render_w}:{render_h}[base]"
+        else:
+            base_filter = "[0:v]null[base]"
+    elif encoder == "intel" and intel_cpu_software_decode:
+        # ETAP 5D rotation contract: autorotate ON at import -- the decoder
+        # applies the source display matrix, so frames arrive already upright.
+        # No manual vflip/hflip/transpose here (baking flips while the MP4
+        # display matrix is copied to the output double-rotated finals).
+        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        if target_res:
+            base_filter = f"[0:v]format={cpu_format},scale={render_w}:{render_h}:flags=lanczos[base]"
+        else:
+            base_filter = f"[0:v]format={cpu_format}[base]"
+    elif encoder == "intel":
+        # CPU_REFERENCE must make the QSV -> system-memory boundary explicit.
+        # Without this, the current FFmpeg rejects QSV frames at scale/overlay
+        # negotiation (and the HUD writer can remain blocked behind the failed
+        # filter graph).
+        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        # ETAP 5D: no manual rotation transforms -- see the software-decode
+        # branch comment (autorotate contract).
+        if target_res:
+            base_filter = f"[0:v]hwdownload,format={cpu_format},scale={render_w}:{render_h}:flags=lanczos[base]"
+        else:
+            base_filter = f"[0:v]hwdownload,format={cpu_format}[base]"
     elif target_res:
         if effective_rotation == 180:
             base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,vflip,hflip[base]"
@@ -819,6 +872,20 @@ def _build_stream_ffmpeg_cmd(
             ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,hwupload[ov]"
 
         filter_complex = f"{base_filter};{ov_input};[base][ov]overlay_opencl[v_ocl];[v_ocl]hwdownload,format=nv12[vtemp]"
+    elif encoder == "intel" and intel_gpu_resident:
+        if hud_regions and len(hud_regions) > 1:
+            raise ValueError("Intel GPU-resident path does not support HUD regions")
+        scaled_stream_w = int(round(stream_w * scale_x))
+        scaled_stream_h = int(round(stream_h * scale_y))
+        ov_input = (
+            f"[1:v]setpts=PTS-STARTPTS,format=bgra,scale={scaled_stream_w}:{scaled_stream_h},"
+            f"hwupload=derive_device=qsv[ov]"
+        )
+        filter_complex = (
+            f"{base_filter};{ov_input};"
+            f"[base][ov]overlay_qsv=x={int(round(hud_x * scale_x))}:"
+            f"y={int(round(hud_y * scale_y))}:shortest=1[vtemp]"
+        )
     elif hud_regions and len(hud_regions) > 1:
         n_reg = len(hud_regions)
         split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
@@ -895,7 +962,7 @@ def _build_stream_ffmpeg_cmd(
         *input_args,
         "-f", "rawvideo", "-pix_fmt", "rgba",
         "-s", f"{stream_w}x{stream_h}",
-        "-r", str(generation_fps),
+        "-r", _fps_rational_arg(generation_fps),
         "-i", "pipe:0",
     ]
     if audio_input_args:
@@ -964,9 +1031,18 @@ def _build_stream_ffmpeg_cmd(
             cmd.extend(["-c:a", "copy"])
     elif encoder == "intel":
         cmd.extend([
+            # This FFmpeg build accepts a DirectX adapter index for qsv_device.
+            # The index is injected dynamically into input_args by streaming;
+            # do not hard-code a vendor/index here.
+            # ETAP 4K: -global_quality removed -- inert whenever -b:v is
+            # present (ETAP 4I/4J/4K proof: identical SHA-256 outputs for
+            # Q22/Q24/Q28 with -b:v 40M). Bitrate control comes solely from
+            # -b:v appended by append_bitrate_args() (GUI video_bitrate /
+            # TELEM_INTEL_QSV_BITRATE_MBPS env override).
             "-c:v", "hevc_qsv", "-preset", "veryfast",
-            "-global_quality", "24", "-look_ahead", "0",
-            "-async_depth", "4", "-pix_fmt", "nv12",
+            "-look_ahead", "0",
+            "-async_depth", "4", "-pix_fmt",
+            ("p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") and not intel_gpu_resident else "nv12"),
         ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])

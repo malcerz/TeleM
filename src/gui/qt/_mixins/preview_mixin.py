@@ -241,16 +241,7 @@ class PreviewMixin:
         Emituje gotowy QImage z powrotem do GUI (QueuedConnection).
         """
         self.src_img = pil_img
-        # ETAP 2E: during playback render_preview(inplace=True) alpha-composites
-        # the HUD DIRECTLY onto src_img.  last_src_pil is re-used by _render_preview
-        # while waiting for the next decoder frame — sharing the SAME object meant
-        # every reuse stacked another copy of the overlay on an already composited
-        # frame (duplicate labels / doubled ruler in the GUI preview).  Keep an
-        # UNCOMPOSITED reference instead.
-        if getattr(self, "_playing", False):
-            self.last_src_pil = pil_img.copy()
-        else:
-            self.last_src_pil = pil_img
+        self.last_src_pil = pil_img
         self.last_preview_ts = seek_seconds
         self._render_preview(seek_seconds)
 
@@ -310,7 +301,8 @@ class PreviewMixin:
 
         # max_speed_kmh — per source
         max_spd = None
-        spd_src = indic.get("speed_visual", {}).get("source", "gpmf")
+        spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
+        spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
         if spd_src == "gpx":
             spd_for_range = gpx_spd or spd
         elif spd_src == "fit":
@@ -324,7 +316,8 @@ class PreviewMixin:
 
         # min_alt / max_alt — per source
         min_a = max_a = None
-        alt_src = indic.get("alt_visual", {}).get("source", "gpmf")
+        alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
+        alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
         if alt_src == "gpx":
             alt_for_range = gpx_alt_s = gpx_alt or alt
         elif alt_src == "fit":
@@ -412,14 +405,8 @@ class PreviewMixin:
                             self.last_preview_ts = global_time
                             # Use the last available frame while waiting for the
                             # new one to arrive from QMediaPlayer.
-                            # ETAP 2E: give render_preview an EXCLUSIVE copy when
-                            # playback will composite in place — never hand it the
-                            # shared clean reference kept in last_src_pil.
                             if self.last_src_pil is not None:
-                                self.src_img = (
-                                    self.last_src_pil.copy()
-                                    if self._playing else self.last_src_pil
-                                )
+                                self.src_img = self.last_src_pil
                             else:
                                 # No frame yet — create placeholder
                                 self.src_img = Image.new(
@@ -445,11 +432,7 @@ class PreviewMixin:
                                 self.last_src_pil = self.src_img
                                 self.last_preview_ts = global_time
                 elif self.last_src_pil is not None:
-                    # ETAP 2E: exclusive copy for inplace compositing (see above).
-                    self.src_img = (
-                        self.last_src_pil.copy()
-                        if self._playing else self.last_src_pil
-                    )
+                    self.src_img = self.last_src_pil
 
             try:
                 src_w, src_h = self.src_img.size
