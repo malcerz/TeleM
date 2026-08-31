@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QEvent
+import os
+
+from PySide6.QtCore import Qt, QEvent, QRect, QPoint
 from PySide6.QtGui import QImage, QPixmap, QPainter
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
-    QStackedWidget, QComboBox,
+    QStackedWidget,
 )
 
 try:
@@ -75,7 +78,7 @@ class TopLevelHUDWindow(QWidget):
             if not widget.isVisible():
                 self.hide()
                 return
-            global_pos = widget.mapToGlobal(widget.rect().topLeft())
+            global_pos = widget.mapToGlobal(QPoint(0, 0))
             self.setGeometry(global_pos.x(), global_pos.y(), widget.width(), widget.height())
             if self.parent_preview_widget.is_using_mpv() and self.parent_preview_widget.isVisible():
                 self.show()
@@ -85,10 +88,11 @@ class TopLevelHUDWindow(QWidget):
         if self.hud_pixmap and not self.hud_pixmap.isNull():
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
-            scaled = self.hud_pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            ox = (self.width() - scaled.width()) // 2
-            oy = (self.height() - scaled.height()) // 2
-            painter.drawPixmap(ox, oy, scaled)
+            vrect = self.parent_preview_widget.get_video_rect()
+            # self.hud_pixmap has devicePixelRatio set to dpr.
+            # Its underlying buffer is physical (phys_w x phys_h).
+            # Drawing at logical (vrect.x(), vrect.y()) maps 1:1 to physical screen pixels with zero post-raster resize.
+            painter.drawPixmap(vrect.x(), vrect.y(), self.hud_pixmap)
             painter.end()
 
 
@@ -113,12 +117,108 @@ class VideoPreview(QWidget):
         self._original_size: tuple[int, int] = (0, 0)
         self._is_playing = False
         self._build_ui()
-        self._connect_trim()
         
         self.hud_overlay = TopLevelHUDWindow(self)
         
         # Event filter na image_label do przechwytywania zdarzeń myszy
         self.image_label.installEventFilter(self)
+
+    def get_video_rect(self) -> QRect:
+        """Zwraca rzeczywisty prostokąt obrazu wideo wewnątrz stacked_widget w pikselach logicznych.
+
+        Uwzględnia aspect ratio wideo (lub 16:9 domyślnie) oraz letterbox / pillarbox.
+        """
+        w = self.stacked_widget.width()
+        h = self.stacked_widget.height()
+        if w <= 0 or h <= 0:
+            return QRect(0, 0, 1, 1)
+
+        vw = 16
+        vh = 9
+        ctrl = self._controller
+        if ctrl is not None:
+            info = getattr(ctrl, "video_info", None)
+            vw = getattr(ctrl, "video_width", 0) or (info.get("width", 0) if isinstance(info, dict) else 0) or getattr(ctrl, "layout", {}).get("width", 0) or 16
+            vh = getattr(ctrl, "video_height", 0) or (info.get("height", 0) if isinstance(info, dict) else 0) or getattr(ctrl, "layout", {}).get("height", 0) or 9
+        aspect = float(vw) / float(vh) if vh > 0 else (16.0 / 9.0)
+
+        if w / h >= aspect:
+            target_h = h
+            target_w = max(1, int(round(h * aspect)))
+            ox = (w - target_w) // 2
+            oy = 0
+        else:
+            target_w = w
+            target_h = max(1, int(round(w / aspect)))
+            ox = 0
+            oy = (h - target_h) // 2
+
+        return QRect(ox, oy, target_w, target_h)
+
+    def get_dpr(self) -> float:
+        """Zwraca devicePixelRatioF powierzchni podglądu."""
+        try:
+            return float(self.devicePixelRatioF())
+        except Exception:
+            return 1.0
+
+    def get_physical_video_rect(self) -> QRect:
+        """Zwraca prostokąt wideo w fizycznych pikselach bufora (DPI-aware)."""
+        vrect = self.get_video_rect()
+        dpr = self.get_dpr()
+        return QRect(
+            int(round(vrect.x() * dpr)),
+            int(round(vrect.y() * dpr)),
+            max(1, int(round(vrect.width() * dpr))),
+            max(1, int(round(vrect.height() * dpr))),
+        )
+
+    def is_geometry_ready(self) -> bool:
+        """Sprawdza, czy geometria podglądu jest gotowa i ma dodatnie wymiary."""
+        vrect = self.get_video_rect()
+        dpr = self.get_dpr()
+        return (vrect.width() > 10 and vrect.height() > 10 and dpr > 0.0)
+
+    def _notify_controller_preview_size(self) -> None:
+        if self._controller and hasattr(self._controller, "set_preview_target_size"):
+            phys_rect = self.get_physical_video_rect()
+            dpr = self.get_dpr()
+            if phys_rect.width() > 10 and phys_rect.height() > 10 and dpr > 0.0:
+                self._controller.set_preview_target_size(phys_rect.width(), phys_rect.height(), dpr=dpr)
+                self._print_preview_debug_info()
+
+
+    def _print_preview_debug_info(self) -> None:
+        if os.environ.get("TELEM_RENDER_DEBUG") or os.environ.get("TELEM_PREVIEW_DEBUG"):
+            vrect = self.get_video_rect()
+            dpr = self.get_dpr()
+            phys_rect = self.get_physical_video_rect()
+            cw = getattr(self._controller, "video_width", 3840) or 3840
+            ch = getattr(self._controller, "video_height", 2160) or 2160
+            sx = phys_rect.width() / float(cw) if cw > 0 else 1.0
+            sy = phys_rect.height() / float(ch) if ch > 0 else 1.0
+            print(
+                f"[Preview HUD] "
+                f"canonical={cw}x{ch} "
+                f"widget_logical={self.stacked_widget.width()}x{self.stacked_widget.height()} "
+                f"dpr={dpr:.2f} "
+                f"video_rect_logical={vrect.x()},{vrect.y()},{vrect.width()}x{vrect.height()} "
+                f"video_rect_physical={phys_rect.x()},{phys_rect.y()},{phys_rect.width()}x{phys_rect.height()} "
+                f"overlay_surface={phys_rect.width()}x{phys_rect.height()} "
+                f"scale_x={sx:.4f} "
+                f"scale_y={sy:.4f} "
+                f"offset_x={vrect.x()} "
+                f"offset_y={vrect.y()} "
+                f"post_raster_resize=False",
+                flush=True,
+            )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._notify_controller_preview_size()
+        if self.is_using_mpv() and self._hud_alive():
+            self.hud_overlay.sync_geometry()
+
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -191,50 +291,7 @@ class VideoPreview(QWidget):
         self.duration_label.setStyleSheet("color: #aaa; font-size: 11px;")
         time_row.addWidget(self.duration_label)
 
-        # ¦¦ Przyciski wycinania ¦¦
-
-        self.cut_btn = QPushButton("\u2702")  # ?
-        self.cut_btn.setFixedSize(26, 26)
-        self.cut_btn.setToolTip("Wytnij zaznaczony fragment")
-        self.cut_btn.setStyleSheet(
-            "QPushButton { background-color: #5a3a2a; color: #ffaa66; "
-            "border: 1px solid #7a5a4a; border-radius: 3px; font-size: 13px; }"
-            "QPushButton:hover { background-color: #7a4a3a; }"
-        )
-        time_row.addWidget(self.cut_btn)
-
-        self.undo_cut_btn = QPushButton("\u21B6")  # ?
-        self.undo_cut_btn.setFixedSize(26, 26)
-        self.undo_cut_btn.setToolTip("Cofnij ostatnie wycięcie")
-        self.undo_cut_btn.setStyleSheet(
-            "QPushButton { background-color: #3a3a5a; color: #8888ff; "
-            "border: 1px solid #5a5a7a; border-radius: 3px; font-size: 13px; }"
-            "QPushButton:hover { background-color: #4a4a7a; }"
-        )
-        time_row.addWidget(self.undo_cut_btn)
-
-        self.restore_cut_btn = QPushButton("\u21A9")  # ?
-        self.restore_cut_btn.setFixedSize(26, 26)
-        self.restore_cut_btn.setToolTip("Przywróć wszystkie wycięte fragmenty")
-        self.restore_cut_btn.setStyleSheet(
-            "QPushButton { background-color: #3a5a3a; color: #88ff88; "
-            "border: 1px solid #5a7a5a; border-radius: 3px; font-size: 13px; }"
-            "QPushButton:hover { background-color: #4a7a4a; }"
-        )
-        time_row.addWidget(self.restore_cut_btn)
-
         layout.addLayout(time_row)
-
-    # ── Widoczność narzędzi wycinania (✂/↩/↩) ──────────────────────────
-
-    def set_cut_tools_visible(self, visible: bool) -> None:
-        """Pokaż/ukryj przyciski wycinania.
-
-        Podgląd jest współdzielony między zakładkami Projekt i Rendering;
-        narzędzia wycinania są ukrywane w Projekcie, a pozostają w Rendering.
-        """
-        for btn in (self.cut_btn, self.undo_cut_btn, self.restore_cut_btn):
-            btn.setVisible(visible)
 
     def _hud_alive(self) -> bool:
         """Czy obiekt C++ nakładki HUD nadal istnieje (bezpieczeństwo przy zamykaniu)."""
@@ -247,8 +304,6 @@ class VideoPreview(QWidget):
             except Exception:
                 return False
         return True
-
-    # ¦¦ Slot: nowa klatka podglądu ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 
     def is_using_mpv(self) -> bool:
         return self._controller is not None and getattr(self._controller, "mpv_player", None) is not None
@@ -281,6 +336,7 @@ class VideoPreview(QWidget):
         win = self.window()
         if win:
             win.installEventFilter(self)
+        self._notify_controller_preview_size()
         if self.is_using_mpv():
             self.hud_overlay.show()
             self.hud_overlay.sync_geometry()
@@ -296,52 +352,40 @@ class VideoPreview(QWidget):
         super().closeEvent(event)
 
     def on_frame_ready(self, qimg: QImage | QPixmap) -> None:
-        """Odbiera QImage/QPixmap z kontrolera i wyświetla.
-
-        QImage jest thread-safe i przychodzi z workera przez QueuedConnection.
-        Konwersja na QPixmap (wymaga GUI wątku) odbywa się tutaj.
-        """
+        """Odbiera QImage/QPixmap z kontrolera i wyświetla 1:1 w natywnej rozdzielczości (DPI-aware)."""
         if qimg is None:
             return
         
+        dpr = self.get_dpr()
+        if isinstance(qimg, QImage) and not qimg.isNull():
+            if abs(qimg.devicePixelRatio() - dpr) > 1e-4:
+                qimg.setDevicePixelRatio(dpr)
+            pixmap = QPixmap.fromImage(qimg)
+        elif isinstance(qimg, QPixmap) and not qimg.isNull():
+            pixmap = qimg
+            if abs(pixmap.devicePixelRatio() - dpr) > 1e-4:
+                pixmap.setDevicePixelRatio(dpr)
+        else:
+            return
+
+        vrect = self.get_video_rect()
+
         if self.is_using_mpv():
-            if isinstance(qimg, QImage) and not qimg.isNull():
-                pixmap = QPixmap.fromImage(qimg)
-            elif isinstance(qimg, QPixmap) and not qimg.isNull():
-                pixmap = qimg
-            else:
-                return
             if hasattr(self, "hud_overlay"):
                 self.hud_overlay.set_hud_pixmap(pixmap)
                 self.hud_overlay.sync_geometry()
             return
 
-        if isinstance(qimg, QImage) and not qimg.isNull():
-            pixmap = QPixmap.fromImage(qimg)
-        elif isinstance(qimg, QPixmap) and not qimg.isNull():
-            pixmap = qimg
-        else:
-            return
-        scaled = pixmap.scaled(
-            self.image_label.size(),
-            Qt.KeepAspectRatio,
-            Qt.FastTransformation,
-        )
-        self.image_label.setPixmap(scaled)
+        self.image_label.setPixmap(pixmap)
         self.image_label.setStyleSheet(
             "background-color: #1a1a1a; border: 1px solid #333;"
         )
+        self._pixmap_size = (pixmap.width(), pixmap.height())
+        self._pixmap_offset = (vrect.x(), vrect.y())
 
-        # Zapisz rozmiar i offset wyświetlonej pixmapy (do przeliczania współrzędnych)
-        pix_size = scaled.size()
-        self._pixmap_size = (pix_size.width(), pix_size.height())
-        label_size = self.image_label.size()
-        ox = (label_size.width() - pix_size.width()) // 2
-        oy = (label_size.height() - pix_size.height()) // 2
-        self._pixmap_offset = (ox, oy)
 
     def set_bboxes(self, bboxes: dict[str, tuple[int, int, int, int]], orig_w: int, orig_h: int) -> None:
-        """Odbiera bounding boxy wskaźników z kontrolera (w pikselach oryginalnego obrazu)."""
+        """Odbiera bounding boxy wskaźników z kontrolera (w pikselach obrazu podglądu)."""
         self._bboxes = bboxes
         self._original_size = (orig_w, orig_h)
 
@@ -427,29 +471,19 @@ class VideoPreview(QWidget):
         return super().eventFilter(obj, event)
 
     def _norm_from_geometry(self, label_x: float, label_y: float, w: int, h: int) -> tuple[float, float]:
-        """Przelicza współrzędne w widgetu na znormalizowane (0..100) w oryginalnym obrazie."""
-        ow, oh = self._original_size
-        if ow <= 0 or oh <= 0:
-            return 0.0, 0.0
-        
-        scale = min(w / ow, h / oh)
-        pw = ow * scale
-        ph = oh * scale
-        ox = (w - pw) / 2
-        oy = (h - ph) / 2
+        """Przelicza współrzędne w widgetu na znormalizowane (0..100) wewnątrz rzeczywistego rect wideo."""
+        vrect = self.get_video_rect()
+        pw = vrect.width()
+        ph = vrect.height()
+        ox = vrect.x()
+        oy = vrect.y()
         
         px = ((label_x - ox) / pw * 100.0) if pw > 0 else 0.0
         py = ((label_y - oy) / ph * 100.0) if ph > 0 else 0.0
         return (px, py)
 
     def _uses_topleft_anchor(self, key: str) -> bool:
-        """True gdy pozycja (x, y) w layoucie oznacza LEWY-GÓRNY róg wskaźnika.
-
-        W kompozytorze wskaźniki z formą "text" (oraz specjalny
-        time_display) są pozycjonowane lewym-górnym rogiem; pozostałe formy
-        (bar, gauge, chart, segment_bar, map, static_map) są pozycjonowane
-        środkiem.
-        """
+        """True gdy pozycja (x, y) w layoucie oznacza LEWY-GÓRNY róg wskaźnika."""
         if key == "time_display":
             return True
         ctrl = self._controller
@@ -459,15 +493,10 @@ class VideoPreview(QWidget):
         return str(cfg.get("form", "text") or "text") == "text"
 
     def _hit_test(self, nx: float, ny: float) -> str | None:
-        """Sprawdza który wskaźnik został kliknięty.
-
-        nx, ny to współrzędne znormalizowane (0..100) względem oryginalnego obrazu.
-        Bboxy w self._bboxes są w pikselach oryginalnego obrazu.
-        """
+        """Sprawdza który wskaźnik został kliknięty."""
         ow, oh = self._original_size
         if ow <= 0 or oh <= 0:
             return None
-        # Przelicz znormalizowane współrzędne (0..100) na piksele oryginału
         click_x = (nx / 100.0) * ow
         click_y = (ny / 100.0) * oh
         for key, (bx, by, bw, bh) in self._bboxes.items():
@@ -475,10 +504,8 @@ class VideoPreview(QWidget):
                 return key
         return None
 
-    # ¦¦ Slot: długość wideo ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-
     def on_duration_ready(self, duration_s: float) -> None:
-        """Ustawia długość wideo na seekbarze i znacznikach A/B."""
+        """Ustawia długość wideo na seekbarze."""
         self._duration_s = max(duration_s, 1.0)
         total_m = int(self._duration_s // 60)
         total_s = int(self._duration_s % 60)
@@ -488,8 +515,12 @@ class VideoPreview(QWidget):
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z project_tab)."""
         self._controller = controller
+        if hasattr(controller, "set_preview_widget"):
+            controller.set_preview_widget(self)
         if hasattr(controller, "set_video_widget") and self.video_widget:
             controller.set_video_widget(self.video_widget, getattr(self, 'mpv_widget', None))
+        self._notify_controller_preview_size()
+
         if self.is_using_mpv():
             self.stacked_widget.setCurrentIndex(1)
             self.hud_overlay.show()
@@ -499,47 +530,9 @@ class VideoPreview(QWidget):
             if self.video_widget:
                 self.video_widget.installEventFilter(self)
 
-    def _connect_trim(self) -> None:
-        self.cut_btn.clicked.connect(self._on_cut)
-        self.undo_cut_btn.clicked.connect(self._on_undo_cut)
-        self.restore_cut_btn.clicked.connect(self._on_restore_cut)
-
-    def _on_cut(self) -> None:
-        """Kliknięto ✂ — wytnij aktualny zakres A-B."""
-        eff_a, eff_b = self.seek_bar.get_range()
-        if not self.seek_bar.has_selection() or eff_b - eff_a < 0.1 or not self._controller:
-            return
-        if not hasattr(self._controller, 'add_cut_region'):
-            return
-        # Przelicz z efektywnego na oryginalny czas
-        orig_a = self.seek_bar.eff_to_orig(eff_a)
-        orig_b = self.seek_bar.eff_to_orig(eff_b)
-        self._controller.add_cut_region(orig_a, orig_b)
-        self.seek_bar.clear_selection()
-
-    def _on_undo_cut(self) -> None:
-        """Kliknięto ↩ — cofnij ostatnie wycięcie."""
-        if self._controller and hasattr(self._controller, 'undo_cut_region'):
-            self._controller.undo_cut_region()
-
-    def _on_restore_cut(self) -> None:
-        """Kliknięto ↩ — przywróć wszystkie wycięte fragmenty."""
-        if self._controller and hasattr(self._controller, 'clear_cut_regions'):
-            self._controller.clear_cut_regions()
 
     def _on_cut_region_changed(self, *args) -> None:
-        """Aktualizuj seek bar po zmianie listy wyciętych fragmentów."""
-        if self._controller and hasattr(self._controller, '_cut_regions'):
-            self.seek_bar.set_cut_regions(self._controller._cut_regions)
-            # Po aktualizacji cięć odśwież podgląd – przeskocz za wycięty zakres
-            self._on_seek(self.seek_bar.get_position())
-            # Zaktualizuj etykietę duration (efektywny czas)
-            eff_dur = self.seek_bar._effective_duration_s
-            total_m = int(eff_dur // 60)
-            total_s = int(eff_dur % 60)
-            self.duration_label.setText(f"{total_m:02d}:{total_s:02d}")
-
-    # ¦¦ Slot: przesunięcie seekbara ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+        return
 
     def _on_seek(self, seconds: float) -> None:
         """Użytkownik przeciągnął pasek (efektywny czas) → przelicz na oryginalny."""
@@ -549,7 +542,8 @@ class VideoPreview(QWidget):
     def _on_seek_position(self, seconds: float) -> None:
         """Kontroler skorygował pozycję (oryginalny czas) → przelicz na efektywny."""
         eff = self.seek_bar.orig_to_eff(seconds)
+        eff_capped = min(eff, self.seek_bar.get_effective_duration())
         self.seek_bar.set_position(eff)
-        mins = int(eff // 60)
-        secs = int(eff % 60)
+        mins = int(eff_capped // 60)
+        secs = int(eff_capped % 60)
         self.time_label.setText(f"{mins:02d}:{secs:02d}")

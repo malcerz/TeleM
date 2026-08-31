@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import threading
+import math
 from typing import Optional
 from bisect import bisect_right
 
@@ -214,19 +215,10 @@ _NICE_TIME_STEPS = [
 ]
 
 
-def generate_nice_time_ticks(duration_s: float, target_count: int = 5) -> list[tuple[float, str]]:
-    """Generate nice time ticks for a given duration.
-
-    Returns a list of (norm_x, label_str) tuples where norm_x is in [0.0, 1.0].
-    Formatting:
-    - duration < 1 hour: MM:SS (e.g. 00:00, 02:00)
-    - duration >= 1 hour: H:MM (e.g. 0:00, 0:30, 1:00)
-    """
+def _choose_nice_time_step(duration_s: float, target_count: int = 5) -> float:
     duration_s = max(1.0, float(duration_s))
-
     best_step = _NICE_TIME_STEPS[0]
     best_score = float("inf")
-
     for step in _NICE_TIME_STEPS:
         count = int(duration_s // step) + 1
         score = abs(count - target_count)
@@ -237,6 +229,20 @@ def generate_nice_time_ticks(duration_s: float, target_count: int = 5) -> list[t
         if score < best_score:
             best_score = score
             best_step = step
+    return float(best_step)
+
+
+def generate_nice_time_ticks(duration_s: float, target_count: int = 5) -> list[tuple[float, str]]:
+    """Generate nice time ticks for a given duration.
+
+    Returns a list of (norm_x, label_str) tuples where norm_x is in [0.0, 1.0].
+    Formatting:
+    - duration < 1 hour: MM:SS (e.g. 00:00, 02:00)
+    - duration >= 1 hour: H:MM (e.g. 0:00, 0:30, 1:00)
+    """
+    duration_s = max(1.0, float(duration_s))
+
+    best_step = _choose_nice_time_step(duration_s, target_count)
 
     ticks: list[tuple[float, str]] = []
     tick_sec = 0
@@ -258,12 +264,72 @@ def generate_nice_time_ticks(duration_s: float, target_count: int = 5) -> list[t
     return ticks
 
 
+def generate_nice_relative_time_ticks(
+    duration_s: float, target_count: int = 5,
+) -> list[tuple[float, str]]:
+    """Generate time-accurate negative labels for a moving chart window."""
+    duration_s = max(0.0, float(duration_s))
+    if duration_s <= 0.0:
+        return [(0.0, "0 s")]
+    step = _choose_nice_time_step(duration_s, target_count)
+
+    def fmt(seconds: float) -> str:
+        rounded = round(seconds)
+        if abs(seconds - rounded) < 0.05:
+            return str(int(rounded))
+        return f"{seconds:.1f}".rstrip("0").rstrip(".")
+
+    ticks: list[tuple[float, str]] = []
+    tick_sec = 0.0
+    while tick_sec < duration_s:
+        remaining = duration_s - tick_sec
+        ticks.append((tick_sec / duration_s, f"-{fmt(remaining)} s"))
+        tick_sec += step
+    ticks.append((1.0, "0 s"))
+    return ticks
+
+
+def generate_nice_value_ticks(
+    data_min: float, data_max: float, target_count: int = 5,
+) -> tuple[float, float, list[str]]:
+    """Return a padded numeric domain and human-friendly evenly spaced labels."""
+    data_min = float(data_min)
+    data_max = float(data_max)
+    if data_min > data_max:
+        data_min, data_max = data_max, data_min
+    if data_min == data_max:
+        pad = max(1.0, abs(data_min) * 0.05)
+        data_min -= pad
+        data_max += pad
+    count = max(2, int(target_count))
+    raw_step = (data_max - data_min) / max(1, count - 1)
+    magnitude = 10 ** int(math.floor(math.log10(raw_step)))
+    normalized = raw_step / magnitude
+    if normalized <= 1:
+        multiplier = 1
+    elif normalized <= 2:
+        multiplier = 2
+    elif normalized <= 5:
+        multiplier = 5
+    else:
+        multiplier = 10
+    step = multiplier * magnitude
+    nice_min = math.floor(data_min / step) * step
+    nice_max = math.ceil(data_max / step) * step
+    labels = [
+        f"{nice_min + i * step:.0f}"
+        for i in range(int(round((nice_max - nice_min) / step)) + 1)
+    ]
+    return nice_min, nice_max, labels
+
+
 def _history_chart_cache_key(
     history_values, width, height, line_color, line_thickness, fill_alpha,
     fill_color, show_axes, grid_color, time_labels, value_labels, supersample,
     custom_min_val, custom_max_val, label_count, label_units, unit,
     show_average, label_font_size, font_path,
     show_x_axis_values=True, show_y_axis_values=True,
+    axis_font_size=None, axis_outline=0,
 ) -> tuple:
     chart_start_dt = getattr(history_values, "chart_start_dt", None)
     chart_end_dt = getattr(history_values, "chart_end_dt", None)
@@ -283,6 +349,7 @@ def _history_chart_cache_key(
         supersample, custom_min_val, custom_max_val, label_count,
         label_units, unit, show_average, label_font_size, font_path,
         bool(show_x_axis_values), bool(show_y_axis_values),
+        axis_font_size, int(axis_outline),
     )
 
 
@@ -311,6 +378,8 @@ def generate_history_chart(
     font_path: Optional[str] = None,
     show_x_axis_values: bool = True,
     show_y_axis_values: bool = True,
+    axis_font_size: Optional[float] = None,
+    axis_outline: int = 0,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
     profiler = get_overlay_profiler()
@@ -321,6 +390,7 @@ def generate_history_chart(
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
+        axis_font_size=axis_font_size, axis_outline=axis_outline,
     )
 
     bg_data = _CHART_BG_CACHE.get(cache_key)
@@ -342,6 +412,7 @@ def generate_history_chart(
             label_font_size=label_font_size, font_path=font_path,
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
+            axis_font_size=axis_font_size, axis_outline=axis_outline,
         )
         if len(_CHART_BG_CACHE) > 50:
             _CHART_BG_CACHE.clear()
@@ -392,6 +463,7 @@ def get_history_chart_background(
     custom_max_val=None, label_count=2, label_units=False, unit="",
     show_average=False, label_font_size=None, font_path=None,
     show_x_axis_values=True, show_y_axis_values=True,
+    axis_font_size=None, axis_outline=0,
 ):
     """Return immutable background geometry and its complete cache identity."""
     cache_key = _history_chart_cache_key(
@@ -400,6 +472,7 @@ def get_history_chart_background(
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
+        axis_font_size=axis_font_size, axis_outline=axis_outline,
     )
     if cache_key not in _CHART_BG_CACHE:
         generate_history_chart(
@@ -414,6 +487,7 @@ def get_history_chart_background(
             font_path=font_path,
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
+            axis_font_size=axis_font_size, axis_outline=axis_outline,
         )
     return (*_CHART_BG_CACHE[cache_key], cache_key)
 
@@ -426,6 +500,7 @@ def get_history_chart_prefix_background(
     custom_max_val=None, label_count=2, label_units=False, unit="",
     show_average=False, label_font_size=None, font_path=None,
     show_x_axis_values=True, show_y_axis_values=True,
+    axis_font_size=None, axis_outline=0,
 ):
     """Render only the activity-history prefix ending at ``visible_end_dt``.
 
@@ -448,6 +523,7 @@ def get_history_chart_prefix_background(
             label_font_size=label_font_size, font_path=font_path,
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
+            axis_font_size=axis_font_size, axis_outline=axis_outline,
         )
 
     cache_key = _history_chart_cache_key(
@@ -456,6 +532,7 @@ def get_history_chart_prefix_background(
         supersample, custom_min_val, custom_max_val, label_count, label_units,
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
+        axis_font_size=axis_font_size, axis_outline=axis_outline,
     )
     geometry = _CHART_PREFIX_GEOMETRY_CACHE.get(cache_key)
     if geometry is None:
@@ -472,6 +549,7 @@ def get_history_chart_prefix_background(
             draw_series=False,
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
+            axis_font_size=axis_font_size, axis_outline=axis_outline,
         )
         if len(_CHART_PREFIX_GEOMETRY_CACHE) > 50:
             _CHART_PREFIX_GEOMETRY_CACHE.clear()
@@ -559,6 +637,7 @@ def get_history_chart_prefix_background(
             custom_max_val=custom_max_val, label_count=label_count,
             label_units=label_units, unit=unit, show_average=show_average,
             label_font_size=label_font_size, font_path=font_path,
+            axis_font_size=axis_font_size, axis_outline=axis_outline,
         )
 
     bisect_started = time.perf_counter()
@@ -602,19 +681,17 @@ def get_history_chart_prefix_background(
             draw.polygon(polygon, fill=actual_fill)
     profiler.record("graph.prefix.fill_polygon", (time.perf_counter() - fill_started) * 1000.0)
 
-    if show_axes:
-        # ``_build_chart_bg`` redraws these two axes after the series.  Keep
-        # the same ordering so the prefix raster has identical axis pixels.
-        axis_color = (180, 180, 180, 220)
-        draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-        draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
-
     line_started = time.perf_counter()
     for left, right in visible_ranges:
         segment = prefix_points[left:right]
         if len(segment) >= 2:
             draw.line(segment, fill=(*line_color, 255), width=max(1, calc_thickness), joint="round")
     profiler.record("graph.prefix.line_draw", (time.perf_counter() - line_started) * 1000.0)
+
+    if show_axes:
+        # Keep structural pixels above the prefix fill/line exactly as in the
+        # full chart path, including grid, ticks, labels, and their outline.
+        img.paste(axes_img, (0, 0), axes_img)
 
     if show_average:
         average_started = time.perf_counter()
@@ -674,6 +751,8 @@ def _build_chart_bg(
     draw_series: bool = True,
     show_x_axis_values: bool = True,
     show_y_axis_values: bool = True,
+    axis_font_size: Optional[float] = None,
+    axis_outline: int = 0,
 ) -> tuple[Image.Image, list[tuple[float, float]], float, float, int]:
     """Build and return static chart background (image, points, plot_y1, plot_y2, thickness)."""
     ss = max(1, int(supersample))
@@ -691,8 +770,14 @@ def _build_chart_bg(
         data_min = 0.0
         data_max = 100.0
 
-    min_val = custom_min_val if custom_min_val is not None else data_min
-    max_val = custom_max_val if custom_max_val is not None else data_max
+    if custom_min_val is None and custom_max_val is None:
+        min_val, max_val, auto_value_labels = generate_nice_value_ticks(
+            data_min, data_max, label_count,
+        )
+    else:
+        min_val = custom_min_val if custom_min_val is not None else data_min
+        max_val = custom_max_val if custom_max_val is not None else data_max
+        auto_value_labels = None
     if min_val >= max_val:
         max_val = min_val + 1.0
 
@@ -700,10 +785,13 @@ def _build_chart_bg(
     num_points = len(history_values) if has_data else 0
 
     count = max(2, label_count)
-    y_label_values = value_labels if value_labels else [
+    base_value_labels = value_labels or auto_value_labels or [
         f"{min_val + (i / (count - 1)) * val_range:.0f}"
-        + (f" {unit}" if (label_units and unit) else "")
         for i in range(count)
+    ]
+    y_label_values = [
+        str(lbl) + (f" {unit}" if (label_units and unit) else "")
+        for lbl in base_value_labels
     ]
     if time_labels:
         if isinstance(time_labels[0], (tuple, list)):
@@ -717,10 +805,10 @@ def _build_chart_bg(
         x_ticks = [(i / 4.0, lbl) for i, lbl in enumerate(["0%", "25%", "50%", "75%", "100%"])]
 
     axis_cache_key = (
-        "chart_axis_v2", width, height, ss, bool(show_axes),
+        "chart_axis_v3", width, height, ss, bool(show_axes),
         tuple(grid_color) if grid_color is not None else None,
         tuple(y_label_values), tuple(x_ticks),
-        label_font_size, font_path,
+        label_font_size, font_path, axis_font_size, int(axis_outline),
         bool(show_x_axis_values), bool(show_y_axis_values),
     )
     cached_axis = _CHART_AXIS_CACHE.get(axis_cache_key)
@@ -728,6 +816,7 @@ def _build_chart_bg(
     if axis_cache_hit:
         img, plot_x1, plot_y1, plot_x2, plot_y2 = cached_axis
         img = img.copy()
+        axis_layer = img.copy()
         draw = ImageDraw.Draw(img)
         font_axis = None
     else:
@@ -738,8 +827,12 @@ def _build_chart_bg(
         axis_bottom_margin_est = (int(max(6, height * 0.20)) if show_axes else 0) * ss
         try:
             plot_h_est = max(1, height - 4 * ss - axis_bottom_margin_est)
-            if label_font_size and label_font_size > 0:
-                label_fs = int(label_font_size * ss)
+            effective_axis_size = (
+                label_font_size if label_font_size and label_font_size > 0
+                else axis_font_size
+            )
+            if effective_axis_size and effective_axis_size > 0:
+                label_fs = int(effective_axis_size * ss)
             else:
                 label_fs = int(max(7, min(width, height) * 0.13) * ss)
             label_fs = max(6, min(label_fs, max(6, plot_h_est // 2)))
@@ -778,7 +871,6 @@ def _build_chart_bg(
                 max_x_bot = max(max_x_bot, 10)
                 max_x_label_w = max(max_x_label_w, len(lbl) * 6)
 
-        import math
         axis_left_margin = int(math.ceil(max_label_w + 8 * ss + 2 * ss))
         axis_right_margin = int(math.ceil(max(6 * ss, max_x_label_w // 2 + 4 * ss)))
         axis_top_margin = int(math.ceil(max(4 * ss, max_y_bot / 2.0 + max_y_top + 4 * ss)))
@@ -800,9 +892,18 @@ def _build_chart_bg(
     else:
         plot_w = max(1, plot_x2 - plot_x1)
         plot_h = max(1, plot_y2 - plot_y1)
-    axis_color = (180, 180, 180, 220)
-    tick_color = (150, 150, 150, 200)
-    label_color = (200, 200, 200, 240)
+    # These are chart-structure colors, deliberately independent of
+    # ``fill_alpha``.  The axis image is composited again after the series so
+    # the fill can never attenuate grid/tick/label pixels.
+    axis_color = (180, 180, 180, 255)
+    tick_color = (150, 150, 150, 255)
+    label_color = (200, 200, 200, 255)
+    # Grid alpha is a chart-style input, not the series fill alpha.  Store
+    # grid strokes as opaque structural pixels so their final color cannot
+    # change when the fill beneath them changes.
+    grid_render_color = (
+        (*grid_color[:3], 255) if grid_color is not None else None
+    )
 
     if not axis_cache_hit and show_axes:
         draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=max(1, ss))
@@ -814,8 +915,11 @@ def _build_chart_bg(
         ]
 
         for lbl, yp in zip(y_label_values, y_positions):
-            if grid_color is not None:
-                draw.line((plot_x1, yp, plot_x2, yp), fill=grid_color, width=max(1, ss))
+            if grid_render_color is not None:
+                draw.line(
+                    (plot_x1, yp, plot_x2, yp),
+                    fill=grid_render_color, width=max(1, ss),
+                )
             draw.line((plot_x1 - 4 * ss, yp, plot_x1, yp), fill=tick_color, width=max(1, ss))
             if show_y_axis_values:
                 if font_axis:
@@ -833,7 +937,11 @@ def _build_chart_bg(
                 ty = int(round(yp - (b_bot + b_top) / 2.0))
                 ty = max(2 * ss - b_top, min(height - b_bot - 2 * ss, ty))
                 if font_axis:
-                    draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
+                    draw.text(
+                        (tx, ty), lbl, fill=label_color, font=font_axis,
+                        stroke_width=max(0, int(axis_outline * ss)),
+                        stroke_fill=(0, 0, 0, 255),
+                    )
                 else:
                     draw.text((tx, ty), lbl, fill=label_color)
 
@@ -861,11 +969,16 @@ def _build_chart_bg(
                 ty = plot_y2 + 5 * ss
                 ty = min(height - b_bot - 2 * ss, ty)
                 if font_axis:
-                    draw.text((tx, ty), lbl, fill=label_color, font=font_axis)
+                    draw.text(
+                        (tx, ty), lbl, fill=label_color, font=font_axis,
+                        stroke_width=max(0, int(axis_outline * ss)),
+                        stroke_fill=(0, 0, 0, 255),
+                    )
                 else:
                     draw.text((tx, ty), lbl, fill=label_color)
 
     if not axis_cache_hit:
+        axis_layer = img.copy()
         if len(_CHART_AXIS_CACHE) >= 64:
             _CHART_AXIS_CACHE.clear()
         _CHART_AXIS_CACHE[axis_cache_key] = (img.copy(), plot_x1, plot_y1, plot_x2, plot_y2)
@@ -932,13 +1045,14 @@ def _build_chart_bg(
                     fill_polygon.append((segment[0][0], plot_y2))
                     draw.polygon(fill_polygon, fill=actual_fill)
 
-            if show_axes:
-                draw.line((plot_x1, plot_y1, plot_x1, plot_y2), fill=axis_color, width=1)
-                draw.line((plot_x1, plot_y2, plot_x2, plot_y2), fill=axis_color, width=1)
-
             for segment in segments:
                 if len(segment) >= 2:
                     draw.line(segment, fill=(line_color[0], line_color[1], line_color[2], 255), width=calc_line_thickness, joint="round")
+
+            if show_axes:
+                # Restore the complete immutable axis/grid/tick/label layer
+                # after the translucent fill and opaque line.
+                img.paste(axis_layer, (0, 0), axis_layer)
 
         if show_average and draw_series and numeric_values:
             avg_val = float(sum(numeric_values) / len(numeric_values))

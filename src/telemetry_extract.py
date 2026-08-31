@@ -23,6 +23,24 @@ except ImportError:
     orjson = None
 
 
+class _ProgressReporter:
+    """Throttle extractor progress without adding a callback per sample."""
+    def __init__(self, callback: Optional[Callable[[int, int], None]], total: int) -> None:
+        self.callback = callback
+        self.total = max(1, total)
+        self.last_done = -1
+        self.last_time = 0.0
+
+    def __call__(self, done: int, force: bool = False) -> None:
+        if self.callback is None:
+            return
+        now = _time.monotonic()
+        if force or done >= self.total or now - self.last_time >= 0.12 or done * 100 // self.total != self.last_done * 100 // self.total:
+            self.last_time = now
+            self.last_done = done
+            self.callback(min(done, self.total), self.total)
+
+
 # ── JSON / helpers ──────────────────────────────────────────────────────────
 
 
@@ -379,6 +397,7 @@ def _extract_gpmf_timed_samples(
     records: list[dict[str, Any]],
     marker: str,
     value_parser: Callable[[Any], list[int]],
+    progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> Optional[list[tuple[datetime, int]]]:
     """Extract ISOE/SHUT using the stream's STMP/TSMP block timing.
 
@@ -393,7 +412,9 @@ def _extract_gpmf_timed_samples(
         "SHUT": "ExposureTimes",
         "TMPC": "CameraTemperature",
     }.get(marker, marker)
-    for record in ensure_records_list(records):
+    records = ensure_records_list(records)
+    reporter = _ProgressReporter(progress_cb, len(records))
+    for record_index, record in enumerate(records, 1):
         flat = flatten_record(record)
         for key, raw in flat.items():
             if not (key.startswith("Doc") and key.endswith(f":{value_suffix}")):
@@ -410,6 +431,8 @@ def _extract_gpmf_timed_samples(
                 dt = parse_exif_datetime(raw)
                 if dt is not None:
                     absolute_times.append(dt)
+        reporter(record_index)
+    reporter(len(records), force=True)
 
     if not blocks or not absolute_times:
         return None
@@ -442,11 +465,14 @@ def _extract_gpmf_timed_samples(
 
 def _extract_gpmf_vector_samples(
     records: list[dict[str, Any]], marker: str,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, tuple[float, float, float]]]:
     """Extract full-resolution 3-axis GPMF vectors with stream timing."""
     blocks: list[tuple[float, float, list[list[float]]]] = []
     anchors: list[datetime] = []
-    for record in ensure_records_list(records):
+    records = ensure_records_list(records)
+    reporter = _ProgressReporter(progress_cb, len(records))
+    for record_index, record in enumerate(records, 1):
         flat = flatten_record(record)
         vector_fields = record if isinstance(record, dict) else flat
         for key, raw in vector_fields.items():
@@ -465,6 +491,7 @@ def _extract_gpmf_vector_samples(
                 dt = parse_exif_datetime(raw)
                 if dt is not None:
                     anchors.append(dt)
+        reporter(record_index)
     if not blocks or not anchors:
         return []
     blocks.sort(key=lambda item: (item[0], item[1]))
@@ -484,13 +511,16 @@ def _extract_gpmf_vector_samples(
     anchor = min(anchors)
     base_stmp = blocks[0][0]
     samples: list[tuple[datetime, tuple[float, float, float]]] = []
-    for (stmp, _tsmp, vectors), step_us in zip(blocks, steps):
+    reporter = _ProgressReporter(progress_cb, len(blocks))
+    for block_index, ((stmp, _tsmp, vectors), step_us) in enumerate(zip(blocks, steps), 1):
         for index, vector in enumerate(vectors):
             dt = anchor + timedelta(microseconds=(stmp - base_stmp) + index * step_us)
             # GPMF reports this camera's raw order as ZXY. Expose canonical XYZ.
             if len(vector) == 3:
                 vector = [vector[1], vector[2], vector[0]]
             samples.append((dt, (vector[0], vector[1], vector[2])))
+        reporter(block_index)
+    reporter(len(blocks), force=True)
     samples.sort(key=lambda item: item[0])
     if any(b[0] <= a[0] for a, b in zip(samples, samples[1:])):
         return []
@@ -499,22 +529,24 @@ def _extract_gpmf_vector_samples(
 
 def extract_accelerometer_samples(
     records: list[dict[str, Any]],
+    progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, tuple[float, float, float]]]:
-    return _extract_gpmf_vector_samples(records, "ACCL")
+    return _extract_gpmf_vector_samples(records, "ACCL", progress_cb)
 
 
 def extract_gyroscope_samples(
     records: list[dict[str, Any]],
+    progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, tuple[float, float, float]]]:
-    return _extract_gpmf_vector_samples(records, "GYRO")
+    return _extract_gpmf_vector_samples(records, "GYRO", progress_cb)
 
 
 def extract_iso_samples(
-    records: list[dict[str, Any]]
+    records: list[dict[str, Any]], progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, int]]:
     """Extract ISO samples from ExifTool records."""
     records = ensure_records_list(records)
-    timed = _extract_gpmf_timed_samples(records, "ISO", _parse_iso_values)
+    timed = _extract_gpmf_timed_samples(records, "ISO", _parse_iso_values, progress_cb)
     if timed is not None:
         return timed
     samples: list[tuple[datetime, int]] = []
@@ -571,11 +603,11 @@ def extract_iso_samples(
 
 
 def extract_exposure_samples(
-    records: list[dict[str, Any]]
+    records: list[dict[str, Any]], progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, int]]:
     """Extract exposure time samples (denominator of '1/xxx') from ExifTool records."""
     records = ensure_records_list(records)
-    timed = _extract_gpmf_timed_samples(records, "SHUT", _parse_exposure_values)
+    timed = _extract_gpmf_timed_samples(records, "SHUT", _parse_exposure_values, progress_cb)
     if timed is not None:
         return timed
     samples: list[tuple[datetime, int]] = []
@@ -629,11 +661,11 @@ def extract_exposure_samples(
 
 
 def extract_temperature_samples(
-    records: list[dict[str, Any]]
+    records: list[dict[str, Any]], progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, int]]:
     """Extract camera temperature samples from ExifTool records."""
     records = ensure_records_list(records)
-    timed = _extract_gpmf_timed_samples(records, "TMPC", _parse_temperature_values)
+    timed = _extract_gpmf_timed_samples(records, "TMPC", _parse_temperature_values, progress_cb)
     if timed is not None:
         return timed
     samples: list[tuple[datetime, int]] = []
@@ -752,13 +784,14 @@ def extract_altitude_samples(
 
 
 def extract_track_samples(
-    records: list[dict[str, Any]]
+    records: list[dict[str, Any]], progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> list[tuple[datetime, float]]:
     """Extract track (GPS position) samples as cumulative distance in metres."""
     records = ensure_records_list(records)
     points: list[tuple[datetime, float, float]] = []
 
-    for rec in records:
+    reporter = _ProgressReporter(progress_cb, len(records))
+    for record_index, rec in enumerate(records, 1):
         flat = flatten_record(rec)
 
         for key, val in flat.items():
@@ -781,6 +814,8 @@ def extract_track_samples(
                 continue
 
             points.append((dt, lat, lon))
+        reporter(record_index)
+    reporter(len(records), force=True)
 
     points.sort(key=lambda x: x[0])
 
@@ -1095,6 +1130,8 @@ def _interpolate_step(
     times = [dt for dt, _ in samples]
     idx = bisect_right(times, target_dt) - 1
     if idx < 0:
+        if len(times) > 0 and (times[0] - target_dt).total_seconds() <= 120.0:
+            return samples[0][1]
         return None
     return samples[idx][1]
 

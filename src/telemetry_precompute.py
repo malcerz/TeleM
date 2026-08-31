@@ -19,10 +19,14 @@ from datetime import timezone
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Callable, Optional
 
 from src.indicators.registry import HARDCODED_KEYS
 from src.indicators.chart_builder import clip_chart_data_for_target
 from src.telemetry_heading import normalize_heading
+from src.telemetry_resolver import resolve_distance_samples
 
 
 # Sensible default units for known FIT field names (identical to the reference
@@ -125,11 +129,6 @@ class TelemetryFrameCache:
         for i, key in enumerate(st.dynamic_keys):
             unit, label = st.dynamic_meta[key]
             extra_indicators[key] = (rec.dynamic_vals[i], unit, label)
-        # ETAP 2E: lean widgets resolve ``lean_roll_{axis}`` (physical roll,
-        # deg) or ``slope`` (grade %) per frame.  Without this block the value
-        # fell through ``remaining_extra`` as a constant None -> the final AMD
-        # render kept the bike icon vertical while the GUI preview (live
-        # resolver) animated it.
         for i, key in enumerate(st.lean_keys):
             extra_indicators[key] = (
                 rec.lean_vals[i],
@@ -223,6 +222,8 @@ def _vectorize_step(
         i = idx[k]
         if i >= 0:
             out[k] = sample_vals[i]
+        elif len(sample_ts) > 0 and (sample_ts[0] - target_ts_arr[k]) <= 120.0:
+            out[k] = sample_vals[0]
     return out
 
 
@@ -364,11 +365,9 @@ def build_telemetry_cache(
     video_timeline: Optional[Any] = None,
     update_rate_step: int = 1,
     subtimer_dict: Optional[dict] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> TelemetryFrameCache:
     """Build the per-frame telemetry cache for an export (ETAP 8P-B Fast Builder).
-
-    Vectorized precomputation over the export timeline while strictly preserving
-    the exact same interpolation / resolver contracts.
 
     ``video_timeline`` (ETAP 4B): when present, the target-datetime grid is
     built via ``timeline.frame_to_absolute`` so each frame maps to the REAL
@@ -376,14 +375,36 @@ def build_telemetry_cache(
     between clips (only target frames of the final movie are generated).
     """
     t_start = time.perf_counter()
+    _progress_done = 0
+    _progress_total = max(1, total_frames + 13)
+    def _progress(label: str, units: int = 1) -> None:
+        nonlocal _progress_done
+        _progress_done += units
+        if progress_cb:
+            progress_cb(min(_progress_done, _progress_total), _progress_total, label)
 
     # 1. Timeline & Target datetimes
     t0_timeline = time.perf_counter()
+    timeline_total = max(1, total_frames * 4)
+    timeline_done = 0
+    timeline_report_step = max(1, timeline_total // 100)
+
+    def _timeline_tick() -> None:
+        nonlocal timeline_done
+        timeline_done += 1
+        if progress_cb and (
+            timeline_done % timeline_report_step == 0
+            or timeline_done == timeline_total
+        ):
+            progress_cb(timeline_done, timeline_total, "timeline")
+
+    if progress_cb:
+        progress_cb(0, timeline_total, "timeline")
     if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
-        target_dts = [
-            video_timeline.frame_to_absolute(i, target_fps, update_rate_step)
-            for i in range(total_frames)
-        ]
+        target_dts = []
+        for i in range(total_frames):
+            target_dts.append(video_timeline.frame_to_absolute(i, target_fps, update_rate_step))
+            _timeline_tick()
         # Degraded safety fallback for any frame without an absolute start
         # (e.g. continuous_fallback clip) — keep legacy linear mapping.
         target_dts = [
@@ -391,7 +412,10 @@ def build_telemetry_cache(
             for i, dt in enumerate(target_dts)
         ]
     else:
-        target_dts = [base_dt + timedelta(seconds=i / target_fps) for i in range(total_frames)]
+        target_dts = []
+        for i in range(total_frames):
+            target_dts.append(base_dt + timedelta(seconds=i / target_fps))
+            _timeline_tick()
     # Keep the cache timeline in naive UTC.  GUI anchors are often aware UTC,
     # while VideoTimeline's fallback is naive; mixing them breaks precompute
     # during real GUI exports.
@@ -400,14 +424,31 @@ def build_telemetry_cache(
         if dt is not None and dt.tzinfo is not None else dt
         for dt in target_dts
     ]
-    local_dts = [dt + timedelta(hours=tz_offset_hours) for dt in target_dts]
-    date_texts = [dt.strftime("%Y-%m-%d") for dt in local_dts]
-    time_texts = [dt.strftime("%H:%M:%S") for dt in local_dts]
+    for _ in target_dts:
+        _timeline_tick()
+    local_dts = []
+    date_texts = []
+    time_texts = []
+    for dt in target_dts:
+        local_dt = dt + timedelta(hours=tz_offset_hours)
+        local_dts.append(local_dt)
+        date_texts.append(local_dt.strftime("%Y-%m-%d"))
+        time_texts.append(local_dt.strftime("%H:%M:%S"))
+        _timeline_tick()
 
     ref_dt = base_dt.replace(tzinfo=None) if base_dt.tzinfo is not None else base_dt
-    target_dts_naive = [dt.replace(tzinfo=None) if dt.tzinfo is not None else dt for dt in target_dts]
-    target_ts_arr = np.array([(dt - ref_dt).total_seconds() for dt in target_dts_naive], dtype=np.float64)
+    target_dts_naive = []
+    target_ts_values = []
+    for dt in target_dts:
+        naive_dt = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+        target_dts_naive.append(naive_dt)
+        target_ts_values.append((naive_dt - ref_dt).total_seconds())
+        _timeline_tick()
+    target_ts_arr = np.array(target_ts_values, dtype=np.float64)
     t_timeline_ms = (time.perf_counter() - t0_timeline) * 1000.0
+    # Timeline has its own real unit stream above; keep the aggregate stage
+    # counter separate so it cannot emit a misleading 1/N reset afterward.
+    _progress("timeline complete")
 
     # 2. Metadata & Static configuration
     t0_static = time.perf_counter()
@@ -541,6 +582,7 @@ def build_telemetry_cache(
 
     gps_trk: list = gps_track or []
     t_static_ms = (time.perf_counter() - t0_static) * 1000.0
+    _progress("static configuration")
 
     # 3. Vectorized Linear Fields (Speed, Distance, Altitude)
     t0_linear = time.perf_counter()
@@ -570,7 +612,11 @@ def build_telemetry_cache(
         if field_type == "speed":
             arr = _vectorize_linear_speed(s_spd, target_dts, target_ts_arr, ref_dt)
         elif field_type == "dist":
-            arr = _vectorize_linear_distance(s_trk, target_dts, target_ts_arr, ref_dt)
+            distance_s = resolve_distance_samples(
+                src, gpmf_track=track_samples, fit_data=fit,
+                gpx_track=gpx_trk,
+            )
+            arr = _vectorize_linear_distance(distance_s, target_dts, target_ts_arr, ref_dt)
         else:
             arr = _vectorize_linear_altitude(s_alt, target_dts, target_ts_arr, ref_dt)
         source_cache[cache_key] = arr
@@ -591,15 +637,25 @@ def build_telemetry_cache(
         "speed_visual",
         ind_arrs.get("speed_text", get_source_linear("gpmf", "speed"))
     )
+    distance_ind = (
+        indicators.get("dist_visual")
+        or indicators.get("dist_text")
+        or indicators.get("fit_distance_text")
+        or {}
+    )
+    distance_src = distance_ind.get(
+        "source", "fit" if "fit_distance_text" in indicators else "gpmf"
+    )
     dist_arr = ind_arrs.get(
         "dist_visual",
-        ind_arrs.get("dist_text", get_source_linear("gpmf", "dist"))
+        ind_arrs.get("dist_text", get_source_linear(distance_src, "dist")),
     )
     alt_arr = ind_arrs.get(
         "alt_visual",
         ind_arrs.get("alt_text", get_source_linear("gpmf", "alt"))
     )
     t_linear_ms = (time.perf_counter() - t0_linear) * 1000.0
+    _progress("linear telemetry")
 
     # 4. GPMF Auxiliary Fields (ISO, Exposure, Temperature)
     t0_gpmf = time.perf_counter()
@@ -615,6 +671,7 @@ def build_telemetry_cache(
     exposure_arr = resolve_field_vectorized("exposure", "exposure_text", exposure_s)
     temp_arr = resolve_field_vectorized("temperature", "temp_text", temp_s)
     t_gpmf_ms = (time.perf_counter() - t0_gpmf) * 1000.0
+    _progress("GPMF fields")
 
     # 5. Standard Resolve Fields (Power, atemp, hr, cad, battery)
     t0_std = time.perf_counter()
@@ -644,6 +701,30 @@ def build_telemetry_cache(
         else:
             std_field_arrs.append([None] * total_frames)
     t_std_ms = (time.perf_counter() - t0_std) * 1000.0
+    _progress("standard fields")
+
+    # Heading is derived once per source and interpolated with circular
+    # semantics only when a future heading consumer is enabled in the layout.
+    t0_heading = time.perf_counter()
+    heading_arr: list[Optional[float]] = [None] * total_frames
+    map_heading_arr: list[Optional[float]] = [None] * total_frames
+    if "heading" in std_names:
+        def _heading_array(key: str) -> list[Optional[float]]:
+            heading_cfg = indicators.get(key, {})
+            heading_src = heading_cfg.get("source", "gpmf")
+            heading_samples = _resolve_cache_samples("heading", heading_src)
+            if heading_samples:
+                return _vectorize_heading(
+                    heading_samples, target_dts, target_ts_arr, ref_dt
+                )
+            if resolve_cache_value is not None:
+                return [
+                    resolve_cache_value("heading", heading_src, dt, key)
+                    for dt in target_dts
+                ]
+            return [None] * total_frames
+
+        heading_key = next((key for key in heading_keys if key != "track_map"), None)
 
     # Heading is derived once per source and interpolated with circular
     # semantics only when a future heading consumer is enabled in the layout.
@@ -672,6 +753,7 @@ def build_telemetry_cache(
         if "track_map" in heading_keys:
             map_heading_arr = _heading_array("track_map")
     t_heading_ms = (time.perf_counter() - t0_heading) * 1000.0
+    _progress("heading")
 
     # Slope is an already-derived, causal STEP stream.  No renderer performs
     # slope math; this stage only places the canonical field in the cache when
@@ -692,12 +774,13 @@ def build_telemetry_cache(
                 for dt in target_dts
             ]
     t_slope_ms = (time.perf_counter() - t0_slope) * 1000.0
+    _progress("slope")
 
     # 6. Active FIT Fields
     t0_fit = time.perf_counter()
     fit_field_arrs: list[list] = []
     for name in active_fit:
-        samples = _resolve_cache_samples(name, "fit")
+        samples = fit.get(name) or _resolve_cache_samples(name, "fit")
         if samples:
             if name in ("speed", "enhanced_speed"):
                 fit_field_arrs.append(_vectorize_linear_speed(samples, target_dts, target_ts_arr, ref_dt))
@@ -712,6 +795,7 @@ def build_telemetry_cache(
         else:
             fit_field_arrs.append([None] * total_frames)
     t_fit_ms = (time.perf_counter() - t0_fit) * 1000.0
+    _progress("FIT fields", 2)
 
     # 7. Dynamic IMU Fields
     t0_imu = time.perf_counter()
@@ -728,6 +812,7 @@ def build_telemetry_cache(
         else:
             dynamic_field_arrs.append([None] * total_frames)
     t_imu_ms = (time.perf_counter() - t0_imu) * 1000.0
+    _progress("IMU fields")
 
     # 7b. Lean consumers (ETAP 2E).  Mirrors the reference path exactly:
     #   source == "gyro"  -> value = interpolate_roll(precomputed roll timeline, t) [deg]
@@ -778,19 +863,25 @@ def build_telemetry_cache(
             else:
                 lean_field_arrs.append([None] * total_frames)
     t_lean_ms = (time.perf_counter() - t0_lean) * 1000.0
+    _progress("lean fields")
 
     # 8. Record Assembly
     t0_records = time.perf_counter()
-    start_dt_ref = (
-        start_dt_utc.astimezone(timezone.utc).replace(tzinfo=None)
-        if start_dt_utc is not None and start_dt_utc.tzinfo is not None
-        else start_dt_utc
-    )
     elapsed_secs_arr = [
-        max(0.0, (dt - start_dt_ref).total_seconds())
-        if start_dt_ref is not None else 0.0
-        for dt in target_dts
+        video_timeline.frame_to_activity_elapsed(
+            i * update_rate_step, target_fps
+        )
+        if video_timeline is not None and getattr(video_timeline, "clip_count", 0)
+        else (i * update_rate_step) / target_fps if target_fps > 0 else 0.0
+        for i in range(total_frames)
     ]
+    activity_start_dt = None
+    if fit_data:
+        fit_pts = fit_data.get("distance") or fit_data.get("speed") or fit_data.get("track")
+        if fit_pts:
+            activity_start_dt = fit_pts[0][0]
+    if activity_start_dt is None and gpx_track_samples:
+        activity_start_dt = gpx_track_samples[0][0]
 
     records: list[_FrameRec] = []
     num_std = len(std_field_arrs)
@@ -804,7 +895,14 @@ def build_telemetry_cache(
 
         dist_m = dist_arr[i]
         el_s = elapsed_secs_arr[i]
-        avg_spd = (dist_m / el_s) * 3.6 if (el_s > 0 and dist_m is not None and dist_m > 0) else 0.0
+        td = target_dts[i]
+        if activity_start_dt is not None and td is not None:
+            _act_sd = activity_start_dt.replace(tzinfo=None) if activity_start_dt.tzinfo is not None else activity_start_dt
+            _act_td = td.replace(tzinfo=None) if td.tzinfo is not None else td
+            act_el_s = max(0.0, (_act_td - _act_sd).total_seconds())
+        else:
+            act_el_s = el_s
+        avg_spd = (dist_m / act_el_s) * 3.6 if (act_el_s > 0 and dist_m is not None and dist_m > 0) else 0.0
         cur_pos = i / max(1, total_frames - 1) if total_frames > 1 else 0.0
 
         std_v = tuple(std_field_arrs[j][i] for j in range(num_std))
@@ -834,6 +932,8 @@ def build_telemetry_cache(
             avg_speed_kmh=avg_spd,
             target_dt=target_dts[i],
         ))
+        if progress_cb:
+            progress_cb(min(_progress_done + i + 1, _progress_total), _progress_total, "frame records")
     t_records_ms = (time.perf_counter() - t0_records) * 1000.0
 
     t_total_ms = (time.perf_counter() - t_start) * 1000.0

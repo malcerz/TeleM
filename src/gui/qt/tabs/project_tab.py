@@ -98,9 +98,6 @@ class ProjectTab(QWidget):
         s.sig_bboxes_ready.connect(self.video_preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.video_preview.on_duration_ready)
         s.sig_seek_position.connect(self.video_preview._on_seek_position)
-        s.sig_cut_region_added.connect(self.video_preview._on_cut_region_changed)
-        s.sig_cut_region_removed.connect(self.video_preview._on_cut_region_changed)
-        s.sig_cut_regions_cleared.connect(self.video_preview._on_cut_region_changed)
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z application.py).

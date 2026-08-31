@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import os
 import time
 import queue
+
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -127,12 +129,23 @@ class PreviewMixin:
             getattr(clip, "absolute_start_dt", None),
             clip,
         )
+        # Unify generation tracking & transition state for both MPV and QMedia
+        self._source_generation = getattr(self, "_source_generation", 0) + 1
+        self._source_transition_in_progress = True
+        self._expected_source_path = str(clip.path)
+
         if self.is_using_mpv():
             try:
+                self._mpv_pending_seek_s = float(local_time)
                 self.mpv_player.play(str(clip.path))
-                self.mpv_player.pause = True
+                # Set pause state matching current playback mode
+                if not self._playing:
+                    self.mpv_player.pause = True
+                else:
+                    self.mpv_player.pause = False
             except Exception as exc:
                 print(f"[MultiFile Preview] MPV source switch failed: {exc}", flush=True)
+                self._source_transition_in_progress = False
         elif _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
             try:
                 # QMediaPlayer loads asynchronously — record the target seek
@@ -143,8 +156,10 @@ class PreviewMixin:
                 )
             except Exception as exc:
                 print(f"[MultiFile Preview] QMedia source switch failed: {exc}", flush=True)
+                self._source_transition_in_progress = False
         self._active_preview_clip_index = clip_index
         return True
+
 
     def _start_compositing_worker(self) -> None:
         """Worker: odbiera PIL Image z kolejki i kompozytuje w tle."""
@@ -181,6 +196,14 @@ class PreviewMixin:
             if self._frame_counter % self._composite_every_n != 0:
                 return
 
+        # FIX D (early): discard all frames while a source switch is in flight.
+        # The old HEVC demuxer can keep delivering decoded frames after
+        # setSource() is called; accepting them would feed stale position()
+        # values into _local_to_global and produce garbage global timestamps
+        # (root cause of the 84:59 display regression).
+        if getattr(self, "_source_transition_in_progress", False):
+            return
+
         bt = BenchmarkTracker.get_instance()
         bt.start_timer("video_decode")
         try:
@@ -203,6 +226,43 @@ class PreviewMixin:
             # QMediaPlayer reports the LOCAL position of the active clip;
             # map it back to the GLOBAL project axis (ETAP 4A).
             local_ts = self.media_player.position() / 1000.0
+
+            # FIX D: secondary guards against stale position() values that
+            # slip through after the transition flag is cleared:
+            # (a) Bilateral clip-duration check: local_ts must not exceed the
+            #     canonical clip duration by more than 1 s.  The old decoder
+            #     can briefly report its last-known position which may equal
+            #     the GLOBAL start of the new clip (e.g. 2549 s for clip 2),
+            #     yielding a bogus global_ts = 2*global_start ≈ 5098 s = 84:58.
+            # (b) Source path identity: the player source must match the clip
+            #     we expect to be decoding.
+            _idx_d = getattr(self, "_active_preview_clip_index", None)
+            _tl_d = getattr(self, "video_timeline", None)
+            if _tl_d is not None and _idx_d is not None and 0 <= _idx_d < _tl_d.clip_count:
+                _clip_d = _tl_d.clips[_idx_d]
+                if local_ts > _clip_d.duration_s + 1.0:
+                    import os as _os_d
+                    if _os_d.environ.get("TELEM_MULTIFILE_DEBUG", "0") == "1":
+                        print(
+                            f"[MFPreview] frame DISCARD stale pos "
+                            f"local_ts={local_ts:.3f}s "
+                            f"clip_dur={_clip_d.duration_s:.3f}s idx={_idx_d}",
+                            flush=True,
+                        )
+                    return
+                _exp_path = getattr(self, "_expected_source_path", None)
+                if _exp_path is not None:
+                    try:
+                        import os as _os_d2
+                        _act = self.media_player.source().toLocalFile()
+                        if _act and (
+                            _os_d2.path.normcase(_os_d2.path.abspath(_act))
+                            != _os_d2.path.normcase(_os_d2.path.abspath(_exp_path))
+                        ):
+                            return  # frame from wrong source
+                    except Exception:
+                        pass
+
             global_ts = self._local_to_global(local_ts)
             self.last_preview_ts = global_ts
 
@@ -215,23 +275,115 @@ class PreviewMixin:
         finally:
             bt.stop_timer("video_decode")
 
-    def _on_media_status_changed(self, status: Any) -> None:
-        """Apply a pending seek after QMediaPlayer finishes loading a source.
+    def _on_media_status_changed(self, status: Any) -> None:  # noqa: C901
+        """Handle QMediaPlayer status changes for multi-file source switching.
 
-        Needed because ``setPosition`` right after ``setSource`` may be ignored
-        until the new media is loaded (ETAP 4A — no seek race).
+        On ``LoadedMedia``/``BufferedMedia``: apply the pending seek that was
+        recorded before ``setSource()`` was called and clear the transition
+        flag (FIX B).
+
+        On ``EndOfMedia``: apply a five-condition compound guard (FIX C) before
+        advancing to the next clip:
+
+        1. No source transition is in progress (``_source_transition_in_progress``
+           is False) — setSource() was called very recently; the event is stale.
+        2. EOF has not already been consumed for the current
+           ``_source_generation`` (idempotency guard).
+        3. ``_active_preview_clip_index`` is the expected clip index (sanity).
+        4. ``media_player.source()`` matches ``_expected_source_path`` (identity
+           guard — frame from wrong source cannot trigger clip advance).
+        5. ``media_player.position()`` lies within ±1000 ms of the canonical
+           clip duration from VideoTimeline (bilateral window guard — rejects
+           both too-early spurious EOFs and stale old-decoder positions that
+           happen to be >= clip_dur because the old clip was longer).
+
+        Only when ALL five conditions are met is the EOF consumed and
+        ``_on_media_end()`` deferred via ``QTimer.singleShot``.
         """
         try:
+            import os as _os_c
             from PySide6.QtMultimedia import QMediaPlayer as _QMP
+            _dbg = _os_c.environ.get("TELEM_MULTIFILE_DEBUG", "0") == "1"
+
             if status in (_QMP.MediaStatus.LoadedMedia, _QMP.MediaStatus.BufferedMedia):
+                # FIX B: new source confirmed loaded — clear transition flag so
+                # frames and subsequent EndOfMedia events are processed normally.
+                self._source_transition_in_progress = False
                 pending = getattr(self, "_pending_seek_ms", None)
                 if pending is not None:
                     self.media_player.setPosition(int(pending))
                     self._pending_seek_ms = None
-                    if not self._playing:
+                    # After setSource(), QMediaPlayer is in Stopped state.
+                    # Resume play() if the project is in playback mode.
+                    if self._playing:
                         self.media_player.play()
+
             elif status == _QMP.MediaStatus.EndOfMedia:
-                self._on_media_end()
+                # ── FIX C: Compound guard — all five conditions required ───
+                cur_gen = getattr(self, "_source_generation", 0)
+                cur_idx = getattr(self, "_active_preview_clip_index", None)
+                timeline = getattr(self, "video_timeline", None)
+
+                def _reject(reason: str) -> None:
+                    if _dbg:
+                        print(
+                            f"[MFPreview] EOF REJECTED ({reason}) "
+                            f"gen={cur_gen} idx={cur_idx}",
+                            flush=True,
+                        )
+
+                # Guard 1: transition in progress
+                if getattr(self, "_source_transition_in_progress", False):
+                    _reject("transition_in_progress")
+                    return
+
+                # Guard 2: already consumed for this generation (idempotency)
+                if getattr(self, "_eof_consumed_for_generation", -1) == cur_gen:
+                    _reject("already_consumed")
+                    return
+
+                # Guards 3–5 require a known clip from the timeline
+                if timeline is not None and cur_idx is not None and 0 <= cur_idx < timeline.clip_count:
+                    clip = timeline.clips[cur_idx]
+
+                    # Guard 4: source path identity
+                    exp_path = getattr(self, "_expected_source_path", None)
+                    if exp_path is not None:
+                        try:
+                            act_path = self.media_player.source().toLocalFile()
+                            if act_path and (
+                                _os_c.path.normcase(_os_c.path.abspath(act_path))
+                                != _os_c.path.normcase(_os_c.path.abspath(exp_path))
+                            ):
+                                _reject(f"source_mismatch act={act_path}")
+                                return
+                        except Exception:
+                            pass
+
+                    # Guard 5: bilateral ±1000 ms window around canonical duration
+                    # Uses VideoTimeline duration (frame-count based), NOT
+                    # player.duration() (container-based, may differ by >1 s).
+                    canonical_dur_ms = int(clip.duration_s * 1000)
+                    player_pos_ms = self.media_player.position()
+                    epsilon_ms = 1000
+                    if abs(player_pos_ms - canonical_dur_ms) > epsilon_ms:
+                        _reject(
+                            f"position_outside_window "
+                            f"pos={player_pos_ms}ms "
+                            f"canonical={canonical_dur_ms}ms "
+                            f"window=±{epsilon_ms}ms"
+                        )
+                        return
+
+                # All guards passed — consume this generation's EOF
+                self._eof_consumed_for_generation = cur_gen
+                if _dbg:
+                    print(
+                        f"[MFPreview] EOF ACCEPTED gen={cur_gen} idx={cur_idx}",
+                        flush=True,
+                    )
+                QTimer.singleShot(0, self._on_media_end)
+
         except Exception as exc:
             print(f"[MultiFile Preview] mediaStatusChanged: {exc}", flush=True)
 
@@ -245,15 +397,57 @@ class PreviewMixin:
         self.last_preview_ts = seek_seconds
         self._render_preview(seek_seconds)
 
+    def set_preview_widget(self, widget: object) -> None:
+        """Zapamiętuje instancję widgetu VideoPreview."""
+        self.video_preview_widget = widget
+
+    def refresh_preview_geometry_and_hud(self, force: bool = False) -> None:
+        """Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render."""
+        preview_widget = getattr(self, "video_preview_widget", None)
+        if preview_widget is not None and hasattr(preview_widget, "get_physical_video_rect"):
+            if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
+                prect = preview_widget.get_physical_video_rect()
+                dpr = preview_widget.get_dpr()
+                if prect.width() > 10 and prect.height() > 10:
+                    self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
+                    return
+        if getattr(self, "video_path", None) and getattr(self, "_preview_target_w", None) and getattr(self, "_preview_target_h", None):
+            self._render_preview()
+
+    def set_preview_target_size(self, w: int, h: int, dpr: float = 1.0) -> None:
+        """Ustawia docelowy fizyczny rozmiar podglądu 1:1 z geometrią obszaru wideo (DPI-aware)."""
+        w = max(10, int(w))
+        h = max(10, int(h))
+        cur_w = getattr(self, "_preview_target_w", None)
+        cur_h = getattr(self, "_preview_target_h", None)
+        cur_dpr = getattr(self, "_preview_dpr", 1.0)
+        size_changed = (cur_w != w or cur_h != h or abs(cur_dpr - dpr) > 1e-4)
+        if size_changed:
+            old_target = f"{cur_w}x{cur_h}@{cur_dpr:.2f}" if cur_w else "None"
+            self._preview_target_w = w
+            self._preview_target_h = h
+            self._preview_dpr = dpr
+            new_target = f"{w}x{h}@{dpr:.2f}"
+            # Invalidate cached render buffers/charts when preview size changes
+            self._chart_data_cache = None
+            if os.environ.get("TELEM_PREVIEW_DEBUG") or os.environ.get("TELEM_RENDER_DEBUG"):
+                print(f"[PreviewInit] event=geometry_changed old_target={old_target} new_target={new_target} rerender={not getattr(self, '_playing', False) and bool(getattr(self, 'video_path', None))}", flush=True)
+            if not getattr(self, "_playing", False) and getattr(self, "video_path", None):
+                self._render_preview()
+
+
+
     def _scale_qimg_to_preview(self, qimg: QImage) -> QImage:
         """Skaluje QImage do `_preview_target_w` (zachowując proporcje)."""
         src_w, src_h = qimg.width(), qimg.height()
-        if src_w <= self._preview_target_w:
+        target_w = getattr(self, "_preview_target_w", 960)
+        target_h = getattr(self, "_preview_target_h", None)
+        if target_h is None or target_h <= 0:
+            target_h = max(1, int(src_h * target_w / src_w))
+        if src_w == target_w and src_h == target_h:
             return qimg  # już wystarczająco małe
-        ratio = self._preview_target_w / src_w
-        preview_h = max(1, int(src_h * ratio))
         return qimg.scaled(
-            self._preview_target_w, preview_h,
+            target_w, target_h,
             Qt.KeepAspectRatio,
             Qt.FastTransformation,
         )
@@ -365,17 +559,20 @@ class PreviewMixin:
             clip = res["clip"]
             target_dt = res["absolute_dt"]
 
-            w = self.layout.get("width", 1280)
-            h = self.layout.get("height", 720)
-            target_h = int(self._preview_target_w * h / w) if w > 0 else 720
+            target_w = getattr(self, "_preview_target_w", 960)
+            target_h = getattr(self, "_preview_target_h", None)
+            if target_h is None or target_h <= 0:
+                vw = getattr(self, "video_width", 0) or (self.video_info.get("width", 0) if isinstance(getattr(self, "video_info", None), dict) else 0) or self.layout.get("width", 16) or 16
+                vh = getattr(self, "video_height", 0) or (self.video_info.get("height", 0) if isinstance(getattr(self, "video_info", None), dict) else 0) or self.layout.get("height", 9) or 9
+                target_h = max(1, int(round(target_w * vh / vw))) if vw > 0 else 540
 
             if self.is_using_mpv():
-                self.src_img = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                self.src_img = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
                 self.last_src_pil = self.src_img
                 if seek_seconds is not None:
                     self.last_preview_ts = global_time
             elif self._preview_mode == "gpu_video":
-                self.src_img = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                self.src_img = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
                 self.last_src_pil = self.src_img
                 if seek_seconds is not None:
                     self.last_preview_ts = global_time
@@ -411,7 +608,7 @@ class PreviewMixin:
                                 # No frame yet — create placeholder
                                 self.src_img = Image.new(
                                     "RGBA",
-                                    (self._preview_target_w, target_h),
+                                    (target_w, target_h),
                                     (0, 0, 0, 0),
                                 )
                                 self.last_src_pil = self.src_img
@@ -424,15 +621,18 @@ class PreviewMixin:
                                 self.video_paths or [self.video_path], global_time,
                                 ffmpeg_exe=self.ffmpeg_exe or "ffmpeg",
                                 ffprobe_exe=self.ffprobe_exe or "ffprobe",
-                                target_w=self._preview_target_w,
+                                target_w=target_w,
                                 preferred_encoder=self.ui.render_tab.cmb_encoder.currentText() if getattr(self, "ui", None) and getattr(self.ui, "render_tab", None) else ""
                             )
                             if frame:
+                                if frame.size != (target_w, target_h):
+                                    frame = frame.resize((target_w, target_h), Image.LANCZOS)
                                 self.src_img = frame.convert("RGBA")
                                 self.last_src_pil = self.src_img
                                 self.last_preview_ts = global_time
                 elif self.last_src_pil is not None:
                     self.src_img = self.last_src_pil
+
 
             try:
                 src_w, src_h = self.src_img.size
@@ -622,6 +822,7 @@ class PreviewMixin:
 
                 bt.start_timer("frame_conversion")
                 try:
+                    dpr = getattr(self, "_preview_dpr", 1.0)
                     # Konwertuj PIL Image → QImage (thread-safe, GUI wątek zrobi QPixmap)
                     if self.is_using_mpv():
                         img_rgba = preview.convert("RGBA")
@@ -630,6 +831,8 @@ class PreviewMixin:
                             data, img_rgba.width, img_rgba.height,
                             img_rgba.width * 4, QImage.Format_RGBA8888,
                         )
+                        if dpr > 0:
+                            qimg.setDevicePixelRatio(dpr)
                         qimg.nd = data
                     else:
                         data = preview.tobytes("raw", "RGBA")
@@ -637,7 +840,10 @@ class PreviewMixin:
                             data, preview.width, preview.height,
                             preview.width * 4, QImage.Format_RGBA8888,
                         )
+                        if dpr > 0:
+                            qimg.setDevicePixelRatio(dpr)
                         qimg.nd = data
+
                 finally:
                     bt.stop_timer("frame_conversion")
 

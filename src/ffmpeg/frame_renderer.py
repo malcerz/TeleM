@@ -20,6 +20,7 @@ from src.telemetry_extract import (
     interpolate_temperature,
 )
 from src.ffmpeg.worker_cache import WORKER_CACHE, _resolve_cache_value
+from src.telemetry_resolver import resolve_distance_samples, distance_max_m
 
 
 def _direct_region_members(layout: dict[str, Any], hud_regions: list[tuple[int, int, int, int, int, int]]) -> list[set[str]] | None:
@@ -156,6 +157,7 @@ def render_overlay_frame(
             chart_data=chart_data,
             resolve_cache_value=_resolve_cache_value,
             _range_cache=WORKER_CACHE.get("_prep_cache"),
+            project_elapsed_s=sample_t,
         )
 
     hud_regions = WORKER_CACHE.get("hud_regions")
@@ -347,7 +349,9 @@ def render_overlay_job(job: tuple) -> int:
         gpx_trk = WORKER_CACHE.get("gpx_track_samples", [])
         gpx_alt = WORKER_CACHE.get("gpx_alt_samples", [])
         fit_spd = WORKER_CACHE.get("fit_data", {}).get("speed", [])
-        fit_trk = WORKER_CACHE.get("fit_data", {}).get("track", [])
+        fit_trk = resolve_distance_samples(
+            "fit", fit_data=WORKER_CACHE.get("fit_data", {})
+        )
         fit_alt = WORKER_CACHE.get("fit_data", {}).get("alt", [])
         if src == "gpx":
             spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
@@ -376,18 +380,41 @@ def render_overlay_job(job: tuple) -> int:
     battery_value = _resolve_cache_value("battery", _source_for("battery_text"), current_dt_utc, "battery_text")
 
     speed_value = indicator_values.get("speed_visual", interpolate_speed(speed_samples, current_dt_utc))
-    distance_m = indicator_values.get("dist_visual", interpolate_distance(track_samples, current_dt_utc))
+    distance_ind = (
+        layout["indicators"].get("dist_visual")
+        or layout["indicators"].get("dist_text")
+        or layout["indicators"].get("fit_distance_text")
+        or {}
+    )
+    distance_src = distance_ind.get(
+        "source", "fit" if "fit_distance_text" in layout["indicators"] else "gpmf"
+    )
+    distance_stream = resolve_distance_samples(
+        distance_src,
+        gpmf_track=track_samples,
+        fit_data=WORKER_CACHE.get("fit_data", {}),
+        gpx_track=WORKER_CACHE.get("gpx_track_samples", []),
+    )
+    distance_m = indicator_values.get(
+        "dist_visual",
+        indicator_values.get(
+            "dist_text",
+            interpolate_distance(distance_stream, current_dt_utc) if distance_stream else None,
+        ),
+    )
     alt_value = indicator_values.get("alt_visual", interpolate_altitude(alt_samples, current_dt_utc))
 
-    dist_src = layout["indicators"].get("dist_visual", {}).get("source", "gpmf")
+    dist_src = distance_src
     if dist_src == "gpx":
         gpx_trk = WORKER_CACHE.get("gpx_track_samples", [])
         if gpx_trk:
-            max_distance_m = gpx_trk[-1][1]
+            max_distance_m = distance_max_m(gpx_trk)
     elif dist_src == "fit":
-        fit_trk = WORKER_CACHE.get("fit_data", {}).get("track", [])
+        fit_trk = resolve_distance_samples(
+            "fit", fit_data=WORKER_CACHE.get("fit_data", {})
+        )
         if fit_trk:
-            max_distance_m = fit_trk[-1][1]
+            max_distance_m = distance_max_m(fit_trk)
 
     max_speed_kmh: Optional[float] = None
     spd_src = layout["indicators"].get("speed_visual", {}).get("source", "gpmf")

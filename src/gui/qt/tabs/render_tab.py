@@ -3,7 +3,7 @@
 Układ:
 - LEWO: HUD Preview (podgląd samej nakładki, czarne tło, bez filmu); gdy
   zakładka nie renderuje, w tym miejscu widoczny jest współdzielony podgląd
-  wideo (do wyboru zakresu IN/OUT).
+  wideo; zakres eksportu ustawia osobny pasek IN/OUT poniżej.
 - PRAWO: Ustawienia eksportu + przycisk [ EKSPORTUJ ] + Anuluj.
 - DÓŁ: rzeczywisty pasek postępu + statystyki (Frame/%/FPS/Elapsed/ETA/Status).
 
@@ -30,6 +30,7 @@ from PIL import Image
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.video_preview import VideoPreview, preview_aspect_size
+from src.telemetry_resolver import build_activity_range_cache
 
 
 class RenderTab(QWidget):
@@ -107,7 +108,7 @@ class RenderTab(QWidget):
         self.hud_preview_label.setVisible(False)
         left_layout.addWidget(self.hud_preview_label, 0, Qt.AlignHCenter)
 
-        # Współdzielony podgląd wideo (zakres IN/OUT — tryb idle)
+        # Współdzielony, neutralny podgląd wideo (tryb idle)
         self.preview_slot = QWidget()
         self.preview_slot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.preview_slot_layout = QVBoxLayout(self.preview_slot)
@@ -313,9 +314,6 @@ class RenderTab(QWidget):
         s.sig_bboxes_ready.connect(self.video_preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.video_preview.on_duration_ready)
         s.sig_seek_position.connect(self.video_preview._on_seek_position)
-        s.sig_cut_region_added.connect(self.video_preview._on_cut_region_changed)
-        s.sig_cut_region_removed.connect(self.video_preview._on_cut_region_changed)
-        s.sig_cut_regions_cleared.connect(self.video_preview._on_cut_region_changed)
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z MainWindow)."""
@@ -342,9 +340,9 @@ class RenderTab(QWidget):
         return float(getattr(self._controller, "video_duration_s", 0.0) or 0.0)
 
     def _current_orig_pos(self) -> float:
-        """Aktualna pozycja odtwarzania w oryginalnym czasie (po cięciach)."""
+        """Aktualna pozycja źródłowa z neutralnego podglądu Export."""
         sb = self.video_preview.seek_bar
-        return sb.eff_to_orig(sb.get_position())
+        return sb.get_position()
 
     def _on_set_in(self) -> None:
         """Ustaw punkt IN na aktualnej pozycji (ucina wszystko przed IN)."""
@@ -534,6 +532,26 @@ class RenderTab(QWidget):
             isinstance(hud_state, dict) and hud_state.get("phase") == "finalize"
         ):
             return
+        if hud_state is not None and isinstance(hud_state, dict) and "global_pct" in hud_state:
+            overall = max(self._render_target, float(hud_state.get("global_pct", 0.0)))
+            self._render_target = min(99.9, overall)
+            phase = hud_state.get("phase")
+            status = str(hud_state.get("label", "Renderowanie..."))
+            if phase == "render":
+                self._render_total = total or self._render_total
+                item_label = "Frame"
+            else:
+                completed = hud_state.get("work_done", completed)
+                total = hud_state.get("work_total", total)
+                item_label = "HUD"
+            self._set_stats(completed, total, elapsed, fps, status, item_label=item_label)
+            if phase == "render" and "ts" in hud_state and self.chk_hud_preview.isChecked():
+                self._hud_ts = hud_state.get("ts")
+                now = time.monotonic()
+                if now - self._last_preview_time >= 0.2:
+                    self._last_preview_time = now
+                    self._trigger_async_preview(self._hud_ts)
+            return
         if hud_state is not None and isinstance(hud_state, dict) and "phase" in hud_state:
             self._on_render_phase(hud_state, elapsed)
             return
@@ -592,7 +610,8 @@ class RenderTab(QWidget):
         self.progress.setValue(int(round(self._render_display)))
 
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
-                   status: str, final_eta: str | None = None) -> None:
+                   status: str, final_eta: str | None = None,
+                   item_label: str = "Frame") -> None:
         total = max(total, 0)
         if total and completed >= 0:
             pct = (completed / total) * 100.0
@@ -613,7 +632,7 @@ class RenderTab(QWidget):
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
-            f"Frame: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
+            f"{item_label}: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
             f"   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
             f"   |   {status}"
         )
@@ -688,40 +707,16 @@ class RenderTab(QWidget):
         if telemetry is None:
             self._hud_prepare_cache = {}
             return
-        layout = getattr(ctrl, "layout", {}) or {}
-        indic = layout.get("indicators", {})
-        spd = list(telemetry.speed_samples or [])
-        trk = list(telemetry.track_samples or [])
-        alt = list(telemetry.alt_samples or [])
-        gpx_spd = list(telemetry.gpx_speed_samples or [])
-        gpx_trk = list(telemetry.gpx_track_samples or [])
-        gpx_alt = list(telemetry.gpx_alt_samples or [])
-        fit_data = dict(telemetry.fit_data or {})
-        max_dist = None
-        src = indic.get("dist_visual", {}).get("source", "gpmf")
-        cand = (gpx_trk or trk) if src == "gpx" else (fit_data.get("track", []) or trk if src == "fit" else trk)
-        if cand:
-            max_dist = cand[-1][1]
-        max_spd = None
-        src = indic.get("speed_visual", {}).get("source", "gpmf")
-        cand = (gpx_spd or spd) if src == "gpx" else (fit_data.get("speed", []) or spd if src == "fit" else spd)
-        if cand:
-            vals = [s for _, s in cand]
-            if vals:
-                max_spd = max(vals)
-        min_a = max_a = None
-        src = indic.get("alt_visual", {}).get("source", "gpmf")
-        cand = (gpx_alt or alt) if src == "gpx" else (fit_data.get("alt", []) or alt if src == "fit" else alt)
-        if cand:
-            alts = [a for _, a in cand]
-            if alts:
-                min_a, max_a = min(alts), max(alts)
-        self._hud_prepare_cache = {
-            "max_distance_m": max_dist,
-            "max_speed_kmh": max_spd,
-            "min_alt": min_a,
-            "max_alt": max_a,
-        }
+        self._hud_prepare_cache = build_activity_range_cache(
+            getattr(ctrl, "layout", {}) or {},
+            speed_samples=telemetry.speed_samples,
+            track_samples=telemetry.track_samples,
+            alt_samples=telemetry.alt_samples,
+            gpx_speed_samples=telemetry.gpx_speed_samples,
+            gpx_track_samples=telemetry.gpx_track_samples,
+            gpx_alt_samples=telemetry.gpx_alt_samples,
+            fit_data=telemetry.fit_data,
+        )
 
     def _on_export_preview_ready(self, qimg: QImage) -> None:
         """Odbiera wyrenderowaną klatkę podglądu w głównym wątku GUI."""
@@ -863,6 +858,7 @@ class RenderTab(QWidget):
                     k, dt, source=src, indicator_key=indicator_key
                 ),
                 _range_cache=self._hud_prepare_cache,
+                project_elapsed_s=ts,
             )
             if not overlay_data:
                 return None

@@ -27,6 +27,7 @@ import subprocess
 from ctypes import POINTER, WINFUNCTYPE, byref, c_char_p, c_size_t, c_uint, c_ulong, c_ulonglong, c_void_p, c_wchar
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+from src.render_logging import render_print
 
 # ── Backend / vendor identity (adapted to the existing string-code system) ──
 BACKEND_AUTO = "auto"
@@ -101,7 +102,7 @@ class DXGI_ADAPTER_DESC1(ctypes.Structure):
 
 
 def _default_log(msg: str) -> None:
-    print(msg, flush=True)
+    render_print(msg, flush=True)
 
 
 def _release_com(ptr: Any) -> None:

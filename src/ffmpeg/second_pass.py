@@ -21,6 +21,9 @@ from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.frame_renderer import render_overlay_job
 from src.ffmpeg.command_builder import scale_filter_for_resolution, append_bitrate_args, RESOLUTION_MAP
 from src.ffmpeg.streaming import run_ffmpeg_with_progress
+from src.render_logging import render_print
+
+print = render_print
 
 
 def generate_overlay_sequence(

@@ -404,9 +404,9 @@ class TestBuildPassesDuration:
         assert captured.get("duration_s") == pytest.approx(60.0)
         assert tl.clips[0].timestamp_source == TIMESTAMP_SOURCE_GPMF_GPS9
 
-    def test_build_clip0_uses_project_start_fast_path(self, monkeypatch):
-        # With base_dt, clip 0 must NOT re-extract GPMF (it is re-anchored to
-        # the project start_dt_utc) -> resolver is skipped.
+    def test_build_clip0_keeps_reliable_source_timestamp(self, monkeypatch):
+        # base_dt is only a fallback. A reliable source-local GPMF timestamp
+        # remains authoritative for the first clip too.
         captured = {"calls": 0}
 
         def fake_probe(ffprobe_exe, path, default_fps=30.0):
@@ -427,8 +427,8 @@ class TestBuildPassesDuration:
             ["C:/videos/x.MP4"], ffprobe_exe="ffprobe",
             base_dt=_dt("10:00:00"), default_fps=30.0,
         )
-        assert captured["calls"] == 0
-        assert tl.clips[0].timestamp_source == "project_start_anchor"
+        assert captured["calls"] == 1
+        assert tl.clips[0].timestamp_source == TIMESTAMP_SOURCE_GPMF_GPS9
         assert tl.clips[0].absolute_start_dt == _dt("10:00:00")
         assert tl.global_to_absolute(0.0) == _dt("10:00:00")
 

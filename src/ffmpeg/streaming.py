@@ -38,6 +38,10 @@ from src.ffmpeg.frame_renderer import render_frame_bytes_job
 from src.benchmark import BenchmarkTracker
 from src.ffmpeg.pipeline_audit import PipelineAuditRecorder, env_enabled
 from src.multifile import timeline_absolute_end
+from src.render_logging import render_print
+from src.telemetry_resolver import resolve_distance_samples, distance_max_m
+
+print = render_print
 
 
 # ETAP 5B.6: the production layout with valid FIT battery/solar fields needs
@@ -841,7 +845,14 @@ def stream_overlay_to_ffmpeg(
     cut_regions = layout.get("cut_regions", [])
 
     generation_fps = target_fps / update_rate_step
-    total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+        output_frames = video_timeline.output_frame_count(target_fps)
+        total_overlay_frames = max(
+            1, math.ceil(output_frames / max(1, update_rate_step)),
+        )
+        duration_s = output_frames / target_fps
+    else:
+        total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
     _report_phase(on_render_progress, "prep", 0.05, "Przygotowywanie HUD...", time.time() - phase_t0)
 
     # ── ETAP 4B: multi-file render diagnostics (once per export) ──────────
@@ -952,13 +963,19 @@ def stream_overlay_to_ffmpeg(
     amd_native_multi_guard = False
     if encoder in ("amd", "amd_native") and is_multi_file:
         print(
-            "[MultiFile] AMD_NATIVE_D3D11 multi-file not yet supported "
-            "-> falling back to standard AMD/AMF pipeline",
+            "RENDER PATH: mode=multifile exporter=amd_native_exporter "
+            "decode=D3D11VA video_frame_path=GPU hud=amd_native "
+            "map=amd_native encode=AMF fallback_reason=none",
             flush=True,
         )
-        amd_native_multi_guard = True
 
     if encoder in ("amd", "amd_native") and not amd_native_multi_guard:
+        print(
+            "RENDER PATH: mode=single exporter=amd_native_exporter "
+            "decode=selected_native_mode video_frame_path=GPU "
+            "hud=amd_native map=amd_native encode=AMF fallback_reason=none",
+            flush=True,
+        )
         from src.ffmpeg.detection import detect_amd_compose_backend
         if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
             from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
@@ -1000,6 +1017,7 @@ def stream_overlay_to_ffmpeg(
                 on_render_progress=on_render_progress,
                 cancel_event=cancel_event,
                 active_process_holder=active_process_holder,
+                video_timeline=video_timeline,
             )
             if success:
                 return total_overlay_frames
@@ -1459,9 +1477,16 @@ def stream_overlay_to_ffmpeg(
                 
                 # Precompute static ranges
                 _range_cache = {}
-                _range_cache["max_distance_m"] = max_distance_m
-                
                 indic = layout.get("indicators", {})
+                dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
+                dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
+                distance_stream = resolve_distance_samples(
+                    dist_src,
+                    gpmf_track=track_samples,
+                    fit_data=fit_data,
+                    gpx_track=gpx_track_samples,
+                )
+                _range_cache["max_distance_m"] = distance_max_m(distance_stream)
                 spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
                 spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
                 if spd_src == "gpx":
@@ -1515,23 +1540,83 @@ def stream_overlay_to_ffmpeg(
                         return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
                     if src_name == "fit":
                         fit_d = fit_data or {}
+                spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
+                spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
+                if spd_src == "gpx":
+                    spd_for_range = gpx_speed_samples
+                elif spd_src == "fit":
+                    spd_for_range = fit_data.get("speed", []) if fit_data else []
+                else:
+                    spd_for_range = speed_samples
+                if spd_for_range:
+                    spd_vals = [s for _, s in spd_for_range]
+                    _range_cache["max_speed_kmh"] = max(spd_vals) if spd_vals else None
+                else:
+                    _range_cache["max_speed_kmh"] = None
+
+                alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
+                alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
+                if alt_src == "gpx":
+                    alt_for_range = gpx_alt_samples
+                elif alt_src == "fit":
+                    alt_for_range = fit_data.get("alt", []) if fit_data else []
+                else:
+                    alt_for_range = alt_samples
+                if alt_for_range:
+                    alts = [a for _, a in alt_for_range]
+                    _range_cache["min_alt"] = min(alts) if alts else None
+                    _range_cache["max_alt"] = max(alts) if alts else None
+                else:
+                    _range_cache["min_alt"] = None
+                    _range_cache["max_alt"] = None
+
+                duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
+                # ETAP 4B: with a multi-file timeline the telemetry/chart range
+                # is the REAL absolute end (max clip absolute_end), never
+                # start_dt_utc + project_duration (wrong with large gaps).
+                end_dt_utc = None
+                if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
+                    end_dt_utc = timeline_absolute_end(video_timeline)
+                if end_dt_utc is None and start_dt_utc and duration_s:
+                    end_dt_utc = start_dt_utc + timedelta(seconds=duration_s)
+                source_ranges = {}
+                if fit_data:
+                    all_fit_pts = [s for s in fit_data.values() if s]
+                    if all_fit_pts:
+                        source_ranges["fit"] = (
+                            min(s[0][0] for s in all_fit_pts),
+                            max(s[-1][0] for s in all_fit_pts),
+                        )
+
+                def _get_src_samples(src_name: str) -> tuple[list, list, list]:
+                    if src_name == "gpx":
+                        return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
+                    if src_name == "fit":
+                        fit_d = fit_data or {}
                         return (fit_d.get("speed", []), fit_d.get("track", []), fit_d.get("alt", []))
                     return (speed_samples or [], track_samples or [], alt_samples or [])
 
                 def _resolve_stream_samples(field_name: str, source: str = "fit", indicator_key: str | None = None) -> list:
                     if source == "fit":
                         fit_d = fit_data or {}
+                        if field_name == "distance":
+                            return resolve_distance_samples("fit", fit_data=fit_d)
                         aliases = {
                             "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
-                            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
-                            "battery": ("battery", "battery_soc"),
+                            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature", "garmin_temperature"),
+                            "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
+                            "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
+                            "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
+                            "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
                         }.get(field_name, (field_name,))
                         for name in aliases:
                             if fit_d.get(name):
                                 return list(fit_d[name])
                         return []
+
                     if source == "gpx":
                         gpx_map = {
+                            "distance": gpx_track_samples,
                             "speed": gpx_speed_samples, "alt": gpx_alt_samples, "altitude": gpx_alt_samples,
                             "dist": gpx_track_samples, "track": gpx_track_samples, "power": gpx_power_samples,
                             "atemp": gpx_atemp_samples, "hr": gpx_hr_samples, "cad": gpx_cad_samples,
@@ -1539,6 +1624,7 @@ def stream_overlay_to_ffmpeg(
                         return list(gpx_map.get(field_name, []) or [])
                     if source == "gpmf":
                         gpmf_map = {
+                            "distance": track_samples,
                             "speed": speed_samples, "alt": alt_samples, "altitude": alt_samples,
                             "dist": track_samples, "track": track_samples, "iso": iso_samples,
                             "exposure": exposure_samples, "temperature": temperature_samples,

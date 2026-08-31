@@ -9,9 +9,13 @@ stream that the overlay can display.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Mapping
+
+from src.render_logging import render_print
+
+print = render_print
 
 try:
     import fitparse
@@ -339,6 +343,85 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
                         break
 
         records.append(rec)
+
+    # 3. Discover device_status (message 104 / unknown_104) messages (Garmin Edge battery voltage, level, temperature)
+    GARMIN_EPOCH = datetime(1989, 12, 31, 0, 0, 0, tzinfo=timezone.utc)
+    dev_status_msgs = list(fitfile.get_messages("unknown_104")) + list(fitfile.get_messages("device_status"))
+    if dev_status_msgs:
+        field_metadata.setdefault("garmin_battery_voltage", {
+            "name": "garmin_battery_voltage",
+            "field_name": "garmin_battery_voltage",
+            "source": "fit",
+            "is_dev": False,
+            "display_name": "Garmin Battery Voltage",
+            "unit": "V",
+        })
+        field_metadata.setdefault("garmin_battery_percent", {
+            "name": "garmin_battery_percent",
+            "field_name": "garmin_battery_percent",
+            "source": "fit",
+            "is_dev": False,
+            "display_name": "Garmin Battery %",
+            "unit": "%",
+        })
+        field_metadata.setdefault("garmin_temperature", {
+            "name": "garmin_temperature",
+            "field_name": "garmin_temperature",
+            "source": "fit",
+            "is_dev": False,
+            "display_name": "Garmin Temperature",
+            "unit": "°C",
+        })
+
+    for msg in dev_status_msgs:
+        ts_val = None
+        v_val = None
+        pct_val = None
+        temp_val = None
+
+        for f in msg.fields:
+            fname = str(f.name)
+            fd = getattr(f, "field_def", None)
+            def_num = getattr(fd, "def_num", None)
+
+            if fname in ("timestamp", "unknown_253") or def_num == 253:
+                if isinstance(f.value, datetime):
+                    ts_val = f.value
+                elif isinstance(f.value, (int, float)):
+                    ts_val = GARMIN_EPOCH + timedelta(seconds=f.value)
+
+            elif fname in ("battery_voltage", "voltage", "unknown_0") or def_num == 0:
+                num = _try_float(f.value)
+                if num is not None:
+                    if num > 100.0:
+                        num = num / 1000.0
+                    v_val = num
+
+            elif fname in ("battery_level", "battery_percent", "battery_pct", "battery_soc", "battery", "unknown_2") or def_num == 2:
+                num = _try_float(f.value)
+                if num is not None:
+                    pct_val = num
+
+            elif fname in ("temperature", "device_temperature", "unknown_3") or def_num == 3:
+                num = _try_float(f.value)
+                if num is not None:
+                    temp_val = num
+
+        if ts_val is not None and (v_val is not None or pct_val is not None or temp_val is not None):
+            dt = (
+                ts_val.replace(tzinfo=timezone.utc)
+                if ts_val.tzinfo is None
+                else ts_val.astimezone(timezone.utc)
+            )
+            rec_dt = dt.replace(tzinfo=None)
+            dev_rec: RecordDict = {"timestamp": rec_dt}
+            if v_val is not None:
+                dev_rec["garmin_battery_voltage"] = v_val
+            if pct_val is not None:
+                dev_rec["garmin_battery_percent"] = pct_val
+            if temp_val is not None:
+                dev_rec["garmin_temperature"] = temp_val
+            records.append(dev_rec)
 
     if not records:
         print("[FIT] No 'record' messages found in FIT file.", flush=True)

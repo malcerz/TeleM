@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from src.render_logging import render_print
+
+print = render_print
+
 
 _GPX_EXT_NS: dict[str, str] = {
     'gpxtpx': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1',

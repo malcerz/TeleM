@@ -178,15 +178,35 @@ class PlaybackMixin:
         if self.is_using_mpv():
             # Switch source only when the active clip changed; seek MPV to the
             # LOCAL time of that clip (never the global project time).
-            self._preview_ensure_active_clip(
-                res["clip_index"], res["clip"], res["local_time"], seconds
+            target_local = float(res["local_time"])
+            switched = self._preview_ensure_active_clip(
+                res["clip_index"], res["clip"], target_local, seconds
             )
-            try:
-                self.mpv_player.time_pos = res["local_time"]
-                self._render_preview(seconds)
-            except Exception as e:
-                print(f"[MPV Seek Error] {e}")
+            if not switched:
+                if getattr(self, "_source_transition_in_progress", False):
+                    # Transition in flight: update target seek for when it finishes loading
+                    self._mpv_pending_seek_s = target_local
+                else:
+                    try:
+                        self.mpv_player.seek(target_local, reference="absolute")
+                        if not self._playing:
+                            self.mpv_player.pause = True
+                    except Exception as e:
+                        print(f"[MPV Seek Error] {e}")
+            else:
+                try:
+                    if hasattr(self.mpv_player, "wait_until_playing"):
+                        self.mpv_player.wait_until_playing(timeout=0.3)
+                        self.mpv_player.seek(target_local, reference="absolute")
+                        if not self._playing:
+                            self.mpv_player.pause = True
+                        self._source_transition_in_progress = False
+                        self._mpv_pending_seek_s = None
+                except Exception:
+                    pass
+            self._render_preview(seconds)
             return
+
 
         # QMediaPlayer seeking (source switch + local seek) is handled inside
         # _render_preview (hardware-accelerated via _on_video_frame callback).
@@ -239,60 +259,113 @@ class PlaybackMixin:
         if not self._playing or not self.is_using_mpv():
             return
         try:
-            # MPV reports the LOCAL position of the active clip.
-            local_pos = self.mpv_player.time_pos or 0.0
+            import os as _os
+            _dbg = _os.environ.get("TELEM_MULTIFILE_DEBUG", "0") == "1"
+
+            # ── 1. Handle in-flight source transitions ──
+            if getattr(self, "_source_transition_in_progress", False):
+                exp_path = getattr(self, "_expected_source_path", None)
+                act_path = getattr(self.mpv_player, "path", None) or getattr(self.mpv_player, "filename", None)
+                if (
+                    act_path and exp_path
+                    and _os.path.normcase(_os.path.abspath(act_path)) == _os.path.normcase(_os.path.abspath(exp_path))
+                ):
+                    pos = self.mpv_player.time_pos
+                    if pos is not None and not getattr(self.mpv_player, "idle_active", False):
+                        pending_s = getattr(self, "_mpv_pending_seek_s", None)
+                        if pending_s is not None and abs(pos - pending_s) > 0.05:
+                            try:
+                                self.mpv_player.seek(pending_s, reference="absolute")
+                            except Exception:
+                                pass
+                        self._mpv_pending_seek_s = None
+                        if self._playing:
+                            self.mpv_player.pause = False
+                        else:
+                            self.mpv_player.pause = True
+                        self._source_transition_in_progress = False
+                        if _dbg:
+                            print(f"[MPV-MULTI] Transition complete, active={act_path} pos={pos:.3f}s", flush=True)
+                return
+
+            # ── 2. Source identity verification ──
+            clip_idx = getattr(self, "_active_preview_clip_index", 0)
+            timeline = getattr(self, "video_timeline", None)
+            if timeline is not None and 0 <= clip_idx < timeline.clip_count:
+                clip = timeline.clips[clip_idx]
+                act_path = getattr(self.mpv_player, "path", None) or getattr(self.mpv_player, "filename", None)
+                if act_path:
+                    try:
+                        if _os.path.normcase(_os.path.abspath(act_path)) != _os.path.normcase(_os.path.abspath(str(clip.path))):
+                            # Stale tick from old source — discard
+                            return
+                    except Exception:
+                        pass
+
+            # ── 3. Read current local position & validate ──
+            local_pos = self.mpv_player.time_pos
+            if local_pos is None:
+                return
+
+            if timeline is not None and 0 <= clip_idx < timeline.clip_count:
+                clip = timeline.clips[clip_idx]
+                if local_pos > clip.duration_s + 1.0:
+                    # Stale decoder position exceeding clip bounds
+                    return
+
+                # ── 4. End-of-clip / EOF detection ──
+                is_eof = False
+                if getattr(self.mpv_player, "eof_reached", False):
+                    is_eof = True
+                elif getattr(self.mpv_player, "idle_active", False):
+                    is_eof = True
+                elif local_pos >= clip.duration_s - 0.08:
+                    is_eof = True
+
+                if is_eof:
+                    if clip_idx + 1 < timeline.clip_count:
+                        # Auto advance to next clip
+                        next_idx = clip_idx + 1
+                        next_clip = timeline.clips[next_idx]
+                        if _dbg:
+                            print(f"[MPV-MULTI] End of clip {clip_idx} ({clip.path.name}), advancing to clip {next_idx} ({next_clip.path.name})", flush=True)
+                        self._preview_ensure_active_clip(
+                            next_idx, next_clip, 0.0, next_clip.global_start_s
+                        )
+                        self.signals.sig_seek_position.emit(next_clip.global_start_s)
+                        self._render_preview(next_clip.global_start_s)
+                    else:
+                        # End of last clip = end of whole project
+                        if _dbg:
+                            print(f"[MPV-MULTI] End of project at clip {clip_idx}", flush=True)
+                        self._on_playback_stop()
+                        self.signals.sig_seek_position.emit(0.0)
+                        try:
+                            self.mpv_player.seek(0.0, reference="absolute")
+                        except Exception:
+                            pass
+                    return
+
             global_pos = self._local_to_global(local_pos)
 
-            # Przeskakuj regiony wycięte (on the GLOBAL axis)
+            # ── 5. Skip cut regions ──
             nxt = self._skip_cut_regions(global_pos)
             if abs(nxt - global_pos) > 0.1:
                 res = self._resolve_preview_time(nxt)
                 self._preview_ensure_active_clip(
                     res["clip_index"], res["clip"], res["local_time"], nxt
                 )
-                self.mpv_player.time_pos = res["local_time"]
+                try:
+                    self.mpv_player.seek(res["local_time"], reference="absolute")
+                except Exception:
+                    pass
                 global_pos = nxt
-
-            # Rozwiąż aktywny clip + local time.
-            res = self._resolve_preview_time(global_pos)
-            clip = res["clip"]
-            clip_idx = res["clip_index"]
-            local = res["local_time"]
-
-            if clip is not None and local >= clip.duration_s - 1e-3:
-                # Koniec bieżącego clipu.
-                timeline = getattr(self, "video_timeline", None)
-                if (
-                    timeline is not None and clip_idx is not None
-                    and clip_idx + 1 < timeline.clip_count
-                ):
-                    # Automatyczne przejście do następnego clipu (local=0),
-                    # globalna oś pozostaje ciągła.
-                    next_idx = clip_idx + 1
-                    next_clip = timeline.clips[next_idx]
-                    self._preview_ensure_active_clip(
-                        next_idx, next_clip, 0.0, next_clip.global_start_s
-                    )
-                    try:
-                        self.mpv_player.time_pos = 0.0
-                    except Exception:
-                        pass
-                    self.signals.sig_seek_position.emit(next_clip.global_start_s)
-                    self._render_preview(next_clip.global_start_s)
-                else:
-                    # Koniec ostatniego clipu = koniec całego projektu.
-                    self._on_playback_stop()
-                    self.signals.sig_seek_position.emit(0.0)
-                    try:
-                        self.mpv_player.time_pos = 0.0
-                    except Exception:
-                        pass
-                return
 
             self.signals.sig_seek_position.emit(global_pos)
             self._render_preview(global_pos)
         except Exception as e:
-            print(f"[MPV Tick Error] {e}")
+            print(f"[MPV Tick Error] {e}", flush=True)
+
 
     def _check_mpv_hwdec(self) -> None:
         """Verify that mpv is actually using hardware decoding.
@@ -368,7 +441,16 @@ class PlaybackMixin:
         If there is a next clip, switch to it (local=0) and continue; only the
         end of the LAST clip stops the whole project.  The GLOBAL axis remains
         continuous (no gap inserted).
+
+        FIX E: If a source transition is still in flight when this deferred
+        callback fires (transition_in_progress=True), re-defer by 50 ms.
+        This can happen when the QTimer.singleShot(0) from _on_media_status_changed
+        fires before the LoadedMedia event clears the transition flag.
         """
+        # Safety guard: transition still in flight — re-defer
+        if getattr(self, "_source_transition_in_progress", False):
+            QTimer.singleShot(50, self._on_media_end)
+            return
         if not self._playing:
             return
         idx = getattr(self, "_active_preview_clip_index", 0)

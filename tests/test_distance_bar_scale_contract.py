@@ -22,6 +22,7 @@ from PIL import Image
 from src.indicators.bar import _render_ruler, _fraction
 from src.indicators.compositor import compose_overlay
 from src.indicators.frame_data import prepare_overlay_frame_data
+from src.telemetry_resolver import resolve_distance_samples
 
 ROOT = Path(__file__).resolve().parents[1]
 FONT = r"C:\Windows\Fonts\arial.ttf"
@@ -203,6 +204,46 @@ def test_source_consistent_fit_gpmf_gpx():
     assert fd_gpmf["max_distance_m"] == pytest.approx(3000.0)   # z gpmf track
     fd_gpx = _frame_data_for_source("gpx")
     assert fd_gpx["max_distance_m"] == pytest.approx(4000.0)    # z gpx track
+
+
+def test_fit_recorded_distance_is_canonical_for_current_and_range():
+    """FIT distance and the bar range must use one activity-global stream."""
+    base_dt = datetime(2026, 8, 14, 9, 40, 16, tzinfo=timezone.utc)
+    fit_distance = [
+        (base_dt, 0.0),
+        (base_dt + __import__("datetime").timedelta(seconds=1), 14300.0),
+        (base_dt + __import__("datetime").timedelta(seconds=2), 24231.54),
+    ]
+    fit_data = {
+        "distance": fit_distance,
+        # Deliberately different GPS-derived cumulative track.
+        "track": [(t, value * 0.987) for t, value in fit_distance],
+    }
+    layout = {"indicators": {"dist_visual": {
+        "enabled": True, "form": "bar", "bar_style": "ruler",
+        "source": "fit", "min_val": 0.0, "max_val": 11.0,
+        "auto_scale": True, "unit": "km",
+    }}}
+    frame = prepare_overlay_frame_data(
+        layout=layout, target_dt=base_dt + __import__("datetime").timedelta(seconds=1),
+        tz_offset_hours=0.0, start_dt_utc=base_dt,
+        speed_samples=[], track_samples=[(base_dt, 1.0)], alt_samples=[],
+        fit_data=fit_data,
+        resolve_cache_value=lambda *args, **kwargs: None,
+    )
+    assert frame["distance_m"] == pytest.approx(14300.0)
+    assert frame["max_distance_m"] == pytest.approx(24231.54)
+    assert resolve_distance_samples("fit", fit_data=fit_data) == fit_distance
+
+
+def test_fit_distance_falls_back_to_gps_track_only_when_unusable():
+    base_dt = datetime(2026, 8, 14, 9, 40, 16, tzinfo=timezone.utc)
+    gps_track = [(base_dt, 0.0), (base_dt + __import__("datetime").timedelta(seconds=1), 7000.0)]
+    bad_recorded = [(base_dt, 0.0), (base_dt + __import__("datetime").timedelta(seconds=1), 6000.0),
+                   (base_dt + __import__("datetime").timedelta(seconds=2), 5000.0)]
+    assert resolve_distance_samples(
+        "fit", fit_data={"distance": bad_recorded, "track": gps_track}
+    ) == gps_track
 
 
 # ---------------------------------------------------------------------------

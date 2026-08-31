@@ -24,6 +24,7 @@ from src.indicators.chart_utils import (
     set_average_layer_cache_enabled,
     get_chart_static_alpha_bbox,
     generate_nice_time_ticks,
+    generate_nice_relative_time_ticks,
 )
 from src.indicators.helpers import (
     _STATIC_CACHE,
@@ -122,21 +123,7 @@ def _get_timestamp_gap_limit(timestamps) -> float | None:
 
 def _window_time_labels(duration_s: float) -> list[str]:
     """Return relative X-axis labels for the current moving window."""
-    duration_s = max(0.0, float(duration_s))
-
-    def fmt(seconds: float) -> str:
-        rounded = round(seconds)
-        if abs(seconds - rounded) < 0.05:
-            return str(int(rounded))
-        return f"{seconds:.1f}".rstrip("0").rstrip(".")
-
-    return [
-        f"-{fmt(duration_s)} s",
-        f"-{fmt(duration_s * 0.75)} s",
-        f"-{fmt(duration_s * 0.5)} s",
-        f"-{fmt(duration_s * 0.25)} s",
-        "0 s",
-    ]
+    return [label for _norm, label in generate_nice_relative_time_ticks(duration_s)]
 
 
 class ChartSplit:
@@ -469,6 +456,11 @@ def _render_chart_indicator(
         font_path=font_path,
         show_x_axis_values=show_x_axis_values,
         show_y_axis_values=show_y_axis_values,
+        # Chart structure follows the indicator's general font system.  The
+        # configurable label size remains available; otherwise use the same
+        # scaled font size as the indicator header/value.
+        axis_font_size=label_fs_px or fs,
+        axis_outline=outline,
     )
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
     chart_start_dt = getattr(history_data, "chart_start_dt", None)
@@ -482,7 +474,9 @@ def _render_chart_indicator(
     ):
         try:
             window_duration_s = max(0.0, (t_end - t_start).total_seconds())
-            graph_kwargs["time_labels"] = _window_time_labels(window_duration_s)
+            graph_kwargs["time_labels"] = generate_nice_relative_time_ticks(
+                window_duration_s,
+            )
         except (AttributeError, TypeError):
             pass
     elif (

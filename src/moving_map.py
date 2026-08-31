@@ -22,6 +22,9 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from src.render_logging import render_print
+
+print = render_print
 
 from src.indicators.profiling import get_overlay_profiler
 

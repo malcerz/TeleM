@@ -402,7 +402,12 @@ def compose_overlay(
         if not show_value:
             fv = ""
         else:
-            default_decimals = 0 if key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass") or key.startswith("fit_") else 1
+            if "voltage" in key or unit == "V":
+                default_decimals = 2
+            elif key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass") or key.startswith("fit_"):
+                default_decimals = 0
+            else:
+                default_decimals = 1
             decimals = int(current_cfg.get("decimals", default_decimals))
             show_units = current_cfg.get("show_units", True)
 
@@ -481,6 +486,7 @@ def compose_overlay(
                     center_x = rx + res.width / 2.0
                     center_y = ry + res.height / 2.0
             else:
+
                 center_x = rx
                 center_y = ry
 

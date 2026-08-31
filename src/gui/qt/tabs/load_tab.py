@@ -249,8 +249,10 @@ class LoadTab(QWidget):
             return
 
         self._start_loading()
+        # Snapshot the explicit dialog selection.  The controller must never
+        # observe a later UI selection or an output-path edit as project input.
         self.signals.sig_files_selected.emit(
-            self._video_paths, self._gpx_path, self._fit_path,
+            list(self._video_paths), self._gpx_path, self._fit_path,
         )
 
     # ═════════════════════════════════════════════════════════════════════

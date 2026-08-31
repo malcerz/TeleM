@@ -7,6 +7,9 @@ import os
 from fractions import Fraction
 from typing import Any
 from src.ffmpeg.detection import _test_encoder
+from src.render_logging import render_print
+
+print = render_print
 
 
 def _fps_rational_arg(fps: float) -> str:
@@ -294,8 +297,11 @@ def build_text_bbox_context(
     }
     fit_aliases = {
         "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
-        "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
-        "battery": ("battery", "battery_soc"),
+        "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature", "garmin_temperature"),
+        "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
+        "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
+        "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
+        "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
     }
 
     def values_for(key: str, cfg: dict[str, Any]) -> list[float]:
@@ -349,7 +355,12 @@ def build_text_bbox_context(
                 phantom_keys.add(key)
 
         field = key[4:-5] if key.startswith("fit_") and key.endswith("_text") else key
-        decimals_default = 0 if key in {"iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text"} or key.startswith("fit_") else 1
+        if "voltage" in key or cfg.get("unit") == "V":
+            decimals_default = 2
+        elif key in {"iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text"} or key.startswith("fit_"):
+            decimals_default = 0
+        else:
+            decimals_default = 1
         decimals = int(cfg.get("decimals", decimals_default))
         numbers = list(values)
         if "min_val" in cfg:

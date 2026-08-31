@@ -13,6 +13,8 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <cstdlib>
+#include <cstring>
 
 #include "d3d11_vp_pipeline.h"
 #include "d3d11_amf_encoder.h"
@@ -23,6 +25,29 @@
 #include "stb_image_write.h"
 
 #define TELEM_EXPORT extern "C" __declspec(dllexport)
+
+// Native success/profiling chatter is opt-in so normal GUI exports remain
+// readable.  std::cerr is intentionally untouched: failures and warnings
+// remain visible.  The state is configured at export creation, before any
+// native initialization diagnostics are emitted.
+static bool TelemRenderDebugEnabled() {
+    const char* value = std::getenv("TELEM_RENDER_DEBUG");
+    return value && (
+        std::strcmp(value, "1") == 0 ||
+        std::strcmp(value, "true") == 0 ||
+        std::strcmp(value, "TRUE") == 0 ||
+        std::strcmp(value, "on") == 0 ||
+        std::strcmp(value, "ON") == 0
+    );
+}
+
+static void ConfigureNativeRenderLogging() {
+    if (TelemRenderDebugEnabled()) {
+        std::cout.clear();
+    } else {
+        std::cout.setstate(std::ios_base::failbit);
+    }
+}
 
 struct TelemAMDFrameTimings {
     double mfReadSampleMs = 0.0;
@@ -224,6 +249,46 @@ struct TelemAMDContext {
 };
 
 static bool RefreshDecoderMediaType(TelemAMDContext* ctx);
+
+static bool OpenSourceReader(TelemAMDContext* ctx, const wchar_t* input_path) {
+    if (!ctx || !ctx->pDXGIManager || !input_path || !*input_path) return false;
+    IMFAttributes* attrs = nullptr;
+    HRESULT hr = MFCreateAttributes(&attrs, 5);
+    if (FAILED(hr)) return false;
+    attrs->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, ctx->pDXGIManager);
+    attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+    attrs->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
+    hr = MFCreateSourceReaderFromURL(input_path, attrs, &ctx->pSourceReader);
+    attrs->Release();
+    if (FAILED(hr) || !ctx->pSourceReader) return false;
+    ctx->pSourceReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
+    ctx->pSourceReader->SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM, TRUE);
+    IMFMediaType* type = nullptr;
+    MFCreateMediaType(&type);
+    if (!type) {
+        ctx->pSourceReader->Release();
+        ctx->pSourceReader = nullptr;
+        return false;
+    }
+    type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_P010);
+    hr = ctx->pSourceReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, type);
+    if (FAILED(hr)) {
+        type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+        hr = ctx->pSourceReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, type);
+    }
+    type->Release();
+    ctx->mfDecoderReady = SUCCEEDED(hr) && RefreshDecoderMediaType(ctx);
+    ctx->mfEndOfStream = false;
+    ctx->pendingTimestamp100ns = 0;
+    ctx->pendingDuration100ns = 0;
+    if (!ctx->mfDecoderReady) {
+        if (ctx->pSourceReader) { ctx->pSourceReader->Release(); ctx->pSourceReader = nullptr; }
+        return false;
+    }
+    std::cout << "[MF DECODER] Source opened for native multi-file path." << std::endl;
+    return true;
+}
 
 TELEM_EXPORT UINT telem_amd_get_abi_version() {
     return TELEM_AMD_ABI_VERSION;
@@ -835,6 +900,71 @@ TELEM_EXPORT int telem_amd_set_decode_mode(void* handle, int mode) {
     return 1;
 }
 
+// Replace only the source reader; device, VP compositor, HUD textures and AMF
+// encoder remain alive. The caller must switch at a VideoTimeline boundary.
+TELEM_EXPORT int telem_amd_switch_source(void* handle, const wchar_t* input_path) {
+    if (!handle || !input_path || !*input_path) return 0;
+    TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
+    const UINT oldWidth = ctx->decoderWidth;
+    const UINT oldHeight = ctx->decoderHeight;
+    const DXGI_FORMAT oldFormat = ctx->decoderOutputFormat;
+    if (ctx->pPendingDecodedTex) {
+        ctx->pPendingDecodedTex->Release();
+        ctx->pPendingDecodedTex = nullptr;
+    }
+    if (ctx->pSourceReader) {
+        ctx->pSourceReader->Release();
+        ctx->pSourceReader = nullptr;
+    }
+    ctx->mfDecoderReady = false;
+    if (!OpenSourceReader(ctx, input_path)) return 0;
+    if (ctx->decoderWidth != oldWidth || ctx->decoderHeight != oldHeight ||
+        ctx->decoderOutputFormat != oldFormat) {
+        std::cerr << "[MF DECODER] Source switch rejected: incompatible format "
+                  << ctx->decoderWidth << "x" << ctx->decoderHeight << " format="
+                  << static_cast<unsigned>(ctx->decoderOutputFormat) << std::endl;
+        ctx->mfDecoderReady = false;
+        ctx->pSourceReader->Release();
+        ctx->pSourceReader = nullptr;
+        return 0;
+    }
+    if (ctx->decodeMode == 1 && !ctx->vpPipeline.SetStreamRotation(ctx->sourceRotation)) {
+        ctx->mfDecoderReady = false;
+        ctx->pSourceReader->Release();
+        ctx->pSourceReader = nullptr;
+        return 0;
+    }
+    std::cout << "[MF DECODER] Native source switch complete." << std::endl;
+    return 1;
+}
+
+// Seek the active source reader to a source-local timestamp.  This is used by
+// production range exports; it does not change the global AMF output clock.
+TELEM_EXPORT int telem_amd_seek_source(void* handle, INT64 timestamp100ns) {
+    if (!handle || timestamp100ns < 0) return 0;
+    TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
+    if (!ctx->pSourceReader || ctx->decodeMode != 1) return 0;
+    if (ctx->pPendingDecodedTex) {
+        ctx->pPendingDecodedTex->Release();
+        ctx->pPendingDecodedTex = nullptr;
+    }
+    PROPVARIANT position;
+    PropVariantInit(&position);
+    position.vt = VT_I8;
+    position.hVal.QuadPart = timestamp100ns;
+    const HRESULT hr = ctx->pSourceReader->SetCurrentPosition(GUID_NULL, position);
+    PropVariantClear(&position);
+    if (FAILED(hr)) {
+        std::cerr << "[MF DECODER] Source seek failed: 0x" << std::hex << hr
+                  << std::dec << std::endl;
+        return 0;
+    }
+    ctx->mfEndOfStream = false;
+    ctx->pendingTimestamp100ns = 0;
+    ctx->pendingDuration100ns = 0;
+    return 1;
+}
+
 // Return: 1 = D3D11 video sample ready, 2 = non-sample event/tick,
 // 0 = clean EOS, -1 = fatal decode/acquisition error.
 TELEM_EXPORT int telem_amd_read_video_sample(
@@ -983,6 +1113,23 @@ TELEM_EXPORT int telem_amd_read_video_sample(
     return 1;
 }
 
+// Release a decoded sample without compositing or encoding it. SourceReader
+// seeks may land on an earlier keyframe, so range exports use this entry point
+// to advance to the requested source-local timestamp while leaving the global
+// output frame clock untouched.
+TELEM_EXPORT int telem_amd_discard_video_sample(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
+    if (!ctx->pPendingDecodedTex) return 0;
+    ctx->pPendingDecodedTex->Release();
+    ctx->pPendingDecodedTex = nullptr;
+    ctx->pendingSubresource = 0;
+    ctx->pendingTimestamp100ns = 0;
+    ctx->pendingDuration100ns = 0;
+    ctx->pendingStreamFlags = 0;
+    return 1;
+}
+
 // Helper: Convert NV12 to RGBA in CPU memory for diagnostic checkpoint PNGs
 static std::vector<uint8_t> ConvertNV12ToRGBA(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);
@@ -1119,6 +1266,7 @@ TELEM_EXPORT void* telem_amd_create(
     UINT fps_num,
     UINT fps_den
 ) {
+    ConfigureNativeRenderLogging();
     MFStartup(MF_VERSION);
 
     TelemAMDContext* ctx = new TelemAMDContext();
@@ -1315,38 +1463,10 @@ TELEM_EXPORT void* telem_amd_create(
         hr = MFCreateDXGIDeviceManager(&ctx->dxgiResetToken, &ctx->pDXGIManager);
         if (SUCCEEDED(hr)) {
             ctx->pDXGIManager->ResetDevice(ctx->pDevice, ctx->dxgiResetToken);
-
-            IMFAttributes* pAttributes = nullptr;
-            MFCreateAttributes(&pAttributes, 5);
-            pAttributes->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, ctx->pDXGIManager);
-            pAttributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
-            pAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
-
-            hr = MFCreateSourceReaderFromURL(input_path, pAttributes, &ctx->pSourceReader);
-            pAttributes->Release();
-
-            if (SUCCEEDED(hr) && ctx->pSourceReader) {
-                ctx->pSourceReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
-                ctx->pSourceReader->SetStreamSelection(
-                    static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM), TRUE);
-                IMFMediaType* pType = nullptr;
-                MFCreateMediaType(&pType);
-                pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-                pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_P010);
-                hr = ctx->pSourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, pType);
-                if (FAILED(hr)) {
-                    pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
-                    hr = ctx->pSourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, pType);
-                }
-                pType->Release();
-                ctx->mfDecoderReady = SUCCEEDED(hr) && RefreshDecoderMediaType(ctx);
-                if (ctx->mfDecoderReady) {
-                    std::cout << "[TELEM AMD DLL] MediaFoundation D3D11VA decoder configured." << std::endl;
-                } else {
-                    std::cerr << "[TELEM AMD DLL] MediaFoundation decoder format negotiation failed: 0x"
-                              << std::hex << hr << std::dec << std::endl;
-                }
-            }
+            if (!OpenSourceReader(ctx, input_path))
+                std::cerr << "[TELEM AMD DLL] MediaFoundation decoder initialization failed." << std::endl;
+            else
+                std::cout << "[TELEM AMD DLL] MediaFoundation D3D11VA decoder configured." << std::endl;
         }
     }
 
@@ -1577,7 +1697,6 @@ TELEM_EXPORT int telem_amd_process_frame(
     ID3D11Texture2D* pDecodedTex = ctx->pBaseP010Tex;
     UINT sampleSlice = 0;
     const bool d3d11Decode = ctx->decodeMode == 1;
-    const LONGLONG sourceTimestamp100ns = ctx->pendingTimestamp100ns;
     // ETAP 5R — opt-in per-frame native accounting.
     const bool fa = ctx->frameAccountEnabled;
     const auto pfStart = std::chrono::steady_clock::now();
@@ -1724,7 +1843,13 @@ TELEM_EXPORT int telem_amd_process_frame(
     double amfQueryMsTot = 0.0;
     double amfPacketWriteMsTot = 0.0;
     int submitResult = AMF_OK;
-    int64_t pts = d3d11Decode ? sourceTimestamp100ns : (int64_t)frame_index * 3000;
+    // AMF PTS belongs to the output timeline.  Media Foundation timestamps are
+    // source-local and restart after telem_amd_switch_source(), so forwarding
+    // them makes multi-file output non-monotonic.  Derive one rounded 100 ns
+    // timestamp from the global output frame and the encoder's exact CFR.
+    const int64_t pts = static_cast<int64_t>(
+        (static_cast<uint64_t>(frame_index) * 10000000ULL * ctx->fpsDen
+         + ctx->fpsNum / 2) / ctx->fpsNum);
     const auto submitLoopStart = std::chrono::steady_clock::now();
     constexpr auto kMaxInputFullWait = std::chrono::seconds(60);
     UINT retriesThisFrame = 0;

@@ -6,6 +6,9 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 import numpy as np
+from src.render_logging import render_print
+
+print = render_print
 
 
 class BenchmarkTracker:

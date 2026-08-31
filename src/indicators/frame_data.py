@@ -100,7 +100,9 @@ def prepare_overlay_frame_data(
     _range_cache: Optional[dict] = None,
     fit_field_plan: Optional[dict[str, list[str]]] = None,
     resolve_stats: Optional[dict[str, Any]] = None,
+    project_elapsed_s: Optional[float] = None,
 ) -> dict[str, Any]:
+
     """Prepare all values needed by ``compose_overlay`` for a single frame.
 
     This function consolidates the data-preparation logic that was previously
@@ -169,6 +171,16 @@ def prepare_overlay_frame_data(
         "dist_visual",
         indicator_values.get("dist_text", interpolate_distance(track_samples, target_dt) if track_samples else None),
     )
+    if distance_m is None and fit_data and "distance" in fit_data:
+        distance_m = interpolate_distance(fit_data["distance"], target_dt)
+    if distance_m is None and resolve_cache_value:
+        try:
+            distance_m = resolve_cache_value("distance", "fit", target_dt, "fit_distance_text")
+        except TypeError:
+            distance_m = resolve_cache_value("distance", target_dt)
+    if distance_m is None and gpx_track_samples:
+        distance_m = interpolate_distance(gpx_track_samples, target_dt)
+
     alt_value = indicator_values.get(
         "alt_visual",
         indicator_values.get("alt_text", interpolate_altitude(alt_samples, target_dt) if alt_samples else None),
@@ -514,6 +526,48 @@ def prepare_overlay_frame_data(
                 slope_cfg.get("unit") or "%",
                 slope_cfg.get("label") or "Slope",
             )
+
+    # ── Elapsed time & average speed (for time_display) ───────────────
+    # Normalise tz-awareness: ``start_dt_utc`` may be tz-aware (GPMF anchor /
+    # ExifTool ``parse_exif_datetime`` attaches ``tzinfo=utc``) while the
+    # timeline's ``global_to_absolute`` returns naive-UTC (multifile
+    # convention).  Both represent the same UTC instant; stripping the marker
+    # makes the subtraction robust without changing the computed value.
+    elapsed_seconds = 0.0
+    if project_elapsed_s is not None:
+        elapsed_seconds = max(0.0, float(project_elapsed_s))
+    elif start_dt_utc is not None and target_dt is not None:
+        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
+        _td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
+        elapsed_seconds = max(0.0, (_td - _sd).total_seconds())
+
+    # ── Activity elapsed time calculation for activity-global average speed ──
+    # When distance is cumulative across the FIT / GPX activity, its denominator
+    # must be the elapsed time within that activity, NOT a clip-local timer.
+    activity_start_dt = None
+    if fit_data:
+        fit_pts = fit_data.get("distance") or fit_data.get("speed") or fit_data.get("track")
+        if fit_pts:
+            activity_start_dt = fit_pts[0][0]
+    if activity_start_dt is None and gpx_track_samples:
+        activity_start_dt = gpx_track_samples[0][0]
+    if activity_start_dt is None:
+        activity_start_dt = start_dt_utc
+
+    activity_elapsed_s = 0.0
+    if activity_start_dt is not None and target_dt is not None:
+        _act_sd = activity_start_dt.replace(tzinfo=None) if activity_start_dt.tzinfo is not None else activity_start_dt
+        _act_td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
+        activity_elapsed_s = max(0.0, (_act_td - _act_sd).total_seconds())
+    elif project_elapsed_s is not None:
+        activity_elapsed_s = max(0.0, float(project_elapsed_s))
+    else:
+        activity_elapsed_s = elapsed_seconds
+
+    avg_speed_kmh = 0.0
+    if activity_elapsed_s > 0 and distance_m is not None and distance_m > 0:
+        # average speed = total activity distance / total activity time * 3.6 (m/s → km/h)
+        avg_speed_kmh = (distance_m / activity_elapsed_s) * 3.6
 
     # ── Position / chart data ─────────────────────────────────────────
     section_started = time.perf_counter()

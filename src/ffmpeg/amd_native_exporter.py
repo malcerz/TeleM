@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import math
+from fractions import Fraction
 import json
 import copy
 import statistics
@@ -51,6 +52,11 @@ from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CA
 
 from ctypes import c_float
 from src.ffmpeg.amd_config import make_benchmark_fingerprint, resolve_amd_config
+from src.render_logging import render_debug_enabled, render_debug_print, render_print
+
+# Keep one renderer verbosity switch for exporter diagnostics.  Warnings and
+# errors remain visible; TELEM_RENDER_DEBUG=1 restores the detailed stream.
+print = render_print
 AMD_NATIVE_ABI_VERSION = 9
 
 # ── ETAP 1A: Data contract for AFTER-MAP GPU_SPLIT Chart Capture ──────────────
@@ -1844,15 +1850,29 @@ def export_amd_native_d3d11(
     on_render_progress: Optional[Callable[[int, int, float, float, Optional[dict]], None]] = None,
     cancel_event: Optional[Any] = None,
     active_process_holder: Optional[dict] = None,
+    video_timeline: Optional[Any] = None,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
     # The GUI starts export on a worker thread while its editable layout remains
     # reachable by the UI.  Snapshot it once so rendering and the ETAP 5B
     # dependency plan are immutable for the whole export.
     layout = copy.deepcopy(layout)
-    total_frames = max(1, math.ceil(duration_s * target_fps))
-    input_file = input_files[0] if isinstance(input_files, list) else input_files
-    input_file_str = str(Path(input_file).resolve())
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+        per_clip_requested_frames = video_timeline.output_frame_counts(target_fps)
+        total_frames = max(1, sum(per_clip_requested_frames))
+        duration_s = total_frames / target_fps
+    else:
+        total_frames = max(1, math.ceil(duration_s * target_fps))
+        per_clip_requested_frames = [total_frames]
+    from src.render_progress import RenderProgressTracker
+    progress_tracker = RenderProgressTracker(total_frames, on_render_progress, target_fps=target_fps)
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+        native_clip_paths = [str(clip.path) for clip in video_timeline.clips]
+    elif isinstance(input_files, (list, tuple)):
+        native_clip_paths = [str(path) for path in input_files]
+    else:
+        native_clip_paths = [str(input_files)]
+    input_file_str = str(Path(native_clip_paths[0]).resolve())
     output_file_str = str(Path(output_file).resolve())
     
     # ETAP 8P-A: Precise wall-clock milestone timers
@@ -2287,7 +2307,9 @@ def export_amd_native_d3d11(
 
     # 1. Locate and Load telem_amd_native.dll
     repo_root = Path(__file__).resolve().parents[2]
+    dll_override = os.environ.get("TELEM_AMD_NATIVE_DLL", "").strip()
     dll_path = str(
+        Path(dll_override).resolve() if dll_override else
         (repo_root / "native" / "d3d11_amf_pipeline" / "bin" / "telem_amd_native.dll").resolve()
     )
     if not os.path.exists(dll_path):
@@ -2591,6 +2613,35 @@ def export_amd_native_d3d11(
     native_dll.telem_amd_set_decode_mode.restype = c_int
     native_dll.telem_amd_set_decode_mode.argtypes = [c_void_p, c_int]
 
+    native_switch_source = getattr(native_dll, "telem_amd_switch_source", None)
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
+        if native_switch_source is None:
+            print("[AMD NATIVE D3D11] Multi-file ABI unavailable; returning controlled fallback.", flush=True)
+            return False
+        native_switch_source.restype = c_int
+        native_switch_source.argtypes = [c_void_p, ctypes.c_wchar_p]
+    native_seek_source = getattr(native_dll, "telem_amd_seek_source", None)
+    range_seek_required = any(
+        float(getattr(clip, "local_start_s", 0.0) or 0.0) > 0.0
+        for clip in getattr(video_timeline, "clips", [])
+    )
+    if range_seek_required:
+        if native_seek_source is None:
+            print("[AMD NATIVE D3D11] Range-seek ABI unavailable.", flush=True)
+            return False
+        native_seek_source.restype = c_int
+        native_seek_source.argtypes = [c_void_p, ctypes.c_int64]
+        native_discard_video_sample = getattr(
+            native_dll, "telem_amd_discard_video_sample", None
+        )
+        if native_discard_video_sample is None:
+            print("[AMD NATIVE D3D11] Range-discard ABI unavailable.", flush=True)
+            return False
+        native_discard_video_sample.restype = c_int
+        native_discard_video_sample.argtypes = [c_void_p]
+    else:
+        native_discard_video_sample = None
+
     native_dll.telem_amd_set_amf_mode.restype = c_int
     native_dll.telem_amd_set_amf_mode.argtypes = [c_void_p, c_int]
 
@@ -2649,6 +2700,7 @@ def export_amd_native_d3d11(
     # 3. Initialize HUD/telemetry worker cache only when this export will
     # actually generate HUD frames (or when explicitly benchmarking ETAP 0).
     if hud_work_enabled:
+        _init_t0 = time.perf_counter()
         init_worker(
             video_width=video_width,
             video_height=video_height,
@@ -2677,10 +2729,15 @@ def export_amd_native_d3d11(
             update_rate_step=1,
             total_overlay_frames=total_frames,
         )
+        progress_tracker.hud_work(1, 8, "worker cache and fonts")
+        print(f"[HUD] worker initialization={time.perf_counter() - _init_t0:.3f}s", flush=True)
+    else:
+        progress_tracker.hud_work(1, 8, "HUD disabled")
 
 
-    fps_num = int(round(target_fps * 1000))
-    fps_den = 1000
+    fps_rate = Fraction(target_fps).limit_denominator(100_000)
+    fps_num = fps_rate.numerator
+    fps_den = fps_rate.denominator
 
     print("[AMD NATIVE D3D11] Initializing telem_amd_native context...", flush=True)
     # ── REAL GUI production configuration summary (integration fix) ───────
@@ -2879,6 +2936,18 @@ def export_amd_native_d3d11(
         _cleanup_native_resources()
         return False
 
+    if range_seek_required:
+        initial_seek = int(round(
+            float(video_timeline.clips[0].local_start_s) * 10_000_000
+        ))
+        if not native_seek_source(h_context, initial_seek):
+            print("[AMD NATIVE D3D11] Initial source range seek failed.", flush=True)
+            _cleanup_native_resources()
+            return False
+        pending_seek_target_100ns: int | None = initial_seek
+    else:
+        pending_seek_target_100ns = None
+
     # ── ETAP 5U: AMF mode (0=ENCODE production, 1=BYPASS frontend-only). ──
     if amf_mode == "BYPASS":
         if not native_dll.telem_amd_set_amf_mode(h_context, 1):
@@ -2892,9 +2961,7 @@ def export_amd_native_d3d11(
     start_time = time.time()
     progress_interval = max(1, min(10, total_frames // 100))
     # GUI phase-report: AMD native HUD initialization has started.
-    if on_render_progress is not None:
-        on_render_progress(0, 0, 0.0, 0.0,
-                           {"phase": "prep", "pct": 0.3, "label": "Przygotowywanie HUD..."})
+    progress_tracker.hud_work(0, 8, "native initialization")
 
     from src.indicators.frame_data import prepare_overlay_frame_data
     from src.indicators.profiling import get_overlay_profiler
@@ -3006,6 +3073,7 @@ def export_amd_native_d3d11(
     previous_bboxes: dict[str, tuple[int, int, int, int]] = {}
     last_hud_call_ms = 0.0
     sample_timestamps: dict[int, dict[str, float | int]] = {}
+    seek_discarded_frames = 0
     # ETAP 5G — GPU map resize/composite counters
     map_geometry_set = False
     map_gpu_frames = 0
@@ -3183,12 +3251,18 @@ def export_amd_native_d3d11(
             _range_cache=WORKER_CACHE.get("_prep_cache"),
             fit_field_plan=fit_field_plan,
             resolve_stats=fit_resolve_stats,
+            project_elapsed_s=(
+                video_timeline.frame_to_activity_elapsed(frame_idx, target_fps)
+                if video_timeline is not None
+                else frame_idx / target_fps
+            ),
         )
     # ── MAP ETAP 1: Ensure 100% of required map tiles are cached before frame loop ──
     from src.indicators.moving_map import ensure_map_tiles_cached
     from src.moving_map import set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats
 
     if layout.get("indicators", {}).get("track_map", {}).get("enabled", True):
+        _map_t0 = time.perf_counter()
         preload_info = ensure_map_tiles_cached(
             video_width, video_height, layout, "track_map", gps_track,
             cancel_event=cancel_event,
@@ -3201,6 +3275,10 @@ def export_amd_native_d3d11(
             f"missing_before_render={preload_info.get('missing')}",
             flush=True,
         )
+        progress_tracker.hud_work(2, 8, "map preload/cache")
+        print(f"[HUD] map preload duration={time.perf_counter() - _map_t0:.3f}s", flush=True)
+    else:
+        progress_tracker.hud_work(2, 8, "map disabled")
 
     reset_map_tile_stats()
     set_map_network_allowed(False)
@@ -3236,6 +3314,14 @@ def export_amd_native_d3d11(
             fit_field_plan=fit_field_plan,
             total_frames=total_frames,
             target_fps=target_fps,
+            video_timeline=video_timeline,
+            progress_cb=lambda done, total, label: progress_tracker.hud_work(
+                (2.0 + 2.5 * done / max(1, total)) if label == "timeline"
+                else (4.5 + 1.5 * done / max(1, total)) if label == "frame records"
+                else 4.5,
+                8,
+                f"{label} {done}/{total}" if label in ("timeline", "frame records") else label,
+            ),
         )
         print(
             f"[AMD NATIVE D3D11] AMD_TELEMETRY_MODE=PRECOMPUTED: "
@@ -3245,9 +3331,7 @@ def export_amd_native_d3d11(
             flush=True,
         )
     t_precompute_end = time.perf_counter()
-    if on_render_progress is not None:
-        on_render_progress(0, 0, time.time() - start_time, 0.0,
-                           {"phase": "prep", "pct": 0.6, "label": "Przygotowywanie HUD..."})
+    progress_tracker.hud_work(7, 8, "native HUD resources")
 
     # Main Frame Processing Loop
     # ── ETAP 8T-B/C: Unified Producer-Consumer Frame Pipeline ──
@@ -3353,7 +3437,17 @@ def export_amd_native_d3d11(
         if overlay_profile_enabled:
             overlay_profiler.start_frame(idx, video_width, video_height)
         sample_time_sec = idx / target_fps
-        c_dt = base_dt + timedelta(seconds=sample_time_sec) if base_dt is not None else None
+        # The native decoder consumes the compressed project-global axis, but
+        # every telemetry/map/chart lookup must use the active clip's own
+        # absolute timestamp.  Do not reintroduce ``base_dt + global`` here:
+        # that would fill real recording gaps with fake telemetry time.
+        c_dt = (
+            video_timeline.frame_to_absolute(idx, target_fps)
+            if video_timeline is not None
+            and getattr(video_timeline, "clip_count", 0)
+            else (base_dt + timedelta(seconds=sample_time_sec)
+                  if base_dt is not None else None)
+        )
         
         if audit_allocs_enabled:
             _aud_blocks0 = sys.getallocatedblocks()
@@ -4701,7 +4795,19 @@ def export_amd_native_d3d11(
     last_uploaded_map_source_key = None
     map_reused_frames = 0
 
+    native_clip_idx = 0
+    per_clip_decoded_frames = [0 for _ in native_clip_paths]
+    per_clip_seek_discarded_frames = [0 for _ in native_clip_paths]
+    boundary_debug_frames = {0, 1, 2, 30, 300, 600, 900}
+    _boundary_offset = 0
+    for _count in per_clip_requested_frames[:-1]:
+        _boundary_offset += _count
+        boundary_debug_frames.update(
+            {_boundary_offset, _boundary_offset + 1, _boundary_offset + 2}
+        )
+
     def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
+        nonlocal native_clip_idx, pending_seek_target_100ns, seek_discarded_frames
         nonlocal decoded_frames_python, hud_frames, successful_hud_updates, successful_video_updates
         nonlocal map_uploaded_bytes_total, map_gpu_frames, gauge_gpu_frames, gauge_uploaded_bytes_total
         nonlocal gauge_upload_calls_total, gauge_full_upload_frames, gauge_region_upload_frames
@@ -4747,6 +4853,33 @@ def export_amd_native_d3d11(
         _sync_frame_mark("consumer_setup")
         raw_nv12: bytes | None = None
         if use_d3d11va:
+            if video_timeline is not None:
+                clip_pos = video_timeline.frame_to_clip(prepared.frame_idx, target_fps)
+                clip_idx = clip_pos[0] if clip_pos is not None else 0
+                if clip_idx != native_clip_idx:
+                    if clip_idx < 0 or clip_idx >= len(video_timeline.clips):
+                        return False
+                    if not native_switch_source(
+                        h_context, str(video_timeline.clips[clip_idx].path)
+                    ):
+                        print(f"[AMD NATIVE D3D11] Source switch failed at clip {clip_idx + 1}.", flush=True)
+                        return False
+                    native_clip_idx = clip_idx
+                    local_start = float(getattr(
+                        video_timeline.clips[clip_idx], "local_start_s", 0.0,
+                    ) or 0.0)
+                    if local_start > 0.0 and not native_seek_source(
+                        h_context, int(round(local_start * 10_000_000))
+                    ):
+                        print(
+                            f"[AMD NATIVE D3D11] Source range seek failed "
+                            f"at clip {clip_idx + 1}.", flush=True,
+                        )
+                        return False
+                    pending_seek_target_100ns = (
+                        int(round(local_start * 10_000_000))
+                        if local_start > 0.0 else None
+                    )
             while True:
                 sample_index = c_uint64(0)
                 sample_pts = ctypes.c_int64(0)
@@ -4765,6 +4898,24 @@ def export_amd_native_d3d11(
                 )
                 if read_status == 2:
                     continue
+                if read_status == 1 and pending_seek_target_100ns is not None:
+                    sample_half_duration = max(
+                        int(sample_duration.value) // 2,
+                        int(round(5_000_000.0 / target_fps)),
+                    )
+                    if int(sample_pts.value) + sample_half_duration < pending_seek_target_100ns:
+                        if not native_discard_video_sample(h_context):
+                            print(
+                                "[AMD NATIVE D3D11VA] ERROR: failed to discard "
+                                "pre-range decoder sample.",
+                                flush=True,
+                            )
+                            return False
+                        seek_discarded_frames += 1
+                        if 0 <= native_clip_idx < len(per_clip_seek_discarded_frames):
+                            per_clip_seek_discarded_frames[native_clip_idx] += 1
+                        continue
+                    pending_seek_target_100ns = None
                 break
             if read_status == 0:
                 return False
@@ -4772,8 +4923,11 @@ def export_amd_native_d3d11(
                 print("[AMD NATIVE D3D11VA] ERROR: native ReadSample failed.", flush=True)
                 return False
             decoded_frames_python += 1
-            if prepared.frame_idx in {0, 30, 300, 600, 900}:
+            if 0 <= native_clip_idx < len(per_clip_decoded_frames):
+                per_clip_decoded_frames[native_clip_idx] += 1
+            if prepared.frame_idx in boundary_debug_frames:
                 reference_pts = prepared.frame_idx / target_fps
+                output_pts_100ns = int(round(reference_pts * 10_000_000))
                 sample_timestamps[prepared.frame_idx] = {
                     "frame_index": prepared.frame_idx,
                     "mf_pts_100ns": int(sample_pts.value),
@@ -4781,6 +4935,10 @@ def export_amd_native_d3d11(
                     "cpu_reference_seconds": reference_pts,
                     "delta_ms": ((sample_pts.value / 10_000_000.0) - reference_pts) * 1000.0,
                     "duration_100ns": int(sample_duration.value),
+                    "clip_index": native_clip_idx,
+                    "decoder_source": native_clip_paths[native_clip_idx],
+                    "output_pts_100ns": output_pts_100ns,
+                    "output_pts_seconds": output_pts_100ns / 10_000_000.0,
                     "dxgi_format": int(sample_format.value),
                     "subresource": int(sample_subresource.value),
                     "texture_pointer": hex(sample_texture.value),
@@ -5198,7 +5356,7 @@ def export_amd_native_d3d11(
             })
 
         # Progress reporting
-        expected_progress_frames = source_frames if use_d3d11va and source_frames else total_frames
+        expected_progress_frames = total_frames
         if (prepared.frame_idx + 1) % progress_interval == 0 or (prepared.frame_idx + 1) == expected_progress_frames:
             elapsed = time.time() - start_time
             fps = (prepared.frame_idx + 1) / elapsed if elapsed > 0 else 0
@@ -5206,18 +5364,10 @@ def export_amd_native_d3d11(
             pct = int(((prepared.frame_idx + 1) / expected_progress_frames) * 100)
             m, s = divmod(int(elapsed), 60)
             em, es = divmod(int(eta), 60)
-            stats_str = f"Render: {pct}% ({prepared.frame_idx+1}/{expected_progress_frames}) | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+            stats_str = f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             if progress_cb:
                 progress_cb(pct, stats_str)
-            if on_render_progress:
-                t_video_pts = (prepared.frame_idx / target_fps) if target_fps > 0 else 0.0
-                on_render_progress(
-                    prepared.frame_idx + 1,
-                    expected_progress_frames,
-                    elapsed,
-                    fps,
-                    {"ts": t_video_pts, "frame_idx": prepared.frame_idx},
-                )
+            progress_tracker.frame(prepared.frame_idx + 1, elapsed, fps)
             if time.time() - last_hud_report_holder[0] >= 1.0:
                 last_hud_report_holder[0] = time.time()
                 print(f"[AMD NATIVE D3D11] Frame {prepared.frame_idx+1}/{expected_progress_frames} ({fps:.1f} FPS)", flush=True)
@@ -5225,9 +5375,7 @@ def export_amd_native_d3d11(
         return True
 
     # GUI phase-report: HUD preparation finished, frame rendering begins.
-    if on_render_progress is not None:
-        on_render_progress(0, 0, time.time() - start_time, 0.0,
-                           {"phase": "prep", "pct": 1.0, "label": "Renderowanie klatek..."})
+    progress_tracker.hud_complete_report()
 
     # Main Execution Switch: ASYNC (Producer-Consumer) vs SYNC (Diagnostic)
     try:
@@ -5375,8 +5523,8 @@ def export_amd_native_d3d11(
         print(f"[AMD Map Tile Stats] {_tile_stats}", flush=True)
         # GUI phase-report: all frames rendered, final flush/mux starts.
         if on_render_progress is not None:
-            on_render_progress(0, 0, time.time() - start_time, 0.0,
-                               {"phase": "finalize", "pct": 0.0, "label": "Finalizacja..."})
+            progress_tracker._emit(phase="finalize", internal=0.0, label="Finalizacja...", force=True,
+                                   elapsed=time.time() - start_time)
 
         # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
         flush_start = time.perf_counter()
@@ -5488,15 +5636,30 @@ def export_amd_native_d3d11(
             print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
             return False
 
+        audio_input = input_file_str
+        audio_args: list[str] = ["-i", audio_input]
+        audio_concat_path: Optional[Path] = None
+        if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
+            # The native DLL owns video only.  Feed mux the same ordered clip
+            # list as the VideoTimeline, so audio cannot come from clip 014
+            # alone or extend beyond the continuous output video timeline.
+            audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
+            with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
+                for clip in video_timeline.clips:
+                    concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+                    local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+                    if local_start > 0.0:
+                        concat_file.write(f"inpoint {local_start:.9f}\n")
+                    local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+                    source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+                    if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+                        concat_file.write(f"outpoint {local_end:.9f}\n")
+            audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
+
         cmd_mux = [
-            ffmpeg_exe, "-y",
-            "-i", temp_h265,
-            "-i", input_file_str,
-            "-map", "0:v",
-            "-map", "1:a?",
-            "-c:v", "copy",
-            "-c:a", "copy",
-            output_file_str
+            ffmpeg_exe, "-y", "-i", temp_h265, *audio_args,
+            "-map", "0:v", "-map", "1:a?", "-t", f"{duration_s:.6f}",
+            "-c:v", "copy", "-c:a", "copy", output_file_str,
         ]
 
         print("[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...", flush=True)
@@ -5506,7 +5669,12 @@ def export_amd_native_d3d11(
         mux_elapsed_ms = (t_mux_end - t_mux_begin) * 1000.0
         timing_samples["Audio mux"].append(mux_elapsed_ms)
         if proc.returncode != 0:
-            print(f"[AMD NATIVE D3D11] WARNING: FFmpeg remux failed, renaming raw bitstream.", flush=True)
+            mux_error = (proc.stderr or b"").decode(errors="replace").strip()
+            print(
+                "[AMD NATIVE D3D11] WARNING: FFmpeg remux failed, "
+                f"renaming raw bitstream.\n{mux_error[-4000:]}",
+                flush=True,
+            )
             if os.path.exists(output_file_str): os.remove(output_file_str)
             os.rename(temp_h265, output_file_str)
         else:
@@ -5518,6 +5686,11 @@ def export_amd_native_d3d11(
                         break
                     except OSError:
                         time.sleep(0.05)
+        if audio_concat_path is not None and audio_concat_path.exists():
+            try:
+                audio_concat_path.unlink()
+            except OSError:
+                pass
 
         final_probe = _probe_video_summary(ffmpeg_exe, output_file_str)
         muxed_frames = _stream_frame_count(final_probe, "video")
@@ -5548,33 +5721,43 @@ def export_amd_native_d3d11(
         name: _timing_summary(values) for name, values in timing_samples.items()
     }
 
-    _print_timing_table(timing_summaries)
-    print("\n[AMD NATIVE TRUE END-TO-END]", flush=True)
-    print(f"  Total wall-clock: {end_to_end_elapsed:.3f} s", flush=True)
-    print(f"  Encoded frames:   {c_rec.value}", flush=True)
-    print(f"  TRUE FPS:         {true_fps:.3f}", flush=True)
-    print(f"  Muxed frames:     {muxed_frames}", flush=True)
-    print(f"  Audio present:    {'YES' if audio_present else 'NO'}", flush=True)
+    if render_debug_enabled():
+        _print_timing_table(timing_summaries)
+        print("\n[AMD NATIVE TRUE END-TO-END]", flush=True)
+        print(f"  Total wall-clock: {end_to_end_elapsed:.3f} s", flush=True)
+        print(f"  Encoded frames:   {c_rec.value}", flush=True)
+        print(f"  TRUE FPS:         {true_fps:.3f}", flush=True)
+        print(f"  Muxed frames:     {muxed_frames}", flush=True)
+        print(f"  Audio present:    {'YES' if audio_present else 'NO'}", flush=True)
 
-    print("\n[AMD NATIVE ETAP 8P-A WALL TIMINGS]", flush=True)
-    print(f"  EXPORT_CLICK / export_start:      0.000 ms (t=0.000 s)", flush=True)
-    print(f"  PRECOMPUTE_BEGIN:                 {(t_precompute_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  PRECOMPUTE_END:                   {(t_precompute_end - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  FIRST_FRAME_BEGIN:                {(t_first_frame_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  FIRST_FRAME_ENCODED:              {(first_frame_encoded_ts - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  VIDEO_RENDER_END:                 {(t_video_render_end - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  MUX_BEGIN:                        {(t_mux_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  MUX_END:                          {(t_mux_end - t_export_start)*1000.0:10.3f} ms", flush=True)
-    print(f"  EXPORT_END:                       {total_from_export_start_ms:10.3f} ms", flush=True)
+        print("\n[AMD NATIVE ETAP 8P-A WALL TIMINGS]", flush=True)
+        print(f"  EXPORT_CLICK / export_start:      0.000 ms (t=0.000 s)", flush=True)
+        print(f"  PRECOMPUTE_BEGIN:                 {(t_precompute_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  PRECOMPUTE_END:                   {(t_precompute_end - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  FIRST_FRAME_BEGIN:                {(t_first_frame_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  FIRST_FRAME_ENCODED:              {(first_frame_encoded_ts - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  VIDEO_RENDER_END:                 {(t_video_render_end - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  MUX_BEGIN:                        {(t_mux_begin - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  MUX_END:                          {(t_mux_end - t_export_start)*1000.0:10.3f} ms", flush=True)
+        print(f"  EXPORT_END:                       {total_from_export_start_ms:10.3f} ms", flush=True)
 
-    print("\n[AMD NATIVE ETAP 8P-A SUMMARY]", flush=True)
-    print(f"  precompute_build_ms:              {precompute_build_ms:.3f} ms ({precompute_build_ms/1000.0:.3f} s)", flush=True)
-    print(f"  delay_export_to_first_frame_ms:   {delay_export_to_first_frame_ms:.3f} ms ({delay_export_to_first_frame_ms/1000.0:.3f} s)", flush=True)
-    print(f"  video_render_wall_ms:             {video_render_wall_ms:.3f} ms ({video_render_wall_ms/1000.0:.3f} s)", flush=True)
-    print(f"  mux_wall_ms:                      {mux_wall_ms:.3f} ms ({mux_wall_ms/1000.0:.3f} s)", flush=True)
-    print(f"  TOTAL_FROM_EXPORT_START_ms:       {total_from_export_start_ms:.3f} ms ({total_from_export_start_ms/1000.0:.3f} s)", flush=True)
-    print(f"  RENDER FPS:                       {render_fps:.3f} fps", flush=True)
-    print(f"  USER EFFECTIVE FPS:               {effective_fps:.3f} fps", flush=True)
+        print("\n[AMD NATIVE ETAP 8P-A SUMMARY]", flush=True)
+        print(f"  precompute_build_ms:              {precompute_build_ms:.3f} ms ({precompute_build_ms/1000.0:.3f} s)", flush=True)
+        print(f"  delay_export_to_first_frame_ms:   {delay_export_to_first_frame_ms:.3f} ms ({delay_export_to_first_frame_ms/1000.0:.3f} s)", flush=True)
+        print(f"  video_render_wall_ms:              {video_render_wall_ms:.3f} ms ({video_render_wall_ms/1000.0:.3f} s)", flush=True)
+        print(f"  mux_wall_ms:                       {mux_wall_ms:.3f} ms ({mux_wall_ms/1000.0:.3f} s)", flush=True)
+        print(f"  TOTAL_FROM_EXPORT_START_ms:        {total_from_export_start_ms:.3f} ms ({total_from_export_start_ms/1000.0:.3f} s)", flush=True)
+        print(f"  RENDER FPS:                        {render_fps:.3f} fps", flush=True)
+        print(f"  USER EFFECTIVE FPS:                {effective_fps:.3f} fps", flush=True)
+
+    print("=== RENDER COMPLETE ===", flush=True)
+    print(f"Frames: {c_rec.value}", flush=True)
+    print(f"HUD prepare: {progress_tracker.hud_actual_estimate:.3f} s", flush=True)
+    print(f"Video encode: {video_render_wall_ms / 1000.0:.3f} s", flush=True)
+    print(f"Finalize: {mux_wall_ms / 1000.0:.3f} s", flush=True)
+    print(f"Total: {total_from_export_start_ms / 1000.0:.3f} s", flush=True)
+    print(f"Render FPS: {render_fps:.3f}", flush=True)
+    print(f"Effective FPS: {effective_fps:.3f}", flush=True)
 
     profile = {
         "schema_version": 1,
@@ -5630,11 +5813,27 @@ def export_amd_native_d3d11(
             "amf_submitted": c_sub.value,
             "amf_output": c_rec.value,
             "muxed_frames": muxed_frames,
+            "per_clip": [
+                {
+                    "clip_index": idx,
+                    "path": native_clip_paths[idx],
+                    "requested_frames": (
+                        per_clip_requested_frames[idx]
+                        if idx < len(per_clip_requested_frames) else 0
+                    ),
+                    "decoded_frames": per_clip_decoded_frames[idx],
+                    "submitted_frames": per_clip_decoded_frames[idx],
+                    "encoded_frames": per_clip_decoded_frames[idx],
+                    "seek_discarded_frames": per_clip_seek_discarded_frames[idx],
+                }
+                for idx in range(len(native_clip_paths))
+            ],
             "cadence_gpu": chart_gpu_frames.get("fit_cadence_text", 0),
             "hr_gpu": chart_gpu_frames.get("fit_heart_rate_text", 0),
             "map_gpu": map_gpu_frames,
             "map_reused_frames": map_reused_frames,
             "map_uploaded_bytes": map_uploaded_bytes_total,
+            "seek_discarded_frames": seek_discarded_frames,
         },
         "amf": {
             "input_full_count": c_input_full.value,
@@ -6104,4 +6303,5 @@ def export_amd_native_d3d11(
         subprocess.run(cmd_thumb, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print("[CHECKPOINT] Saved F_final_mp4.png", flush=True)
 
+    progress_tracker.complete(time.time() - start_time)
     return True

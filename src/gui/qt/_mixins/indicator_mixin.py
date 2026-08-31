@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -438,6 +439,32 @@ class IndicatorMixin:
         Legacy ``time_block`` indicator został zastąpiony przez ``time_display``
         i NIE jest już tworzony ani przywracany (ETAP 4A.1).
         """
+        old_count = len(self.layout.get("indicators", {}))
+        try:
+            from src.gui.layout_manager import normalize_layout
+            base = getattr(self, "base_dir", None)
+            source_image = getattr(self, "src_img", None)
+            width, height = source_image.size if source_image is not None else (1280, 720)
+            self.layout = normalize_layout(
+                Path(base) / "def_layout.json" if base is not None else None,
+                width, height,
+            )
+        except Exception:
+            self.layout = {"indicators": {}, "custom_texts": []}
+        if self.layout_mgr:
+            self.layout_mgr.layout = self.layout
+        if hasattr(self, "_invalidate_layout_visual_state"):
+            self._invalidate_layout_visual_state()
+        self._selected_stream_key = ""
+        if os.environ.get("TELEM_HUD_LIFECYCLE_DEBUG", "0") == "1":
+            print(
+                f"[HUD Lifecycle] reset old={old_count} "
+                f"new={len(self.layout.get('indicators', {}))}",
+                flush=True,
+            )
+        self._render_preview()
+        return
+
         time_cfg = None
         try:
             from src.gui.layout_manager import normalize_layout

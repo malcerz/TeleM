@@ -269,8 +269,9 @@ class AppController(
         s.sig_playback_stop.connect(self._on_playback_stop)
         s.sig_preview_mode_changed.connect(self._on_preview_mode_changed)
         s.sig_preview_accel_changed.connect(self._on_preview_accel_changed)
-        s.sig_data_streams_ready.connect(lambda _: self._render_preview(0))
+        s.sig_data_streams_ready.connect(lambda _: self.refresh_preview_geometry_and_hud())
         # Map preload: refresh the preview when the overview map becomes ready.
+
         s.sig_map_ready.connect(lambda: self._render_preview())
         s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
 

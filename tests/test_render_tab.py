@@ -145,32 +145,31 @@ class TestMainWindowSharing:
         # set_controller wiąże współdzielony podgląd dokładnie raz
         assert len(calls) == 1
 
-    def test_cut_tools_only_in_rendering(self, qapp):
-        """Narzędzia wycinania (✂/↩/↩) ukryte w Projekcie, widoczne w Rendering."""
+    def test_preview_has_no_cut_tools(self, qapp):
+        """Preview exposes no cut controls; Export owns IN/OUT controls."""
         from src.gui.qt.main_window import MainWindow
         win = MainWindow()
         win.show()
         qapp.processEvents()
 
-        # startowo podgląd w Projekcie → narzędzia ukryte
+        # The shared preview stays free of range-selection controls.
         assert win.preview.parentWidget() is win._project_tab.preview_slot
-        assert not win.preview.cut_btn.isVisible()
-        assert not win.preview.undo_cut_btn.isVisible()
-        assert not win.preview.restore_cut_btn.isVisible()
+        assert not hasattr(win.preview, "cut_btn")
+        assert not hasattr(win.preview, "undo_cut_btn")
+        assert not hasattr(win.preview, "restore_cut_btn")
 
-        # Rendering → narzędzia widoczne
+        # Rendering moves the same clean preview; range controls are on tab.
         win.tabs.setCurrentWidget(win._render_tab)
         qapp.processEvents()
         assert win.preview.parentWidget() is win._render_tab.preview_slot
-        assert win.preview.cut_btn.isVisible()
-        assert win.preview.undo_cut_btn.isVisible()
-        assert win.preview.restore_cut_btn.isVisible()
+        assert win._render_tab.btn_in.isVisible()
+        assert win._render_tab.btn_out.isVisible()
 
-        # powrót do Projekt → znów ukryte
+        # powrót do Projekt → preview remains clean
         win.tabs.setCurrentWidget(win._project_tab)
         qapp.processEvents()
         assert win.preview.parentWidget() is win._project_tab.preview_slot
-        assert not win.preview.cut_btn.isVisible()
+        assert not hasattr(win.preview, "cut_btn")
 
 
 class TestMpvAvailability:
@@ -238,19 +237,19 @@ class TestInOutRange:
         assert (80.0, 100.0) in ctrl._cut_regions
         assert rt.lbl_out.text() == "OUT: 01:20"
 
-    def test_in_then_out_maps_through_cuts(self, shared_setup):
-        """Po ustawieniu IN pozycja OUT liczona jest w czasie oryginalnym."""
+    def test_in_then_out_uses_source_preview_axis(self, shared_setup):
+        """Export controls read the neutral source-axis preview position."""
         _, rt, ctrl = shared_setup
         rt.video_preview.on_duration_ready(100.0)
         rt.video_preview.seek_bar.set_position(10.0)
         rt._on_set_in()
-        # po cięciu [0,10] efektywny suwak ma 90s; pozycja 40 (efektywna) → oryg. 50
+        # The preview is not shortened by the Export cut state.
         rt.video_preview.seek_bar.set_position(40.0)
         rt._on_set_out()
         assert rt._in_orig == 10.0
-        assert rt._out_orig == 50.0
+        assert rt._out_orig == 40.0
         assert (0.0, 10.0) in ctrl._cut_regions
-        assert (50.0, 100.0) in ctrl._cut_regions
+        assert (40.0, 100.0) in ctrl._cut_regions
 
     def test_reposition_in_replaces_old_boundary(self, shared_setup):
         _, rt, ctrl = shared_setup
@@ -258,13 +257,12 @@ class TestInOutRange:
         rt.video_preview.seek_bar.set_position(10.0)
         rt._on_set_in()
         assert (0.0, 10.0) in ctrl._cut_regions
-        # Po cięciu [0,10] suwak jest w czasie efektywnym: pozycja 25 (efektywna)
-        # = oryginalne 35. Ponowne ustawienie IN na bieżącej klatce → IN = 35.
+        # Export range changes do not move the preview to a shortened axis.
         rt.video_preview.seek_bar.set_position(25.0)
         rt._on_set_in()
-        assert rt._in_orig == 35.0
+        assert rt._in_orig == 25.0
         assert (0.0, 10.0) not in ctrl._cut_regions
-        assert (0.0, 35.0) in ctrl._cut_regions
+        assert (0.0, 25.0) in ctrl._cut_regions
 
     def test_clear_removes_boundary_cuts(self, shared_setup):
         _, rt, ctrl = shared_setup
@@ -273,9 +271,9 @@ class TestInOutRange:
         rt._on_set_in()
         rt.video_preview.seek_bar.set_position(80.0)
         rt._on_set_out()
-        # 80 (efektywne) po cięciu [0,10] → oryg. 90
+        # The source-axis position remains 80 seconds.
         assert (0.0, 10.0) in ctrl._cut_regions
-        assert (90.0, 100.0) in ctrl._cut_regions
+        assert (80.0, 100.0) in ctrl._cut_regions
         rt._on_clear_range()
         assert rt._in_orig is None
         assert rt._out_orig is None
@@ -300,10 +298,10 @@ class TestInOutRange:
         rt.video_preview.seek_bar.set_position(10.0)
         rt._on_set_in()
         rt.video_preview.seek_bar.set_position(80.0)
-        rt._on_set_out()  # OUT = 90 (oryg.)
+        rt._on_set_out()  # OUT = 80 on the source axis
         rt._ensure_range_applied()
         assert (0.0, 10.0) in ctrl._cut_regions
-        assert (90.0, 100.0) in ctrl._cut_regions
+        assert (80.0, 100.0) in ctrl._cut_regions
 
     def test_new_video_resets_range(self, shared_setup):
         _, rt, ctrl = shared_setup

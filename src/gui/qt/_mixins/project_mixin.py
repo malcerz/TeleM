@@ -34,7 +34,19 @@ from src.video_helpers import (
 )
 
 
+def _canonical_project_video_paths(paths: list[str | Path]) -> list[Path]:
+    """Filter and return canonical project video paths preserving explicit order."""
+    out: list[Path] = []
+    for p in paths:
+        path = Path(p)
+        if path.name.lower() in ("output_h265.mp4", "output.mp4"):
+            continue
+        out.append(path)
+    return out
+
+
 def _map_provider_from_layout(layout: dict) -> str:
+
     """Return the saved map provider used for the initial preload job."""
     return str(
         (layout or {}).get("indicators", {})
@@ -267,10 +279,14 @@ class ProjectMixin:
                 streams = info.get("streams", [])
                 w = int(streams[0].get("width", 1920)) if streams else 1920
                 h = int(streams[0].get("height", 1080)) if streams else 1080
+                self.video_width = w
+                self.video_height = h
+                self.video_info = {"width": w, "height": h, "fps": self.fps if hasattr(self, "fps") else 30.0}
                 self.fps = parse_fps(
                     streams[0].get("avg_frame_rate")
                     or streams[0].get("r_frame_rate")
                 ) if streams else 30.0
+                self.video_info["fps"] = self.fps
                 total_dur = sum(
                     float(
                         ffprobe_stream_info(ffprobe_exe, p)
@@ -285,7 +301,12 @@ class ProjectMixin:
                 self.signals.sig_video_info_ready.emit(
                     f"{w}x{h} @ {self.fps:.1f} fps, {total_dur:.1f}s"
                 )
-                self.signals.sig_video_duration_ready.emit(total_dur)
+                # FIX A: do NOT emit sig_video_duration_ready here.
+                # format.duration and player.duration() are source-local/provisional
+                # values.  The canonical project_duration comes from VideoTimeline
+                # (video-stream frame-count based).  Emission is deferred to after
+                # build_timeline_from_paths below; total_dur is only a fallback used
+                # if timeline build fails.
 
                 # Layout — użyj startowego preseta jeśli ustawiony
                 preset_path = self._startup_preset_path or self.layout.get("_startup_preset", "")
@@ -403,6 +424,19 @@ class ProjectMixin:
                     self.video_timeline = timeline
                     self.video_clips = list(timeline.clips)
                     self.video_duration_s = timeline.project_duration_s
+                    # FIX A: emit the canonical project duration (video-stream
+                    # frame-count based) so the seek bar receives the correct
+                    # value.  This replaces the earlier provisional emission of
+                    # format.duration sum (which was architecturally wrong even
+                    # though numerically only ~0.47 s off for this dataset).
+                    self.signals.sig_video_duration_ready.emit(
+                        timeline.project_duration_s
+                    )
+                    print(
+                        f"[MultiFile] project_duration={timeline.project_duration_s:.6f} s"
+                        f" clip_count={timeline.clip_count} (canonical, emitted to seek bar)",
+                        flush=True,
+                    )
                     # Full per-clip + gap diagnostics (ETAP 3).
                     for line in format_timeline_diagnostics(timeline):
                         print(line, flush=True)
@@ -424,6 +458,9 @@ class ProjectMixin:
                     )
                     self.video_timeline = None
                     self.video_clips = []
+                    # FIX A fallback: emit provisional total_dur when timeline
+                    # build failed (better than no emit at all).
+                    self.signals.sig_video_duration_ready.emit(total_dur)
                 # The decoder is loaded with clip 0 (first file) at this point.
                 self._active_preview_clip_index = 0
                 self._pending_seek_ms = None
@@ -455,37 +492,40 @@ class ProjectMixin:
                 self.signals.sig_progress.emit(85, "Przygotowywanie podglądu...")
 
                 self.signals.sig_progress.emit(90, "Pobieranie klatki...")
+                target_w = getattr(self, "_preview_target_w", 960)
+                target_h = getattr(self, "_preview_target_h", None)
+                if target_h is None or target_h <= 0:
+                    target_h = max(1, int(round(target_w * h / w))) if w > 0 else 540
+
                 if self.is_using_mpv():
-                    target_h = int(self._preview_target_w * h / w) if w > 0 else 540
-                    first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                    first_frame = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
                 elif _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
                     # QMediaPlayer is loaded — first frame will arrive via
                     # _on_video_frame callback (hardware-accelerated).
                     # Use placeholder until then.
-                    target_h = int(self._preview_target_w * h / w) if w > 0 else 540
-                    first_frame = Image.new("RGBA", (self._preview_target_w, target_h), (0, 0, 0, 0))
+                    first_frame = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
                 else:
                     clear_capture_cache()
                     first_frame = extract_frame(
-                        self.video_paths, 0, ffmpeg_exe, ffprobe_exe, target_w=self._preview_target_w, preferred_encoder=self.ui.render_tab.cmb_encoder.currentText() if getattr(self, "ui", None) and getattr(self.ui, "render_tab", None) else ""
+                        self.video_paths, 0, ffmpeg_exe, ffprobe_exe, target_w=target_w, preferred_encoder=self.ui.render_tab.cmb_encoder.currentText() if getattr(self, "ui", None) and getattr(self.ui, "render_tab", None) else ""
                     )
                 if first_frame:
                     if not self.is_using_mpv():
                         # Skaluj do rozdzielczości podglądu
-                        w, h = first_frame.size
-                        if w > self._preview_target_w:
-                            ratio = self._preview_target_w / w
-                            new_h = max(1, int(h * ratio))
+                        fw, fh = first_frame.size
+                        if (fw, fh) != (target_w, target_h):
                             first_frame = first_frame.resize(
-                                (self._preview_target_w, new_h), Image.LANCZOS,
+                                (target_w, target_h), Image.LANCZOS,
                             )
                     self.src_img = first_frame
                     self.last_src_pil = first_frame
                     self.last_preview_ts = 0.0
+
                 self.signals.sig_progress.emit(95, "Składanie podglądu...")
-                self._render_preview(0)
+                self.refresh_preview_geometry_and_hud()
 
                 # ── Hwdec diagnostics (deferred, needs main thread) ────
+
                 if self.is_using_mpv():
                     # bg_load has no Qt event dispatcher. Request the timer
                     # on the controller's GUI thread through a queued signal.

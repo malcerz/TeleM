@@ -30,6 +30,9 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from src.render_logging import render_print
+
+print = render_print
 from typing import Any, Callable, Optional
 
 # datetime convention: naive UTC (matches the rest of TeleM).
@@ -428,6 +431,15 @@ def _load_valid_telem_time_cache(
             timestamp_source=data.get("timestamp_source", TIMESTAMP_SOURCE_UNKNOWN),
             timestamp_reliable=bool(data.get("timestamp_reliable", False)),
             timestamp_detail=data.get("timestamp_detail", ""),
+            # Version-1 caches predate the explicit quality field.  Preserve
+            # their proven GPMF reliability instead of silently relabelling
+            # them as continuous/fallback timestamps.
+            timestamp_quality=data.get(
+                "timestamp_quality",
+                TIMESTAMP_QUALITY_EXACT
+                if data.get("timestamp_source") in _GPMF_RELIABLE_SOURCES
+                else TIMESTAMP_QUALITY_ESTIMATED,
+            ),
         )
     except Exception:
         return None
@@ -531,11 +543,36 @@ class VideoClip:
     timestamp_detail: str = ""
     timestamp_quality: str = TIMESTAMP_QUALITY_FALLBACK
     metadata: dict = field(default_factory=dict)
+    frame_count: int = 0
+    local_start_s: float = 0.0
+    source_duration_s: float = 0.0
+    # Position on the original compressed activity axis.  Export subsets keep
+    # this anchor so activity-global statistics do not restart at range 0.
+    activity_start_s: Optional[float] = None
 
     @property
     def local_duration_s(self) -> float:
         """Duration on the local (inside-clip) axis."""
         return self.duration_s
+
+    @property
+    def local_end_s(self) -> float:
+        return self.local_start_s + self.duration_s
+
+    def output_frame_count(self, target_fps: float) -> int:
+        """Return this clip's canonical output-frame contribution.
+
+        Preserve the probed source count when source and output rates match.
+        Otherwise use the clip's visual duration on the requested CFR grid.
+        """
+        full_source = (
+            self.local_start_s == 0.0
+            and (self.source_duration_s <= 0.0
+                 or abs(self.source_duration_s - self.duration_s) < 1e-6)
+        )
+        if full_source and self.frame_count > 0 and abs(self.fps - target_fps) < 1e-6:
+            return self.frame_count
+        return max(0, int(round(self.duration_s * target_fps)))
 
 
 class VideoTimeline:
@@ -566,8 +603,8 @@ class VideoTimeline:
         """Recompute global offsets and absolute ends for all clips.
 
         Also finalises the timestamp provenance:
-        - clip 0 is re-anchored to the project ``base_dt`` (telemetry
-          ``start_dt_utc``) so single-file behavior stays identical;
+        - project ``base_dt`` fills clip 0 only when that clip has no reliable
+          source-local absolute timestamp;
         - a clip with no reliable absolute start is explicitly marked
           ``continuous_fallback`` (the mapping-time degraded fallback).
         """
@@ -576,8 +613,15 @@ class VideoTimeline:
         for i, clip in enumerate(clips):
             clip.global_start_s = offset
             clip.global_end_s = offset + clip.duration_s
-            if i == 0 and base is not None:
-                # Clip 0 = project start (telemetry.start_dt_utc, GPMF anchor).
+            if clip.activity_start_s is None:
+                clip.activity_start_s = offset
+            if (
+                i == 0 and base is not None
+                and (clip.absolute_start_dt is None or not clip.timestamp_reliable)
+            ):
+                # Project anchor is a fallback only. A reliable clip-local GPMF
+                # timestamp remains authoritative even when it differs from the
+                # telemetry manager's legacy start anchor.
                 clip.absolute_start_dt = base
                 clip.timestamp_reliable = True
                 if clip.timestamp_source not in (
@@ -602,7 +646,7 @@ class VideoTimeline:
             clip.absolute_start_dt = _as_naive_utc(clip.absolute_start_dt)
             if clip.absolute_start_dt is not None:
                 clip.absolute_end_dt = clip.absolute_start_dt + timedelta(
-                    seconds=clip.duration_s
+                    seconds=clip.local_end_s
                 )
             else:
                 clip.absolute_end_dt = None
@@ -645,6 +689,97 @@ class VideoTimeline:
         """True when the project contains exactly one clip (legacy mode)."""
         return len(self.clips) == 1
 
+    def output_frame_counts(self, target_fps: float) -> list[int]:
+        """Canonical per-clip frame plan for a CFR export."""
+        return [clip.output_frame_count(target_fps) for clip in self.clips]
+
+    def output_frame_count(self, target_fps: float) -> int:
+        """Canonical total frame count for a CFR export."""
+        return sum(self.output_frame_counts(target_fps))
+
+    def frame_to_clip(
+        self, frame_index: int, target_fps: float
+    ) -> tuple[Optional[int], int]:
+        """Map a global output frame to ``(clip index, local frame)``.
+
+        Integer boundaries avoid source switches depending on container
+        duration rounding or floating-point time comparisons.
+        """
+        counts = self.output_frame_counts(target_fps)
+        if not counts:
+            return None, 0
+        frame = max(0, int(frame_index))
+        offset = 0
+        for idx, count in enumerate(counts):
+            if frame < offset + count:
+                local_start_frame = int(round(
+                    self.clips[idx].local_start_s * target_fps
+                ))
+                return idx, local_start_frame + frame - offset
+            offset += count
+        local_start_frame = int(round(
+            self.clips[-1].local_start_s * target_fps
+        ))
+        return (
+            len(counts) - 1,
+            local_start_frame + max(0, counts[-1] - 1),
+        )
+
+    def frame_to_activity_elapsed(
+        self, frame_index: int, target_fps: float
+    ) -> float:
+        """Map an output frame to elapsed time on the original activity axis."""
+        clip_index, local_frame = self.frame_to_clip(frame_index, target_fps)
+        if clip_index is None or target_fps <= 0:
+            return 0.0
+        clip = self.clips[clip_index]
+        anchor = (
+            float(clip.activity_start_s)
+            if clip.activity_start_s is not None else clip.global_start_s
+        )
+        return max(
+            0.0,
+            anchor + local_frame / target_fps - clip.local_start_s,
+        )
+
+    def subset(self, ranges: list[tuple[int, float, float]]) -> "VideoTimeline":
+        """Create an export timeline from real per-source local ranges.
+
+        Each tuple is ``(clip_index, local_start_s, local_end_s)``. Repeated
+        source clips are allowed and remain distinct decoder segments.
+        """
+        selected: list[VideoClip] = []
+        for clip_index, local_start, local_end in ranges:
+            source = self.clips[int(clip_index)]
+            start = max(0.0, float(local_start))
+            end = min(source.local_end_s, float(local_end))
+            if end <= start:
+                raise ValueError("timeline subset range must have end > start")
+            selected.append(VideoClip(
+                path=source.path,
+                duration_s=end - start,
+                fps=source.fps,
+                width=source.width,
+                height=source.height,
+                absolute_start_dt=source.absolute_start_dt,
+                timestamp_source=source.timestamp_source,
+                timestamp_reliable=source.timestamp_reliable,
+                timestamp_detail=source.timestamp_detail,
+                timestamp_quality=source.timestamp_quality,
+                metadata=dict(source.metadata),
+                frame_count=max(0, int(round((end - start) * source.fps))),
+                local_start_s=start,
+                source_duration_s=(
+                    source.source_duration_s or source.local_end_s
+                ),
+                activity_start_s=(
+                    float(source.activity_start_s)
+                    if source.activity_start_s is not None
+                    else source.global_start_s
+                ) + start - source.local_start_s,
+            ))
+        return VideoTimeline(selected, base_dt=self.base_dt)
+
     # ── Global → clip / local ───────────────────────────────────────────────
 
     def global_to_clip(self, global_time: float) -> tuple[Optional[int], float]:
@@ -659,10 +794,10 @@ class VideoTimeline:
         g = max(0.0, min(float(global_time), self.project_duration_s))
         for i, clip in enumerate(self.clips):
             if g < clip.global_end_s:
-                return i, g - clip.global_start_s
+                return i, clip.local_start_s + g - clip.global_start_s
         # At (or past) the exact project end -> last clip, its last local time.
         last = self.clips[-1]
-        return len(self.clips) - 1, last.duration_s
+        return len(self.clips) - 1, last.local_end_s
 
     def clip_at(self, global_time: float) -> Optional[VideoClip]:
         """Return the active clip for a given global time (or None)."""
@@ -732,8 +867,8 @@ class VideoTimeline:
             if start is None:
                 continue
             local = (dt - start).total_seconds()
-            if 0.0 <= local <= clip.duration_s + 1e-6:
-                return clip.global_start_s + local
+            if clip.local_start_s - 1e-6 <= local <= clip.local_end_s + 1e-6:
+                return clip.global_start_s + local - clip.local_start_s
         return None
 
 
@@ -751,19 +886,19 @@ def probe_video_info(
     cmd = [
         ffprobe_exe, "-v", "error", "-select_streams", "v:0",
         "-show_entries",
-        "stream=r_frame_rate,avg_frame_rate,width,height:format=duration",
+        "stream=r_frame_rate,avg_frame_rate,width,height,duration,nb_frames:format=duration",
         "-of", "json", str(path),
     ]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True)
     except Exception:
-        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0}
+        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0, "frame_count": 0}
     if p.returncode != 0:
-        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0}
+        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0, "frame_count": 0}
     try:
         data = json.loads(p.stdout or "{}")
     except (json.JSONDecodeError, ValueError):
-        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0}
+        return {"duration_s": 0.0, "fps": default_fps, "width": 0, "height": 0, "frame_count": 0}
 
     streams = data.get("streams", [])
     try:
@@ -774,15 +909,29 @@ def probe_video_info(
     fps = default_fps
     width = 0
     height = 0
+    frame_count = 0
     if streams:
         rate = streams[0].get("avg_frame_rate") or streams[0].get("r_frame_rate")
         fps = _parse_fps(rate, default_fps)
         try:
             width = int(streams[0].get("width", 0) or 0)
             height = int(streams[0].get("height", 0) or 0)
+            frame_count = int(streams[0].get("nb_frames", 0) or 0)
         except (TypeError, ValueError):
-            width = height = 0
-    return {"duration_s": duration_s, "fps": fps, "width": width, "height": height}
+            width = height = frame_count = 0
+        # The visual stream, not container/audio/GPMF duration, owns clip
+        # boundaries.  This prevents MF EOS from arriving before a switch.
+        if frame_count > 0 and fps > 0:
+            duration_s = frame_count / fps
+        elif streams[0].get("duration") is not None:
+            try:
+                duration_s = float(streams[0]["duration"])
+            except (TypeError, ValueError):
+                pass
+    return {
+        "duration_s": duration_s, "fps": fps, "width": width,
+        "height": height, "frame_count": frame_count,
+    }
 
 
 def resolve_clip_absolute_start(
@@ -828,8 +977,8 @@ def build_timeline_from_paths(
         paths: ordered list of video files (order is preserved, never sorted).
         ffmpeg_exe: ffmpeg binary path (used to extract each clip's GPMF).
         ffprobe_exe: ffprobe binary path.
-        base_dt: project absolute start (telemetry.start_dt_utc). Re-anchors
-            clip 0 so single-file behavior is identical to today.
+        base_dt: project absolute start (telemetry.start_dt_utc). Used only as
+            fallback when clip 0 has no reliable source-local timestamp.
         default_fps: fallback FPS when probing fails.
         absolute_start_fn: optional per-clip absolute-start override (used by
             tests / callers that already know the start).
@@ -839,21 +988,7 @@ def build_timeline_from_paths(
     for idx, p in enumerate(paths):
         path = Path(p)
         info = probe_video_info(ffprobe_exe, path, default_fps=default_fps)
-        if idx == 0 and base_dt is not None and absolute_start_fn is None:
-            # Clip 0 is always re-anchored to the project start
-            # (telemetry.start_dt_utc), which itself derives from clip 0's GPMF
-            # anchor.  Skipping a second GPMF extraction of the (large) first
-            # file avoids redundant parsing on every project load.
-            res = ClipTimestampResolution(
-                absolute_start_dt=_as_naive_utc(base_dt),
-                timestamp_source="project_start_anchor",
-                timestamp_reliable=True,
-                timestamp_detail=(
-                    f"project start_dt_utc (telemetry anchor) {_fmt_iso(base_dt)}"
-                ),
-                timestamp_quality=TIMESTAMP_QUALITY_EXACT,
-            )
-        elif absolute_start_fn is not None:
+        if absolute_start_fn is not None:
             try:
                 start = _as_naive_utc(absolute_start_fn(path))
             except Exception:
@@ -877,6 +1012,8 @@ def build_timeline_from_paths(
             VideoClip(
                 path=path,
                 duration_s=info["duration_s"],
+                frame_count=info.get("frame_count", 0),
+                source_duration_s=info["duration_s"],
                 fps=info["fps"],
                 width=info["width"],
                 height=info["height"],

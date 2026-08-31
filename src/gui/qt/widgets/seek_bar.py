@@ -1,10 +1,8 @@
-"""SeekBar — zintegrowany pasek przewijania z znacznikami wycinania A/B.
+"""SeekBar — zwykły pasek przewijania podglądu.
 
-Zastępuje osobny QSlider + MarkerBar jednym widgetem.
---- same
-- Przeciaganie po pasku → seek (zmiana pozycji odtwarzania)
-- Przeciaganie zoltego (A) / czerwonego (B) trojkata pod paskiem → zakres wycinania
-- Pomaranczowe podswietlenie zakresu A-B na pasku
+Zakres eksportu jest ustawiany wyłącznie w zakładce Rendering/Export. Pasek
+zachowuje wewnętrzne API mapowania zakresów dla kompatybilności z modelem
+eksportu, ale nie eksponuje markerów, zaznaczenia ani interakcji A/B.
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ from PySide6.QtWidgets import QWidget
 
 
 class SeekBar(QWidget):
-    """Pasek przewijania z wbudowanymi znacznikami A/B wycinania."""
+    """Pasek przewijania z playheadem; bez UI wyboru zakresu cięcia."""
 
     # Emitowany gdy użytkownik przeciągnął pasek (seeking)
     sig_position_changed = Signal(float)
@@ -29,7 +27,7 @@ class SeekBar(QWidget):
         self._position_s: float = 0.0             # efektywna pozycja seeka
         self._mark_a: float = 0.0                 # znacznik A (efektywny)
         self._mark_b: float = 100.0               # znacznik B (efektywny)
-        self._dragging: str | None = None         # None | "seek" | "A" | "B"
+        self._dragging: str | None = None         # None | "seek"
         self._cut_regions: list[tuple[float, float]] = []
         self._has_selection = False
 
@@ -43,10 +41,7 @@ class SeekBar(QWidget):
         self.setMaximumHeight(26)
         self.setMouseTracking(True)
         self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setToolTip(
-            "Przeciagnij pasek — przewijanie.\n"
-            "Przeciagnij zolty (A) / czerwony (B) znacznik — zakres wycinania."
-        )
+        self.setToolTip("Przeciągnij pasek — przewijanie podglądu.")
 
     # ═════════════════════════════════════════════════════════════════════
     # API
@@ -201,26 +196,6 @@ class SeekBar(QWidget):
         painter.setBrush(QColor(50, 50, 50))
         painter.drawRoundedRect(m, bar_y, w - 2 * m, bar_h, 2, 2)
 
-        # --- Zakres A-B (pomarańczowy, pod spodem) ---
-        if dur > 0:
-            a, b = self.get_range()
-            if b - a > 0.01:
-                x1 = self._sec_to_x(a)
-                x2 = self._sec_to_x(b)
-                painter.setBrush(QColor(200, 100, 50, 140))
-                painter.drawRoundedRect(
-                    int(x1), bar_y, max(1, int(x2 - x1)), bar_h, 2, 2,
-                )
-
-        # --- Znaczniki cięć (wąskie czerwone karbowania na efektywnej osi) ---
-        if self._cut_regions:
-            painter.setBrush(QColor(220, 60, 60, 200))
-            painter.setPen(Qt.NoPen)
-            for cs, ce in self._cut_regions:
-                cx = self._sec_to_x(self.orig_to_eff(cs))
-                notch_h = bar_h + 6
-                painter.drawRect(int(cx) - 1, bar_y - 3, 3, notch_h)
-
         # --- Znacznik pozycji (thumb) ---
         if dur > 0:
             px = self._sec_to_x(self._position_s)
@@ -234,75 +209,23 @@ class SeekBar(QWidget):
             tri.append(QPointF(px - 4, bar_y + bar_h // 2))
             painter.drawPolygon(tri)
 
-        # --- Znacznik A (żółty trójkąt pod paskiem) ---
-        if dur > 0:
-            ax = self._sec_to_x(self._mark_a)
-            ax = max(m, min(w - m, ax))
-            tri_a = QPolygonF()
-            tri_a.append(QPointF(ax, h - 2))
-            tri_a.append(QPointF(ax - 5, h - 10))
-            tri_a.append(QPointF(ax + 5, h - 10))
-            painter.setBrush(QColor(255, 200, 50))
-            painter.drawPolygon(tri_a)
-
-            # Etykieta "A"
-            painter.setPen(QColor(255, 200, 50))
-            fnt = painter.font()
-            fnt.setPointSize(7)
-            painter.setFont(fnt)
-            painter.drawText(int(ax) - 8, h - 14, 16, 8, Qt.AlignCenter, "A")
-
-        # --- Znacznik B (czerwony trójkąt pod paskiem) ---
-        if dur > 0:
-            bx = self._sec_to_x(self._mark_b)
-            bx = max(m, min(w - m, bx))
-            tri_b = QPolygonF()
-            tri_b.append(QPointF(bx, h - 2))
-            tri_b.append(QPointF(bx - 5, h - 10))
-            tri_b.append(QPointF(bx + 5, h - 10))
-            painter.setBrush(QColor(255, 80, 80))
-            painter.drawPolygon(tri_b)
-
-            # Etykieta "B"
-            painter.setPen(QColor(255, 80, 80))
-            fnt = painter.font()
-            fnt.setPointSize(7)
-            painter.setFont(fnt)
-            painter.drawText(int(bx) - 8, h - 14, 16, 8, Qt.AlignCenter, "B")
-
         painter.end()
 
     # ═════════════════════════════════════════════════════════════════════
     # Obsługa myszy
     # ═════════════════════════════════════════════════════════════════════
 
-    def _hit_marker(self, x: float) -> str | None:
-        """Sprawdź czy kliknięto w pobliżu znacznika A lub B."""
-        if self._effective_duration_s <= 0:
-            return None
-        sec = self._x_to_sec(x)
-        threshold = 0.04 * self._effective_duration_s
-        if abs(sec - self._mark_a) < threshold:
-            return "A"
-        if abs(sec - self._mark_b) < threshold:
-            return "B"
-        return None
-
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() != Qt.LeftButton:
             return
         x = event.position().x()
-        hit = self._hit_marker(x)
-        if hit:
-            self._dragging = hit
-        else:
-            self._dragging = "seek"
-            # Natychmiastowy seek do klikniętej pozycji
-            sec = self._x_to_sec(x)
-            sec = max(0.0, min(self._effective_duration_s, sec))
-            self._position_s = sec
-            self.sig_position_changed.emit(sec)
-            self.update()
+        self._dragging = "seek"
+        # Natychmiastowy seek do klikniętej pozycji.
+        sec = self._x_to_sec(x)
+        sec = max(0.0, min(self._effective_duration_s, sec))
+        self._position_s = sec
+        self.sig_position_changed.emit(sec)
+        self.update()
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._dragging is None:
@@ -315,14 +238,6 @@ class SeekBar(QWidget):
             self._position_s = sec
             self._pending_seek_s = sec
             self._seek_timer.start()  # restart debounce
-        elif self._dragging == "A":
-            self._mark_a = sec
-            self._has_selection = True
-            self.sig_range_changed.emit(*self.get_range())
-        elif self._dragging == "B":
-            self._mark_b = sec
-            self._has_selection = True
-            self.sig_range_changed.emit(*self.get_range())
         self.update()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
@@ -330,8 +245,6 @@ class SeekBar(QWidget):
             if self._dragging == "seek":
                 self._seek_timer.stop()
                 self.sig_position_changed.emit(self._position_s)
-            elif self._dragging in ("A", "B"):
-                self.sig_range_changed.emit(*self.get_range())
         self._dragging = None
         self.update()
 

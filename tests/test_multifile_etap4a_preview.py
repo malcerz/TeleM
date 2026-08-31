@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from src.gui.qt._mixins.preview_mixin import PreviewMixin
+from src.gui.qt._mixins.playback_mixin import PlaybackMixin
 from src.multifile import (
     TIMESTAMP_SOURCE_GPMF_GPS9,
     VideoClip,
@@ -70,6 +71,14 @@ class _FakePlayer:
 
     def pause(self) -> None:
         pass
+
+
+class _FakeSignal:
+    def __init__(self) -> None:
+        self.values: list[float] = []
+
+    def emit(self, value: float) -> None:
+        self.values.append(float(value))
 
 
 def _make_preview(
@@ -256,3 +265,50 @@ class TestLocalSeek:
         assert res["clip_index"] == 1
         assert res["local_time"] == pytest.approx(120.0)
         assert res["local_time"] != pytest.approx(720.0)
+
+
+class TestContinuousPlaybackBoundary:
+    def test_qmedia_end_switches_to_next_global_clip_without_stopping(self):
+        timeline = VideoTimeline.from_clips([
+            _clip("a", 60.0, _dt("10:05:00")),
+            _clip("b", 90.0, _dt("10:35:00")),
+        ], base_dt=_dt("10:05:00"))
+        obj = PlaybackMixin.__new__(PlaybackMixin)
+        seek_signal = _FakeSignal()
+        transitions: list[tuple[int, float, float]] = []
+        rendered: list[float] = []
+        obj._playing = True
+        obj._active_preview_clip_index = 0
+        obj.video_timeline = timeline
+        obj.mpv_player = None
+        obj.media_player = _FakePlayer()
+        obj._seek_pending = False
+        obj._playback_pos = timeline.clips[0].global_end_s
+        obj.signals = type("Signals", (), {"sig_seek_position": seek_signal})()
+        obj._preview_ensure_active_clip = lambda idx, clip, local, global_t: transitions.append(
+            (idx, local, global_t)
+        )
+        obj._render_preview = lambda global_t: rendered.append(global_t)
+        obj._on_playback_stop = lambda: pytest.fail("must not stop at an intermediate clip")
+
+        obj._on_media_end()
+
+        assert obj._playing is True
+        assert transitions == [(1, 0.0, 60.0)]
+        assert obj._playback_pos == pytest.approx(60.0)
+        assert seek_signal.values == [60.0]
+        assert rendered == [60.0]
+
+    def test_loaded_source_resumes_when_project_play_is_active(self):
+        from PySide6.QtMultimedia import QMediaPlayer
+
+        player = _FakePlayer()
+        obj = PreviewMixin.__new__(PreviewMixin)
+        obj.media_player = player
+        obj._pending_seek_ms = 0
+        obj._playing = True
+
+        obj._on_media_status_changed(QMediaPlayer.MediaStatus.LoadedMedia)
+
+        assert player.positions == [0]
+        assert player.played is True

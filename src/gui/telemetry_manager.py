@@ -13,6 +13,9 @@ from typing import Any, Callable, Optional
 from src.telemetry_resolver import resolve_samples_from_sources
 from src.telemetry_heading import derive_heading_samples, interpolate_heading
 from src.telemetry_slope import derive_slope_from_streams, interpolate_slope
+from src.render_logging import render_print
+
+print = render_print
 
 # Import telemetry modules (with fallback stubs)
 try:
@@ -77,8 +80,11 @@ _FIT_LOOKUP: dict[str, tuple[str, ...]] = {
     "power": ("curVpower",),
     "hr": ("heart_rate",),
     "cad": ("cadence",),
-    "atemp": ("temperature",),
-    "battery": ("battery_soc",),
+    "atemp": ("temperature", "garmin_temperature"),
+    "battery": ("battery_soc", "garmin_battery_percent", "battery_pct"),
+    "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
+    "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
+    "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
 }
 
 # GPS-related fields handled by built-in indicators (not registered as extension)
@@ -111,6 +117,7 @@ def _align_offset_by_track(
 
     fit_pts: list[tuple[datetime, float, float]] = []
     for r in records:
+
         if r.get("timestamp") is None or r.get("lat") is None or r.get("lon") is None:
             continue
         dt = r["timestamp"]
@@ -522,13 +529,18 @@ class TelemetryDataManager:
             else:
                 self.alt_samples = raw_alt or []
 
-    def load_gpmf_records(self, records: list[dict], profile_cb=None) -> None:
+    def load_gpmf_records(self, records: list[dict], profile_cb=None, progress_cb=None) -> None:
         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
         self.records = records
 
-        def _run(stage, fn):
+        def _run(stage, fn, label=None):
             started = _time.perf_counter()
             result = fn()
+            if progress_cb is not None:
+                try:
+                    progress_cb(stage, 1, 1, label)
+                except Exception:
+                    pass
             if profile_cb is not None:
                 try:
                     profile_cb(stage, _time.perf_counter() - started, len(records), len(result or []))
@@ -543,18 +555,18 @@ class TelemetryDataManager:
         if not self.alt_samples and self._extract_altitude:
             self.alt_samples = _run("altitude_extract", lambda: self._extract_altitude(records))
         if self._extract_track:
-            self.track_samples = _run("track_extract", lambda: self._extract_track(records))
+            self.track_samples = _run("track_extract", lambda: self._extract_track(records, lambda d, t: progress_cb("track_extract", d, t, "GPMF: GPS/track")) if progress_cb else self._extract_track(records))
         if self._extract_iso:
-            self.iso_samples = _run("iso_extract", lambda: self._extract_iso(records))
+            self.iso_samples = _run("iso_extract", lambda: self._extract_iso(records, lambda d, t: progress_cb("iso_extract", d, t, "GPMF: ISO")) if progress_cb else self._extract_iso(records))
         if self._extract_exposure:
-            self.exposure_samples = _run("exposure_extract", lambda: self._extract_exposure(records))
+            self.exposure_samples = _run("exposure_extract", lambda: self._extract_exposure(records, lambda d, t: progress_cb("exposure_extract", d, t, "GPMF: exposure")) if progress_cb else self._extract_exposure(records))
         if self._extract_temperature:
-            self.temperature_samples = _run("temperature_extract", lambda: self._extract_temperature(records))
+            self.temperature_samples = _run("temperature_extract", lambda: self._extract_temperature(records, lambda d, t: progress_cb("temperature_extract", d, t, "GPMF: temperature")) if progress_cb else self._extract_temperature(records))
         if self._extract_accelerometer:
-            self.accelerometer_samples = _run("accelerometer_extract", lambda: self._extract_accelerometer(records))
+            self.accelerometer_samples = _run("accelerometer_extract", lambda: self._extract_accelerometer(records, lambda d, t: progress_cb("accelerometer_extract", d, t, "GPMF: accelerometer")) if progress_cb else self._extract_accelerometer(records))
             self._set_vector_series(self.accelerometer_samples, "accel")
         if self._extract_gyroscope:
-            self.gyroscope_samples = _run("gyroscope_extract", lambda: self._extract_gyroscope(records))
+            self.gyroscope_samples = _run("gyroscope_extract", lambda: self._extract_gyroscope(records, lambda d, t: progress_cb("gyroscope_extract", d, t, "GPMF: gyroscope")) if progress_cb else self._extract_gyroscope(records))
             self._set_vector_series(self.gyroscope_samples, "gyro")
 
         # Determine start_dt_utc
@@ -1120,12 +1132,26 @@ class TelemetryDataManager:
                     min_val = min_val / 1000.0
                     unit = "km"
 
-                # Bateria FIT: semantyczny zakres baterii to 0..100%, a nie min/max z sesji.
+                # Bateria FIT / Garmin: semantyczny zakres baterii to 0..100%, a nie min/max z sesji.
                 is_battery = "battery" in field_name.lower() or (unit == "%" and "battery" in label.lower())
-                if is_battery:
+                if is_battery and "voltage" not in field_name.lower():
                     min_val = 0.0
                     max_val = 100.0
                     unit = "%"
+
+                # Napięcie baterii FIT / Garmin (0..5V)
+                is_voltage = "voltage" in field_name.lower() or unit == "V"
+                if is_voltage:
+                    min_val = 0.0
+                    max_val = 5.0
+                    unit = "V"
+
+                # Temperatura Garmin / FIT (-20..60°C)
+                if "temperature" in field_name.lower() or unit == "°C":
+                    min_val = -20.0
+                    max_val = 60.0
+                    unit = "°C"
+
 
                 indicators[key] = {
                     "enabled": False,

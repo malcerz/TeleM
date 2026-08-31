@@ -35,11 +35,11 @@ def main() -> None:
         if not video_dir.exists():
             video_dir = base_dir / "video"
 
-        video_path = video_dir / "GX020079.mp4"
+        video_path = video_dir / "GX010115.mp4"
         if not video_path.exists():
             video_path = video_dir / "GL010032.mp4"
 
-        fit_path = video_dir / "Morning_Ride.fit"
+        fit_path = video_dir / "GX010114_116.fit"
 
         if video_path.exists() and fit_path.exists():
             print(f"[TEST MODE] Wczytywanie plików testowych:\n  MP4: {video_path}\n  FIT: {fit_path}", flush=True)

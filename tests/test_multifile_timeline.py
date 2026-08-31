@@ -77,6 +77,19 @@ class TestSingleFile:
         assert tl.global_to_absolute(0.0) == _dt("10:00:00")
         assert tl.global_to_absolute(10.0) == _dt("10:00:10")
 
+    def test_reliable_clip0_gpmf_is_not_reanchored_to_project_anchor(self):
+        """A source-local exact timestamp outranks the project fallback."""
+        clip = _clip(60.0, _dt("09:40:12"))
+        clip.timestamp_source = "gpmf_gps9"
+        clip.timestamp_reliable = True
+        clip.timestamp_quality = "exact"
+
+        tl = VideoTimeline.from_clips([clip], base_dt=_dt("11:18:03"))
+
+        assert tl.global_to_absolute(0.0) == _dt("09:40:12")
+        assert tl.clips[0].timestamp_source == "gpmf_gps9"
+        assert tl.clips[0].timestamp_quality == "exact"
+
     def test_out_of_range_clamps(self):
         tl = VideoTimeline.from_clips([_clip(60.0, None)], base_dt=_dt("10:00:00"))
         assert tl.global_to_clip(-5.0) == (0, 0.0)
@@ -314,8 +327,9 @@ class TestBuildFromPaths:
             base_dt=_dt("10:00:00"),
             absolute_start_fn=lambda p: _dt("09:59:30"),
         )
-        # Custom resolver ignored for clip0 (base_dt re-anchors it).
-        assert tl.global_to_absolute(0.0) == _dt("10:00:00")
+        # A source-local resolver is reliable and must outrank the project
+        # fallback anchor, exactly like GPMF on the first selected clip.
+        assert tl.global_to_absolute(0.0) == _dt("09:59:30")
 
     def test_probe_video_info_failure_is_safe(self, monkeypatch):
         # A failing ffprobe returns zeros + default_fps instead of raising.
@@ -371,3 +385,38 @@ class TestOrderingAndCompat:
         assert tl.is_single_file is False
         assert tl.global_to_absolute(0.0) is None
         assert tl.global_to_clip(0.0) == (None, 0.0)
+
+
+def test_integer_frame_plan_switches_exactly_at_source_frame_boundary():
+    fps = 30000 / 1001
+    clips = [
+        VideoClip(Path("014.MP4"), duration_s=58639 / fps,
+                  fps=fps, frame_count=58639),
+        VideoClip(Path("015.MP4"), duration_s=17760 / fps,
+                  fps=fps, frame_count=17760),
+        VideoClip(Path("016.MP4"), duration_s=52257 / fps,
+                  fps=fps, frame_count=52257),
+    ]
+    timeline = VideoTimeline.from_clips(clips)
+    assert timeline.output_frame_counts(fps) == [58639, 17760, 52257]
+    assert timeline.output_frame_count(fps) == 128656
+    assert timeline.frame_to_clip(58638, fps) == (0, 58638)
+    assert timeline.frame_to_clip(58639, fps) == (1, 0)
+    assert timeline.frame_to_clip(76398, fps) == (1, 17759)
+    assert timeline.frame_to_clip(76399, fps) == (2, 0)
+
+
+def test_subset_preserves_original_activity_elapsed_for_global_hud_stats():
+    fps = 30.0
+    timeline = VideoTimeline.from_clips([
+        VideoClip(Path("014.MP4"), duration_s=100.0, fps=fps),
+        VideoClip(Path("015.MP4"), duration_s=50.0, fps=fps),
+    ])
+    subset = timeline.subset([
+        (0, 90.0, 100.0),
+        (1, 0.0, 10.0),
+        (1, 40.0, 50.0),
+    ])
+    assert subset.frame_to_activity_elapsed(0, fps) == pytest.approx(90.0)
+    assert subset.frame_to_activity_elapsed(300, fps) == pytest.approx(100.0)
+    assert subset.frame_to_activity_elapsed(600, fps) == pytest.approx(140.0)

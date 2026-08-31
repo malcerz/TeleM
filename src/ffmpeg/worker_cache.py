@@ -18,6 +18,7 @@ from src.telemetry_extract import (
 )
 from src.telemetry_heading import interpolate_heading
 from src.telemetry_slope import interpolate_slope
+from src.telemetry_resolver import resolve_distance_samples, distance_max_m
 
 WORKER_CACHE: dict[str, Any] = {}
 
@@ -136,7 +137,7 @@ def init_worker(
     # max_distance_m
     trk = track_samples or []
     gpx_trk = gpx_track_samples or []
-    fit_trk = fit_data.get("track", []) if fit_data else []
+    fit_trk = resolve_distance_samples("fit", fit_data=fit_data)
     dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
     dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
     if dist_src == "gpx":
@@ -145,7 +146,7 @@ def init_worker(
         trk_for_range = fit_trk
     else:
         trk_for_range = trk
-    _prep_cache["max_distance_m"] = trk_for_range[-1][1] if trk_for_range else None
+    _prep_cache["max_distance_m"] = distance_max_m(trk_for_range)
 
     # max_speed_kmh
     spd = speed_samples or []
@@ -198,7 +199,9 @@ def _get_source_samples(source_type: str) -> tuple[list, list, list]:
     gpx_trk = WORKER_CACHE.get("gpx_track_samples", [])
     gpx_alt = WORKER_CACHE.get("gpx_alt_samples", [])
     fit_spd = WORKER_CACHE.get("fit_data", {}).get("speed", [])
-    fit_trk = WORKER_CACHE.get("fit_data", {}).get("track", [])
+    fit_trk = resolve_distance_samples(
+        "fit", fit_data=WORKER_CACHE.get("fit_data", {})
+    )
     fit_alt = WORKER_CACHE.get("fit_data", {}).get("alt", [])
     gpmf_spd = WORKER_CACHE.get("field_samples", {}).get("speed_samples", [])
     gpmf_trk = WORKER_CACHE.get("field_samples", {}).get("track_samples", [])
@@ -301,10 +304,15 @@ def _resolve_cache_samples(
         return list(WORKER_CACHE.get(gpx_map.get(field_name, ""), []) or [])
     if source == "fit":
         fit_data = WORKER_CACHE.get("fit_data", {})
+        if field_name == "distance":
+            return resolve_distance_samples("fit", fit_data=fit_data)
         aliases = {
             "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
-            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature"),
-            "battery": ("battery", "battery_soc"),
+            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature", "garmin_temperature"),
+            "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
+            "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
+            "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
+            "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
         }.get(field_name, (field_name,))
         for name in aliases:
             if fit_data.get(name):

@@ -76,18 +76,25 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         # Po załadowaniu danych przełącz na zakładkę Projekt
-        self.signals.sig_data_streams_ready.connect(
-            lambda _: self.tabs.setCurrentWidget(self._project_tab)
-        )
+        self.signals.sig_data_streams_ready.connect(self._on_data_streams_ready)
+
+    def _on_data_streams_ready(self, _streams) -> None:
+        self.tabs.setCurrentWidget(self._project_tab)
+        self.preview._notify_controller_preview_size()
+        if hasattr(self, "_controller") and self._controller:
+            if hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+                self._controller.refresh_preview_geometry_and_hud()
 
     def set_controller(self, controller: object) -> None:
         """Bind kontroler do współdzielonego podglądu (jeden raz).
 
         Wywoływane z application.py po utworzeniu MainWindow.
         """
+        self._controller = controller
         self.preview.set_controller(controller)
         self._project_tab.set_controller(controller)
         self._render_tab.set_controller(controller)
+
 
     def check_mpv_availability(self) -> None:
         """Zgłoś błąd, gdy program nie wykryje bibliotek libmpv.
@@ -116,9 +123,6 @@ class MainWindow(QMainWindow):
         s.sig_bboxes_ready.connect(self.preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.preview.on_duration_ready)
         s.sig_seek_position.connect(self.preview._on_seek_position)
-        s.sig_cut_region_added.connect(self.preview._on_cut_region_changed)
-        s.sig_cut_region_removed.connect(self.preview._on_cut_region_changed)
-        s.sig_cut_regions_cleared.connect(self.preview._on_cut_region_changed)
 
     def _move_preview_to(self, slot: QWidget) -> None:
         """Przenieś współdzielony podgląd do kontenera aktywnej zakładki."""
@@ -130,8 +134,6 @@ class MainWindow(QMainWindow):
         self.preview.setParent(slot)
         slot.layout().addWidget(self.preview)
         self.preview.show()
-        # Narzędzia wycinania (✂/↩/↩) tylko w Rendering — w Projekcie ukryte
-        self.preview.set_cut_tools_visible(slot is self._render_tab.preview_slot)
 
     def _on_tab_changed(self, index: int) -> None:
         """Przy zmianie zakładki przenieś podgląd do zakładki z kontenerem."""
@@ -139,6 +141,11 @@ class MainWindow(QMainWindow):
         slot = getattr(current, "preview_slot", None)
         if slot is not None:
             self._move_preview_to(slot)
+            self.preview._notify_controller_preview_size()
+            if hasattr(self, "_controller") and self._controller:
+                if hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+                    self._controller.refresh_preview_geometry_and_hud()
+
 
     def _connect_controller_signals(self) -> None:
         s = self.signals
