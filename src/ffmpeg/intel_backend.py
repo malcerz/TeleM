@@ -22,10 +22,14 @@ Vendor IDs (diagnostic only; AMD/NVIDIA backend implementations are untouched):
 from __future__ import annotations
 
 import ctypes
+import json
 import os
+import platform
+import shutil
 import subprocess
 from ctypes import POINTER, WINFUNCTYPE, byref, c_char_p, c_size_t, c_uint, c_ulong, c_ulonglong, c_void_p, c_wchar
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Optional
 from src.render_logging import render_print
 
@@ -344,6 +348,349 @@ class IntelDeviceSelection:
     adapter_name: str
     vendor_id: int = VENDOR_ID_INTEL
     qsv_device_name: str = "intel_qsv"
+
+
+@dataclass
+class IntelRenderCapabilities:
+    """Canonical, observation-only snapshot for one Intel render.
+
+    This model deliberately describes the selected capabilities and graph.  It
+    does not enable a path and it never guesses a CPU generation from a name.
+    """
+
+    adapter_name: str = ""
+    adapter_vendor_id: int = VENDOR_ID_INTEL
+    adapter_device_id: int = 0
+    adapter_dxgi_index: int = -1
+    driver_version: Optional[str] = None
+    qsv_available: bool = False
+    qsv_h264_encode: bool = False
+    qsv_hevc_encode: bool = False
+    d3d11_device_available: bool = False
+    input_codec: Optional[str] = None
+    input_width: Optional[int] = None
+    input_height: Optional[int] = None
+    input_bit_depth: Optional[int] = None
+    input_pixel_format: Optional[str] = None
+    input_hdr: Optional[bool] = None
+    input_rotation: int = 0
+    multi_file: bool = False
+    cut_active: bool = False
+    decode_path: str = ""
+    decode_residency: str = ""
+    hud_transport: str = ""
+    hud_canvas_width: int = 0
+    hud_canvas_height: int = 0
+    hud_width: int = 0
+    hud_height: int = 0
+    hud_bytes_per_frame: int = 0
+    hud_region_mode: str = "NONE"
+    hud_region_bbox: Optional[list[int]] = None
+    compositor_path: str = ""
+    encode_path: str = ""
+    encode_pixel_format: Optional[str] = None
+    hwdownload_count_expected: int = 0
+    hwupload_count_expected: int = 0
+    capability_class: str = "INTEL_UNAVAILABLE"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+INTEL_CAPABILITY_UNAVAILABLE = "INTEL_UNAVAILABLE"
+INTEL_CAPABILITY_CPU_REFERENCE = "INTEL_QSV_CPU_REFERENCE"
+INTEL_CAPABILITY_GPU_RESIDENT_SDR = "INTEL_QSV_GPU_RESIDENT_SDR"
+INTEL_CAPABILITY_FUTURE_HDR = "INTEL_FUTURE_HDR_CANDIDATE"
+
+
+def intel_proof_enabled() -> bool:
+    """Return whether low-volume Intel proof output was explicitly requested."""
+    return os.environ.get("TELEM_INTEL_PROOF", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def classify_intel_capability(
+    *,
+    qsv_available: bool,
+    gpu_resident: bool,
+    input_hdr: bool | None,
+) -> str:
+    """Classify the selected path using capabilities, never CPU branding."""
+    if not qsv_available:
+        return INTEL_CAPABILITY_UNAVAILABLE
+    if gpu_resident and input_hdr is not True:
+        return INTEL_CAPABILITY_GPU_RESIDENT_SDR
+    # HDR/P010 stays on the existing CPU_REFERENCE path.  The future class is
+    # intentionally not returned by production routing in this stage.
+    return INTEL_CAPABILITY_CPU_REFERENCE
+
+
+def probe_intel_input(input_file: str, ffmpeg_exe: str = "ffmpeg") -> dict[str, Any]:
+    """Probe input facts only when Intel proof mode is enabled."""
+    ffprobe = str(Path(ffmpeg_exe).with_name("ffprobe.exe"))
+    if not Path(ffprobe).exists():
+        ffprobe = shutil.which("ffprobe") or "ffprobe"
+    empty: dict[str, Any] = {
+        "path": str(input_file), "codec": None, "width": None, "height": None,
+        "bit_depth": None, "pixel_format": None, "hdr": None,
+    }
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries",
+             "stream=codec_name,width,height,pix_fmt,bits_per_raw_sample,color_space,color_transfer,color_primaries",
+             "-of", "json", str(input_file)],
+            capture_output=True, text=True, timeout=8,
+            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
+        )
+        data = json.loads(result.stdout) if result.returncode == 0 else {}
+        stream = (data.get("streams") or [{}])[0]
+        pix_fmt = str(stream.get("pix_fmt") or "")
+        color_text = " ".join(
+            str(stream.get(key) or "")
+            for key in ("color_space", "color_transfer", "color_primaries")
+        ).lower()
+        depth = stream.get("bits_per_raw_sample")
+        if not depth:
+            if any(token in pix_fmt.lower() for token in ("10", "p010", "p016", "12")):
+                depth = 10 if "12" not in pix_fmt.lower() else 12
+            elif pix_fmt:
+                depth = 8
+        empty.update({
+            "codec": stream.get("codec_name"),
+            "width": stream.get("width"),
+            "height": stream.get("height"),
+            "bit_depth": int(depth) if depth is not None else None,
+            "pixel_format": pix_fmt or None,
+            "hdr": (
+                any(token in color_text for token in
+                    ("bt2020", "arib-std-b67", "smpte2084"))
+                if color_text else None
+            ),
+        })
+    except Exception:
+        pass
+    return empty
+
+
+def validate_intel_graph_contract(
+    cmd: list[str],
+    filter_complex: str,
+    *,
+    gpu_resident: bool,
+    software_decode: bool,
+) -> dict[str, Any]:
+    """Classify the built Intel graph and compare it to the selected path."""
+    graph = str(filter_complex)
+    command = " ".join(str(item) for item in cmd)
+    has_hwdownload = graph.count("hwdownload")
+    has_hwupload = graph.count("hwupload")
+    has_scale_qsv = "scale_qsv" in graph
+    has_overlay_qsv = "overlay_qsv" in graph
+    has_cpu_overlay = "overlay=" in graph and not has_overlay_qsv
+    expected_compositor = "QSV_GPU" if gpu_resident else "CPU_REFERENCE"
+    expected_residency = (
+        "GPU" if gpu_resident else ("CPU" if software_decode else "GPU_TO_CPU")
+    )
+    expected_download = 0 if (gpu_resident or software_decode) else 1
+    actual_path = "QSV_GPU" if has_overlay_qsv else (
+        "CPU_REFERENCE" if has_cpu_overlay else "UNKNOWN"
+    )
+    mismatch_reasons: list[str] = []
+    if actual_path != expected_compositor:
+        mismatch_reasons.append(
+            f"expected={expected_compositor},actual={actual_path}"
+        )
+    if (has_hwdownload > 0) != (expected_download > 0):
+        mismatch_reasons.append(
+            f"hwdownload_expected={expected_download},actual={has_hwdownload}"
+        )
+    if "hevc_qsv" not in command:
+        mismatch_reasons.append("hevc_qsv_missing")
+    return {
+        "expected_path": expected_compositor,
+        "actual_path": actual_path,
+        "expected_decode_residency": expected_residency,
+        "actual_graph": {
+            "scale_qsv": has_scale_qsv,
+            "overlay_qsv": has_overlay_qsv,
+            "overlay_cpu": has_cpu_overlay,
+            "hwdownload_count": has_hwdownload,
+            "hwupload_explicit_count": has_hwupload,
+            "format_p010le": "format=p010le" in graph,
+            "format_nv12": "format=nv12" in graph,
+            "hevc_qsv": "hevc_qsv" in command,
+            "hwupload_derive_qsv": "hwupload=derive_device=qsv" in graph,
+        },
+        "mismatch": bool(mismatch_reasons),
+        "mismatch_reasons": mismatch_reasons,
+    }
+
+
+def format_intel_proof_clips(video_timeline: Any) -> list[str]:
+    """Format existing VideoTimeline records without reparsing telemetry."""
+    lines: list[str] = []
+    if video_timeline is None:
+        return lines
+    for index, clip in enumerate(getattr(video_timeline, "clips", [])):
+        lines.extend([
+            "[INTEL PROOF CLIP]",
+            f"index={index}",
+            f"source={clip.path.name}",
+            f"source_path={clip.path}",
+            f"global_start={clip.global_start_s:.6f}",
+            f"global_end={clip.global_end_s:.6f}",
+            f"local_start={clip.local_start_s:.6f}",
+            f"local_end={clip.local_end_s:.6f}",
+            f"absolute_start_dt={clip.absolute_start_dt.isoformat() if clip.absolute_start_dt else 'NOT_AVAILABLE'}",
+            f"absolute_end_dt={clip.absolute_end_dt.isoformat() if clip.absolute_end_dt else 'NOT_AVAILABLE'}",
+            f"timestamp_source={clip.timestamp_source}",
+            f"timestamp_quality={clip.timestamp_quality}",
+        ])
+    return lines
+
+
+def intel_proof_snapshot(
+    capabilities: IntelRenderCapabilities,
+    *,
+    input_info: dict[str, Any],
+    timeline: Any,
+    contract_validation: dict[str, Any],
+    ffmpeg_exe: str,
+) -> dict[str, Any]:
+    """Build the machine-readable proof document with stable sections."""
+    data = capabilities.to_dict()
+    clips: list[dict[str, Any]] = []
+    for index, clip in enumerate(getattr(timeline, "clips", []) if timeline else []):
+        clips.append({
+            "index": index,
+            "source": str(clip.path),
+            "source_name": clip.path.name,
+            "global_start": clip.global_start_s,
+            "global_end": clip.global_end_s,
+            "local_start": clip.local_start_s,
+            "local_end": clip.local_end_s,
+            "absolute_start_dt": clip.absolute_start_dt.isoformat() if clip.absolute_start_dt else None,
+            "absolute_end_dt": clip.absolute_end_dt.isoformat() if clip.absolute_end_dt else None,
+            "timestamp_source": clip.timestamp_source,
+            "timestamp_quality": clip.timestamp_quality,
+        })
+    return {
+        "system": {"platform": platform.platform(), "python": platform.python_version(), "ffmpeg": ffmpeg_exe},
+        "adapter": {
+            "name": capabilities.adapter_name,
+            "vendor_id": capabilities.adapter_vendor_id,
+            "device_id": capabilities.adapter_device_id,
+            "dxgi_index": capabilities.adapter_dxgi_index,
+            "driver_version": capabilities.driver_version,
+        },
+        "capabilities": {
+            "class": capabilities.capability_class,
+            "qsv_available": capabilities.qsv_available,
+            "qsv_h264_encode": capabilities.qsv_h264_encode,
+            "qsv_hevc_encode": capabilities.qsv_hevc_encode,
+            "d3d11_device_available": capabilities.d3d11_device_available,
+        },
+        "input": input_info,
+        "timeline": {"multi_file": capabilities.multi_file, "clips": clips},
+        "decode": {"path": capabilities.decode_path, "residency": capabilities.decode_residency},
+        "hud": {
+            "transport": capabilities.hud_transport,
+            "canvas_size": [capabilities.hud_canvas_width, capabilities.hud_canvas_height],
+            "transport_size": [capabilities.hud_width, capabilities.hud_height],
+            "bytes_per_frame": capabilities.hud_bytes_per_frame,
+            "region_mode": capabilities.hud_region_mode,
+            "region_bbox": capabilities.hud_region_bbox,
+        },
+        "compositor": {"path": capabilities.compositor_path},
+        "encode": {"path": capabilities.encode_path, "pixel_format": capabilities.encode_pixel_format},
+        "transfers": {
+            "hwdownload_count_expected": capabilities.hwdownload_count_expected,
+            "hwupload_count_expected": capabilities.hwupload_count_expected,
+        },
+        "timings": {
+            "export_wall_ms": None,
+            "precompute_ms": None,
+            "first_frame_latency_ms": None,
+            "video_render_wall_ms": None,
+            "mux_ms": None,
+            "render_fps": None,
+            "hud_prepare_ms": None,
+            "hud_render_ms": None,
+            "hud_copy_ms": None,
+            "ffmpeg_write_ms": None,
+            "writer_wait_ms": None,
+        },
+        "contract_validation": contract_validation,
+        "capability_snapshot": data,
+    }
+
+
+def emit_intel_proof(snapshot: dict[str, Any]) -> None:
+    """Emit canonical proof lines only in explicit proof mode."""
+    if not intel_proof_enabled():
+        return
+    adapter = snapshot["adapter"]
+    caps = snapshot["capabilities"]
+    inp = snapshot["input"]
+    dec = snapshot["decode"]
+    hud = snapshot["hud"]
+    enc = snapshot["encode"]
+    transfers = snapshot["transfers"]
+    lines = [
+        f"[INTEL PROOF] ADAPTER_NAME={adapter['name']}",
+        f"[INTEL PROOF] ADAPTER_VENDOR=0x{int(adapter['vendor_id']):04X}",
+        f"[INTEL PROOF] ADAPTER_DEVICE={adapter['device_id']}",
+        f"[INTEL PROOF] ADAPTER_DXGI_INDEX={adapter['dxgi_index']}",
+        f"[INTEL PROOF] DRIVER={adapter.get('driver_version') or 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] CAPABILITY_CLASS={caps['class']}",
+        f"[INTEL PROOF] INPUT_CODEC={inp.get('codec') or 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] INPUT_SIZE={inp.get('width') or '?'}x{inp.get('height') or '?'}",
+        f"[INTEL PROOF] INPUT_BIT_DEPTH={inp.get('bit_depth') or 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] INPUT_PIXEL_FORMAT={inp.get('pixel_format') or 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] INPUT_HDR={'YES' if inp.get('hdr') is True else 'NO' if inp.get('hdr') is False else 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] DECODE_PATH={dec['path']}",
+        f"[INTEL PROOF] DECODE_RESIDENCY={dec['residency']}",
+        f"[INTEL PROOF] HUD_TRANSPORT={hud['transport']}",
+        f"[INTEL PROOF] HUD_CANVAS_SIZE={hud['canvas_size'][0]}x{hud['canvas_size'][1]}",
+        f"[INTEL PROOF] HUD_SIZE={hud['transport_size'][0]}x{hud['transport_size'][1]}",
+        f"[INTEL PROOF] HUD_BYTES_FRAME={hud['bytes_per_frame']}",
+        f"[INTEL PROOF] HUD_REGION_MODE={hud['region_mode']}",
+        f"[INTEL PROOF] HUD_BBOX={hud['region_bbox'] or 'FULL_RASTER'}",
+        f"[INTEL PROOF] COMPOSITOR_PATH={snapshot['compositor']['path']}",
+        f"[INTEL PROOF] ENCODE_PATH={enc['path']}",
+        f"[INTEL PROOF] ENCODE_PIXEL_FORMAT={enc['pixel_format'] or 'NOT_AVAILABLE'}",
+        f"[INTEL PROOF] HWDOWNLOAD_EXPECTED={transfers['hwdownload_count_expected']}",
+        f"[INTEL PROOF] HWUPLOAD_EXPECTED={transfers['hwupload_count_expected']}",
+        f"[INTEL PROOF] MULTIFILE={'YES' if snapshot['timeline']['multi_file'] else 'NO'}",
+    ]
+    for line in lines:
+        render_print(line, flush=True)
+    contract = snapshot.get("contract_validation", {})
+    if contract.get("mismatch"):
+        render_print("[INTEL PROOF] PATH_CONTRACT_MISMATCH=YES", flush=True)
+        render_print(
+            f"[INTEL PROOF] PATH_CONTRACT_REASONS={contract.get('mismatch_reasons', [])}",
+            flush=True,
+        )
+    for line in format_intel_proof_clips(snapshot.get("_timeline_object")):
+        render_print(line, flush=True)
+
+
+def write_intel_proof_json(snapshot: dict[str, Any], output_file: str) -> Optional[Path]:
+    """Write proof JSON only when explicitly enabled; never in normal renders."""
+    if not intel_proof_enabled():
+        return None
+    path = Path(f"{output_file}.intel_proof.json")
+    serializable = dict(snapshot)
+    serializable.pop("_timeline_object", None)
+    try:
+        path.write_text(json.dumps(serializable, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        render_print(f"[INTEL PROOF] JSON_WRITE_FAILED={exc}", flush=True)
+        return None
+    return path
 
 
 def intel_device_selection(resolution: IntelResolution) -> IntelDeviceSelection:
