@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import math
+import uuid
 from fractions import Fraction
 import json
 import copy
@@ -17,6 +18,7 @@ import statistics
 import subprocess
 import tracemalloc
 import ctypes
+from ctypes import wintypes
 import queue
 import threading
 from dataclasses import dataclass, field
@@ -2764,11 +2766,161 @@ def export_amd_native_d3d11(
     print(f"[AMD NATIVE D3D11] REQUESTED OUTPUT:  {video_width}x{video_height}", flush=True)
     print(f"[AMD NATIVE D3D11] VP OUTPUT:          {video_width}x{video_height}", flush=True)
     print(f"[AMD NATIVE D3D11] AMF OUTPUT:         {video_width}x{video_height}", flush=True)
+    # ── Single & Multi-File Direct Live MP4 Mux Setup ────────────────────
+    # Eliminates buffering the full temporary .h265 bitstream on disk.
+    is_multi_file = video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1
+    direct_mux_enabled = _env_flag("AMD_DIRECT_MUX", True) and (amf_mode not in ("SUBMIT_NO_MUX", "BYPASS"))
+    direct_mux_completed = False
+    audio_concat_path: Optional[Path] = None
+
+    proc_mux: subprocess.Popen | None = None
+    h_pipe: Any = None
+    pump_thread: threading.Thread | None = None
+    stderr_thread: threading.Thread | None = None
+    mux_stderr_lines: list[bytes] = []
+    mux_pump_error: Optional[str] = None
+    mux_pump_stats: dict[str, int] = {"bytes": 0, "chunks": 0}
+    output_part_str = output_file_str + ".part"
+    native_out_target = output_file_str
+
+    if direct_mux_enabled:
+        if os.path.exists(output_part_str):
+            try:
+                os.remove(output_part_str)
+            except OSError:
+                pass
+        pipe_token = uuid.uuid4().hex[:8]
+        pipe_base = rf"\\.\pipe\telem_amf_{os.getpid()}_{pipe_token}"
+        pipe_server_name = pipe_base + ".h265"
+        kernel32 = ctypes.windll.kernel32
+        h_pipe = kernel32.CreateNamedPipeW(
+            pipe_server_name,
+            0x00000001,  # PIPE_ACCESS_INBOUND
+            0x00000000,  # PIPE_TYPE_BYTE | PIPE_WAIT
+            1,
+            4 * 1024 * 1024,  # 4MB buffer
+            4 * 1024 * 1024,
+            0,
+            None,
+        )
+        if h_pipe == -1 or h_pipe == 0:
+            print(f"[AMD NATIVE D3D11] WARNING: Failed to create Named Pipe ({kernel32.GetLastError()}), falling back to file mux.", flush=True)
+            direct_mux_enabled = False
+            h_pipe = None
+        else:
+            if is_multi_file:
+                audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
+                with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
+                    for clip in video_timeline.clips:
+                        concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+                        local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+                        if local_start > 0.0:
+                            concat_file.write(f"inpoint {local_start:.9f}\n")
+                        local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+                        source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+                        if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+                            concat_file.write(f"outpoint {local_end:.9f}\n")
+                audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
+            else:
+                audio_args: list[str] = ["-i", input_file_str]
+                if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+                    clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
+                    if clip0_local_start > 0.0:
+                        audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", input_file_str]
+
+            cmd_live_mux = [
+                ffmpeg_exe, "-y",
+                "-f", "hevc",
+                "-r", f"{fps_num}/{fps_den}",
+                "-i", "-",
+                *audio_args,
+                "-map", "0:v", "-map", "1:a?",
+                "-t", f"{duration_s:.6f}",
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-f", "mp4",
+                output_part_str,
+            ]
+            try:
+                proc_mux = subprocess.Popen(
+                    cmd_live_mux,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except Exception as e:
+                print(f"[AMD NATIVE D3D11] WARNING: Failed to launch FFmpeg live muxer ({e}), falling back to file mux.", flush=True)
+                direct_mux_enabled = False
+                kernel32.CloseHandle(h_pipe)
+                h_pipe = None
+                proc_mux = None
+
+        if direct_mux_enabled and proc_mux is not None and h_pipe is not None:
+            native_out_target = pipe_base
+            mode_str = "multi" if is_multi_file else "single"
+            clip_count_str = str(getattr(video_timeline, "clip_count", 1) if video_timeline else 1)
+            audio_mode_str = "concat" if is_multi_file else "source"
+            print(f"[AMD DIRECT MUX] mode={mode_str} clips={clip_count_str} video=pipe audio={audio_mode_str} output=.part", flush=True)
+            print(f"[AMD NATIVE D3D11] DIRECT MP4 MUX:      ENABLED (live streaming -> {Path(output_part_str).name})", flush=True)
+
+            def _mux_stderr_reader():
+                try:
+                    if proc_mux and proc_mux.stderr:
+                        for line in proc_mux.stderr:
+                            mux_stderr_lines.append(line)
+                except Exception:
+                    pass
+
+            stderr_thread = threading.Thread(target=_mux_stderr_reader, daemon=True)
+            stderr_thread.start()
+
+            def _mux_pump_worker():
+                nonlocal mux_pump_error
+                connected = kernel32.ConnectNamedPipe(h_pipe, None)
+                if not connected:
+                    err = kernel32.GetLastError()
+                    if err != 535:  # ERROR_PIPE_CONNECTED
+                        mux_pump_error = f"ConnectNamedPipe error: {err}"
+                        return
+                buf = ctypes.create_string_buffer(256 * 1024)
+                bytes_read = wintypes.DWORD()
+                try:
+                    while True:
+                        res = kernel32.ReadFile(h_pipe, buf, len(buf), ctypes.byref(bytes_read), None)
+                        if not res or bytes_read.value == 0:
+                            break
+                        if proc_mux.poll() is not None and proc_mux.returncode != 0:
+                            mux_pump_error = f"FFmpeg muxer exited prematurely with rc {proc_mux.returncode}"
+                            break
+                        proc_mux.stdin.write(buf.raw[:bytes_read.value])
+                        mux_pump_stats["bytes"] += bytes_read.value
+                        mux_pump_stats["chunks"] += 1
+                except Exception as ex:
+                    mux_pump_error = f"Pump exception: {ex}"
+                finally:
+                    try:
+                        if proc_mux and proc_mux.stdin:
+                            proc_mux.stdin.close()
+                    except Exception:
+                        pass
+                    try:
+                        if h_pipe is not None:
+                            kernel32.CloseHandle(h_pipe)
+                    except Exception:
+                        pass
+
+            pump_thread = threading.Thread(target=_mux_pump_worker, daemon=True)
+            pump_thread.start()
+        else:
+            print("[AMD NATIVE D3D11] DIRECT MP4 MUX:      DISABLED (file finalize path)", flush=True)
+    else:
+        print("[AMD NATIVE D3D11] DIRECT MP4 MUX:      DISABLED (file finalize path)", flush=True)
+
     print("[AMD NATIVE D3D11] ===================================", flush=True)
     proc_dec: subprocess.Popen | None = None
     h_context = native_dll.telem_amd_create(
         input_file_str,
-        output_file_str,
+        native_out_target,
         video_width,
         video_height,
         fps_num,
@@ -2778,6 +2930,12 @@ def export_amd_native_d3d11(
     if not h_context:
         print("[AMD NATIVE D3D11] ERROR: telem_amd_create returned NULL!", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
+        if proc_mux is not None:
+            try: proc_mux.kill()
+            except Exception: pass
+        if h_pipe is not None:
+            try: kernel32.CloseHandle(h_pipe)
+            except Exception: pass
         return False
 
     def _cleanup_native_resources() -> None:
@@ -2801,6 +2959,36 @@ def export_amd_native_d3d11(
                 native_dll.telem_amd_close(ctx_to_close)
             except Exception as _ce:
                 print(f"[AMD NATIVE D3D11] telem_amd_close error: {_ce}", flush=True)
+
+    def _abort_direct_mux() -> None:
+        nonlocal proc_mux, h_pipe, audio_concat_path
+        if proc_mux is not None:
+            if proc_mux.poll() is None:
+                try:
+                    proc_mux.kill()
+                except Exception:
+                    pass
+            try:
+                proc_mux.wait(timeout=2.0)
+            except Exception:
+                pass
+            proc_mux = None
+        if h_pipe is not None and h_pipe != -1 and h_pipe != 0:
+            try:
+                kernel32.CloseHandle(h_pipe)
+            except Exception:
+                pass
+            h_pipe = None
+        if os.path.exists(output_part_str):
+            try:
+                os.remove(output_part_str)
+            except OSError:
+                pass
+        if audio_concat_path is not None and audio_concat_path.exists():
+            try:
+                audio_concat_path.unlink()
+            except OSError:
+                pass
 
     if not native_dll.telem_amd_set_diagnostics(h_context, 1 if diagnostics_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure diagnostic mode.", flush=True)
@@ -4803,7 +4991,7 @@ def export_amd_native_d3d11(
     for _count in per_clip_requested_frames[:-1]:
         _boundary_offset += _count
         boundary_debug_frames.update(
-            {_boundary_offset, _boundary_offset + 1, _boundary_offset + 2}
+            {_boundary_offset - 2, _boundary_offset - 1, _boundary_offset, _boundary_offset + 1, _boundary_offset + 2}
         )
 
     def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
@@ -4859,6 +5047,8 @@ def export_amd_native_d3d11(
                 if clip_idx != native_clip_idx:
                     if clip_idx < 0 or clip_idx >= len(video_timeline.clips):
                         return False
+                    if direct_mux_enabled:
+                        print(f"[AMD DIRECT MUX] source_switch {native_clip_idx + 1}->{clip_idx + 1} global_frame={prepared.frame_idx}", flush=True)
                     if not native_switch_source(
                         h_context, str(video_timeline.clips[clip_idx].path)
                     ):
@@ -4880,48 +5070,65 @@ def export_amd_native_d3d11(
                         int(round(local_start * 10_000_000))
                         if local_start > 0.0 else None
                     )
-            while True:
-                sample_index = c_uint64(0)
-                sample_pts = ctypes.c_int64(0)
-                sample_duration = ctypes.c_int64(0)
-                sample_flags = c_uint(0)
-                sample_format = c_uint(0)
-                sample_width = c_uint(0)
-                sample_height = c_uint(0)
-                sample_subresource = c_uint(0)
-                sample_texture = c_uint64(0)
-                read_status = native_dll.telem_amd_read_video_sample(
-                    h_context,
-                    byref(sample_index), byref(sample_pts), byref(sample_duration),
-                    byref(sample_flags), byref(sample_format), byref(sample_width),
-                    byref(sample_height), byref(sample_subresource), byref(sample_texture),
-                )
-                if read_status == 2:
-                    continue
-                if read_status == 1 and pending_seek_target_100ns is not None:
-                    sample_half_duration = max(
-                        int(sample_duration.value) // 2,
-                        int(round(5_000_000.0 / target_fps)),
+            while True:  # Outer loop for EOF recovery
+                while True:
+                    sample_index = c_uint64(0)
+                    sample_pts = ctypes.c_int64(0)
+                    sample_duration = ctypes.c_int64(0)
+                    sample_flags = c_uint(0)
+                    sample_format = c_uint(0)
+                    sample_width = c_uint(0)
+                    sample_height = c_uint(0)
+                    sample_subresource = c_uint(0)
+                    sample_texture = c_uint64(0)
+                    read_status = native_dll.telem_amd_read_video_sample(
+                        h_context,
+                        byref(sample_index), byref(sample_pts), byref(sample_duration),
+                        byref(sample_flags), byref(sample_format), byref(sample_width),
+                        byref(sample_height), byref(sample_subresource), byref(sample_texture),
                     )
-                    if int(sample_pts.value) + sample_half_duration < pending_seek_target_100ns:
-                        if not native_discard_video_sample(h_context):
-                            print(
-                                "[AMD NATIVE D3D11VA] ERROR: failed to discard "
-                                "pre-range decoder sample.",
-                                flush=True,
-                            )
-                            return False
-                        seek_discarded_frames += 1
-                        if 0 <= native_clip_idx < len(per_clip_seek_discarded_frames):
-                            per_clip_seek_discarded_frames[native_clip_idx] += 1
+                    if read_status == 2:
                         continue
-                    pending_seek_target_100ns = None
+                    if read_status == 1 and pending_seek_target_100ns is not None:
+                        sample_half_duration = max(
+                            int(sample_duration.value) // 2,
+                            int(round(5_000_000.0 / target_fps)),
+                        )
+                        if int(sample_pts.value) + sample_half_duration < pending_seek_target_100ns:
+                            if not native_discard_video_sample(h_context):
+                                print(
+                                    "[AMD NATIVE D3D11VA] ERROR: failed to discard "
+                                    "pre-range decoder sample.",
+                                    flush=True,
+                                )
+                                return False
+                            seek_discarded_frames += 1
+                            if 0 <= native_clip_idx < len(per_clip_seek_discarded_frames):
+                                per_clip_seek_discarded_frames[native_clip_idx] += 1
+                            continue
+                        pending_seek_target_100ns = None
+                    break
+                if read_status == 0:
+                    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
+                        if native_clip_idx < len(video_timeline.clips) - 1:
+                            print(f"[AMD NATIVE D3D11] EOF reached early on clip {native_clip_idx + 1}, forcing switch to next clip.", flush=True)
+                            next_idx = native_clip_idx + 1
+                            if direct_mux_enabled:
+                                print(f"[AMD DIRECT MUX] source_switch {native_clip_idx + 1}->{next_idx + 1} global_frame={prepared.frame_idx} (EOF recovery)", flush=True)
+                            if not native_switch_source(h_context, str(video_timeline.clips[next_idx].path)):
+                                print(f"[AMD NATIVE D3D11] Source switch failed during EOF recovery.", flush=True)
+                                return False
+                            native_clip_idx = next_idx
+                            local_start = float(getattr(video_timeline.clips[next_idx], "local_start_s", 0.0) or 0.0)
+                            if local_start > 0.0 and not native_seek_source(h_context, int(round(local_start * 10_000_000))):
+                                print(f"[AMD NATIVE D3D11] Source range seek failed during EOF recovery.", flush=True)
+                                return False
+                            continue
+                    return False
+                if read_status < 0:
+                    print("[AMD NATIVE D3D11VA] ERROR: native ReadSample failed.", flush=True)
+                    return False
                 break
-            if read_status == 0:
-                return False
-            if read_status < 0:
-                print("[AMD NATIVE D3D11VA] ERROR: native ReadSample failed.", flush=True)
-                return False
             decoded_frames_python += 1
             if 0 <= native_clip_idx < len(per_clip_decoded_frames):
                 per_clip_decoded_frames[native_clip_idx] += 1
@@ -5434,6 +5641,7 @@ def export_amd_native_d3d11(
                     if cancel_evt.is_set():
                         print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
                         _cleanup_native_resources()
+                        _abort_direct_mux()
                         return False
                     if item is _END_OF_STREAM:
                         break
@@ -5459,6 +5667,7 @@ def export_amd_native_d3d11(
                 if cancel_event is not None and cancel_event.is_set():
                     print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
                     _cleanup_native_resources()
+                    _abort_direct_mux()
                     return False
                 if sync_frame_accounting_enabled:
                     _sync_parent_start = time.perf_counter_ns()
@@ -5631,7 +5840,73 @@ def export_amd_native_d3d11(
             f"(h265 temp = {temp_h265})",
             flush=True,
         )
+    elif direct_mux_enabled and proc_mux is not None:
+        # ── DIRECT MP4 LIVE MUX FINALIZATION ──
+        t_mux_begin = time.perf_counter()
+        print("[AMD NATIVE D3D11] Finalizing direct MP4 live mux...", flush=True)
+        if pump_thread is not None:
+            pump_thread.join(timeout=30.0)
+        try:
+            proc_mux.wait(timeout=30.0)
+        except subprocess.TimeoutExpired:
+            proc_mux.kill()
+            proc_mux.wait()
+        if stderr_thread is not None:
+            stderr_thread.join(timeout=5.0)
+        t_mux_end = time.perf_counter()
+        mux_elapsed_ms = (t_mux_end - t_mux_begin) * 1000.0
+        timing_samples["Audio mux"].append(mux_elapsed_ms)
+
+        if proc_mux.returncode != 0 or mux_pump_error:
+            mux_err_str = b"".join(mux_stderr_lines).decode(errors="replace").strip()
+            print(
+                f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})!\n"
+                f"{mux_err_str[-4000:]}",
+                flush=True,
+            )
+            if os.path.exists(output_part_str):
+                try: os.remove(output_part_str)
+                except OSError: pass
+            if audio_concat_path is not None and audio_concat_path.exists():
+                try: audio_concat_path.unlink()
+                except OSError: pass
+            return False
+
+        if not os.path.exists(output_part_str) or os.path.getsize(output_part_str) == 0:
+            print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output {output_part_str} is missing or empty!", flush=True)
+            if audio_concat_path is not None and audio_concat_path.exists():
+                try: audio_concat_path.unlink()
+                except OSError: pass
+            return False
+
+        # Probe sanity check on .part before atomic rename
+        final_probe = _probe_video_summary(ffmpeg_exe, output_part_str)
+        muxed_frames = _stream_frame_count(final_probe, "video")
+        audio_present = any(
+            stream.get("codec_type") == "audio" for stream in final_probe.get("streams", [])
+        )
+        if muxed_frames == 0:
+            print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output has 0 muxed video frames!", flush=True)
+            if os.path.exists(output_part_str):
+                try: os.remove(output_part_str)
+                except OSError: pass
+            if audio_concat_path is not None and audio_concat_path.exists():
+                try: audio_concat_path.unlink()
+                except OSError: pass
+            return False
+
+        # Atomic rename .part -> final .mp4
+        if os.path.exists(output_file_str):
+            try: os.remove(output_file_str)
+            except OSError: pass
+        os.replace(output_part_str, output_file_str)
+        if audio_concat_path is not None and audio_concat_path.exists():
+            try: audio_concat_path.unlink()
+            except OSError: pass
+        direct_mux_completed = True
+        print(f"[AMD NATIVE D3D11] Direct MP4 Mux complete. Final output: {output_file_str}", flush=True)
     else:
+        # ── FALLBACK FILE REMUX ──
         if not os.path.exists(temp_h265) or os.path.getsize(temp_h265) == 0:
             print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
             return False
@@ -5640,9 +5915,6 @@ def export_amd_native_d3d11(
         audio_args: list[str] = ["-i", audio_input]
         audio_concat_path: Optional[Path] = None
         if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
-            # The native DLL owns video only.  Feed mux the same ordered clip
-            # list as the VideoTimeline, so audio cannot come from clip 014
-            # alone or extend beyond the continuous output video timeline.
             audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
             with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
                 for clip in video_timeline.clips:
@@ -5655,6 +5927,10 @@ def export_amd_native_d3d11(
                     if source_duration <= 0.0 or local_end < source_duration - 1e-6:
                         concat_file.write(f"outpoint {local_end:.9f}\n")
             audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
+        elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) == 1:
+            local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
+            if local_start > 0.0:
+                audio_args = ["-ss", f"{local_start:.6f}", "-i", audio_input]
 
         cmd_mux = [
             ffmpeg_exe, "-y", "-i", temp_h265, *audio_args,
@@ -5671,12 +5947,14 @@ def export_amd_native_d3d11(
         if proc.returncode != 0:
             mux_error = (proc.stderr or b"").decode(errors="replace").strip()
             print(
-                "[AMD NATIVE D3D11] WARNING: FFmpeg remux failed, "
-                f"renaming raw bitstream.\n{mux_error[-4000:]}",
+                "[AMD NATIVE D3D11] ERROR: FFmpeg remux failed!\n"
+                f"{mux_error[-4000:]}",
                 flush=True,
             )
-            if os.path.exists(output_file_str): os.remove(output_file_str)
-            os.rename(temp_h265, output_file_str)
+            if os.path.exists(temp_h265):
+                try: os.remove(temp_h265)
+                except OSError: pass
+            return False
         else:
             print(f"[AMD NATIVE D3D11] Remux complete. Final output: {output_file_str}", flush=True)
             if os.path.exists(temp_h265):
