@@ -2939,7 +2939,7 @@ def export_amd_native_d3d11(
         return False
 
     def _cleanup_native_resources() -> None:
-        """P1-A FIX: Idempotent cleanup of native D3D11 context and decoder process."""
+        """P1-A FIX: Idempotent cleanup of native D3D11 context, decoder process, and direct mux."""
         nonlocal h_context, proc_dec
         if proc_dec is not None:
             if proc_dec.poll() is None:
@@ -2974,6 +2974,14 @@ def export_amd_native_d3d11(
                 pass
             proc_mux = None
         if h_pipe is not None and h_pipe != -1 and h_pipe != 0:
+            try:
+                GENERIC_WRITE = 0x40000000
+                OPEN_EXISTING = 3
+                h_c = kernel32.CreateFileW(pipe_server_name, GENERIC_WRITE, 0, None, OPEN_EXISTING, 0, None)
+                if h_c != -1 and h_c != 0:
+                    kernel32.CloseHandle(h_c)
+            except Exception:
+                pass
             try:
                 kernel32.CloseHandle(h_pipe)
             except Exception:
@@ -5821,6 +5829,10 @@ def export_amd_native_d3d11(
         )
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         _cleanup_native_resources()
+    except Exception:
+        if direct_mux_enabled and not direct_mux_completed:
+            _abort_direct_mux()
+        raise
     finally:
         set_map_network_allowed(True)
         _cleanup_native_resources()
