@@ -59,7 +59,7 @@ def _render_text_indicator(
     outline_int = int(outline)
 
     cache_key = _static_cache_key(
-        "text_ind_v2", canvas_w, canvas_h, font_path, key, txt, text_color, outline_int, fs_int,
+        "text_ind_v3", canvas_w, canvas_h, font_path, key, txt, text_color, outline_int, fs_int,
         icon_name
     )
     px_x = s(cfg["x"], canvas_w)
@@ -72,16 +72,34 @@ def _render_text_indicator(
     if font is None:
         font = load_font(font_path, fs_int)
 
-    icon = render_icon(icon_name, max(8, int(fs_int * 0.95)))
-    gap = max(2, int(fs_int * 0.18)) if icon else 0
-    txt_w = int(font.getlength(txt) + outline_int * 4 + (icon.width + gap if icon else 0))
-    tmp = Image.new("RGBA", (txt_w, int(fs_int * 2)), (0, 0, 0, 0))
+    icon = render_icon(icon_name, max(8, int(round(fs_int * 0.90))))
+    gap = max(3, int(round(fs_int * 0.22))) if icon else 0
+
+    # Calculate optical text metrics (aligned with font capital/digit baseline & optical center)
+    ref_bbox = font.getbbox("HX0123456789") if hasattr(font, "getbbox") else (0, 0, 0, fs_int)
+    text_optical_mid = (ref_bbox[1] + ref_bbox[3]) / 2.0
+    text_h = max(fs_int, ref_bbox[3] - ref_bbox[1])
+
+    pad = outline_int + 4
+    canvas_h = max(int(text_h + pad * 2), int((icon.height if icon else 0) + pad * 2), int(fs_int * 2))
+    txt_w = int(font.getlength(txt) + outline_int * 6 + (icon.width + gap if icon else 0) + 10)
+
+    tmp = Image.new("RGBA", (txt_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(tmp)
-    text_x = outline_int + (icon.width + gap if icon else 0)
+
+    text_y = pad
+    actual_text_mid = text_y + text_optical_mid
+
     if icon:
-        tmp.alpha_composite(icon, (outline_int, max(0, (tmp.height - icon.height) // 2)))
+        icon_x = outline_int
+        icon_y = max(outline_int, int(round(actual_text_mid - icon.height / 2.0)))
+        tmp.alpha_composite(icon, (icon_x, icon_y))
+        text_x = icon_x + icon.width + gap
+    else:
+        text_x = outline_int
+
     draw.text(
-        (text_x, 0), txt, font=font,
+        (text_x, text_y), txt, font=font,
         fill=(text_color[0], text_color[1], text_color[2], 255),
         stroke_width=outline_int, stroke_fill=(0, 0, 0, 255),
     )

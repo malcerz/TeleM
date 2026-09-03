@@ -134,6 +134,7 @@ class AppController(
         self.gpx_path: Optional[Path] = None
         self.fit_path: Optional[Path] = None
         self.font_path = resolve_font_path("Arial")
+        self._global_font_family: str = "Arial"
         self.src_img = Image.new("RGB", (1280, 720), (0, 0, 0))
         self.layout: dict[str, Any] = default_layout(1280, 720)
         self.video_duration_s = 0.0
@@ -249,6 +250,11 @@ class AppController(
         """Czyszczenie pamięci podręcznej wyliczeń podglądu."""
         self._prepare_cache.clear()
         self._chart_data_cache = None
+        try:
+            from src.indicators.gauge import clear_gauge_cache
+            clear_gauge_cache()
+        except Exception:
+            pass
 
     def _connect_signals(self) -> None:
         s = self.signals
@@ -267,11 +273,13 @@ class AppController(
         s.sig_settings_changed.connect(self._on_settings_changed)
         s.sig_playback_start.connect(self._on_playback_start)
         s.sig_playback_stop.connect(self._on_playback_stop)
+        s.sig_frame_step.connect(self._on_frame_step)
         s.sig_preview_mode_changed.connect(self._on_preview_mode_changed)
         s.sig_preview_accel_changed.connect(self._on_preview_accel_changed)
         s.sig_data_streams_ready.connect(lambda _: self.refresh_preview_geometry_and_hud())
         # Map preload: refresh the preview when the overview map becomes ready.
 
+        s.sig_save_global_settings.connect(self._on_save_global_settings)
         s.sig_map_ready.connect(lambda: self._render_preview())
         s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
 
@@ -282,5 +290,13 @@ class AppController(
             try:
                 self.layout = normalize_layout(def_layout, 1280, 720)
                 self._startup_preset_path = self.layout.get("_startup_preset", "")
+                # Przywróć globalny font zapisany w pliku
+                saved_font = self.layout.get("global", {}).get("font", "")
+                if saved_font:
+                    self._global_font_family = saved_font
+                    self.font_path = resolve_font_path(saved_font)
+                    print(f"[Controller] Przywrócono font: '{saved_font}' -> '{self.font_path}'", flush=True)
+                    # Poinformuj GUI o przywróconym foncie (ustawi cmb_font)
+                    self.signals.sig_global_font_restored.emit(saved_font)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

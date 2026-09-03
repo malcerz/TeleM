@@ -284,8 +284,15 @@ def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.I
             "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
         )
         return font
+
+    actual_path = str(font_path) if font_path else ""
+    if actual_path and not Path(actual_path).is_file():
+        resolved = resolve_indicator_font_path(actual_path, actual_path)
+        if resolved and Path(resolved).is_file():
+            actual_path = resolved
+
     try:
-        font = ImageFont.truetype(str(font_path), size=int(size))
+        font = ImageFont.truetype(actual_path, size=int(size))
     except Exception:
         font = ImageFont.load_default()
     FONT_CACHE[key] = font

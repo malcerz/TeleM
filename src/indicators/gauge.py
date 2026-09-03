@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 import math
+from typing import Any
 
 try:
     from PIL import Image, ImageDraw
@@ -14,17 +15,19 @@ except ImportError:
     ImageDraw = None  # type: ignore
 
 from src.indicators.helpers import (
+    FONT_CACHE,
     _BoundedStaticCache,
     _STATIC_CACHE,
     _static_cache_key,
     compose_5q_optimized,
     load_font,
     parse_hex_color,
+    resolve_indicator_font_path,
     s,
 )
 _GAUGE_RASTER_CACHE = _BoundedStaticCache(max_entries=16)
 _COMPASS_INDICATOR_CACHE = _BoundedStaticCache(max_entries=64)
-_GAUGE_CANVAS_STATE: dict[str, Any] = {"canvas": None, "bg_key": None, "prev_dirty_boxes": []}
+_GAUGE_CANVAS_STATE: dict[str, Any] = {"canvas": None, "bg_key": None, "needle_sig": None, "prev_dirty_boxes": []}
 
 
 def get_compass_cache_stats() -> dict[str, Any]:
@@ -47,6 +50,19 @@ def clear_compass_cache() -> None:
     _COMPASS_INDICATOR_CACHE.clear()
     _COMPASS_INDICATOR_CACHE.hits = 0
     _COMPASS_INDICATOR_CACHE.misses = 0
+
+
+def clear_gauge_cache() -> None:
+    """Clear gauge dynamic raster cache and regional canvas state."""
+    _GAUGE_RASTER_CACHE.clear()
+    _GAUGE_CANVAS_STATE["canvas"] = None
+    _GAUGE_CANVAS_STATE["bg_key"] = None
+    _GAUGE_CANVAS_STATE["needle_sig"] = None
+    _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = []
+    if _STATIC_CACHE is not None:
+        _STATIC_CACHE.clear()
+    if FONT_CACHE is not None:
+        FONT_CACHE.clear()
 # ── ETAP 2C: renderer-reported dynamic-support info for AUTO regions ──────────
 # Keyed by indicator key. Updated by EVERY _render_gauge_indicator call so the
 # AMD native exporter can derive ghost-free AUTO upload rectangles from the
@@ -272,9 +288,19 @@ def _render_gauge_indicator(
             cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness,
             size_px, ss, formatted_val=formatted_val,
         )
-    ss = max(1, ss)
+    ss = max(2, int(ss))
+    ind_font_val = cfg.get("font") if isinstance(cfg, dict) else None
+    gauge_font_path = resolve_indicator_font_path(ind_font_val, font_path) if ind_font_val else font_path
+
+    _diag_key = (str(key), str(ind_font_val), str(gauge_font_path))
+    if getattr(_render_gauge_indicator, "_last_diag", None) != _diag_key:
+        _render_gauge_indicator._last_diag = _diag_key
+        print(f"[GAUGE FONT]\nindicator={key}\nelement=scale\nrequested={ind_font_val or '(default)'}\nresolved={gauge_font_path}\nrenderer=_render_gauge_indicator", flush=True)
+        print(f"[GAUGE FONT]\nindicator={key}\nelement=value\nrequested={ind_font_val or '(default)'}\nresolved={gauge_font_path}\nrenderer=_render_gauge_indicator", flush=True)
+        print(f"[GAUGE FONT]\nindicator={key}\nelement=unit\nrequested={ind_font_val or '(default)'}\nresolved={gauge_font_path}\nrenderer=_render_gauge_indicator", flush=True)
+
     gauge_fs = max(8, fs * ss)
-    gauge_font = load_font(font_path, gauge_fs)
+    gauge_font = load_font(gauge_font_path, gauge_fs)
     gauge_outline = outline * ss
     radius = size_px * ss
     img_size = int(radius * 2.4)
@@ -303,11 +329,26 @@ def _render_gauge_indicator(
      sub_ticks_count, total_ticks) = _gauge_ticks(display_min, raw_max, ticks)
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
 
+    # ── Decoupled tick length and thickness (with legacy thickness fallback) ──
+    _leg_thick_raw = float(cfg.get("thickness", 3))
+    maj_len_raw = float(cfg.get("major_tick_length", _leg_thick_raw))
+    maj_thick_raw = float(cfg.get("major_tick_thickness", _leg_thick_raw))
+    min_len_raw = float(cfg.get("minor_tick_length", _leg_thick_raw))
+    min_thick_raw = float(cfg.get("minor_tick_thickness", _leg_thick_raw))
+
+    maj_len_factor = float(max(1, s(0.6 + (maj_len_raw - 1) * 0.2, min_dim)))
+    maj_thick_factor = float(max(1, s(0.6 + (maj_thick_raw - 1) * 0.2, min_dim)))
+    min_len_factor = float(max(1, s(0.6 + (min_len_raw - 1) * 0.2, min_dim)))
+    min_thick_factor = float(max(1, s(0.6 + (min_thick_raw - 1) * 0.2, min_dim)))
+
+    mid_len_factor = (maj_len_factor + min_len_factor) / 2.0
+    mid_thick_factor = (maj_thick_factor + min_thick_factor) / 2.0
+
     # ── Static background: tick marks + numbers (cached) ──
     bg_key = _static_cache_key(
         "gauge_bg", img_size, start_deg, sweep_deg,
-        display_min, display_max, ticks, thickness, ss, gauge_fs, font_path, outline,
-        pixel_profile,
+        display_min, display_max, ticks, thickness, ss, gauge_fs, gauge_font_path, outline,
+        pixel_profile, maj_len_raw, maj_thick_raw, min_len_raw, min_thick_raw,
     )
     bg = _STATIC_CACHE.get(bg_key)
     if bg is None:
@@ -320,11 +361,12 @@ def _render_gauge_indicator(
             if i % sub_ticks_count == 0:
                 # Główna kreska (pełna dziesiątka) — grubsza i dłuższa z etykietą
                 if pixel_profile:
-                    tick_len = max(8 * ss, radius * 0.12)
-                    tick_width = max(3 * ss, int(round(thickness * 1.15 * ss)))
+                    _scale_l = maj_len_raw / max(0.1, _leg_thick_raw if "major_tick_length" in cfg else 4.0)
+                    tick_len = max(8 * ss, radius * 0.12 * _scale_l)
+                    tick_width = max(3 * ss, int(round(maj_thick_factor * 1.15 * ss)))
                 else:
-                    tick_len = thickness * 1.4 * ss
-                    tick_width = max(3 * ss, int(thickness * 0.8) * ss)
+                    tick_len = maj_len_factor * 1.4 * ss
+                    tick_width = max(3 * ss, int(maj_thick_factor * 0.8) * ss)
                 tick_val = display_min + (display_max - display_min) * (i / total_ticks)
                 txt_tick = f"{tick_val:.0f}"
                 text_radius = radius - tick_len - (radius * 0.16)
@@ -335,19 +377,21 @@ def _render_gauge_indicator(
             elif sub_ticks_count % 2 == 0 and i % (sub_ticks_count // 2) == 0:
                 # Średnia kreska pośrodku (np. 5)
                 if pixel_profile:
-                    tick_len = max(5 * ss, radius * 0.075)
-                    tick_width = max(2 * ss, int(round(thickness * 0.70 * ss)))
+                    _scale_l = ((maj_len_raw + min_len_raw) / 2.0) / max(0.1, _leg_thick_raw if "major_tick_length" in cfg else 4.0)
+                    tick_len = max(5 * ss, radius * 0.075 * _scale_l)
+                    tick_width = max(2 * ss, int(round(mid_thick_factor * 0.70 * ss)))
                 else:
-                    tick_len = thickness * 0.9 * ss
-                    tick_width = max(2 * ss, int(thickness * 0.5) * ss)
+                    tick_len = mid_len_factor * 0.9 * ss
+                    tick_width = max(2 * ss, int(mid_thick_factor * 0.5) * ss)
             else:
                 # Mniejsza i cieńsza kreska (sub-tick)
                 if pixel_profile:
-                    tick_len = max(3 * ss, radius * 0.035)
-                    tick_width = max(1 * ss, int(round(thickness * 0.42 * ss)))
+                    _scale_l = min_len_raw / max(0.1, _leg_thick_raw if "minor_tick_length" in cfg else 4.0)
+                    tick_len = max(3 * ss, radius * 0.035 * _scale_l)
+                    tick_width = max(1 * ss, int(round(min_thick_factor * 0.42 * ss)))
                 else:
-                    tick_len = thickness * 0.5 * ss
-                    tick_width = max(1 * ss, int(thickness * 0.3) * ss)
+                    tick_len = min_len_factor * 0.5 * ss
+                    tick_width = max(1 * ss, int(min_thick_factor * 0.3) * ss)
             r_out, r_in = radius, radius - tick_len
             x1, y1 = cx + cos_a * r_in, cy + sin_a * r_in
             x2, y2 = cx + cos_a * r_out, cy + sin_a * r_out
@@ -371,6 +415,15 @@ def _render_gauge_indicator(
             bg = bg.resize((out_gauge_size, out_gauge_size), Image.LANCZOS)
         _STATIC_CACHE[bg_key] = bg
 
+    # Needle geometry & colors (evaluated before raster cache key)
+    needle_len_rel = cfg.get("needle_length", 1.1)
+    needle_r_out = max(2, int(radius * needle_len_rel / ss))
+    needle_r_in = max(1, int(radius * 0.05))
+    needle_width_px = max(2, int(cfg.get("needle_width", 4) * (1.8 if pixel_profile else 1.5)))
+    needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
+    needle_fill = (needle_rgb[0], needle_rgb[1], needle_rgb[2], 255)
+    needle_sig = (needle_width_px, needle_len_rel, needle_fill)
+
     # ── ETAP 4G: Discrete dynamic raster state memoization ──
     draw_needle = False
     frac = 0.0
@@ -385,9 +438,16 @@ def _render_gauge_indicator(
     show_value = bool(cfg.get("show_value", True))
     txt_main = (formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")) if show_value else ""
 
-    needle_state_key = round(frac, 4) if draw_needle else None
+    needle_state_key = (
+        round(frac, 4),
+        float(needle_len_rel),
+        int(needle_width_px),
+        needle_fill,
+    ) if draw_needle else None
+
     gauge_raster_key = _static_cache_key(
         "gauge_dyn_raster", bg_key, needle_state_key, txt_main,
+        needle_len_rel, needle_width_px, needle_fill,
         bool(cfg.get("show_marker", False)), int(cfg.get("marker_size", 0)),
         str(cfg.get("marker_color", "#333333")), str(cfg.get("text_color", "#FFFFFF")),
         float(cfg.get("text_offset_x", 0.0)), float(cfg.get("text_offset_y", 0.0)),
@@ -400,10 +460,15 @@ def _render_gauge_indicator(
         return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
 
     # ── Dynamic elements: regional restore or full canvas init ──
-    if _GAUGE_CANVAS_STATE["canvas"] is None or _GAUGE_CANVAS_STATE["bg_key"] != bg_key:
+    if (
+        _GAUGE_CANVAS_STATE["canvas"] is None
+        or _GAUGE_CANVAS_STATE["bg_key"] != bg_key
+        or _GAUGE_CANVAS_STATE.get("needle_sig") != needle_sig
+    ):
         img = bg.copy()
         _GAUGE_CANVAS_STATE["canvas"] = img
         _GAUGE_CANVAS_STATE["bg_key"] = bg_key
+        _GAUGE_CANVAS_STATE["needle_sig"] = needle_sig
         _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = []
     else:
         img = _GAUGE_CANVAS_STATE["canvas"]
@@ -420,16 +485,6 @@ def _render_gauge_indicator(
 
     ang = math.radians(start_deg + (end_deg - start_deg) * frac)
 
-    # Needle
-    needle_len_rel = cfg.get("needle_length", 1.1)
-    # The background is rendered at `radius * ss` and downscaled to output
-    # space, while the needle is drawn in output space — so scale by /ss.
-    needle_r_out = max(2, int(radius * needle_len_rel / ss))
-    needle_r_in = max(1, int(radius * 0.05))
-    needle_width_px = max(2, int(cfg.get("needle_width", 4) * (1.8 if pixel_profile else 1.5)))
-    needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
-    needle_fill = (needle_rgb[0], needle_rgb[1], needle_rgb[2], 255)
-
     # For cached bg we downscaled, so coordinates are in output space
     _cx, _cy = out_gauge_size // 2, out_gauge_size // 2
     pdx, pdy = -math.sin(ang), math.cos(ang)
@@ -438,30 +493,80 @@ def _render_gauge_indicator(
     base_x = _cx + math.cos(ang) * needle_r_in
     base_y = _cy + math.sin(ang) * needle_r_in
 
+    # ── Antialiased rendering: local supersampled patch for needle ──
     if draw_needle:
-        draw.polygon([
-            (base_x + pdx * needle_width_px / 2, base_y + pdy * needle_width_px / 2),
-            (base_x - pdx * needle_width_px / 2, base_y - pdy * needle_width_px / 2),
-            (tip_x, tip_y),
-        ], fill=needle_fill)
+        _n_hw = needle_width_px / 2.0
+        p1 = (base_x + pdx * _n_hw, base_y + pdy * _n_hw)
+        p2 = (base_x - pdx * _n_hw, base_y - pdy * _n_hw)
+        p3 = (tip_x, tip_y)
+        pts = [p1, p2, p3]
 
-    # Marker (center dot cap)
+        pad = 4
+        min_x = min(p[0] for p in pts)
+        max_x = max(p[0] for p in pts)
+        min_y = min(p[1] for p in pts)
+        max_y = max(p[1] for p in pts)
+        bx0 = max(0, int(math.floor(min_x)) - pad)
+        by0 = max(0, int(math.floor(min_y)) - pad)
+        bx1 = min(img.width, int(math.ceil(max_x)) + pad)
+        by1 = min(img.height, int(math.ceil(max_y)) + pad)
+        bw, bh = bx1 - bx0, by1 - by0
+
+        if bw > 0 and bh > 0:
+            scale = 2
+            mask_buf = Image.new("L", (bw * scale, bh * scale), 0)
+            draw_mask = ImageDraw.Draw(mask_buf)
+            local_poly = [
+                ((p[0] - bx0) * scale, (p[1] - by0) * scale) for p in pts
+            ]
+            draw_mask.polygon(local_poly, fill=255)
+
+            alpha_mask = mask_buf.resize((bw, bh), Image.LANCZOS)
+            solid_color = Image.new("RGBA", (bw, bh), needle_fill[:3] + (255,))
+            solid_color.putalpha(alpha_mask)
+
+            target_crop = img.crop((bx0, by0, bx1, by1))
+            target_crop.alpha_composite(solid_color)
+            img.paste(target_crop, (bx0, by0))
+
+    # Marker (center dot cap) config with dedicated AA
     show_marker = bool(cfg.get("show_marker", False))
     marker_size = int(cfg.get("marker_size", 0))
     if show_marker and marker_size > 0:
         r = max(1, marker_size)
-        marker_color = parse_hex_color(cfg.get("marker_color", "#333333")) or (51, 51, 51)
-        marker_fill = (marker_color[0], marker_color[1], marker_color[2], 255)
-        draw.ellipse([
-            _cx - r, _cy - r,
-            _cx + r, _cy + r
-        ], fill=marker_fill, outline=(120, 120, 120, 255), width=1)
+        pad = 2
+        m_bw = (r + pad) * 2
+        m_bh = (r + pad) * 2
+        m_bx0 = max(0, _cx - r - pad)
+        m_by0 = max(0, _cy - r - pad)
+        m_bx1 = min(img.width, m_bx0 + m_bw)
+        m_by1 = min(img.height, m_by0 + m_bh)
+        m_bw = m_bx1 - m_bx0
+        m_bh = m_by1 - m_by0
+
+        if m_bw > 0 and m_bh > 0:
+            m_scale = 4
+            m_buf = Image.new("RGBA", (m_bw * m_scale, m_bh * m_scale), (0, 0, 0, 0))
+            d_m = ImageDraw.Draw(m_buf)
+            marker_color = parse_hex_color(cfg.get("marker_color", "#333333")) or (51, 51, 51)
+            marker_fill = (marker_color[0], marker_color[1], marker_color[2], 255)
+            mc_x = (_cx - m_bx0) * m_scale
+            mc_y = (_cy - m_by0) * m_scale
+            mr = r * m_scale
+            d_m.ellipse([
+                mc_x - mr, mc_y - mr,
+                mc_x + mr, mc_y + mr
+            ], fill=marker_fill, outline=(120, 120, 120, 255), width=m_scale)
+            m_patch = m_buf.resize((m_bw, m_bh), Image.LANCZOS)
+            m_crop = img.crop((m_bx0, m_by0, m_bx1, m_by1))
+            m_crop.alpha_composite(m_patch)
+            img.paste(m_crop, (m_bx0, m_by0))
 
     # Center text — always the current value, honouring show_value/show_units
     # (formatted_val is built by the compositor from those flags).
     show_value = cfg.get("show_value", True)
     _fs_ds = max(8, fs)
-    _c_font = load_font(font_path, _fs_ds)
+    _c_font = load_font(gauge_font_path, _fs_ds)
     _text_support = None  # ETAP 2C: dynamic value-text support bbox
     if show_value:
         txt_main = formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")
@@ -533,7 +638,7 @@ def _render_gauge_indicator(
         _n_hw = needle_width_px / 2.0
         _nvx = (base_x + pdx * _n_hw, base_x - pdx * _n_hw, tip_x)
         _nvy = (base_y + pdy * _n_hw, base_y - pdy * _n_hw, tip_y)
-        _n_margin = 2.0  # PIL polygon rasterizer rounding margin
+        _n_margin = 4.0  # margin covering local AA filter padding
         _needle_support = (
             min(_nvx) - _n_margin, min(_nvy) - _n_margin,
             max(_nvx) + _n_margin, max(_nvy) + _n_margin)
@@ -545,6 +650,7 @@ def _render_gauge_indicator(
         start_deg, sweep_deg, display_min, display_max,
         ticks, thickness, ss, gauge_fs, str(font_path), outline,
         pixel_profile, needle_len_rel, needle_width_px, needle_fill,
+        maj_len_raw, maj_thick_raw, min_len_raw, min_thick_raw,
         show_marker, marker_size, bool(show_value),
         str(cfg.get("text_color", "#FFFFFF")),
         float(cfg.get("text_offset_x", 0.0)),
@@ -569,7 +675,7 @@ def _render_gauge_indicator(
         dirty_boxes.append(_text_support)
     if show_marker and marker_size > 0:
         m_r = max(1, marker_size)
-        dirty_boxes.append((float(_cx - m_r - 1), float(_cy - m_r - 1), float(_cx + m_r + 2), float(_cy + m_r + 2)))
+        dirty_boxes.append((float(_cx - m_r - 4), float(_cy - m_r - 4), float(_cx + m_r + 4), float(_cy + m_r + 4)))
     _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = dirty_boxes
 
     record_gauge_dynamic_info(key, **dynamic_info)

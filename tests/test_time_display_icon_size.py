@@ -203,9 +203,9 @@ def test_schema_has_icon_field():
     names = [f.name for f in schema]
     assert "icon" in names
     icon_field = next(f for f in schema if f.name == "icon")
-    assert icon_field.choices == [
-        "none", "clock", "camera", "temperature", "battery", "solar",
-    ]
+    choice_keys = [c[0] if isinstance(c, (tuple, list)) else c for c in icon_field.choices]
+    for expected in ("none", "clock", "camera", "temperature", "battery", "solar", "heart", "speedometer", "mountain"):
+        assert expected in choice_keys
 
 
 def test_schema_icon_default_is_clock():

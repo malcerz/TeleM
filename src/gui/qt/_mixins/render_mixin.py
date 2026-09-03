@@ -34,11 +34,10 @@ class RenderMixin:
             self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
             return
 
-        # Persist explicit bar/ruler orientation instead of the legacy hack.
-        from src.indicators.compositor import normalize_layout_for_save
-        def_layout = self.base_dir / "def_layout.json"
-        with open(def_layout, "w", encoding="utf-8") as f:
-            json.dump(normalize_layout_for_save(self.layout), f, indent=2, ensure_ascii=False)
+        # Zapisz stan roboczy layoutu dla konkretnego filmu (sidecar .layout.json).
+        # NIGDY nie nadpisuj wczytanego presetu użytkownika ani def_layout.json!
+        if hasattr(self, "_save_project_layout"):
+            self._save_project_layout()
 
         self.render_cancel_event.clear()
         self.render_process_holder = {}

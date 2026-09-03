@@ -53,9 +53,11 @@ class RenderTab(QWidget):
         self._controller: object = None
         self._owns_preview = preview is None
         self.video_preview = preview if preview is not None else VideoPreview()
-        # Zakres eksportu IN/OUT w oryginalnym czasie
+        # Zakres eksportu IN/OUT w oryginalnym czasie oraz całkowitych klatkach
         self._in_orig: float | None = None
         self._out_orig: float | None = None
+        self._in_frame: int | None = None
+        self._out_frame: int | None = None
         self._boundary_regions: list[tuple[float, float]] = []
         # Stan renderingu / HUD preview (latest-state, ~5 Hz)
         self._rendering = False
@@ -252,23 +254,49 @@ class RenderTab(QWidget):
         vbox.addWidget(self.lbl_stats)
 
     def _build_inout_bar(self) -> QHBoxLayout:
-        """Pasek narzędzi zakresu eksportu: IN / OUT / Wyczyść."""
+        """Pasek narzędzi zakresu eksportu: IN / OUT / Wyczyść z krokami klatkowymi."""
         row = QHBoxLayout()
         row.setContentsMargins(4, 2, 4, 2)
-        row.setSpacing(8)
+        row.setSpacing(6)
 
+        # ── IN (START) ──
         self.btn_in = QPushButton("IN")
         self.btn_in.setFixedHeight(26)
         self.btn_in.setToolTip("Ustaw punkt początku eksportu (IN) na aktualnej pozycji")
         self.btn_in.clicked.connect(self._on_set_in)
 
+        self.btn_in_prev = QPushButton("[-1f]")
+        self.btn_in_prev.setFixedHeight(26)
+        self.btn_in_prev.setFixedWidth(38)
+        self.btn_in_prev.setToolTip("Cofnij punkt IN o dokładnie 1 klatkę")
+        self.btn_in_prev.clicked.connect(lambda: self._on_step_in(-1))
+
+        self.btn_in_next = QPushButton("[+1f]")
+        self.btn_in_next.setFixedHeight(26)
+        self.btn_in_next.setFixedWidth(38)
+        self.btn_in_next.setToolTip("Przesuń punkt IN naprzód o dokładnie 1 klatkę")
+        self.btn_in_next.clicked.connect(lambda: self._on_step_in(1))
+
         self.lbl_in = QLabel("IN: --:--")
         self.lbl_in.setStyleSheet("color: #ffd75e; font-weight: bold;")
 
+        # ── OUT (END) ──
         self.btn_out = QPushButton("OUT")
         self.btn_out.setFixedHeight(26)
         self.btn_out.setToolTip("Ustaw punkt końca eksportu (OUT) na aktualnej pozycji")
         self.btn_out.clicked.connect(self._on_set_out)
+
+        self.btn_out_prev = QPushButton("[-1f]")
+        self.btn_out_prev.setFixedHeight(26)
+        self.btn_out_prev.setFixedWidth(38)
+        self.btn_out_prev.setToolTip("Cofnij punkt OUT o dokładnie 1 klatkę")
+        self.btn_out_prev.clicked.connect(lambda: self._on_step_out(-1))
+
+        self.btn_out_next = QPushButton("[+1f]")
+        self.btn_out_next.setFixedHeight(26)
+        self.btn_out_next.setFixedWidth(38)
+        self.btn_out_next.setToolTip("Przesuń punkt OUT naprzód o dokładnie 1 klatkę")
+        self.btn_out_next.clicked.connect(lambda: self._on_step_out(1))
 
         self.lbl_out = QLabel("OUT: --:--")
         self.lbl_out.setStyleSheet("color: #ff8a8a; font-weight: bold;")
@@ -282,8 +310,13 @@ class RenderTab(QWidget):
         self.btn_clear_range.clicked.connect(self._on_clear_range)
 
         row.addWidget(self.btn_in)
+        row.addWidget(self.btn_in_prev)
+        row.addWidget(self.btn_in_next)
         row.addWidget(self.lbl_in)
+        row.addSpacing(10)
         row.addWidget(self.btn_out)
+        row.addWidget(self.btn_out_prev)
+        row.addWidget(self.btn_out_next)
         row.addWidget(self.lbl_out)
         row.addWidget(self.lbl_range_len)
         row.addStretch()
@@ -334,6 +367,17 @@ class RenderTab(QWidget):
             return f"{h}:{m:02d}:{s:02d}"
         return f"{m:02d}:{s:02d}"
 
+    def _get_fps(self) -> float:
+        fps = 30.0
+        if self._controller is not None:
+            fps = float(getattr(self._controller, "fps", 30.0) or 30.0)
+        return fps if fps > 0 else 30.0
+
+    def _get_total_frames(self) -> int:
+        fps = self._get_fps()
+        dur = self._duration_s()
+        return max(1, int(round(dur * fps)))
+
     def _duration_s(self) -> float:
         if self._controller is None:
             return 0.0
@@ -345,33 +389,94 @@ class RenderTab(QWidget):
         return sb.get_position()
 
     def _on_set_in(self) -> None:
-        """Ustaw punkt IN na aktualnej pozycji (ucina wszystko przed IN)."""
+        """Ustaw punkt IN na aktualnej pozycji w domenie klatek."""
         dur = self._duration_s()
         if dur <= 0:
             return
+        fps = self._get_fps()
         pos = min(max(0.0, self._current_orig_pos()), dur)
+        self._in_frame = int(round(pos * fps))
+        self._apply_in_frame()
+
+    def _on_step_in(self, delta: int) -> None:
+        """Krok klatkowy punktu IN w domenie całkowitej liczby klatek."""
+        dur = self._duration_s()
+        if dur <= 0:
+            return
+        fps = self._get_fps()
+        if self._in_frame is None:
+            pos = min(max(0.0, self._current_orig_pos()), dur)
+            self._in_frame = int(round(pos * fps))
+        total_frames = self._get_total_frames()
+        new_frame = max(0, self._in_frame + int(delta))
+        if self._out_frame is not None:
+            new_frame = min(new_frame, max(0, self._out_frame - 1))
+        else:
+            new_frame = min(new_frame, total_frames - 1)
+        self._in_frame = new_frame
+        self._apply_in_frame()
+        if self._in_orig is not None:
+            self.signals.sig_seek_changed.emit(self._in_orig)
+
+    def _apply_in_frame(self) -> None:
+        fps = self._get_fps()
+        dur = self._duration_s()
+        if self._in_frame is None:
+            return
+        pos = self._in_frame / fps
         if self._in_orig is not None and self._in_orig > 0:
             self._remove_boundary(0.0, self._in_orig)
         self._in_orig = pos
         if pos > 0:
             self._add_boundary(0.0, pos)
-        if self._out_orig is not None and self._out_orig <= pos:
+        if (self._out_frame is not None and self._out_frame <= self._in_frame) or (self._out_orig is not None and self._out_orig <= pos):
             self._clear_range()
             return
         self._update_inout_labels()
 
     def _on_set_out(self) -> None:
-        """Ustaw punkt OUT na aktualnej pozycji (ucina wszystko po OUT)."""
+        """Ustaw punkt OUT na aktualnej pozycji w domenie klatek."""
         dur = self._duration_s()
         if dur <= 0:
             return
+        fps = self._get_fps()
         pos = min(max(0.0, self._current_orig_pos()), dur)
+        self._out_frame = int(round(pos * fps))
+        self._apply_out_frame()
+
+    def _on_step_out(self, delta: int) -> None:
+        """Krok klatkowy punktu OUT w domenie całkowitej liczby klatek."""
+        dur = self._duration_s()
+        if dur <= 0:
+            return
+        fps = self._get_fps()
+        if self._out_frame is None:
+            pos = min(max(0.0, self._current_orig_pos()), dur)
+            self._out_frame = int(round(pos * fps))
+        total_frames = self._get_total_frames()
+        new_frame = self._out_frame + int(delta)
+        if self._in_frame is not None:
+            new_frame = max(self._in_frame + 1, new_frame)
+        else:
+            new_frame = max(1, new_frame)
+        new_frame = min(total_frames, new_frame)
+        self._out_frame = new_frame
+        self._apply_out_frame()
+        if self._out_orig is not None:
+            self.signals.sig_seek_changed.emit(self._out_orig)
+
+    def _apply_out_frame(self) -> None:
+        fps = self._get_fps()
+        dur = self._duration_s()
+        if self._out_frame is None:
+            return
+        pos = self._out_frame / fps
         if self._out_orig is not None and self._out_orig < dur:
             self._remove_boundary(self._out_orig, dur)
         self._out_orig = pos
         if pos < dur:
             self._add_boundary(pos, dur)
-        if self._in_orig is not None and self._in_orig >= pos:
+        if (self._in_frame is not None and self._in_frame >= self._out_frame) or (self._in_orig is not None and self._in_orig >= pos):
             self._clear_range()
             return
         self._update_inout_labels()
@@ -397,6 +502,8 @@ class RenderTab(QWidget):
         self._boundary_regions.clear()
         self._in_orig = None
         self._out_orig = None
+        self._in_frame = None
+        self._out_frame = None
         self._update_inout_labels()
 
     def _on_clear_range(self) -> None:
@@ -405,12 +512,20 @@ class RenderTab(QWidget):
     def _update_inout_labels(self) -> None:
         if self._in_orig is not None:
             self.lbl_in.setText(f"IN: {self._fmt_time(self._in_orig)}")
+            if self._in_frame is not None:
+                self.lbl_in.setToolTip(f"Punkt IN: {self._fmt_time(self._in_orig)} (klatka: {self._in_frame})")
         else:
             self.lbl_in.setText("IN: --:--")
+            self.lbl_in.setToolTip("")
+
         if self._out_orig is not None:
             self.lbl_out.setText(f"OUT: {self._fmt_time(self._out_orig)}")
+            if self._out_frame is not None:
+                self.lbl_out.setToolTip(f"Punkt OUT: {self._fmt_time(self._out_orig)} (klatka: {self._out_frame})")
         else:
             self.lbl_out.setText("OUT: --:--")
+            self.lbl_out.setToolTip("")
+
         if self._in_orig is not None and self._out_orig is not None:
             self.lbl_range_len.setText(
                 f"Zakres: {self._fmt_time(self._out_orig - self._in_orig)}"

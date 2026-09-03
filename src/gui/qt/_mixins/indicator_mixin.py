@@ -75,8 +75,12 @@ class IndicatorMixin:
         defaults: dict[str, Any] = {
             "enabled": True, "label": key, "x": 50.0, "y": 50.0,
             "rotation": 0, "form": "text", "font_size": 2.5,
+            "font": "",
             "size": 2.5, "thickness": 3, "min_val": 0, "max_val": 100,
             "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
+            # Ticks (decoupled)
+            "major_tick_length": 4.0, "minor_tick_length": 2.0,
+            "major_tick_thickness": 4, "minor_tick_thickness": 2,
             # Text
             "text_offset_x": 0.0, "text_offset_y": 0.0,
             # Gauge
@@ -267,7 +271,8 @@ class IndicatorMixin:
             defaults["form"] = "lean"
             defaults["source"] = "gyro"
             defaults["axis"] = "x"
-            defaults["zero_offset"] = 0.0
+            defaults["calibration"] = 6.0
+            defaults["zero_offset"] = 6.0
             defaults["invert_axis"] = False
             defaults["pivot_x"] = 0.5
             defaults["pivot_y"] = 1.0

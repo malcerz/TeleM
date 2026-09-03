@@ -108,6 +108,12 @@ def _read_widget(w):
         return data if data is not None else w.currentText()
     if isinstance(w, QLineEdit):
         return w.text()
+    try:
+        from src.gui.qt.widgets.icon_picker import IconPickerWidget
+        if isinstance(w, IconPickerWidget):
+            return w.value()
+    except ImportError:
+        pass
     return None
 
 

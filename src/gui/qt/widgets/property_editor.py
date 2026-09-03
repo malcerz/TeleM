@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from src.gui.qt.models import FieldSchema
 from src.gui.qt.signals import get_signals
+from src.gui.qt.widgets.icon_picker import IconPickerWidget
 
 
 class PropertyEditor(QWidget):
@@ -92,26 +93,36 @@ class PropertyEditor(QWidget):
         """Aktualizuje wartości w istniejących widgetach bez przebudowywania UI."""
         self._suppress_emit = True
         try:
-            for name, val in values.items():
-                w = self._field_widgets.get(name)
-                if w is None or val is None:
-                    continue
+            for name, w in self._field_widgets.items():
+                val = values.get(name)
                 if isinstance(w, QDoubleSpinBox):
-                    w.setValue(float(val))
+                    if val is not None:
+                        try:
+                            w.setValue(float(val))
+                        except (ValueError, TypeError):
+                            pass
                 elif isinstance(w, QSpinBox):
-                    w.setValue(int(val))
+                    if val is not None:
+                        try:
+                            w.setValue(int(val))
+                        except (ValueError, TypeError):
+                            pass
                 elif isinstance(w, QCheckBox):
-                    w.setChecked(bool(val))
+                    if val is not None:
+                        w.setChecked(bool(val))
                 elif isinstance(w, QComboBox):
-                    idx = w.findData(val)
-                    if idx >= 0:
-                        w.setCurrentIndex(idx)
-                    else:
-                        w.setCurrentText(str(val))
+                    if val is not None:
+                        idx = w.findData(val)
+                        if idx >= 0:
+                            w.setCurrentIndex(idx)
+                        else:
+                            w.setCurrentText(str(val))
                 elif isinstance(w, QLineEdit):
-                    w.setText(str(val))
-            if "smoothing" in values and hasattr(self, "_smoothing_spin") and self._smoothing_spin:
-                self._smoothing_spin.setValue(int(values["smoothing"]))
+                    w.setText(str(val) if val is not None else "")
+                elif isinstance(w, IconPickerWidget):
+                    w.set_value(str(val) if val is not None else "none")
+            if hasattr(self, "_smoothing_spin") and self._smoothing_spin:
+                self._smoothing_spin.setValue(int(values.get("smoothing", 0)))
         finally:
             self._suppress_emit = False
 
@@ -140,8 +151,12 @@ class PropertyEditor(QWidget):
         self.delete_btn.setVisible(True)
         self.placeholder.setVisible(False)
 
-        self._field_widgets.clear()
-        self._build_form(schema, values)
+        self._suppress_emit = True
+        try:
+            self._field_widgets.clear()
+            self._build_form(schema, values)
+        finally:
+            self._suppress_emit = False
         self.form_container.setVisible(True)
 
     def _clear_layout(self, layout) -> None:
@@ -196,7 +211,7 @@ class PropertyEditor(QWidget):
             outer.addLayout(hform)
 
         # ── Zakładki ──────────────────────────────────────────────────
-        tab_order = ["Text", "Data", "Czas", "Od początku", "Śr. prędkość",
+        tab_order = ["Text", "Ikona", "Data", "Czas", "Od początku", "Śr. prędkość",
                      "Labels", "Ticks", "Gauge", "Compass", "Chart", "Segments",
                      "Colors", "Marker", "Range", "Path", "Shape"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
@@ -215,16 +230,26 @@ class PropertyEditor(QWidget):
                 if tab_name not in active_tabs:
                     continue
                 page = QWidget()
-                flayout = QFormLayout(page)
-                flayout.setSpacing(8)
-                flayout.setContentsMargins(8, 8, 8, 8)
-                for field in active_tabs[tab_name]:
-                    w = self._create_field_widget(
-                        field, values.get(field.name))
-                    if w:
-                        flayout.addRow(f"{field.label}:", w)
-                flayout.addItem(QSpacerItem(
-                    0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+                if tab_name == "Ikona":
+                    page_layout = QVBoxLayout(page)
+                    page_layout.setContentsMargins(6, 6, 6, 6)
+                    page_layout.setSpacing(6)
+                    for field in active_tabs[tab_name]:
+                        w = self._create_field_widget(field, values.get(field.name))
+                        if w:
+                            page_layout.addWidget(w)
+                    page_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+                else:
+                    flayout = QFormLayout(page)
+                    flayout.setSpacing(8)
+                    flayout.setContentsMargins(8, 8, 8, 8)
+                    for field in active_tabs[tab_name]:
+                        w = self._create_field_widget(
+                            field, values.get(field.name))
+                        if w:
+                            flayout.addRow(f"{field.label}:", w)
+                    flayout.addItem(QSpacerItem(
+                        0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
                 tabs.addTab(page, tab_name)
             outer.addWidget(tabs, 1)
 
@@ -267,7 +292,14 @@ class PropertyEditor(QWidget):
             value = field.default
 
         res_widget = None
-        if field.field_type == "bool":
+        if field.name == "icon" or field.field_type == "icon":
+            picker = IconPickerWidget(current_value=value)
+            picker.icon_changed.connect(
+                lambda icon_name, n=name: self._emit_change(n, icon_name)
+            )
+            res_widget = picker
+
+        elif field.field_type == "bool":
             cb = QCheckBox()
             cb.setChecked(bool(value))
             cb.toggled.connect(
@@ -342,6 +374,7 @@ class PropertyEditor(QWidget):
             row = QWidget()
             hbox = QHBoxLayout(row)
             hbox.setContentsMargins(0, 0, 0, 0)
+            hbox.setSpacing(4)
             edit = QLineEdit(str(value) if value else "")
             edit.setPlaceholderText("Domyślny")
             edit.setToolTip("Wpisz nazwę rodziny fontu (np. Digital-7, Comic Sans) lub wskaż plik")
@@ -356,14 +389,21 @@ class PropertyEditor(QWidget):
             except Exception:
                 pass
             edit.textChanged.connect(
-                lambda txt, n=name: self._emit_change(n, txt or None)
+                lambda txt, n=name: self._emit_change(n, txt.strip() if txt else "")
             )
-            btn = QPushButton("Wybierz plik…")
-            btn.clicked.connect(
-                lambda checked=False, e=edit: self._pick_font(e)
+            btn_font = QPushButton("Font…")
+            btn_font.setToolTip("Wybierz zainstalowaną czcionkę systemową")
+            btn_font.clicked.connect(
+                lambda checked=False, e=edit: self._pick_font_dialog(e)
+            )
+            btn_file = QPushButton("Plik…")
+            btn_file.setToolTip("Wskaż plik czcionki (.ttf, .otf, .ttc)")
+            btn_file.clicked.connect(
+                lambda checked=False, e=edit: self._pick_font_file(e)
             )
             hbox.addWidget(edit, 1)
-            hbox.addWidget(btn)
+            hbox.addWidget(btn_font)
+            hbox.addWidget(btn_file)
             self._field_widgets[name] = edit
             return row
 
@@ -415,12 +455,26 @@ class PropertyEditor(QWidget):
                 f"border: 1px solid #555; border-radius: 2px;"
             )
 
-    def _pick_font(self, edit: QLineEdit) -> None:
+    def _pick_font_file(self, edit: QLineEdit) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Wybierz plik fontu", "", "Fonty (*.ttf *.otf *.ttc)"
         )
         if path:
             edit.setText(path)
+
+    def _pick_font_dialog(self, edit: QLineEdit) -> None:
+        try:
+            from PySide6.QtWidgets import QFontDialog
+            from PySide6.QtGui import QFont
+            curr_font = QFont(edit.text()) if edit.text() else QFont()
+            ok, font = QFontDialog.getFont(curr_font, self, "Wybierz czcionkę")
+            if ok and font.family():
+                edit.setText(font.family())
+        except Exception:
+            pass
+
+    def _pick_font(self, edit: QLineEdit) -> None:
+        self._pick_font_file(edit)
 
     def _emit_change(self, field_name: str, value: Any) -> None:
         """Emituje sygnał zmiany właściwości."""

@@ -188,6 +188,31 @@ class VideoPreview(QWidget):
                 self._print_preview_debug_info()
 
 
+    def print_preview_raster_diag(self) -> None:
+        """Wypisuje diagnostykę fizycznego mapowania rastra 1:1 dla fullscreen preview."""
+        vrect = self.get_video_rect()
+        dpr = self.get_dpr()
+        phys_rect = self.get_physical_video_rect()
+        ctrl = self._controller
+        vw = getattr(ctrl, "video_width", 0) or 3840
+        vh = getattr(ctrl, "video_height", 0) or 2160
+        target_w = getattr(ctrl, "_preview_target_w", phys_rect.width())
+        target_h = getattr(ctrl, "_preview_target_h", phys_rect.height())
+        display_sx = 1.0
+        display_sy = 1.0
+        print(
+            f"[PREVIEW RASTER]\n"
+            f"video={vw}x{vh}\n"
+            f"qt_logical={vrect.width()}x{vrect.height()}\n"
+            f"dpr={dpr:.2f}\n"
+            f"qt_physical={phys_rect.width()}x{phys_rect.height()}\n"
+            f"hud_canvas={target_w}x{target_h}\n"
+            f"composite={target_w}x{target_h}\n"
+            f"display_scale_x={display_sx:.2f}\n"
+            f"display_scale_y={display_sy:.2f}",
+            flush=True,
+        )
+
     def _print_preview_debug_info(self) -> None:
         if os.environ.get("TELEM_RENDER_DEBUG") or os.environ.get("TELEM_PREVIEW_DEBUG"):
             vrect = self.get_video_rect()
@@ -260,12 +285,12 @@ class VideoPreview(QWidget):
 
         layout.addWidget(self.stacked_widget, 1)
 
-        # Oś czasu + Play/Stop
+        # Oś czasu + Play/Stop + frame step + fullscreen
         time_row = QHBoxLayout()
         time_row.setContentsMargins(4, 2, 4, 2)
         time_row.setSpacing(4)
 
-        self.play_btn = QPushButton("\u25B6")
+        self.play_btn = QPushButton("▶")
         self.play_btn.setFixedSize(28, 26)
         self.play_btn.setToolTip("Odtwarzaj / Pauza")
         self.play_btn.setStyleSheet(
@@ -275,6 +300,29 @@ class VideoPreview(QWidget):
         )
         self.play_btn.clicked.connect(self._toggle_playback)
         time_row.addWidget(self.play_btn)
+
+        # Obok Play: oba przyciski frame-step
+        self.btn_prev_frame = QPushButton("|<")
+        self.btn_prev_frame.setFixedSize(32, 26)
+        self.btn_prev_frame.setToolTip("Poprzednia klatka")
+        self.btn_prev_frame.setStyleSheet(
+            "QPushButton { background-color: #333; color: #ccc; "
+            "border: 1px solid #555; border-radius: 3px; font-weight: bold; font-size: 11px; }"
+            "QPushButton:hover { background-color: #444; }"
+        )
+        self.btn_prev_frame.clicked.connect(lambda: self._step_frame(-1))
+        time_row.addWidget(self.btn_prev_frame)
+
+        self.btn_next_frame = QPushButton(">|")
+        self.btn_next_frame.setFixedSize(32, 26)
+        self.btn_next_frame.setToolTip("Następna klatka")
+        self.btn_next_frame.setStyleSheet(
+            "QPushButton { background-color: #333; color: #ccc; "
+            "border: 1px solid #555; border-radius: 3px; font-weight: bold; font-size: 11px; }"
+            "QPushButton:hover { background-color: #444; }"
+        )
+        self.btn_next_frame.clicked.connect(lambda: self._step_frame(+1))
+        time_row.addWidget(self.btn_next_frame)
 
         self.time_label = QLabel("00:00")
         self.time_label.setFixedWidth(50)
@@ -291,7 +339,23 @@ class VideoPreview(QWidget):
         self.duration_label.setStyleSheet("color: #aaa; font-size: 11px;")
         time_row.addWidget(self.duration_label)
 
+        # Przycisk pełnoekranowy
+        self.btn_fullscreen = QPushButton("\u26F6")
+        self.btn_fullscreen.setFixedSize(28, 26)
+        self.btn_fullscreen.setToolTip("Pełny ekran (ESC aby wyjść)")
+        self.btn_fullscreen.setStyleSheet(
+            "QPushButton { background-color: #333; color: #ddd; "
+            "border: 1px solid #555; border-radius: 3px; font-size: 14px; }"
+            "QPushButton:hover { background-color: #444; }"
+        )
+        self.btn_fullscreen.clicked.connect(self._toggle_fullscreen)
+        time_row.addWidget(self.btn_fullscreen)
+
         layout.addLayout(time_row)
+
+        # Referencja do okna pełnoekranowego (None gdy zamknięte)
+        self._fullscreen_window: "FullscreenPreviewWindow | None" = None
+
 
     def _hud_alive(self) -> bool:
         """Czy obiekt C++ nakładki HUD nadal istnieje (bezpieczeństwo przy zamykaniu)."""
@@ -547,3 +611,32 @@ class VideoPreview(QWidget):
         mins = int(eff_capped // 60)
         secs = int(eff_capped % 60)
         self.time_label.setText(f"{mins:02d}:{secs:02d}")
+
+    # ── Krok klatkowy ─────────────────────────────────────────────────────
+
+    def _step_frame(self, delta: int) -> None:
+        """Przesuń pozycję o delta klatek (delegowane do kontrolera z obsługą MPV i multi-file)."""
+        self.signals.sig_frame_step.emit(int(delta))
+
+    # ── Pełnoekranowy podgląd ─────────────────────────────────────────────
+
+    def _toggle_fullscreen(self) -> None:
+        """Przełącz tryb pełnoekranowy (Fullscreen Preview)."""
+        self.signals.sig_toggle_fullscreen.emit()
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key == Qt.Key_Escape:
+            self.signals.sig_toggle_fullscreen.emit()
+            event.accept()
+        elif key == Qt.Key_Space:
+            self._toggle_playback()
+            event.accept()
+        elif key == Qt.Key_Left:
+            self.signals.sig_frame_step.emit(-1)
+            event.accept()
+        elif key == Qt.Key_Right:
+            self.signals.sig_frame_step.emit(1)
+            event.accept()
+        else:
+            super().keyPressEvent(event)

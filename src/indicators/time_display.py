@@ -255,11 +255,8 @@ def render_time_display(
     icon_w = (icon.width + icon_gap) if icon else 0
 
     tmp_w = int(max(max_w + outline * 2 + icon_w, s(0.3, canvas_w)))
-    tmp_h = max(total_h, 80)
+    tmp_h = total_h + outline * 2 + 10
     tmp = Image.new("RGBA", (tmp_w, tmp_h), (0, 0, 0, 0))
-
-    if icon:
-        tmp.alpha_composite(icon, (outline, max(0, (tmp_h - icon.height) // 2)))
 
     # ── Second pass: composite each cached line tile ──────────────────
     text_x = outline + icon_w
@@ -268,6 +265,11 @@ def render_time_display(
         line_tile = _get_line_tile(text, font_path, fs, fill, outline, tw, lh)
         tmp.alpha_composite(line_tile, (text_x - outline, y - outline))
         y += lh
+
+    total_rendered_h = y - outline
+    if icon:
+        icon_y = max(outline, int(round(outline + (total_rendered_h - icon.height) / 2.0)))
+        tmp.alpha_composite(icon, (outline, icon_y))
 
     bbox = tmp.getbbox()
     if not bbox:

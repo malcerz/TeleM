@@ -8,6 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.indicators.icons import ICON_NAMES, ICON_LABELS
+
+_ICON_CHOICES = [(name, f"{ICON_LABELS.get(name, name)} ({name})" if name != "none" else "Brak") for name in ICON_NAMES]
+
 
 @dataclass
 class DataStream:
@@ -105,9 +109,7 @@ def _header_fields(with_source: bool = True, text_size: bool = False,
         FieldSchema("rotation", "choice", "Rotacja", tab="",
                     choices=["0", "90", "180", "270"], default="0"),
         FieldSchema("font", "font", "Font", tab="", default=""),
-        FieldSchema("icon", "choice", "Ikona", tab="", choices=[
-            "none", "clock", "camera", "temperature", "battery", "solar",
-        ], default="none"),
+        FieldSchema("icon", "choice", "Ikona", tab="Ikona", choices=_ICON_CHOICES, default="none"),
     ]
     if with_source:
         fields.append(
@@ -191,6 +193,14 @@ def _ticks_tab_fields(with_range: bool = True, with_ticks: bool = True) -> list[
                               min_val=0.0, max_val=1000.0, step=0.1, default=0.0))
     fields.append(FieldSchema("thickness", "int", "Grubość podziałek",
                               tab="Ticks", min_val=1, max_val=10, step=1, default=3))
+    fields.append(FieldSchema("major_tick_length", "float", "Dł. podziałki głównej",
+                              tab="Ticks", min_val=0.5, max_val=20.0, step=0.5, default=4.0))
+    fields.append(FieldSchema("minor_tick_length", "float", "Dł. podziałki drobnej",
+                              tab="Ticks", min_val=0.5, max_val=20.0, step=0.5, default=2.0))
+    fields.append(FieldSchema("major_tick_thickness", "int", "Grubość podz. głównej",
+                              tab="Ticks", min_val=1, max_val=20, step=1, default=4))
+    fields.append(FieldSchema("minor_tick_thickness", "int", "Grubość podz. drobnej",
+                              tab="Ticks", min_val=1, max_val=20, step=1, default=2))
     if with_range:
         fields += [
             FieldSchema("min_val", "float", "Minimum", tab="Ticks",
@@ -529,8 +539,8 @@ def lean_indicator_fields() -> list[FieldSchema]:
             FieldSchema("axis", "choice", "Oś przechyłu", tab="Data",
                         choices=[("x", "X (roll)"), ("y", "Y (pitch)"), ("z", "Z (yaw)")],
                         default="x"),
-            FieldSchema("zero_offset", "float", "Offset zerowy [°]", tab="Data",
-                        min_val=-90.0, max_val=90.0, step=0.5, default=0.0),
+            FieldSchema("calibration", "float", "Kalibracja / Offset [°]", tab="Data",
+                        min_val=-90.0, max_val=90.0, step=0.5, default=6.0),
             FieldSchema("invert_axis", "bool", "Odwróć kierunek", tab="Data", default=False),
             FieldSchema("pivot_x", "float", "Punkt obrotu X", tab="Data",
                         min_val=0.0, max_val=1.0, step=0.01, default=0.5),
@@ -664,9 +674,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
     header = [
         FieldSchema("size", "float", "Rozmiar", tab="",
                     min_val=0.05, max_val=10.0, step=0.05, default=1.0),
-        FieldSchema("icon", "choice", "Ikona", tab="", choices=[
-            "none", "clock", "camera", "temperature", "battery", "solar",
-        ], default="clock"),
+        FieldSchema("icon", "choice", "Ikona", tab="Ikona", choices=_ICON_CHOICES, default="clock"),
         FieldSchema("label", "text", "Etykieta", tab="", default=""),
         FieldSchema("x", "float", "Pozycja X", tab="",
                     min_val=0.0, max_val=100.0, step=0.1, default=50.0),

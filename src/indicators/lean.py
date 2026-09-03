@@ -41,6 +41,7 @@ from src.indicators.helpers import (
 
 _LEAN_BASE_CACHE = _BoundedStaticCache(max_entries=64)
 _LEAN_GRAPHIC_CACHE = _BoundedStaticCache(max_entries=16)
+_LEAN_ROTATED_PATCH_CACHE = _BoundedStaticCache(max_entries=360)
 _ROWER_ICO = Path(__file__).resolve().parents[2] / "wzor" / "rower_ico.png"
 
 
@@ -48,6 +49,7 @@ def clear_lean_caches() -> None:
     """Clear all process-local lean caches between exports/tests."""
     _LEAN_BASE_CACHE.clear()
     _LEAN_GRAPHIC_CACHE.clear()
+    _LEAN_ROTATED_PATCH_CACHE.clear()
     cache = globals().get("_TEXT_TILE_CACHE")
     if cache is not None:
         cache.clear()
@@ -70,28 +72,35 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 def lean_visual_angle(roll_deg, cfg: dict[str, Any]) -> float:
     """Physical roll [deg] -> visual angle [deg].
 
-    Pipeline (ETAP 13): roll - zero_offset -> invert -> sensitivity -> clamp.
-    Default sensitivity 1.0 means 1° of real roll = 1° of graphic rotation.
+    Pipeline: (roll + calibration) -> invert -> sensitivity -> clamp.
+    Calibration offset default is 0.0° (backward compatibility).
     """
     if roll_deg is None:
         return 0.0
-    offset = float(cfg.get("zero_offset", 0.0))
+    try:
+        roll_float = float(roll_deg)
+        if math.isnan(roll_float) or math.isinf(roll_float):
+            return 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+    calib = float(cfg.get("calibration", cfg.get("zero_offset", 0.0)))
     invert = bool(cfg.get("invert_axis", False))
     sensitivity = float(cfg.get("sensitivity", 1.0))
     max_angle = abs(float(cfg.get("max_angle", 30.0)))
-    angle = (float(roll_deg) - offset) * (-1.0 if invert else 1.0) * sensitivity
+    angle = (roll_float + calib) * (-1.0 if invert else 1.0) * sensitivity
     return _clamp(angle, -max_angle, max_angle)
 
 
 def lean_angle(raw, cfg: dict[str, Any]) -> float:
-    """Interpret the incoming raw value and return the final visual angle [deg].
+    """Interpret incoming raw value and return final visual angle [deg].
 
     - source == "grade": ``raw`` is a grade percent -> physical angle via
       ``degrees(atan(grade/100))``.
     - source == "gyro"/"imu": ``raw`` is the PRECOMPUTED physical roll [deg]
       from the complementary filter (never raw rad/s).
 
-    Then the common visual pipeline: offset -> invert -> sensitivity -> clamp.
+    Then the common visual pipeline: calibration -> invert -> sensitivity -> clamp.
     """
     if raw is None:
         return 0.0
@@ -405,43 +414,50 @@ def _render_lean_indicator(
                     cropped = rot_src.graphic.crop((cx0 - dest_x, cy0 - dest_y, cx1 - dest_x, cy1 - dest_y))
                     img.alpha_composite(cropped, (cx0, cy0))
         else:
-            rad = -math.radians(angle)
-            a_mat = round(math.cos(rad), 15)
-            b_mat = round(math.sin(rad), 15)
-            d_mat = round(-math.sin(rad), 15)
-            e_mat = round(math.cos(rad), 15)
+            q_angle = round(float(angle), 1)
+            patch_key = (id(rot_src), q_angle)
+            cached_patch = _LEAN_ROTATED_PATCH_CACHE.get(patch_key)
+            if cached_patch is not None:
+                tight_rot, dest_x, dest_y, tw, th = cached_patch
+            else:
+                rad = -math.radians(angle)
+                a_mat = round(math.cos(rad), 15)
+                b_mat = round(math.sin(rad), 15)
+                d_mat = round(-math.sin(rad), 15)
+                e_mat = round(math.cos(rad), 15)
 
-            rot_c = [
-                (a_mat * u + d_mat * v + rot_src.Cx, b_mat * u + e_mat * v + rot_src.Cy)
-                for u, v in rot_src.corners_src_rel
-            ]
-            min_xd = min(c[0] for c in rot_c)
-            max_xd = max(c[0] for c in rot_c)
-            min_yd = min(c[1] for c in rot_c)
-            max_yd = max(c[1] for c in rot_c)
+                rot_c = [
+                    (a_mat * u + d_mat * v + rot_src.Cx, b_mat * u + e_mat * v + rot_src.Cy)
+                    for u, v in rot_src.corners_src_rel
+                ]
+                min_xd = min(c[0] for c in rot_c)
+                max_xd = max(c[0] for c in rot_c)
+                min_yd = min(c[1] for c in rot_c)
+                max_yd = max(c[1] for c in rot_c)
 
-            margin = 4
-            xd0 = max(0, int(math.floor(min_xd)) - margin)
-            yd0 = max(0, int(math.floor(min_yd)) - margin)
-            xd1 = min(rot_src.pad_ref, int(math.ceil(max_xd)) + margin)
-            yd1 = min(rot_src.pad_ref, int(math.ceil(max_yd)) + margin)
+                margin = 4
+                xd0 = max(0, int(math.floor(min_xd)) - margin)
+                yd0 = max(0, int(math.floor(min_yd)) - margin)
+                xd1 = min(rot_src.pad_ref, int(math.ceil(max_xd)) + margin)
+                yd1 = min(rot_src.pad_ref, int(math.ceil(max_yd)) + margin)
 
-            tw = xd1 - xd0
-            th = yd1 - yd0
+                tw = xd1 - xd0
+                th = yd1 - yd0
 
-            c_x = a_mat * (xd0 - rot_src.Cx) + b_mat * (yd0 - rot_src.Cy) + rot_src.Px
-            c_y = d_mat * (xd0 - rot_src.Cx) + e_mat * (yd0 - rot_src.Cy) + rot_src.Py
-            matrix = (a_mat, b_mat, c_x, d_mat, e_mat, c_y)
+                c_x = a_mat * (xd0 - rot_src.Cx) + b_mat * (yd0 - rot_src.Cy) + rot_src.Px
+                c_y = d_mat * (xd0 - rot_src.Cx) + e_mat * (yd0 - rot_src.Cy) + rot_src.Py
+                matrix = (a_mat, b_mat, c_x, d_mat, e_mat, c_y)
 
-            tight_rot = rot_src.padded_graphic.transform(
-                (tw, th),
-                Image.Transform.AFFINE,
-                matrix,
-                resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
-            )
+                tight_rot = rot_src.padded_graphic.transform(
+                    (tw, th),
+                    Image.Transform.AFFINE,
+                    matrix,
+                    resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
+                )
 
-            dest_x = px_ref + xd0
-            dest_y = py_ref + yd0
+                dest_x = px_ref + xd0
+                dest_y = py_ref + yd0
+                _LEAN_ROTATED_PATCH_CACHE[patch_key] = (tight_rot, dest_x, dest_y, tw, th)
             cx0 = max(0, dest_x)
             cy0 = max(0, dest_y)
             cx1 = min(raster_w, dest_x + tw)

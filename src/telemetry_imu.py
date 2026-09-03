@@ -171,7 +171,33 @@ def compute_roll_timeline(
                 roll = alpha * roll + (1.0 - alpha) * a_roll
         out.append((dt, roll))
         prev_dt = dt
+    try:
+        out._naive_times = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in out]
+    except Exception:
+        pass
     return out
+
+
+_ROLL_TIMES_CACHE: dict[int, tuple[int, Any, Any, list]] = {}
+
+
+def _get_naive_roll_times(roll_samples: list[tuple[datetime, float]]) -> list[datetime]:
+    k = id(roll_samples)
+    entry = _ROLL_TIMES_CACHE.get(k)
+    if (
+        entry is not None
+        and entry[0] == len(roll_samples)
+        and entry[1] == roll_samples[0][0]
+        and entry[2] == roll_samples[-1][0]
+    ):
+        return entry[3]
+    def _naive(dt):
+        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+    times = [_naive(s[0]) for s in roll_samples]
+    if len(_ROLL_TIMES_CACHE) > 16:
+        _ROLL_TIMES_CACHE.clear()
+    _ROLL_TIMES_CACHE[k] = (len(roll_samples), roll_samples[0][0], roll_samples[-1][0], times)
+    return times
 
 
 def interpolate_roll(
@@ -188,18 +214,14 @@ def interpolate_roll(
         return None
     if target_dt.tzinfo is not None:
         target_dt = target_dt.replace(tzinfo=None)
-    def _naive(dt):
-        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
-    t0_first = _naive(roll_samples[0][0])
-    t_last = _naive(roll_samples[-1][0])
-    if target_dt <= t0_first:
+    times = _get_naive_roll_times(roll_samples)
+    if target_dt <= times[0]:
         return float(roll_samples[0][1])
-    if target_dt >= t_last:
+    if target_dt >= times[-1]:
         return float(roll_samples[-1][1])
-    times = [_naive(s[0]) for s in roll_samples]
     i = bisect.bisect_left(times, target_dt)
-    t0, v0 = _naive(roll_samples[i - 1][0]), roll_samples[i - 1][1]
-    t1, v1 = _naive(roll_samples[i][0]), roll_samples[i][1]
+    t0, v0 = times[i - 1], roll_samples[i - 1][1]
+    t1, v1 = times[i], roll_samples[i][1]
     span = (t1 - t0).total_seconds()
     if span <= 0:
         return float(v0)

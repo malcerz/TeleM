@@ -172,7 +172,7 @@ class LayoutManager:
 
 
 def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
-    return {
+    layout_dict = {
         "version": 6,
         "global": {"text_outline": 3},
         "custom_texts": [],
@@ -272,6 +272,10 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
         },
         "smoothing": {"method": "moving_average", "strength": 3}
     }
+    for ind in layout_dict.get("indicators", {}).values():
+        if isinstance(ind, dict) and "font" not in ind:
+            ind["font"] = ""
+    return layout_dict
 
 
 def normalize_layout(layout_path: Path | str | None, video_width: int, video_height: int) -> dict[str, Any]:
@@ -295,6 +299,9 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
 
         if "indicators" in user and isinstance(user["indicators"], dict):
             layout["indicators"] = user["indicators"]
+            for ind in layout["indicators"].values():
+                if isinstance(ind, dict) and "font" not in ind:
+                    ind["font"] = ""
         if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
 

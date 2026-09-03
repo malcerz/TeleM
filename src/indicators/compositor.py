@@ -20,7 +20,7 @@ except ImportError:
 from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
-from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color
+from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color, resolve_indicator_font_path
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_display import render_time_display
 from src.indicators.profiling import (
@@ -167,7 +167,9 @@ def compose_overlay(
     _above_start = time.perf_counter() if _audit_above else None
     widget_fonts: dict[str, str] = {}
 
-    def _font_for(key: str) -> str:
+    def _font_for(key: str, custom_font: Any = None) -> str:
+        if custom_font:
+            return resolve_indicator_font_path(custom_font, font_path)
         if key not in widget_fonts:
             widget_fonts[key] = indicator_font_path(layout, key, font_path)
         return widget_fonts[key]
@@ -655,7 +657,7 @@ def compose_overlay(
         if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
             continue
         ct_res, ctx, cty = render_custom_text(
-            canvas_w, canvas_h, _font_for("custom_text"), ct_cfg, stroke_width=ct_outline
+            canvas_w, canvas_h, _font_for("custom_text", ct_cfg.get("font")), ct_cfg, stroke_width=ct_outline
         )
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))

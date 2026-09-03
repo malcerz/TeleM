@@ -308,16 +308,27 @@ class ProjectMixin:
                 # build_timeline_from_paths below; total_dur is only a fallback used
                 # if timeline build fails.
 
-                # Layout — użyj startowego preseta jeśli ustawiony
-                preset_path = self._startup_preset_path or self.layout.get("_startup_preset", "")
-                if preset_path and Path(preset_path).exists():
-                    # Wczytaj preset bezpośrednio (bez scalania z domyślnym)
-                    self.layout = json.loads(
-                        Path(preset_path).read_text(encoding="utf-8")
-                    )
-                else:
-                    def_layout = self.base_dir / "def_layout.json"
-                    self.layout = normalize_layout(def_layout, w, h)
+                # Layout — priorytet:
+                # 1. Istniejący layout roboczy powiązany z filmem (video.layout.json)
+                # 2. Startowy preset użytkownika jeśli skonfigurowany
+                # 3. Szablon bazowy def_layout.json
+                proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
+                if proj_layout.exists():
+                    try:
+                        self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
+                        print(f"[ProjectLayout] Wczytano istniejący layout filmu z {proj_layout}", flush=True)
+                    except Exception as e:
+                        print(f"[ProjectLayout] Błąd odczytu {proj_layout}: {e}", flush=True)
+                        proj_layout = None
+                if not proj_layout or not proj_layout.exists():
+                    preset_path = self._startup_preset_path or self.layout.get("_startup_preset", "")
+                    if preset_path and Path(preset_path).exists():
+                        self.layout = json.loads(
+                            Path(preset_path).read_text(encoding="utf-8")
+                        )
+                    else:
+                        def_layout = self.base_dir / "def_layout.json"
+                        self.layout = normalize_layout(def_layout, w, h)
                 self._selected_stream_key = ""
                 self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
 

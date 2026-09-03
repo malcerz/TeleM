@@ -296,7 +296,7 @@ def _vectorize_linear_speed(
 
 
 def _vectorize_linear_distance(
-    samples: list[tuple[datetime, float]],
+    samples: list,
     target_dts: list[datetime],
     target_ts_arr: np.ndarray,
     ref_dt: datetime,
@@ -304,8 +304,10 @@ def _vectorize_linear_distance(
     """Vectorized linear distance interpolation matching interpolate_distance exactly."""
     if not samples:
         return [None] * len(target_dts)
+    if isinstance(samples[0][1], (tuple, list)):
+        return [None] * len(target_dts)
     sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
-    sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    sample_vals = np.array([float(s[1]) for s in samples], dtype=np.float64)
     sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
     
     interp_vals = np.interp(
@@ -328,6 +330,33 @@ def _vectorize_linear_altitude(
     sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
     sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
     
+    interp_vals = np.interp(
+        target_ts_arr, sample_ts, sample_vals,
+        left=float(sample_vals[0]), right=float(sample_vals[-1])
+    )
+    return [float(v) for v in interp_vals]
+
+
+def _vectorize_linear_roll(
+    timeline: list[tuple[datetime, float]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized linear roll interpolation using np.interp matching interpolate_roll."""
+    if not timeline:
+        return [None] * len(target_dts)
+    sample_ts = getattr(timeline, "_sample_ts", None)
+    sample_vals = getattr(timeline, "_sample_vals", None)
+    if sample_ts is None or sample_vals is None or len(sample_ts) != len(timeline):
+        sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in timeline]
+        sample_vals = np.array([float(s[1]) for s in timeline], dtype=np.float64)
+        sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+        try:
+            timeline._sample_ts = sample_ts
+            timeline._sample_vals = sample_vals
+        except Exception:
+            pass
     interp_vals = np.interp(
         target_ts_arr, sample_ts, sample_vals,
         left=float(sample_vals[0]), right=float(sample_vals[-1])
@@ -825,6 +854,7 @@ def build_telemetry_cache(
     for key in lean_keys:
         lcfg = indicators.get(key, {})
         lsrc = str(lcfg.get("source", "gyro")).strip().lower()
+
         if lsrc == "grade":
             s_src = lcfg.get("slope_source", "gpmf")
             s_samples = _resolve_cache_samples("slope", s_src)
@@ -843,18 +873,15 @@ def build_telemetry_cache(
             if axis not in ("x", "y", "z"):
                 axis = "z"
             timeline: list = []
-            _interp_roll = None
             try:
                 from src.ffmpeg.worker_cache import _worker_lean_roll
-                from src.telemetry_imu import interpolate_roll as _interp_roll_fn
                 timeline = _worker_lean_roll(axis)
-                _interp_roll = _interp_roll_fn
             except Exception:
                 timeline = []
-            if timeline and _interp_roll is not None:
-                lean_field_arrs.append([
-                    _interp_roll(timeline, dt) for dt in target_dts
-                ])
+            if timeline:
+                lean_field_arrs.append(
+                    _vectorize_linear_roll(timeline, target_dts, target_ts_arr, ref_dt)
+                )
             elif resolve_cache_value is not None:
                 lean_field_arrs.append([
                     resolve_cache_value(f"lean_roll_{axis}", "gpmf", dt, key)
@@ -863,6 +890,8 @@ def build_telemetry_cache(
             else:
                 lean_field_arrs.append([None] * total_frames)
     t_lean_ms = (time.perf_counter() - t0_lean) * 1000.0
+    if lean_keys:
+        print(f"[HUD PREP LEAN] stage=lean_vectorize keys={lean_keys} frames={total_frames} elapsed_ms={t_lean_ms:.2f}", flush=True)
     _progress("lean fields")
 
     # 8. Record Assembly

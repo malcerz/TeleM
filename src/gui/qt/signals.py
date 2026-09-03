@@ -48,6 +48,13 @@ class AppSignals(QObject):
     sig_settings_changed = Signal(str, object)
     # (setting_name: str, value: Any)
 
+    # Zakładka Ustawienia: jawny zapis ustawień globalnych do pliku
+    sig_save_global_settings = Signal()
+
+    # Kontroler → GUI: przywróć zapisany font w UI (po starcie / wczytaniu layoutu)
+    sig_global_font_restored = Signal(str)
+    # (family_name: str)
+
     # Oś czasu: zmiana pozycji seek (GUI → Kontroler)
     sig_seek_changed = Signal(float)
     # (seconds: float)
@@ -66,6 +73,13 @@ class AppSignals(QObject):
     # Playback: start / stop
     sig_playback_start = Signal()
     sig_playback_stop = Signal()
+
+    # Krok klatkowy (+1 lub -1 klatka)
+    sig_frame_step = Signal(int)
+    # (delta: int — np. +1 lub -1)
+
+    # Przełączenie pełnego ekranu podglądu (Fullscreen Preview)
+    sig_toggle_fullscreen = Signal()
 
     # Trim / cut
     sig_cut_region_added = Signal(float, float)

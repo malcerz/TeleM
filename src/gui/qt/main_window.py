@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
     QWidget,
@@ -42,6 +43,8 @@ class MainWindow(QMainWindow):
         # ── Centralny widget: QTabWidget ────────────────────────────────
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
+        self._preview_fullscreen: bool = False
+        self._fullscreen_saved_central = None
 
         # ── Zakładki ────────────────────────────────────────────────────
         self._load_tab = LoadTab()
@@ -123,6 +126,7 @@ class MainWindow(QMainWindow):
         s.sig_bboxes_ready.connect(self.preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.preview.on_duration_ready)
         s.sig_seek_position.connect(self.preview._on_seek_position)
+        s.sig_toggle_fullscreen.connect(self.toggle_fullscreen_preview)
 
     def _move_preview_to(self, slot: QWidget) -> None:
         """Przenieś współdzielony podgląd do kontenera aktywnej zakładki."""
@@ -167,3 +171,111 @@ class MainWindow(QMainWindow):
 
     def _on_video_info(self, info: str) -> None:
         self.status_label.setText(f"Wideo: {info}")
+
+    @property
+    def _is_fullscreen_preview(self) -> bool:
+        return self._preview_fullscreen
+
+    def enter_fullscreen_preview(self) -> None:
+        """Wejdź w tryb True Fullscreen — zachowuje tabs bez niszczenia przez Qt."""
+        if getattr(self, "_preview_fullscreen", False):
+            return
+
+        self._was_maximized = self.isMaximized()
+        self._saved_preview_slot = self.preview.parentWidget()
+
+        # Bezpiecznie zdejmij centralny widget (tabs) przejmując ownership w Pythonie
+        normal_central = self.takeCentralWidget()
+        self._fullscreen_saved_central = normal_central
+        if normal_central is not None:
+            normal_central.hide()
+
+        # Wyjmij preview ze slotu w zakładce
+        if self._saved_preview_slot is not None and self._saved_preview_slot.layout() is not None:
+            self._saved_preview_slot.layout().removeWidget(self.preview)
+
+        self.status_bar.hide()
+        if self.menuBar() is not None:
+            self.menuBar().hide()
+
+        self.setCentralWidget(self.preview)
+        self.preview.show()
+        self.showFullScreen()
+        self._preview_fullscreen = True
+
+        self.preview._notify_controller_preview_size()
+        if hasattr(self.preview, "hud_overlay") and self.preview.hud_overlay:
+            self.preview.hud_overlay.sync_geometry()
+        if self._controller and hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+            self._controller.refresh_preview_geometry_and_hud()
+        if hasattr(self.preview, "print_preview_raster_diag"):
+            self.preview.print_preview_raster_diag()
+
+    def exit_fullscreen_preview(self) -> None:
+        """Wyjdź z trybu True Fullscreen — bezpiecznie przywróć tabs i wstaw preview na miejsce."""
+        if not getattr(self, "_preview_fullscreen", False):
+            return
+
+        # Zdejmij preview z central widgetu, by QMainWindow nie usunął go przy setCentralWidget
+        preview = self.takeCentralWidget()
+
+        # Przywróć oryginalny central widget (tabs)
+        if getattr(self, "_fullscreen_saved_central", None) is not None:
+            self.setCentralWidget(self._fullscreen_saved_central)
+            self._fullscreen_saved_central.show()
+            self._fullscreen_saved_central = None
+        else:
+            self.setCentralWidget(self.tabs)
+            self.tabs.show()
+
+        target_slot = getattr(self, "_saved_preview_slot", None) or self._project_tab.preview_slot
+        self._move_preview_to(target_slot)
+
+        if self.menuBar() is not None:
+            self.menuBar().show()
+        self.status_bar.show()
+
+        if getattr(self, "_was_maximized", False):
+            self.showMaximized()
+        else:
+            self.showNormal()
+        self._preview_fullscreen = False
+
+        self.preview._notify_controller_preview_size()
+        if hasattr(self.preview, "hud_overlay") and self.preview.hud_overlay:
+            self.preview.hud_overlay.sync_geometry()
+        if self._controller and hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+            self._controller.refresh_preview_geometry_and_hud()
+
+    def toggle_fullscreen_preview(self) -> None:
+        """Przełącz tryb True Fullscreen — cały ekran zajmuje tylko podgląd (wideo + HUD)."""
+        if getattr(self, "_preview_fullscreen", False):
+            self.exit_fullscreen_preview()
+        else:
+            self.enter_fullscreen_preview()
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key == Qt.Key_Escape:
+            if getattr(self, "_preview_fullscreen", False):
+                self.exit_fullscreen_preview()
+                event.accept()
+                return
+        elif key == Qt.Key_Space:
+            if hasattr(self, "preview") and hasattr(self.preview, "_toggle_playback"):
+                self.preview._toggle_playback()
+                event.accept()
+                return
+        elif key == Qt.Key_Left:
+            self.signals.sig_frame_step.emit(-1)
+            event.accept()
+            return
+        elif key == Qt.Key_Right:
+            self.signals.sig_frame_step.emit(1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event) -> None:
+        """Zamykanie okna — brak automatycznego zapisu (zapis tylko po jawnym kliknięciu 'Zapisz ustawienia')."""
+        super().closeEvent(event)
