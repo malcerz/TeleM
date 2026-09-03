@@ -27,6 +27,8 @@ public:
     ~D3D11AMFEncoder();
 
     bool Initialize(ID3D11Device* pDevice, UINT width, UINT height, UINT fpsNum = 30000, UINT fpsDen = 1001);
+    bool CreateSurface(ID3D11Texture2D* pNV12Texture, int64_t pts, amf::AMFSurfacePtr& outSurface, double* outCreateMs = nullptr);
+    AMF_RESULT SubmitSurface(amf::AMFSurface* pSurface, AMFEncoderStats* outStats = nullptr);
     bool SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, AMFEncoderStats* outStats = nullptr);
     bool QueryPacket(
         std::vector<uint8_t>& outData,
@@ -38,6 +40,7 @@ public:
     bool Flush();
 
     bool IsSameDeviceUsed() const { return m_sameDeviceUsed; }
+    amf::AMFContextPtr GetContext() const { return m_context; }
 
 private:
     HMODULE m_hAMFRT = nullptr;

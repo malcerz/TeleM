@@ -521,11 +521,13 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
         std::cout << "[VP CAPS] MaxInputStreams: " << caps.MaxInputStreams << " MaxStreamStates: " << caps.MaxStreamStates << " FeatureCaps: 0x" << std::hex << caps.FeatureCaps << std::dec << std::endl;
     }
 
-    UINT inFlagsNV12 = 0, inFlagsBGRA = 0, inFlagsRGBA = 0;
+    UINT inFlagsNV12 = 0, inFlagsBGRA = 0, inFlagsRGBA = 0, inFlagsP010 = 0;
     m_videoEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_NV12, &inFlagsNV12);
     m_videoEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_B8G8R8A8_UNORM, &inFlagsBGRA);
     m_videoEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_R8G8B8A8_UNORM, &inFlagsRGBA);
-    std::cout << "[VP FORMATS] NV12 In: " << ((inFlagsNV12 & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? "YES" : "NO")
+    m_videoEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_P010, &inFlagsP010);
+    std::cout << "[VP FORMATS] P010 In: " << ((inFlagsP010 & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? "YES" : "NO")
+              << " NV12 In: " << ((inFlagsNV12 & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? "YES" : "NO")
               << " BGRA In: " << ((inFlagsBGRA & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? "YES" : "NO")
               << " RGBA In: " << ((inFlagsRGBA & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? "YES" : "NO") << std::endl;
 

@@ -1890,6 +1890,10 @@ def export_amd_native_d3d11(
     diagnostics_enabled = _env_flag("AMD_NATIVE_DIAGNOSTICS", False)
     profiling_enabled = diagnostics_enabled or _env_flag("AMD_NATIVE_PROFILING", False) or _env_flag("AMD_GPU_TIMESTAMP_PROFILE", False)
     overlay_profile_enabled = _env_flag("AMD_OVERLAY_PROFILE", False)
+    bottleneck_proof_enabled = _env_flag("TELEM_AMD_BOTTLENECK_PROOF", False)
+    if bottleneck_proof_enabled:
+        frame_trace_enabled = True
+        print("[AMD NATIVE D3D11] TELEM_AMD_BOTTLENECK_PROOF: ON (bottleneck audit instrumentation active)", flush=True)
     # ── AMD RENDER PATH AUDIT (temporary diagnostic instrumentation) ──
     # AMD_AUDIT_ALLOCS=1 adds cheap per-frame allocation counters
     # (sys.getallocatedblocks + tracemalloc current bytes) to the producer and
@@ -2006,8 +2010,13 @@ def export_amd_native_d3d11(
             flush=True,
         )
         return False
+    amd_decode_mode_env = os.environ.get("AMD_DECODE_MODE", "").strip().upper()
+    if amd_decode_mode_env in {"CPU", "0"}:
+        default_decode_mode = "GPU_HUD_CPU_DECODE_REFERENCE"
+    else:
+        default_decode_mode = "GPU_HUD_D3D11VA"
     native_decode_mode = os.environ.get(
-        "AMD_NATIVE_DECODE_MODE", "GPU_HUD_D3D11VA"
+        "AMD_NATIVE_DECODE_MODE", default_decode_mode
     ).strip().upper()
     if native_decode_mode not in _AMD_DECODE_MODES:
         print(
@@ -2275,10 +2284,9 @@ def export_amd_native_d3d11(
         + ", ".join(fit_field_plan["inactive_fit_fields"]),
         flush=True,
     )
-    # ── ETAP 5G.2 / C6: AMD REAL PRODUCTION EFFECTIVE CONFIG LOG ──
-    pipeline_mode_resolved = os.getenv("AMD_CPU_GPU_PIPELINE", "SYNC").upper()
+    pipeline_mode_resolved = os.getenv("AMD_CPU_GPU_PIPELINE", "ASYNC").upper()
     if pipeline_mode_resolved not in ("ASYNC", "SYNC"):
-        pipeline_mode_resolved = "SYNC"
+        pipeline_mode_resolved = "ASYNC"
     q_depth_resolved = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2"))) if pipeline_mode_resolved == "ASYNC" else 0
     vp_state_env = os.getenv("AMD_VP_STATE_MODE", "REFERENCE").upper()
     vp_pool_env = os.getenv("AMD_VP_POOL_SIZE", "8")
@@ -2288,6 +2296,7 @@ def export_amd_native_d3d11(
 
     print("\n=== AMD REAL PRODUCTION EFFECTIVE CONFIG ===", flush=True)
     print(f"  CPU_GPU_PIPELINE = {pipeline_mode_resolved}", flush=True)
+    print(f"  DECODE_MODE      = {'CPU (FFmpeg P010)' if not use_d3d11va else 'GPU (D3D11VA / VCN)'}", flush=True)
     print(f"  QUEUE_DEPTH      = {q_depth_resolved}", flush=True)
     print(f"  VP_STATE         = {vp_state_env}", flush=True)
     print(f"  VP_POOL          = {vp_pool_env}", flush=True)
@@ -2390,6 +2399,12 @@ def export_amd_native_d3d11(
     native_dll.telem_amd_update_video_frame.restype = c_int
     native_dll.telem_amd_update_video_frame.argtypes = [c_void_p, ctypes.c_char_p, c_uint, c_uint, c_uint]
 
+    if hasattr(native_dll, "telem_amd_update_video_frame_p010"):
+        native_dll.telem_amd_update_video_frame_p010.restype = c_int
+        native_dll.telem_amd_update_video_frame_p010.argtypes = [
+            c_void_p, POINTER(c_uint8), c_uint, c_uint, c_uint, POINTER(ctypes.c_double)
+        ]
+
     native_dll.telem_amd_process_frame.restype = c_int
     native_dll.telem_amd_process_frame.argtypes = [c_void_p, c_uint, c_int]
 
@@ -2404,6 +2419,19 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_get_stats.restype = None
     native_dll.telem_amd_get_stats.argtypes = [c_void_p, POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64)]
+
+    if hasattr(native_dll, "telem_amd_drain_amf"):
+        native_dll.telem_amd_drain_amf.restype = c_int
+        native_dll.telem_amd_drain_amf.argtypes = [c_void_p]
+
+    if hasattr(native_dll, "telem_amd_get_queue_stats"):
+        native_dll.telem_amd_get_queue_stats.restype = None
+        native_dll.telem_amd_get_queue_stats.argtypes = [
+            c_void_p,
+            POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+            POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64), POINTER(c_uint64),
+            POINTER(ctypes.c_double),
+        ]
 
     native_dll.telem_amd_set_diagnostics.restype = c_int
     native_dll.telem_amd_set_diagnostics.argtypes = [c_void_p, c_int]
@@ -2918,6 +2946,9 @@ def export_amd_native_d3d11(
 
     print("[AMD NATIVE D3D11] ===================================", flush=True)
     proc_dec: subprocess.Popen | None = None
+    h_cpu_pipe: int | None = None
+    p010_c_buf = None
+    p010_buf_addr = None
     h_context = native_dll.telem_amd_create(
         input_file_str,
         native_out_target,
@@ -2940,7 +2971,13 @@ def export_amd_native_d3d11(
 
     def _cleanup_native_resources() -> None:
         """P1-A FIX: Idempotent cleanup of native D3D11 context, decoder process, and direct mux."""
-        nonlocal h_context, proc_dec
+        nonlocal h_context, proc_dec, h_cpu_pipe
+        if h_cpu_pipe is not None and h_cpu_pipe != -1 and h_cpu_pipe != 0:
+            try:
+                kernel32.CloseHandle(h_cpu_pipe)
+            except Exception:
+                pass
+            h_cpu_pipe = None
         if proc_dec is not None:
             if proc_dec.poll() is None:
                 try:
@@ -3390,32 +3427,44 @@ def export_amd_native_d3d11(
         "dirty_zeros": [], "partial_alpha": [],
     }
 
-    # CPU reference keeps the ETAP 3 FFmpeg rawvideo pipe. D3D11VA never
-    # starts a video decoder subprocess; samples come from MF as GPU surfaces.
+    # CPU decode path uses FFmpeg rawvideo P010 10-bit with a high-throughput Named Pipe.
     cmd_decode: list[str] | None = None
-    frame_size = video_width * video_height * 3 // 2
+    frame_size = (video_width * video_height * 3) if not use_d3d11va else 0
     end_to_end_start = time.perf_counter()
     if not use_d3d11va:
+        cpu_pipe_name = rf"\\.\pipe\telem_cpu_p010_{os.getpid()}"
+        kernel32 = ctypes.windll.kernel32
+        h_cpu_pipe = kernel32.CreateNamedPipeW(
+            cpu_pipe_name,
+            1, # PIPE_ACCESS_INBOUND
+            0, # PIPE_TYPE_BYTE | PIPE_WAIT
+            1, 0, 64 * 1024 * 1024, 1000, None
+        )
         cmd_decode = [
             ffmpeg_exe, "-y",
+            "-threads", "16",
             "-i", input_file_str,
-            "-vf", f"scale={video_width}:{video_height},format=nv12",
             "-f", "rawvideo",
-            "-pix_fmt", "nv12",
-            "pipe:1"
+            "-pix_fmt", "p010le",
+            "-y", cpu_pipe_name
         ]
         try:
             proc_dec = subprocess.Popen(
                 cmd_decode,
-                stdout=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
+            kernel32.ConnectNamedPipe(h_cpu_pipe, None)
+            p010_raw_arr = (ctypes.c_uint8 * frame_size)()
+            p010_buf_addr = ctypes.addressof(p010_raw_arr)
+            p010_c_buf = ctypes.cast(p010_buf_addr, POINTER(ctypes.c_uint8))
+            print(f"[AMD NATIVE D3D11] FFmpeg P010 10-bit decoder pipe active: {cpu_pipe_name}", flush=True)
         except Exception as e:
             print(f"[AMD NATIVE D3D11] ERROR: Failed to launch decoder pipe: {e}", flush=True)
             _cleanup_native_resources()
             return False
     else:
-        print("[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF", flush=True)
+        print("[AMD NATIVE D3D11VA] FFmpeg rawvideo decoder pipe: OFF (D3D11VA VCN active)", flush=True)
 
     # ── ETAP 5N: precomputed telemetry cache (PRECOMPUTED mode) ─────────
     # Live reference closure (used by REFERENCE mode and as the VFR fallback).
@@ -3531,9 +3580,9 @@ def export_amd_native_d3d11(
 
     # Main Frame Processing Loop
     # ── ETAP 8T-B/C: Unified Producer-Consumer Frame Pipeline ──
-    pipeline_mode = os.getenv("AMD_CPU_GPU_PIPELINE", "SYNC").upper()
+    pipeline_mode = os.getenv("AMD_CPU_GPU_PIPELINE", "ASYNC").upper()
     if pipeline_mode not in ("ASYNC", "SYNC"):
-        pipeline_mode = "SYNC"
+        pipeline_mode = "ASYNC"
     print(f"[AMD NATIVE D3D11] AMD_CPU_GPU_PIPELINE={pipeline_mode}", flush=True)
 
     previous_bboxes_holder = [{}] # Mutable cell for producer
@@ -3654,7 +3703,7 @@ def export_amd_native_d3d11(
 
         t_samples_p: dict[str, float] = {}
         above_stats_p: dict[str, Any] = {}
-        _producer_accounting_enabled = fa_enabled or _env_flag("AMD_PRODUCTION_ACCOUNTING", False)
+        _producer_accounting_enabled = fa_enabled or _env_flag("AMD_PRODUCTION_ACCOUNTING", False) or bottleneck_proof_enabled
         _producer_accounting_last = t_p_start
 
         def _producer_stage(name: str) -> None:
@@ -5159,11 +5208,21 @@ def export_amd_native_d3d11(
                     "texture_pointer": hex(sample_texture.value),
                 }
         else:
-            assert proc_dec is not None and proc_dec.stdout is not None
+            assert h_cpu_pipe is not None and p010_c_buf is not None
             decode_wait_start = time.perf_counter()
-            raw_nv12 = proc_dec.stdout.read(frame_size)
+            rem = frame_size
+            cur_ptr = p010_buf_addr
+            while rem > 0:
+                chunk = wintypes.DWORD(0)
+                to_read = min(rem, 4 * 1024 * 1024)
+                ok = kernel32.ReadFile(h_cpu_pipe, ctypes.c_void_p(cur_ptr), to_read, ctypes.byref(chunk), None)
+                if not ok or chunk.value == 0:
+                    break
+                rem -= chunk.value
+                cur_ptr += chunk.value
             decode_wait_ms = (time.perf_counter() - decode_wait_start) * 1000.0
-            if len(raw_nv12) != frame_size:
+            if rem > 0:
+                print(f"[AMD NATIVE D3D11] ERROR: Incomplete CPU P010 frame read: rem={rem}", flush=True)
                 return False
             timing_samples["Decode/pipe wait"].append(decode_wait_ms)
             decoded_frames_python += 1
@@ -5456,12 +5515,13 @@ def export_amd_native_d3d11(
             hud_frames += 1
 
         if not use_d3d11va:
-            assert raw_nv12 is not None
-            video_update_ok = native_dll.telem_amd_update_video_frame(
-                h_context, raw_nv12, video_width, video_height, video_width,
+            assert p010_c_buf is not None
+            up_ms = ctypes.c_double(0.0)
+            video_update_ok = native_dll.telem_amd_update_video_frame_p010(
+                h_context, p010_c_buf, video_width, video_height, video_width * 2, ctypes.byref(up_ms)
             )
             if not video_update_ok:
-                print(f"[AMD NATIVE D3D11] ERROR: telem_amd_update_video_frame failed on frame {prepared.frame_idx}", flush=True)
+                print(f"[AMD NATIVE D3D11] ERROR: telem_amd_update_video_frame_p010 failed on frame {prepared.frame_idx}", flush=True)
                 return False
             successful_video_updates += 1
 
@@ -5730,6 +5790,29 @@ def export_amd_native_d3d11(
                         _v = timing_samples.get(_k)
                         if _v:
                             _row["c_" + _k] = _v[-1]
+                    if bottleneck_proof_enabled:
+                        _dec_ms = timing_samples.get("MF ReadSample/decode availability", [0.0])[-1]
+                        _comp_ms = (
+                            timing_samples.get("VideoProcessor CPU submit", [0.0])[-1]
+                            + timing_samples.get("consumer_upload", [0.0])[-1]
+                        )
+                        _amf_sub = timing_samples.get("AMF submit/backpressure", [0.0])[-1]
+                        _amf_out = timing_samples.get("AMF QueryOutput", [0.0])[-1]
+                        _mux_w = timing_samples.get("Packet write", [0.0])[-1]
+                        _row["decode_wait_ms"] = _dec_ms
+                        _row["prepare_compositor_ms"] = _comp_ms
+                        _row["amf_submit_ms"] = _amf_sub
+                        _row["amf_wait_output_ms"] = _amf_out
+                        _row["mux_write_ms"] = _mux_w
+                        _row["total_frame_wall_ms"] = _row["frame_total_ms"]
+                        _row["map_ms"] = timing_samples.get("map_cpu_upload", [0.0])[-1]
+                        _row["charts_ms"] = (
+                            timing_samples.get("chart_cpu_tobytes", [0.0])[-1]
+                            + timing_samples.get("chart_dynamic_tobytes", [0.0])[-1]
+                        )
+                        _row["gauge_ms"] = timing_samples.get("gauge_tobytes", [0.0])[-1]
+                        _row["above_ms"] = timing_samples.get("above_total", [0.0])[-1]
+                        _row["vp_gpu_ms"] = timing_samples.get("VideoProcessor GPU completion", [0.0])[-1]
                     frame_trace_rows.append(_row)
                 if not ok:
                     # EOS reached normally from decoder
@@ -5775,6 +5858,40 @@ def export_amd_native_d3d11(
             byref(c_dropped),
             byref(c_ignored),
         )
+
+        c_q_submitted = c_uint64(0)
+        c_q_received = c_uint64(0)
+        c_q_in_flight = c_uint64(0)
+        c_q_max_in_flight = c_uint64(0)
+        c_q_query_calls = c_uint64(0)
+        c_q_input_full = c_uint64(0)
+        c_q_not_ready = c_uint64(0)
+        c_q_retries = c_uint64(0)
+        c_q_wait_ms = ctypes.c_double(0.0)
+        if hasattr(native_dll, "telem_amd_get_queue_stats"):
+            native_dll.telem_amd_get_queue_stats(
+                h_context,
+                byref(c_q_submitted),
+                byref(c_q_received),
+                byref(c_q_in_flight),
+                byref(c_q_max_in_flight),
+                byref(c_q_query_calls),
+                byref(c_q_input_full),
+                byref(c_q_not_ready),
+                byref(c_q_retries),
+                byref(c_q_wait_ms),
+            )
+        if os.getenv("AMD_AMF_QUEUE_DIAG") == "1" or os.getenv("AMD_AMF_DIAG") == "1":
+            print("\n[AMD AMF QUEUE DIAGNOSTICS]", flush=True)
+            print(f"  submitted_frames:       {c_q_submitted.value}", flush=True)
+            print(f"  received_frames:        {c_q_received.value}", flush=True)
+            print(f"  in_flight_frames:       {c_q_in_flight.value}", flush=True)
+            print(f"  max_in_flight:          {c_q_max_in_flight.value}", flush=True)
+            print(f"  query_output_calls:     {c_q_query_calls.value}", flush=True)
+            print(f"  input_full_count:       {c_q_input_full.value}", flush=True)
+            print(f"  output_not_ready_count: {c_q_not_ready.value}", flush=True)
+            print(f"  retry_count:            {c_q_retries.value}", flush=True)
+            print(f"  consumer_wait_ms:       {c_q_wait_ms.value:.3f}", flush=True)
 
         c_blend_calls = c_uint64(0)
         c_gpu_profiled_frames = c_uint64(0)
@@ -6580,6 +6697,97 @@ def export_amd_native_d3d11(
             print(f"[AMD NATIVE] Frame trace CSV: {ft_path}", flush=True)
         except Exception as exc:
             print(f"[AMD NATIVE] WARNING: failed to write frame trace CSV: {exc}", flush=True)
+
+    if bottleneck_proof_enabled and frame_trace_rows:
+        try:
+            import numpy as _bp_np
+            _total_f = len(frame_trace_rows)
+            _t_wall_tot = sum(r.get("total_frame_wall_ms", r.get("frame_total_ms", 0.0)) for r in frame_trace_rows)
+            _render_dur = (t_video_render_end - t_first_frame_begin) if (t_video_render_end > t_first_frame_begin) else (_t_wall_tot / 1000.0)
+            _render_fps = _total_f / _render_dur if _render_dur > 0 else 0.0
+            _eff_dur = time.perf_counter() - t_export_start
+            _effective_fps = _total_f / _eff_dur if _eff_dur > 0 else 0.0
+
+            _bp_keys = [
+                "decode_wait_ms", "prepare_compositor_ms", "map_ms", "charts_ms",
+                "gauge_ms", "above_ms", "vp_gpu_ms", "amf_submit_ms",
+                "amf_wait_output_ms", "mux_write_ms", "total_frame_wall_ms"
+            ]
+            _metrics = {}
+            for k in _bp_keys:
+                vals = [r.get(k, 0.0) for r in frame_trace_rows]
+                if vals:
+                    arr = _bp_np.array(vals)
+                    tot = float(_bp_np.sum(arr))
+                    _metrics[k] = {
+                        "mean": round(float(_bp_np.mean(arr)), 3),
+                        "median": round(float(_bp_np.median(arr)), 3),
+                        "p90": round(float(_bp_np.percentile(arr, 90)), 3),
+                        "p95": round(float(_bp_np.percentile(arr, 95)), 3),
+                        "p99": round(float(_bp_np.percentile(arr, 99)), 3),
+                        "max": round(float(_bp_np.max(arr)), 3),
+                        "pct_of_wall": round((tot / _t_wall_tot * 100.0) if _t_wall_tot > 0 else 0.0, 2),
+                    }
+
+            _quartiles = []
+            _step = max(1, _total_f // 4)
+            for q_idx in range(4):
+                q_start = q_idx * _step
+                q_end = min(_total_f, (q_idx + 1) * _step) if q_idx < 3 else _total_f
+                q_rows = frame_trace_rows[q_start:q_end]
+                if q_rows:
+                    q_wall = sum(r.get("total_frame_wall_ms", r.get("frame_total_ms", 0.0)) for r in q_rows)
+                    q_fps = len(q_rows) / (q_wall / 1000.0) if q_wall > 0 else 0.0
+                    _quartiles.append({
+                        "segment": f"{q_idx*25}%-{(q_idx+1)*25}%",
+                        "frames": len(q_rows),
+                        "fps": round(q_fps, 3),
+                        "decode_wait_mean_ms": round(float(_bp_np.mean([r.get("decode_wait_ms", 0.0) for r in q_rows])), 3),
+                        "compositor_mean_ms": round(float(_bp_np.mean([r.get("prepare_compositor_ms", 0.0) for r in q_rows])), 3),
+                        "amf_submit_mean_ms": round(float(_bp_np.mean([r.get("amf_submit_ms", 0.0) for r in q_rows])), 3),
+                        "amf_wait_output_mean_ms": round(float(_bp_np.mean([r.get("amf_wait_output_ms", 0.0) for r in q_rows])), 3),
+                        "mux_write_mean_ms": round(float(_bp_np.mean([r.get("mux_write_ms", 0.0) for r in q_rows])), 3),
+                    })
+
+            _bp_data = {
+                "frames": _total_f,
+                "render_fps": round(_render_fps, 3),
+                "effective_fps": round(_effective_fps, 3),
+                "metrics": _metrics,
+                "quartiles": _quartiles,
+                "amf_stats": {
+                    "input_full": int(c_input_full.value),
+                    "retries": int(c_retries.value),
+                    "dropped": int(c_dropped.value),
+                    "submitted": int(c_sub.value),
+                    "received": int(c_rec.value),
+                },
+                "direct_mux": {
+                    "enabled": direct_mux_enabled,
+                    "bytes": mux_pump_stats.get("bytes", 0),
+                    "chunks": mux_pump_stats.get("chunks", 0),
+                    "error": mux_pump_error,
+                }
+            }
+            bp_path = output_file_str + ".bottleneck_proof.json"
+            with open(bp_path, "w", encoding="utf-8") as bpf:
+                json.dump(_bp_data, bpf, indent=2)
+            print("=" * 95, flush=True)
+            print("[TELEM BOTTLENECK PROOF SUMMARY]", flush=True)
+            print(f"Frames: {_total_f} | Render FPS: {_render_fps:.3f} | Effective FPS: {_effective_fps:.3f}", flush=True)
+            print(f"{'STAGE':<25} {'MEAN (ms)':<10} {'MEDIAN':<10} {'P90':<10} {'P95':<10} {'P99':<10} {'MAX':<10} {'% WALL':<8}", flush=True)
+            print("-" * 95, flush=True)
+            for k, m in _metrics.items():
+                print(f"{k:<25} {m['mean']:<10.3f} {m['median']:<10.3f} {m['p90']:<10.3f} {m['p95']:<10.3f} {m['p99']:<10.3f} {m['max']:<10.3f} {m['pct_of_wall']:<8.2f}%", flush=True)
+            print("-" * 95, flush=True)
+            print("LONG-RUN QUARTILES:", flush=True)
+            for q in _quartiles:
+                print(f"  {q['segment']:<10}: FPS={q['fps']:<7.3f} decode={q['decode_wait_mean_ms']:<6.2f}ms comp={q['compositor_mean_ms']:<6.2f}ms amf_sub={q['amf_submit_mean_ms']:<6.2f}ms amf_out={q['amf_wait_output_mean_ms']:<6.2f}ms mux={q['mux_write_mean_ms']:<6.2f}ms", flush=True)
+            print(f"AMF STATS: input_full={c_input_full.value} retries={c_retries.value} dropped={c_dropped.value} submitted={c_sub.value} received={c_rec.value}", flush=True)
+            print(f"Detailed proof JSON: {bp_path}", flush=True)
+            print("=" * 95, flush=True)
+        except Exception as _bp_exc:
+            print(f"[AMD NATIVE] WARNING: failed to compute bottleneck proof: {_bp_exc}", flush=True)
 
     # Dump Checkpoint F (Frame 30 from final encoded MP4)
     if diagnostics_enabled and os.path.exists(output_file_str):

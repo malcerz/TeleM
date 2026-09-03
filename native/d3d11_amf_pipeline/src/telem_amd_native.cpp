@@ -123,6 +123,10 @@ struct NativeFrameRec {
     int prevLocalQueryReady = -1;
     UINT64 sameSlotPreviousFrame = UINT64_MAX;
     int sameSlotQueryReady = -1;
+    UINT inFlightFrames = 0;
+    UINT maxInFlight = 0;
+    UINT outputNotReadyCount = 0;
+    double queueWaitMs = 0.0;
 };
 
 struct TelemAMDContext {
@@ -235,6 +239,11 @@ struct TelemAMDContext {
     int amfQueryMode = 0;
     UINT amfQueryCalls = 0;   // QueryOutput calls in the current frame
     UINT amfOutputsThisFrame = 0;  // packets received in the current frame
+    int queueDepth = 1;
+    UINT64 inFlightFrames = 0;
+    UINT64 maxInFlight = 0;
+    UINT64 outputNotReadyCount = 0;
+    double consumerWaitMs = 0.0;
     TelemAMDFrameTimings lastTimings;
 
     // ETAP 5R — native process_frame accounting (AMD_NATIVE_FRAME_ACCOUNTING).
@@ -872,10 +881,7 @@ TELEM_EXPORT int telem_amd_set_source_rotation(void* handle, UINT degrees) {
     if (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270) return 0;
     TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
     ctx->sourceRotation = degrees;
-    if (ctx->decodeMode == 1) {
-        return ctx->vpPipeline.SetStreamRotation(degrees) ? 1 : 0;
-    }
-    return 1;
+    return ctx->vpPipeline.SetStreamRotation(degrees) ? 1 : 0;
 }
 
 TELEM_EXPORT int telem_amd_set_decode_mode(void* handle, int mode) {
@@ -1368,6 +1374,18 @@ TELEM_EXPORT void* telem_amd_create(
     ctx->amfQueryMode = qm;
     std::cout << "[TELEM AMD DLL] AMD_AMF_QUERY_MODE="
               << (qm == 1 ? "DRAIN_READY" : "REFERENCE") << std::endl;
+    // AMD_QUEUE_DEPTH & AMD_CPU_GPU_PIPELINE
+    const char* pipeEnv = getenv("AMD_CPU_GPU_PIPELINE");
+    const bool isAsync = !pipeEnv || (_stricmp(pipeEnv, "SYNC") != 0);
+    const char* qdEnv = getenv("AMD_QUEUE_DEPTH");
+    int qd = isAsync ? 2 : 1;
+    if (qdEnv) {
+        int parsed = atoi(qdEnv);
+        if (parsed >= 1 && parsed <= 8) qd = parsed;
+    }
+    ctx->queueDepth = qd;
+    std::cout << "[TELEM AMD DLL] AMD_QUEUE_DEPTH=" << qd
+              << " (pipeline=" << (isAsync ? "ASYNC" : "SYNC") << ")" << std::endl;
     // ETAP 5T — async GPU timestamp timeline (enabled after VP init below).
     const char* gpuTsEnv = getenv("AMD_GPU_TIMESTAMP_PROFILE");
     const bool gpuTsEnabled = (gpuTsEnv && gpuTsEnv[0] == '1');
@@ -1453,10 +1471,16 @@ TELEM_EXPORT void* telem_amd_create(
     }
 
     // 4. Initialize Media Foundation Decoder for Input Video File
-    // ETAP 5W debug: AMD_DEBUG_NO_MF=1 skips the MF source reader (device-ref
-    // leak isolation).
-    const bool skipMf = (getenv("AMD_DEBUG_NO_MF") != nullptr);
-    if (skipMf) {
+    // ETAP 5W debug: AMD_DEBUG_NO_MF=1 skips the MF source reader.
+    // AMD_DECODE_MODE=CPU disables MF decoder completely.
+    const char* decEnv = getenv("AMD_DECODE_MODE");
+    const bool isCpuDecodeEnv = decEnv && (_stricmp(decEnv, "CPU") == 0 || strcmp(decEnv, "0") == 0);
+    const bool skipMf = (getenv("AMD_DEBUG_NO_MF") != nullptr) || isCpuDecodeEnv;
+    if (isCpuDecodeEnv) {
+        ctx->decodeMode = 0;
+        std::cout << "[TELEM AMD DLL] AMD_DECODE_MODE=CPU -> D3D11VA MF decoder disabled." << std::endl;
+    }
+    if (skipMf && !isCpuDecodeEnv) {
         std::cout << "[TELEM AMD DLL] AMD_DEBUG_NO_MF=1 (diagnostic skip)" << std::endl;
     }
     if (input_path && wcslen(input_path) > 0 && !skipMf) {
@@ -1470,19 +1494,19 @@ TELEM_EXPORT void* telem_amd_create(
         }
     }
 
-    // 5. Create Standby Base NV12 Texture & Upload Staging Texture
-    D3D11_TEXTURE2D_DESC nv12Desc = {};
-    nv12Desc.Width = width;
-    nv12Desc.Height = height;
-    nv12Desc.MipLevels = 1;
-    nv12Desc.ArraySize = 1;
-    nv12Desc.Format = DXGI_FORMAT_NV12;
-    nv12Desc.SampleDesc.Count = 1;
-    nv12Desc.Usage = D3D11_USAGE_DEFAULT;
-    nv12Desc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
-    ctx->pDevice->CreateTexture2D(&nv12Desc, nullptr, &ctx->pBaseP010Tex);
+    // 5. Create Standby Base P010 (10-bit) Texture & Upload Staging Texture
+    D3D11_TEXTURE2D_DESC p010Desc = {};
+    p010Desc.Width = width;
+    p010Desc.Height = height;
+    p010Desc.MipLevels = 1;
+    p010Desc.ArraySize = 1;
+    p010Desc.Format = DXGI_FORMAT_P010;
+    p010Desc.SampleDesc.Count = 1;
+    p010Desc.Usage = D3D11_USAGE_DEFAULT;
+    p010Desc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+    ctx->pDevice->CreateTexture2D(&p010Desc, nullptr, &ctx->pBaseP010Tex);
 
-    D3D11_TEXTURE2D_DESC stagingDesc = nv12Desc;
+    D3D11_TEXTURE2D_DESC stagingDesc = p010Desc;
     stagingDesc.Usage = D3D11_USAGE_STAGING;
     stagingDesc.BindFlags = 0;
     stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -1651,6 +1675,58 @@ TELEM_EXPORT int telem_amd_update_video_frame(
     return 0;
 }
 
+TELEM_EXPORT int telem_amd_update_video_frame_p010(
+    void* handle,
+    const uint8_t* pP010,
+    UINT width,
+    UINT height,
+    UINT stride,
+    double* out_upload_ms
+) {
+    if (!handle || !pP010) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (!ctx->pBaseP010Tex || !ctx->pUploadStagingTex) return 0;
+
+    const auto uploadStart = std::chrono::high_resolution_clock::now();
+    D3D11_MAPPED_SUBRESOURCE map = {};
+    HRESULT hr = ctx->pContext->Map(ctx->pUploadStagingTex, 0, D3D11_MAP_WRITE, 0, &map);
+    if (FAILED(hr) || !map.pData) return 0;
+
+    uint8_t* pDstY = (uint8_t*)map.pData;
+    const uint8_t* pSrcY = pP010;
+    const UINT dstPitch = map.RowPitch;
+    const UINT srcPitch = (stride > 0) ? stride : (width * 2);
+    const size_t yBytes = (size_t)height * srcPitch;
+    const size_t uvBytes = (size_t)(height / 2) * srcPitch;
+
+    if (dstPitch == srcPitch) {
+        memcpy(pDstY, pSrcY, yBytes);
+        uint8_t* pDstUV = pDstY + ((size_t)height * dstPitch);
+        const uint8_t* pSrcUV = pSrcY + yBytes;
+        memcpy(pDstUV, pSrcUV, uvBytes);
+    } else {
+        for (UINT y = 0; y < height; ++y) {
+            memcpy(pDstY + y * dstPitch, pSrcY + y * srcPitch, width * 2);
+        }
+        uint8_t* pDstUV = pDstY + ((size_t)height * dstPitch);
+        const uint8_t* pSrcUV = pSrcY + yBytes;
+        for (UINT y = 0; y < height / 2; ++y) {
+            memcpy(pDstUV + y * dstPitch, pSrcUV + y * srcPitch, width * 2);
+        }
+    }
+
+    ctx->pContext->Unmap(ctx->pUploadStagingTex, 0);
+    ctx->pContext->CopyResource(ctx->pBaseP010Tex, ctx->pUploadStagingTex);
+    ctx->hasUpdatedVideoFrame = true;
+    ctx->videoUpdates++;
+
+    const auto uploadEnd = std::chrono::high_resolution_clock::now();
+    const double upMs = std::chrono::duration<double, std::milli>(uploadEnd - uploadStart).count();
+    if (out_upload_ms) *out_upload_ms = upMs;
+    ctx->lastTimings.stagingMemcpyMs = upMs;
+    return 1;
+}
+
 static bool EnsureDecoderCopyTexture(
     TelemAMDContext* ctx,
     const D3D11_TEXTURE2D_DESC& sourceDesc
@@ -1732,7 +1808,7 @@ TELEM_EXPORT int telem_amd_process_frame(
         }
     } else {
         if (!ctx->hasUpdatedVideoFrame) {
-            std::cerr << "[CPU DECODE REFERENCE] Process requested without uploaded NV12." << std::endl;
+            std::cerr << "[CPU DECODE REFERENCE] Process requested without uploaded P010." << std::endl;
             return 0;
         }
         ctx->hasUpdatedVideoFrame = false;
@@ -1837,154 +1913,193 @@ TELEM_EXPORT int telem_amd_process_frame(
     AMFEncoderStats amfStats = {};
     ctx->amfQueryCalls = 0;
     ctx->amfOutputsThisFrame = 0;
-    // ETAP 5R — accumulate exclusive AMF substage wall (QPC).
     double amfCreateSurfaceMs = 0.0;
     double amfSubmitInputMs = 0.0;
     double amfQueryMsTot = 0.0;
     double amfPacketWriteMsTot = 0.0;
     int submitResult = AMF_OK;
-    // AMF PTS belongs to the output timeline.  Media Foundation timestamps are
-    // source-local and restart after telem_amd_switch_source(), so forwarding
-    // them makes multi-file output non-monotonic.  Derive one rounded 100 ns
-    // timestamp from the global output frame and the encoder's exact CFR.
+    int queryResult = (int)AMF_REPEAT;
+    UINT retriesThisFrame = 0;
+    double queueWaitMs = 0.0;
+
     const int64_t pts = static_cast<int64_t>(
         (static_cast<uint64_t>(frame_index) * 10000000ULL * ctx->fpsDen
          + ctx->fpsNum / 2) / ctx->fpsNum);
-    const auto submitLoopStart = std::chrono::steady_clock::now();
-    constexpr auto kMaxInputFullWait = std::chrono::seconds(60);
-    UINT retriesThisFrame = 0;
-    bool submitted = false;
-    while (!submitted) {
-        amfStats = {};
-        const bool submitOk = ctx->amfEncoder.SubmitTexture(pOutNV12Tex, pts, &amfStats);
-        amfCreateSurfaceMs += amfStats.create_surface_ms;
-        amfSubmitInputMs += amfStats.submit_input_ms;
-        submitResult = amfStats.result;
-        if (submitOk) {
-            submitted = true;
-            break;
-        }
-        if (!amfStats.input_full) {
-            ctx->amfDroppedSubmissions++;
-            std::cerr << "[TELEM AMD DLL] AMF SubmitTexture failed on frame " << frame_index << std::endl;
-            return 0;
-        }
 
-        ctx->amfInputFullCount++;
-        ctx->amfRetryCount++;
-        retriesThisFrame++;
+    constexpr auto kMaxWait = std::chrono::seconds(60);
 
-        // Correctness-only backpressure handling: drain one ready packet and
-        // retry the exact same surface.  Queue depth and encoder settings stay
-        // unchanged.
-        std::vector<uint8_t> backpressurePacket;
-        int64_t backpressurePts = 0;
-        bool backpressureKeyframe = false;
-        AMF_RESULT queryResult = AMF_REPEAT;
-        double queryMs = 0.0;
-        ctx->amfQueryCalls++;
-        if (ctx->amfEncoder.QueryPacket(
-                backpressurePacket, backpressurePts, backpressureKeyframe,
-                &queryResult, &queryMs)) {
-            ctx->lastTimings.amfQueryMs += queryMs;
-            amfQueryMsTot += queryMs;
+    // Helper lambda to drain any packets that are immediately ready
+    auto drainReadyPackets = [&]() {
+        while (true) {
+            std::vector<uint8_t> pktData;
+            int64_t outPts = 0;
+            bool isKeyframe = false;
+            AMF_RESULT qRes = AMF_REPEAT;
+            double qMs = 0.0;
+            ctx->amfQueryCalls++;
+            if (!ctx->amfEncoder.QueryPacket(pktData, outPts, isKeyframe, &qRes, &qMs)) {
+                ctx->lastTimings.amfQueryMs += qMs;
+                amfQueryMsTot += qMs;
+                ctx->outputNotReadyCount++;
+                break; // No more packets ready right now
+            }
+            ctx->lastTimings.amfQueryMs += qMs;
+            amfQueryMsTot += qMs;
+            ctx->framesReceived++;
             ctx->amfOutputsThisFrame++;
+            queryResult = (int)qRes;
+
             const auto writeStart = std::chrono::high_resolution_clock::now();
-            if (ctx->h265Out.is_open() && !backpressurePacket.empty()) {
-                ctx->h265Out.write(
-                    reinterpret_cast<const char*>(backpressurePacket.data()),
-                    backpressurePacket.size());
+            if (ctx->h265Out.is_open() && !pktData.empty()) {
+                ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
             }
             const auto writeEnd = std::chrono::high_resolution_clock::now();
             const double writeMs = std::chrono::duration<double, std::milli>(
                 writeEnd - writeStart).count();
             ctx->lastTimings.packetWriteMs += writeMs;
             amfPacketWriteMsTot += writeMs;
+        }
+    };
+
+    // Substage A: Pre-drain packets completed during decode / HUD / VideoProcessor
+    drainReadyPackets();
+
+    // Substage B: If in-flight frames reached queueDepth limit, wait for at least one packet
+    // to complete before submitting.
+    const int maxInFlight = ctx->queueDepth;
+    const auto waitStart = std::chrono::steady_clock::now();
+    while (static_cast<int>(ctx->framesSubmitted - ctx->framesReceived) >= maxInFlight) {
+        std::vector<uint8_t> pktData;
+        int64_t outPts = 0;
+        bool isKeyframe = false;
+        AMF_RESULT qRes = AMF_REPEAT;
+        double qMs = 0.0;
+        ctx->amfQueryCalls++;
+        if (ctx->amfEncoder.QueryPacket(pktData, outPts, isKeyframe, &qRes, &qMs)) {
+            ctx->lastTimings.amfQueryMs += qMs;
+            amfQueryMsTot += qMs;
             ctx->framesReceived++;
+            ctx->amfOutputsThisFrame++;
+            queryResult = (int)qRes;
+
+            const auto writeStart = std::chrono::high_resolution_clock::now();
+            if (ctx->h265Out.is_open() && !pktData.empty()) {
+                ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
+            }
+            const auto writeEnd = std::chrono::high_resolution_clock::now();
+            const double writeMs = std::chrono::duration<double, std::milli>(
+                writeEnd - writeStart).count();
+            ctx->lastTimings.packetWriteMs += writeMs;
+            amfPacketWriteMsTot += writeMs;
+            break; // slot freed!
         } else {
-            ctx->lastTimings.amfQueryMs += queryMs;
-            amfQueryMsTot += queryMs;
-            std::this_thread::yield();
+            ctx->lastTimings.amfQueryMs += qMs;
+            amfQueryMsTot += qMs;
+            ctx->outputNotReadyCount++;
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+        if (std::chrono::steady_clock::now() - waitStart >= kMaxWait) {
+            std::cerr << "[TELEM AMD DLL] In-flight wait timed out after 60s on frame " << frame_index << std::endl;
+            return 0;
+        }
+    }
+    queueWaitMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - waitStart).count();
+    ctx->consumerWaitMs += queueWaitMs;
+
+    // Substage C: Create AMFSurface EXACTLY ONCE for this frame
+    amf::AMFSurfacePtr pSurface;
+    double createMs = 0.0;
+    if (!ctx->amfEncoder.CreateSurface(pOutNV12Tex, pts, pSurface, &createMs)) {
+        std::cerr << "[AMF] CreateSurface failed on frame " << frame_index << std::endl;
+        return 0;
+    }
+    amfCreateSurfaceMs = createMs;
+
+    // Substage D: Submit surface to AMF encoder
+    const auto submitStart = std::chrono::steady_clock::now();
+    bool submitted = false;
+    while (!submitted) {
+        AMF_RESULT sRes = ctx->amfEncoder.SubmitSurface(pSurface, &amfStats);
+        amfSubmitInputMs += amfStats.submit_input_ms;
+        submitResult = sRes;
+        if (sRes == AMF_OK) {
+            submitted = true;
+            ctx->framesSubmitted++;
+            break;
+        }
+        if (sRes != AMF_INPUT_FULL) {
+            ctx->amfDroppedSubmissions++;
+            std::cerr << "[TELEM AMD DLL] SubmitSurface failed on frame " << frame_index << ": " << sRes << std::endl;
+            return 0;
         }
 
-        if (std::chrono::steady_clock::now() - submitLoopStart >= kMaxInputFullWait) {
+        // AMF_INPUT_FULL backpressure handling (rare): drain 1 packet and retry submission
+        ctx->amfInputFullCount++;
+        ctx->amfRetryCount++;
+        retriesThisFrame++;
+
+        std::vector<uint8_t> bpPacket;
+        int64_t bpPts = 0;
+        bool bpKey = false;
+        AMF_RESULT bpRes = AMF_REPEAT;
+        double bpMs = 0.0;
+        ctx->amfQueryCalls++;
+        if (ctx->amfEncoder.QueryPacket(bpPacket, bpPts, bpKey, &bpRes, &bpMs)) {
+            ctx->lastTimings.amfQueryMs += bpMs;
+            amfQueryMsTot += bpMs;
+            ctx->framesReceived++;
+            ctx->amfOutputsThisFrame++;
+            queryResult = (int)bpRes;
+            const auto writeStart = std::chrono::high_resolution_clock::now();
+            if (ctx->h265Out.is_open() && !bpPacket.empty()) {
+                ctx->h265Out.write(reinterpret_cast<const char*>(bpPacket.data()), bpPacket.size());
+            }
+            const auto writeEnd = std::chrono::high_resolution_clock::now();
+            const double writeMs = std::chrono::duration<double, std::milli>(
+                writeEnd - writeStart).count();
+            ctx->lastTimings.packetWriteMs += writeMs;
+            amfPacketWriteMsTot += writeMs;
+        } else {
+            ctx->lastTimings.amfQueryMs += bpMs;
+            amfQueryMsTot += bpMs;
+            ctx->outputNotReadyCount++;
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+
+        if (std::chrono::steady_clock::now() - submitStart >= kMaxWait) {
             ctx->amfDroppedSubmissions++;
-            std::cerr << "[TELEM AMD DLL] AMF_INPUT_FULL timed out after 60 seconds on frame "
-                      << frame_index << " retries=" << retriesThisFrame << std::endl;
+            std::cerr << "[TELEM AMD DLL] AMF_INPUT_FULL timed out on frame " << frame_index << std::endl;
             return 0;
         }
     }
     ctx->lastTimings.amfSubmitMs = std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now() - submitLoopStart).count();
-    ctx->framesSubmitted++;
+        std::chrono::steady_clock::now() - submitStart).count();
 
-    // Step 3: Query Encoded Packets
-    std::vector<uint8_t> pktData;
-    int64_t outPts = 0;
-    bool isKeyframe = false;
-    AMF_RESULT queryResult = AMF_REPEAT;
-    double queryMs = 0.0;
-    ctx->amfQueryCalls++;
-    if (ctx->amfEncoder.QueryPacket(pktData, outPts, isKeyframe, &queryResult, &queryMs)) {
-        ctx->lastTimings.amfQueryMs += queryMs;
-        amfQueryMsTot += queryMs;
-        const auto writeStart = std::chrono::high_resolution_clock::now();
-        if (ctx->h265Out.is_open() && !pktData.empty()) {
-            ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
-        }
-        const auto writeEnd = std::chrono::high_resolution_clock::now();
-        const double writeMs = std::chrono::duration<double, std::milli>(
-            writeEnd - writeStart).count();
-        ctx->lastTimings.packetWriteMs += writeMs;
-        amfPacketWriteMsTot += writeMs;
-        ctx->framesReceived++;
-        ctx->amfOutputsThisFrame++;
-        // ETAP 5U DRAIN_READY: drain all immediately-ready packets, stop at the
-        // first AMF_REPEAT / not-ready.  Zero wait (no sleep/retry/flush).
-        if (ctx->amfQueryMode == 1) {
-            while (true) {
-                std::vector<uint8_t> more;
-                int64_t mpts = 0;
-                bool mkey = false;
-                AMF_RESULT mres = AMF_REPEAT;
-                double mms = 0.0;
-                ctx->amfQueryCalls++;
-                if (!ctx->amfEncoder.QueryPacket(more, mpts, mkey, &mres, &mms)) {
-                    ctx->lastTimings.amfQueryMs += mms;
-                    amfQueryMsTot += mms;
-                    break;  // first not-ready -> stop immediately
-                }
-                ctx->lastTimings.amfQueryMs += mms;
-                amfQueryMsTot += mms;
-                const auto ws2 = std::chrono::high_resolution_clock::now();
-                if (ctx->h265Out.is_open() && !more.empty()) {
-                    ctx->h265Out.write(reinterpret_cast<const char*>(more.data()), more.size());
-                }
-                const auto we2 = std::chrono::high_resolution_clock::now();
-                const double wms2 = std::chrono::duration<double, std::milli>(
-                    we2 - ws2).count();
-                ctx->lastTimings.packetWriteMs += wms2;
-                amfPacketWriteMsTot += wms2;
-                ctx->framesReceived++;
-                ctx->amfOutputsThisFrame++;
-            }
-        }
-    } else {
-        ctx->lastTimings.amfQueryMs += queryMs;
-        amfQueryMsTot += queryMs;
+    // Substage E: Non-blocking drain of any packets that finished immediately
+    drainReadyPackets();
+
+    ctx->inFlightFrames = ctx->framesSubmitted - ctx->framesReceived;
+    if (ctx->inFlightFrames > ctx->maxInFlight) {
+        ctx->maxInFlight = ctx->inFlightFrames;
     }
+
     if (fa) {
         rec.amfCreateSurfaceMs = amfCreateSurfaceMs;
         rec.amfSubmitInputMs = amfSubmitInputMs;
         rec.amfQueryMs = amfQueryMsTot;
         rec.amfPacketWriteMs = amfPacketWriteMsTot;
         rec.submitResult = submitResult;
-        rec.queryResult = (int)queryResult;
+        rec.queryResult = queryResult;
         rec.amfSubmitted = ctx->framesSubmitted;
         rec.amfReceived = ctx->framesReceived;
         rec.amfQueryCalls = ctx->amfQueryCalls;
         rec.amfOutputs = ctx->amfOutputsThisFrame;
         rec.retriesThisFrame = retriesThisFrame;
+        rec.inFlightFrames = static_cast<UINT>(ctx->inFlightFrames);
+        rec.maxInFlight = static_cast<UINT>(ctx->maxInFlight);
+        rec.outputNotReadyCount = static_cast<UINT>(ctx->outputNotReadyCount);
+        rec.queueWaitMs = queueWaitMs;
     }
     }
 
@@ -2191,7 +2306,7 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                      "prev_vp_query_ready,prev_local_query_ready,same_slot_previous_frame,same_slot_query_ready,"
                      "amf_submitted,"
                      "amf_received,amf_query_calls,amf_outputs,retries,submit_result,query_result,"
-                     "decoder_copy\n";
+                     "decoder_copy,in_flight,max_in_flight,not_ready,queue_wait_ms\n";
             for (const auto& r : ctx->nativeTrace) {
                 trace << r.frame << ',' << r.surfAcquireMs << ',' << r.vpTotalMs << ','
                       << r.vpSetupMs << ',' << r.vpCreateViewMs << ',' << r.vpSetStreamMs << ','
@@ -2218,7 +2333,9 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
                       << r.amfSubmitted << ',' << r.amfReceived << ','
                       << r.amfQueryCalls << ',' << r.amfOutputs << ','
                       << r.retriesThisFrame << ','
-                      << r.submitResult << ',' << r.queryResult << ',' << r.decoderCopy << '\n';
+                      << r.submitResult << ',' << r.queryResult << ',' << r.decoderCopy << ','
+                      << r.inFlightFrames << ',' << r.maxInFlight << ',' << r.outputNotReadyCount << ','
+                      << r.queueWaitMs << '\n';
             }
             trace.close();
             std::cout << "[TELEM AMD DLL] Native frame trace: " << tracePath
@@ -2259,6 +2376,9 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
         }
     }
 
+    if (ctx->framesReceived < ctx->framesSubmitted) {
+        telem_amd_flush(ctx);
+    }
     if (ctx->pSourceReader) ctx->pSourceReader->Release();
     if (ctx->pDXGIManager) ctx->pDXGIManager->Release();
     if (ctx->pBaseP010Tex) ctx->pBaseP010Tex->Release();
@@ -2291,6 +2411,37 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     if (dev) dev->Release();
     std::cout << "[TELEM AMD DLL] telem_amd_close completed." << std::endl;
     return 1;
+}
+
+TELEM_EXPORT int telem_amd_drain_amf(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
+    return telem_amd_flush(ctx);
+}
+
+TELEM_EXPORT void telem_amd_get_queue_stats(
+    void* handle,
+    UINT64* out_submitted,
+    UINT64* out_received,
+    UINT64* out_in_flight,
+    UINT64* out_max_in_flight,
+    UINT64* out_query_calls,
+    UINT64* out_input_full,
+    UINT64* out_not_ready,
+    UINT64* out_retries,
+    double* out_consumer_wait_ms
+) {
+    if (!handle) return;
+    TelemAMDContext* ctx = static_cast<TelemAMDContext*>(handle);
+    if (out_submitted) *out_submitted = ctx->framesSubmitted;
+    if (out_received) *out_received = ctx->framesReceived;
+    if (out_in_flight) *out_in_flight = ctx->inFlightFrames;
+    if (out_max_in_flight) *out_max_in_flight = ctx->maxInFlight;
+    if (out_query_calls) *out_query_calls = ctx->amfQueryCalls;
+    if (out_input_full) *out_input_full = ctx->amfInputFullCount;
+    if (out_not_ready) *out_not_ready = ctx->outputNotReadyCount;
+    if (out_retries) *out_retries = ctx->amfRetryCount;
+    if (out_consumer_wait_ms) *out_consumer_wait_ms = ctx->consumerWaitMs;
 }
 
 TELEM_EXPORT void telem_amd_get_stats(
