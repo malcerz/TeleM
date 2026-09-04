@@ -1788,7 +1788,8 @@ def export_amd_native_d3d11(
         total_frames = max(1, sum(per_clip_requested_frames))
         duration_s = total_frames / target_fps
     else:
-        total_frames = max(1, math.ceil(duration_s * target_fps))
+        total_frames = max(1, int(round(duration_s * target_fps)))
+        duration_s = total_frames / target_fps
         per_clip_requested_frames = [total_frames]
     from src.render_progress import RenderProgressTracker
     progress_tracker = RenderProgressTracker(total_frames, on_render_progress, target_fps=target_fps)
