@@ -172,6 +172,10 @@ Koszt operacji `crop().tobytes("raw", "RGBA")` na 6 małych wycinkach tekstowych
 ```text
 TASK: AMD ABOVE HUD FLICKER / ASYNC DEPTH 2 RESOURCE-LIFETIME RACE FIX
 STATUS: PASS
+USER ACCEPTANCE: PASS
+
+COMMIT: f63a850
+PUSH: e6b875e..f63a850 integration/intel-amd -> integration/intel-amd
 
 CHANGED:
   src/ffmpeg/amd_native_exporter.py
@@ -199,4 +203,17 @@ RISKS:
 
 REPORT:
   Raporty/RAPORT_AMD_ABOVE_HUD_ASYNC_RACE_FIX.md
+```
+
+## 9. Final Verdict
+
+```text
+FINAL VERDICT:
+HUD FLICKER FIXED: YES
+ASYNC DEPTH2 RETAINED: YES
+GPU/CPU SWITCH RETAINED: YES
+USER ACCEPTANCE: PASS
+COMMITTED: YES
+PUSHED: YES
+TRACKED WORKTREE CLEAN: YES
 ```
