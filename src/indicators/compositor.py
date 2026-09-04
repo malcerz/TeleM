@@ -601,6 +601,16 @@ def compose_overlay(
                             stroke_width=outline,
                             stroke_fill=(0, 0, 0, 255),
                         )
+                        # ETAP 10R FIX: extend tight and loose bboxes to include standalone text
+                        actual_bbox = draw.textbbox((text_x, text_y), text, font=font, stroke_width=outline)
+                        bx, by = actual_bbox[0] + origin_x - 2, actual_bbox[1] + origin_y - 2
+                        bw, bh = actual_bbox[2] - actual_bbox[0] + 4, actual_bbox[3] - actual_bbox[1] + 4
+                        if _bboxes is not None and key in _bboxes:
+                            r = _bboxes[key]
+                            _bboxes[key] = (min(r[0], bx), min(r[1], by), max(r[0] + r[2], bx + bw) - min(r[0], bx), max(r[1] + r[3], by + bh) - min(r[1], by))
+                        if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                            r = _tight_bboxes[key]["rect"]
+                            _tight_bboxes[key]["rect"] = (min(r[0], bx), min(r[1], by), max(r[0] + r[2], bx + bw) - min(r[0], bx), max(r[1] + r[3], by + bh) - min(r[1], by))
 
                     if extra and extra.get("show_range_labels"):
                         left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
@@ -623,17 +633,59 @@ def compose_overlay(
                             left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
                             left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
                             draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                            abbox = draw.textbbox((left_x - origin_x, left_y - origin_y), left_text, font=font, stroke_width=outline)
+                            tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                            tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                            if _bboxes is not None and key in _bboxes:
+                                r = _bboxes[key]
+                                _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                            if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                r = _tight_bboxes[key]["rect"]
+                                _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+
                             if right_text:
                                 right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
                                 right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
                                 draw.text((right_x - origin_x, right_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                                abbox = draw.textbbox((right_x - origin_x, right_y - origin_y), right_text, font=font, stroke_width=outline)
+                                tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                                tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                                if _bboxes is not None and key in _bboxes:
+                                    r = _bboxes[key]
+                                    _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                                if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                    r = _tight_bboxes[key]["rect"]
+                                    _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
                         else:
                             left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
                             left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
                             draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                            abbox = draw.textbbox((left_x - origin_x, left_y - origin_y), left_text, font=font, stroke_width=outline)
+                            tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                            tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                            if _bboxes is not None and key in _bboxes:
+                                r = _bboxes[key]
+                                _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                            if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                r = _tight_bboxes[key]["rect"]
+                                _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+
                             if right_text:
                                 right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
                                 draw.text((right_x - origin_x, left_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                                abbox = draw.textbbox((right_x - origin_x, left_y - origin_y), right_text, font=font, stroke_width=outline)
+                                tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                                tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                                if _bboxes is not None and key in _bboxes:
+                                    r = _bboxes[key]
+                                    _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                                if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                    r = _tight_bboxes[key]["rect"]
+                                    _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
                 profiler.record(
                     f"indicator.{key}.annotations",
                     (time.perf_counter() - annotation_started) * 1000.0,

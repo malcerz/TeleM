@@ -151,6 +151,9 @@ class AppController(
         self.map_context: Any = None
         self._map_preload_worker: Any = None
 
+        # Tryb dekodowania wideo w backendzie AMD: "gpu" (domyślny) lub "cpu"
+        self.amd_decode_mode: str = "gpu"
+
         # Wczytaj startowy preset z def_layout.json jeśli istnieje
         self._startup_preset_path: str = ""
         self._load_startup_preset()
@@ -298,5 +301,9 @@ class AppController(
                     print(f"[Controller] Przywrócono font: '{saved_font}' -> '{self.font_path}'", flush=True)
                     # Poinformuj GUI o przywróconym foncie (ustawi cmb_font)
                     self.signals.sig_global_font_restored.emit(saved_font)
+                # Przywróć tryb dekodowania AMD zapisany w pliku
+                saved_decode_mode = self.layout.get("global", {}).get("amd_decode_mode", "gpu")
+                self.amd_decode_mode = (saved_decode_mode or "gpu").lower()
+                self.signals.sig_amd_decode_mode_restored.emit(self.amd_decode_mode)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

@@ -55,6 +55,10 @@ class AppSignals(QObject):
     sig_global_font_restored = Signal(str)
     # (family_name: str)
 
+    # Kontroler → GUI: przywróć zapisany tryb dekodowania AMD w UI (po starcie)
+    sig_amd_decode_mode_restored = Signal(str)
+    # (mode: str – 'gpu' lub 'cpu')
+
     # Oś czasu: zmiana pozycji seek (GUI → Kontroler)
     sig_seek_changed = Signal(float)
     # (seconds: float)

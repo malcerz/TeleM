@@ -154,6 +154,31 @@ class RenderTab(QWidget):
             pass
         form.addRow("Encoder:", self.cmb_encoder)
 
+        self.cmb_amd_decode = QComboBox()
+        self.cmb_amd_decode.addItem("GPU — sprzętowe (zalecane)", "gpu")
+        self.cmb_amd_decode.addItem("CPU — programowe", "cpu")
+        self.cmb_amd_decode.setToolTip(
+            "Wybór metody dekodowania materiału wideo w backendzie AMD.\n"
+            "Tryb CPU może być znacznie wolniejszy od GPU i mocno obciążać procesor."
+        )
+
+        self.lbl_cpu_warning = QLabel("Tryb CPU może być znacznie wolniejszy od GPU i mocno obciążać procesor.")
+        self.lbl_cpu_warning.setStyleSheet("color: #e6a700; font-size: 11px; font-weight: normal;")
+        self.lbl_cpu_warning.setVisible(False)
+
+        def _on_decode_changed(idx: int) -> None:
+            val = self.cmb_amd_decode.itemData(idx)
+            self.lbl_cpu_warning.setVisible(val == "cpu")
+            self.signals.sig_settings_changed.emit("amd_decode_mode", val)
+
+        self.cmb_amd_decode.currentIndexChanged.connect(_on_decode_changed)
+
+        row_decode = QVBoxLayout()
+        row_decode.setSpacing(4)
+        row_decode.addWidget(self.cmb_amd_decode)
+        row_decode.addWidget(self.lbl_cpu_warning)
+        form.addRow("Dekodowanie AMD:", row_decode)
+
         self.cmb_resolution = QComboBox()
         self.cmb_resolution.addItems(
             ["source", "8k", "5.3k", "4k", "1080p", "720p", "480p"]
@@ -336,6 +361,7 @@ class RenderTab(QWidget):
         s.sig_render_stopped.connect(self._on_stopped)
         s.sig_error.connect(self._on_error)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
+        s.sig_amd_decode_mode_restored.connect(self._on_amd_decode_mode_restored)
 
     def _connect_preview_signals(self) -> None:
         """Podłącz sygnały podglądu — tylko gdy zakładka posiada podgląd.
@@ -572,6 +598,7 @@ class RenderTab(QWidget):
             "rotation": self.cmb_rotation.currentText(),
             "update_rate": self.cmb_update_rate.currentText(),
             "hud_resolution_scale": self.cmb_hud_resolution.currentText(),
+            "amd_decode_mode": self.cmb_amd_decode.currentData() or "gpu",
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
         }
@@ -1033,3 +1060,20 @@ class RenderTab(QWidget):
         except Exception as exc:  # noqa: BLE001
             print(f"[Export Preview Async] {exc}", flush=True)
             return None
+
+    def _on_amd_decode_mode_restored(self, mode: str) -> None:
+        """Przywraca zaznaczenie trybu dekodowania AMD w cmb_amd_decode."""
+        mode_clean = (mode or "gpu").lower()
+        self.cmb_amd_decode.blockSignals(True)
+        idx = self.cmb_amd_decode.findData(mode_clean)
+        if idx >= 0:
+            self.cmb_amd_decode.setCurrentIndex(idx)
+        else:
+            self.cmb_amd_decode.setCurrentIndex(0)
+            mode_clean = "gpu"
+        self.lbl_cpu_warning.setVisible(mode_clean == "cpu")
+        self.cmb_amd_decode.blockSignals(False)
+
+    def set_amd_decode_mode(self, mode: str) -> None:
+        """Publiczna metoda ustawiająca tryb dekodowania AMD w zakładce Renderowania."""
+        self._on_amd_decode_mode_restored(mode)

@@ -224,6 +224,9 @@ class PresetMixin:
             if text_outline is not None:
                 saved.setdefault("global", {})["text_outline"] = text_outline
 
+            amd_mode = getattr(self, "amd_decode_mode", "gpu") or "gpu"
+            saved.setdefault("global", {})["amd_decode_mode"] = amd_mode
+
             with open(def_layout, "w", encoding="utf-8") as f:
                 json.dump(saved, f, indent=2, ensure_ascii=False)
             self._layout_dirty = False
@@ -243,6 +246,8 @@ class PresetMixin:
     def _on_settings_changed(self, name: str, value: Any) -> None:
         if name == "threads":
             self.render_threads = int(value)
+        elif name == "amd_decode_mode":
+            self.amd_decode_mode = str(value).lower()
         elif name == "font":
             family = str(value)
             self._global_font_family = family

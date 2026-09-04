@@ -174,7 +174,7 @@ class LayoutManager:
 def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
     layout_dict = {
         "version": 6,
-        "global": {"text_outline": 3},
+        "global": {"text_outline": 3, "amd_decode_mode": "gpu"},
         "custom_texts": [],
         "indicators": {
             "time_display": {

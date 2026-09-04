@@ -243,6 +243,7 @@ class RenderMixin:
             render_h=render_h,
             hud_resolution_scale=hud_resolution_scale,
             active_process_holder=self.render_process_holder,
+            amd_decode_mode=options.get("amd_decode_mode", getattr(self, "amd_decode_mode", "gpu")),
         )
 
         return {"total_overlay_frames": 0, "png_duration": 0}

@@ -791,6 +791,7 @@ def stream_overlay_to_ffmpeg(
     on_render_progress: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
+    amd_decode_mode: Optional[str] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
@@ -1018,6 +1019,7 @@ def stream_overlay_to_ffmpeg(
                 cancel_event=cancel_event,
                 active_process_holder=active_process_holder,
                 video_timeline=video_timeline,
+                amd_decode_mode=amd_decode_mode,
             )
             if success:
                 return total_overlay_frames

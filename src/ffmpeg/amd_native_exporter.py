@@ -913,22 +913,6 @@ def _extract_exact_above_regions(
     non_contig_regions = 0
     fallback_reasons: dict[str, int] = {}
 
-    row_table_ptr = None
-    canvas_stride = canvas_w * 4
-    if hasattr(above_full, "im") and hasattr(above_full.im, "ptr"):
-        try:
-            ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
-            ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
-            ctypes.pythonapi.PyCapsule_GetName.restype = ctypes.c_char_p
-            ctypes.pythonapi.PyCapsule_GetName.argtypes = [ctypes.py_object]
-            cap_name = ctypes.pythonapi.PyCapsule_GetName(above_full.im.ptr)
-            raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(above_full.im.ptr, cap_name)
-            if raw_ptr:
-                # offset 40 (0x28) on x64 Pillow points to void** image row pointers
-                row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
-        except Exception:
-            row_table_ptr = None
-
     for (cx, cy, cw, ch), members in clusters_with_members:
         candidate_pixels += cw * ch
 
@@ -1001,54 +985,18 @@ def _extract_exact_above_regions(
         uploaded_bytes += ew * eh * 4
         exact_rects.append(exact_rect)
 
-        is_contig = False
-        if row_table_ptr is not None:
-            top_row = ctypes.c_void_p.from_address(row_table_ptr + ey * 8).value
-            bottom_row = ctypes.c_void_p.from_address(row_table_ptr + (ey + eh - 1) * 8).value
-            if top_row and bottom_row and bottom_row == top_row + (eh - 1) * canvas_stride:
-                is_contig = True
-                region_ptr = top_row + ex * 4
-                regions_out.append((ex, ey, ew, eh, None, region_ptr, canvas_stride, above_full))
+        t_crop_start = time.perf_counter()
+        reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
+        exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
+        t_b_start = time.perf_counter()
+        r_bytes = reg_img.tobytes("raw", "RGBA")
+        tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
+        regions_out.append((ex, ey, ew, eh, r_bytes))
 
-        if not is_contig:
-            # Fallback when region crosses chunk boundary or Imaging memory instance unavailable
-            non_contig_regions += 1
-            t_crop_start = time.perf_counter()
-            reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
-            exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
-            t_b_start = time.perf_counter()
-            r_bytes = reg_img.tobytes("raw", "RGBA")
-            tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
-            regions_out.append((ex, ey, ew, eh, r_bytes))
-
-    # ETAP 5K Batched Fast-Path:
-    if (
-        batched_rects_buf is not None
-        and fallback_clusters == 0
-        and non_contig_regions == 0
-        and row_table_ptr is not None
-        and len(exact_rects) <= 8
-    ):
-        base_ptr_val = row_table_ptr
-        for i, (ex, ey, ew, eh) in enumerate(exact_rects):
-            batched_rects_buf[i].x = ex
-            batched_rects_buf[i].y = ey
-            batched_rects_buf[i].width = ew
-            batched_rects_buf[i].height = eh
-        final_output: Any = (
-            "BATCHED",
-            base_ptr_val,
-            canvas_stride,
-            batched_rects_buf,
-            len(exact_rects),
-            uploaded_bytes,
-            above_full,
-        )
-    else:
-        final_output = regions_out
+    final_output = regions_out
 
     stats: dict[str, Any] = {
-        "region_count": len(exact_rects) if batched_rects_buf is not None and fallback_clusters == 0 else len(regions_out),
+        "region_count": len(regions_out),
         "candidate_pixels": candidate_pixels,
         "scanned_pixels": scanned_pixels,
         "uploaded_pixels": uploaded_pixels,
@@ -1114,42 +1062,17 @@ def _extract_fine_dynamic_above_regions(
     uploaded_pixels = 0
     uploaded_bytes = 0
 
-    row_table_ptr = None
-    canvas_stride = canvas_w * 4
-    if hasattr(above_full, "im") and hasattr(above_full.im, "ptr"):
-        try:
-            ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
-            ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
-            ctypes.pythonapi.PyCapsule_GetName.restype = ctypes.c_char_p
-            ctypes.pythonapi.PyCapsule_GetName.argtypes = [ctypes.py_object]
-            cap_name = ctypes.pythonapi.PyCapsule_GetName(above_full.im.ptr)
-            raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(above_full.im.ptr, cap_name)
-            if raw_ptr:
-                row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
-        except Exception:
-            row_table_ptr = None
-
     for cx, cy, cw, ch in merged:
         uploaded_pixels += cw * ch
         uploaded_bytes += cw * ch * 4
-        is_contig = False
-        if row_table_ptr is not None:
-            top_row = ctypes.c_void_p.from_address(row_table_ptr + cy * 8).value
-            bottom_row = ctypes.c_void_p.from_address(row_table_ptr + (cy + ch - 1) * 8).value
-            if top_row and bottom_row and bottom_row == top_row + (ch - 1) * canvas_stride:
-                is_contig = True
-                region_ptr = top_row + cx * 4
-                regions_out.append((cx, cy, cw, ch, None, region_ptr, canvas_stride, above_full))
+        t_c = time.perf_counter()
+        patch = above_full.crop((cx, cy, cx + cw, cy + ch))
+        crop_ms += (time.perf_counter() - t_c) * 1000.0
 
-        if not is_contig:
-            t_c = time.perf_counter()
-            patch = above_full.crop((cx, cy, cx + cw, cy + ch))
-            crop_ms += (time.perf_counter() - t_c) * 1000.0
-
-            t_b = time.perf_counter()
-            r_bytes = patch.tobytes("raw", "RGBA")
-            tobytes_ms += (time.perf_counter() - t_b) * 1000.0
-            regions_out.append((cx, cy, cw, ch, r_bytes))
+        t_b = time.perf_counter()
+        r_bytes = patch.tobytes("raw", "RGBA")
+        tobytes_ms += (time.perf_counter() - t_b) * 1000.0
+        regions_out.append((cx, cy, cw, ch, r_bytes))
 
     stats: dict[str, Any] = {
         "region_count": len(regions_out),
@@ -1853,6 +1776,7 @@ def export_amd_native_d3d11(
     cancel_event: Optional[Any] = None,
     active_process_holder: Optional[dict] = None,
     video_timeline: Optional[Any] = None,
+    amd_decode_mode: Optional[str] = None,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
     # The GUI starts export on a worker thread while its editable layout remains
@@ -2010,8 +1934,31 @@ def export_amd_native_d3d11(
             flush=True,
         )
         return False
+    # Priority resolution (Requirement 8 & 11):
+    # 1. explicit env override AMD_DECODE_MODE
+    # 2. explicit setting from GUI / caller (amd_decode_mode)
+    # 3. fallback GPU
     amd_decode_mode_env = os.environ.get("AMD_DECODE_MODE", "").strip().upper()
+    gui_requested_cpu = amd_decode_mode is not None and str(amd_decode_mode).strip().upper() in {"CPU", "0"}
+    requested_mode = "CPU" if gui_requested_cpu else "GPU"
+
     if amd_decode_mode_env in {"CPU", "0"}:
+        resolved_decode_mode = "CPU"
+        decode_source = "ENV"
+    elif amd_decode_mode_env in {"GPU", "1"}:
+        resolved_decode_mode = "GPU"
+        decode_source = "ENV"
+    elif amd_decode_mode is not None and str(amd_decode_mode).strip().upper() in {"CPU", "0"}:
+        resolved_decode_mode = "CPU"
+        decode_source = "GUI"
+    elif amd_decode_mode is not None and str(amd_decode_mode).strip().upper() in {"GPU", "1"}:
+        resolved_decode_mode = "GPU"
+        decode_source = "GUI"
+    else:
+        resolved_decode_mode = "GPU"
+        decode_source = "default"
+
+    if resolved_decode_mode == "CPU":
         default_decode_mode = "GPU_HUD_CPU_DECODE_REFERENCE"
     else:
         default_decode_mode = "GPU_HUD_D3D11VA"
@@ -2035,7 +1982,15 @@ def export_amd_native_d3d11(
             "decode; overriding GPU_HUD_D3D11VA to GPU_HUD_CPU_DECODE_REFERENCE.",
             flush=True,
         )
+    # Requirement 9 & 11: Clean startup decode log
+    backend_name = "D3D11VA" if use_d3d11va else "FFmpeg-P010"
+    print(
+        f"[AMD DECODE] requested={requested_mode} effective={resolved_decode_mode} "
+        f"source={decode_source} backend={backend_name}",
+        flush=True,
+    )
     hud_upload_mode = os.environ.get("AMD_NATIVE_HUD_UPLOAD_MODE", "DIRTY").strip().upper()
+
     if hud_upload_mode not in {"FULL", "DIRTY"}:
         print(
             "[AMD NATIVE D3D11] ERROR: AMD_NATIVE_HUD_UPLOAD_MODE must be FULL or DIRTY.",
@@ -4892,30 +4847,10 @@ def export_amd_native_d3d11(
                         previous_gauge_tile_holder[0] = gauge_tile_bbox
                 t_samples_p["HUD dirty bbox"] = (time.perf_counter() - bbox_start) * 1000.0
                 dirty_rect_slices = []
-                canvas_row_table_ptr = None
-                canvas_stride = video_width * 4
-                if hasattr(composed_img, "im") and hasattr(composed_img.im, "ptr"):
-                    try:
-                        cap_name = ctypes.pythonapi.PyCapsule_GetName(composed_img.im.ptr)
-                        raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(composed_img.im.ptr, cap_name)
-                        if raw_ptr:
-                            canvas_row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
-                    except Exception:
-                        canvas_row_table_ptr = None
-
                 for rx, ry, rw, rh in dirty_rects:
-                    is_contig = False
-                    if canvas_row_table_ptr is not None:
-                        top_row = ctypes.c_void_p.from_address(canvas_row_table_ptr + ry * 8).value
-                        bottom_row = ctypes.c_void_p.from_address(canvas_row_table_ptr + (ry + rh - 1) * 8).value
-                        if top_row and bottom_row and bottom_row == top_row + (rh - 1) * canvas_stride:
-                            is_contig = True
-                            src_ptr = top_row + rx * 4
-                            dirty_rect_slices.append((rx, ry, rw, rh, None, src_ptr, canvas_stride, composed_img))
-                    if not is_contig:
-                        slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
-                        slice_bytes = slice_img.tobytes("raw", "RGBA")
-                        dirty_rect_slices.append((rx, ry, rw, rh, slice_bytes))
+                    slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
+                    slice_bytes = slice_img.tobytes("raw", "RGBA")
+                    dirty_rect_slices.append((rx, ry, rw, rh, slice_bytes))
                     upload_bytes += rw * rh * 4
                 intermediate_bytes = upload_bytes
                 persistent_copy_bytes = upload_bytes

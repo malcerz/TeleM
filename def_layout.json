@@ -2,7 +2,8 @@
   "version": 6,
   "global": {
     "text_outline": 3,
-    "font": "Digital-7 Mono"
+    "font": "Digital-7 Mono",
+    "amd_decode_mode": "gpu"
   },
   "custom_texts": [],
   "indicators": {
