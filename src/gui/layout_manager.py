@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from src.gui.qt.models import normalize_indicator_decimal_defaults
+
 
 class LayoutManager:
     """Manages HUD layout configurations (JSON-based indicator definitions).
@@ -364,7 +366,10 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
                                 ct[field] = round(float(ct[field]) * 100.0, 4)
             layout["version"] = 6
 
-    return layout
+    # Canonical numeric presentation defaults are applied after all legacy
+    # migrations and user-indicator replacement.  Explicit ``decimals`` is
+    # preserved; legacy ``decimal_places`` alone must not restore ISO `.0`.
+    return normalize_indicator_decimal_defaults(layout)
 
 
 def resolve_font_path(family_name: str) -> str:

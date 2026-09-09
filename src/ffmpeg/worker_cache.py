@@ -87,14 +87,20 @@ def init_worker(
     WORKER_CACHE["gpx_heading_samples"] = field_samples.get("gpx_heading_samples", []) or []
     WORKER_CACHE["gpx_slope_samples"] = field_samples.get("gpx_slope_samples", []) or []
     WORKER_CACHE["fit_data"] = fit_data or {}
-    battery_samples = (fit_data or {}).get("garmin_battery_percent", []) if isinstance(fit_data, dict) else []
-    if battery_samples:
+    battery_fields = ("garmin_battery_percent", "gopro_battery")
+    if isinstance(fit_data, dict):
         from src.telemetry_resolver import battery_presentation_plan
-        battery_presentation_plan(battery_samples,
-                                  coverage_start=start_dt_utc,
-                                  coverage_end=(start_dt_utc + timedelta(
-                                      seconds=max(0.0, (total_overlay_frames - 1) / target_fps))
-                                      if start_dt_utc is not None and target_fps and total_overlay_frames else None))
+        coverage_end = (start_dt_utc + timedelta(
+            seconds=max(0.0, (total_overlay_frames - 1) / target_fps))
+            if start_dt_utc is not None and target_fps and total_overlay_frames else None)
+        for battery_field in battery_fields:
+            battery_samples = fit_data.get(battery_field, [])
+            if battery_samples:
+                battery_presentation_plan(
+                    battery_samples,
+                    coverage_start=start_dt_utc,
+                    coverage_end=coverage_end,
+                )
     WORKER_CACHE["gps_track"] = gps_track or []
     WORKER_CACHE["start_dt_utc"] = start_dt_utc
     WORKER_CACHE["tz_offset_hours"] = tz_offset_hours
@@ -324,7 +330,7 @@ def _resolve_cache_value(
         raw_cfg = WORKER_CACHE.get("layout", {}).get("indicators", {}).get(indicator_key, {})
         if isinstance(raw_cfg, dict):
             cfg = dict(raw_cfg)
-    if field_name == "garmin_battery_percent":
+    if field_name in ("garmin_battery_percent", "gopro_battery"):
         video_start = WORKER_CACHE.get("start_dt_utc")
         target_fps = WORKER_CACHE.get("target_fps")
         total = WORKER_CACHE.get("total_overlay_frames")

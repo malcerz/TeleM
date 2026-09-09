@@ -5,7 +5,7 @@ GUI operuje tylko na tych strukturach, nie zna szczegółów GPMF/GPX/FIT.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.indicators.icons import ICON_NAMES, ICON_LABELS
@@ -85,6 +85,59 @@ def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
         for field in schema
         if field.default is not None
     }
+
+
+# Indicator-specific defaults that are part of the generic numeric property
+# contract.  These are presentation defaults only; resolver semantics and
+# source values remain untouched.
+def indicator_default_decimals(indicator_key: str) -> int | None:
+    """Return an explicit canonical decimal default for known indicators."""
+    key = str(indicator_key or "").strip().lower()
+    if key in {"iso_text", "fit_gopro_battery_text"}:
+        return 0
+    return None
+
+
+def get_schema_for_indicator(
+    indicator_key: str,
+    form: str,
+    *,
+    bar_style: str = "ruler",
+    chart_time_scope: str = "activity",
+) -> list[FieldSchema]:
+    """Build a form schema with the indicator's canonical numeric defaults."""
+    schema = get_schema_for_form(
+        form, bar_style=bar_style, chart_time_scope=chart_time_scope,
+    )
+    default = indicator_default_decimals(indicator_key)
+    if default is None:
+        return schema
+    # Do not mutate shared factory results or alter the generic form defaults.
+    return [
+        replace(field, default=default,
+                label="Liczba miejsc po przecinku"
+                if field.name == "decimals" else field.label)
+        if field.name == "decimals" else field
+        for field in schema
+    ]
+
+
+def normalize_indicator_decimal_defaults(layout: dict[str, Any]) -> dict[str, Any]:
+    """Fill missing canonical decimal defaults in an in-memory layout.
+
+    Existing explicit ``decimals`` values are preserved.  In particular this
+    prevents legacy ``decimal_places`` from reviving the old generic default
+    of one decimal place for ISO while retaining any explicit modern setting.
+    """
+    indicators = layout.get("indicators", {}) if isinstance(layout, dict) else {}
+    if isinstance(indicators, dict):
+        for key, cfg in indicators.items():
+            if not isinstance(cfg, dict) or "decimals" in cfg:
+                continue
+            default = indicator_default_decimals(key)
+            if default is not None:
+                cfg["decimals"] = default
+    return layout
 
 
 # ── Fabryki pól per-zakładka ────────────────────────────────────────────────

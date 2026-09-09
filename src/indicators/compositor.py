@@ -77,6 +77,14 @@ def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
 def normalize_layout_for_save(layout: dict[str, Any]) -> dict[str, Any]:
     """Persist modern orientation fields instead of the legacy rotation hack."""
     saved = copy.deepcopy(layout)
+    # Persist canonical indicator presentation defaults as well.  This keeps
+    # old layouts (which may contain only ``decimal_places``) from reloading
+    # ISO or GoPro Battery with the generic one-decimal default.
+    try:
+        from src.gui.qt.models import normalize_indicator_decimal_defaults
+        normalize_indicator_decimal_defaults(saved)
+    except Exception:
+        pass
     for cfg in saved.get("indicators", {}).values():
         if isinstance(cfg, dict) and _is_legacy_vertical_ruler(cfg):
             cfg["orientation"] = "vertical"

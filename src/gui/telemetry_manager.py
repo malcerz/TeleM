@@ -933,9 +933,16 @@ class TelemetryDataManager:
 
         # Full-FIT Battery prepass: build the lightweight presentation plan at
         # source load, before the first Preview frame requests a value.
-        battery_samples = self.fit_data.get("garmin_battery_percent", [])
-        if battery_samples:
-            battery_presentation_plan(battery_samples)
+        # Warm both GoPro and Garmin quantized battery plans before the first
+        # Preview request.  They are independent streams and do not depend on
+        # GPS availability or on the first asynchronous paint.
+        for battery_field in ("garmin_battery_percent", "gopro_battery"):
+            battery_samples = self.fit_data.get(battery_field, [])
+            if battery_samples:
+                battery_presentation_plan(
+                    battery_samples,
+                    coverage_start=self.start_dt_utc,
+                )
 
         if self.start_dt_utc is None and self.fit_data.get("speed"):
             self.start_dt_utc = self.fit_data["speed"][0][0]

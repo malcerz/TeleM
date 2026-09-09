@@ -178,6 +178,8 @@ class PreviewMixin:
 
     def _on_video_frame(self, frame) -> None:
         """Szybki handler — tylko zapisz klatkę, compositing w workerze."""
+        if getattr(self, "_preview_telemetry_loading", False):
+            return
         if self._preview_mode == "gpu_video":
             return
 
@@ -564,6 +566,8 @@ class PreviewMixin:
         bt.count("preview_frames")
         try:
             if not self.video_path:
+                return
+            if getattr(self, "_preview_telemetry_loading", False):
                 return
 
             # ── ETAP 4A: resolve GLOBAL preview time → clip/local/absolute ──

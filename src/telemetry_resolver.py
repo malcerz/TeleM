@@ -679,7 +679,11 @@ def presentation_value(
     )
     if (metadata.presentation_strategy == 'monotonic_depletion' and
             effective_precision >= 1 and
-            (canonical == 'garmin_battery_percent' or coverage_start is not None)):
+            (canonical in ('garmin_battery_percent', 'gopro_battery') or
+             coverage_start is not None)):
+        # GoPro and Garmin battery streams share the same quantized continuous
+        # contract.  Generic ``battery`` callers retain the legacy resolver
+        # unless a coverage-aware plan is explicitly requested.
         use_plan = True
     if (metadata.presentation_strategy == 'quantized_reconstruct' and
             effective_precision > _native_decimal_places(metadata.native_resolution)):

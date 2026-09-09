@@ -10,7 +10,11 @@ from typing import Any
 from PySide6.QtWidgets import QFileDialog
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
-from src.gui.qt.models import _sync_size_font_fields, get_schema_for_form
+from src.gui.qt.models import (
+    _sync_size_font_fields,
+    get_schema_for_indicator,
+    normalize_indicator_decimal_defaults,
+)
 from src.overlay_renderer import FONT_CACHE
 from src.gui.layout_manager import resolve_font_path
 try:
@@ -56,6 +60,7 @@ class PresetMixin:
                 loaded = json.load(f)
             if not isinstance(loaded, dict):
                 raise ValueError("Nieprawidłowy format pliku")
+            normalize_indicator_decimal_defaults(loaded)
             self.layout = loaded
             self._user_preset_path = str(path)
             if self.layout_mgr:
@@ -108,7 +113,8 @@ class PresetMixin:
             or (field_name == "bar_style" and cfg.get("form") in ("bar", "segment_bar"))
             or (field_name == "chart_time_scope" and cfg.get("form") == "chart")
         ):
-            schema = get_schema_for_form(
+            schema = get_schema_for_indicator(
+                stream_key,
                 cfg.get("form", "text"),
                 bar_style=cfg.get("bar_style", "ruler"),
                 chart_time_scope=cfg.get("chart_time_scope", "activity"),

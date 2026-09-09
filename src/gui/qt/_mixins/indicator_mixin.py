@@ -14,7 +14,8 @@ from src.gui.qt.models import (
     DataStream,
     canonical_defaults,
     compass_indicator_fields,
-    get_schema_for_form,
+    get_schema_for_indicator,
+    indicator_default_decimals,
 )
 from src.telemetry_extract import interpolate_value
 from src.telemetry_resolver import distance_m_to_km
@@ -54,7 +55,8 @@ class IndicatorMixin:
         schema = (
             compass_indicator_fields()
             if stream_key == "compass"
-            else get_schema_for_form(
+            else get_schema_for_indicator(
+                stream_key,
                 form, bar_style=bar_style,
                 chart_time_scope=cfg.get("chart_time_scope", "activity"),
             )
@@ -179,6 +181,9 @@ class IndicatorMixin:
         _form, _form_overrides = get_form_for_key(key)
         defaults["form"] = _form
         defaults.update(_form_overrides)
+        _decimal_default = indicator_default_decimals(key)
+        if _decimal_default is not None:
+            defaults["decimals"] = _decimal_default
         if defaults.get("form") == "text":
             defaults["size"] = defaults["font_size"]
 
@@ -304,7 +309,8 @@ class IndicatorMixin:
         if key == "compass":
             _schema = compass_indicator_fields()
         else:
-            _schema = get_schema_for_form(
+            _schema = get_schema_for_indicator(
+                key,
                 defaults.get("form", "text"),
                 bar_style=defaults.get("bar_style", "ruler"),
                 chart_time_scope=defaults.get("chart_time_scope", "activity"),
@@ -418,7 +424,8 @@ class IndicatorMixin:
 
         form = cfg.get("form", "text")
         bar_style = cfg.get("bar_style", "ruler")
-        schema = get_schema_for_form(
+        schema = get_schema_for_indicator(
+            key,
             form, bar_style=bar_style,
             chart_time_scope=cfg.get("chart_time_scope", "activity"),
         )

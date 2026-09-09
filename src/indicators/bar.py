@@ -115,6 +115,28 @@ def _fmt_number(value: float, decimals: int) -> str:
     return f"{value:.{decimals}f}"
 
 
+def _resolve_range_decimals(
+    cfg: dict[str, Any], value_decimals: int,
+    val_min: float, val_max: float,
+    *, percent_scale: bool = False,
+) -> int:
+    """Resolve range/tick-label precision independently from current value.
+
+    ``decimals`` belongs to the live value.  A 0..100 percentage scale has
+    integer endpoints by definition, while other bars retain their existing
+    value precision unless an explicit generic ``range_decimals`` is present.
+    """
+    raw = cfg.get("range_decimals")
+    if raw is not None:
+        try:
+            return max(0, min(6, int(raw)))
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if percent_scale and float(val_min) >= 0.0 and float(val_max) <= 100.0:
+        return 0
+    return max(0, int(value_decimals))
+
+
 def _gradient_colour(stops: Iterable[Any], position: float) -> tuple[int, int, int]:
     colours = [_rgb(x, (255, 255, 255)) for x in stops]
     if not colours:
@@ -418,6 +440,14 @@ def _render_ruler(
     title_with_unit = bool(cfg.get("title_with_unit", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
     decimals = int(cfg.get("decimals", 0))
+    is_percent_scale = (
+        unit == "%"
+        or "battery" in str(label or "").lower()
+        or "battery" in str(cfg.get("field", "")).lower()
+    )
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, val_min, val_max, percent_scale=is_percent_scale,
+    )
 
     raw_title = str(cfg.get("title_text") or label or "").strip()
     title = raw_title.upper() if uppercase_title else raw_title
@@ -462,7 +492,7 @@ def _render_ruler(
     marker_radius = max(int(round(3 * ss * scale)), int(round(float(cfg.get("marker_size", 7)) * ss * scale)))
     marker_border_w = max(1 * ss, int(round(float(cfg.get("marker_border_width", 1.5)) * ss * scale)))
 
-    range_sample = f"{_fmt_number(max(abs(val_min), abs(val_max)), decimals)} {unit}".strip()
+    range_sample = f"{_fmt_number(max(abs(val_min), abs(val_max)), range_decimals)} {unit}".strip()
     title_h, range_h, value_h = _get_ruler_text_metrics(
         font_path, title, title_font, show_title,
         range_sample, range_font, show_range,
@@ -494,6 +524,7 @@ def _render_ruler(
         raster_w, height, width, track_y, pad_x, pad_top,
         title, font_path, title_fs, label_fs, value_fs, text_stroke,
         show_title, show_range, show_mid, show_value, range_units, decimals,
+        range_decimals,
         val_min, val_max, unit, major_divisions, minor_per_major, major_step,
         track_color, tick_color, text_color, dim_text, marker_color, marker_border,
         marker_radius, marker_border_w, line_w, tick_w, major_len, minor_len,
@@ -576,7 +607,7 @@ def _render_ruler(
 
         if show_range:
             def range_text(v: float) -> str:
-                txt = _fmt_number(v, decimals)
+                txt = _fmt_number(v, range_decimals)
                 return f"{txt} {unit}".strip() if range_units else txt
 
             y = track_y + marker_radius + bottom_gap
@@ -714,6 +745,14 @@ def _render_ruler_vertical(
     title_with_unit = bool(cfg.get("title_with_unit", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
     missing = bool(cfg.get("_slope_missing", False)) or value is None
+    is_percent_scale = (
+        unit == "%"
+        or "battery" in str(label or "").lower()
+        or "battery" in str(cfg.get("field", "")).lower()
+    )
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, lo, hi, percent_scale=is_percent_scale,
+    )
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     legacy_slope = bool(cfg.get("_legacy_slope", False))
     min_dim = min(canvas_w, canvas_h)
@@ -813,7 +852,7 @@ def _render_ruler_vertical(
     range_label_texts: list[tuple[float, str]] = []
     if show_range:
         def _rt(v: float) -> str:
-            txt = _fmt_number(v, decimals)
+            txt = _fmt_number(v, range_decimals)
             return f"{txt} {unit}".strip() if range_units and unit else txt
         if not show_tick_labels:
             range_label_texts = [(hi, _rt(hi)), (lo, _rt(lo))]
@@ -1595,6 +1634,9 @@ def _render_segments(
         or "battery" in str(cfg.get("field", "")).lower()
     )
     decimals = max(0, int(cfg.get("decimals", 0 if is_pct_field else 1)))
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, val_min, val_max, percent_scale=is_pct_field,
+    )
 
     # ── Per-widget fonts (independent control) ──────────────────────────
     value_fs = max(10 * ss, int(round(float(cfg.get("value_font_size", cfg.get("value_font_scale", 1.70))) * fs * ss)))
@@ -1697,7 +1739,7 @@ def _render_segments(
     dd = ImageDraw.Draw(dummy)
     value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if show_value else 0
     label_h = _text_size(dd, str(label), label_font, text_stroke)[1] if show_label and label else 0
-    sample_range = _fmt_number(max(abs(val_min), abs(val_max)), decimals)
+    sample_range = _fmt_number(max(abs(val_min), abs(val_max)), range_decimals)
     range_h = _text_size(dd, sample_range, range_font, text_stroke)[1] if (show_min or show_max) else 0
 
     label_width = _text_size(dd, str(label), label_font, text_stroke)[0] if show_label and label else 0
@@ -1754,7 +1796,7 @@ def _render_segments(
         raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap,
         seg_area_h, seg_top, seg_bottom, bottom_y, bottom_text_h, segments, gap, radius,
         round(seg_w, 2), grow_height, round(grow_start, 2), inactive, show_min, show_max, show_label,
-        val_min, val_max, decimals, range_units, unit, label, range_fs, label_fs, text_stroke,
+        val_min, val_max, decimals, range_decimals, range_units, unit, label, range_fs, label_fs, text_stroke,
         dim_color, text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
         label_align, marker_zone_top, marker_zone_bottom, label_gap, range_gap,
         label_position, label_offset_x, label_offset_y,
@@ -1775,7 +1817,7 @@ def _render_segments(
             raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap, seg_area_h,
             seg_top, seg_bottom, bottom_y, bottom_text_h, segments, gap, radius, seg_w,
             grow_height, grow_start, inactive, show_min, show_max, show_label, val_min,
-            val_max, decimals, range_units, unit, label, range_font_path, range_fs, label_fs,
+            val_max, range_decimals, range_units, unit, label, range_font_path, range_fs, label_fs,
             text_stroke, range_text_color if "range_color" in cfg else dim_color,
             text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
             label_align, label_font_path=label_font_path, label_color=label_color,
