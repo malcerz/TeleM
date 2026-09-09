@@ -8,5 +8,6 @@
             "approve": true,
             "matchCommandLine": true
         }
-    }
+    },
+    "cmake.sourceDirectory": "C:/_DEV/TeleM-integration/native/d3d11_amf_pipeline"
 }

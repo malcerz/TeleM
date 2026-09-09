@@ -9,11 +9,13 @@ stream that the overlay can display.
 from __future__ import annotations
 
 import math
+import struct
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Mapping
 
 from src.render_logging import render_print
+from src.telemetry_resolver import normalize_fit_recorded_distance
 
 print = render_print
 
@@ -53,8 +55,16 @@ class FitRecords(list[RecordDict]):
         self,
         records: list[RecordDict] | None = None,
         catalog: dict[str, dict[str, Any]] | None = None,
+        active_time_mapper: Any = None,
+        timezone_offset_hours: float | None = None,
+        session_total_distance: float | None = None,
+        lap_summaries: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(records or [])
+        self.active_time_mapper = active_time_mapper
+        self.timezone_offset_hours = timezone_offset_hours
+        self.session_total_distance = session_total_distance
+        self.lap_summaries = list(lap_summaries or [])
         if catalog is not None:
             self.field_catalog = dict(catalog)
         else:
@@ -103,8 +113,18 @@ class FitDataset(dict[str, list[Sample]]):
         self,
         fields: Mapping[str, list[Sample]] | None = None,
         catalog: dict[str, dict[str, Any]] | None = None,
+        active_time_mapper: Any = None,
+        timezone_offset_hours: float | None = None,
+        session_total_distance: float | None = None,
+        lap_summaries: list[dict[str, Any]] | None = None,
+        distance_normalization: Any = None,
     ) -> None:
         super().__init__(fields or {})
+        self.active_time_mapper = active_time_mapper
+        self.timezone_offset_hours = timezone_offset_hours
+        self.session_total_distance = session_total_distance
+        self.lap_summaries = list(lap_summaries or [])
+        self.distance_normalization = distance_normalization
         self.available_fit_fields: frozenset[str] = frozenset(
             name for name, samples in self.items() if samples
         )
@@ -451,7 +471,51 @@ def parse_fit(fit_path: Path | str) -> FitRecords | None:
     if discovered:
         print(f"[FIT] Fields discovered: {sorted(discovered)}", flush=True)
 
-    return FitRecords(deduped, catalog=field_metadata)
+    # 4. Discover timer events and session to build ActiveTimeMapper (CEL 3 & CEL 4)
+    active_mapper = None
+    session_dict: dict[str, Any] = {}
+    lap_summaries: list[dict[str, Any]] = []
+    try:
+        from src.telemetry_active_time import build_active_time_mapper_from_events
+        events_list: list[dict[str, Any]] = []
+        for msg in fitfile.get_messages("event"):
+            events_list.append({f.name: f.value for f in msg.fields})
+        session_msg = next(fitfile.get_messages("session"), None)
+        if session_msg:
+            session_dict = {f.name: f.value for f in session_msg.fields}
+        for lap_msg in fitfile.get_messages("lap"):
+            lap_values = {f.name: f.value for f in lap_msg.fields}
+            lap_summaries.append({
+                "start_time": lap_values.get("start_time"),
+                "total_distance": _try_float(lap_values.get("total_distance")),
+            })
+        active_mapper = build_active_time_mapper_from_events(
+            events_list, records=deduped, session=session_dict
+        )
+    except Exception as exc:
+        print(f"[FIT] Warning: active_time_mapper build failed: {exc}", flush=True)
+
+    # 5. Discover activity message for local time / timezone offset (e.g. Garmin Edge local_timestamp)
+    fit_tz_offset_hours = None
+    try:
+        activity_msg = next(fitfile.get_messages("activity"), None)
+        if activity_msg:
+            vals = {f.name: f.value for f in activity_msg.fields}
+            ts = vals.get("timestamp")
+            lts = vals.get("local_timestamp")
+            if isinstance(ts, datetime) and isinstance(lts, datetime):
+                fit_tz_offset_hours = (lts - ts).total_seconds() / 3600.0
+    except Exception:
+        pass
+
+    return FitRecords(
+        deduped,
+        catalog=field_metadata,
+        active_time_mapper=active_mapper,
+        timezone_offset_hours=fit_tz_offset_hours,
+        session_total_distance=_try_float(session_dict.get("total_distance")),
+        lap_summaries=lap_summaries,
+    )
 
 
 def sync_fit_to_video(
@@ -539,13 +603,36 @@ def sync_fit_to_video(
         if samples:
             result[key] = samples
 
+    session_total_distance = getattr(records, "session_total_distance", None)
+    distance_normalization = None
+    raw_recorded_distance = result.get("distance", [])
+    if raw_recorded_distance:
+        canonical_distance = normalize_fit_recorded_distance(
+            raw_recorded_distance,
+            session_total=session_total_distance,
+            emit_diagnostic=True,
+        )
+        if canonical_distance:
+            result["distance"] = canonical_distance
+            distance_normalization = canonical_distance.normalization
+
     catalog = getattr(records, "field_catalog", None)
+    active_mapper = getattr(records, "active_time_mapper", None)
+    tz_offset = getattr(records, "timezone_offset_hours", None)
     print(
         f"[FIT] Synchro: {len(result)} field(s) – { {k: len(v) for k, v in result.items()} }",
         flush=True,
     )
 
-    return FitDataset(result, catalog=catalog)
+    return FitDataset(
+        result,
+        catalog=catalog,
+        active_time_mapper=active_mapper,
+        timezone_offset_hours=tz_offset,
+        session_total_distance=session_total_distance,
+        lap_summaries=getattr(records, "lap_summaries", None),
+        distance_normalization=distance_normalization,
+    )
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -571,8 +658,310 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def find_fit_for_video(video_path: Path | str) -> Path | None:
-    """Look for a .fit file with the same base name as the video."""
+_FIT_PROBE_CACHE: dict[tuple[str, int, float], tuple[datetime, datetime, float]] = {}
+
+
+def probe_fit_time_range(fit_path: Path | str) -> tuple[datetime, datetime, float] | None:
+    """Read lightweight time metadata from a FIT file in milliseconds.
+
+    Returns (start_utc, end_utc, duration_s) or None if invalid.
+    """
+    path = Path(fit_path)
+    if not path.exists():
+        return None
+    try:
+        st = path.stat()
+        cache_key = (str(path.resolve()), st.st_size, st.st_mtime)
+        if cache_key in _FIT_PROBE_CACHE:
+            return _FIT_PROBE_CACHE[cache_key]
+    except OSError:
+        cache_key = None
+
+    sess_start: datetime | None = None
+    sess_end: datetime | None = None
+    sess_elapsed: float | None = None
+
+    # 1. Fast binary scanner (typically ~10-20ms, seeks past records)
+    try:
+        with open(path, "rb") as f:
+            header = f.read(14)
+            if len(header) >= 14 and header[8:12] == b".FIT":
+                data_size = struct.unpack("<I", header[4:8])[0]
+                end_pos = 14 + data_size
+                defs: dict[int, tuple[int, list, int, str]] = {}
+                while f.tell() < end_pos:
+                    rec_hdr_b = f.read(1)
+                    if not rec_hdr_b:
+                        break
+                    rec_hdr = rec_hdr_b[0]
+                    if (rec_hdr & 0x80) != 0:
+                        local_id = (rec_hdr >> 5) & 0x03
+                        if local_id in defs:
+                            f.seek(defs[local_id][2], 1)
+                        continue
+                    is_def = bool(rec_hdr & 0x40)
+                    has_dev = bool(rec_hdr & 0x20)
+                    local_id = rec_hdr & 0x0F
+                    if is_def:
+                        fixed = f.read(5)
+                        if len(fixed) < 5:
+                            break
+                        endian = "<" if fixed[1] == 0 else ">"
+                        global_num = struct.unpack(endian + "H", fixed[2:4])[0]
+                        num_fields = fixed[4]
+                        field_bytes = f.read(num_fields * 3)
+                        fields = []
+                        total_size = 0
+                        for i in range(num_fields):
+                            f_def_num = field_bytes[i * 3]
+                            f_size = field_bytes[i * 3 + 1]
+                            f_base_type = field_bytes[i * 3 + 2]
+                            fields.append((f_def_num, f_size, f_base_type))
+                            total_size += f_size
+                        if has_dev:
+                            dev_hdr = f.read(1)
+                            if dev_hdr:
+                                num_dev = dev_hdr[0]
+                                dev_bytes = f.read(num_dev * 3)
+                                for i in range(num_dev):
+                                    total_size += dev_bytes[i * 3 + 1]
+                        defs[local_id] = (global_num, fields, total_size, endian)
+                    else:
+                        if local_id not in defs:
+                            break
+                        global_num, fields, total_size, endian = defs[local_id]
+                        if global_num in (18, 34):  # session=18, activity=34
+                            data = f.read(total_size)
+                            offset = 0
+                            for f_num, f_sz, _ in fields:
+                                raw = data[offset : offset + f_sz]
+                                offset += f_sz
+                                if f_num == 2 and f_sz == 4:  # start_time
+                                    val = struct.unpack(endian + "I", raw)[0]
+                                    if val < 0xFFFFFFFF:
+                                        sess_start = datetime.fromtimestamp(val + 631065600, timezone.utc)
+                                elif f_num == 253 and f_sz == 4:  # timestamp
+                                    val = struct.unpack(endian + "I", raw)[0]
+                                    if val < 0xFFFFFFFF:
+                                        sess_end = datetime.fromtimestamp(val + 631065600, timezone.utc)
+                                elif f_num == 7 and f_sz == 4:  # total_elapsed_time
+                                    val = struct.unpack(endian + "I", raw)[0]
+                                    if val < 0xFFFFFFFF:
+                                        sess_elapsed = val / 1000.0
+                        else:
+                            f.seek(total_size, 1)
+    except Exception:
+        pass
+
+    # 2. Fallback to fitparse if needed
+    if sess_start is None and fitparse is not None:
+        try:
+            fit = fitparse.FitFile(path, check_crc=False)
+            for msg in fit.get_messages(["session", "activity"]):
+                vals = {f.name: f.value for f in msg.fields}
+                if sess_start is None and vals.get("start_time"):
+                    st_val = vals["start_time"]
+                    if isinstance(st_val, datetime):
+                        sess_start = st_val if st_val.tzinfo else st_val.replace(tzinfo=timezone.utc)
+                if sess_end is None and vals.get("timestamp"):
+                    ts_val = vals["timestamp"]
+                    if isinstance(ts_val, datetime):
+                        sess_end = ts_val if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc)
+                if sess_elapsed is None and vals.get("total_elapsed_time"):
+                    sess_elapsed = float(vals["total_elapsed_time"])
+                if sess_start is not None and (sess_end is not None or sess_elapsed is not None):
+                    break
+        except Exception:
+            pass
+
+    if sess_start is None and sess_end is None:
+        return None
+
+    if sess_start is not None:
+        start_utc = sess_start
+        if sess_elapsed is not None and sess_elapsed > 0:
+            end_utc = start_utc + timedelta(seconds=sess_elapsed)
+            dur = sess_elapsed
+        elif sess_end is not None and sess_end > start_utc:
+            end_utc = sess_end
+            dur = (end_utc - start_utc).total_seconds()
+        else:
+            end_utc = sess_end or start_utc
+            dur = max(0.0, (end_utc - start_utc).total_seconds())
+    else:
+        end_utc = sess_end  # type: ignore[assignment]
+        dur = sess_elapsed or 0.0
+        start_utc = end_utc - timedelta(seconds=dur)
+
+    res = (start_utc, end_utc, dur)
+    if cache_key is not None:
+        _FIT_PROBE_CACHE[cache_key] = res
+    return res
+
+
+_FIT_TZ_CACHE: dict[tuple[str, int, float], float | None] = {}
+
+
+def probe_fit_timezone_offset(fit_path: Path | str) -> float | None:
+    """Fast probe of timezone offset in hours from the FIT activity message."""
+    path = Path(fit_path)
+    if not path.is_file():
+        return None
+    try:
+        st = path.stat()
+        cache_key = (str(path.resolve()), st.st_size, st.st_mtime)
+        if cache_key in _FIT_TZ_CACHE:
+            return _FIT_TZ_CACHE[cache_key]
+    except Exception:
+        cache_key = None
+
+    offset_hours = None
+    if fitparse is not None:
+        try:
+            fit = fitparse.FitFile(str(path), check_crc=False)
+            for msg in fit.get_messages("activity"):
+                vals = {f.name: f.value for f in msg.fields}
+                ts = vals.get("timestamp")
+                lts = vals.get("local_timestamp")
+                if isinstance(ts, datetime) and isinstance(lts, datetime):
+                    offset_hours = (lts - ts).total_seconds() / 3600.0
+                    break
+        except Exception:
+            pass
+
+    if cache_key is not None:
+        _FIT_TZ_CACHE[cache_key] = offset_hours
+    return offset_hours
+
+
+def find_best_fit_match(
+    mp4_intervals: list[tuple[datetime, datetime]],
+    directory: Path | str,
+    max_tolerance_s: float = 1800.0,
+) -> tuple[Path | None, dict[str, Any]]:
+    """Scan directory for matching .fit files based on UTC time overlap and start diff.
+
+    Returns (matched_path, diagnostics_dict).
+    If no match or ambiguous match (tie), matched_path is None.
+    """
+    dir_path = Path(directory)
+    if not dir_path.is_dir():
+        return None, {"status": "no_dir", "reason": f"Directory not found: {directory}"}
+
+    if not mp4_intervals:
+        return None, {"status": "no_intervals", "reason": "No MP4 intervals provided"}
+
+    norm_intervals: list[tuple[datetime, datetime]] = []
+    has_degraded = False
+    for item in mp4_intervals:
+        s = item[0]
+        e = item[1] if len(item) > 1 else None
+        s_utc = s if s.tzinfo is not None else s.replace(tzinfo=timezone.utc)
+        if e is None:
+            e = s + timedelta(seconds=600)
+            has_degraded = True
+        e_utc = e if e.tzinfo is not None else e.replace(tzinfo=timezone.utc)
+        norm_intervals.append((s_utc, e_utc))
+
+    mp4_earliest = min(s for s, _ in norm_intervals)
+    mp4_latest = max(e for _, e in norm_intervals)
+    total_mp4_duration = sum(max(0.0, (e - s).total_seconds()) for s, e in norm_intervals)
+
+    fit_candidates = sorted(dir_path.glob("*.fit")) + sorted(dir_path.glob("*.FIT"))
+    seen_paths = set()
+    unique_fits = []
+    for p in fit_candidates:
+        can = str(p.resolve())
+        if can not in seen_paths:
+            seen_paths.add(can)
+            unique_fits.append(p)
+
+    if not unique_fits:
+        return None, {"status": "no_fit_files", "reason": "No .fit files found in directory"}
+
+    scored_candidates = []
+    for p in unique_fits:
+        probe = probe_fit_time_range(p)
+        if probe is None:
+            continue
+        fit_start, fit_end, fit_dur = probe
+        total_overlap = 0.0
+        for c_start, c_end in norm_intervals:
+            ov = (min(c_end, fit_end) - max(c_start, fit_start)).total_seconds()
+            if ov > 0:
+                total_overlap += ov
+
+        start_diff = abs((mp4_earliest - fit_start).total_seconds())
+
+        is_acceptable = False
+        if total_overlap > 0.0:
+            is_acceptable = True
+        elif start_diff <= max_tolerance_s:
+            if fit_start <= mp4_latest and fit_end >= mp4_earliest:
+                is_acceptable = True
+            elif fit_start > mp4_latest and (fit_start - mp4_latest).total_seconds() <= max_tolerance_s:
+                is_acceptable = True
+            elif mp4_earliest > fit_end and (mp4_earliest - fit_end).total_seconds() <= max_tolerance_s:
+                is_acceptable = True
+
+        if not is_acceptable:
+            continue
+
+        coverage = total_overlap / total_mp4_duration if total_mp4_duration > 0 else 0.0
+        scored_candidates.append({
+            "path": p,
+            "fit_start": fit_start,
+            "fit_end": fit_end,
+            "fit_dur": fit_dur,
+            "total_overlap": total_overlap,
+            "coverage": coverage,
+            "start_diff": start_diff,
+        })
+
+    if not scored_candidates:
+        return None, {"status": "no_match", "reason": "No FIT candidates met tolerance"}
+
+    scored_candidates.sort(
+        key=lambda c: (c["total_overlap"], -c["start_diff"], c["coverage"]),
+        reverse=True,
+    )
+
+    if len(scored_candidates) >= 2:
+        top = scored_candidates[0]
+        second = scored_candidates[1]
+        overlap_diff = abs(top["total_overlap"] - second["total_overlap"])
+        start_diff_diff = abs(top["start_diff"] - second["start_diff"])
+        if overlap_diff < 1.0 and start_diff_diff < 5.0:
+            print(
+                f"[AutoFIT] Ambiguous match between {top['path'].name} and {second['path'].name}; leaving selection empty",
+                flush=True,
+            )
+            return None, {
+                "status": "ambiguous",
+                "candidates": [top, second],
+            }
+
+    best = scored_candidates[0]
+    confidence = "degraded" if has_degraded else "exact"
+    diag = {
+        "status": "matched",
+        "fit_path": best["path"],
+        "mp4_start": mp4_earliest,
+        "fit_range": (best["fit_start"], best["fit_end"]),
+        "overlap": best["total_overlap"],
+        "start_diff": best["start_diff"],
+        "coverage": best["coverage"],
+        "confidence": confidence,
+    }
+    print(f"[AutoFIT] matched: {best['path'].name}", flush=True)
+    print(f"[AutoFIT] MP4 start: {mp4_earliest.isoformat()}", flush=True)
+    print(f"[AutoFIT] FIT range: {best['fit_start'].isoformat()} - {best['fit_end'].isoformat()}", flush=True)
+    print(f"[AutoFIT] overlap: {best['total_overlap']:.1f}s, coverage: {best['coverage']:.3f}, confidence: {confidence}", flush=True)
+    return best["path"], diag
+
+
+def find_fit_for_video(video_path: Path | str, video_start_dt: datetime | None = None) -> Path | None:
+    """Look for a .fit file matching the video by time or base name."""
     video_path = Path(video_path)
     stem = video_path.stem
     candidates = [
@@ -584,10 +973,24 @@ def find_fit_for_video(video_path: Path | str) -> Path | None:
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    fits = sorted(video_path.parent.glob("*.fit")) + sorted(video_path.parent.glob("*.FIT"))
-    if fits:
-        print(f"[FIT] No matching FIT found, using: {fits[0]}", flush=True)
-        return fits[0]
+
+    if video_start_dt is not None:
+        try:
+            from src.multifile import probe_clip_time_interval
+            s, e, dur, conf = probe_clip_time_interval(video_path)
+            if s is not None and e is not None:
+                interval = (s, e, dur, conf)
+            else:
+                interval = (video_start_dt, video_start_dt + timedelta(seconds=600), 600.0, "degraded")
+        except Exception:
+            interval = (video_start_dt, video_start_dt + timedelta(seconds=600), 600.0, "degraded")
+        matched, _ = find_best_fit_match(
+            [interval],
+            video_path.parent,
+        )
+        if matched is not None:
+            return matched
+
     return None
 
 
@@ -596,7 +999,7 @@ def process_fit(
     video_start_dt: datetime | None = None,
 ) -> FitDataset | None:
     """Convenience: find FIT file, parse and synchronise in one call."""
-    fit_path = find_fit_for_video(video_path)
+    fit_path = find_fit_for_video(video_path, video_start_dt=video_start_dt)
     if fit_path is None:
         return None
     records = parse_fit(fit_path)

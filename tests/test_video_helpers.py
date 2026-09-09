@@ -102,6 +102,38 @@ def test_get_cached_capture_graceful_without_cv2():
         assert result is None
 
 
+def test_extract_frame_uncached_capture_is_released():
+    """Export Preview's per-snapshot decoder must not survive the call."""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from src.video_helpers import _CV2_CAP_CACHE
+
+    cap = MagicMock()
+    cap.isOpened.return_value = True
+    frame = MagicMock()
+    frame.shape = (2, 2, 3)
+    cap.read.return_value = (True, frame)
+    fake_cv2 = SimpleNamespace(
+        VideoCapture=MagicMock(return_value=cap),
+        CAP_PROP_POS_MSEC=0,
+        COLOR_BGR2RGBA=1,
+        cvtColor=lambda value, _code: value,
+        resize=lambda value, _size: value,
+    )
+    _CV2_CAP_CACHE.clear()
+    with patch.dict(sys.modules, {"cv2": fake_cv2}), \
+         patch("src.video_helpers.ffprobe_stream_info", return_value={"format": {"duration": 10.0}}), \
+         patch("src.video_helpers.Image.fromarray", return_value="preview"):
+        result = extract_frame(
+            ["snapshot.mp4"], 1.0, target_w=960,
+            preferred_encoder="cpu", cache_capture=False,
+        )
+    assert result == "preview"
+    cap.release.assert_called_once()
+    assert not _CV2_CAP_CACHE
+
+
 def test_encoder_fallback_on_unsupported_gpu():
     """When nvenc is not supported (e.g. on AMD system), validation should fallback to best encoder."""
     from src.ffmpeg_pipeline import detect_best_encoder, _test_encoder

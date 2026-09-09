@@ -243,6 +243,8 @@ class ProjectMixin:
 
         def bg_load() -> None:
             try:
+                effective_fit_path = fit_path
+                effective_gpx_path = gpx_path
                 self.video_paths = [Path(p) for p in video_paths]
                 self.video_path = self.video_paths[0]
 
@@ -340,9 +342,25 @@ class ProjectMixin:
                 self._map_preload_gpx_points = None
                 map_gps = None
                 map_source = None
-                if fit_path and _FIT_AVAILABLE and _parse_fit is not None:
+                if not effective_fit_path and not effective_gpx_path and self.video_paths:
                     try:
-                        records = _parse_fit(fit_path)
+                        from src.multifile import probe_clip_time_interval
+                        from telemetry_fit import find_best_fit_match
+                        intervals = []
+                        for vp in self.video_paths:
+                            start_dt, end_dt, dur_s, conf = probe_clip_time_interval(vp)
+                            if start_dt is not None and end_dt is not None:
+                                intervals.append((start_dt, end_dt, dur_s, conf))
+                        if intervals:
+                            matched_fit, diag = find_best_fit_match(intervals, Path(self.video_paths[0]).parent)
+                            if matched_fit is not None:
+                                effective_fit_path = str(matched_fit)
+                                self.fit_path = Path(effective_fit_path)
+                    except Exception as e:
+                        print(f"[AutoFIT] Error in project auto-fit: {e}", flush=True)
+                if effective_fit_path and _FIT_AVAILABLE and _parse_fit is not None:
+                    try:
+                        records = _parse_fit(effective_fit_path)
                         if records:
                             self._map_preload_fit_records = records
                             map_gps = [
@@ -357,9 +375,9 @@ class ProjectMixin:
                             )
                     except Exception as exc:
                         print(f"[MapPreload] FIT preparse failed: {exc}", flush=True)
-                if map_gps is None and gpx_path and _GPX_AVAILABLE and _parse_gpx is not None:
+                if map_gps is None and effective_gpx_path and _GPX_AVAILABLE and _parse_gpx is not None:
                     try:
-                        points = _parse_gpx(gpx_path)
+                        points = _parse_gpx(effective_gpx_path)
                         if points:
                             self._map_preload_gpx_points = points
                             map_gps = [
@@ -401,8 +419,8 @@ class ProjectMixin:
                     )
 
                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
-                if gpx_path and _GPX_AVAILABLE:
-                    self.gpx_path = Path(gpx_path)
+                if effective_gpx_path and _GPX_AVAILABLE:
+                    self.gpx_path = Path(effective_gpx_path)
                     self.telemetry.load_gpx(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=self.gpx_path,
@@ -410,8 +428,8 @@ class ProjectMixin:
                     )
 
                 # Wczytaj FIT (jeśli podano) — reuse the preparsed records
-                if fit_path and _FIT_AVAILABLE:
-                    self.fit_path = Path(fit_path)
+                if effective_fit_path and _FIT_AVAILABLE:
+                    self.fit_path = Path(effective_fit_path)
                     self.telemetry.load_fit(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=self.fit_path,
@@ -542,6 +560,27 @@ class ProjectMixin:
                     # on the controller's GUI thread through a queued signal.
                     self.signals.sig_schedule_mpv_hwdec_check.emit()
 
+                # ── Auto export filename (CEL 6) ──────────────────────
+                try:
+                    start_dt = None
+                    if getattr(self, "video_timeline", None) and self.video_timeline.clips:
+                        start_dt = self.video_timeline.clips[0].absolute_start_dt
+                    if start_dt is None and getattr(self, "telemetry", None):
+                        start_dt = getattr(self.telemetry, "start_dt_utc", None)
+                    if start_dt is not None:
+                        from src.video_helpers import generate_auto_export_filename
+                        out_dir = Path(self.video_paths[0]).parent if self.video_paths else None
+                        fit_data = getattr(self.telemetry, "fit_data", None) if getattr(self, "telemetry", None) else None
+                        auto_name = generate_auto_export_filename(
+                            start_dt,
+                            target_dir=out_dir,
+                            fit_data=fit_data,
+                            tz_offset_hours=getattr(self, "tz_offset_hours", None),
+                        )
+                        self.signals.sig_default_export_name_ready.emit(auto_name)
+                except Exception as e:
+                    print(f"[AutoExportName] Failed to generate default name: {e}", flush=True)
+
                 self.signals.sig_progress.emit(100, "Gotowe")
 
             except Exception as e:
@@ -637,194 +676,272 @@ class ProjectMixin:
         )
         self._start_map_preload(snap["gps_track"], snap.get("gps_source") or "gps", provider=provider)
 
-    def _load_or_generate_telemetry(self) -> None:
-        """Wczytaj istniejący JSON lub wygeneruj synchronicznie (blokada).
-
-        Blokuje do czasu sparsowania danych, emitując postęp przez sig_progress.
-        """
-        if not self.video_path:
-            return
-
-        meta = self.video_path.with_suffix(".json")
-        self.signals.sig_progress.emit(45, "Odczyt JSON...")
-        cache_t0 = _time.perf_counter()
-        data, cache_reason = _load_valid_gpmf_cache(self.video_path, meta)
-        _profile_load_stage("json_cache_validation", cache_t0, meta)
-        if data is not None:
-            try:
-                records = ensure_records_list(data)
-            except Exception:
-                records = None
-                cache_reason = "invalid_payload"
-            if records:
-                print(
-                    f"[Telemetry Cache] HIT file={meta.name} "
-                    f"version={GPMF_CACHE_VERSION}", flush=True,
-                )
-                self.telemetry.records = records
-                processed_t0 = _time.perf_counter()
-                processed = read_processed_cache(self.video_path)
-                _profile_load_stage(
-                    "processed_cache_read_decode", processed_t0,
-                    processed_cache_path(self.video_path),
-                    len(records),
-                )
-                if processed is not None:
-                    print(
-                        f"[Telemetry Cache] PROCESSED HIT file="
-                        f"{processed_cache_path(self.video_path).name}",
-                        flush=True,
-                    )
-                    self.signals.sig_progress.emit(
-                        65, "Wczytywanie cache telemetrycznego...",
-                    )
-                    apply_processed_cache(self.telemetry, processed)
-                    self.meta_path = meta
-                    return
-                print(
-                    f"[Telemetry Cache] PROCESSED MISS file="
-                    f"{processed_cache_path(self.video_path).name}",
-                    flush=True,
-                )
-                self.signals.sig_progress.emit(55, "Analiza GPMF...")
-                extract_t0 = _time.perf_counter()
-                # The sidecar already contains the flat ExifTool-compatible
-                # dictionary.  Passing it avoids launching ExifTool again on
-                # every warm load.
-                self.telemetry.load_gpmf_from_exiftool(
-                    self.video_path, flat=data if isinstance(data, dict) else None,
-                )
-                _profile_load_stage(
-                    "gpmf_exiftool_extract", extract_t0, meta, len(records),
-                )
-                records_t0 = _time.perf_counter()
-                self.telemetry.load_gpmf_records(
-                    records, profile_cb=_profile_gpmf_substage,
-                )
-                _profile_load_stage(
-                    "gpmf_records_extract", records_t0, meta, len(records),
-                )
-                gps_t0 = _time.perf_counter()
-                self.telemetry.load_gps_track(
-                    records, profile_cb=_profile_gpmf_substage,
-                )
-                _profile_load_stage("gps_extract", gps_t0, meta, len(records))
-                write_processed_t0 = _time.perf_counter()
-                processed_path = write_processed_cache(self.video_path, self.telemetry)
-                _profile_load_stage(
-                    "processed_cache_write", write_processed_t0,
-                    processed_path,
-                )
-                self.meta_path = meta
-                return
-        print(
-            f"[Telemetry Cache] MISS reason={cache_reason or 'invalid_cache'}",
-            flush=True,
-        )
-        # ── JSON nie istnieje → generuj synchronicznie (blokada) ──────
-        self.signals.sig_progress.emit(45, "Generowanie metadanych...")
-
-        data = None
-        method = ""
-        # Próbuj GPMF (bezpośrednio z ffmpeg — dużo szybszy niż ExifTool)
-        if _GPMF_AVAILABLE and self.ffmpeg_exe and self.ffprobe_exe:
-            try:
-                self.signals.sig_progress.emit(50, "GPMF: czytanie strumienia...")
-                gpmf_t0 = _time.perf_counter()
-                data = gpmf_to_exiftool_json(
-                    str(self.video_paths[0]),
-                    self.ffmpeg_exe, self.ffprobe_exe,
-                )
-                _profile_load_stage("gpmf_convert", gpmf_t0, self.video_path)
-                if data:
-                    method = "GPMF"
-                    print(f"[GPMF] Succeeded — extracted {len(data[0]) if isinstance(data, list) and data else 0} keys", flush=True)
-                else:
-                    print("[GPMF] Returned empty data", flush=True)
-            except Exception as exc:
-                print(f"[GPMF] Failed: {exc} — falling back to ExifTool", flush=True)
-
-        # Fallback: ExifTool
-        if not data:
-            self.signals.sig_progress.emit(55, "ExifTool: odczyt metadanych...")
-            exe = find_executable(
-                str(self.exiftool_path),
-                [str(self.base_dir / "exiftool.exe"), "exiftool.exe"],
-            )
-            if not exe:
-                raise RuntimeError("Nie znaleziono exiftool")
-            exiftool_t0 = _time.perf_counter()
-            proc = subprocess.run(
-                [exe, "-ee", "-j", "-G3", str(self.video_paths[0])],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True,
-            )
-            _profile_load_stage("exiftool_process", exiftool_t0, self.video_path)
-            if proc.returncode != 0:
-                raise RuntimeError(proc.stderr or "ExifTool error")
-            exiftool_t0 = _time.perf_counter()
-            data = json.loads(proc.stdout)
-            _profile_load_stage("exiftool_json_parse", exiftool_t0, self.video_path)
-            method = "ExifTool"
-
-        if data:
-            flat = data[0] if isinstance(data, list) else data
-            json_path = self.video_path.with_suffix(".json")
-            _write_gpmf_cache(json_path, self.video_path, flat, method)
+    def _load_single_clip_telemetry(self, video_path: Path, clip_idx: int = 0, total_clips: int = 1) -> tuple[dict, list]:
+        """Wczytaj cache procesowany (.telemetry.npz) lub wygeneruj metadane dla jednego klipu."""
+        t0 = _time.perf_counter()
+        meta = video_path.with_suffix(".json")
+        processed = read_processed_cache(video_path)
+        if processed is not None and (processed.get("speed_samples") or processed.get("track_samples")):
             print(
-                f"[Telemetry Cache] REGENERATED file={json_path.name}",
+                f"[Telemetry Cache] PROCESSED HIT file="
+                f"{processed_cache_path(video_path).name}",
                 flush=True,
             )
-            self.meta_path = json_path
+            data, _ = _load_valid_gpmf_cache(video_path, meta)
+            records = ensure_records_list(data) if data else []
+            _profile_load_stage("gpmf_decode_ms", t0, video_path, len(records))
+            return processed, records
 
-            self.signals.sig_progress.emit(65, f"Parsowanie danych ({method})...")
-            records_t0 = _time.perf_counter()
-            records = ensure_records_list([flat])
-            _profile_load_stage(
-                "records_conversion", records_t0, json_path, len(records),
-            )
-            self.telemetry.records = records
-            # Przekazujemy flat zamiast uruchamiać ExifTool ponownie
-            extract_t0 = _time.perf_counter()
-            self.telemetry.load_gpmf_from_exiftool(self.video_path, flat=flat)
-            self.telemetry.load_gpmf_records(
-                records, profile_cb=_profile_gpmf_substage,
-            )
-            _profile_load_stage(
-                "gpmf_records_extract", extract_t0, json_path, len(records),
-            )
-            gps_t0 = _time.perf_counter()
-            self.telemetry.load_gps_track(
-                records, profile_cb=_profile_gpmf_substage,
-            )
-            _profile_load_stage("gps_extract", gps_t0, json_path, len(records))
+        pct_clip_start = 30 + int(35 * (clip_idx / total_clips))
+        pct_clip_end = 30 + int(35 * ((clip_idx + 1) / total_clips))
+        clip_span = max(1, pct_clip_end - pct_clip_start)
 
-            write_processed_t0 = _time.perf_counter()
-            processed_path = write_processed_cache(self.video_path, self.telemetry)
-            _profile_load_stage(
-                "processed_cache_write", write_processed_t0, processed_path,
-            )
+        def _gpmf_subprogress(phase: str, done: int, tot: int) -> None:
+            if phase == "extract":
+                p = pct_clip_start + int(0.05 * clip_span)
+                msg = f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — ekstrakcja strumienia..."
+            elif phase == "parse":
+                ratio = (done / tot) if tot > 0 else 0.0
+                p = pct_clip_start + int((0.10 + 0.40 * ratio) * clip_span)
+                msg = f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — parsowanie {done // 1024}/{tot // 1024} KB ({int(ratio * 100)}%)..."
+            elif phase == "convert":
+                ratio = (done / tot) if tot > 0 else 0.0
+                p = pct_clip_start + int((0.50 + 0.30 * ratio) * clip_span)
+                msg = f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — konwersja rekordów ({int(ratio * 100)}%)..."
+            else:
+                p = pct_clip_start + int(0.85 * clip_span)
+                msg = f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — {phase}..."
+            try:
+                self.signals.sig_progress.emit(min(p, pct_clip_end - 1), msg)
+            except Exception:
+                pass
 
-            # Jeśli start_dt_utc wciąż None (brak GPSDateTime w GPMF),
-            # użyj daty z metadanych wideo
-            if self.telemetry.start_dt_utc is None and self.ffprobe_exe:
+        # 1b. Szybka ekstrakcja C++ GPMF bezpośrednio z MP4 (telem_gpmf_native)
+        try:
+            from src.telemetry_native_gpmf import (
+                is_native_gpmf_available,
+                extract_gpmf_native,
+                populate_telemetry_from_native,
+            )
+            if is_native_gpmf_available():
+                t_native = _time.perf_counter()
                 try:
-                    import subprocess, json as _json
-                    p = subprocess.run(
-                        [self.ffprobe_exe, "-v", "error", "-show_format", "-of", "json",
-                         str(self.video_path)],
-                        capture_output=True, text=True, timeout=5,
+                    self.signals.sig_progress.emit(
+                        pct_clip_start + int(0.2 * clip_span),
+                        f"Natywna analiza GPMF C++ ({clip_idx + 1}/{total_clips})...",
                     )
-                    if p.returncode == 0:
-                        info = _json.loads(p.stdout)
-                        ct = info.get("format", {}).get("tags", {}).get("creation_time")
-                        if ct:
-                            from datetime import timezone as _tz
-                            dt = datetime.fromisoformat(ct.replace("Z", "+00:00"))
-                            self.telemetry.start_dt_utc = dt.astimezone(_tz.utc).replace(tzinfo=None)
-                            print(f"[start_dt_utc] Fallback from video creation_time: {self.telemetry.start_dt_utc}", flush=True)
+                except Exception:
+                    pass
+
+                native_data = extract_gpmf_native(video_path)
+                if native_data and native_data.get("gps_track"):
+                    from src.gui.telemetry_manager import TelemetryDataManager
+                    from src.telemetry_extract import (
+                        extract_speed_samples, extract_altitude_samples, extract_track_samples,
+                        extract_iso_samples, extract_exposure_samples, extract_temperature_samples,
+                        smooth_speed_samples, interpolate_value, extract_gps_track,
+                        smooth_speed_values, extract_accelerometer_samples, extract_gyroscope_samples
+                    )
+                    temp_telem = TelemetryDataManager(
+                        extract_speed_fn=getattr(self.telemetry, "_extract_speed", None) or extract_speed_samples,
+                        extract_altitude_fn=getattr(self.telemetry, "_extract_altitude", None) or extract_altitude_samples,
+                        extract_track_fn=getattr(self.telemetry, "_extract_track", None) or extract_track_samples,
+                        extract_iso_fn=getattr(self.telemetry, "_extract_iso", None) or extract_iso_samples,
+                        extract_exposure_fn=getattr(self.telemetry, "_extract_exposure", None) or extract_exposure_samples,
+                        extract_temperature_fn=getattr(self.telemetry, "_extract_temperature", None) or extract_temperature_samples,
+                        smooth_fn=getattr(self.telemetry, "_smooth_speed", None) or smooth_speed_samples,
+                        interpolate_fn=getattr(self.telemetry, "_interpolate", None) or interpolate_value,
+                        extract_gps_track_fn=getattr(self.telemetry, "_extract_gps_track", None) or extract_gps_track,
+                        smooth_values_fn=getattr(self.telemetry, "_smooth_values", None) or smooth_speed_values,
+                        extract_accelerometer_fn=getattr(self.telemetry, "_extract_accelerometer", None) or extract_accelerometer_samples,
+                        extract_gyroscope_fn=getattr(self.telemetry, "_extract_gyroscope", None) or extract_gyroscope_samples,
+                    )
+                    populate_telemetry_from_native(video_path, native_data, temp_telem)
+                    write_processed_cache(video_path, temp_telem)
+                    processed = read_processed_cache(video_path)
+                    if processed:
+                        _profile_load_stage("gpmf_decode_ms", t0, video_path, len(native_data.get("gps_track", [])))
+                        print(f"[Telemetry Native] Extracted {video_path.name} in {(_time.perf_counter() - t_native)*1000.0:.1f}ms", flush=True)
+                        return processed, []
+        except Exception as exc:
+            print(f"[Telemetry Native] Fallback to legacy parser: {exc}", flush=True)
+
+        # Sprawdź cache GPMF JSON
+        data, cache_reason = _load_valid_gpmf_cache(video_path, meta)
+        records = ensure_records_list(data) if data else None
+        if not records:
+            # Generuj bezpośrednio z GPMF (FFmpeg) lub ExifTool
+            t_extract = _time.perf_counter()
+            data = None
+            method = ""
+            if _GPMF_AVAILABLE and self.ffmpeg_exe and self.ffprobe_exe:
+                try:
+                    data = gpmf_to_exiftool_json(
+                        str(video_path), self.ffmpeg_exe, self.ffprobe_exe,
+                        progress_cb=_gpmf_subprogress
+                    )
+                    if data:
+                        method = "GPMF"
                 except Exception as exc:
-                    print(f"[start_dt_utc] Fallback failed: {exc}", flush=True)
+                    print(f"[GPMF] Błąd czytania {video_path.name}: {exc}", flush=True)
+            if not data:
+                exe = find_executable(str(self.exiftool_path), [str(self.base_dir / "exiftool.exe"), "exiftool.exe"])
+                if exe:
+                    _gpmf_subprogress("ExifTool", 0, 1)
+                    proc = subprocess.run([exe, "-ee", "-j", "-G3", str(video_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if proc.returncode == 0:
+                        data = json.loads(proc.stdout)
+                        method = "ExifTool"
+            if data:
+                flat = data[0] if isinstance(data, list) else data
+                _write_gpmf_cache(meta, video_path, flat, method)
+                records = ensure_records_list([flat])
+            _profile_load_stage("gpmf_extract_ms", t_extract, video_path)
+
+        if records:
+            from src.gui.telemetry_manager import TelemetryDataManager
+            from src.telemetry_extract import (
+                extract_speed_samples, extract_altitude_samples, extract_track_samples,
+                extract_iso_samples, extract_exposure_samples, extract_temperature_samples,
+                smooth_speed_samples, interpolate_value, extract_gps_track,
+                smooth_speed_values, extract_accelerometer_samples, extract_gyroscope_samples
+            )
+            temp_telem = TelemetryDataManager(
+                extract_speed_fn=getattr(self.telemetry, "_extract_speed", None) or extract_speed_samples,
+                extract_altitude_fn=getattr(self.telemetry, "_extract_altitude", None) or extract_altitude_samples,
+                extract_track_fn=getattr(self.telemetry, "_extract_track", None) or extract_track_samples,
+                extract_iso_fn=getattr(self.telemetry, "_extract_iso", None) or extract_iso_samples,
+                extract_exposure_fn=getattr(self.telemetry, "_extract_exposure", None) or extract_exposure_samples,
+                extract_temperature_fn=getattr(self.telemetry, "_extract_temperature", None) or extract_temperature_samples,
+                smooth_fn=getattr(self.telemetry, "_smooth_speed", None) or smooth_speed_samples,
+                interpolate_fn=getattr(self.telemetry, "_interpolate", None) or interpolate_value,
+                extract_gps_track_fn=getattr(self.telemetry, "_extract_gps_track", None) or extract_gps_track,
+                smooth_values_fn=getattr(self.telemetry, "_smooth_values", None) or smooth_speed_values,
+                extract_accelerometer_fn=getattr(self.telemetry, "_extract_accelerometer", None) or extract_accelerometer_samples,
+                extract_gyroscope_fn=getattr(self.telemetry, "_extract_gyroscope", None) or extract_gyroscope_samples,
+            )
+            temp_telem.records = records
+            flat_dict = data[0] if (data and isinstance(data, list)) else (data if isinstance(data, dict) else None)
+            temp_telem.load_gpmf_from_exiftool(video_path, flat=flat_dict)
+
+            def _records_subprogress(stage, done, tot, label):
+                p = pct_clip_start + int(0.80 * clip_span)
+                msg = f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — {label or stage}..."
+                try:
+                    self.signals.sig_progress.emit(min(p, pct_clip_end - 1), msg)
+                except Exception:
+                    pass
+
+            temp_telem.load_gpmf_records(records, profile_cb=_profile_gpmf_substage, progress_cb=_records_subprogress)
+            temp_telem.load_gps_track(records, profile_cb=_profile_gpmf_substage)
+
+            try:
+                self.signals.sig_progress.emit(pct_clip_start + int(0.95 * clip_span), f"Analiza GPMF ({clip_idx + 1}/{total_clips}) — zapis cache...")
+            except Exception:
+                pass
+
+            write_processed_cache(video_path, temp_telem)
+            processed = read_processed_cache(video_path)
+            if processed:
+                _profile_load_stage("gpmf_decode_ms", t0, video_path, len(records))
+                return processed, records
+
+        return {}, records or []
+
+    def _merge_clip_telemetry(self, fields: dict, records: list | None) -> None:
+        """Połącz próbki telemetrii kolejnego klipu z self.telemetry."""
+        if not fields:
+            return
+        t0 = _time.perf_counter()
+        # 1. Dystans kumulacyjny (track_samples)
+        new_track = fields.get("track_samples") or []
+        if new_track:
+            last_dist = self.telemetry.track_samples[-1][1] if getattr(self.telemetry, "track_samples", None) else 0.0
+            first_new = new_track[0][1] if new_track else 0.0
+            offset = last_dist if first_new < last_dist - 10.0 else 0.0
+            merged_track = [(t, d + offset) for t, d in new_track]
+            if not self.telemetry.track_samples:
+                self.telemetry.track_samples = list(merged_track)
+            else:
+                self.telemetry.track_samples.extend(merged_track)
+
+        # 2. Serie próbek z czasem bezwzględnym
+        sample_attrs = (
+            "speed_samples", "alt_samples", "iso_samples", "exposure_samples",
+            "temperature_samples", "slope_samples", "accelerometer_samples",
+            "gyroscope_samples", "heading_samples", "gps_track",
+        )
+        for attr in sample_attrs:
+            incoming = fields.get(attr) or []
+            if incoming:
+                curr = getattr(self.telemetry, attr, None)
+                if curr is None:
+                    setattr(self.telemetry, attr, list(incoming))
+                else:
+                    curr.extend(incoming)
+                    try:
+                        # Cache-backed IMU series remain NumPy-backed after
+                        # concatenation.  A generic ``key=lambda`` forces
+                        # LazySampleList to create every datetime/tuple just
+                        # to sort an already numeric timestamp column.
+                        sort_by_timestamp = getattr(curr, "sort_by_timestamp", None)
+                        if callable(sort_by_timestamp):
+                            sort_by_timestamp()
+                        else:
+                            curr.sort(key=lambda x: x[0])
+                    except Exception:
+                        pass
+
+        # 3. Rekordy
+        if records:
+            if self.telemetry.records is None:
+                self.telemetry.records = list(records)
+            else:
+                self.telemetry.records.extend(records)
+        _profile_load_stage("telemetry_merge_ms", t0)
+
+    def _load_or_generate_telemetry(self) -> None:
+        """Wczytaj lub wygeneruj telemetrię dla wszystkich klipów projektu."""
+        if not self.video_path:
+            return
+        load_start = _time.perf_counter()
+        paths = getattr(self, "video_paths", None) or [self.video_path]
+        total_clips = len(paths)
+        print(f"[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla {total_clips} klip(ów)...", flush=True)
+
+        for idx, p in enumerate(paths):
+            pct_clip_start = 30 + int(35 * (idx / total_clips))
+            self.signals.sig_progress.emit(pct_clip_start, f"Analiza GPMF ({idx + 1}/{total_clips})...")
+            t_clip_0 = _time.perf_counter()
+            fields, records = self._load_single_clip_telemetry(p, clip_idx=idx, total_clips=total_clips)
+            _profile_load_stage(f"clip_load_{idx + 1}_ms", t_clip_0, p, len(records) if records else 0)
+
+            if idx == 0:
+                if fields:
+                    apply_processed_cache(self.telemetry, fields)
+                self.telemetry.records = records or []
+                self.meta_path = p.with_suffix(".json")
+            else:
+                self._merge_clip_telemetry(fields, records)
+
+        if getattr(self.telemetry, "start_dt_utc", None) is None and self.ffprobe_exe and paths:
+            try:
+                import subprocess, json as _json
+                p_ct = subprocess.run(
+                    [self.ffprobe_exe, "-v", "error", "-show_format", "-of", "json",
+                     str(paths[0])],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if p_ct.returncode == 0:
+                    info = _json.loads(p_ct.stdout)
+                    ct = info.get("format", {}).get("tags", {}).get("creation_time")
+                    if ct:
+                        from datetime import timezone as _tz
+                        dt = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+                        self.telemetry.start_dt_utc = dt.astimezone(_tz.utc).replace(tzinfo=None)
+                        print(f"[start_dt_utc] Fallback from video creation_time: {self.telemetry.start_dt_utc}", flush=True)
+            except Exception as exc:
+                print(f"[start_dt_utc] Fallback failed: {exc}", flush=True)
 
         self.signals.sig_progress.emit(70, "Metadane gotowe")
 

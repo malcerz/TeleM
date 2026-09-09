@@ -6,7 +6,7 @@ to avoid IPC overhead in child processes.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from src.overlay_renderer import build_chart_data
@@ -14,6 +14,7 @@ from src.telemetry_extract import (
     interpolate_speed,
     interpolate_distance,
     interpolate_altitude,
+    interpolate_gpmf_step,
     interpolate_value,
 )
 from src.telemetry_heading import interpolate_heading
@@ -86,6 +87,14 @@ def init_worker(
     WORKER_CACHE["gpx_heading_samples"] = field_samples.get("gpx_heading_samples", []) or []
     WORKER_CACHE["gpx_slope_samples"] = field_samples.get("gpx_slope_samples", []) or []
     WORKER_CACHE["fit_data"] = fit_data or {}
+    battery_samples = (fit_data or {}).get("garmin_battery_percent", []) if isinstance(fit_data, dict) else []
+    if battery_samples:
+        from src.telemetry_resolver import battery_presentation_plan
+        battery_presentation_plan(battery_samples,
+                                  coverage_start=start_dt_utc,
+                                  coverage_end=(start_dt_utc + timedelta(
+                                      seconds=max(0.0, (total_overlay_frames - 1) / target_fps))
+                                      if start_dt_utc is not None and target_fps and total_overlay_frames else None))
     WORKER_CACHE["gps_track"] = gps_track or []
     WORKER_CACHE["start_dt_utc"] = start_dt_utc
     WORKER_CACHE["tz_offset_hours"] = tz_offset_hours
@@ -124,10 +133,12 @@ def init_worker(
                 min(s[0][0] for s in all_fit_pts),
                 max(s[-1][0] for s in all_fit_pts),
             )
+    act_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
     WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(
         layout, _get_source_samples, _resolve_cache_samples,
         start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
         source_activity_ranges=source_ranges,
+        active_time_mapper=act_mapper,
     )
 
     # ── Precompute static ranges (max_distance_m, max_speed_kmh, min/max_alt) ──
@@ -188,6 +199,28 @@ def init_worker(
 
     WORKER_CACHE["_prep_cache"] = _prep_cache
 
+    try:
+        from src.indicators.frame_data import compute_indicator_auto_ranges
+        WORKER_CACHE["auto_ranges"] = compute_indicator_auto_ranges(
+            layout,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+        )
+    except Exception:
+        WORKER_CACHE["auto_ranges"] = {}
+
     # ── Cut regions & rotation ─────────────────────────────────────────────
     WORKER_CACHE["_cut_regions"] = cut_regions or []
     WORKER_CACHE["effective_rotation"] = effective_rotation
@@ -213,7 +246,7 @@ def _get_source_samples(source_type: str) -> tuple[list, list, list]:
     return (gpmf_spd, gpmf_trk, gpmf_alt)
 
 
-def _worker_lean_roll(axis: str) -> list:
+def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
     """Precomputed roll timeline for the final-render worker (ETAP 13).
 
     Mirrors ``TelemetryDataManager._get_lean_roll_samples`` so the AMD/NVIDIA/
@@ -221,11 +254,13 @@ def _worker_lean_roll(axis: str) -> list:
     """
     axis = str(axis).strip().lower()
     if axis not in ("x", "y", "z"):
-        axis = "z"
+        axis = "x"
+    smoothing_s = max(0.0, float(smoothing_s or 0.0))
+    cache_key = f"{axis}_{smoothing_s:.2f}"
     cache: dict = WORKER_CACHE.setdefault("_lean_roll", {})
-    if axis in cache:
-        return cache[axis]
-    from src.telemetry_imu import compute_roll_timeline, merge_axis_samples
+    if cache_key in cache:
+        return cache[cache_key]
+    from src.telemetry_imu import compute_roll_timeline, merge_axis_samples, smooth_roll_samples
     fs = WORKER_CACHE.get("field_samples", {}) or {}
     accel = merge_axis_samples(
         fs.get("accel_x_samples", []), fs.get("accel_y_samples", []),
@@ -236,36 +271,76 @@ def _worker_lean_roll(axis: str) -> list:
         fs.get("gyro_z_samples", []),
     )
     timeline = compute_roll_timeline(accel=accel, gyro=gyro, roll_axis=axis)
-    cache[axis] = timeline
+    if smoothing_s > 0.0:
+        timeline = smooth_roll_samples(timeline, smoothing_s)
+    cache[cache_key] = timeline
     return timeline
 
 
 def _resolve_cache_value(
     field_name: str, source: str, target_dt: datetime,
     indicator_key: str | None = None,
+    *, indicator_config: dict | None = None,
 ) -> Any:
     """Resolve one field from one explicit source using the shared contract."""
-    del indicator_key
+    from src.telemetry_resolver import canonical_telemetry_field, resolve_current_presentation
+    field_name = canonical_telemetry_field(field_name)
     if str(field_name).startswith("lean_roll_"):
         from src.telemetry_imu import interpolate_roll
         axis = str(field_name).split("_")[-1]
-        return interpolate_roll(_worker_lean_roll(axis), target_dt)
+        fs = WORKER_CACHE.get("field_samples", {}) or {}
+        def _first_axis_dt(prefix: str) -> datetime | None:
+            for suffix in ("x", "y", "z", "magnitude"):
+                samples = fs.get(f"{prefix}_{suffix}_samples", []) or []
+                if not samples:
+                    continue
+                try:
+                    backing = getattr(samples, "_arr", None)
+                    if backing is not None and len(backing):
+                        return datetime.fromtimestamp(float(backing[0, 0]), tz=timezone.utc)
+                    return samples[0][0]
+                except Exception:
+                    return None
+            return None
+        accel_first = _first_axis_dt("accel")
+        gyro_first = _first_axis_dt("gyro")
+        if accel_first is not None and gyro_first is not None:
+            def _naive_utc(value: datetime) -> datetime:
+                return value.replace(tzinfo=None) if value.tzinfo is not None else value
+            if _naive_utc(target_dt) < max(
+                _naive_utc(accel_first), _naive_utc(gyro_first)
+            ):
+                return None
+        smooth_s = 0.0
+        if indicator_key:
+            ind_cfg = WORKER_CACHE.get("layout", {}).get("indicators", {}).get(indicator_key, {})
+            smooth_s = float(ind_cfg.get("lean_smoothing_s", 0.0) or 0.0)
+        return interpolate_roll(_worker_lean_roll(axis, smooth_s), target_dt)
     samples = _resolve_cache_samples(field_name, source)
     if not samples:
         return None
+    cfg = indicator_config if indicator_config is not None else {}
+    if indicator_config is None and indicator_key:
+        raw_cfg = WORKER_CACHE.get("layout", {}).get("indicators", {}).get(indicator_key, {})
+        if isinstance(raw_cfg, dict):
+            cfg = dict(raw_cfg)
+    if field_name == "garmin_battery_percent":
+        video_start = WORKER_CACHE.get("start_dt_utc")
+        target_fps = WORKER_CACHE.get("target_fps")
+        total = WORKER_CACHE.get("total_overlay_frames")
+        if video_start is not None and target_fps and total:
+            cfg.setdefault("_presentation_video_start", video_start)
+            cfg.setdefault("_presentation_video_end",
+                           video_start + timedelta(seconds=max(0.0, (total - 1) / target_fps)))
     if field_name == "heading":
         return interpolate_heading(samples, target_dt)
     if field_name == "slope":
         return interpolate_slope(samples, target_dt)
-    # Linear interpolation for speed/distance/altitude fields (smooth per frame),
-    # step for the rest — must match telemetry_manager.resolve_value.
-    if field_name in ("speed", "enhanced_speed"):
-        return interpolate_speed(samples, target_dt)
-    if field_name in ("distance", "dist", "track"):
-        return interpolate_distance(samples, target_dt)
-    if field_name in ("alt", "enhanced_altitude", "altitude"):
-        return interpolate_altitude(samples, target_dt)
-    return interpolate_value(samples, target_dt)
+    return resolve_current_presentation(
+        samples, target_dt, field_name, cfg,
+        active_time_mapper=getattr(WORKER_CACHE.get('fit_data'), 'active_time_mapper', None)
+        if source == 'fit' else None,
+    )
 
 
 def _resolve_cache_samples(
@@ -296,15 +371,15 @@ def _resolve_cache_samples(
     if source == "gpmf":
         key = gpmf_map.get(field_name, "")
         if key and key in field_samples and field_samples[key]:
-            return list(field_samples[key])
+            return field_samples[key]
         if key and key in WORKER_CACHE and WORKER_CACHE[key]:
-            return list(WORKER_CACHE[key])
-        return list(field_samples.get(key, []) or [])
+            return WORKER_CACHE[key]
+        return field_samples.get(key, []) or []
     if source == "gpx":
-        return list(WORKER_CACHE.get(gpx_map.get(field_name, ""), []) or [])
+        return WORKER_CACHE.get(gpx_map.get(field_name, ""), []) or []
     if source == "fit":
         fit_data = WORKER_CACHE.get("fit_data", {})
-        if field_name == "distance":
+        if field_name in ("distance", "dist", "track"):
             return resolve_distance_samples("fit", fit_data=fit_data)
         aliases = {
             "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
@@ -316,6 +391,6 @@ def _resolve_cache_samples(
         }.get(field_name, (field_name,))
         for name in aliases:
             if fit_data.get(name):
-                return list(fit_data[name])
+                return fit_data[name]
         return []
     return []

@@ -238,6 +238,68 @@ def derive_heading_samples(
     return smoothed
 
 
+def smooth_heading_samples(
+    samples: list[tuple[datetime, float | None]],
+    window_s: float = 0.0,
+) -> list[tuple[datetime, float | None]]:
+    """Smooth heading samples over a symmetric time window [-window_s/2, +window_s/2].
+
+    Circular angle wrap (0/360) is handled via sin/cos vector accumulation.
+    Uses time-based precomputation so live preview seek and final render give identical results.
+    When window_s <= 0.0, returns the original samples unmodified.
+    """
+    if not samples or window_s <= 0.0:
+        return samples
+
+    valid = [
+        (s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0], float(s[1]))
+        for s in samples
+        if s[1] is not None and math.isfinite(float(s[1]))
+    ]
+    if not valid:
+        return samples
+
+    try:
+        import numpy as np
+        half = float(window_s) / 2.0
+        ts = np.array([s[0].timestamp() for s in valid], dtype=np.float64)
+        rads = np.radians([s[1] for s in valid])
+        sin_arr = np.sin(rads)
+        cos_arr = np.cos(rads)
+
+        cum_sin = np.concatenate(([0.0], np.cumsum(sin_arr)))
+        cum_cos = np.concatenate(([0.0], np.cumsum(cos_arr)))
+
+        left_idx = np.searchsorted(ts, ts - half, side="left")
+        right_idx = np.searchsorted(ts, ts + half, side="right")
+
+        sum_sin = cum_sin[right_idx] - cum_sin[left_idx]
+        sum_cos = cum_cos[right_idx] - cum_cos[left_idx]
+
+        angles = (np.degrees(np.arctan2(sum_sin, sum_cos)) % 360.0).tolist()
+        val_map = {valid[i][0]: normalize_heading(angles[i]) for i in range(len(valid))}
+    except Exception:
+        # Pure Python fallback
+        half = float(window_s) / 2.0
+        val_map = {}
+        for i, (dt, _) in enumerate(valid):
+            t_curr = dt.timestamp()
+            t_min = t_curr - half
+            t_max = t_curr + half
+            window_angles = [v for d, v in valid if t_min <= d.timestamp() <= t_max]
+            if window_angles:
+                val_map[dt] = _circular_mean(window_angles)
+
+    result: list[tuple[datetime, float | None]] = []
+    for s in samples:
+        dt = s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0]
+        if dt in val_map:
+            result.append((s[0], val_map[dt]))
+        else:
+            result.append(s)
+    return result
+
+
 def interpolate_heading(
     samples: list[tuple[datetime, float | None]], target_dt: datetime
 ) -> float | None:

@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
-    QStyleFactory,
+    QStyleFactory, QCheckBox,
 )
 from PySide6.QtGui import QFontDatabase
 
@@ -148,6 +148,21 @@ class SettingsTab(QWidget):
         perf_form.addRow("Ścieżka ffmpeg:", row_ffmpeg)
 
         vbox.addWidget(perf_group)
+
+        # ── Wykresy ───────────────────────────────────────────────────
+        charts_group = QGroupBox("Wykresy")
+        charts_group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
+        charts_form = QFormLayout(charts_group)
+        charts_form.setSpacing(10)
+
+        self.chk_skip_pauses = QCheckBox("Pomiń pauzy aktywności")
+        self.chk_skip_pauses.setChecked(False)
+        self.chk_skip_pauses.toggled.connect(
+            lambda v: self.signals.sig_settings_changed.emit("charts_skip_pauses", v)
+        )
+        charts_form.addRow(self.chk_skip_pauses)
+
+        vbox.addWidget(charts_group)
 
         vbox.addStretch()
 

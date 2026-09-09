@@ -3,20 +3,51 @@ from __future__ import annotations
 
 import builtins
 import os
+from enum import IntEnum
 from typing import Any
+
+
+class RenderLogLevel(IntEnum):
+    """Ordered renderer logging levels used by Python-side diagnostics."""
+
+    ERROR = 0
+    INFO = 1
+    DEBUG = 2
+    TRACE = 3
+
+
+def render_log_level() -> RenderLogLevel:
+    """Resolve the process logging level without changing production defaults."""
+    if os.environ.get("TELEM_RENDER_DEBUG", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }:
+        return RenderLogLevel.DEBUG
+    raw = os.environ.get("TELEM_RENDER_LOG_LEVEL", "INFO").strip().upper()
+    try:
+        return RenderLogLevel[raw]
+    except KeyError:
+        return RenderLogLevel.INFO
+
+
+def render_log(level: RenderLogLevel, *args: Any, **kwargs: Any) -> None:
+    """Emit a levelled diagnostic; TRACE is never sent to the hot path by default."""
+    if RenderLogLevel(level) <= render_log_level():
+        builtins.print(*args, **kwargs)
 
 
 def render_debug_enabled() -> bool:
     """Return whether verbose renderer diagnostics were explicitly requested."""
-    return os.environ.get("TELEM_RENDER_DEBUG", "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    return render_log_level() >= RenderLogLevel.DEBUG
 
 
 def render_debug_print(*args: Any, **kwargs: Any) -> None:
     """Print a detailed render diagnostic only in debug mode."""
-    if render_debug_enabled():
-        builtins.print(*args, **kwargs)
+    render_log(RenderLogLevel.DEBUG, *args, **kwargs)
+
+
+def render_trace_print(*args: Any, **kwargs: Any) -> None:
+    """Print trace diagnostics only when explicitly requested."""
+    render_log(RenderLogLevel.TRACE, *args, **kwargs)
 
 
 _ALWAYS_VISIBLE = (

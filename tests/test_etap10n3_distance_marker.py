@@ -33,6 +33,31 @@ def _find_marker_pixel_x(img: Image.Image, marker_color=(255, 212, 42)) -> float
     return None
 
 
+def _find_horizontal_scale_span(img: Image.Image, cfg: dict) -> tuple[int, int]:
+    arr = np.array(img)
+    colors = [
+        tuple(bytes.fromhex(str(cfg[key]).lstrip("#")))
+        for key in ("track_color", "tick_color")
+    ]
+    mask = np.zeros(arr.shape[:2], dtype=bool)
+    for color in colors:
+        mask |= np.all(arr[:, :, :3] == color, axis=2) & (arr[:, :, 3] > 200)
+    row = int(np.argmax(mask.sum(axis=1)))
+    xs = np.where(mask[row])[0]
+    assert len(xs), "horizontal scale not found"
+    return int(xs.min()), int(xs.max())
+
+
+def _render_distance_ruler(cfg: dict, value, val_min=0.0, val_max=10.0):
+    return _render_ruler(
+        canvas_w=1280, canvas_h=720, font_path="", value=value,
+        unit="km", label="DISTANCE", cfg=cfg, val_min=val_min,
+        val_max=val_max, ticks=5, thickness=1, size_px=int(0.28 * 1280),
+        fs=15, outline=1, ss=1,
+        formatted_val=f"{value:.1f} km" if value is not None else None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. Raster Marker Detection Test: 0, 2.5, 5.0, 7.5, 10.0 km
 # ---------------------------------------------------------------------------
@@ -43,7 +68,6 @@ def test_raster_marker_detection_steps(v10_layout):
     cfg = v10_layout["indicators"]["dist_visual"]
     canvas_w, canvas_h = 1280, 720
     size_px = int(0.28 * canvas_w)  # 358 px
-    pad_x = 10.0
 
     steps = [
         (0.0, 0.0),
@@ -53,20 +77,23 @@ def test_raster_marker_detection_steps(v10_layout):
         (10.0, 1.00),
     ]
 
-    for val, expected_ratio in steps:
-        img = _render_ruler(
-            canvas_w=canvas_w, canvas_h=canvas_h, font_path="",
-            value=val, unit="km", label="DISTANCE", cfg=cfg,
-            val_min=0.0, val_max=10.0, ticks=5, thickness=1,
-            size_px=size_px, fs=15, outline=1, ss=1,
-            formatted_val=f"{val:.1f} km",
-        )
+    positions = {}
+    for val, _expected_ratio in steps:
+        img = _render_distance_ruler(cfg, val)
         pixel_x = _find_marker_pixel_x(img)
         assert pixel_x is not None, f"Marker pixel must exist for value={val}"
-        expected_x = pad_x + expected_ratio * size_px
-        assert abs(pixel_x - expected_x) <= 1.0, (
-            f"Value {val} expected marker pixel at {expected_x:.1f} px, got {pixel_x:.1f} px"
+        positions[val] = pixel_x
+
+    scale_start, scale_end = _find_horizontal_scale_span(
+        _render_distance_ruler(cfg, None), cfg
+    )
+    assert abs(positions[0.0] - scale_start) <= 1.0
+    assert abs(positions[10.0] - scale_end) <= 1.0
+    for val, expected_ratio in steps:
+        expected_x = positions[0.0] + expected_ratio * (
+            positions[10.0] - positions[0.0]
         )
+        assert abs(positions[val] - expected_x) <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +106,6 @@ def test_real_11_9_km_marker_position(v10_layout):
     cfg = v10_layout["indicators"]["dist_visual"]
     canvas_w, canvas_h = 1280, 720
     size_px = int(0.28 * canvas_w)  # 358 px
-    pad_x = 10.0
 
     val = 11.8866
     val_min = 0.0
@@ -95,7 +121,14 @@ def test_real_11_9_km_marker_position(v10_layout):
     )
     pixel_x = _find_marker_pixel_x(img)
     assert pixel_x is not None
-    expected_x = pad_x + expected_ratio * size_px  # ~187.9 px
+    start_x = _find_marker_pixel_x(
+        _render_distance_ruler(cfg, val_min, val_min, val_max)
+    )
+    end_x = _find_marker_pixel_x(
+        _render_distance_ruler(cfg, val_max, val_min, val_max)
+    )
+    assert start_x is not None and end_x is not None
+    expected_x = start_x + expected_ratio * (end_x - start_x)
     assert abs(pixel_x - expected_x) <= 1.0, (
         f"11.9 km on 0..23.9 km ruler expected marker at ~{expected_x:.1f} px, got {pixel_x:.1f} px"
     )
@@ -111,7 +144,9 @@ def test_cache_sequence_responsiveness(v10_layout):
     cfg = v10_layout["indicators"]["dist_visual"]
     canvas_w, canvas_h = 1280, 720
     size_px = int(0.28 * canvas_w)  # 358 px
-    pad_x = 10.0
+    start_x = _find_marker_pixel_x(_render_distance_ruler(cfg, 0.0))
+    end_x = _find_marker_pixel_x(_render_distance_ruler(cfg, 10.0))
+    assert start_x is not None and end_x is not None
 
     sequence = [0.0, 5.0, 10.0, 2.5, 7.5, 0.0]
     for val in sequence:
@@ -124,7 +159,7 @@ def test_cache_sequence_responsiveness(v10_layout):
         )
         pixel_x = _find_marker_pixel_x(img)
         assert pixel_x is not None
-        expected_x = pad_x + (val / 10.0) * size_px
+        expected_x = start_x + (val / 10.0) * (end_x - start_x)
         assert abs(pixel_x - expected_x) <= 1.0, (
             f"Value {val} in sequence got pixel_x={pixel_x:.1f}, expected {expected_x:.1f}"
         )
@@ -159,7 +194,10 @@ def test_none_and_zero_raster(v10_layout):
         size_px=size_px, fs=15, outline=1, ss=1,
         formatted_val="0.0 km",
     )
-    assert abs(_find_marker_pixel_x(img_zero) - 10.0) <= 1.0
+    scale_start, _ = _find_horizontal_scale_span(
+        _render_distance_ruler(cfg, None), cfg
+    )
+    assert abs(_find_marker_pixel_x(img_zero) - scale_start) <= 1.0
 
 
 # ---------------------------------------------------------------------------

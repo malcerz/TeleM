@@ -13,7 +13,13 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
-from src.indicators.helpers import _parse_marker_color, s, apply_map_shape
+from src.indicators.helpers import (
+    _parse_marker_color,
+    s,
+    apply_map_shape,
+    apply_map_opacity,
+    apply_map_pitch,
+)
 
 
 def _static_target_index(gps_track, target_dt, current_position) -> int:
@@ -191,6 +197,8 @@ def _render_static_map_indicator(
         )
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:
         return None, 0, 0, None

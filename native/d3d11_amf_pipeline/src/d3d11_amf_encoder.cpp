@@ -2,7 +2,7 @@
 
 D3D11AMFEncoder::D3D11AMFEncoder() {}
 
-D3D11AMFEncoder::~D3D11AMFEncoder() {
+void D3D11AMFEncoder::Shutdown() {
     if (m_encoder != nullptr) {
         m_encoder->Drain();
         m_encoder->Terminate();
@@ -16,6 +16,10 @@ D3D11AMFEncoder::~D3D11AMFEncoder() {
         FreeLibrary(m_hAMFRT);
         m_hAMFRT = nullptr;
     }
+}
+
+D3D11AMFEncoder::~D3D11AMFEncoder() {
+    Shutdown();
 }
 
 bool D3D11AMFEncoder::Initialize(ID3D11Device* pDevice, UINT width, UINT height, UINT fpsNum, UINT fpsDen) {

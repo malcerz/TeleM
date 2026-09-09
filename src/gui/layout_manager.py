@@ -175,6 +175,7 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
     layout_dict = {
         "version": 6,
         "global": {"text_outline": 3, "amd_decode_mode": "gpu"},
+        "charts_skip_pauses": False,
         "custom_texts": [],
         "indicators": {
             "time_display": {
@@ -266,6 +267,7 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
                 "enabled": False, "label": "Mapa", "x": 2.0, "y": 15.0, "rotation": 0, "form": "map",
                 "font_size": 1.2, "size": 18.0, "thickness": 1, "zoom": 16,
                 "source": "gpmf", "map_style": "light_all", "map_shape": "square",
+                "map_rotation_smoothing_s": 0.0,
                 "min_val": 0, "max_val": 1, "ticks": 0,
                 "marker_size": 7, "marker_color": "#FFFFFF",
             },
@@ -296,6 +298,8 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
             layout["_startup_preset"] = user["_startup_preset"]
         if "cut_regions" in user:
             layout["cut_regions"] = user["cut_regions"]
+        if "charts_skip_pauses" in user:
+            layout["charts_skip_pauses"] = bool(user["charts_skip_pauses"])
 
         if "indicators" in user and isinstance(user["indicators"], dict):
             layout["indicators"] = user["indicators"]

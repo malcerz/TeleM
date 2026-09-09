@@ -32,6 +32,7 @@ from src.indicators.helpers import (
     compose_5q_optimized,
     parse_hex_color,
     s,
+    resolve_decimal_places,
 )
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
 from src.indicators.profiling import get_overlay_profiler
@@ -434,6 +435,11 @@ def _render_chart_indicator(
     label_count = int(cfg.get("label_count", 2))
     label_units = bool(cfg.get("label_units", False))
     show_average = bool(cfg.get("show_average", False))
+    if key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text") or key.startswith("fit_") or unit == "%":
+        legacy_decimal_default = 0
+    else:
+        legacy_decimal_default = 1
+    decimal_places = resolve_decimal_places(cfg, legacy_decimal_default)
 
     # label_font_size (Właściwości) → pixel size, clamped to fit the chart
     lfs = cfg.get("label_font_size")
@@ -461,6 +467,7 @@ def _render_chart_indicator(
         # scaled font size as the indicator header/value.
         axis_font_size=label_fs_px or fs,
         axis_outline=outline,
+        decimal_places=decimal_places,
     )
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
     chart_start_dt = getattr(history_data, "chart_start_dt", None)
@@ -513,11 +520,17 @@ def _render_chart_indicator(
     if timestamps and len(timestamps) >= 1 and target_dt is not None and t_start is not None and t_end is not None:
         sample_tz = timestamps[0].tzinfo
         aligned_target = target_dt
-        if sample_tz is None and target_dt.tzinfo is not None:
-            aligned_target = target_dt.replace(tzinfo=None)
-        elif sample_tz is not None and target_dt.tzinfo is None:
+        if getattr(history_data, "skip_pauses", False) and getattr(history_data, "active_time_mapper", None) is not None:
+            from datetime import timedelta
+            mapper = history_data.active_time_mapper
+            base = getattr(history_data, "base_start_dt", None) or timestamps[0]
+            sec = mapper.wall_to_active_seconds(target_dt)
+            aligned_target = base + timedelta(seconds=sec)
+        if sample_tz is None and aligned_target.tzinfo is not None:
+            aligned_target = aligned_target.replace(tzinfo=None)
+        elif sample_tz is not None and aligned_target.tzinfo is None:
             from datetime import timezone
-            aligned_target = target_dt.replace(tzinfo=timezone.utc)
+            aligned_target = aligned_target.replace(tzinfo=timezone.utc)
 
         if sample_tz is None:
             if align_start.tzinfo is not None:
@@ -622,7 +635,10 @@ def _render_chart_indicator(
 
     tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
     toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
-    v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
+    v_str = formatted_val if formatted_val is not None else (
+        f"{value:.{decimal_places}f} {unit}".strip()
+        if value is not None else f"-- {unit}".strip()
+    )
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key, load_font
     hdr_key = _static_cache_key("chart_hdr", chart_w + 8, final_h, label, font_path, fs, outline, text_color, tox, toy)
@@ -704,7 +720,10 @@ def _render_chart_indicator(
                     "graph.final_static_build",
                     (time.perf_counter() - static_started) * 1000.0,
                 )
-        v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
+        v_str = formatted_val if formatted_val is not None else (
+            f"{value:.{decimal_places}f} {unit}".strip()
+            if value is not None else f"-- {unit}".strip()
+        )
         if split_mode and not prefix_dynamic:
             # ETAP 5K: hand the exporter a static layer + two small dynamic
             # tiles instead of a full per-frame chart image.  No final_static

@@ -153,6 +153,7 @@ class AppController(
 
         # Tryb dekodowania wideo w backendzie AMD: "gpu" (domyślny) lub "cpu"
         self.amd_decode_mode: str = "gpu"
+        self.render_mode: str = "gpu"
 
         # Wczytaj startowy preset z def_layout.json jeśli istnieje
         self._startup_preset_path: str = ""
@@ -250,12 +251,36 @@ class AppController(
         BenchmarkTracker.get_instance().enable(True)
 
     def _clear_caches(self) -> None:
-        """Czyszczenie pamięci podręcznej wyliczeń podglądu."""
+        """Czyszczenie pamięci podręcznej wyliczeń podglądu i rastrów wskaźników."""
         self._prepare_cache.clear()
         self._chart_data_cache = None
         try:
-            from src.indicators.gauge import clear_gauge_cache
+            from src.indicators.helpers import _STATIC_CACHE, FONT_CACHE
+            if _STATIC_CACHE is not None:
+                _STATIC_CACHE.clear()
+            if FONT_CACHE is not None:
+                FONT_CACHE.clear()
+        except Exception:
+            pass
+        try:
+            from src.indicators.gauge import clear_gauge_cache, clear_compass_cache
             clear_gauge_cache()
+            clear_compass_cache()
+        except Exception:
+            pass
+        try:
+            from src.indicators.bar import clear_bar_cache
+            clear_bar_cache()
+        except Exception:
+            pass
+        try:
+            from src.indicators.moving_map import clear_moving_map_cache
+            clear_moving_map_cache()
+        except Exception:
+            pass
+        try:
+            from src.indicators.text import clear_text_cache
+            clear_text_cache()
         except Exception:
             pass
 
@@ -271,7 +296,7 @@ class AppController(
         s.sig_property_changed.connect(self._on_property_changed)
         s.sig_delete_indicator.connect(self._on_delete_indicator)
         s.sig_render_requested.connect(self._on_render_requested)
-        s.sig_render_cancelled.connect(self._on_render_cancelled)
+        s.sig_render_cancel_requested.connect(self._on_render_cancel_requested)
         s.sig_seek_changed.connect(self._on_seek_changed)
         s.sig_settings_changed.connect(self._on_settings_changed)
         s.sig_playback_start.connect(self._on_playback_start)
@@ -304,6 +329,7 @@ class AppController(
                 # Przywróć tryb dekodowania AMD zapisany w pliku
                 saved_decode_mode = self.layout.get("global", {}).get("amd_decode_mode", "gpu")
                 self.amd_decode_mode = (saved_decode_mode or "gpu").lower()
+                self.render_mode = str(self.layout.get("global", {}).get("render_mode", "gpu") or "gpu").lower()
                 self.signals.sig_amd_decode_mode_restored.emit(self.amd_decode_mode)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

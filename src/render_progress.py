@@ -3,9 +3,114 @@ from __future__ import annotations
 
 import os
 import time
+from dataclasses import dataclass
+from enum import Enum
 from typing import Callable, Optional
 
 from src.render_logging import render_debug_print
+
+_generation_counter = 0
+
+
+class RenderCancelReason(str, Enum):
+    """Why a render session was asked to stop."""
+
+    NONE = "NONE"
+    USER_CANCEL = "USER_CANCEL"
+    INTERNAL_STOP = "INTERNAL_STOP"
+    SUPERSEDED = "SUPERSEDED"
+    ERROR = "ERROR"
+    APP_SHUTDOWN = "APP_SHUTDOWN"
+
+
+@dataclass(frozen=True)
+class RenderCancelRequest:
+    """Generation-tagged cancellation request crossing the GUI boundary."""
+
+    generation_id: int
+    reason: RenderCancelReason
+    source: str
+
+
+def render_cancel_log_message(reason: RenderCancelReason) -> str:
+    """Return the user-facing exporter cancellation message for a reason."""
+    if reason == RenderCancelReason.USER_CANCEL:
+        return "Export cancelled by user."
+    return f"Export cancelled (reason={reason.value})."
+
+
+def next_render_generation_id() -> int:
+    """Return a process-wide monotonically increasing export generation."""
+    global _generation_counter
+    _generation_counter += 1
+    return _generation_counter
+
+
+@dataclass(frozen=True)
+class RenderProgressState:
+    """Canonical GUI snapshot for one export session."""
+
+    generation_id: int
+    state: str
+    frame: int = 0
+    total_frames: int = 0
+    percent: float = 0.0
+    global_percent: float = 0.0
+    elapsed_s: float = 0.0
+    fps: float = 0.0
+    eta_s: float | None = None
+    finalization_stage: str = ""
+    cancel_requested: bool = False
+    cancelled: bool = False
+    failed: bool = False
+    completed: bool = False
+    cancel_reason: RenderCancelReason = RenderCancelReason.NONE
+    cancel_source: str = ""
+    # Cross-backend semantic contract.  The legacy names above remain for Qt
+    # callers; these fields make the producer/backend meaning explicit.
+    backend: str = ""
+    role: str = ""
+    phase: str = ""
+    frame_done: int = 0
+    frame_total: int = 0
+    fps_instant: float = 0.0
+    fps_average: float = 0.0
+
+
+def format_render_progress_status(snapshot: RenderProgressState) -> str:
+    """Format the canonical snapshot for the application status bar."""
+    frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
+    pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
+    fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
+    elapsed = max(0, int(snapshot.elapsed_s))
+    mins, secs = divmod(elapsed, 60)
+    hours, mins = divmod(mins, 60)
+    elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
+    if snapshot.eta_s is None:
+        eta_txt = "--:--"
+    else:
+        eta = max(0, int(snapshot.eta_s))
+        eta_m, eta_s = divmod(eta, 60)
+        eta_h, eta_m = divmod(eta_m, 60)
+        eta_txt = f"{eta_h}:{eta_m:02d}:{eta_s:02d}" if eta_h else f"{eta_m:02d}:{eta_s:02d}"
+    if snapshot.completed:
+        status = "Gotowe"
+    elif snapshot.cancelled:
+        status = "Anulowano"
+    elif snapshot.failed:
+        status = "Błąd"
+    elif snapshot.cancel_requested:
+        status = "Anulowanie..."
+    elif snapshot.state == "finalizing":
+        status = snapshot.finalization_stage or "Finalizacja..."
+    elif snapshot.state == "preparing":
+        status = "Przygotowywanie HUD..."
+    else:
+        status = "Renderowanie..."
+    return (
+        f"Frame: {frame} | {pct} | FPS: {fps} | Czas: {elapsed_txt} "
+        f"| ETA: {eta_txt} | {status}"
+    )
 
 
 class RenderProgressTracker:
@@ -49,11 +154,21 @@ class RenderProgressTracker:
         elif phase == "prep":
             global_pct = 100.0 * hud_est * max(0.0, min(1.0, internal)) / total_est
         elif phase == "render":
-            global_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
+            # Render frames map to 0..95% of total bar
+            raw_render_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
+            global_pct = min(95.0, raw_render_pct)
+        elif phase == "finalize":
+            drain_pct = extra.get("drain_pct")
+            if drain_pct is not None:
+                # Map drain to 95..98%
+                global_pct = 95.0 + (max(0.0, min(100.0, float(drain_pct))) / 100.0) * 3.0
+            else:
+                # Mux / postprocess holds at 98..99.9%
+                global_pct = max(98.0, min(99.9, self.last_global))
         else:
             global_pct = 100.0 * (hud_est + render_est) / total_est
         global_pct = max(self.last_global, min(99.9 if phase != "complete" else 100.0, global_pct))
-        if not force and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
+        if not force and phase != "finalize" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
             return
         self.last_global = global_pct
         self.last_emit = now

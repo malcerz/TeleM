@@ -22,6 +22,7 @@ from src.indicators.lean import lean_angle, lean_visual_angle
 from src.telemetry_imu import (
     accel_roll_deg,
     compute_roll_timeline,
+    compute_roll_timeline_from_arrays,
     grade_to_angle_deg,
     gyro_rate_deg_s,
     interpolate_roll,
@@ -44,6 +45,29 @@ def _accel_level(n=20, dt_s=0.01, roll_deg=0.0):
     ax = -9.8 * math.cos(th)
     ay = 9.8 * math.sin(th)
     return [(T0 + timedelta(seconds=i * dt_s), (ax, ay, 0.0)) for i in range(n)]
+
+
+def test_array_backed_roll_matches_tuple_source_contract():
+    accel = _accel_level(n=20, dt_s=0.1, roll_deg=12.0)
+    gyro = _gyro(0.3, axis="z", n=20, dt_s=0.1)
+    accel_array = np.array(
+        [[sample[0].timestamp(), *sample[1]] for sample in accel], dtype=np.float64
+    )
+    gyro_array = np.array(
+        [[sample[0].timestamp(), *sample[1]] for sample in gyro], dtype=np.float64
+    )
+
+    expected = compute_roll_timeline(accel, gyro, roll_axis="z")
+    actual = compute_roll_timeline_from_arrays(
+        accel_array, gyro_array, roll_axis="z", tz_aware=True
+    )
+
+    assert [value for _, value in actual] == pytest.approx(
+        [value for _, value in expected]
+    )
+    assert [timestamp for timestamp, _ in actual] == [
+        timestamp for timestamp, _ in expected
+    ]
 
 
 # ---------------------------------------------------------------------------

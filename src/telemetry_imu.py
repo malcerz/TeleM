@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import bisect
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 # default complementary-filter weight: gyro dominates dynamics, accel corrects drift
@@ -178,6 +178,92 @@ def compute_roll_timeline(
     return out
 
 
+def compute_roll_timeline_from_arrays(
+    accel_array: Any,
+    gyro_array: Any,
+    roll_axis: str = "z",
+    alpha: float = DEFAULT_ALPHA,
+    max_gap_s: float = DEFAULT_MAX_GAP_S,
+    tz_aware: bool = True,
+) -> list[tuple[datetime, float]]:
+    """Array-backed equivalent of :func:`compute_roll_timeline`.
+
+    Preview's lean cache needs the complete derived roll sequence, but it does
+    not need to first expand both raw IMU sources into Python datetime/tuple
+    lists. Keep the sources compact and create only the required derived cache.
+    """
+    try:
+        import numpy as np
+        accel = np.asarray(accel_array, dtype=np.float64)
+        gyro = np.asarray(gyro_array, dtype=np.float64)
+    except Exception:
+        return []
+    if accel.ndim != 2 or accel.shape[1] < 4:
+        accel = np.empty((0, 4), dtype=np.float64)
+    if gyro.ndim != 2 or gyro.shape[1] < 4:
+        gyro = np.empty((0, 4), dtype=np.float64)
+    if not len(accel) and not len(gyro):
+        return []
+
+    roll_axis = str(roll_axis).strip().lower()
+    if roll_axis not in ("x", "y", "z"):
+        roll_axis = "z"
+    if len(accel):
+        accel = accel[np.argsort(accel[:, 0], kind="stable")]
+        up_axis = "xyz"[int(np.argmax(np.sum(np.abs(accel[:, 1:4]), axis=0)))]
+    else:
+        up_axis = "z"
+    if len(gyro):
+        gyro = gyro[np.argsort(gyro[:, 0], kind="stable")]
+
+    def as_dt(timestamp: float) -> datetime:
+        dt = datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
+        return dt if tz_aware else dt.replace(tzinfo=None)
+
+    def roll_from_row(row: Any) -> float:
+        return accel_roll_deg((row[1], row[2], row[3]), roll_axis, up_axis)
+
+    if not len(gyro):
+        return [(as_dt(row[0]), roll_from_row(row)) for row in accel]
+
+    gyro_axis = _AXIS_INDEX[roll_axis] + 1
+    if not len(accel):
+        out: list[tuple[datetime, float]] = []
+        roll = 0.0
+        previous_ts: Optional[float] = None
+        for row in gyro:
+            timestamp = float(row[0])
+            if previous_ts is not None:
+                delta_s = timestamp - previous_ts
+                if 0.0 < delta_s <= max_gap_s:
+                    roll += float(row[gyro_axis]) * 180.0 / math.pi * delta_s
+            out.append((as_dt(timestamp), roll))
+            previous_ts = timestamp
+        return out
+
+    accel_ts = accel[:, 0]
+    roll = roll_from_row(accel[0])
+    out = []
+    previous_ts = None
+    for row in gyro:
+        timestamp = float(row[0])
+        if previous_ts is not None:
+            delta_s = timestamp - previous_ts
+            if 0.0 < delta_s <= max_gap_s:
+                roll += float(row[gyro_axis]) * 180.0 / math.pi * delta_s
+                index = int(np.searchsorted(accel_ts, timestamp, side="left"))
+                if index >= len(accel):
+                    nearest = accel[-1]
+                else:
+                    nearest = accel[index]
+                    if index > 0 and abs(float(accel[index - 1, 0]) - timestamp) < abs(float(nearest[0]) - timestamp):
+                        nearest = accel[index - 1]
+                roll = alpha * roll + (1.0 - alpha) * roll_from_row(nearest)
+        out.append((as_dt(timestamp), roll))
+        previous_ts = timestamp
+    return out
+
+
 _ROLL_TIMES_CACHE: dict[int, tuple[int, Any, Any, list]] = {}
 
 
@@ -216,6 +302,8 @@ def interpolate_roll(
         target_dt = target_dt.replace(tzinfo=None)
     times = _get_naive_roll_times(roll_samples)
     if target_dt <= times[0]:
+        if target_dt < times[0]:
+            return None
         return float(roll_samples[0][1])
     if target_dt >= times[-1]:
         return float(roll_samples[-1][1])
@@ -227,6 +315,61 @@ def interpolate_roll(
         return float(v0)
     frac = (target_dt - t0).total_seconds() / span
     return float(v0 + (v1 - v0) * frac)
+
+
+def smooth_roll_samples(
+    roll_samples: list[tuple[datetime, float]],
+    window_s: float = 0.0,
+) -> list[tuple[datetime, float]]:
+    """Smooth roll samples over a symmetric time window [-window_s/2, +window_s/2].
+
+    Uses time-based precomputation so live preview seek and final render give identical results.
+    When window_s <= 0.0, returns the original samples unmodified.
+    """
+    if not roll_samples or window_s <= 0.0:
+        return roll_samples
+
+    valid = [
+        (s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0], float(s[1]))
+        for s in roll_samples
+        if s[1] is not None and math.isfinite(float(s[1]))
+    ]
+    if not valid:
+        return roll_samples
+
+    try:
+        import numpy as np
+        half = float(window_s) / 2.0
+        ts = np.array([s[0].timestamp() for s in valid], dtype=np.float64)
+        vals = np.array([s[1] for s in valid], dtype=np.float64)
+
+        cum_vals = np.concatenate(([0.0], np.cumsum(vals)))
+        left_idx = np.searchsorted(ts, ts - half, side="left")
+        right_idx = np.searchsorted(ts, ts + half, side="right")
+
+        counts = right_idx - left_idx
+        sums = cum_vals[right_idx] - cum_vals[left_idx]
+        smoothed_vals = (sums / np.maximum(1, counts)).tolist()
+        val_map = {valid[i][0]: float(smoothed_vals[i]) for i in range(len(valid))}
+    except Exception:
+        half = float(window_s) / 2.0
+        val_map = {}
+        for i, (dt, _) in enumerate(valid):
+            t_curr = dt.timestamp()
+            t_min = t_curr - half
+            t_max = t_curr + half
+            window_vals = [v for d, v in valid if t_min <= d.timestamp() <= t_max]
+            if window_vals:
+                val_map[dt] = float(sum(window_vals) / len(window_vals))
+
+    result: list[tuple[datetime, float]] = []
+    for s in roll_samples:
+        dt = s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0]
+        if dt in val_map:
+            result.append((s[0], val_map[dt]))
+        else:
+            result.append(s)
+    return result
 
 
 def merge_axis_samples(

@@ -14,7 +14,13 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
-from src.indicators.helpers import _parse_marker_color, s, apply_map_shape
+from src.indicators.helpers import (
+    _parse_marker_color,
+    s,
+    apply_map_shape,
+    apply_map_opacity,
+    apply_map_pitch,
+)
 
 
 def _shared_map_renderers() -> dict:
@@ -24,6 +30,12 @@ def _shared_map_renderers() -> dict:
     if not hasattr(_render_moving_map_indicator, "_map_renderers"):
         _render_moving_map_indicator._map_renderers = {}
     return _render_moving_map_indicator._map_renderers
+
+
+def clear_moving_map_cache() -> None:
+    """Clear cached MovingMapRenderer instances."""
+    if hasattr(_render_moving_map_indicator, "_map_renderers"):
+        _render_moving_map_indicator._map_renderers.clear()
 
 
 def map_required_tile_margin(canvas_w: int, map_w: int, track_up: bool = True) -> int:
@@ -54,20 +66,32 @@ def ensure_map_tiles_cached(
     if not cfg or not cfg.get("enabled", True):
         return {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
 
-    from src.moving_map import _lat_lon_to_tile, _download_tile_raw, get_shared_tile_cache
-    map_w = s(cfg.get("size", 0.1), canvas_w)
+    from src.moving_map import (
+        _download_tile_raw, get_shared_tile_cache, iter_track_center_tiles,
+        tile_range_for_center_tile, track_up_working_size,
+    )
+    raw_map_w = s(cfg.get("size", 0.1), canvas_w)
+    # AMD's aligned working raster may be a few pixels larger than the normal
+    # CPU size.  Prefetch the larger footprint so both consumers share cover.
+    aligned_map_w = _quantize_map_val(
+        int(raw_map_w), os.environ.get("AMD_MAP_ALIGN", "1"),
+    )
+    map_w = max(raw_map_w, aligned_map_w)
     render_plan = _map_render_plan(canvas_w, map_w, int(cfg.get("zoom", 14)))
     effective_zoom = render_plan["effective_zoom"]
     map_style = cfg.get("map_style", "light_all")
     is_track_up = str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
+    render_size = track_up_working_size(map_w) if is_track_up else map_w
     margin = map_required_tile_margin(canvas_w, map_w, is_track_up)
 
     needed: set[tuple[int, int, int]] = set()
-    for _, lat, lon in gps_track:
-        tx, ty, _, _ = _lat_lon_to_tile(lat, lon, effective_zoom)
-        for dx in range(-margin, margin + 1):
-            for dy in range(-margin, margin + 1):
-                needed.add((effective_zoom, tx + dx, ty + dy))
+    for tx, ty in iter_track_center_tiles(gps_track, effective_zoom):
+        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(
+            tx, ty, render_size, render_size,
+        )
+        for tile_y in range(ty1, ty2):
+            for tile_x in range(tx1, tx2):
+                needed.add((effective_zoom, tile_x, tile_y))
 
     cache = get_shared_tile_cache()
     missing: list[tuple[int, int, int]] = []
@@ -83,7 +107,7 @@ def ensure_map_tiles_cached(
     if missing:
         print(
             f"[Map Preload] Pre-caching {len(missing)}/{total} missing tiles "
-            f"(provider={map_style}, zoom={effective_zoom}, margin={margin})...",
+            f"(provider={map_style}, zoom={effective_zoom}, render_size={render_size})...",
             flush=True,
         )
         for i, (z, x, y) in enumerate(missing, 1):
@@ -107,6 +131,7 @@ def ensure_map_tiles_cached(
         "provider": map_style,
         "zoom": effective_zoom,
         "margin": margin,
+        "render_size": render_size,
     }
 
 
@@ -143,6 +168,8 @@ def render_map_working_image(
         effective_zoom = render_plan["effective_zoom"]
         map_style = cfg.get("map_style", "light_all")
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        if bool(cfg.get("arrow_marker", False)) and marker_style == "dot":
+            marker_style = "directional"
         track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
         if len(track_color) == 3:
             track_color = (*track_color, 220)
@@ -213,6 +240,8 @@ def render_map_working_image(
             )
         renderer._is_first_render = False
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         rx = s(cfg["x"], canvas_w)
         ry = s(cfg["y"], canvas_h)
         dst_bbox = (int(rx - map_w // 2), int(ry - map_w // 2), int(map_w), int(map_w))
@@ -305,6 +334,8 @@ def render_map_unrotated_working_image(
         working_size = _quantize_map_val(int(raw_working_size), align_spec)
         map_style = cfg.get("map_style", "light_all")
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        if bool(cfg.get("arrow_marker", False)) and marker_style == "dot":
+            marker_style = "directional"
         track_color = _parse_marker_color(cfg.get("track_color", "#FF3C1E"))
         if len(track_color) == 3:
             track_color = (*track_color, 220)
@@ -377,6 +408,8 @@ def render_map_unrotated_working_image(
         )
         if angle == 0.0:
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         renderer._is_first_render = False
         crop_key = getattr(renderer, "_last_crop_key", None)
         if map_img is not None and crop_key is not None:
@@ -506,6 +539,8 @@ def _render_moving_map_indicator(
         working_size = render_plan["working_size"]
         map_style = cfg.get("map_style", "light_all")
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
+        if bool(cfg.get("arrow_marker", False)) and marker_style == "dot":
+            marker_style = "directional"
         cache_key = (track_id, effective_zoom, map_style, marker_style)
         if not hasattr(_render_moving_map_indicator, "_map_renderers"):
             _render_moving_map_indicator._map_renderers = {}
@@ -589,6 +624,8 @@ def _render_moving_map_indicator(
                 if map_img.size != (map_w, map_h):
                     map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
                 map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+                map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+                map_img = apply_map_pitch(map_img, cfg.get("pitch"))
                 return map_img, _pos_xy[0], _pos_xy[1], None
 
             if ctx is None:
@@ -627,6 +664,9 @@ def _render_moving_map_indicator(
                 marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
             )
             if ov is not None:
+                ov = apply_map_shape(ov, cfg.get("map_shape", "square"))
+                ov = apply_map_opacity(ov, cfg.get("opacity"))
+                ov = apply_map_pitch(ov, cfg.get("pitch"))
                 return ov, _pos_xy[0], _pos_xy[1], None
             return _placeholder()
 
@@ -717,6 +757,8 @@ def _render_moving_map_indicator(
             map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:
         return None, 0, 0, None

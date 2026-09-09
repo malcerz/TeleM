@@ -1,10 +1,23 @@
+from __future__ import annotations
+
+def _filter_logical_stderr(raw_bytes: bytes, max_lines: int = 200) -> str:
+    """Extract logical stderr lines from FFmpeg output, filtering progress updates."""
+    text = raw_bytes.decode(errors="replace")
+    raw_lines = [line.strip() for chunk in text.split("\n") for line in chunk.split("\r") if line.strip()]
+    logical = [
+        line for line in raw_lines
+        if not (line.startswith("frame=") or line.startswith("size=") or line.startswith("Lsize=") or "fps=" in line and "time=" in line)
+    ]
+    if not logical:
+        logical = raw_lines[-50:]
+    return "\n".join(logical[-max_lines:])
+
 """Production AMD Native D3D11 + AMF Exporter Pipeline for TeleM.
 
 Integrates the native C++ Direct3D 11 GPU VideoProcessor, persistent Python/Pillow RGBA HUD buffer,
 and direct AMD AMF hardware encoding inside telem_amd_native.dll.
 """
 
-from __future__ import annotations
 
 import os
 import sys
@@ -21,12 +34,16 @@ import ctypes
 from ctypes import wintypes
 import queue
 import threading
+import tempfile
+import shutil
+from collections import deque
 from dataclasses import dataclass, field
 from ctypes import byref, c_void_p, c_uint, c_uint64, c_int, c_double, c_uint8, POINTER
 from datetime import datetime, timedelta
 import numpy as np
 from pathlib import Path
 from typing import Any, Callable, Optional
+from src.ffmpeg.amd_pipeline_watchdog import NonBlockingProgressDispatcher
 
 try:
     from PIL import Image
@@ -55,11 +72,156 @@ from src.ffmpeg.worker_cache import init_worker, _resolve_cache_value, WORKER_CA
 from ctypes import c_float
 from src.ffmpeg.amd_config import make_benchmark_fingerprint, resolve_amd_config
 from src.render_logging import render_debug_enabled, render_debug_print, render_print
+from src.render_progress import RenderCancelReason, render_cancel_log_message
+
 
 # Keep one renderer verbosity switch for exporter diagnostics.  Warnings and
 # errors remain visible; TELEM_RENDER_DEBUG=1 restores the detailed stream.
 print = render_print
 AMD_NATIVE_ABI_VERSION = 9
+
+
+# Pillow's ``ImagingCore.ptr`` is a PyCapsule.  Keep the C-API prototypes in
+# one place so the map upload path can borrow the existing RGBA storage rather
+# than allocating a new ``Image.tobytes()`` buffer for every frame.
+_PY_CAPSULE_GET_NAME = ctypes.pythonapi.PyCapsule_GetName
+_PY_CAPSULE_GET_NAME.argtypes = [ctypes.py_object]
+_PY_CAPSULE_GET_NAME.restype = ctypes.c_char_p
+_PY_CAPSULE_GET_POINTER = ctypes.pythonapi.PyCapsule_GetPointer
+_PY_CAPSULE_GET_POINTER.argtypes = [ctypes.py_object, ctypes.c_char_p]
+_PY_CAPSULE_GET_POINTER.restype = ctypes.c_void_p
+
+
+def _pillow_rgba_contiguous_pointer(image: Any) -> Optional[tuple[int, int]]:
+    """Return ``(first_row, stride)`` for a contiguous RGBA Pillow image.
+
+    Pillow does not expose this as a stable high-level API, so this helper is
+    deliberately guarded and returns ``None`` on any version/layout mismatch;
+    callers retain the byte-copy fallback.  The pointer is only borrowed for
+    the duration of the native upload while the image reference is retained.
+    """
+    if image is None or getattr(image, "mode", None) != "RGBA":
+        return None
+    try:
+        core = image.im
+        capsule = core.ptr
+        cap_name = _PY_CAPSULE_GET_NAME(capsule)
+        raw_ptr = _PY_CAPSULE_GET_POINTER(capsule, cap_name)
+        if not raw_ptr:
+            return None
+        width, height = (int(image.size[0]), int(image.size[1]))
+        if width <= 0 or height <= 0:
+            return None
+        stride = width * 4
+        # ``Imaging`` stores its row-pointer table at this offset in the
+        # Pillow ABI used by TeleM.  Validate first/last rows before exposing
+        # the borrowed pointer to native code.
+        row_table = ctypes.c_void_p.from_address(int(raw_ptr) + 40).value
+        if not row_table:
+            return None
+        first_row = ctypes.c_void_p.from_address(int(row_table)).value
+        last_row = ctypes.c_void_p.from_address(
+            int(row_table) + (height - 1) * ctypes.sizeof(ctypes.c_void_p)
+        ).value
+        if not first_row or not last_row:
+            return None
+        if int(last_row) != int(first_row) + (height - 1) * stride:
+            return None
+        return int(first_row), stride
+    except Exception:
+        return None
+
+
+def _create_amd_local_scratch_dir(output_file: str | Path) -> Path:
+    """Compatibility helper retained for older tests/tools.
+
+    The production Stage A path no longer calls this helper; it writes the
+    proof-compatible ``.part.temp_video.mp4`` beside the requested output.
+    """
+    configured = os.environ.get("AMD_LOCAL_SCRATCH_DIR", "").strip()
+    parent = Path(configured).expanduser() if configured else Path(tempfile.gettempdir())
+    parent.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=f"telem-amd-stage-{os.getpid()}-", dir=str(parent))).resolve()
+
+
+def _cleanup_cancelled_amd_outputs(
+    output_part: str | Path,
+    stage_video: str | Path | None,
+    audio_concat: str | Path | None,
+) -> list[Path]:
+    """Remove only incomplete AMD artifacts after an explicit cancellation.
+
+    The completed output path is intentionally not accepted by this helper,
+    which makes it impossible for cancellation cleanup to delete a valid
+    final render.  Error/finalization recovery keeps its separate policy.
+    """
+    removed: list[Path] = []
+    candidates = [output_part, stage_video, audio_concat]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        path = Path(candidate)
+        try:
+            path.unlink()
+            removed.append(path)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            print(
+                f"[AMD CANCEL CLEANUP] failed={path} error={exc}",
+                flush=True,
+            )
+    return removed
+
+
+class AMDNativeFinalizationError(RuntimeError):
+    """Final MP4 storage/mux failure; callers must not silently software-fallback."""
+
+
+def _audio_concat_entries(video_timeline: Any) -> list[str]:
+    """Build the canonical source-local audio plan for an effective timeline.
+
+    ``video_timeline`` is already the GUI/cut-resolved timeline supplied to the
+    AMD exporter.  Reusing its clip-local bounds keeps audio semantics identical
+    to native video for single clips, cross-boundary ranges and multiple cuts.
+    """
+    entries: list[str] = []
+    for clip in getattr(video_timeline, "clips", ()):
+        entries.append("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+        local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+        if local_start > 0.0:
+            entries.append(f"inpoint {local_start:.9f}\n")
+        local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+        source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+        if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+            entries.append(f"outpoint {local_end:.9f}\n")
+    return entries
+
+
+def _write_audio_concat_plan(path: str | Path, video_timeline: Any) -> Path:
+    """Write a small concat demuxer plan before the live muxer starts."""
+    plan = Path(path)
+    with plan.open("w", encoding="utf-8", newline="\n") as concat_file:
+        concat_file.writelines(_audio_concat_entries(video_timeline))
+    return plan
+
+
+def _wait_for_process_exit(process: Any, cancel_event: Optional[Any] = None) -> bool:
+    """Compatibility helper retained for older tests/tools; unused by mux hot path."""
+    cancelled = False
+    while process.poll() is None:
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+            try:
+                process.kill()
+            except Exception:
+                pass
+            break
+        time.sleep(0.1)
+    if cancelled and process.poll() is None:
+        process.wait()
+    return not cancelled
+
 
 # ── ETAP 1A: Data contract for AFTER-MAP GPU_SPLIT Chart Capture ──────────────
 @dataclass
@@ -885,6 +1047,7 @@ def _extract_exact_above_regions(
     canvas_w: int,
     canvas_h: int,
     batched_rects_buf: Optional[Any] = None,
+    debug_frame_idx: int | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """ETAP 10R EXACT + ETAP 4F DIRECT ZERO-COPY + ETAP 5K BATCHED: extract ABOVE dirty regions.
 
@@ -912,9 +1075,28 @@ def _extract_exact_above_regions(
     fallback_clusters = 0
     non_contig_regions = 0
     fallback_reasons: dict[str, int] = {}
+    _audit_regions = os.environ.get("AMD_MEMORY_AUDIT", "0").strip().lower() in {"1", "true", "yes", "on"}
+    try:
+        _audit_region_every = max(1, int(os.environ.get("AMD_MEMORY_AUDIT_EVERY", "250")))
+    except ValueError:
+        _audit_region_every = 250
+    _audit_regions = _audit_regions and (
+        debug_frame_idx is None or (debug_frame_idx % _audit_region_every) == 0
+    )
 
     for (cx, cy, cw, ch), members in clusters_with_members:
         candidate_pixels += cw * ch
+
+        # Memory-growth diagnostics are deliberately opt-in.  Report the
+        # exact rectangles before Pillow allocates a crop/byte buffer so a
+        # MemoryError in ``tobytes`` can be distinguished from an unexpectedly
+        # huge dirty region or from process/native memory pressure.
+        if _audit_regions:
+            print(
+                "[AMD MEMORY AUDIT] above_region_candidate "
+                f"frame={debug_frame_idx} cluster=({cx},{cy},{cw},{ch}) members={len(members)}",
+                flush=True,
+            )
 
         t_union_start = time.perf_counter()
         rects: list[tuple[int, int, int, int]] = []
@@ -970,6 +1152,13 @@ def _extract_exact_above_regions(
                     reg_x, reg_y = cx + lx, cy + ly
                     uploaded_pixels += reg_w * reg_h
                     t_b_start = time.perf_counter()
+                    if _audit_regions:
+                        print(
+                            "[AMD MEMORY AUDIT] above_region_alloc "
+                            f"frame={debug_frame_idx} kind=fallback rect=({reg_x},{reg_y},{reg_w},{reg_h}) "
+                            f"bytes={reg_w * reg_h * 4}",
+                            flush=True,
+                        )
                     r_bytes = reg_img.tobytes("raw", "RGBA")
                     tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
                     uploaded_bytes += len(r_bytes)
@@ -989,6 +1178,12 @@ def _extract_exact_above_regions(
         reg_img = above_full.crop((ex, ey, ex + ew, ey + eh))
         exact_crop_ms += (time.perf_counter() - t_crop_start) * 1000.0
         t_b_start = time.perf_counter()
+        if _audit_regions:
+            print(
+                "[AMD MEMORY AUDIT] above_region_alloc "
+                f"frame={debug_frame_idx} kind=exact rect=({ex},{ey},{ew},{eh}) bytes={ew * eh * 4}",
+                flush=True,
+            )
         r_bytes = reg_img.tobytes("raw", "RGBA")
         tobytes_ms += (time.perf_counter() - t_b_start) * 1000.0
         regions_out.append((ex, ey, ew, eh, r_bytes))
@@ -1777,8 +1972,24 @@ def export_amd_native_d3d11(
     active_process_holder: Optional[dict] = None,
     video_timeline: Optional[Any] = None,
     amd_decode_mode: Optional[str] = None,
+    cancel_reason_provider: Optional[Callable[[], Any]] = None,
+    preview_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
+    preview_session: Optional[Any] = None,
+    generation_id: int = 0,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
+    if active_process_holder is None:
+        active_process_holder = {}
+
+    def cancel_message() -> str:
+        reason = RenderCancelReason.INTERNAL_STOP
+        if cancel_reason_provider is not None:
+            try:
+                candidate = cancel_reason_provider()
+                reason = candidate if isinstance(candidate, RenderCancelReason) else RenderCancelReason(str(candidate))
+            except (ValueError, TypeError):
+                reason = RenderCancelReason.INTERNAL_STOP
+        return render_cancel_log_message(reason)
     # The GUI starts export on a worker thread while its editable layout remains
     # reachable by the UI.  Snapshot it once so rendering and the ETAP 5B
     # dependency plan are immutable for the whole export.
@@ -1825,6 +2036,87 @@ def export_amd_native_d3d11(
     # consumer so the audit report can quantify per-frame allocation pressure.
     # Disabled by default; remove together with the AMD render-path audit.
     audit_allocs_enabled = _env_flag("AMD_AUDIT_ALLOCS", False)
+    # Bounded memory audit for long full-HUD reproductions.  This is inert in
+    # production and intentionally samples only every N frames; it must not
+    # retain per-frame objects or enable tracemalloc.
+    memory_audit_enabled = _env_flag("AMD_MEMORY_AUDIT", False)
+    try:
+        memory_audit_every = max(1, int(os.environ.get("AMD_MEMORY_AUDIT_EVERY", "250")))
+    except ValueError:
+        memory_audit_every = 250
+
+    def _memory_audit_sample(frame_idx: int, stage: str) -> None:
+        if not memory_audit_enabled or (frame_idx % memory_audit_every) != 0:
+            return
+        try:
+            import gc
+            # Prefer psutil when present, but keep the audit usable in the
+            # application's normal Windows environment where it is not an
+            # installed dependency.  PROCESS_MEMORY_COUNTERS gives the same
+            # process-local working-set/private-commit trend without adding a
+            # production dependency.
+            try:
+                import psutil
+                proc = psutil.Process(os.getpid())
+                mi = proc.memory_info()
+                rss = int(mi.rss)
+                private = int(getattr(mi, "private", 0) or 0)
+                commit = int(getattr(mi, "vms", 0) or 0)
+            except ImportError:
+                class _ProcessMemoryCounters(ctypes.Structure):
+                    _fields_ = [
+                        ("cb", wintypes.DWORD),
+                        ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t),
+                        ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t),
+                        ("PeakPagefileUsage", ctypes.c_size_t),
+                    ]
+                counters = _ProcessMemoryCounters()
+                counters.cb = ctypes.sizeof(counters)
+                _get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+                _get_process_memory_info.argtypes = [
+                    wintypes.HANDLE,
+                    ctypes.POINTER(_ProcessMemoryCounters),
+                    wintypes.DWORD,
+                ]
+                _get_process_memory_info.restype = wintypes.BOOL
+                ok = _get_process_memory_info(
+                    ctypes.windll.kernel32.GetCurrentProcess(),
+                    ctypes.byref(counters),
+                    counters.cb,
+                )
+                if not ok:
+                    raise OSError("GetProcessMemoryInfo failed")
+                rss = int(counters.WorkingSetSize)
+                private = int(counters.PagefileUsage)
+                commit = int(counters.PagefileUsage)
+            pil_images = 0
+            if Image is not None:
+                pil_images = sum(1 for obj in gc.get_objects() if isinstance(obj, Image.Image))
+            map_renderers = 0
+            map_tiles = 0
+            try:
+                from src.indicators.moving_map import _shared_map_renderers
+                renderers = _shared_map_renderers()
+                map_renderers = len(renderers)
+                map_tiles = sum(len(getattr(r, "_cache", None)._mem)
+                                for r in renderers.values()
+                                if getattr(r, "_cache", None) is not None)
+            except Exception:
+                pass
+            print(
+                "[AMD MEMORY AUDIT] "
+                f"stage={stage} frame={frame_idx} rss={rss} private={private} commit={commit} "
+                f"pil_images={pil_images} map_renderers={map_renderers} map_tiles={map_tiles}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"[AMD MEMORY AUDIT] stage={stage} frame={frame_idx} unavailable={exc}", flush=True)
     # ── AMD RENDER PATH AUDIT 2 (temporary diagnostic instrumentation) ──
     # AMD_FRAME_TRACE=1 records a full per-frame wall-clock accounting (frame
     # total, producer children, consumer children, inter-frame gaps) to a CSV
@@ -2075,10 +2367,11 @@ def export_amd_native_d3d11(
     map_source_reuse_enabled = _env_flag("AMD_MAP_SOURCE_REUSE", False)
     map_cfg = layout.get("indicators", {}).get("track_map", {})
     is_track_up = str(map_cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
-    gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up
+    has_pitch = float(map_cfg.get("pitch", 0.0) or 0.0) > 0.001
+    gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up and not has_pitch
     print(
         f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} "
-        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}) | "
+        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}, pitch={map_cfg.get('pitch', 0.0)}) | "
         f"AMD_MAP_SOURCE_REUSE: {1 if map_source_reuse_enabled else 0}",
         flush=True,
     )
@@ -2363,6 +2656,23 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_process_frame.restype = c_int
     native_dll.telem_amd_process_frame.argtypes = [c_void_p, c_uint, c_int]
+
+    # AMD Export Preview GPU frame-tap ABI.  The functions are optional while
+    # older diagnostic DLLs are still present, but production preview uses this
+    # path whenever the current DLL exposes it.
+    native_preview_set_tap = getattr(native_dll, "telem_amd_set_preview_tap", None)
+    native_preview_poll_tap = getattr(native_dll, "telem_amd_poll_preview_tap", None)
+    if native_preview_set_tap is not None:
+        native_preview_set_tap.restype = c_int
+        native_preview_set_tap.argtypes = [
+            c_void_p, c_int, c_uint, c_uint, c_uint,
+        ]
+    if native_preview_poll_tap is not None:
+        native_preview_poll_tap.restype = c_int
+        native_preview_poll_tap.argtypes = [
+            c_void_p, POINTER(c_uint8), c_uint,
+            POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), POINTER(c_double),
+        ]
 
     native_dll.telem_amd_dump_checkpoint.restype = c_int
     native_dll.telem_amd_dump_checkpoint.argtypes = [c_void_p, c_uint, ctypes.c_char_p, ctypes.c_wchar_p]
@@ -2725,6 +3035,8 @@ def export_amd_native_d3d11(
     fps_num = fps_rate.numerator
     fps_den = fps_rate.denominator
 
+    if os.environ.get("TELEM_AMD_CHILD_PROCESS") == "1":
+        print("[AMD CHILD NATIVE INIT] telem_amd_create", flush=True)
     print("[AMD NATIVE D3D11] Initializing telem_amd_native context...", flush=True)
     # ── REAL GUI production configuration summary (integration fix) ───────
     print("[AMD NATIVE D3D11] === REAL PRODUCTION CONFIG ===", flush=True)
@@ -2754,6 +3066,12 @@ def export_amd_native_d3d11(
     # Eliminates buffering the full temporary .h265 bitstream on disk.
     is_multi_file = video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1
     direct_mux_enabled = _env_flag("AMD_DIRECT_MUX", True) and (amf_mode not in ("SUBMIT_NO_MUX", "BYPASS"))
+    # Production multi-file success is a single live A/V mux.  The previous
+    # full-size Stage A -> Stage C copy remains available only as an explicit
+    # diagnostic/recovery mode.
+    single_pass_av_mux = bool(
+        is_multi_file and _env_flag("AMD_SINGLE_PASS_AV_MUX", True)
+    )
     direct_mux_completed = False
     audio_concat_path: Optional[Path] = None
 
@@ -2761,11 +3079,29 @@ def export_amd_native_d3d11(
     h_pipe: Any = None
     pump_thread: threading.Thread | None = None
     stderr_thread: threading.Thread | None = None
-    mux_stderr_lines: list[bytes] = []
+    mux_stderr_lines = deque(maxlen=200)
     mux_pump_error: Optional[str] = None
-    mux_pump_stats: dict[str, int] = {"bytes": 0, "chunks": 0}
+    mux_pump_stats: dict[str, Any] = {
+        "bytes": 0,
+        "chunks": 0,
+        "pipe_read_bytes": 0,
+        "ffmpeg_stdin_bytes": 0,
+        "exit_reason": "not_started",
+    }
+    native_frame_observed = -1
+    progress_dispatcher_holder: list[NonBlockingProgressDispatcher | None] = [None]
     output_part_str = output_file_str + ".part"
     native_out_target = output_file_str
+    stage_video_str: Optional[str] = None
+    # Stage A deliberately stays beside the requested output.  The later
+    # local-scratch routing was the USB-specific regression under audit.
+    stage_scratch_dir: Optional[Path] = None
+    stage_a_size_bytes = 0
+    stage_a_growth_mbps = 0.0
+    stage_c_elapsed_ms = 0.0
+    stage_c_output_size_bytes = 0
+    stage_c_growth_mbps = 0.0
+    finalization_summary: dict[str, Any] = {}
 
     if direct_mux_enabled:
         if os.path.exists(output_part_str):
@@ -2779,7 +3115,7 @@ def export_amd_native_d3d11(
         kernel32 = ctypes.windll.kernel32
         h_pipe = kernel32.CreateNamedPipeW(
             pipe_server_name,
-            0x00000001,  # PIPE_ACCESS_INBOUND
+            0x00000001,  # PIPE_ACCESS_INBOUND (synchronous proof lifecycle)
             0x00000000,  # PIPE_TYPE_BYTE | PIPE_WAIT
             1,
             4 * 1024 * 1024,  # 4MB buffer
@@ -2792,44 +3128,72 @@ def export_amd_native_d3d11(
             direct_mux_enabled = False
             h_pipe = None
         else:
-            if is_multi_file:
-                audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
-                with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
-                    for clip in video_timeline.clips:
-                        concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
-                        local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
-                        if local_start > 0.0:
-                            concat_file.write(f"inpoint {local_start:.9f}\n")
-                        local_end = float(getattr(clip, "local_end_s", clip.duration_s))
-                        source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
-                        if source_duration <= 0.0 or local_end < source_duration - 1e-6:
-                            concat_file.write(f"outpoint {local_end:.9f}\n")
-                audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
+            if is_multi_file and not single_pass_av_mux:
+                stage_video_str = output_part_str + ".temp_video.mp4"
+                if os.path.exists(stage_video_str):
+                    try:
+                        os.remove(stage_video_str)
+                    except OSError:
+                        pass
+                target_live_out = stage_video_str
+                # Explicit legacy diagnostic path: video-only Stage A followed
+                # by the old full-size Stage C remux.
+                cmd_live_mux = [
+                    ffmpeg_exe, "-y", "-f", "hevc",
+                    "-r", f"{fps_num}/{fps_den}", "-i", "-",
+                    "-map", "0:v", "-t", f"{duration_s:.6f}",
+                    "-c:v", "copy", "-an", "-f", "mp4", target_live_out,
+                ]
             else:
+                target_live_out = output_part_str
                 audio_args: list[str] = ["-i", input_file_str]
-                if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+                if single_pass_av_mux:
+                    audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
+                    try:
+                        _write_audio_concat_plan(audio_concat_path, video_timeline)
+                    except OSError as exc:
+                        # A storage failure while creating the tiny plan is a
+                        # finalization failure too: do not silently switch to
+                        # software finalization and recreate a full-size copy.
+                        raise AMDNativeFinalizationError(
+                            f"AMD single-pass audio plan write failed: {exc}"
+                        ) from exc
+                    audio_args = [
+                        # Concat demuxer inpoint seeks can retain the source
+                        # packet timestamp (notably on clip-2 fragments).
+                        # Shift the copied stream back to zero so the global
+                        # ``-t`` applies to the effective timeline rather
+                        # than discarding the first ~N seconds.
+                        "-copyts", "-avoid_negative_ts", "make_zero",
+                        "-f", "concat", "-safe", "0", "-i", str(audio_concat_path)
+                    ]
+                    print(
+                        f"[AMD SINGLE-PASS A/V MUX] audio plan={audio_concat_path} "
+                        f"clips={video_timeline.clip_count}", flush=True,
+                    )
+                elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
                     clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
                     if clip0_local_start > 0.0:
                         audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", input_file_str]
 
-            cmd_live_mux = [
-                ffmpeg_exe, "-y",
-                "-f", "hevc",
-                "-r", f"{fps_num}/{fps_den}",
-                "-i", "-",
-                *audio_args,
-                "-map", "0:v", "-map", "1:a?",
-                "-t", f"{duration_s:.6f}",
-                "-c:v", "copy",
-                "-c:a", "copy",
-                "-f", "mp4",
-                output_part_str,
-            ]
+                cmd_live_mux = [
+                    ffmpeg_exe, "-y",
+                    "-f", "hevc",
+                    "-r", f"{fps_num}/{fps_den}",
+                    "-i", "-",
+                    *audio_args,
+                    "-map", "0:v", "-map", "1:a?",
+                    "-t", f"{duration_s:.6f}",
+                    "-c:v", "copy",
+                    "-c:a", "copy",
+                    "-f", "mp4",
+                    target_live_out,
+                ]
             try:
                 proc_mux = subprocess.Popen(
                     cmd_live_mux,
                     stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                 )
             except Exception as e:
@@ -2841,10 +3205,14 @@ def export_amd_native_d3d11(
 
         if direct_mux_enabled and proc_mux is not None and h_pipe is not None:
             native_out_target = pipe_base
+            if active_process_holder is not None:
+                active_process_holder["process"] = proc_mux
             mode_str = "multi" if is_multi_file else "single"
             clip_count_str = str(getattr(video_timeline, "clip_count", 1) if video_timeline else 1)
-            audio_mode_str = "concat" if is_multi_file else "source"
+            audio_mode_str = "concat" if (is_multi_file or audio_concat_path is not None) else "source"
+            mux_mode_str = "single_pass_av" if single_pass_av_mux else "stage_a_then_c"
             print(f"[AMD DIRECT MUX] mode={mode_str} clips={clip_count_str} video=pipe audio={audio_mode_str} output=.part", flush=True)
+            print(f"[AMD DIRECT MUX] topology={mux_mode_str}", flush=True)
             print(f"[AMD NATIVE D3D11] DIRECT MP4 MUX:      ENABLED (live streaming -> {Path(output_part_str).name})", flush=True)
 
             def _mux_stderr_reader():
@@ -2858,30 +3226,101 @@ def export_amd_native_d3d11(
             stderr_thread = threading.Thread(target=_mux_stderr_reader, daemon=True)
             stderr_thread.start()
 
+            # AMD export Preview is a best-effort side consumer of the exact
+            # encoded HEVC stream. It is started only after the final mux
+            # process exists; it never owns or replaces the final mux path.
+            if preview_session is not None:
+                try:
+                    preview_session.configure_input_rate(fps_num, fps_den)
+                    if preview_session.start():
+                        if getattr(preview_session, "is_native_frame_tap", False):
+                            print("[EXPORT PREVIEW GPU TAP] session enabled", flush=True)
+                        else:
+                            print("[EXPORT PREVIEW FFMPEG] continuous HEVC side consumer enabled", flush=True)
+                    else:
+                        print("[EXPORT PREVIEW] unavailable; final render continues", flush=True)
+                except Exception as preview_start_exc:
+                    print(
+                        f"[EXPORT PREVIEW FFMPEG ERROR] start failed: {preview_start_exc}",
+                        flush=True,
+                    )
+
             def _mux_pump_worker():
-                nonlocal mux_pump_error
-                connected = kernel32.ConnectNamedPipe(h_pipe, None)
-                if not connected:
-                    err = kernel32.GetLastError()
-                    if err != 535:  # ERROR_PIPE_CONNECTED
-                        mux_pump_error = f"ConnectNamedPipe error: {err}"
-                        return
+                nonlocal mux_pump_error, h_pipe
                 buf = ctypes.create_string_buffer(256 * 1024)
                 bytes_read = wintypes.DWORD()
                 try:
+                    connected = kernel32.ConnectNamedPipe(h_pipe, None)
+                    if not connected:
+                        err = kernel32.GetLastError()
+                        if err != 535:  # ERROR_PIPE_CONNECTED
+                            mux_pump_error = f"ConnectNamedPipe error: {err}"
+                            return
                     while True:
+                        bytes_read.value = 0
                         res = kernel32.ReadFile(h_pipe, buf, len(buf), ctypes.byref(bytes_read), None)
-                        if not res or bytes_read.value == 0:
+                        if not res:
+                            err = kernel32.GetLastError()
+                            if err in (109, 232):
+                                mux_pump_stats["exit_reason"] = f"pipe_closed_error_{err}"
+                                break
+                            mux_pump_stats["exit_reason"] = f"readfile_error_{err}"
+                            mux_pump_error = f"ReadFile error: {err}"
                             break
+                        if bytes_read.value == 0:
+                            mux_pump_stats["exit_reason"] = "pipe_eof"
+                            break
+                        mux_pump_stats["pipe_read_bytes"] += int(bytes_read.value)
                         if proc_mux.poll() is not None and proc_mux.returncode != 0:
+                            mux_pump_stats["exit_reason"] = "ffmpeg_exited_before_write"
                             mux_pump_error = f"FFmpeg muxer exited prematurely with rc {proc_mux.returncode}"
                             break
-                        proc_mux.stdin.write(buf.raw[:bytes_read.value])
+                        try:
+                            mux_chunk = buf.raw[:bytes_read.value]
+                            proc_mux.stdin.write(mux_chunk)
+                            mux_pump_stats["ffmpeg_stdin_bytes"] += len(mux_chunk)
+                            if not mux_pump_stats.get("first_packet_logged"):
+                                mux_pump_stats["first_packet_logged"] = True
+                                try:
+                                    first_output_size = os.path.getsize(target_live_out)
+                                except OSError:
+                                    first_output_size = 0
+                                first_packet_label = (
+                                    "[MULTIFILE FIRST PACKET] "
+                                    if is_multi_file else "[AMD FIRST PACKET] "
+                                )
+                                print(
+                                    first_packet_label +
+                                    f"frame={native_frame_observed} "
+                                    f"encoded_bytes={len(mux_chunk)} "
+                                    "pipe_write_ok=1 "
+                                    f"pump_read_bytes={mux_pump_stats['pipe_read_bytes']} "
+                                    f"ffmpeg_stdin_bytes={mux_pump_stats['ffmpeg_stdin_bytes']} "
+                                    f"output_size={first_output_size}",
+                                    flush=True,
+                                )
+                        except (BrokenPipeError, OSError) as write_ex:
+                            mux_pump_stats["exit_reason"] = "ffmpeg_stdin_write_error"
+                            mux_pump_error = f"FFmpeg stdin write error: {write_ex}"
+                            break
+                        # The final mux write above has priority. Queueing to
+                        # Preview is non-blocking and may be dropped/disabled.
+                        if preview_session is not None:
+                            try:
+                                preview_session.feed(mux_chunk)
+                            except Exception as preview_feed_exc:
+                                print(
+                                    f"[EXPORT PREVIEW FFMPEG ERROR] feed failed: {preview_feed_exc}",
+                                    flush=True,
+                                )
                         mux_pump_stats["bytes"] += bytes_read.value
                         mux_pump_stats["chunks"] += 1
                 except Exception as ex:
+                    mux_pump_stats["exit_reason"] = "pump_exception"
                     mux_pump_error = f"Pump exception: {ex}"
                 finally:
+                    if mux_pump_stats.get("exit_reason") == "not_started":
+                        mux_pump_stats["exit_reason"] = "pump_finished"
                     try:
                         if proc_mux and proc_mux.stdin:
                             proc_mux.stdin.close()
@@ -2890,6 +3329,7 @@ def export_amd_native_d3d11(
                     try:
                         if h_pipe is not None:
                             kernel32.CloseHandle(h_pipe)
+                            h_pipe = None
                     except Exception:
                         pass
 
@@ -2925,9 +3365,176 @@ def export_amd_native_d3d11(
             except Exception: pass
         return False
 
+    # Bind the native GPU frame tap after the render context exists.  This is
+    # best-effort and never changes final-export success/failure semantics.
+    if preview_session is not None and getattr(preview_session, "is_native_frame_tap", False):
+        try:
+            if native_preview_set_tap is None or native_preview_poll_tap is None:
+                preview_session._fail("native GPU frame tap ABI unavailable")
+            elif not preview_session.bind_native(native_dll, h_context):
+                print(
+                    "[EXPORT PREVIEW GPU TAP] unavailable; final render continues",
+                    flush=True,
+                )
+        except Exception as preview_bind_exc:
+            print(
+                f"[EXPORT PREVIEW GPU TAP ERROR] bind failed: {preview_bind_exc}",
+                flush=True,
+            )
+
+    def _dump_live_mux_failure_context(failed_frame: int) -> None:
+        """Capture and print comprehensive diagnostic dump upon pipe or frame failure."""
+        # Kept as an inert compatibility hook; diagnostics must not participate
+        # in the normal Stage A/C lifecycle.
+        return
+        if failure_context_dumped[0]:
+            return
+        failure_context_dumped[0] = True
+        native_err = wintypes.DWORD(0)
+        native_err_frame = ctypes.c_uint64(0)
+        native_bytes = ctypes.c_uint64(0)
+        native_connected = ctypes.c_int(0)
+        native_cancel_called = ctypes.c_int(0)
+        native_timed_out = ctypes.c_int(0)
+        native_frame = ctypes.c_uint64(0)
+        native_written = ctypes.c_uint64(0)
+        native_encoded = ctypes.c_uint64(0)
+        native_stage = ctypes.c_uint(0)
+        native_stage_age = ctypes.c_uint64(0)
+        native_decoded = ctypes.c_uint64(0)
+        native_composed = ctypes.c_uint64(0)
+        native_submitted = ctypes.c_uint64(0)
+
+        if hasattr(native_dll, "telem_amd_get_pipe_diagnostics") and h_context is not None:
+            try:
+                native_dll.telem_amd_get_pipe_diagnostics(
+                    h_context,
+                    ctypes.byref(native_err),
+                    ctypes.byref(native_err_frame),
+                    ctypes.byref(native_bytes),
+                    ctypes.byref(native_connected),
+                    ctypes.byref(native_cancel_called),
+                    ctypes.byref(native_timed_out),
+                )
+            except Exception as _pe:
+                print(f"[AMD DIAG] Failed to query telem_amd_get_pipe_diagnostics: {_pe}", flush=True)
+        if hasattr(native_dll, "telem_amd_get_liveness"):
+            try:
+                native_dll.telem_amd_get_liveness(
+                    h_context, ctypes.byref(native_frame), ctypes.byref(native_stage),
+                    ctypes.byref(native_stage_age),
+                    ctypes.byref(native_decoded), ctypes.byref(native_composed),
+                    ctypes.byref(native_submitted), ctypes.byref(native_encoded),
+                    ctypes.byref(native_written),
+                )
+            except Exception:
+                pass
+
+        err_names = {
+            0: "ERROR_SUCCESS",
+            109: "ERROR_BROKEN_PIPE",
+            232: "ERROR_NO_DATA",
+            233: "ERROR_PIPE_NOT_CONNECTED",
+            995: "ERROR_OPERATION_ABORTED",
+            996: "ERROR_IO_INCOMPLETE",
+            997: "ERROR_IO_PENDING",
+            6: "ERROR_INVALID_HANDLE",
+            38: "ERROR_HANDLE_EOF",
+        }
+        native_err_val = native_err.value
+        native_err_name = err_names.get(native_err_val, "UNKNOWN_WIN32_ERROR")
+        try:
+            native_err_text = ctypes.FormatError(native_err_val).strip() if native_err_val else "ERROR_SUCCESS"
+        except Exception:
+            native_err_text = "unavailable"
+
+        p_alive = (proc_mux.poll() is None) if proc_mux is not None else False
+        p_pid = proc_mux.pid if proc_mux is not None else None
+        p_rc = proc_mux.poll() if proc_mux is not None else None
+
+        pump_alive = pump_thread.is_alive() if pump_thread is not None else False
+        pump_stop_set = mux_pump_stop.is_set()
+        pump_err = mux_pump_error or "none"
+        pump_exit_reason = mux_pump_stats.get("exit_reason", "none")
+        pump_bytes = mux_pump_stats.get("bytes", 0)
+        pump_chunks = mux_pump_stats.get("chunks", 0)
+
+        c_set = cancel_event.is_set() if cancel_event is not None else False
+        c_reason = "NONE"
+        if cancel_reason_provider is not None:
+            try:
+                c_reason = str(cancel_reason_provider())
+            except Exception:
+                c_reason = "provider_error"
+
+        preview_state: Any = "unavailable"
+        if preview_state_provider is not None:
+            try:
+                preview_state = preview_state_provider()
+            except Exception as exc:
+                preview_state = f"provider_error: {exc}"
+        try:
+            scratch_root = stage_scratch_dir or Path(output_file_str).parent
+            disk_free = shutil.disk_usage(scratch_root).free
+            scratch_size = sum(p.stat().st_size for p in scratch_root.rglob("*") if p.is_file()) if stage_scratch_dir and stage_scratch_dir.exists() else 0
+        except Exception:
+            disk_free = -1
+            scratch_size = -1
+
+        print("================================================================================", flush=True)
+        print(f"[AMD LIVE MUX FAILURE CONTEXT] Frame: {failed_frame}", flush=True)
+        print("--------------------------------------------------------------------------------", flush=True)
+        print(f"1. Native Win32 Named Pipe Writer (telem_amd_native.dll):", flush=True)
+        print(f"   - Last Error Code:       {native_err_val} ({native_err_name})", flush=True)
+        print(f"   - Native Error Text:     {native_err_text}", flush=True)
+        print(f"   - Error Frame:           {native_err_frame.value}", flush=True)
+        print(f"   - Total Bytes Written:   {native_bytes.value}", flush=True)
+        print(f"   - Pipe Connected:        {bool(native_connected.value)}", flush=True)
+        print(f"   - Native Frame:          {native_frame.value}", flush=True)
+        print(f"   - Native Stage:          {NATIVE_STAGE_NAMES.get(int(native_stage.value), native_stage.value)}", flush=True)
+        print(f"   - Native Stage Age:      {native_stage_age.value / 1000.0:.3f}s", flush=True)
+        print(f"   - Native Counters:       decoded={native_decoded.value} composed={native_composed.value} submitted={native_submitted.value} encoded={native_encoded.value} written={native_written.value}", flush=True)
+        print(f"   - CancelIoEx Called:     {bool(native_cancel_called.value)}", flush=True)
+        print(f"   - Write Timed Out (15s): {bool(native_timed_out.value)}", flush=True)
+        print(f"2. Python Pipe Pump Worker:", flush=True)
+        print(f"   - Pump Thread Alive:     {pump_alive}", flush=True)
+        print(f"   - Stop Event Set:        {pump_stop_set}", flush=True)
+        print(f"   - Exit Reason:           {pump_exit_reason}", flush=True)
+        print(f"   - Error:                 {pump_err}", flush=True)
+        print(f"   - Chunks Read:           {pump_chunks}", flush=True)
+        print(f"   - Bytes Read by Pump:    {pump_bytes}", flush=True)
+        print(f"   - Bytes to FFmpeg stdin: {pump_bytes}", flush=True)
+        print(f"   - Pump Bytes to FFmpeg:  {pump_bytes}", flush=True)
+        print(f"   - Pump Write Time ms:    {mux_pump_stats.get('write_ms', 0.0):.3f}", flush=True)
+        print(f"   - Pump Flushes/Time ms:  {mux_pump_stats.get('flushes', 0)}/{mux_pump_stats.get('flush_ms', 0.0):.3f}", flush=True)
+        print(f"   - Total Packets:         {native_written.value or mux_pump_stats.get('chunks', 0)}", flush=True)
+        print(f"3. FFmpeg Live Muxer Process:", flush=True)
+        print(f"   - Alive:                 {p_alive}", flush=True)
+        print(f"   - PID:                   {p_pid}", flush=True)
+        print(f"   - Return Code:           {p_rc}", flush=True)
+        print(f"4. Session Lifecycle & Cancellation:", flush=True)
+        print(f"   - Cancel Event Set:      {c_set}", flush=True)
+        print(f"   - Cancel Reason:         {c_reason}", flush=True)
+        print(f"   - Generation ID:         {generation_id}", flush=True)
+        print(f"   - Preview Worker State:  {preview_state}", flush=True)
+        print(f"   - Render Thread State:   {threading.current_thread().name}/alive={threading.current_thread().is_alive()}", flush=True)
+        print(f"   - Free Disk Bytes:       {disk_free}", flush=True)
+        print(f"   - Scratch Size Bytes:    {scratch_size}", flush=True)
+        print(f"   - App Shutdown:          {'APP_SHUTDOWN' in str(c_reason)}", flush=True)
+        print(f"5. FFmpeg Stderr (tail {len(mux_stderr_lines)} lines):", flush=True)
+        if mux_stderr_lines:
+            for stderr_line in list(mux_stderr_lines)[-100:]:
+                decoded = stderr_line.decode("utf-8", errors="replace").rstrip()
+                if decoded:
+                    print(f"   [stderr] {decoded}", flush=True)
+        else:
+            print("   (no stderr captured)", flush=True)
+        print("================================================================================", flush=True)
+
     def _cleanup_native_resources() -> None:
         """P1-A FIX: Idempotent cleanup of native D3D11 context, decoder process, and direct mux."""
         nonlocal h_context, proc_dec, h_cpu_pipe
+        mux_rc = proc_mux.poll() if proc_mux is not None else None
         if h_cpu_pipe is not None and h_cpu_pipe != -1 and h_cpu_pipe != 0:
             try:
                 kernel32.CloseHandle(h_cpu_pipe)
@@ -2953,8 +3560,12 @@ def export_amd_native_d3d11(
             except Exception as _ce:
                 print(f"[AMD NATIVE D3D11] telem_amd_close error: {_ce}", flush=True)
 
-    def _abort_direct_mux() -> None:
+    def _abort_direct_mux(*, preserve_stage_a: bool = True) -> None:
         nonlocal proc_mux, h_pipe, audio_concat_path
+        dispatcher = progress_dispatcher_holder[0]
+        if dispatcher is not None:
+            dispatcher.stop()
+            progress_dispatcher_holder[0] = None
         if proc_mux is not None:
             if proc_mux.poll() is None:
                 try:
@@ -2965,7 +3576,6 @@ def export_amd_native_d3d11(
                 proc_mux.wait(timeout=2.0)
             except Exception:
                 pass
-            proc_mux = None
         if h_pipe is not None and h_pipe != -1 and h_pipe != 0:
             try:
                 GENERIC_WRITE = 0x40000000
@@ -2975,21 +3585,38 @@ def export_amd_native_d3d11(
                     kernel32.CloseHandle(h_c)
             except Exception:
                 pass
-            try:
-                kernel32.CloseHandle(h_pipe)
-            except Exception:
-                pass
-            h_pipe = None
-        if os.path.exists(output_part_str):
-            try:
-                os.remove(output_part_str)
-            except OSError:
-                pass
-        if audio_concat_path is not None and audio_concat_path.exists():
-            try:
-                audio_concat_path.unlink()
-            except OSError:
-                pass
+        if pump_thread is not None:
+            pump_thread.join(timeout=2.0)
+        if pump_thread is None or not pump_thread.is_alive():
+            if h_pipe is not None and h_pipe != -1 and h_pipe != 0:
+                try:
+                    kernel32.CloseHandle(h_pipe)
+                except Exception:
+                    pass
+                h_pipe = None
+        else:
+            print("[AMD DIRECT MUX] WARNING: pump did not stop within 2s; handle left to worker.", flush=True)
+        proc_mux = None
+        if preserve_stage_a:
+            cleanup_candidates = [Path(output_part_str), audio_concat_path]
+            for candidate in cleanup_candidates:
+                if candidate is None:
+                    continue
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    pass
+        else:
+            removed = _cleanup_cancelled_amd_outputs(
+                output_part_str, stage_video_str, audio_concat_path
+            )
+            print(
+                "[AMD CANCEL CLEANUP] removed="
+                + (",".join(str(path) for path in removed) or "none"),
+                flush=True,
+            )
 
     if not native_dll.telem_amd_set_diagnostics(h_context, 1 if diagnostics_enabled else 0):
         print("[AMD NATIVE D3D11] ERROR: failed to configure diagnostic mode.", flush=True)
@@ -3462,6 +4089,7 @@ def export_amd_native_d3d11(
     from src.indicators.moving_map import ensure_map_tiles_cached
     from src.moving_map import set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats
 
+    preload_info = {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
     if layout.get("indicators", {}).get("track_map", {}).get("enabled", True):
         _map_t0 = time.perf_counter()
         preload_info = ensure_map_tiles_cached(
@@ -3540,6 +4168,16 @@ def export_amd_native_d3d11(
     if pipeline_mode not in ("ASYNC", "SYNC"):
         pipeline_mode = "ASYNC"
     print(f"[AMD NATIVE D3D11] AMD_CPU_GPU_PIPELINE={pipeline_mode}", flush=True)
+
+    # Rendering progress callbacks are never part of the frame dependency
+    # chain.  A blocked GUI callback can delay UI refreshes, but not AMF.
+    progress_dispatcher = NonBlockingProgressDispatcher()
+    progress_dispatcher_holder[0] = progress_dispatcher
+    async_on_render_progress = (
+        (lambda *args: progress_dispatcher.submit(on_render_progress, *args))
+        if on_render_progress is not None else None
+    )
+    progress_tracker.callback = async_on_render_progress
 
     previous_bboxes_holder = [{}] # Mutable cell for producer
     sparse_clusters_holder: list[Any] = [None]
@@ -3635,6 +4273,7 @@ def export_amd_native_d3d11(
 
     def _prepare_frame_cpu(idx: int) -> PreparedFrame:
         t_p_start = time.perf_counter()
+        _memory_audit_sample(idx, "prepare_begin")
         if overlay_profile_enabled:
             overlay_profiler.start_frame(idx, video_width, video_height)
         sample_time_sec = idx / target_fps
@@ -4172,6 +4811,7 @@ def export_amd_native_d3d11(
                             above_full, clusters_with_members, above_tight_bboxes or {},
                             video_width, video_height,
                             batched_rects_buf=batched_above_rects_buf,
+                            debug_frame_idx=idx,
                         )
                         if idx == 0 and above_fine_dirty_enabled:
                             for _k, _box in above_bboxes.items():
@@ -4206,11 +4846,13 @@ def export_amd_native_d3d11(
                         above_regions_out, above_stats_p = _extract_exact_above_regions(
                             above_full, clusters_with_members, above_tight_bboxes or {},
                             video_width, video_height,
+                            debug_frame_idx=idx,
                         )
                     else:
                         above_regions_out, above_stats_p = _extract_above_regions(
                             above_full, candidate_clusters, above_dirty_mode
                         )
+                _memory_audit_sample(idx, "after_above")
                 above_candidate_crop_ms = above_stats_p["candidate_crop_ms"]
                 above_local_alpha_scan_ms = above_stats_p["alpha_scan_ms"]
                 above_final_crop_ms = above_stats_p["final_crop_ms"]
@@ -4756,29 +5398,28 @@ def export_amd_native_d3d11(
                     map_geometry = (dst_x, dst_y, src_w, src_h, out_w, out_h)
                 
                 # Check for direct strided pointer
-                map_row_table_ptr = None
+                map_direct_error = None
                 mw, mh = map_img.size
                 map_stride = mw * 4
-                if hasattr(map_img, "im") and hasattr(map_img.im, "ptr"):
-                    try:
-                        cap_name = ctypes.pythonapi.PyCapsule_GetName(map_img.im.ptr)
-                        raw_ptr = ctypes.pythonapi.PyCapsule_GetPointer(map_img.im.ptr, cap_name)
-                        if raw_ptr:
-                            map_row_table_ptr = ctypes.c_void_p.from_address(raw_ptr + 40).value
-                    except Exception:
-                        map_row_table_ptr = None
-                
-                is_contig = False
-                if map_row_table_ptr is not None:
-                    top_row = ctypes.c_void_p.from_address(map_row_table_ptr).value
-                    bottom_row = ctypes.c_void_p.from_address(map_row_table_ptr + (mh - 1) * 8).value
-                    if top_row and bottom_row and bottom_row == top_row + (mh - 1) * map_stride:
-                        is_contig = True
-                        map_data = (None, mw, mh, map_dst, top_row, map_stride, map_img)
-                if not is_contig:
+                direct_pointer = _pillow_rgba_contiguous_pointer(map_img)
+                if direct_pointer is not None:
+                    top_row, map_stride = direct_pointer
+                    map_data = (None, mw, mh, map_dst, top_row, map_stride, map_img)
+                elif memory_audit_enabled:
+                    map_direct_error = "not-contiguous-or-unsupported-pillow-layout"
+                if direct_pointer is None:
+                    if memory_audit_enabled:
+                        print(
+                            "[AMD MEMORY AUDIT] map_image_alloc "
+                            f"frame={idx} size=({mw},{mh}) bytes={mw * mh * 4} "
+                            f"ptr_type={type(getattr(getattr(map_img, 'im', None), 'ptr', None)).__name__} "
+                            f"direct_error={map_direct_error}",
+                            flush=True,
+                        )
                     map_bytes = map_img.tobytes("raw", "RGBA")
                     map_data = (map_bytes, mw, mh, map_dst, None, map_stride, map_img)
             map_timing_ms = (time.perf_counter() - map_start) * 1000.0
+        _memory_audit_sample(idx, "after_map")
         t_samples_p["map_cpu_upload"] = map_timing_ms
         _producer_stage("map_cpu_preparation")
 
@@ -4979,6 +5620,24 @@ def export_amd_native_d3d11(
     native_clip_idx = 0
     per_clip_decoded_frames = [0 for _ in native_clip_paths]
     per_clip_seek_discarded_frames = [0 for _ in native_clip_paths]
+    per_clip_runtime = [
+        {
+            "frames": 0,
+            "pipeline_ms": 0.0,
+            "producer_ms": 0.0,
+            "gpu_completion_ms": 0.0,
+            "amf_submit_ms": 0.0,
+            "amf_query_output_ms": 0.0,
+            "packet_write_ms": 0.0,
+            "pipeline_ms_samples": [],
+            "producer_ms_samples": [],
+            "gpu_completion_ms_samples": [],
+            "amf_submit_ms_samples": [],
+            "amf_query_output_ms_samples": [],
+            "packet_write_ms_samples": [],
+        }
+        for _ in native_clip_paths
+    ]
     boundary_debug_frames = {0, 1, 2, 30, 300, 600, 900}
     _boundary_offset = 0
     for _count in per_clip_requested_frames[:-1]:
@@ -4996,7 +5655,7 @@ def export_amd_native_d3d11(
         nonlocal chart_full_tobytes_total, chart_split_frames, chart_uploaded_bytes_total
         nonlocal above_map_frames, above_map_visible_frames, above_map_uploaded_bytes_total
         nonlocal t_first_frame_begin, t_first_frame_encoded, last_map_img, last_map_dst
-        nonlocal last_uploaded_map_source_key, map_reused_frames
+        nonlocal last_uploaded_map_source_key, map_reused_frames, native_frame_observed
 
         t_c_start = time.perf_counter()
         if t_first_frame_begin == 0.0:
@@ -5010,6 +5669,11 @@ def export_amd_native_d3d11(
         frame_acct.begin_frame(prepared.frame_idx)
         frame_acct.mark("consumer_setup_and_producer_merge")
         _sync_frame_mark("producer_prepare")
+        frame_clip_idx = native_clip_idx
+        if video_timeline is not None:
+            mapped_clip = video_timeline.frame_to_clip(prepared.frame_idx, target_fps)
+            if mapped_clip is not None:
+                frame_clip_idx = int(mapped_clip[0])
         
         # Merge producer timing samples
         for k_t, v_t in prepared.timing_samples_producer.items():
@@ -5493,8 +6157,29 @@ def export_amd_native_d3d11(
         frame_acct.mark("native_process_frame")
         _sync_frame_mark("native_process_call")
         if not ret:
-            print(f"[AMD NATIVE D3D11] ERROR: telem_amd_process_frame failed on frame {prepared.frame_idx}", flush=True)
-            return False
+            print(
+                f"[AMD NATIVE D3D11] native frame failed frame={prepared.frame_idx} "
+                f"mux_pump_error={mux_pump_error!r} "
+                f"mux_pid={proc_mux.pid if proc_mux is not None else None} "
+                f"mux_rc={proc_mux.poll() if proc_mux is not None else None}",
+                flush=True,
+            )
+            raise RuntimeError(
+                        f"AMD native frame pipeline failed on frame {prepared.frame_idx}"
+                    )
+        if preview_session is not None and getattr(preview_session, "is_native_frame_tap", False):
+            # Non-blocking query/map of the previous GPU capture.  A not-ready
+            # frame is simply dropped; the final renderer never waits for it.
+            try:
+                preview_session.poll_native_frame()
+            except Exception as preview_poll_exc:
+                print(
+                    f"[EXPORT PREVIEW GPU TAP ERROR] poll failed: {preview_poll_exc}",
+                    flush=True,
+                )
+        native_frame_observed = int(prepared.frame_idx)
+        if mux_pump_error is not None:
+            raise RuntimeError(f"AMD live mux pump failed on frame {prepared.frame_idx}: {mux_pump_error}")
 
         chk_frame_env = os.environ.get("AMD_DUMP_CHECKPOINT_FRAME")
         if chk_frame_env is not None and prepared.frame_idx == int(chk_frame_env):
@@ -5543,6 +6228,21 @@ def export_amd_native_d3d11(
         frame_acct.end_frame()
         pipeline_total_ms = (t_c_end - t_c_start) * 1000.0
         timing_samples["pipeline_total"].append(pipeline_total_ms)
+        if 0 <= frame_clip_idx < len(per_clip_runtime):
+            clip_runtime = per_clip_runtime[frame_clip_idx]
+            clip_runtime["frames"] += 1
+            clip_runtime["pipeline_ms"] += pipeline_total_ms
+            clip_runtime["producer_ms"] += prepared.producer_prepare_ms
+            clip_runtime["gpu_completion_ms"] += float(native_timing_values[9].value)
+            clip_runtime["amf_submit_ms"] += float(native_timing_values[11].value)
+            clip_runtime["amf_query_output_ms"] += float(native_timing_values[12].value)
+            clip_runtime["packet_write_ms"] += float(native_timing_values[13].value)
+            clip_runtime["pipeline_ms_samples"].append(pipeline_total_ms)
+            clip_runtime["producer_ms_samples"].append(float(prepared.producer_prepare_ms))
+            clip_runtime["gpu_completion_ms_samples"].append(float(native_timing_values[9].value))
+            clip_runtime["amf_submit_ms_samples"].append(float(native_timing_values[11].value))
+            clip_runtime["amf_query_output_ms_samples"].append(float(native_timing_values[12].value))
+            clip_runtime["packet_write_ms_samples"].append(float(native_timing_values[13].value))
 
         if audit_allocs_enabled:
             audit_alloc_frames.append({
@@ -5577,12 +6277,8 @@ def export_amd_native_d3d11(
             em, es = divmod(int(eta), 60)
             stats_str = f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             if progress_cb:
-                progress_cb(pct, stats_str)
+                progress_dispatcher.submit(progress_cb, pct, stats_str)
             progress_tracker.frame(prepared.frame_idx + 1, elapsed, fps)
-            if time.time() - last_hud_report_holder[0] >= 1.0:
-                last_hud_report_holder[0] = time.time()
-                print(f"[AMD NATIVE D3D11] Frame {prepared.frame_idx+1}/{expected_progress_frames} ({fps:.1f} FPS)", flush=True)
-
         return True
 
     # GUI phase-report: HUD preparation finished, frame rendering begins.
@@ -5595,16 +6291,24 @@ def export_amd_native_d3d11(
             frame_queue: queue.Queue = queue.Queue(maxsize=q_depth)
             queue_truth.configure(q_depth)
             cancel_evt = cancel_event if cancel_event is not None else threading.Event()
+            # This event belongs only to the producer thread.  Never set the
+            # caller-owned render cancel event merely because the producer is
+            # leaving its normal finally block.
+            producer_stop_event = threading.Event()
+
+            def producer_should_stop() -> bool:
+                return producer_stop_event.is_set() or cancel_evt.is_set()
+
             producer_error: list[Exception] = []
 
             def producer_worker():
                 try:
                     for f_idx in range(total_frames):
-                        if cancel_evt.is_set():
+                        if producer_should_stop():
                             break
                         prep = _prepare_frame_cpu(f_idx)
                         t_put_start = queue_truth.put_begin(f_idx, frame_queue.qsize())
-                        while not cancel_evt.is_set():
+                        while not producer_should_stop():
                             try:
                                 frame_queue.put(prep, timeout=0.05)
                                 t_put_ms = (time.perf_counter() - t_put_start) * 1000.0
@@ -5616,7 +6320,7 @@ def export_amd_native_d3d11(
                 except Exception as e:
                     producer_error.append(e)
                 finally:
-                    while not cancel_evt.is_set():
+                    while not producer_should_stop():
                         try:
                             frame_queue.put(_END_OF_STREAM, timeout=0.05)
                             break
@@ -5643,9 +6347,9 @@ def export_amd_native_d3d11(
                                 raise producer_error[0]
                             continue
                     if cancel_evt.is_set():
-                        print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
+                        print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                         _cleanup_native_resources()
-                        _abort_direct_mux()
+                        _abort_direct_mux(preserve_stage_a=False)
                         return False
                     if item is _END_OF_STREAM:
                         break
@@ -5658,7 +6362,7 @@ def export_amd_native_d3d11(
                         break
                     consumed_count += 1
             finally:
-                cancel_evt.set()
+                producer_stop_event.set()
                 prod_thread.join(timeout=2.0)
                 if prod_thread.is_alive():
                     print("[AMD NATIVE D3D11] WARNING: producer thread did not exit within 2.0s.", flush=True)
@@ -5669,9 +6373,9 @@ def export_amd_native_d3d11(
             _ft_prev_end: float | None = None
             for f_idx in range(total_frames):
                 if cancel_event is not None and cancel_event.is_set():
-                    print("[AMD NATIVE D3D11] Export cancelled by user.", flush=True)
+                    print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                     _cleanup_native_resources()
-                    _abort_direct_mux()
+                    _abort_direct_mux(preserve_stage_a=False)
                     return False
                 if sync_frame_accounting_enabled:
                     _sync_parent_start = time.perf_counter_ns()
@@ -5757,10 +6461,17 @@ def export_amd_native_d3d11(
         t_video_render_end = time.perf_counter()
         _tile_stats = get_map_tile_stats()
         print(f"[AMD Map Tile Stats] {_tile_stats}", flush=True)
-        # GUI phase-report: all frames rendered, final flush/mux starts.
-        if on_render_progress is not None:
-            progress_tracker._emit(phase="finalize", internal=0.0, label="Finalizacja...", force=True,
-                                   elapsed=time.time() - start_time)
+        print(
+            "[MAP CACHE AUDIT] "
+            f"PREFETCH required tiles = {preload_info.get('required', 0)} | "
+            f"PREFETCH cached tiles = "
+            f"{preload_info.get('required', 0) - preload_info.get('missing', 0)} | "
+            f"RENDER requested tiles = {_tile_stats.get('render_unique_tiles', 0)} | "
+            f"RENDER cache hits = {_tile_stats.get('map_cache_hits', 0)} | "
+            f"RENDER cache misses = {_tile_stats.get('map_cache_misses', 0)} | "
+            f"frames with miss = {_tile_stats.get('frames_with_cache_miss', 0)}",
+            flush=True,
+        )
 
         # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
         flush_start = time.perf_counter()
@@ -5885,10 +6596,13 @@ def export_amd_native_d3d11(
     except Exception:
         if direct_mux_enabled and not direct_mux_completed:
             _abort_direct_mux()
+        progress_dispatcher.stop()
         raise
     finally:
         set_map_network_allowed(True)
         _cleanup_native_resources()
+        if t_video_render_end == 0.0:
+            progress_dispatcher.stop()
 
     # 5. Final Fast Remux (Copy Video Stream + Copy Audio Stream - ZERO VIDEO RE-ENCODE)
     temp_h265 = output_file_str + ".h265"
@@ -5910,39 +6624,176 @@ def export_amd_native_d3d11(
         t_mux_begin = time.perf_counter()
         print("[AMD NATIVE D3D11] Finalizing direct MP4 live mux...", flush=True)
         if pump_thread is not None:
-            pump_thread.join(timeout=30.0)
+            pump_thread.join(timeout=60.0)
+        if preview_session is not None:
+            try:
+                preview_session.finish_input(timeout=8.0)
+            except Exception as preview_finish_exc:
+                print(
+                    f"[EXPORT PREVIEW FFMPEG ERROR] finish failed: {preview_finish_exc}",
+                    flush=True,
+                )
+        adaptive_wait = max(60.0, duration_s * 0.25)
         try:
-            proc_mux.wait(timeout=30.0)
+            proc_mux.wait(timeout=adaptive_wait)
         except subprocess.TimeoutExpired:
+            print(
+                f"[AMD NATIVE D3D11] WARNING: Live muxer did not exit within {adaptive_wait:.1f}s, terminating...",
+                flush=True,
+            )
             proc_mux.kill()
             proc_mux.wait()
         if stderr_thread is not None:
             stderr_thread.join(timeout=5.0)
+        if active_process_holder is not None and active_process_holder.get("process") is proc_mux:
+            active_process_holder["process"] = None
+
+        raw_stderr = b"".join(mux_stderr_lines)
+        logical_stderr = _filter_logical_stderr(raw_stderr, max_lines=200)
+        print(
+            "[AMD DIRECT MUX DIAGNOSTICS] "
+            f"ffmpeg_pid={proc_mux.pid if proc_mux is not None else None} "
+            f"returncode={proc_mux.returncode if proc_mux is not None else None} "
+            f"pump_exit_reason={mux_pump_stats.get('exit_reason', 'unknown')} "
+            f"pipe_read_bytes={mux_pump_stats.get('pipe_read_bytes', 0)} "
+            f"ffmpeg_stdin_bytes={mux_pump_stats.get('ffmpeg_stdin_bytes', 0)} "
+            f"chunks={mux_pump_stats.get('chunks', 0)}",
+            flush=True,
+        )
+        if logical_stderr:
+            print(f"[AMD DIRECT MUX STDERR] {logical_stderr}", flush=True)
+
+        live_target = stage_video_str if (is_multi_file and stage_video_str) else output_part_str
+        if proc_mux.returncode != 0 or mux_pump_error:
+            print(
+                f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})!\n"
+                f"[FFmpeg Command]: {' '.join(cmd_live_mux)}\n"
+                f"[FFmpeg Stderr (last logical lines)]:\n{logical_stderr}",
+                flush=True,
+            )
+            if is_multi_file and stage_video_str and os.path.exists(stage_video_str) and os.path.getsize(stage_video_str) > 0:
+                print(f"[AMD MULTI-FILE] NOTICE: Preserved Stage A video at: {stage_video_str}", flush=True)
+            _abort_direct_mux()
+            if single_pass_av_mux:
+                raise AMDNativeFinalizationError(
+                    f"AMD single-pass A/V mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})"
+                )
+            return False
+
+        if not os.path.exists(live_target) or os.path.getsize(live_target) == 0:
+            print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output {live_target} is missing or empty!\n[FFmpeg Stderr]:\n{logical_stderr}", flush=True)
+            _abort_direct_mux()
+            if single_pass_av_mux:
+                raise AMDNativeFinalizationError(
+                    "AMD single-pass A/V mux output is missing or empty"
+                )
+            return False
+
+        if is_multi_file and stage_video_str and not single_pass_av_mux:
+            # ── MULTI-FILE STAGE B & C: ROBUST STREAM-COPY REMUX ──
+            try:
+                stage_a_size_bytes = os.path.getsize(stage_video_str)
+            except OSError:
+                stage_a_size_bytes = 0
+            print("[AMD MULTI-FILE MUX] Stage A complete (video-only container created).", flush=True)
+            print("[AMD MULTI-FILE MUX] Stage B: Building audio concat script...", flush=True)
+            audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
+            with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
+                for clip in video_timeline.clips:
+                    concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+                    local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+                    if local_start > 0.0:
+                        concat_file.write(f"inpoint {local_start:.9f}\n")
+                    local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+                    source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+                    if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+                        concat_file.write(f"outpoint {local_end:.9f}\n")
+
+            cmd_stage_c = [
+                ffmpeg_exe, "-y",
+                "-i", stage_video_str,
+                "-f", "concat", "-safe", "0", "-i", str(audio_concat_path),
+                "-map", "0:v", "-map", "1:a?",
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-shortest",
+                "-f", "mp4",
+                output_part_str,
+            ]
+            print(
+                f"[AMD Stage C] start local_input={stage_video_str} "
+                f"local_input_size_bytes={stage_a_size_bytes} "
+                f"usb_output={output_part_str} usb_output_drive={Path(output_part_str).drive or 'unknown'}",
+                flush=True,
+            )
+            print(f"[AMD MULTI-FILE MUX] Stage C: Fast stream-copy remux: {' '.join(cmd_stage_c)}", flush=True)
+            t_remux_0 = time.perf_counter()
+            p_remux = subprocess.Popen(
+                cmd_stage_c,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+            )
+            if active_process_holder is not None:
+                active_process_holder["process"] = p_remux
+            remux_stderr_lines = []
+            def _remux_stderr_reader():
+                try:
+                    for line in p_remux.stderr:
+                        remux_stderr_lines.append(line)
+                except Exception:
+                    pass
+            remux_stderr_t = threading.Thread(target=_remux_stderr_reader, daemon=True)
+            remux_stderr_t.start()
+            while p_remux.poll() is None:
+                if cancel_event is not None and cancel_event.is_set():
+                    p_remux.kill()
+                    break
+                time.sleep(0.1)
+            remux_stderr_t.join(timeout=2.0)
+            t_remux_1 = time.perf_counter()
+            remux_ms = (t_remux_1 - t_remux_0) * 1000.0
+            stage_c_elapsed_ms = remux_ms
+            try:
+                stage_c_output_size_bytes = os.path.getsize(output_part_str)
+            except OSError:
+                stage_c_output_size_bytes = 0
+            stage_c_growth_mbps = (
+                (stage_c_output_size_bytes / (1024.0 * 1024.0)) / (remux_ms / 1000.0)
+                if remux_ms > 0.0 else 0.0
+            )
+            print(f"[AMD MULTI-FILE MUX] Remux completed in {remux_ms:.2f} ms (rc={p_remux.returncode})", flush=True)
+            print(
+                f"[AMD Stage C] end local_input_size_bytes={stage_a_size_bytes} "
+                f"usb_output_size_bytes={stage_c_output_size_bytes} "
+                f"usb_growth_MBps={stage_c_growth_mbps:.3f} elapsed_ms={stage_c_elapsed_ms:.2f} "
+                f"end={time.time():.6f}",
+                flush=True,
+            )
+
+            if cancel_event is not None and cancel_event.is_set():
+                print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
+                _abort_direct_mux(preserve_stage_a=False)
+                return False
+            if p_remux.returncode != 0:
+                remux_err_raw = "".join(remux_stderr_lines).encode("utf-8", errors="replace")
+                remux_err_filtered = _filter_logical_stderr(remux_err_raw, max_lines=200)
+                print(
+                    f"[AMD MULTI-FILE MUX] ERROR: Stage C stream-copy remux failed (rc={p_remux.returncode})!\n"
+                    f"[Preserved Video]: {stage_video_str}\n"
+                    f"[FFmpeg Stderr]:\n{remux_err_filtered}\n"
+                    f"[RECOVERY INSTRUCTIONS]: The entire rendered video was PRESERVED! Remux manually using:\n"
+                    f"  {' '.join(cmd_stage_c)}",
+                    flush=True,
+                )
+                _abort_direct_mux()
+                raise AMDNativeFinalizationError(
+                    f"AMD multi-file Stage C remux failed (rc={p_remux.returncode})"
+                )
+
         t_mux_end = time.perf_counter()
         mux_elapsed_ms = (t_mux_end - t_mux_begin) * 1000.0
         timing_samples["Audio mux"].append(mux_elapsed_ms)
-
-        if proc_mux.returncode != 0 or mux_pump_error:
-            mux_err_str = b"".join(mux_stderr_lines).decode(errors="replace").strip()
-            print(
-                f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})!\n"
-                f"{mux_err_str[-4000:]}",
-                flush=True,
-            )
-            if os.path.exists(output_part_str):
-                try: os.remove(output_part_str)
-                except OSError: pass
-            if audio_concat_path is not None and audio_concat_path.exists():
-                try: audio_concat_path.unlink()
-                except OSError: pass
-            return False
-
-        if not os.path.exists(output_part_str) or os.path.getsize(output_part_str) == 0:
-            print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output {output_part_str} is missing or empty!", flush=True)
-            if audio_concat_path is not None and audio_concat_path.exists():
-                try: audio_concat_path.unlink()
-                except OSError: pass
-            return False
 
         # Probe sanity check on .part before atomic rename
         final_probe = _probe_video_summary(ffmpeg_exe, output_part_str)
@@ -5952,24 +6803,33 @@ def export_amd_native_d3d11(
         )
         if muxed_frames == 0:
             print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output has 0 muxed video frames!", flush=True)
-            if os.path.exists(output_part_str):
-                try: os.remove(output_part_str)
-                except OSError: pass
-            if audio_concat_path is not None and audio_concat_path.exists():
-                try: audio_concat_path.unlink()
-                except OSError: pass
-            return False
+            if is_multi_file and stage_video_str and os.path.exists(stage_video_str):
+                print(f"[AMD MULTI-FILE] NOTICE: Preserved Stage A video at: {stage_video_str}", flush=True)
+            _abort_direct_mux()
+            raise AMDNativeFinalizationError(
+                "AMD direct A/V mux produced zero video frames"
+            )
 
         # Atomic rename .part -> final .mp4
         if os.path.exists(output_file_str):
             try: os.remove(output_file_str)
             except OSError: pass
         os.replace(output_part_str, output_file_str)
+
+        # Cleanup intermediate temporary files now that final output is confirmed
+        if is_multi_file and stage_video_str and os.path.exists(stage_video_str):
+            try: os.remove(stage_video_str)
+            except OSError: pass
+        if stage_scratch_dir is not None:
+            try:
+                stage_scratch_dir.rmdir()
+            except OSError:
+                pass
         if audio_concat_path is not None and audio_concat_path.exists():
             try: audio_concat_path.unlink()
             except OSError: pass
         direct_mux_completed = True
-        print(f"[AMD NATIVE D3D11] Direct MP4 Mux complete. Final output: {output_file_str}", flush=True)
+        print(f"[AMD NATIVE D3D11] Direct MP4 Mux complete. Final output: {output_file_str} (frames={muxed_frames}, audio={audio_present})", flush=True)
     else:
         # ── FALLBACK FILE REMUX ──
         if not os.path.exists(temp_h265) or os.path.getsize(temp_h265) == 0:
@@ -6005,12 +6865,34 @@ def export_amd_native_d3d11(
 
         print("[AMD NATIVE D3D11] Muxing encoded video stream + audio (-c:v copy -c:a copy)...", flush=True)
         t_mux_begin = time.perf_counter()
-        proc = subprocess.run(cmd_mux, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            cmd_mux,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+        if active_process_holder is not None:
+            active_process_holder["process"] = proc
+        proc_stderr_lines = []
+        def _proc_stderr_reader():
+            try:
+                for line in proc.stderr:
+                    proc_stderr_lines.append(line)
+            except Exception:
+                pass
+        proc_stderr_t = threading.Thread(target=_proc_stderr_reader, daemon=True)
+        proc_stderr_t.start()
+        while proc.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                proc.kill()
+                break
+            time.sleep(0.1)
+        proc_stderr_t.join(timeout=2.0)
         t_mux_end = time.perf_counter()
         mux_elapsed_ms = (t_mux_end - t_mux_begin) * 1000.0
         timing_samples["Audio mux"].append(mux_elapsed_ms)
         if proc.returncode != 0:
-            mux_error = (proc.stderr or b"").decode(errors="replace").strip()
+            mux_error = "\n".join(proc_stderr_lines).strip()
             print(
                 "[AMD NATIVE D3D11] ERROR: FFmpeg remux failed!\n"
                 f"{mux_error[-4000:]}",
@@ -6029,11 +6911,11 @@ def export_amd_native_d3d11(
                         break
                     except OSError:
                         time.sleep(0.05)
-        if audio_concat_path is not None and audio_concat_path.exists():
-            try:
-                audio_concat_path.unlink()
-            except OSError:
-                pass
+            if audio_concat_path is not None and audio_concat_path.exists():
+                try:
+                    audio_concat_path.unlink()
+                except OSError:
+                    pass
 
         final_probe = _probe_video_summary(ffmpeg_exe, output_file_str)
         muxed_frames = _stream_frame_count(final_probe, "video")
@@ -6054,12 +6936,62 @@ def export_amd_native_d3d11(
     encoded_count = float(c_rec.value)
     render_fps = encoded_count / (video_render_wall_ms / 1000.0) if video_render_wall_ms > 0 else 0.0
     effective_fps = encoded_count / (total_from_export_start_ms / 1000.0) if total_from_export_start_ms > 0 else 0.0
+    stage_a_growth_mbps = (
+        (stage_a_size_bytes / (1024.0 * 1024.0)) / (video_render_wall_ms / 1000.0)
+        if is_multi_file and stage_a_size_bytes > 0 and video_render_wall_ms > 0.0 else 0.0
+    )
 
     if amf_mode == "BYPASS":
         # ETAP 5U: frontend-only equivalent FPS (no encoder) — use VP frames.
         true_fps = c_vp.value / end_to_end_elapsed if end_to_end_elapsed > 0 else 0.0
     else:
         true_fps = c_rec.value / end_to_end_elapsed if end_to_end_elapsed > 0 else 0.0
+    per_clip_diagnostics = []
+    for idx, runtime in enumerate(per_clip_runtime):
+        frames = int(runtime["frames"])
+        pipeline_ms = float(runtime["pipeline_ms"])
+        producer_ms = float(runtime["producer_ms"])
+        producer_samples = runtime["producer_ms_samples"]
+        gpu_samples = runtime["gpu_completion_ms_samples"]
+        amf_submit_samples = runtime["amf_submit_ms_samples"]
+        amf_query_samples = runtime["amf_query_output_ms_samples"]
+        packet_write_samples = runtime["packet_write_ms_samples"]
+        clip_elapsed_s = pipeline_ms / 1000.0
+        per_clip_diagnostics.append({
+            "clip_index": idx,
+            "path": native_clip_paths[idx],
+            "frames": frames,
+            "elapsed_s": clip_elapsed_s,
+            "render_fps": frames / clip_elapsed_s if clip_elapsed_s > 0.0 else 0.0,
+            "pipeline_ms_total": pipeline_ms,
+            "pipeline_ms_avg": pipeline_ms / frames if frames else 0.0,
+            "producer_ms_total": producer_ms,
+            "producer_ms_avg": producer_ms / frames if frames else 0.0,
+            "gpu_completion_ms_avg": float(runtime["gpu_completion_ms"]) / frames if frames else 0.0,
+            "amf_submit_ms_avg": float(runtime["amf_submit_ms"]) / frames if frames else 0.0,
+            "amf_query_output_ms_avg": float(runtime["amf_query_output_ms"]) / frames if frames else 0.0,
+            "packet_write_ms_avg": float(runtime["packet_write_ms"]) / frames if frames else 0.0,
+            "producer_ms_p90": _percentile(producer_samples, 0.90),
+            "gpu_completion_ms_p90": _percentile(gpu_samples, 0.90),
+            "amf_submit_ms_p90": _percentile(amf_submit_samples, 0.90),
+            "amf_query_output_ms_p90": _percentile(amf_query_samples, 0.90),
+            "packet_write_ms_p90": _percentile(packet_write_samples, 0.90),
+            "stage_a_file_growth_MBps": stage_a_growth_mbps,
+        })
+    if is_multi_file:
+        print("[AMD MULTI-FILE] Per-clip render diagnostics:", flush=True)
+        for diag in per_clip_diagnostics:
+            print(
+                f"  clip={diag['clip_index'] + 1} frames={diag['frames']} "
+                f"elapsed_s={diag['elapsed_s']:.3f} fps={diag['render_fps']:.3f} "
+                f"producer_ms_avg={diag['producer_ms_avg']:.3f} producer_ms_p90={diag['producer_ms_p90']:.3f} "
+                f"gpu_ms_avg={diag['gpu_completion_ms_avg']:.3f} gpu_ms_p90={diag['gpu_completion_ms_p90']:.3f} "
+                f"amf_submit_ms_avg={diag['amf_submit_ms_avg']:.3f} amf_submit_ms_p90={diag['amf_submit_ms_p90']:.3f} "
+                f"amf_query_ms_avg={diag['amf_query_output_ms_avg']:.3f} amf_query_ms_p90={diag['amf_query_output_ms_p90']:.3f} "
+                f"packet_write_ms_avg={diag['packet_write_ms_avg']:.3f} packet_write_ms_p90={diag['packet_write_ms_p90']:.3f} "
+                f"stage_a_file_growth_MBps={diag['stage_a_file_growth_MBps']:.3f}",
+                flush=True,
+            )
     timing_summaries = {
         name: _timing_summary(values) for name, values in timing_samples.items()
     }
@@ -6121,8 +7053,23 @@ def export_amd_native_d3d11(
             "layout_sha256": os.getenv("AMD_BENCHMARK_LAYOUT_SHA256"),
             "output_path": output_file_str,
             "output_drive": Path(output_file_str).drive,
+            "stage_a": {
+                "mode": "LEGACY_STAGE_A" if is_multi_file and stage_video_str else "N/A",
+                "path": stage_video_str if is_multi_file else None,
+                "scratch_drive": stage_scratch_dir.drive if stage_scratch_dir is not None else None,
+                "size_bytes": stage_a_size_bytes if is_multi_file else 0,
+                "file_growth_MBps": stage_a_growth_mbps if is_multi_file else 0.0,
+            },
+            "stage_c": {
+                "local_input_size_bytes": stage_a_size_bytes if is_multi_file else 0,
+                "usb_output_size_bytes": stage_c_output_size_bytes if is_multi_file else 0,
+                "usb_growth_MBps": stage_c_growth_mbps if is_multi_file else 0.0,
+                "elapsed_ms": stage_c_elapsed_ms if is_multi_file else 0.0,
+            },
+            "single_pass_av_mux": bool(single_pass_av_mux),
         },
         "backend": f"AMD_NATIVE_D3D11_{native_hud_mode}_{native_decode_mode}",
+        "map_cache": _tile_stats,
         "dll": {
             "path": dll_path,
             "abi_version": loaded_abi,
@@ -6158,8 +7105,7 @@ def export_amd_native_d3d11(
             "muxed_frames": muxed_frames,
             "per_clip": [
                 {
-                    "clip_index": idx,
-                    "path": native_clip_paths[idx],
+                    **per_clip_diagnostics[idx],
                     "requested_frames": (
                         per_clip_requested_frames[idx]
                         if idx < len(per_clip_requested_frames) else 0
@@ -6561,6 +7507,15 @@ def export_amd_native_d3d11(
             if audit_allocs_enabled else None
         ),
         "timings": timing_summaries,
+        "finalization": finalization_summary,
+        "mux_pump": {
+            **dict(mux_pump_stats),
+            "flush_mode": "none",
+            "flush_batch": 0,
+            "throughput_mbps": (
+                float(mux_pump_stats.get("bytes", 0)) / 1_000_000.0 / max(1e-9, end_to_end_elapsed)
+            ),
+        },
         "total_wall_clock_s": end_to_end_elapsed,
         "true_fps": true_fps,
         "audio_present": audio_present,
@@ -6738,4 +7693,6 @@ def export_amd_native_d3d11(
         print("[CHECKPOINT] Saved F_final_mp4.png", flush=True)
 
     progress_tracker.complete(time.time() - start_time)
+    progress_dispatcher.stop()
+    progress_dispatcher_holder[0] = None
     return True

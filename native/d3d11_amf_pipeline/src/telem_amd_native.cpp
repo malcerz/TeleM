@@ -15,6 +15,8 @@
 #include <thread>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <unordered_set>
 
 #include "d3d11_vp_pipeline.h"
 #include "d3d11_amf_encoder.h"
@@ -130,6 +132,16 @@ struct NativeFrameRec {
 };
 
 struct TelemAMDContext {
+    bool mfStarted = false;
+    // Opt-in lifecycle audit (AMD_NATIVE_RESOURCE_AUDIT=1).  The audit tracks
+    // owning top-level COM pointers; high-churn frame surfaces remain covered
+    // by the VP pool high-water counters to avoid per-frame log floods.
+    bool resourceAuditEnabled = false;
+    UINT64 resourceGeneration = 0;
+    std::map<std::string, UINT64> resourceCreated;
+    std::map<std::string, UINT64> resourceReleased;
+    std::unordered_set<const void*> resourceLive;
+
     ID3D11Device* pDevice = nullptr;
     ID3D11DeviceContext* pContext = nullptr;
 
@@ -253,9 +265,136 @@ struct TelemAMDContext {
     // Last processed VP output NV12 texture
     ID3D11Texture2D* pLastOutNV12Tex = nullptr;
 
+    // Best-effort AMD Export Preview GPU frame tap.  The tap is disabled by
+    // default and never participates in AMF success/failure decisions.
+    bool previewTapEnabled = false;
+    UINT previewTapWidth = 0;
+    UINT previewTapHeight = 0;
+    UINT previewTapIntervalFrames = 15;
+
     // Persistent CPU HUD RGBA buffer
     std::vector<uint8_t> currentHUDRGBA;
 };
+
+static UINT64 g_resourceGeneration = 0;
+static void CloseEncodedOutput(TelemAMDContext* ctx);
+
+static void DestroyPartialContext(TelemAMDContext* ctx) {
+    if (!ctx) return;
+    CloseEncodedOutput(ctx);
+    if (ctx->pSourceReader) {
+        ctx->pSourceReader->Release();
+        ctx->pSourceReader = nullptr;
+    }
+    if (ctx->pDXGIManager) {
+        ctx->pDXGIManager->Release();
+        ctx->pDXGIManager = nullptr;
+    }
+    if (ctx->pHUDInputView) {
+        ctx->pHUDInputView->Release();
+        ctx->pHUDInputView = nullptr;
+    }
+    if (ctx->pHUDTexture) {
+        ctx->pHUDTexture->Release();
+        ctx->pHUDTexture = nullptr;
+    }
+    if (ctx->pBaseP010Tex) {
+        ctx->pBaseP010Tex->Release();
+        ctx->pBaseP010Tex = nullptr;
+    }
+    if (ctx->pUploadStagingTex) {
+        ctx->pUploadStagingTex->Release();
+        ctx->pUploadStagingTex = nullptr;
+    }
+    if (ctx->pDecodedCopyTex) {
+        ctx->pDecodedCopyTex->Release();
+        ctx->pDecodedCopyTex = nullptr;
+    }
+    if (ctx->pPendingDecodedTex) {
+        ctx->pPendingDecodedTex->Release();
+        ctx->pPendingDecodedTex = nullptr;
+    }
+    // Explicitly tear down member owners before dropping the raw device
+    // references.  Both operations are idempotent, so delete remains safe.
+    ctx->amfEncoder.Shutdown();
+    ctx->vpPipeline.ReleaseResources();
+    if (ctx->pContext) {
+        ctx->pContext->Release();
+        ctx->pContext = nullptr;
+    }
+    if (ctx->pDevice) {
+        ctx->pDevice->Release();
+        ctx->pDevice = nullptr;
+    }
+    delete ctx;
+}
+
+static void AuditNativeResource(TelemAMDContext* ctx, const char* type,
+                                const void* ptr, bool create) {
+    if (!ctx || !ctx->resourceAuditEnabled || !type || !ptr) return;
+    auto& counters = create ? ctx->resourceCreated : ctx->resourceReleased;
+    counters[type]++;
+    if (create) ctx->resourceLive.insert(ptr);
+    else ctx->resourceLive.erase(ptr);
+    std::cout << (create ? "[NATIVE RESOURCE CREATE]" : "[NATIVE RESOURCE RELEASE]")
+              << " type=" << type << " ptr=" << ptr
+              << " render_generation=" << ctx->resourceGeneration
+              << " thread=" << GetCurrentThreadId() << std::endl;
+}
+
+static void PrintNativeResourceSummary(TelemAMDContext* ctx) {
+    if (!ctx || !ctx->resourceAuditEnabled) return;
+    std::cout << "[NATIVE RESOURCE SUMMARY] generation=" << ctx->resourceGeneration
+              << " created=";
+    bool first = true;
+    for (const auto& item : ctx->resourceCreated) {
+        if (!first) std::cout << ',';
+        first = false;
+        const UINT64 released = ctx->resourceReleased[item.first];
+        std::cout << item.first << ':' << item.second << '/' << released;
+    }
+    if (first) std::cout << "none";
+    std::cout << " released=";
+    first = true;
+    for (const auto& item : ctx->resourceReleased) {
+        if (!first) std::cout << ',';
+        first = false;
+        std::cout << item.first << ':' << item.second;
+    }
+    if (first) std::cout << "none";
+    std::cout << " still_alive=" << ctx->resourceLive.size() << std::endl;
+}
+
+static bool InitializeEncodedOutput(TelemAMDContext* ctx, const wchar_t* outputPath) {
+    if (!ctx || !outputPath) return false;
+    // The working Stage A/C proof used the normal synchronous stream writer.
+    // Windows permits std::ofstream to open the named-pipe path as well as a
+    // regular .h265 file, so no overlapped state machine is required here.
+    const std::wstring h265Path = std::wstring(outputPath) + L".h265";
+    std::string path;
+    int n = WideCharToMultiByte(CP_UTF8, 0, h265Path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (n <= 0) return false;
+    path.resize(static_cast<size_t>(n));
+    WideCharToMultiByte(CP_UTF8, 0, h265Path.c_str(), -1, path.data(), n, nullptr, nullptr);
+    path.resize(static_cast<size_t>(n - 1));
+    ctx->h265Out.open(path, std::ios::binary);
+    return ctx->h265Out.is_open();
+}
+static bool WriteEncodedPacket(TelemAMDContext* ctx, const uint8_t* data, size_t size) {
+    if (!ctx || !data || size == 0) return size == 0;
+    if (!ctx->h265Out.is_open()) return false;
+    ctx->h265Out.write(reinterpret_cast<const char*>(data),
+                       static_cast<std::streamsize>(size));
+    if (!ctx->h265Out.good()) {
+        std::cerr << "[TELEM AMD DLL] Encoded output file write failed" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+static void CloseEncodedOutput(TelemAMDContext* ctx) {
+    if (ctx && ctx->h265Out.is_open()) ctx->h265Out.close();
+}
 
 static bool RefreshDecoderMediaType(TelemAMDContext* ctx);
 
@@ -270,6 +409,7 @@ static bool OpenSourceReader(TelemAMDContext* ctx, const wchar_t* input_path) {
     hr = MFCreateSourceReaderFromURL(input_path, attrs, &ctx->pSourceReader);
     attrs->Release();
     if (FAILED(hr) || !ctx->pSourceReader) return false;
+    AuditNativeResource(ctx, "MF_SOURCE_READER", ctx->pSourceReader, true);
     ctx->pSourceReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
     ctx->pSourceReader->SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM, TRUE);
     IMFMediaType* type = nullptr;
@@ -1273,9 +1413,23 @@ TELEM_EXPORT void* telem_amd_create(
     UINT fps_den
 ) {
     ConfigureNativeRenderLogging();
-    MFStartup(MF_VERSION);
+    const HRESULT mfStartupHr = MFStartup(MF_VERSION);
+    if (FAILED(mfStartupHr)) {
+        std::cerr << "[TELEM AMD DLL] MFStartup failed: 0x"
+                  << std::hex << mfStartupHr << std::dec << std::endl;
+        return nullptr;
+    }
 
     TelemAMDContext* ctx = new TelemAMDContext();
+    ctx->mfStarted = true;
+    const char* resourceAuditEnv = std::getenv("AMD_NATIVE_RESOURCE_AUDIT");
+    ctx->resourceAuditEnabled = resourceAuditEnv && resourceAuditEnv[0] == '1';
+    ctx->resourceGeneration = ++g_resourceGeneration;
+    if (ctx->resourceAuditEnabled) {
+        std::cout << "[NATIVE RESOURCE GENERATION] generation="
+                  << ctx->resourceGeneration << " thread=" << GetCurrentThreadId()
+                  << std::endl;
+    }
     ctx->width = width;
     ctx->height = height;
     ctx->fpsNum = fps_num;
@@ -1284,8 +1438,12 @@ TELEM_EXPORT void* telem_amd_create(
     char mbsOut[512] = {};
     wcstombs(mbsOut, output_path, 512);
     ctx->outputPath = std::string(mbsOut);
-    std::string h265Path = ctx->outputPath + ".h265";
-    ctx->h265Out.open(h265Path, std::ios::binary);
+    if (!InitializeEncodedOutput(ctx, output_path)) {
+        std::cerr << "[TELEM AMD DLL] Failed to initialize encoded output." << std::endl;
+        DestroyPartialContext(ctx);
+        MFShutdown();
+        return nullptr;
+    }
 
     // ETAP 5R — opt-in native process_frame accounting.
     const char* faEnv = getenv("AMD_NATIVE_FRAME_ACCOUNTING");
@@ -1424,9 +1582,12 @@ TELEM_EXPORT void* telem_amd_create(
     );
     if (FAILED(hr)) {
         std::cerr << "[TELEM AMD DLL] D3D11CreateDevice failed: 0x" << std::hex << hr << std::dec << std::endl;
-        delete ctx;
+        DestroyPartialContext(ctx);
+        MFShutdown();
         return nullptr;
     }
+    AuditNativeResource(ctx, "D3D11_DEVICE", ctx->pDevice, true);
+    AuditNativeResource(ctx, "D3D11_CONTEXT", ctx->pContext, true);
 
     // 2. Initialize VideoProcessor Pipeline
     // ETAP 5W debug: AMD_DEBUG_NO_VP=1 skips the VP pipeline (device-ref leak
@@ -1438,12 +1599,14 @@ TELEM_EXPORT void* telem_amd_create(
     if (!skipVp) {
         if (!ctx->vpPipeline.Initialize(ctx->pDevice, ctx->pContext, width, height)) {
             std::cerr << "[TELEM AMD DLL] VP Pipeline Initialize failed!" << std::endl;
-            delete ctx;
+            DestroyPartialContext(ctx);
+            MFShutdown();
             return nullptr;
         }
         if (!ctx->vpPipeline.SetupVideoProcessor(DXGI_FORMAT_P010, DXGI_FORMAT_NV12)) {
             std::cerr << "[TELEM AMD DLL] VP Setup failed!" << std::endl;
-            delete ctx;
+            DestroyPartialContext(ctx);
+            MFShutdown();
             return nullptr;
         }
         // ETAP 5V — report the effective pool size (fallback may have reduced it).
@@ -1463,9 +1626,12 @@ TELEM_EXPORT void* telem_amd_create(
     if (!skipAmf) {
         if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
             std::cerr << "[TELEM AMD DLL] AMF Encoder Initialize failed!" << std::endl;
-            delete ctx;
+            DestroyPartialContext(ctx);
+            MFShutdown();
             return nullptr;
         }
+        AuditNativeResource(ctx, "AMF_CONTEXT", ctx->amfEncoder.ContextIdentity(), true);
+        AuditNativeResource(ctx, "AMF_ENCODER", ctx->amfEncoder.EncoderIdentity(), true);
     } else {
         std::cout << "[TELEM AMD DLL] AMD_DEBUG_NO_AMF=1 (diagnostic skip)" << std::endl;
     }
@@ -1486,6 +1652,7 @@ TELEM_EXPORT void* telem_amd_create(
     if (input_path && wcslen(input_path) > 0 && !skipMf) {
         hr = MFCreateDXGIDeviceManager(&ctx->dxgiResetToken, &ctx->pDXGIManager);
         if (SUCCEEDED(hr)) {
+            AuditNativeResource(ctx, "MF_DXGI_DEVICE_MANAGER", ctx->pDXGIManager, true);
             ctx->pDXGIManager->ResetDevice(ctx->pDevice, ctx->dxgiResetToken);
             if (!OpenSourceReader(ctx, input_path))
                 std::cerr << "[TELEM AMD DLL] MediaFoundation decoder initialization failed." << std::endl;
@@ -1505,6 +1672,7 @@ TELEM_EXPORT void* telem_amd_create(
     p010Desc.Usage = D3D11_USAGE_DEFAULT;
     p010Desc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
     ctx->pDevice->CreateTexture2D(&p010Desc, nullptr, &ctx->pBaseP010Tex);
+    AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pBaseP010Tex, true);
 
     D3D11_TEXTURE2D_DESC stagingDesc = p010Desc;
     stagingDesc.Usage = D3D11_USAGE_STAGING;
@@ -1512,6 +1680,7 @@ TELEM_EXPORT void* telem_amd_create(
     stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     stagingDesc.MiscFlags = 0;
     ctx->pDevice->CreateTexture2D(&stagingDesc, nullptr, &ctx->pUploadStagingTex);
+    AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pUploadStagingTex, true);
 
     std::cout << "[TELEM AMD DLL] telem_amd_create SUCCESS. Width: " << width << " Height: " << height << std::endl;
     return (void*)ctx;
@@ -1893,6 +2062,14 @@ TELEM_EXPORT int telem_amd_process_frame(
         ctx->gpuProfiledFrames++;
     }
 
+    // Submit at most one asynchronous GPU-scaled preview capture.  The
+    // submission is queued before AMF, but does not wait for completion and
+    // its failure is deliberately non-fatal to the final render.
+    if (ctx->previewTapEnabled && ctx->previewTapIntervalFrames > 0 &&
+        (frame_index % ctx->previewTapIntervalFrames) == 0) {
+        ctx->vpPipeline.SubmitPreviewTap(pOutNV12Tex, frame_index);
+    }
+
     if (ctx->diagnosticsEnabled && frame_index == 30) {
         std::cout << "\n--- FRAME 30 POINTER IDENTITIES ---" << std::endl;
         std::cout << "  Base Stream0 texture pointer: " << pDecodedTex << std::endl;
@@ -1929,7 +2106,7 @@ TELEM_EXPORT int telem_amd_process_frame(
     constexpr auto kMaxWait = std::chrono::seconds(60);
 
     // Helper lambda to drain any packets that are immediately ready
-    auto drainReadyPackets = [&]() {
+    auto drainReadyPackets = [&]() -> bool {
         while (true) {
             std::vector<uint8_t> pktData;
             int64_t outPts = 0;
@@ -1950,19 +2127,18 @@ TELEM_EXPORT int telem_amd_process_frame(
             queryResult = (int)qRes;
 
             const auto writeStart = std::chrono::high_resolution_clock::now();
-            if (ctx->h265Out.is_open() && !pktData.empty()) {
-                ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
-            }
+            if (!pktData.empty() && !WriteEncodedPacket(ctx, pktData.data(), pktData.size())) return false;
             const auto writeEnd = std::chrono::high_resolution_clock::now();
             const double writeMs = std::chrono::duration<double, std::milli>(
                 writeEnd - writeStart).count();
             ctx->lastTimings.packetWriteMs += writeMs;
             amfPacketWriteMsTot += writeMs;
         }
+        return true;
     };
 
     // Substage A: Pre-drain packets completed during decode / HUD / VideoProcessor
-    drainReadyPackets();
+    if (!drainReadyPackets()) return 0;
 
     // Substage B: If in-flight frames reached queueDepth limit, wait for at least one packet
     // to complete before submitting.
@@ -1983,9 +2159,7 @@ TELEM_EXPORT int telem_amd_process_frame(
             queryResult = (int)qRes;
 
             const auto writeStart = std::chrono::high_resolution_clock::now();
-            if (ctx->h265Out.is_open() && !pktData.empty()) {
-                ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
-            }
+            if (!pktData.empty() && !WriteEncodedPacket(ctx, pktData.data(), pktData.size())) return 0;
             const auto writeEnd = std::chrono::high_resolution_clock::now();
             const double writeMs = std::chrono::duration<double, std::milli>(
                 writeEnd - writeStart).count();
@@ -2052,9 +2226,7 @@ TELEM_EXPORT int telem_amd_process_frame(
             ctx->amfOutputsThisFrame++;
             queryResult = (int)bpRes;
             const auto writeStart = std::chrono::high_resolution_clock::now();
-            if (ctx->h265Out.is_open() && !bpPacket.empty()) {
-                ctx->h265Out.write(reinterpret_cast<const char*>(bpPacket.data()), bpPacket.size());
-            }
+            if (!bpPacket.empty() && !WriteEncodedPacket(ctx, bpPacket.data(), bpPacket.size())) return 0;
             const auto writeEnd = std::chrono::high_resolution_clock::now();
             const double writeMs = std::chrono::duration<double, std::milli>(
                 writeEnd - writeStart).count();
@@ -2077,7 +2249,7 @@ TELEM_EXPORT int telem_amd_process_frame(
         std::chrono::steady_clock::now() - submitStart).count();
 
     // Substage E: Non-blocking drain of any packets that finished immediately
-    drainReadyPackets();
+    if (!drainReadyPackets()) return 0;
 
     ctx->inFlightFrames = ctx->framesSubmitted - ctx->framesReceived;
     if (ctx->inFlightFrames > ctx->maxInFlight) {
@@ -2257,10 +2429,8 @@ TELEM_EXPORT int telem_amd_flush(void* handle) {
     while (true) {
         AMF_RESULT queryResult = AMF_REPEAT;
         if (ctx->amfEncoder.QueryPacket(pktData, outPts, isKeyframe, &queryResult, nullptr)) {
-            if (ctx->h265Out.is_open() && !pktData.empty()) {
-                ctx->h265Out.write(reinterpret_cast<const char*>(pktData.data()), pktData.size());
-            }
             ctx->framesReceived++;
+            if (!pktData.empty() && !WriteEncodedPacket(ctx, pktData.data(), pktData.size())) return 0;
             continue;
         }
         if (queryResult == AMF_EOF) break;
@@ -2277,9 +2447,7 @@ TELEM_EXPORT int telem_amd_flush(void* handle) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    if (ctx->h265Out.is_open()) {
-        ctx->h265Out.close();
-    }
+    CloseEncodedOutput(ctx);
     std::cout << "[TELEM AMD DLL] telem_amd_flush completed. Total received: " << ctx->framesReceived << std::endl;
     return 1;
 }
@@ -2379,12 +2547,39 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     if (ctx->framesReceived < ctx->framesSubmitted) {
         telem_amd_flush(ctx);
     }
-    if (ctx->pSourceReader) ctx->pSourceReader->Release();
-    if (ctx->pDXGIManager) ctx->pDXGIManager->Release();
-    if (ctx->pBaseP010Tex) ctx->pBaseP010Tex->Release();
-    if (ctx->pUploadStagingTex) ctx->pUploadStagingTex->Release();
-    if (ctx->pDecodedCopyTex) ctx->pDecodedCopyTex->Release();
-    if (ctx->pPendingDecodedTex) ctx->pPendingDecodedTex->Release();
+    CloseEncodedOutput(ctx);
+    const char* mfFlushEnv = std::getenv("AMD_MF_TEARDOWN_FLUSH");
+    const bool mfTeardownFlush = mfFlushEnv && mfFlushEnv[0] == '1';
+    if (ctx->pSourceReader) {
+        if (mfTeardownFlush) {
+            // Diagnostic-only: force the SourceReader to release queued
+            // decoder samples before dropping the reader/device manager.
+            ctx->pSourceReader->Flush(MF_SOURCE_READER_ALL_STREAMS);
+            std::cout << "[NATIVE RESOURCE TEARDOWN] MF SourceReader Flush before release" << std::endl;
+        }
+        ctx->pSourceReader->Release();
+        AuditNativeResource(ctx, "MF_SOURCE_READER", ctx->pSourceReader, false);
+    }
+    if (ctx->pDXGIManager) {
+        AuditNativeResource(ctx, "MF_DXGI_DEVICE_MANAGER", ctx->pDXGIManager, false);
+        ctx->pDXGIManager->Release();
+    }
+    if (ctx->pBaseP010Tex) {
+        AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pBaseP010Tex, false);
+        ctx->pBaseP010Tex->Release();
+    }
+    if (ctx->pUploadStagingTex) {
+        AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pUploadStagingTex, false);
+        ctx->pUploadStagingTex->Release();
+    }
+    if (ctx->pDecodedCopyTex) {
+        AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pDecodedCopyTex, false);
+        ctx->pDecodedCopyTex->Release();
+    }
+    if (ctx->pPendingDecodedTex) {
+        AuditNativeResource(ctx, "D3D11_TEXTURE", ctx->pPendingDecodedTex, false);
+        ctx->pPendingDecodedTex->Release();
+    }
     // ETAP 5W — release the D3D11 device/context AFTER the VP/AMF destructors
     // (inside delete ctx) have torn down all GPU resources.  Releasing the
     // device first can strand driver-side kernel objects (events/mutants/
@@ -2396,9 +2591,27 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     // ETAP 5W — device/context liveness diagnostic (AMD_POOL_LIFECYCLE_STATS=1).
     const bool poolDbg = ctx->vpPipeline.IsPoolLifecycleStats();
 
+    // Resource-lifecycle audit only.  ClearState releases references retained
+    // by the immediate context; Flush submits the release work before the
+    // per-render objects and device are dropped.  Keep this opt-in until the
+    // native ablation proves that deferred D3D11 work is the retained resource.
+    const char* teardownFlushEnv = std::getenv("AMD_D3D11_TEARDOWN_FLUSH");
+    const bool teardownFlush = teardownFlushEnv && teardownFlushEnv[0] == '1';
+    if (teardownFlush && cctx) {
+        cctx->ClearState();
+        cctx->Flush();
+        std::cout << "[NATIVE RESOURCE TEARDOWN] D3D11 ClearState+Flush before release" << std::endl;
+    }
+
+    AuditNativeResource(ctx, "D3D11_CONTEXT", cctx, false);
+    AuditNativeResource(ctx, "D3D11_DEVICE", dev, false);
+    AuditNativeResource(ctx, "AMF_ENCODER", ctx->amfEncoder.EncoderIdentity(), false);
+    AuditNativeResource(ctx, "AMF_CONTEXT", ctx->amfEncoder.ContextIdentity(), false);
+    PrintNativeResourceSummary(ctx);
+    const bool mfStarted = ctx->mfStarted;
     delete ctx;
     if (cctx) cctx->Release();
-    MFShutdown();
+    if (mfStarted) MFShutdown();
     // ETAP 5W — remaining refcount after teardown + MFShutdown.  1 = only ours
     // (device destroyed by our Release below); >1 = a leaked reference keeps
     // the device alive and strands driver-side kernel objects.
@@ -2580,4 +2793,38 @@ TELEM_EXPORT void telem_amd_get_last_frame_timings(
     if (out_amf_submit_ms) *out_amf_submit_ms = t.amfSubmitMs;
     if (out_amf_query_ms) *out_amf_query_ms = t.amfQueryMs;
     if (out_packet_write_ms) *out_packet_write_ms = t.packetWriteMs;
+}
+
+TELEM_EXPORT int telem_amd_set_preview_tap(
+    void* handle, int enabled, UINT width, UINT height, UINT interval_frames) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (!enabled) {
+        ctx->previewTapEnabled = false;
+        ctx->vpPipeline.ReleasePreviewTap();
+        return 1;
+    }
+    if (width < 2 || height < 2) return 0;
+    if (!ctx->vpPipeline.ConfigurePreviewTap(width, height)) {
+        std::cerr << "[AMD PREVIEW TAP] ConfigurePreviewTap failed" << std::endl;
+        ctx->previewTapEnabled = false;
+        return 0;
+    }
+    ctx->previewTapWidth = ctx->vpPipeline.GetPreviewTapWidth();
+    ctx->previewTapHeight = ctx->vpPipeline.GetPreviewTapHeight();
+    ctx->previewTapIntervalFrames = interval_frames ? interval_frames : 1;
+    ctx->previewTapEnabled = true;
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_poll_preview_tap(
+    void* handle, uint8_t* out_bgra, UINT capacity, UINT* out_width,
+    UINT* out_height, UINT* out_frame, double* out_readback_ms) {
+    if (!handle || !out_bgra) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (!ctx->previewTapEnabled || !ctx->vpPipeline.IsPreviewTapConfigured()) return 0;
+    if (out_width) *out_width = ctx->previewTapWidth;
+    if (out_height) *out_height = ctx->previewTapHeight;
+    return ctx->vpPipeline.PollPreviewTap(
+        out_bgra, capacity, out_frame, out_readback_ms) ? 1 : 0;
 }

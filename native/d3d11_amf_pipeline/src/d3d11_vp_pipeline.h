@@ -83,6 +83,12 @@ public:
     D3D11VideoProcessorPipeline();
     ~D3D11VideoProcessorPipeline();
 
+    // Idempotent teardown used both by the destructor and by partial native
+    // initialization failure paths.  It releases all resources owned by the
+    // pipeline, including the borrowed device/context references acquired in
+    // Initialize().
+    void ReleaseResources();
+
     bool Initialize(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT width, UINT height);
     bool SetupVideoProcessor(DXGI_FORMAT inputFormat, DXGI_FORMAT outputFormat);
 
@@ -282,6 +288,19 @@ public:
         bool profilingEnabled = false
     );
 
+    // AMD Export Preview GPU frame tap.  The tap consumes the already
+    // composited NV12 output surface, scales it on the video processor, and
+    // queues at most one asynchronous BGRA readback.  It never waits for the
+    // GPU and is intentionally independent from the AMF submission path.
+    bool ConfigurePreviewTap(UINT width, UINT height);
+    bool SubmitPreviewTap(ID3D11Texture2D* finalTexture, UINT frameIndex);
+    bool PollPreviewTap(uint8_t* outBGRA, UINT capacity, UINT* outFrame,
+                        double* outReadbackMs);
+    void ReleasePreviewTap();
+    bool IsPreviewTapConfigured() const { return m_previewTapConfigured; }
+    UINT GetPreviewTapWidth() const { return m_previewTapWidth; }
+    UINT GetPreviewTapHeight() const { return m_previewTapHeight; }
+
     ID3D11Texture2D* GetHUDTexture() const { return m_hudTexture; }
     UINT GetLastPoolIndex() const { return m_lastPoolIndex; }
     ID3D11Device* GetDevice() const { return m_device; }
@@ -393,6 +412,22 @@ private:
     bool m_baseConvertCompute = false;
     ID3D11ComputeShader* m_baseConvertShader = nullptr;
 
+    // Export Preview frame-tap resources.  These are created lazily only when
+    // the checkbox is enabled and are released with the render context.
+    ID3D11VideoProcessorEnumerator* m_previewEnumerator = nullptr;
+    ID3D11VideoProcessor* m_previewProcessor = nullptr;
+    ID3D11Texture2D* m_previewOutputTexture[2] = { nullptr, nullptr };
+    ID3D11VideoProcessorOutputView* m_previewOutputView[2] = { nullptr, nullptr };
+    ID3D11Texture2D* m_previewStagingTexture[2] = { nullptr, nullptr };
+    ID3D11Query* m_previewReadyQuery[2] = { nullptr, nullptr };
+    bool m_previewTapConfigured = false;
+    bool m_previewCaptureInFlight = false;
+    UINT m_previewInFlightSlot = 0;
+    UINT m_previewInFlightFrame = 0;
+    UINT m_previewNextSlot = 0;
+    UINT m_previewTapWidth = 0;
+    UINT m_previewTapHeight = 0;
+
     ID3D11Texture2D* m_hudTexture = nullptr;
     ID3D11VideoProcessorInputView* m_hudInputView = nullptr;
     ID3D11ShaderResourceView* m_hudShaderView = nullptr;
@@ -423,6 +458,7 @@ private:
     int m_mapFilter = 2;  // 0=bilinear, 1=bicubic(Catmull-Rom), 2=Lanczos-3
     int m_mapGpuPath = 0; // ETAP 8U-B: 0=DIRECT_AUTO, 1=REFERENCE, 2=DIRECT_1TO1
     bool m_mapDirectUsed = false;
+    bool m_resourcesReleased = false;
     UINT64 m_mapUploads = 0;
     UINT64 m_mapUploadedBytes = 0;
     double m_mapUploadMs = 0.0;

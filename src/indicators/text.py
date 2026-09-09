@@ -62,8 +62,10 @@ def _render_text_indicator(
         "text_ind_v3", canvas_w, canvas_h, font_path, key, txt, text_color, outline_int, fs_int,
         icon_name
     )
-    px_x = s(cfg["x"], canvas_w)
-    px_y = s(cfg["y"], canvas_h)
+    ox = int(round(float(cfg.get("text_offset_x", 0.0)) * canvas_w))
+    oy = int(round(float(cfg.get("text_offset_y", 0.0)) * canvas_h))
+    px_x = s(cfg["x"], canvas_w) + ox
+    px_y = s(cfg["y"], canvas_h) + oy
     
     cached = _TEXT_INDICATOR_CACHE.get(cache_key)
     if cached is not None:

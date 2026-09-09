@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -196,15 +197,19 @@ class PlaybackMixin:
                         print(f"[MPV Seek Error] {e}")
             else:
                 try:
-                    if hasattr(self.mpv_player, "wait_until_playing"):
-                        self.mpv_player.wait_until_playing(timeout=0.3)
-                        self.mpv_player.seek(target_local, reference="absolute+exact")
-                        if not self._playing:
-                            self.mpv_player.pause = True
-                        self._source_transition_in_progress = False
-                        self._mpv_pending_seek_s = None
-                except Exception:
-                    pass
+                    if hasattr(self.mpv_player, "wait_for_property"):
+                        try:
+                            self.mpv_player.wait_for_property("seekable", lambda v: v is True, timeout=0.5)
+                        except Exception:
+                            pass
+                    self.mpv_player.seek(target_local, reference="absolute+exact")
+                    if not self._playing:
+                        self.mpv_player.pause = True
+                except Exception as e:
+                    print(f"[MPV Switch Seek Error] {e}")
+                finally:
+                    self._source_transition_in_progress = False
+                    self._mpv_pending_seek_s = None
             self._render_preview(seconds)
             return
 
@@ -474,10 +479,29 @@ class PlaybackMixin:
                     self.mpv_player.seek(res["local_time"], reference="absolute")
                 except Exception:
                     pass
-                global_pos = nxt
-
+            # ── 6. Critical UI & HUD updates (must never be blocked by diagnostics) ──
             self.signals.sig_seek_position.emit(global_pos)
             self._render_preview(global_pos)
+
+            # ── 7. Isolated rate-limited diagnostic log: PREVIEW_TIME max once per second ──
+            try:
+                now_mono = _time.monotonic()
+                if getattr(self, "_last_preview_time_diag", 0.0) == 0.0 or (now_mono - getattr(self, "_last_preview_time_diag", 0.0) >= 1.0):
+                    self._last_preview_time_diag = now_mono
+                    res_diag = self._resolve_preview_time(global_pos)
+                    abs_dt = res_diag.get("absolute_dt")
+                    abs_txt = abs_dt.isoformat(timespec="milliseconds") if abs_dt else "N/A"
+                    total_clips = timeline.clip_count if timeline else 1
+                    fps = getattr(self, "fps", 30.0) or 30.0
+                    print(
+                        f"[PREVIEW_TIME] clip={clip_idx + 1}/{total_clips} "
+                        f"local={local_pos:.3f} global={global_pos:.3f} "
+                        f"absolute={abs_txt} slider={global_pos:.3f} "
+                        f"telemetry_index={int(global_pos * fps)}",
+                        flush=True,
+                    )
+            except Exception:
+                pass
         except Exception as e:
             print(f"[MPV Tick Error] {e}", flush=True)
 

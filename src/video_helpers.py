@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 try:
     from PIL import Image
@@ -134,7 +135,7 @@ def clear_capture_cache():
     _CV2_CAP_CACHE.clear()
 
 
-def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ffprobe', target_w=960, preferred_encoder=''):
+def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ffprobe', target_w=960, preferred_encoder='', cache_capture=True):
     if not isinstance(video_paths, list):
         video_paths = [video_paths]
 
@@ -159,13 +160,30 @@ def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ff
         import cv2
         actual_path = get_proxy_path(target_path) or target_path
         
-        cap = get_cached_capture(actual_path)
+        local_caps = []
+        if cache_capture:
+            cap = get_cached_capture(actual_path)
+        else:
+            cap = cv2.VideoCapture(actual_path)
+            if cap is not None:
+                local_caps.append(cap)
+                if not cap.isOpened():
+                    cap.release()
+                    cap = None
         if cap is not None:
             cap.set(cv2.CAP_PROP_POS_MSEC, target_ts * 1000.0)
             ret, frame = cap.read()
             
             if not ret and actual_path != target_path:
-                cap = get_cached_capture(target_path)
+                if cache_capture:
+                    cap = get_cached_capture(target_path)
+                else:
+                    cap = cv2.VideoCapture(target_path)
+                    if cap is not None:
+                        local_caps.append(cap)
+                        if not cap.isOpened():
+                            cap.release()
+                            cap = None
                 if cap is not None:
                     cap.set(cv2.CAP_PROP_POS_MSEC, target_ts * 1000.0)
                     ret, frame = cap.read()
@@ -179,6 +197,15 @@ def extract_frame(video_paths, timestamp_s, ffmpeg_exe='ffmpeg', ffprobe_exe='ff
                 return Image.fromarray(frame_rgb)
     except Exception:
         pass
+    finally:
+        # Export Preview uses cache_capture=False and owns each decoder for
+        # one snapshot only.  Never leave a VideoCapture alive between
+        # renders or after Preview is disabled.
+        for local_cap in locals().get("local_caps", []):
+            try:
+                local_cap.release()
+            except Exception:
+                pass
 
     startupinfo = None
     if os.name == 'nt':
@@ -238,3 +265,91 @@ def parse_fps(rate_text):
             return 30.0
         return a / b
     return float(rate_text)
+
+
+def round_dt_to_nearest_5min(dt: datetime) -> datetime:
+    """Round a datetime to the nearest 5 minutes (300 seconds).
+
+    Correctly handles rollover like 23:58 -> next day 00:00.
+    """
+    minute_s = dt.minute * 60 + dt.second + dt.microsecond / 1e6
+    rounded_s = round(minute_s / 300.0) * 300
+    base = dt.replace(minute=0, second=0, microsecond=0)
+    return base + timedelta(seconds=rounded_s)
+
+
+def resolve_local_datetime(
+    dt: datetime,
+    fit_data: any = None,
+    tz_offset_hours: float | None = None,
+    tzinfo: any = None,
+) -> tuple[datetime, str]:
+    """Convert a UTC (or naive-UTC) datetime to local recording datetime.
+
+    Resolution order:
+    1. FIT / GPMF / project timezone information if available and reliable.
+    2. Existing project / application timezone offset (tz_offset_hours).
+    3. System local timezone as DST-aware fallback (via datetime.astimezone()).
+
+    Returns:
+        (local_dt, resolution_reason)
+    """
+    from datetime import timezone as _dt_tz
+
+    # 1. FIT timezone information (e.g. Garmin Edge activity local_timestamp offset)
+    if fit_data is not None:
+        offset = getattr(fit_data, "timezone_offset_hours", None)
+        if offset is None and hasattr(fit_data, "records"):
+            offset = getattr(fit_data.records, "timezone_offset_hours", None)
+        if offset is not None:
+            base = dt.replace(tzinfo=None) if dt.tzinfo else dt
+            return base + timedelta(hours=offset), f"FIT activity offset ({offset:+.1f}h)"
+
+    # 2. Explicit project / application timezone offset
+    if tz_offset_hours is not None:
+        base = dt.replace(tzinfo=None) if dt.tzinfo else dt
+        return base + timedelta(hours=tz_offset_hours), f"Project/App timezone offset ({tz_offset_hours:+.1f}h)"
+
+    # Explicit tzinfo object if provided
+    if tzinfo is not None:
+        dt_utc = dt.replace(tzinfo=_dt_tz.utc) if dt.tzinfo is None else dt.astimezone(_dt_tz.utc)
+        dt_loc = dt_utc.astimezone(tzinfo)
+        return dt_loc.replace(tzinfo=None), f"Explicit tzinfo ({tzinfo})"
+
+    # 3. System local timezone as DST-aware fallback
+    dt_utc = dt.replace(tzinfo=_dt_tz.utc) if dt.tzinfo is None else dt.astimezone(_dt_tz.utc)
+    dt_loc = dt_utc.astimezone()
+    tz_name = dt_loc.tzname() or "local"
+    return dt_loc.replace(tzinfo=None), f"System local timezone ({tz_name}, {dt_loc.utcoffset()})"
+
+
+def generate_auto_export_filename(
+    start_dt: datetime,
+    target_dir: Path | str | None = None,
+    fit_data: any = None,
+    tz_offset_hours: float | None = None,
+    tzinfo: any = None,
+) -> str:
+    """Generate default export filename YYYYMMDD-HHMM.mp4 with collision suffixes.
+
+    Converts start_dt (assumed UTC if naive) to local datetime using:
+    1. FIT / GPMF / project timezone information if available.
+    2. Explicit project / app timezone offset.
+    3. System local timezone as DST-aware fallback.
+    """
+    local_dt, _ = resolve_local_datetime(
+        start_dt, fit_data=fit_data, tz_offset_hours=tz_offset_hours, tzinfo=tzinfo
+    )
+    rd = round_dt_to_nearest_5min(local_dt)
+    base_stem = rd.strftime("%Y%m%d-%H%M")
+    candidate_name = f"{base_stem}.mp4"
+    if target_dir is None:
+        return candidate_name
+    t_dir = Path(target_dir)
+    if not (t_dir / candidate_name).exists():
+        return candidate_name
+    idx = 1
+    while (t_dir / f"{base_stem}-{idx:02d}.mp4").exists():
+        idx += 1
+    return f"{base_stem}-{idx:02d}.mp4"
+

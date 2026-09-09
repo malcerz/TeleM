@@ -20,13 +20,20 @@ except ImportError:
 from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
-from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color, resolve_indicator_font_path
+from src.indicators.helpers import (
+    indicator_font_path, load_font, s, parse_hex_color,
+    resolve_indicator_font_path,
+)
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_display import render_time_display
 from src.indicators.profiling import (
     get_overlay_profiler,
     indicator_scope,
     record_production_accounting,
+)
+from src.telemetry_resolver import (
+    distance_m_to_km, resolve_presentation_precision, presentation_debug,
+    presentation_default_precision,
 )
 
 
@@ -153,6 +160,7 @@ def compose_overlay(
     map_heading: Optional[float] = None,
     async_map: bool = False,
     _production_accounting_role: Optional[str] = None,
+    auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
 
@@ -281,8 +289,8 @@ def compose_overlay(
     known_vals: dict[str, tuple[float, str, str]] = {
         "speed_visual": (speed_value, "km/h", ""),
         "speed_text": (speed_value, "km/h", ""),
-        "dist_visual": (None if distance_m is None else distance_m / 1000.0, "km", ""),
-        "dist_text": (None if distance_m is None else distance_m / 1000.0, "km", ""),
+        "dist_visual": (distance_m_to_km(distance_m), "km", ""),
+        "dist_text": (distance_m_to_km(distance_m), "km", ""),
         "alt_visual": (alt_value, "m", "Alt"),
         "alt_text": (alt_value, "m", "Alt"),
         "iso_text": (iso_value, "ISO", "ISO"),
@@ -309,7 +317,7 @@ def compose_overlay(
         if raw is None:
             return raw
         if "distance" in k or "dist_" in k:
-            return raw / 1000.0
+            return distance_m_to_km(raw)
         return raw
 
     if extra_indicators:
@@ -376,17 +384,32 @@ def compose_overlay(
             current_cfg.get("form") in ("bar", "gauge", "segment_bar")
             and (current_cfg.get("unit") == "km" or "distance" in key or "dist_" in key)
         )
-        if (
+        auto_scale_active = bool(
+            current_cfg.get("auto_scale")
+            or current_cfg.get("auto_min")
+            or current_cfg.get("auto_max")
+        )
+        is_range_form = current_cfg.get("form") in ("bar", "ruler", "gauge", "segment_bar", "chart")
+        if auto_scale_active and is_range_form and auto_ranges and key in auto_ranges:
+            amin, amax = auto_ranges[key]
+            if current_cfg.get("auto_scale") or current_cfg.get("auto_min"):
+                current_cfg["min_val"] = amin
+            if current_cfg.get("auto_scale") or current_cfg.get("auto_max"):
+                current_cfg["max_val"] = max(current_cfg.get("min_val", amin) + 0.001, amax)
+        elif (
             is_dist_key
             and current_cfg.get("auto_scale", False)
             and max_distance_m is not None
         ):
-            current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, max_distance_m / 1000.0)
+            current_cfg["max_val"] = max(
+                current_cfg.get("min_val", 0) + 0.001,
+                distance_m_to_km(max_distance_m),
+            )
         elif (
             key in ("speed_visual", "speed_text")
             and current_cfg.get("auto_scale", False)
             and max_speed_kmh is not None
-            and current_cfg.get("form") in ("bar", "gauge", "segment_bar")
+            and is_range_form
         ):
             rounded = math.ceil(max_speed_kmh / 10.0) * 10
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, rounded)
@@ -404,13 +427,21 @@ def compose_overlay(
         if not show_value:
             fv = ""
         else:
-            if "voltage" in key or unit == "V":
+            if key.startswith('fit_'):
+                default_decimals = presentation_default_precision(key, current_cfg)
+            elif "voltage" in key or unit == "V":
                 default_decimals = 2
-            elif key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass") or key.startswith("fit_"):
+            elif (
+                key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass")
+                or key.startswith("fit_")
+                or "solar" in key.lower()
+                or "battery" in key.lower()
+                or unit == "%"
+            ):
                 default_decimals = 0
             else:
                 default_decimals = 1
-            decimals = int(current_cfg.get("decimals", default_decimals))
+            decimals = resolve_presentation_precision(current_cfg, default_decimals)
             show_units = current_cfg.get("show_units", True)
 
             if key == "compass":
@@ -444,7 +475,7 @@ def compose_overlay(
                     fv = f"{val_str} BPM"
                 elif key == "cad_text":
                     fv = f"{val_str} RPM"
-                elif key == "battery_text":
+                elif key == "battery_text" or unit == "%":
                     fv = f"{val_str}%"
                 elif key == "iso_text":
                     fv = val_str
@@ -453,6 +484,8 @@ def compose_overlay(
             else:
                 fv = val_str
 
+        presentation_debug('compositor', indicator=key, target_dt=target_dt,
+                           known_vals=value, formatted_val=fv)
         chart_vals = chart_data.get(key) if chart_data else None
 
         global_ss = 1 if fast_preview else layout.get("global", {}).get("antialiasing", 1)
@@ -786,6 +819,7 @@ def render_preview(
     inplace: bool = False,
     map_heading: Optional[float] = None,
     async_map: bool = False,
+    auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top.
 
@@ -834,6 +868,7 @@ def render_preview(
         fast_preview=True,
         map_heading=map_heading,
         async_map=async_map,
+        auto_ranges=auto_ranges,
     )
     # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)

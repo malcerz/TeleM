@@ -1075,7 +1075,10 @@ def interpolate_speed(
 def interpolate_distance(
     track_samples: list[tuple[datetime, float]], target_dt: datetime
 ) -> float:
-    """Linear interpolation of cumulative distance at a given timestamp."""
+    """Interpolate cumulative distance, holding across merged-FIT boundaries."""
+    segment_start_indices = frozenset(
+        getattr(track_samples, "segment_start_indices", ()) or ()
+    )
     target_dt = _normalise_dt(target_dt)
     track_samples = _normalise_samples(track_samples)
     if not track_samples:
@@ -1089,6 +1092,8 @@ def interpolate_distance(
         return track_samples[-1][1]
     t1, d1 = track_samples[idx - 1]
     t2, d2 = track_samples[idx]
+    if idx in segment_start_indices and target_dt < t2:
+        return d1
     dt_total = (t2 - t1).total_seconds()
     if dt_total <= 0:
         return d1
@@ -1120,9 +1125,15 @@ def interpolate_altitude(
 
 
 def _interpolate_step(
-    samples: list[tuple[datetime, Any]], target_dt: datetime
+    samples: list[tuple[datetime, Any]], target_dt: datetime,
+    *, allow_pre_first: bool = True,
 ) -> Any:
-    """Previous-or-equal lookup shared by all STEP telemetry fields."""
+    """Previous-or-equal lookup shared by STEP telemetry fields.
+
+    FIT historically allows a short pre-first hold.  Native GPMF camera
+    streams use the stricter availability contract exposed by
+    :func:`interpolate_gpmf_step` below.
+    """
     if not samples:
         return None
     target_dt = _normalise_dt(target_dt)
@@ -1130,7 +1141,7 @@ def _interpolate_step(
     times = [dt for dt, _ in samples]
     idx = bisect_right(times, target_dt) - 1
     if idx < 0:
-        if len(times) > 0 and (times[0] - target_dt).total_seconds() <= 120.0:
+        if allow_pre_first and len(times) > 0 and (times[0] - target_dt).total_seconds() <= 120.0:
             return samples[0][1]
         return None
     return samples[idx][1]
@@ -1140,21 +1151,32 @@ def interpolate_iso(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of ISO at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_exposure(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of exposure at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_temperature(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of temperature at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
+
+
+def interpolate_gpmf_step(
+    samples: list[tuple[datetime, Any]], target_dt: datetime
+) -> Any:
+    """Resolve a dynamic GPMF stream without backfilling future samples.
+
+    The first value becomes available exactly at its own timestamp.  Existing
+    last-value hold after the final sample is intentionally preserved.
+    """
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_value(

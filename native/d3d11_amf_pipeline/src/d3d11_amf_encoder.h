@@ -26,6 +26,9 @@ public:
     D3D11AMFEncoder();
     ~D3D11AMFEncoder();
 
+    // Idempotent lifecycle boundary for partial native initialization.
+    void Shutdown();
+
     bool Initialize(ID3D11Device* pDevice, UINT width, UINT height, UINT fpsNum = 30000, UINT fpsDen = 1001);
     bool CreateSurface(ID3D11Texture2D* pNV12Texture, int64_t pts, amf::AMFSurfacePtr& outSurface, double* outCreateMs = nullptr);
     AMF_RESULT SubmitSurface(amf::AMFSurface* pSurface, AMFEncoderStats* outStats = nullptr);
@@ -38,6 +41,11 @@ public:
         double* outQueryMs = nullptr
     );
     bool Flush();
+
+    // Diagnostic-only raw identities; ownership remains with AMF smart
+    // pointers and callers must never Release these values.
+    const void* ContextIdentity() const { return static_cast<const void*>(m_context.GetPtr()); }
+    const void* EncoderIdentity() const { return static_cast<const void*>(m_encoder.GetPtr()); }
 
     bool IsSameDeviceUsed() const { return m_sameDeviceUsed; }
     amf::AMFContextPtr GetContext() const { return m_context; }

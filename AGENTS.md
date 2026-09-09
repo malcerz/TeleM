@@ -496,3 +496,21 @@ REPORT:
 ```
 
 Do not automatically start the next optimization stage.
+
+---
+
+# 19. Unified `main` branch workflow
+
+The active development branch is `main`; do not create new backend branches.
+NVIDIA work proceeds on `main`, followed by Intel work on the same branch.
+
+During NVIDIA work:
+
+- keep AMD-specific code unchanged unless a shared-layer change is necessary;
+- prefer NVIDIA-only scope;
+- prove any shared-code change with an AMD smoke regression;
+- run a short AMD smoke after each substantial NVIDIA fix;
+- do not start Intel work concurrently.
+
+Stable milestones may receive annotated tags, but not separate backend
+branches. The AMD checkpoint tag is `amd-final-2026-09-09`.

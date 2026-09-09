@@ -79,7 +79,28 @@ class TopLevelHUDWindow(QWidget):
                 self.hide()
                 return
             global_pos = widget.mapToGlobal(QPoint(0, 0))
-            self.setGeometry(global_pos.x(), global_pos.y(), widget.width(), widget.height())
+            gw = max(1, widget.width())
+            gh = max(1, widget.height())
+            gx = global_pos.x()
+            gy = global_pos.y()
+            screen = self.screen() or (main_win.screen() if main_win else None)
+            if screen is not None:
+                avail = screen.availableGeometry()
+                if avail.isValid() and not avail.isNull():
+                    if gx < avail.x():
+                        gw = max(1, gw - (avail.x() - gx))
+                        gx = avail.x()
+                    if gy < avail.y():
+                        gh = max(1, gh - (avail.y() - gy))
+                        gy = avail.y()
+                    if gx + gw > avail.right() + 1:
+                        gw = max(1, avail.right() + 1 - gx)
+                    if gy + gh > avail.bottom() + 1:
+                        gh = max(1, avail.bottom() + 1 - gy)
+            try:
+                self.setGeometry(gx, gy, gw, gh)
+            except Exception:
+                pass
             if self.parent_preview_widget.is_using_mpv() and self.parent_preview_widget.isVisible():
                 self.show()
                 self.raise_()
@@ -89,10 +110,9 @@ class TopLevelHUDWindow(QWidget):
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
             vrect = self.parent_preview_widget.get_video_rect()
-            # self.hud_pixmap has devicePixelRatio set to dpr.
-            # Its underlying buffer is physical (phys_w x phys_h).
-            # Drawing at logical (vrect.x(), vrect.y()) maps 1:1 to physical screen pixels with zero post-raster resize.
-            painter.drawPixmap(vrect.x(), vrect.y(), self.hud_pixmap)
+            # Scale self.hud_pixmap to fit vrect: maps 1:1 if physical raster
+            # matches, or adapts cleanly without distortion if geometry changed in-flight.
+            painter.drawPixmap(vrect, self.hud_pixmap)
             painter.end()
 
 
@@ -140,19 +160,8 @@ class VideoPreview(QWidget):
             info = getattr(ctrl, "video_info", None)
             vw = getattr(ctrl, "video_width", 0) or (info.get("width", 0) if isinstance(info, dict) else 0) or getattr(ctrl, "layout", {}).get("width", 0) or 16
             vh = getattr(ctrl, "video_height", 0) or (info.get("height", 0) if isinstance(info, dict) else 0) or getattr(ctrl, "layout", {}).get("height", 0) or 9
-        aspect = float(vw) / float(vh) if vh > 0 else (16.0 / 9.0)
-
-        if w / h >= aspect:
-            target_h = h
-            target_w = max(1, int(round(h * aspect)))
-            ox = (w - target_w) // 2
-            oy = 0
-        else:
-            target_w = w
-            target_h = max(1, int(round(w / aspect)))
-            ox = 0
-            oy = (h - target_h) // 2
-
+        from src.gui.preview_transform import calculate_displayed_video_rect
+        ox, oy, target_w, target_h = calculate_displayed_video_rect(w, h, vw, vh)
         return QRect(ox, oy, target_w, target_h)
 
     def get_dpr(self) -> float:
@@ -536,15 +545,15 @@ class VideoPreview(QWidget):
 
     def _norm_from_geometry(self, label_x: float, label_y: float, w: int, h: int) -> tuple[float, float]:
         """Przelicza współrzędne w widgetu na znormalizowane (0..100) wewnątrz rzeczywistego rect wideo."""
-        vrect = self.get_video_rect()
-        pw = vrect.width()
-        ph = vrect.height()
-        ox = vrect.x()
-        oy = vrect.y()
-        
-        px = ((label_x - ox) / pw * 100.0) if pw > 0 else 0.0
-        py = ((label_y - oy) / ph * 100.0) if ph > 0 else 0.0
-        return (px, py)
+        ctrl = self._controller
+        vw = getattr(ctrl, "video_width", 0) or 16
+        vh = getattr(ctrl, "video_height", 0) or 9
+        from src.gui.preview_transform import preview_to_norm_coords
+        return preview_to_norm_coords(
+            label_x, label_y,
+            self.stacked_widget.width(), self.stacked_widget.height(),
+            vw, vh,
+        )
 
     def _uses_topleft_anchor(self, key: str) -> bool:
         """True gdy pozycja (x, y) w layoucie oznacza LEWY-GÓRNY róg wskaźnika."""

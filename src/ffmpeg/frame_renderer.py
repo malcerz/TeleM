@@ -198,6 +198,10 @@ def render_overlay_frame(
                         break
 
             if not is_dirty:
+                # Dynamic FIT current values and full-float geometry must
+                # invalidate the atlas even inside one displayed second.
+                is_dirty = prev_data.get('extra_indicators') != data.get('extra_indicators')
+            if not is_dirty:
                 return prev_atlas
 
         direct_members = None
@@ -269,6 +273,7 @@ def render_overlay_frame(
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
             avg_speed_kmh=data["avg_speed_kmh"],
+            auto_ranges=data.get("auto_ranges"),
         )
 
         atlas_img = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
@@ -488,12 +493,25 @@ def render_overlay_job(job: tuple) -> int:
             )
 
     # ── Elapsed time & average speed (for time_display) ───────────────
+    fit_data = WORKER_CACHE.get("fit_data")
+    active_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
     _elapsed = 0.0
-    if start_dt_utc is not None and current_dt_utc is not None:
-        _elapsed = max(0.0, (current_dt_utc - start_dt_utc).total_seconds())
-    _avg_spd = 0.0
-    if _elapsed > 0 and distance_m > 0:
-        _avg_spd = (distance_m / _elapsed) * 3.6
+    if active_mapper is not None and current_dt_utc is not None:
+        _elapsed = max(0.0, active_mapper.wall_to_active_seconds(current_dt_utc))
+    elif start_dt_utc is not None and current_dt_utc is not None:
+        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
+        _td = current_dt_utc.replace(tzinfo=None) if current_dt_utc.tzinfo is not None else current_dt_utc
+        raw_diff = (_td - _sd).total_seconds()
+        _elapsed = max(0.0, raw_diff) if 0.0 <= raw_diff < 2592000.0 else 0.0
+    from src.telemetry_active_time import compute_activity_distance_and_avg_speed
+    _, _avg_spd = compute_activity_distance_and_avg_speed(
+        fit_data=fit_data,
+        gpx_track_samples=WORKER_CACHE.get("gpx_track_samples"),
+        gpmf_track_samples=track_samples,
+        target_dt=current_dt_utc,
+        active_elapsed_s=_elapsed,
+        fallback_distance_m=distance_m,
+    )
 
     map_heading = None
     map_cfg = layout.get("indicators", {}).get("track_map", {})
@@ -523,6 +541,7 @@ def render_overlay_job(job: tuple) -> int:
         start_dt_utc=start_dt_utc,
         elapsed_seconds=_elapsed,
         avg_speed_kmh=_avg_spd,
+        auto_ranges=WORKER_CACHE.get("auto_ranges"),
     )
     rot = WORKER_CACHE.get("effective_rotation", 0) % 360
     if rot == 180:

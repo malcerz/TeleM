@@ -25,6 +25,41 @@ FONT_CACHE: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _FONT_PATH_CACHE: dict[tuple[str, str], str] = {}
 _SYSTEM_FONT_MAP_CACHE: Optional[dict[str, str]] = None
+PREVIEW_VIDEO_BRIGHTNESS = 0.55
+_PREVIEW_DIM_LUT_CACHE: dict[float, tuple[int, ...]] = {}
+
+
+def resolve_decimal_places(cfg: dict[str, Any], default: int = 1) -> int:
+    """Resolve displayed numeric precision without changing source values.
+
+    ``decimal_places`` is canonical for charts.  ``decimals`` remains a
+    compatibility alias used by older indicator forms and saved presets.
+    Presence is tested explicitly so that a configured value of zero is kept.
+    """
+    from src.telemetry_resolver import resolve_presentation_precision
+    return resolve_presentation_precision(cfg, default)
+
+
+def dim_preview_video(img, brightness: float = PREVIEW_VIDEO_BRIGHTNESS):
+    """Dim only preview-video RGB channels and preserve alpha byte-for-byte."""
+    if img is None:
+        return None
+    try:
+        factor = max(0.0, min(1.0, float(brightness)))
+    except (TypeError, ValueError):
+        factor = PREVIEW_VIDEO_BRIGHTNESS
+    rgba = img.convert("RGBA")
+    alpha = rgba.getchannel("A")
+    lut_key = round(factor, 6)
+    lut = _PREVIEW_DIM_LUT_CACHE.get(lut_key)
+    if lut is None:
+        channel_lut = tuple(int(i * factor) for i in range(256))
+        lut = channel_lut * 3
+        _PREVIEW_DIM_LUT_CACHE[lut_key] = lut
+    rgb = rgba.convert("RGB").point(lut)
+    result = rgb.convert("RGBA")
+    result.putalpha(alpha)
+    return result
 
 
 def _build_windows_font_map() -> dict[str, str]:
@@ -294,7 +329,10 @@ def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.I
     try:
         font = ImageFont.truetype(actual_path, size=int(size))
     except Exception:
-        font = ImageFont.load_default()
+        try:
+            font = ImageFont.load_default(size=int(size))
+        except Exception:
+            font = ImageFont.load_default()
     FONT_CACHE[key] = font
     profiler.record_operation(
         "font cache lookup", (time.perf_counter() - lookup_started) * 1000.0
@@ -410,3 +448,194 @@ def apply_map_shape(img, shape: str):
     except Exception:
         pass
     return img
+
+
+def apply_map_opacity(img, raw_opacity: Any):
+    """Apply opacity (0.0..1.0) to a rendered map image.
+
+    Normalizes legacy 1.0..10.0 or percentage (10..100) ranges cleanly.
+    """
+    if img is None or raw_opacity is None:
+        return img
+    try:
+        op = float(raw_opacity)
+        if op > 1.0 and op <= 10.0:
+            op = op / 10.0
+        elif op > 10.0 and op <= 100.0:
+            op = op / 100.0
+        op = max(0.0, min(1.0, op))
+        if op < 1.0:
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            r, g, b, a = img.split()
+            a = a.point(lambda p: int(round(p * op)))
+            return Image.merge("RGBA", (r, g, b, a))
+    except Exception:
+        pass
+    return img
+
+
+def _find_perspective_coeffs(pa, pb):
+    """Solve 8 perspective matrix coefficients using pure-Python Gaussian elimination."""
+    matrix = []
+    for p1, p2 in zip(pa, pb):
+        matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1], p2[0]])
+        matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1]*p1[0], -p2[1]*p1[1], p2[1]])
+
+    n = 8
+    for i in range(n):
+        max_el = abs(matrix[i][i])
+        max_row = i
+        for k in range(i + 1, n):
+            if abs(matrix[k][i]) > max_el:
+                max_el = abs(matrix[k][i])
+                max_row = k
+        matrix[i], matrix[max_row] = matrix[max_row], matrix[i]
+        for k in range(i + 1, n):
+            c = -matrix[k][i] / matrix[i][i]
+            for j in range(i, n + 1):
+                if i == j:
+                    matrix[k][j] = 0
+                else:
+                    matrix[k][j] += c * matrix[i][j]
+
+    x = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        x[i] = matrix[i][n] / matrix[i][i]
+        for k in range(i - 1, -1, -1):
+            matrix[k][n] -= matrix[k][i] * x[i]
+    return x
+
+
+_MAP_PITCH_CACHE: dict[tuple[int, int, float], tuple[Any, Any, list[tuple[float, float]]]] = {}
+
+
+def compute_map_pitch_quad(w: int, h: int, raw_pitch: Any) -> list[tuple[float, float]]:
+    """Compute 2D destination quadrilateral for a 3D perspective pitch tilt.
+
+    Returns 4 corner points: [top_left, top_right, bottom_right, bottom_left].
+    For pitch <= 0.001 deg, returns the exact rectangular bounds.
+    """
+    if w <= 0 or h <= 0:
+        return [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+    try:
+        pitch_deg = float(raw_pitch or 0.0)
+    except Exception:
+        pitch_deg = 0.0
+
+    if pitch_deg <= 0.001:
+        return [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
+
+    import math
+    pitch_deg = min(70.0, max(0.0, pitch_deg))
+    d = 1.2 * max(w, h)
+    theta = math.radians(pitch_deg)
+    sin_t = math.sin(theta)
+    cos_t = math.cos(theta)
+
+    z_top = d + h * sin_t
+    w_top = w * (d / z_top)
+    x_tl = (w - w_top) / 2.0
+    x_tr = (w + w_top) / 2.0
+    dy_top = (h * d * cos_t) / z_top
+    y_top = h - dy_top
+
+    return [
+        (float(x_tl), float(y_top)),
+        (float(x_tr), float(y_top)),
+        (float(w), float(h)),
+        (0.0, float(h)),
+    ]
+
+
+def _get_map_pitch_transforms(w: int, h: int, pitch_deg: float):
+    """Retrieve or compute cached OpenCV homography and Pillow perspective coefficients."""
+    cache_key = (w, h, round(pitch_deg, 2))
+    cached = _MAP_PITCH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    quad = compute_map_pitch_quad(w, h, pitch_deg)
+    src_pts = [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
+    dst_pts = quad
+
+    cv2_M = None
+    pil_coeffs = None
+
+    try:
+        import cv2
+        import numpy as np
+        cv2_M = cv2.getPerspectiveTransform(
+            np.float32(src_pts),
+            np.float32(dst_pts),
+        )
+        M_inv = np.linalg.inv(cv2_M)
+        M_inv /= M_inv[2, 2]
+        pil_coeffs = tuple(float(x) for x in M_inv.flatten()[:8])
+    except Exception:
+        pass
+
+    if pil_coeffs is None:
+        # Pure Python fallback
+        pil_coeffs = tuple(_find_perspective_coeffs(dst_pts, src_pts))
+
+    result = (cv2_M, pil_coeffs, quad)
+    if len(_MAP_PITCH_CACHE) > 128:
+        _MAP_PITCH_CACHE.clear()
+    _MAP_PITCH_CACHE[cache_key] = result
+    return result
+
+
+def apply_map_pitch(img, raw_pitch: Any):
+    """Apply true 3D perspective pitch tilt (0..70 degrees) to a rendered map image.
+
+    Models the map as a flat 3D quadrilateral viewed at a pitch angle by a camera.
+    For pitch == 0, returns the exact legacy unwarped image without any overhead.
+    """
+    if img is None or raw_pitch is None:
+        return img
+    try:
+        pitch_deg = float(raw_pitch)
+    except (ValueError, TypeError):
+        return img
+
+    if pitch_deg <= 0.001:
+        return img
+
+    pitch_deg = min(70.0, max(0.0, pitch_deg))
+    w, h = img.size
+    if w <= 0 or h <= 0:
+        return img
+
+    try:
+        cv2_M, pil_coeffs, _ = _get_map_pitch_transforms(w, h, pitch_deg)
+
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+
+        if cv2_M is not None:
+            try:
+                import cv2
+                import numpy as np
+                arr = np.array(img)
+                warped = cv2.warpPerspective(
+                    arr,
+                    cv2_M,
+                    (w, h),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=(0, 0, 0, 0),
+                )
+                return Image.fromarray(warped)
+            except Exception:
+                pass
+
+        return img.transform(
+            (w, h),
+            Image.PERSPECTIVE,
+            pil_coeffs,
+            Image.BILINEAR,
+            fillcolor=(0, 0, 0, 0),
+        )
+    except Exception:
+        return img

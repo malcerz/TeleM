@@ -101,7 +101,9 @@ def render_value_indicator(
         if form == "segment_bar" and "bar_style" not in cfg:
             cfg["bar_style"] = "segments"
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
-    elif form == "gauge":
+    elif form in ("gauge", "compass"):
+        if form == "compass" and "gauge_style" not in cfg:
+            cfg["gauge_style"] = "compass"
         return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "lean":
         return _render_lean_indicator(**_kwargs, formatted_val=formatted_val)

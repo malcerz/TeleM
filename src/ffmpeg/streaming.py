@@ -223,7 +223,12 @@ class _RenderExecutor:
     def __exit__(self, exc_type, exc, tb):
         cancelled = self._cancel_event is not None and self._cancel_event.is_set()
         if cancelled:
-            for child in list(getattr(self.executor, "_processes", {}).values()):
+            # ``ProcessPoolExecutor.shutdown(wait=False)`` may already have
+            # cleared its private process mapping in the in-loop cancel path.
+            # Treat that as an already-clean executor, never as a CPU-cancel
+            # failure after FFmpeg has been stopped successfully.
+            processes = getattr(self.executor, "_processes", None) or {}
+            for child in list(processes.values()):
                 try:
                     child.terminate()
                 except Exception:
@@ -560,10 +565,23 @@ def _report_stream_progress(
         if audit is not None:
             audit.add_stat("progress_callback", (time.perf_counter_ns() - callback_started) / 1_000_000.0)
     if on_render_progress:
-        hud_state = None
+        # CPU/software rendering used to send only {frame, ts}.  The shared
+        # GUI contract treats a payload without phase as preparation, leaving
+        # the visible counter at 0 despite real frames reaching FFmpeg stdin.
+        # ``done`` is incremented only after bounded hand-off of a real frame;
+        # no wall-clock timer is involved.
+        hud_state = {
+            "phase": "render",
+            "backend": "cpu",
+            "role": "cpu",
+            "frame_done": int(done),
+            "frame_total": int(total),
+            "fps_instant": float(fps),
+            "fps_average": float(fps),
+        }
         if target_fps and target_fps > 0 and done > 0:
             frame = min(max(0, total - 1), done - 1)
-            hud_state = {"frame": frame, "ts": frame / target_fps}
+            hud_state.update({"frame": frame, "ts": frame / target_fps})
         callback_started = time.perf_counter_ns() if audit is not None else 0
         on_render_progress(done, total, elapsed, fps, hud_state)
         if audit is not None:
@@ -746,6 +764,32 @@ def resolve_hud_resolution_policy(
     return 1.0, "[INTEL] HUD resolution policy: FALLBACK 100%" if encoder == "intel" else ""
 
 
+def resolve_amd_gui_range_plan(
+    video_timeline: Any,
+    cut_regions: list[tuple[float, float]],
+    target_fps: float,
+    fallback_duration_s: float,
+) -> tuple[Any, int, float]:
+    """Resolve GUI cuts to the one timeline/frame plan used by AMD native."""
+    if (
+        video_timeline is None
+        or not getattr(video_timeline, "clip_count", 0)
+        or not cut_regions
+    ):
+        frames = (
+            video_timeline.output_frame_count(target_fps)
+            if video_timeline is not None
+            and getattr(video_timeline, "clip_count", 0)
+            else max(1, int(round(float(fallback_duration_s) * target_fps)))
+        )
+        return video_timeline, frames, frames / target_fps
+    effective = video_timeline.subset_excluding(cut_regions)
+    frames = effective.output_frame_count(target_fps)
+    if frames <= 0:
+        raise ValueError("AMD GUI range contains no output frames")
+    return effective, frames, frames / target_fps
+
+
 def stream_overlay_to_ffmpeg(
     ffmpeg_exe: str,
     input_files: str | list[str],
@@ -792,6 +836,10 @@ def stream_overlay_to_ffmpeg(
     cancel_event: Optional[threading.Event] = None,
     active_process_holder: Optional[dict] = None,
     amd_decode_mode: Optional[str] = None,
+    cancel_reason_provider: Optional[Callable[[], Any]] = None,
+    preview_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
+    preview_session: Optional[Any] = None,
+    generation_id: int = 0,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
@@ -844,6 +892,37 @@ def stream_overlay_to_ffmpeg(
 
     phase_t0 = time.time()
     cut_regions = layout.get("cut_regions", [])
+
+    # AMD native consumes a clip-aware VideoTimeline directly.  Convert the
+    # GUI's canonical excluded regions to retained source-local clip ranges
+    # before native frame planning; otherwise the native exporter would see
+    # the full project and silently render outside IN/OUT.
+    amd_video_timeline = video_timeline
+    amd_layout = layout
+    amd_duration_s = duration_s
+    amd_output_frames: Optional[int] = None
+    if (
+        encoder in ("amd", "amd_native")
+        and video_timeline is not None
+        and getattr(video_timeline, "clip_count", 0)
+        and cut_regions
+    ):
+        amd_video_timeline, amd_output_frames, amd_duration_s = (
+            resolve_amd_gui_range_plan(
+                video_timeline, cut_regions, target_fps, duration_s
+            )
+        )
+        amd_layout = dict(layout)
+        amd_layout["cut_regions"] = []
+        print(
+            "[AMD RANGE PLAN] "
+            f"gui_cuts={len(cut_regions)} "
+            f"source_clips={video_timeline.clip_count} "
+            f"effective_segments={amd_video_timeline.clip_count} "
+            f"requested_frames={amd_output_frames} "
+            f"duration_s={amd_duration_s:.6f}",
+            flush=True,
+        )
 
     generation_fps = target_fps / update_rate_step
     if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
@@ -979,50 +1058,66 @@ def stream_overlay_to_ffmpeg(
         )
         from src.ffmpeg.detection import detect_amd_compose_backend
         if detect_amd_compose_backend("AUTO", ffmpeg_exe=ffmpeg_exe) == "AMD_NATIVE_D3D11":
-            from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11
+            from src.ffmpeg.amd_native_exporter import (
+                AMDNativeFinalizationError,
+                export_amd_native_d3d11,
+            )
             from src.ffmpeg.command_builder import RESOLUTION_MAP
             target_res = RESOLUTION_MAP.get(resolution_name)
             out_w, out_h = target_res if target_res is not None else (render_w, render_h)
             print("[STREAM AMD] Dispatching to production AMD_NATIVE_D3D11 GPU pipeline...", flush=True)
-            success = export_amd_native_d3d11(
-                ffmpeg_exe=ffmpeg_exe,
-                input_files=input_files,
-                output_file=str(output_file),
-                duration_s=duration_s,
-                video_width=out_w,
-                video_height=out_h,
-                start_dt_utc=start_dt_utc,
-                tz_offset_hours=tz_offset_hours,
-                speed_samples=speed_samples,
-                track_samples=track_samples,
-                alt_samples=alt_samples,
-                font_path=font_path,
-                layout=layout,
-                field_samples=field_samples,
-                target_fps=target_fps,
-                video_bitrate=video_bitrate,
-                max_distance_m=max_distance_m,
-                iso_samples=iso_samples,
-                exposure_samples=exposure_samples,
-                temperature_samples=temperature_samples,
-                gpx_speed_samples=gpx_speed_samples,
-                gpx_track_samples=gpx_track_samples,
-                gpx_alt_samples=gpx_alt_samples,
-                gpx_power_samples=gpx_power_samples,
-                gpx_atemp_samples=gpx_atemp_samples,
-                gpx_hr_samples=gpx_hr_samples,
-                gpx_cad_samples=gpx_cad_samples,
-                fit_data=fit_data,
-                gps_track=gps_track,
-                progress_cb=progress_cb,
-                on_render_progress=on_render_progress,
-                cancel_event=cancel_event,
-                active_process_holder=active_process_holder,
-                video_timeline=video_timeline,
-                amd_decode_mode=amd_decode_mode,
-            )
+            try:
+                success = export_amd_native_d3d11(
+                    ffmpeg_exe=ffmpeg_exe,
+                    input_files=input_files,
+                    output_file=str(output_file),
+                    duration_s=amd_duration_s,
+                    video_width=out_w,
+                    video_height=out_h,
+                    start_dt_utc=start_dt_utc,
+                    tz_offset_hours=tz_offset_hours,
+                    speed_samples=speed_samples,
+                    track_samples=track_samples,
+                    alt_samples=alt_samples,
+                    font_path=font_path,
+                    layout=amd_layout,
+                    field_samples=field_samples,
+                    target_fps=target_fps,
+                    video_bitrate=video_bitrate,
+                    max_distance_m=max_distance_m,
+                    iso_samples=iso_samples,
+                    exposure_samples=exposure_samples,
+                    temperature_samples=temperature_samples,
+                    gpx_speed_samples=gpx_speed_samples,
+                    gpx_track_samples=gpx_track_samples,
+                    gpx_alt_samples=gpx_alt_samples,
+                    gpx_power_samples=gpx_power_samples,
+                    gpx_atemp_samples=gpx_atemp_samples,
+                    gpx_hr_samples=gpx_hr_samples,
+                    gpx_cad_samples=gpx_cad_samples,
+                    fit_data=fit_data,
+                    gps_track=gps_track,
+                    progress_cb=progress_cb,
+                    on_render_progress=on_render_progress,
+                    cancel_event=cancel_event,
+                    cancel_reason_provider=cancel_reason_provider,
+                    preview_state_provider=preview_state_provider,
+                    preview_session=preview_session,
+                    generation_id=generation_id,
+                    active_process_holder=active_process_holder,
+                    video_timeline=amd_video_timeline,
+                    amd_decode_mode=amd_decode_mode,
+                )
+            except AMDNativeFinalizationError as exc:
+                # Storage/finalization failure is not a renderer capability
+                # failure; do not hide it by launching the software exporter.
+                print(f"[STREAM AMD] Native finalization failed: {exc}", flush=True)
+                raise
             if success:
-                return total_overlay_frames
+                return (
+                    amd_output_frames
+                    if amd_output_frames is not None else total_overlay_frames
+                )
             if cancel_event is not None and cancel_event.is_set():
                 return 0
             print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
@@ -1264,7 +1359,7 @@ def stream_overlay_to_ffmpeg(
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
         with open(concat_txt, "w", encoding="utf-8") as f:
             for p in input_files:
-                escaped_p = str(p.absolute()).replace("'", "'\\''")
+                escaped_p = str(Path(p).resolve()).replace("'", "'\\''")
                 f.write(f"file '{escaped_p}'\n")
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
         audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
@@ -1462,8 +1557,7 @@ def stream_overlay_to_ffmpeg(
                 if not _put_frame(raw_bytes):
                     break
                 total_piped += 1
-                if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                    _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
+                _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
@@ -1595,13 +1689,17 @@ def stream_overlay_to_ffmpeg(
                         return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
                     if src_name == "fit":
                         fit_d = fit_data or {}
-                        return (fit_d.get("speed", []), fit_d.get("track", []), fit_d.get("alt", []))
+                        return (
+                            fit_d.get("speed", []),
+                            resolve_distance_samples("fit", fit_data=fit_d),
+                            fit_d.get("alt", []),
+                        )
                     return (speed_samples or [], track_samples or [], alt_samples or [])
 
                 def _resolve_stream_samples(field_name: str, source: str = "fit", indicator_key: str | None = None) -> list:
                     if source == "fit":
                         fit_d = fit_data or {}
-                        if field_name == "distance":
+                        if field_name in ("distance", "dist", "track"):
                             return resolve_distance_samples("fit", fit_data=fit_d)
                         aliases = {
                             "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
@@ -1634,12 +1732,14 @@ def stream_overlay_to_ffmpeg(
                         return list(gpmf_map.get(field_name, []) or [])
                     return []
 
+                act_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
                 chart_data = build_chart_data(
                     layout,
                     _get_src_samples,
                     _resolve_stream_samples,
                     start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
                     source_activity_ranges=source_ranges,
+                    active_time_mapper=act_mapper,
                 )
 
                 telemetry_cache = build_telemetry_cache(
@@ -1837,11 +1937,10 @@ def stream_overlay_to_ffmpeg(
                             pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                         total_piped += 1
                         next_idx += 1
-                        if total_piped % 50 == 0 or total_piped == total_overlay_frames:
-                            _report_stream_progress(
-                                total_piped, total_overlay_frames,
-                                start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
-                            )
+                        _report_stream_progress(
+                            total_piped, total_overlay_frames,
+                            start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
+                        )
 
                     # Aggressive top-up: fill ALL available slots in the window
                     while (
@@ -1926,15 +2025,8 @@ def stream_overlay_to_ffmpeg(
                             cancel_started,
                         )
 
-        _report_phase(on_render_progress, "finalize", 0.0, "Finalizacja...", time.time() - phase_t0)
-
         # Signal pipe writer to finish and close stdin.
-        # The sentinel is FIFO-after all frame messages, so the writer writes
-        # every queued frame before it sees None.  done_event alone no longer
-        # discards the backlog (ETAP 5B tail-loss fix).  join() waits until the
-        # queue is really drained; the deadline is only a hang safety-net (a
-        # healthy writer needs ms per frame, but FFmpeg backpressure can make
-        # individual writes take seconds).
+        _report_phase(on_render_progress, "finalize", 0.0, "Finalizacja...", time.time() - phase_t0)
         t_drain_start = time.perf_counter()
         pipe_queue.put_nowait(None)  # sentinel (FIFO after final frames)
         pipe_done.set()

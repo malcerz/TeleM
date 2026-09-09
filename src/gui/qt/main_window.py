@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
     QWidget,
@@ -14,6 +14,7 @@ from src.gui.qt.tabs.project_tab import ProjectTab
 from src.gui.qt.tabs.render_tab import RenderTab
 from src.gui.qt.tabs.settings_tab import SettingsTab
 from src.gui.qt.widgets.video_preview import VideoPreview
+from src.render_progress import RenderProgressState, format_render_progress_status
 
 
 APP_TITLE = "TeleMGP HUD Tuner"
@@ -36,6 +37,8 @@ class MainWindow(QMainWindow):
         self.resize(1600, 1000)
 
         self.signals = get_signals()
+        self._render_state_active = False
+        self._render_generation_id = 0
 
         # ── Współdzielony podgląd wideo (Projekt ↔ Rendering) ───────────
         self.preview = VideoPreview()
@@ -154,17 +157,39 @@ class MainWindow(QMainWindow):
     def _connect_controller_signals(self) -> None:
         s = self.signals
         s.sig_progress.connect(self._on_progress)
+        s.sig_render_state.connect(self._on_render_state)
         s.sig_error.connect(self._on_error)
         s.sig_video_info_ready.connect(self._on_video_info)
 
     def _on_progress(self, percent: int, text: str) -> None:
+        # During export the generation-tagged render state is canonical.
+        # Legacy progress is still used by loading and other operations.
+        if self._render_state_active:
+            return
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(percent)
         self.status_label.setText(text)
         if percent >= 100:
             self.progress_bar.setVisible(False)
 
+    def _on_render_state(self, snapshot: RenderProgressState) -> None:
+        """Display the same generation-tagged snapshot as RenderTab."""
+        if not isinstance(snapshot, RenderProgressState):
+            return
+        if snapshot.generation_id < self._render_generation_id:
+            return
+        self._render_generation_id = snapshot.generation_id
+        self._render_state_active = not (
+            snapshot.completed or snapshot.cancelled or snapshot.failed
+        )
+        self.status_label.setText(format_render_progress_status(snapshot))
+        if snapshot.total_frames:
+            self.progress_bar.setValue(int(round(snapshot.global_percent)))
+        self.progress_bar.setVisible(not (snapshot.completed or snapshot.cancelled or snapshot.failed))
+
     def _on_error(self, msg: str) -> None:
+        if self._render_state_active:
+            return
         self.status_label.setText(f"Błąd: {msg}")
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "Błąd", msg)
@@ -279,3 +304,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """Zamykanie okna — brak automatycznego zapisu (zapis tylko po jawnym kliknięciu 'Zapisz ustawienia')."""
         super().closeEvent(event)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.WindowActivate, QEvent.WindowDeactivate, QEvent.WindowStateChange):
+            render_tab = getattr(self, "_render_tab", None)
+            notify = getattr(render_tab, "notify_window_state_changed", None)
+            if callable(notify):
+                notify()

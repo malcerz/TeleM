@@ -22,12 +22,46 @@ from PIL import Image
 from src.indicators.bar import _render_ruler, _fraction
 from src.indicators.compositor import compose_overlay
 from src.indicators.frame_data import prepare_overlay_frame_data
-from src.telemetry_resolver import resolve_distance_samples
+from src.telemetry_resolver import (
+    distance_m_to_km,
+    resolve_distance_samples,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FONT = r"C:\Windows\Fonts\arial.ttf"
 W, H = 1280, 720
 MARKER_RGB = (255, 212, 42)  # #FFD42A
+TRACK_RGB = (244, 244, 244)
+TICK_RGB = (246, 246, 246)
+
+
+@pytest.mark.parametrize(
+    ("metres", "kilometres"),
+    [
+        (0.0, 0.0),
+        (500.0, 0.5),
+        (1000.0, 1.0),
+        (11500.0, 11.5),
+        (43746.0, 43.746),
+    ],
+)
+def test_distance_internal_metres_to_display_kilometres(metres, kilometres):
+    assert distance_m_to_km(metres) == pytest.approx(kilometres)
+
+
+def test_fit_distance_auto_range_is_converted_to_km_once():
+    base_dt = datetime(2026, 9, 7, tzinfo=timezone.utc)
+    layout = {"indicators": {"fit_distance_text": {
+        "enabled": True, "form": "bar", "bar_style": "ruler",
+        "field": "distance", "source": "fit", "unit": "km",
+        "auto_scale": True,
+    }}}
+    from src.indicators.frame_data import compute_indicator_auto_ranges
+    ranges = compute_indicator_auto_ranges(
+        layout,
+        fit_data={"distance": [(base_dt, 2183.0), (base_dt, 43746.0)]},
+    )
+    assert ranges["fit_distance_text"] == pytest.approx((2.183, 43.746))
 
 
 def _dist_cfg(**over) -> dict:
@@ -53,18 +87,42 @@ def _find_marker_x(img: Image.Image) -> float | None:
     return float(np.mean(xs)) if len(xs) else None
 
 
-def _render_ruler_marker(value, min_val=0.0, max_val=3.0, **cfg_over) -> float:
+def _render_ruler_image(
+    value, min_val=0.0, max_val=3.0, *, supersampling=1, **cfg_over
+) -> Image.Image:
     cfg = _dist_cfg(**cfg_over)
-    img = _render_ruler(
+    return _render_ruler(
         canvas_w=W, canvas_h=H, font_path=FONT, value=value, unit="km",
         label="DISTANCE", cfg=cfg, val_min=min_val, val_max=max_val,
         ticks=int(cfg.get("ticks", 5)), thickness=1,
-        size_px=int(0.28 * W), fs=15, outline=1, ss=1,
-        formatted_val=f"{value:.1f} km",
+        size_px=int(0.28 * W), fs=15, outline=1, ss=supersampling,
+        formatted_val=f"{value:.1f} km" if value is not None else None,
+    )
+
+
+def _render_ruler_marker(
+    value, min_val=0.0, max_val=3.0, *, supersampling=1, **cfg_over
+) -> float:
+    img = _render_ruler_image(
+        value, min_val, max_val, supersampling=supersampling, **cfg_over
     )
     x = _find_marker_x(img)
     assert x is not None, "marker pixel not found"
     return x
+
+
+def _find_useful_scale_span(img: Image.Image) -> tuple[int, int]:
+    """Return the horizontal track endpoints, excluding transparent crop padding."""
+    arr = np.array(img)
+    rgb = arr[:, :, :3]
+    opaque = arr[:, :, 3] > 200
+    track_or_tick = (
+        np.all(rgb == TRACK_RGB, axis=2) | np.all(rgb == TICK_RGB, axis=2)
+    ) & opaque
+    row = int(np.argmax(track_or_tick.sum(axis=1)))
+    xs = np.where(track_or_tick[row])[0]
+    assert len(xs), "useful ruler scale not found"
+    return int(xs.min()), int(xs.max())
 
 
 def _compose_marker_x(cfg: dict, distance_m: float, max_distance_m: float) -> float:
@@ -136,24 +194,43 @@ def test_compositor_does_not_mutate_config():
 # ---------------------------------------------------------------------------
 
 def test_marker_0_percent_at_scale_start():
+    scale_start, _ = _find_useful_scale_span(_render_ruler_image(None))
     x = _render_ruler_marker(0.0, 0.0, 3.0)
-    # frac=0 -> marker_x = pad_x = 10
-    assert abs(x - 10.0) <= 1.0, x
+    assert abs(x - scale_start) <= 1.0, (scale_start, x)
 
 
 def test_marker_50_percent_midpoint():
+    scale_start, scale_end = _find_useful_scale_span(_render_ruler_image(None))
     x0 = _render_ruler_marker(0.0, 0.0, 3.0)
     x3 = _render_ruler_marker(3.0, 0.0, 3.0)
     x15 = _render_ruler_marker(1.5, 0.0, 3.0)
+    assert abs(x0 - scale_start) <= 1.0, (scale_start, x0)
+    assert abs(x3 - scale_end) <= 1.0, (scale_end, x3)
     assert abs(x15 - (x0 + x3) / 2.0) <= 1.0, (x0, x15, x3)
 
 
 def test_marker_100_percent_at_scale_end():
+    _, scale_end = _find_useful_scale_span(_render_ruler_image(None))
     x0 = _render_ruler_marker(0.0, 0.0, 3.0)
     x3 = _render_ruler_marker(3.0, 0.0, 3.0)
     # marker przy 100% jest dalej niż przy 0% i używa pełnej szerokości
-    assert x3 > x0
+    assert abs(x3 - scale_end) <= 1.0, (scale_end, x3)
     assert abs((x3 - x0) - 0.28 * W) <= 2.0, (x0, x3)
+
+
+@pytest.mark.parametrize("supersampling", [1, 2, 3])
+def test_marker_geometry_tracks_useful_scale_with_supersampling(supersampling):
+    scale_start, scale_end = _find_useful_scale_span(
+        _render_ruler_image(None, supersampling=supersampling)
+    )
+    x0 = _render_ruler_marker(0.0, supersampling=supersampling)
+    x15 = _render_ruler_marker(1.5, supersampling=supersampling)
+    x3 = _render_ruler_marker(3.0, supersampling=supersampling)
+
+    assert abs(x0 - scale_start) <= supersampling
+    assert abs(x3 - scale_end) <= supersampling
+    assert abs(x15 - (x0 + x3) / 2.0) <= 1.0
+    assert (x3 - x0) == int(0.28 * W) * supersampling
 
 
 # ---------------------------------------------------------------------------
@@ -239,8 +316,7 @@ def test_fit_recorded_distance_is_canonical_for_current_and_range():
 def test_fit_distance_falls_back_to_gps_track_only_when_unusable():
     base_dt = datetime(2026, 8, 14, 9, 40, 16, tzinfo=timezone.utc)
     gps_track = [(base_dt, 0.0), (base_dt + __import__("datetime").timedelta(seconds=1), 7000.0)]
-    bad_recorded = [(base_dt, 0.0), (base_dt + __import__("datetime").timedelta(seconds=1), 6000.0),
-                   (base_dt + __import__("datetime").timedelta(seconds=2), 5000.0)]
+    bad_recorded = [(base_dt, 0.0), (base_dt + __import__("datetime").timedelta(seconds=1), float("nan"))]
     assert resolve_distance_samples(
         "fit", fit_data={"distance": bad_recorded, "track": gps_track}
     ) == gps_track

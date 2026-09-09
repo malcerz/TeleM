@@ -46,6 +46,21 @@ def _find_marker_center_y(img: Image.Image, marker_color=(21, 159, 165)) -> floa
     return None
 
 
+def _find_horizontal_scale_span(img: Image.Image, cfg: dict) -> tuple[int, int]:
+    arr = np.array(img)
+    colors = [
+        tuple(bytes.fromhex(str(cfg[key]).lstrip("#")))
+        for key in ("track_color", "tick_color")
+    ]
+    mask = np.zeros(arr.shape[:2], dtype=bool)
+    for color in colors:
+        mask |= np.all(arr[:, :, :3] == color, axis=2) & (arr[:, :, 3] > 200)
+    row = int(np.argmax(mask.sum(axis=1)))
+    xs = np.where(mask[row])[0]
+    assert len(xs), "horizontal scale not found"
+    return int(xs.min()), int(xs.max())
+
+
 # ---------------------------------------------------------------------------
 # 1. Synthetic 0%, 25%, 50%, 75%, 100% Distance Marker Tests
 # ---------------------------------------------------------------------------
@@ -56,7 +71,6 @@ def test_distance_marker_synthetic_steps(v10_layout):
     cfg = v10_layout["indicators"]["dist_visual"]
     canvas_w, canvas_h = 1280, 720
     size_px = int(0.28 * canvas_w)  # 358 px
-    pad_x = 10  # pad_x for marker_size 6
 
     expected_ratios = {
         0.0: 0.0,
@@ -79,12 +93,20 @@ def test_distance_marker_synthetic_steps(v10_layout):
         assert marker_x is not None, f"Marker must be visible for value={val}"
         x_coords[val] = marker_x
 
-        # Check track width
-        track_w = 358.0
-        expected_x = pad_x + ratio * track_w
-        assert abs(marker_x - expected_x) <= 1.0, (
-            f"Value {val} km expected marker at ~{expected_x:.1f} px, got {marker_x:.1f} px"
-        )
+    scale_start, scale_end = _find_horizontal_scale_span(
+        _render_ruler(
+            canvas_w=canvas_w, canvas_h=canvas_h, font_path="",
+            value=None, unit="km", label="DISTANCE", cfg=cfg,
+            val_min=0.0, val_max=10.0, ticks=5, thickness=1,
+            size_px=size_px, fs=15, outline=1, ss=1, formatted_val=None,
+        ),
+        cfg,
+    )
+    assert abs(x_coords[0.0] - scale_start) <= 1.0
+    assert abs(x_coords[10.0] - scale_end) <= 1.0
+    for val, ratio in expected_ratios.items():
+        expected_x = x_coords[0.0] + ratio * (x_coords[10.0] - x_coords[0.0])
+        assert abs(x_coords[val] - expected_x) <= 1.0
 
     # Monotonicity
     vals = sorted(expected_ratios.keys())
@@ -118,7 +140,17 @@ def test_distance_marker_zero(v10_layout):
     )
     marker_x = _find_marker_center_x(img)
     assert marker_x is not None, "Marker must be rendered for value=0.0"
-    assert abs(marker_x - 10.0) <= 1.0, f"Marker at 0.0 km should be at ~10.0 px, got {marker_x}"
+    scale_start, _ = _find_horizontal_scale_span(
+        _render_ruler(
+            canvas_w=1280, canvas_h=720, font_path="",
+            value=None, unit="km", label="DISTANCE", cfg=cfg,
+            val_min=0.0, val_max=10.0, ticks=5, thickness=1,
+            size_px=int(0.28 * 1280), fs=15, outline=1, ss=1,
+            formatted_val=None,
+        ),
+        cfg,
+    )
+    assert abs(marker_x - scale_start) <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +170,22 @@ def test_distance_text_and_marker_consistency(v10_layout):
     )
     marker_x = _find_marker_center_x(img)
     assert marker_x is not None
-    # 5.0 km on 0..10 km bar is 50%
-    assert abs(marker_x - (10 + 0.5 * 358)) <= 1.0
+    start_img = _render_ruler(
+        canvas_w=1280, canvas_h=720, font_path="", value=0.0, unit="km",
+        label="DISTANCE", cfg=cfg, val_min=0.0, val_max=10.0, ticks=5,
+        thickness=1, size_px=int(0.28 * 1280), fs=15, outline=1, ss=1,
+        formatted_val="0.0 km",
+    )
+    end_img = _render_ruler(
+        canvas_w=1280, canvas_h=720, font_path="", value=10.0, unit="km",
+        label="DISTANCE", cfg=cfg, val_min=0.0, val_max=10.0, ticks=5,
+        thickness=1, size_px=int(0.28 * 1280), fs=15, outline=1, ss=1,
+        formatted_val="10.0 km",
+    )
+    start_x = _find_marker_center_x(start_img)
+    end_x = _find_marker_center_x(end_img)
+    assert start_x is not None and end_x is not None
+    assert abs(marker_x - (start_x + end_x) / 2.0) <= 1.0
 
 
 # ---------------------------------------------------------------------------

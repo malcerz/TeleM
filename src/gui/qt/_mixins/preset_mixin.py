@@ -119,24 +119,10 @@ class PresetMixin:
         if self.layout_mgr:
             self.layout_mgr.layout = self.layout
 
-        # Inwalidacja cache przygotowania — gdy zmienią się dane wpływające na geometrię/wygląd
-        if field_name in (
-            "source", "form", "bar_style", "min_val", "max_val", "chart_time_scope", "chart_window_s",
-            "ticks", "thickness", "major_ticks", "minor_ticks", "segments",
-            "major_tick_length", "minor_tick_length", "major_tick_thickness", "minor_tick_thickness",
-            "needle_width", "needle_length", "needle_color",
-            "font", "value_font", "label_font", "range_font",
-        ):
-            self._clear_caches()
-            if field_name in ("font", "value_font", "label_font", "range_font"):
-                try:
-                    from src.indicators.helpers import FONT_CACHE
-                    FONT_CACHE.clear()
-                except Exception:
-                    pass
-                # Wyczyść statyczny cache tarcz gauge (zawiera font w kluczu)
-                if _STATIC_CACHE is not None:
-                    _STATIC_CACHE.clear()
+        # Inwalidacja cache przygotowania i renderowania wskaźników
+        # Każda zmiana właściwości (kolor, geometria, skala, styl) musi natychmiast
+        # unieważnić cache, aby aktualna klatka Preview odświeżyła się od razu bez seek.
+        self._clear_caches()
 
         # Map provider/style switch (ETAP MAP PRELOAD): reuse the same
         # MapContext geometry, restart the overview preload for the new
@@ -226,6 +212,7 @@ class PresetMixin:
 
             amd_mode = getattr(self, "amd_decode_mode", "gpu") or "gpu"
             saved.setdefault("global", {})["amd_decode_mode"] = amd_mode
+            saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
 
             with open(def_layout, "w", encoding="utf-8") as f:
                 json.dump(saved, f, indent=2, ensure_ascii=False)
@@ -248,6 +235,8 @@ class PresetMixin:
             self.render_threads = int(value)
         elif name == "amd_decode_mode":
             self.amd_decode_mode = str(value).lower()
+        elif name == "render_mode":
+            self.render_mode = str(value).lower()
         elif name == "font":
             family = str(value)
             self._global_font_family = family
@@ -260,6 +249,10 @@ class PresetMixin:
             self._render_preview()
         elif name == "outline":
             self.layout.setdefault("global", {})["text_outline"] = int(value)
+            self._render_preview()
+        elif name == "charts_skip_pauses":
+            self.layout["charts_skip_pauses"] = bool(value)
+            self._chart_data_cache = None
             self._render_preview()
         elif name == "startup_preset":
             self._startup_preset_path = str(value) if value else ""

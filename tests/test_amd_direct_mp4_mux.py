@@ -16,7 +16,101 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ffmpeg.amd_native_exporter import export_amd_native_d3d11, AMD_NATIVE_ABI_VERSION
+from src.ffmpeg.amd_native_exporter import (
+    export_amd_native_d3d11,
+    AMD_NATIVE_ABI_VERSION,
+    _cleanup_cancelled_amd_outputs,
+    _audio_concat_entries,
+    _write_audio_concat_plan,
+    _create_amd_local_scratch_dir,
+    _wait_for_process_exit,
+)
+
+
+def test_canonical_audio_plan_uses_effective_source_local_ranges(tmp_path):
+    """The live A/V mux receives the same retained clip bounds as native video."""
+    from types import SimpleNamespace
+
+    timeline = SimpleNamespace(clips=[
+        SimpleNamespace(
+            path=tmp_path / "clip one.mp4", duration_s=6.0,
+            local_start_s=2.0, local_end_s=8.0, source_duration_s=10.0,
+        ),
+        SimpleNamespace(
+            path=tmp_path / "clip two.mp4", duration_s=4.0,
+            local_start_s=0.0, local_end_s=4.0, source_duration_s=4.0,
+        ),
+    ])
+    entries = _audio_concat_entries(timeline)
+    assert entries == [
+        "file '" + str(tmp_path / "clip one.mp4") + "'\n",
+        "inpoint 2.000000000\n",
+        "outpoint 8.000000000\n",
+        "file '" + str(tmp_path / "clip two.mp4") + "'\n",
+    ]
+    plan = _write_audio_concat_plan(tmp_path / "audio.plan.txt", timeline)
+    assert plan.read_text(encoding="utf-8") == "".join(entries)
+
+
+def test_amd_multifile_stage_a_uses_local_scratch(tmp_path, monkeypatch):
+    output = tmp_path / "usb" / "final.mp4"
+    configured = tmp_path / "local-m2" / "amd"
+    monkeypatch.setenv("AMD_LOCAL_SCRATCH_DIR", str(configured))
+
+    scratch = _create_amd_local_scratch_dir(output)
+
+    assert scratch.parent == configured.resolve()
+    assert scratch != output.parent.resolve()
+    assert scratch.exists()
+    scratch.rmdir()
+
+
+def test_amd_multifile_stage_a_scratch_is_recoverable_on_failure(tmp_path, monkeypatch):
+    output = tmp_path / "usb" / "final.mp4"
+    configured = tmp_path / "local-m2" / "amd"
+    monkeypatch.setenv("AMD_LOCAL_SCRATCH_DIR", str(configured))
+
+    scratch = _create_amd_local_scratch_dir(output)
+    stage_video = scratch / "final.temp_video.mp4"
+    stage_video.write_bytes(b"recoverable Stage A video")
+
+    # The exporter deliberately does not delete this workspace on Stage C
+    # failure; this mirrors the recovery contract for a long render.
+    assert stage_video.read_bytes() == b"recoverable Stage A video"
+    stage_video.unlink()
+    scratch.rmdir()
+
+
+def test_cancel_cleanup_removes_partial_artifacts_but_preserves_final(tmp_path):
+    final_output = tmp_path / "render.mp4"
+    output_part = tmp_path / "render.mp4.part"
+    stage_video = tmp_path / "render.mp4.part.temp_video.mp4"
+    audio_concat = tmp_path / "render.audio.concat.txt"
+    final_output.write_bytes(b"valid completed output")
+    output_part.write_bytes(b"partial mux")
+    stage_video.write_bytes(b"partial stage A")
+    audio_concat.write_text("partial concat", encoding="utf-8")
+
+    removed = _cleanup_cancelled_amd_outputs(
+        output_part, stage_video, audio_concat
+    )
+
+    assert set(removed) == {output_part, stage_video, audio_concat}
+    assert final_output.read_bytes() == b"valid completed output"
+    assert not output_part.exists()
+    assert not stage_video.exists()
+    assert not audio_concat.exists()
+
+
+def test_live_mux_wait_has_no_elapsed_timeout(monkeypatch):
+    process = MagicMock()
+    states = iter([None, None, None, 0])
+    process.poll.side_effect = lambda: next(states)
+    process.returncode = 0
+    monkeypatch.setattr("src.ffmpeg.amd_native_exporter.time.sleep", lambda _: None)
+
+    assert _wait_for_process_exit(process) is True
+    process.kill.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +463,10 @@ def test_direct_mp4_mux_user_cancellation(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 def test_direct_mp4_mux_lifecycle_multi_file(tmp_path, monkeypatch):
     """Multi-file direct live mux creates .part, streams without temp .h265, uses .audio.concat.txt, and renames to .mp4."""
+    # Preserve coverage of the explicit legacy two-stage recovery path.  The
+    # production default is single-pass A/V mux; this test exercises the old
+    # path only as a controlled diagnostic fallback.
+    monkeypatch.setenv("AMD_SINGLE_PASS_AV_MUX", "0")
     out_mp4 = tmp_path / "output_multi.mp4"
     in_mp4_1 = tmp_path / "clip1.mp4"
     in_mp4_2 = tmp_path / "clip2.mp4"
@@ -410,11 +508,14 @@ def test_direct_mp4_mux_lifecycle_multi_file(tmp_path, monkeypatch):
     captured_cmds = []
     def fake_popen(cmd, *a, **kw):
         captured_cmds.append(cmd)
-        out_part = cmd[-1]
-        assert out_part.endswith(".mp4.part")
-        Path(out_part).write_bytes(b"dummy live encoded mp4 payload")
+        out_path = cmd[-1]
+        if "concat" in cmd:
+            assert out_path.endswith(".mp4.part")
+        else:
+            assert out_path.endswith(".temp_video.mp4")
+        Path(out_path).write_bytes(b"dummy encoded mp4 payload")
         mock_proc = MagicMock()
-        mock_proc.poll.return_value = None
+        mock_proc.poll.return_value = 0
         mock_proc.returncode = 0
         mock_proc.stdin = MagicMock()
         mock_proc.stdout = None
@@ -466,7 +567,7 @@ def test_direct_mp4_mux_lifecycle_multi_file(tmp_path, monkeypatch):
     assert len(mux_cmd) == 1
     cmd = mux_cmd[0]
     concat_idx = cmd.index("-f")
-    assert cmd[concat_idx + 1] == "hevc"
+    assert cmd[concat_idx + 1] == "concat"
     assert "-safe" in cmd
     assert "concat" in cmd
 
@@ -512,14 +613,16 @@ def test_direct_mp4_mux_fallback_on_flag_or_multifile(tmp_path, monkeypatch):
     monkeypatch.setattr("ctypes.CDLL", lambda *a, **kw: mock_dll)
     monkeypatch.setenv("AMD_DIRECT_MUX", "0")
 
-    def fake_subprocess_run(cmd, *a, **kw):
+    def fake_popen(cmd, *a, **kw):
         out_file = cmd[-1]
         Path(out_file).write_bytes(b"final muxed mp4")
         mock_res = MagicMock()
         mock_res.returncode = 0
+        mock_res.poll.return_value = 0
+        mock_res.stderr = []
         return mock_res
 
-    monkeypatch.setattr("subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
     monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda exe, path: {
         "streams": [{"codec_type": "video", "nb_frames": "30"}, {"codec_type": "audio"}]
     })

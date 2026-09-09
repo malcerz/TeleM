@@ -43,6 +43,9 @@ class AppSignals(QObject):
 
     # Zakładka Rendering: anulowanie renderowania
     sig_render_cancelled = Signal()
+    # Generation-tagged cancellation request. The no-argument signal above
+    # remains as a compatibility notification for existing listeners.
+    sig_render_cancel_requested = Signal(object)
 
     # Zakładka Ustawienia: zmiana ustawień
     sig_settings_changed = Signal(str, object)
@@ -58,6 +61,10 @@ class AppSignals(QObject):
     # Kontroler → GUI: przywróć zapisany tryb dekodowania AMD w UI (po starcie)
     sig_amd_decode_mode_restored = Signal(str)
     # (mode: str – 'gpu' lub 'cpu')
+
+    # Kontroler → GUI: wyliczona domyślna nazwa pliku eksportu
+    sig_default_export_name_ready = Signal(str)
+    # (filename: str)
 
     # Oś czasu: zmiana pozycji seek (GUI → Kontroler)
     sig_seek_changed = Signal(float)
@@ -136,6 +143,12 @@ class AppSignals(QObject):
     # (completed_frames, total_frames, elapsed_s, fps, hud_state_or_None)
     # hud_state = {"frame": int, "ts": float} — latest-state snapshot (1 Hz).
     sig_render_progress = Signal(int, int, float, float, object)
+
+    # Canonical export status snapshot.  Legacy sig_progress remains for
+    # non-render operations and compatibility, but Rendering UI consumes this
+    # generation-tagged state for all frame/status values.
+    sig_render_state = Signal(object)
+    # (RenderProgressState)
 
     # Błąd
     sig_error = Signal(str)

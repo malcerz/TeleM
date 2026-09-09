@@ -145,9 +145,11 @@ def _render_compass_indicator(
     ring_r = int(round(radius * 0.95))
 
     heading_key = round(float(value), 1) if (value is not None and not bool(cfg.get("_compass_missing", False))) else None
+    cfg_sig = tuple(sorted((str(k), str(v)) for k, v in cfg.items() if not str(k).startswith("_")))
     compass_cache_key = _static_cache_key(
-        "compass_full_v1", canvas_w, canvas_h, font_path, key, heading_key, str(formatted_val or ""),
-        int(fs), int(ss), int(outline), int(size_px), float(cfg.get("opacity", 1.0))
+        "compass_full_v2", canvas_w, canvas_h, font_path, key, heading_key, str(formatted_val or ""),
+        int(fs), int(ss), int(outline), int(size_px), float(cfg.get("opacity", 1.0)),
+        cfg_sig,
     )
     cached_compass = _COMPASS_INDICATOR_CACHE.get(compass_cache_key)
     if cached_compass is not None:
@@ -251,7 +253,9 @@ def _render_compass_indicator(
                      width=max(1, ss))
 
     if cfg.get("compass_show_heading", cfg.get("show_value", True)):
-        heading_text = formatted_val if formatted_val is not None else ("--°" if heading is None else f"{int(round(heading)) % 360:03d}°")
+        fmt = str(cfg.get("compass_heading_format", "03d")).strip()
+        h_str = f"{int(round(heading)) % 360:03d}" if fmt != "d" else f"{int(round(heading)) % 360}"
+        heading_text = formatted_val if formatted_val is not None else ("--°" if heading is None else f"{h_str}°")
         heading_font = load_font(font_path, max(8, int(round(fs * 0.78 * ss))))
         draw.text((cx, cy + int(round(radius * 0.34))), heading_text,
                   font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
@@ -439,7 +443,7 @@ def _render_gauge_indicator(
     txt_main = (formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")) if show_value else ""
 
     needle_state_key = (
-        round(frac, 4),
+        frac,
         float(needle_len_rel),
         int(needle_width_px),
         needle_fill,
@@ -680,5 +684,9 @@ def _render_gauge_indicator(
 
     record_gauge_dynamic_info(key, **dynamic_info)
     img_out = img.copy()
+    gauge_opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
+    if gauge_opacity < 1.0:
+        alpha = img_out.getchannel("A").point(lambda a: int(round(a * gauge_opacity)))
+        img_out.putalpha(alpha)
     _GAUGE_RASTER_CACHE[gauge_raster_key] = (img_out, dynamic_info)
     return img_out, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 static std::vector<uint8_t> ConvertNV12ToRGBA_VP(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);
@@ -215,6 +216,13 @@ void D3D11VideoProcessorPipeline::SetPoolSize(UINT n) {
 }
 
 D3D11VideoProcessorPipeline::~D3D11VideoProcessorPipeline() {
+    ReleaseResources();
+}
+
+void D3D11VideoProcessorPipeline::ReleaseResources() {
+    if (m_resourcesReleased) return;
+    m_resourcesReleased = true;
+    ReleasePreviewTap();
     for (UINT i = 0; i < (UINT)m_outputYViews.size(); ++i) {
         if (m_outputYViews[i]) { m_outputYViews[i]->Release(); m_poolViewsReleased++; }
         if (m_outputUVViews[i]) { m_outputUVViews[i]->Release(); m_poolViewsReleased++; }
@@ -3490,6 +3498,246 @@ bool D3D11VideoProcessorPipeline::SetStreamRotation(UINT degrees) {
             m_videoProcessor, 0, degrees != 0, rotation);
     }
     videoContext1->Release();
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::ReleasePreviewTap() {
+    for (int i = 0; i < 2; ++i) {
+        if (m_previewReadyQuery[i]) {
+            m_previewReadyQuery[i]->Release();
+            m_previewReadyQuery[i] = nullptr;
+        }
+        if (m_previewStagingTexture[i]) {
+            m_previewStagingTexture[i]->Release();
+            m_previewStagingTexture[i] = nullptr;
+        }
+        if (m_previewOutputView[i]) {
+            m_previewOutputView[i]->Release();
+            m_previewOutputView[i] = nullptr;
+        }
+        if (m_previewOutputTexture[i]) {
+            m_previewOutputTexture[i]->Release();
+            m_previewOutputTexture[i] = nullptr;
+        }
+    }
+    if (m_previewProcessor) {
+        m_previewProcessor->Release();
+        m_previewProcessor = nullptr;
+    }
+    if (m_previewEnumerator) {
+        m_previewEnumerator->Release();
+        m_previewEnumerator = nullptr;
+    }
+    m_previewTapConfigured = false;
+    m_previewCaptureInFlight = false;
+    m_previewInFlightSlot = 0;
+    m_previewInFlightFrame = 0;
+    m_previewNextSlot = 0;
+    m_previewTapWidth = 0;
+    m_previewTapHeight = 0;
+}
+
+bool D3D11VideoProcessorPipeline::ConfigurePreviewTap(UINT width, UINT height) {
+    width = std::max<UINT>(2u, width & ~1u);
+    height = std::max<UINT>(2u, height & ~1u);
+    if (m_previewTapConfigured && m_previewTapWidth == width &&
+        m_previewTapHeight == height) {
+        return true;
+    }
+    ReleasePreviewTap();
+    if (!m_device || !m_context || !m_videoDevice || !m_videoContext ||
+        m_width == 0 || m_height == 0) {
+        return false;
+    }
+
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
+    content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    content.InputFrameRate.Numerator = 30000;
+    content.InputFrameRate.Denominator = 1001;
+    content.InputWidth = m_width;
+    content.InputHeight = m_height;
+    content.OutputFrameRate.Numerator = 30000;
+    content.OutputFrameRate.Denominator = 1001;
+    content.OutputWidth = width;
+    content.OutputHeight = height;
+    content.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
+
+    HRESULT hr = m_videoDevice->CreateVideoProcessorEnumerator(
+        &content, &m_previewEnumerator);
+    if (FAILED(hr) || !m_previewEnumerator) {
+        ReleasePreviewTap();
+        return false;
+    }
+    UINT inputFlags = 0;
+    UINT outputFlags = 0;
+    m_previewEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_NV12, &inputFlags);
+    m_previewEnumerator->CheckVideoProcessorFormat(
+        DXGI_FORMAT_B8G8R8A8_UNORM, &outputFlags);
+    if (!(inputFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ||
+        !(outputFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_OUTPUT)) {
+        ReleasePreviewTap();
+        return false;
+    }
+    hr = m_videoDevice->CreateVideoProcessor(
+        m_previewEnumerator, 0, &m_previewProcessor);
+    if (FAILED(hr) || !m_previewProcessor) {
+        ReleasePreviewTap();
+        return false;
+    }
+
+    // Final renderer output is studio-range NV12; preview is full-range BGRA.
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE csIn = {};
+    csIn.Usage = 0;
+    csIn.RGB_Range = 1;
+    csIn.YCbCr_Matrix = 1;
+    m_videoContext->VideoProcessorSetStreamColorSpace(
+        m_previewProcessor, 0, &csIn);
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE csOut = {};
+    csOut.Usage = 0;
+    csOut.RGB_Range = 0;
+    csOut.YCbCr_Matrix = 0;
+    m_videoContext->VideoProcessorSetOutputColorSpace(
+        m_previewProcessor, &csOut);
+
+    D3D11_TEXTURE2D_DESC outputDesc = {};
+    outputDesc.Width = width;
+    outputDesc.Height = height;
+    outputDesc.MipLevels = 1;
+    outputDesc.ArraySize = 1;
+    outputDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    outputDesc.SampleDesc.Count = 1;
+    outputDesc.Usage = D3D11_USAGE_DEFAULT;
+    outputDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputViewDesc = {};
+    outputViewDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    outputViewDesc.Texture2D.MipSlice = 0;
+
+    D3D11_TEXTURE2D_DESC stagingDesc = outputDesc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    stagingDesc.MiscFlags = 0;
+
+    D3D11_QUERY_DESC queryDesc = {};
+    queryDesc.Query = D3D11_QUERY_EVENT;
+    for (int i = 0; i < 2; ++i) {
+        hr = m_device->CreateTexture2D(
+            &outputDesc, nullptr, &m_previewOutputTexture[i]);
+        if (FAILED(hr)) {
+            ReleasePreviewTap();
+            return false;
+        }
+        hr = m_videoDevice->CreateVideoProcessorOutputView(
+            m_previewOutputTexture[i], m_previewEnumerator, &outputViewDesc,
+            &m_previewOutputView[i]);
+        if (FAILED(hr)) {
+            ReleasePreviewTap();
+            return false;
+        }
+        hr = m_device->CreateTexture2D(
+            &stagingDesc, nullptr, &m_previewStagingTexture[i]);
+        if (FAILED(hr)) {
+            ReleasePreviewTap();
+            return false;
+        }
+        hr = m_device->CreateQuery(&queryDesc, &m_previewReadyQuery[i]);
+        if (FAILED(hr)) {
+            ReleasePreviewTap();
+            return false;
+        }
+    }
+    m_previewTapWidth = width;
+    m_previewTapHeight = height;
+    m_previewTapConfigured = true;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::SubmitPreviewTap(
+    ID3D11Texture2D* finalTexture, UINT frameIndex) {
+    if (!m_previewTapConfigured || !finalTexture || m_previewCaptureInFlight) {
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC inputDesc = {};
+    finalTexture->GetDesc(&inputDesc);
+    if (inputDesc.Format != DXGI_FORMAT_NV12) return false;
+
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
+    inputViewDesc.FourCC = 0;
+    inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    inputViewDesc.Texture2D.MipSlice = 0;
+    inputViewDesc.Texture2D.ArraySlice = 0;
+    ID3D11VideoProcessorInputView* inputView = nullptr;
+    HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(
+        finalTexture, m_previewEnumerator, &inputViewDesc, &inputView);
+    if (FAILED(hr) || !inputView) return false;
+
+    const UINT slot = m_previewNextSlot & 1u;
+    RECT srcRect = { 0, 0, static_cast<LONG>(inputDesc.Width),
+                     static_cast<LONG>(inputDesc.Height) };
+    RECT dstRect = { 0, 0, static_cast<LONG>(m_previewTapWidth),
+                     static_cast<LONG>(m_previewTapHeight) };
+    m_videoContext->VideoProcessorSetStreamFrameFormat(
+        m_previewProcessor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
+    m_videoContext->VideoProcessorSetStreamSourceRect(
+        m_previewProcessor, 0, TRUE, &srcRect);
+    m_videoContext->VideoProcessorSetStreamDestRect(
+        m_previewProcessor, 0, TRUE, &dstRect);
+
+    D3D11_VIDEO_PROCESSOR_STREAM stream = {};
+    stream.Enable = TRUE;
+    stream.OutputIndex = 0;
+    stream.InputFrameOrField = 0;
+    stream.pInputSurface = inputView;
+    hr = m_videoContext->VideoProcessorBlt(
+        m_previewProcessor, m_previewOutputView[slot], 0, 1, &stream);
+    inputView->Release();
+    if (FAILED(hr)) return false;
+
+    m_context->CopyResource(
+        m_previewStagingTexture[slot], m_previewOutputTexture[slot]);
+    m_context->End(m_previewReadyQuery[slot]);
+    m_previewCaptureInFlight = true;
+    m_previewInFlightSlot = slot;
+    m_previewInFlightFrame = frameIndex;
+    m_previewNextSlot = (slot + 1u) & 1u;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::PollPreviewTap(
+    uint8_t* outBGRA, UINT capacity, UINT* outFrame, double* outReadbackMs) {
+    if (outFrame) *outFrame = 0;
+    if (outReadbackMs) *outReadbackMs = 0.0;
+    if (!m_previewTapConfigured || !m_previewCaptureInFlight || !outBGRA ||
+        capacity < m_previewTapWidth * m_previewTapHeight * 4u) {
+        return false;
+    }
+    BOOL done = FALSE;
+    if (m_context->GetData(
+            m_previewReadyQuery[m_previewInFlightSlot], &done, sizeof(done),
+            D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK || !done) {
+        return false;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = m_context->Map(
+        m_previewStagingTexture[m_previewInFlightSlot], 0, D3D11_MAP_READ,
+        D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+    if (FAILED(hr)) return false;
+    const UINT rowBytes = m_previewTapWidth * 4u;
+    for (UINT y = 0; y < m_previewTapHeight; ++y) {
+        memcpy(outBGRA + static_cast<size_t>(y) * rowBytes,
+               static_cast<const uint8_t*>(mapped.pData) +
+                   static_cast<size_t>(y) * mapped.RowPitch,
+               rowBytes);
+    }
+    m_context->Unmap(m_previewStagingTexture[m_previewInFlightSlot], 0);
+    if (outFrame) *outFrame = m_previewInFlightFrame;
+    if (outReadbackMs) {
+        *outReadbackMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+    }
+    m_previewCaptureInFlight = false;
     return true;
 }
 
