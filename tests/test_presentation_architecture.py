@@ -140,30 +140,30 @@ def test_last_quantized_plateau_holds_without_extrapolation():
                                         'battery', {'decimals': 2}) == 96
 
 
-def test_battery_plan_back_predicts_first_drop_and_open_tail():
+def test_battery_plan_monotonic_global_trend():
     raw = [(BASE + timedelta(seconds=i * 60), value)
            for i, value in enumerate([98, 98, 98, 97, 97, 96, 96])]
     plan = build_battery_presentation_plan(raw, coverage_start=BASE,
                                            coverage_end=BASE + timedelta(seconds=420))
-    assert [segment.kind for segment in plan.segments] == [
-        'back_predicted_first_transition', 'observed_transition', 'open_tail_estimate']
-    assert plan.segments[0].start_time == BASE + timedelta(seconds=60)
-    assert plan.value_at(BASE + timedelta(seconds=120)) == pytest.approx(97.5)
-    assert plan.value_at(BASE + timedelta(seconds=360)) == pytest.approx(95.505)
-    assert plan.value_at(BASE + timedelta(seconds=420)) == pytest.approx(95.01)
+    assert [segment.kind for segment in plan.segments] == ['global_monotonic_trend']
+    assert plan.segments[0].start_time == BASE
+    assert plan.value_at(BASE) == 98.0
+    assert plan.value_at(BASE + timedelta(seconds=150)) == pytest.approx(97.0)
+    assert plan.value_at(BASE + timedelta(seconds=300)) == pytest.approx(96.0)
+    assert plan.value_at(BASE + timedelta(seconds=420)) == pytest.approx(95.2)
 
 
 def test_single_state_and_two_state_plans_have_deterministic_tails():
     one = [(BASE, 90), (BASE + timedelta(seconds=60), 90)]
     one_plan = build_battery_presentation_plan(one, coverage_start=BASE,
                                                coverage_end=BASE + timedelta(seconds=120))
-    assert one_plan.value_at(BASE) == 90
-    assert one_plan.value_at(BASE + timedelta(seconds=120)) == pytest.approx(89.01)
+    assert one_plan.value_at(BASE) == 90.0
+    assert one_plan.value_at(BASE + timedelta(seconds=120)) == 90.0
     two = [(BASE, 90), (BASE + timedelta(seconds=60), 89)]
     two_plan = build_battery_presentation_plan(two, coverage_start=BASE,
                                                coverage_end=BASE + timedelta(seconds=120))
     assert two_plan.value_at(BASE + timedelta(seconds=30)) == pytest.approx(89.5)
-    assert two_plan.value_at(BASE + timedelta(seconds=120)) == pytest.approx(88.01)
+    assert two_plan.value_at(BASE + timedelta(seconds=120)) == pytest.approx(88.0)
 
 
 def test_generic_numeric_plan_is_decimal_independent_and_linear_for_continuous_fields():
@@ -198,5 +198,5 @@ def test_quantized_voltage_uses_plan_only_beyond_native_resolution():
     raw = [(BASE, 4.225), (BASE + timedelta(seconds=20), 4.221)]
     assert resolve_current_presentation(raw, BASE + timedelta(seconds=10),
                                         'garmin_battery_voltage', {'decimals': 2}) == pytest.approx(4.225)
-    assert resolve_current_presentation(raw, BASE + timedelta(seconds=10),
-                                        'garmin_battery_voltage', {'decimals': 4}) == pytest.approx(4.223)
+    assert presentation_value(raw, BASE + timedelta(seconds=10),
+                              'garmin_battery_voltage', effective_precision=4) == pytest.approx(4.223)

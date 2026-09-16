@@ -23,7 +23,7 @@ def _decimals_field(key: str, form: str = "text"):
 def test_gopro_battery_decimals_property_is_generic_and_zero_default():
     field = _decimals_field("fit_gopro_battery_text", "bar")
     assert field.min_val == 0
-    assert field.max_val == 3
+    assert field.max_val == 2
     assert field.default == 0
     assert field.label == "Liczba miejsc po przecinku"
 
@@ -36,11 +36,12 @@ def test_gopro_battery_decimal_format_matrix():
     assert f"{value:.3f}%" == "47.439%"
 
 
-def test_iso_default_schema_and_step_semantics():
-    assert _decimals_field("iso_text").default == 0
+def test_iso_schema_omits_decimals_and_has_step_semantics():
+    fields = get_schema_for_indicator("iso_text", "text")
+    assert not any(f.name in ("decimals", "decimal_places") for f in fields)
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     samples = [(start, 100.0), (start + timedelta(seconds=1), 200.0)]
-    cfg = {"decimals": 0, "interpolation_policy": "linear"}
+    cfg = {"decimals": 1, "interpolation_policy": "linear"}
     assert resolve_current_presentation(samples, start + timedelta(seconds=.5), "iso", cfg) == 100.0
 
 
@@ -53,20 +54,21 @@ def test_legacy_layout_gets_canonical_defaults_and_round_trips(tmp_path):
     }
     normalize_indicator_decimal_defaults(layout)
     assert layout["indicators"]["fit_gopro_battery_text"]["decimals"] == 0
-    assert layout["indicators"]["iso_text"]["decimals"] == 0
+    assert "decimals" not in layout["indicators"]["iso_text"]
 
     path = tmp_path / "layout.json"
     path.write_text(json.dumps(layout), encoding="utf-8")
     reloaded = json.loads(path.read_text(encoding="utf-8"))
     normalize_indicator_decimal_defaults(reloaded)
     assert reloaded["indicators"]["fit_gopro_battery_text"]["decimals"] == 0
-    assert reloaded["indicators"]["iso_text"]["decimals"] == 0
+    assert "decimals" not in reloaded["indicators"]["iso_text"]
 
 
-def test_explicit_decimal_setting_is_preserved():
-    layout = {"indicators": {"iso_text": {"decimals": 2}}}
+def test_explicit_decimal_setting_is_preserved_for_configurable_fields():
+    layout = {"indicators": {"speed_text": {"decimals": 2}, "iso_text": {"decimals": 2}}}
     normalize_indicator_decimal_defaults(layout)
-    assert layout["indicators"]["iso_text"]["decimals"] == 2
+    assert layout["indicators"]["speed_text"]["decimals"] == 2
+    assert "decimals" not in layout["indicators"]["iso_text"]
 
 
 def test_compositor_uses_integer_iso_default_without_string_hack(monkeypatch):

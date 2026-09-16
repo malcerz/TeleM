@@ -60,21 +60,22 @@ def test_intel_manual_overrides_work_on_all_resolutions():
     assert scale_num == 0.5
 
 
-def test_amd_nvidia_cpu_preserve_100_percent_on_auto():
+def test_amd_cpu_preserve_100_percent_on_auto():
     # AMD
     scale_amd, msg_amd = resolve_hud_resolution_policy("amd", 3840, 2160, "Auto")
     assert scale_amd == 1.0
     assert msg_amd == ""
 
-    # NVIDIA
-    scale_nv, msg_nv = resolve_hud_resolution_policy("nv", 3840, 2160, "Auto")
-    assert scale_nv == 1.0
-    assert msg_nv == ""
-
     # CPU
     scale_cpu, msg_cpu = resolve_hud_resolution_policy("cpu", 3840, 2160, "Auto")
     assert scale_cpu == 1.0
     assert msg_cpu == ""
+
+
+def test_nvidia_auto_resolves_to_50_percent_on_4k():
+    scale_nv, msg_nv = resolve_hud_resolution_policy("nv", 3840, 2160, "Auto")
+    assert scale_nv == 0.5
+    assert "[NVIDIA] HUD resolution policy: AUTO -> 50% (1920x1080 -> 3840x2160)" in msg_nv
 
 
 def test_odd_even_overlay_dimensions_calculation():

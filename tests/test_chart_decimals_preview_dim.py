@@ -31,7 +31,7 @@ def test_decimal_places_keeps_explicit_zero_and_legacy_alias():
 def test_chart_editor_exposes_global_decimal_places_control():
     field = next(field for field in chart_indicator_fields() if field.name == "decimal_places")
     assert field.label == "Miejsca po przecinku"
-    assert (field.min_val, field.max_val, field.default) == (0, 3, 1)
+    assert (field.min_val, field.max_val, field.default) == (0, 2, 1)
 
 
 def test_chart_axis_ticks_use_requested_decimal_places():
