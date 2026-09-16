@@ -17,14 +17,14 @@ from src.gui.qt.mpv_hwdec import (
 )
 from src.gui.qt.mpv_hwdec import vendor_label as _vendor_label
 
-_MPV_BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-if _MPV_BASE_DIR.exists():
-    os.environ["PATH"] = str(_MPV_BASE_DIR) + os.pathsep + os.environ.get("PATH", "")
-    if hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(_MPV_BASE_DIR))
-        except Exception:
-            pass
+for _base in (Path(__file__).resolve().parents[3], Path(__file__).resolve().parents[4] if len(Path(__file__).resolve().parents) > 4 else None):
+    if _base is not None and _base.exists():
+        os.environ["PATH"] = str(_base) + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(str(_base))
+            except Exception:
+                pass
 
 try:
     import mpv

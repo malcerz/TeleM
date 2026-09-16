@@ -675,6 +675,11 @@ def _build_stream_ffmpeg_cmd(
     intel_gpu_resident: bool = False,
     intel_cpu_download_format: str = "nv12",
     intel_cpu_software_decode: bool = False,
+    nvidia_codec: str = "HEVC",
+    nvidia_quality: str = "Fast",
+    enable_compression_analysis: bool = True,
+    is_10bit: bool = False,
+    max_frames: int | None = None,
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
@@ -833,11 +838,15 @@ def _build_stream_ffmpeg_cmd(
                         f"[ov_raw_{i}]crop={rw}:{rh}:{atlas_x}:{atlas_y},format=yuva420p,hwupload_cuda[ov_{i}]"
                     )
 
-                next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+                is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+                next_base = f"[v_step_{i}]" if i < n_reg - 1 else ("[v_pre10]" if is_10bit_nv else "[vtemp]")
                 overlay_ops.append(
                     f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{next_base}"
                 )
                 curr_base = next_base
+
+            if is_10bit_nv:
+                overlay_ops.append("[v_pre10]scale_cuda=format=p010le[vtemp]")
 
             filter_complex = (
                 f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
@@ -862,7 +871,11 @@ def _build_stream_ffmpeg_cmd(
                 ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={scaled_stream_w}:{scaled_stream_h}:flags=bilinear,format=yuva420p,hwupload_cuda[ov]"
             else:
                 ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,format=yuva420p,hwupload_cuda[ov]"
-            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
+            is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+            if is_10bit_nv:
+                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y},scale_cuda=format=p010le"
+            else:
+                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
             filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
         if "-init_hw_device" not in input_args:
@@ -1020,12 +1033,24 @@ def _build_stream_ffmpeg_cmd(
     ])
 
     if encoder == "nv":
+        from src.ffmpeg.nvidia_config import resolve_nvenc_ffmpeg_params
+        is_10bit_nv = bool(is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+        nv_params = resolve_nvenc_ffmpeg_params(
+            codec=nvidia_codec,
+            quality=nvidia_quality,
+            is_10bit=is_10bit_nv,
+        )
+        cmd.extend(nv_params["ffmpeg_args"])
         cmd.extend([
-            "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
-            "-cq", "24",
-            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else "yuv420p",
+            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else ("p010le" if is_10bit_nv else "yuv420p"),
             "-gpu", str(gpu),
         ])
+        if is_10bit_nv:
+            cmd.extend([
+                "-color_primaries", "bt2020",
+                "-color_trc", "arib-std-b67",
+                "-colorspace", "bt2020nc",
+            ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
@@ -1070,6 +1095,10 @@ def _build_stream_ffmpeg_cmd(
             cmd.extend(["-c:a", "copy"])
 
     cmd = append_bitrate_args(cmd, encoder, video_bitrate)
+    if max_frames is not None and int(max_frames) > 0:
+        cmd.extend(["-frames:v", str(int(max_frames))])
     cmd.append(str(output_file))
+    if encoder == "nv" and enable_compression_analysis:
+        cmd.extend(["-stats_period", "0.25"])
     cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "error"])
     return cmd, filter_complex

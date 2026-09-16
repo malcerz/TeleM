@@ -408,6 +408,16 @@ workloads as if they were equivalent.
 
 Every implementation stage must produce a Markdown report in the repository.
 
+**LOKALIZACJA RAPORTÓW (ZASADA BEZWZGLĘDNA):**
+Wszystkie raporty MUSZĄ być ZAWSZE zapisywane wyłącznie w podkatalogu:
+
+```text
+Raporty/
+```
+
+(np. `Raporty/RAPORT_...md`).
+NIGDY nie zapisuj raportów bezpośrednio w katalogu głównym projektu ani w folderach `scratch/`.
+
 Report must include:
 
 - task

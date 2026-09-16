@@ -660,7 +660,9 @@ def build_telemetry_cache(
         return arr
 
     ind_arrs: dict[str, list] = {}
-    for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text", "alt_visual", "alt_text"):
+    eff_fit_mapper = video_timeline if (video_timeline is not None and getattr(video_timeline, "clip_count", 0)) else getattr(fit, 'active_time_mapper', None)
+    for ind_key in ("speed_visual", "dist_visual", "alt_visual",
+                    "speed_text", "dist_text", "alt_text"):
         if ind_key not in indicators:
             continue
         ind_cfg = indicators.get(ind_key, {})
@@ -672,7 +674,8 @@ def build_telemetry_cache(
                   'gpx': (gpx_spd, gpx_trk, gpx_alt)}.get(src, (speed_samples, track_samples, alt_samples))
         samples = source[{'speed': 0, 'dist': 1, 'alt': 2}[ftype]]
         ind_arrs[ind_key] = [resolve_current_presentation(samples, dt, ftype, ind_cfg,
-            active_time_mapper=getattr(fit, 'active_time_mapper', None) if src == 'fit' else None)
+            active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+            timeline=video_timeline)
             for dt in target_dts]
 
     speed_arr = ind_arrs.get(
@@ -720,7 +723,8 @@ def build_telemetry_cache(
         if not samples:
             samples = fallback_samples if src == "gpmf" else []
         return [resolve_current_presentation(samples, dt, field, cfg,
-                active_time_mapper=getattr(fit, 'active_time_mapper', None) if src == 'fit' else None)
+                active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+                timeline=video_timeline)
                 for dt in target_dts]
 
     iso_arr = resolve_field_vectorized("iso", "iso_text", iso_s)
@@ -743,7 +747,8 @@ def build_telemetry_cache(
             samples = _resolve_cache_samples(f, src)
             if samples:
                 std_field_arrs.append([resolve_current_presentation(samples, dt, f, cfg,
-                    active_time_mapper=getattr(fit, 'active_time_mapper', None) if src == 'fit' else None)
+                    active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+                    timeline=video_timeline)
                     for dt in target_dts])
             elif resolve_cache_value is not None:
                 std_field_arrs.append([resolve_cache_value(f, src, dt, std_keys_map[f]) for dt in target_dts])
@@ -840,7 +845,8 @@ def build_telemetry_cache(
         if samples:
             cfg = indicators.get(f'fit_{name}_text', {})
             fit_field_arrs.append([resolve_current_presentation(samples, dt, name, cfg,
-                active_time_mapper=getattr(fit, 'active_time_mapper', None)) for dt in target_dts])
+                active_time_mapper=eff_fit_mapper,
+                timeline=video_timeline) for dt in target_dts])
         elif resolve_cache_value is not None:
             fit_field_arrs.append([resolve_cache_value(name, "fit", dt, f"fit_{name}_text") for dt in target_dts])
         else:
@@ -955,18 +961,22 @@ def build_telemetry_cache(
         el_s = elapsed_secs_arr[i]
         td = target_dts[i]
         if active_mapper is not None and td is not None:
-            act_candidate = active_mapper.wall_to_active_seconds(td)
-            mapper_start = getattr(active_mapper, "start_dt", None)
-            if mapper_start is not None:
-                _ms_sd = mapper_start.replace(tzinfo=None) if mapper_start.tzinfo is not None else mapper_start
-                _ms_td = td.replace(tzinfo=None) if td.tzinfo is not None else td
-                wall_el = max(0.0, (_ms_td - _ms_sd).total_seconds())
-                if 0.0 <= act_candidate <= wall_el + 5.0 and wall_el < 2592000.0:
-                    act_el_s = act_candidate
-                else:
-                    act_el_s = wall_el if wall_el < 2592000.0 else el_s
+            from src.telemetry_resolver import _map_wall_to_seconds
+            act_candidate = _map_wall_to_seconds(active_mapper, td)
+            if act_candidate is None:
+                act_el_s = el_s
             else:
-                act_el_s = max(0.0, act_candidate)
+                mapper_start = getattr(active_mapper, "start_dt", None)
+                if mapper_start is not None:
+                    _ms_sd = mapper_start.replace(tzinfo=None) if mapper_start.tzinfo is not None else mapper_start
+                    _ms_td = td.replace(tzinfo=None) if td.tzinfo is not None else td
+                    wall_el = max(0.0, (_ms_td - _ms_sd).total_seconds())
+                    if 0.0 <= act_candidate <= wall_el + 5.0 and wall_el < 2592000.0:
+                        act_el_s = act_candidate
+                    else:
+                        act_el_s = wall_el if wall_el < 2592000.0 else el_s
+                else:
+                    act_el_s = max(0.0, act_candidate)
         elif activity_start_dt is not None and td is not None:
             _act_sd = activity_start_dt.replace(tzinfo=None) if activity_start_dt.tzinfo is not None else activity_start_dt
             _act_td = td.replace(tzinfo=None) if td.tzinfo is not None else td

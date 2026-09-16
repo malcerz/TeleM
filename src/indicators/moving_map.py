@@ -689,13 +689,16 @@ def _render_moving_map_indicator(
             _cache[cache_key] = renderer
             renderer._is_first_render = True
             
-            # Precache common zoom levels to make slider smoother
-            zooms_to_cache = list(range(13, 19))
-            if effective_zoom not in zooms_to_cache:
-                zooms_to_cache.append(effective_zoom)
-            zooms_to_cache.sort(key=lambda z: abs(z - effective_zoom))
-            
-            renderer.background_precache(margin=2, zooms=zooms_to_cache)
+            # Precache common zoom levels only in interactive preview (async_map=True).
+            # In synchronous worker export (async_map=False), do NOT launch multi-zoom
+            # background precache across the entire track (avoids multi-GiB memory surge).
+            if async_map:
+                zooms_to_cache = list(range(13, 19))
+                if effective_zoom not in zooms_to_cache:
+                    zooms_to_cache.append(effective_zoom)
+                zooms_to_cache.sort(key=lambda z: abs(z - effective_zoom))
+                
+                renderer.background_precache(margin=2, zooms=zooms_to_cache)
         else:
             renderer = _cache[cache_key]
             # Update renderer properties that can change dynamically

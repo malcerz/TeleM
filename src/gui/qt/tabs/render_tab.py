@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import gc
 import json
+import re
 import subprocess
 import threading
 import time
@@ -132,6 +133,7 @@ class RenderTab(QWidget):
         self._preview_last_video_decode_ts: float | None = None
         self._preview_had_lifecycle = False
         self._preview_snapshot_labels: set[str] = set()
+        self._pending_hud_switch_log = False
         self._render_generation_id = 0
         self._render_state_enabled = False
         self._render_state: RenderProgressState | None = None
@@ -257,6 +259,11 @@ class RenderTab(QWidget):
             pass
         form.addRow("Encoder:", self.cmb_encoder)
 
+        self.widget_amd_options = QWidget()
+        layout_amd = QFormLayout(self.widget_amd_options)
+        layout_amd.setContentsMargins(0, 0, 0, 0)
+        layout_amd.setSpacing(4)
+
         self.cmb_amd_decode = QComboBox()
         self.cmb_amd_decode.addItem("GPU — sprzętowe (zalecane)", "gpu")
         self.cmb_amd_decode.addItem("CPU — programowe", "cpu")
@@ -280,7 +287,84 @@ class RenderTab(QWidget):
         row_decode.setSpacing(4)
         row_decode.addWidget(self.cmb_amd_decode)
         row_decode.addWidget(self.lbl_cpu_warning)
-        form.addRow("Dekodowanie AMD:", row_decode)
+        layout_amd.addRow("Dekodowanie AMD:", row_decode)
+        form.addRow(self.widget_amd_options)
+
+        # ── NVIDIA Options (Stage 8L) ──────────────────────────────────
+        self.widget_nvidia_options = QWidget()
+        layout_nvidia = QFormLayout(self.widget_nvidia_options)
+        layout_nvidia.setContentsMargins(0, 0, 0, 0)
+        layout_nvidia.setSpacing(6)
+
+        self.cmb_nvidia_backend = QComboBox()
+        self.cmb_nvidia_backend.addItem("NVIDIA Legacy CUDA", "legacy_cuda")
+        self.cmb_nvidia_backend.addItem("NVIDIA Native D3D11 (Experimental)", "native_d3d11")
+        self.cmb_nvidia_backend.setToolTip(
+            "NVIDIA Legacy CUDA: hybrydowy pipeline z workerami CPU i FFmpeg NVENC (Domyślny/Produkcyjny).\n"
+            "NVIDIA Native D3D11 (Experimental): akcelerowany sprzętowo pipeline D3D11VA + Direct2D HUD + GPU map + NVENC."
+        )
+
+        from src.ffmpeg.nvidia_config import is_nvidia_native_available
+        nv_native_ok, nv_native_reason = is_nvidia_native_available()
+        idx_native = self.cmb_nvidia_backend.findData("native_d3d11")
+        if not nv_native_ok and idx_native >= 0:
+            self.cmb_nvidia_backend.setItemText(idx_native, f"NVIDIA Native D3D11 (Experimental / niedostępny: {nv_native_reason})")
+        idx_legacy = self.cmb_nvidia_backend.findData("legacy_cuda")
+        if idx_legacy >= 0:
+            self.cmb_nvidia_backend.setCurrentIndex(idx_legacy)
+
+        layout_nvidia.addRow("Backend NVIDIA:", self.cmb_nvidia_backend)
+
+        self.cmb_nvidia_codec = QComboBox()
+        self.cmb_nvidia_codec.addItems(["HEVC", "AV1", "H.264 (SDR)"])
+        layout_nvidia.addRow("Kodek NVIDIA:", self.cmb_nvidia_codec)
+
+        self.cmb_nvidia_quality = QComboBox()
+        self.cmb_nvidia_quality.addItems(["Fast", "Quality", "Max Quality"])
+        layout_nvidia.addRow("Jakość:", self.cmb_nvidia_quality)
+
+        self.chk_compression_analysis = QCheckBox("Analiza kompresji podczas eksportu")
+        self.chk_compression_analysis.setChecked(True)
+        self.chk_compression_analysis.setToolTip("Pomiary QP/Quantizer w czasie rzeczywistym podczas renderowania NVENC")
+        layout_nvidia.addRow(self.chk_compression_analysis)
+
+        def _update_nvidia_quality_options():
+            codec = self.cmb_nvidia_codec.currentText().strip().upper()
+            curr_qual = self.cmb_nvidia_quality.currentText()
+            self.cmb_nvidia_quality.blockSignals(True)
+            self.cmb_nvidia_quality.clear()
+            self.cmb_nvidia_quality.addItems(["Fast", "Quality", "Max Quality"])
+            if curr_qual in ["Fast", "Quality", "Max Quality"]:
+                self.cmb_nvidia_quality.setCurrentText(curr_qual)
+            else:
+                self.cmb_nvidia_quality.setCurrentText("Quality")
+            self.cmb_nvidia_quality.blockSignals(False)
+
+        self.cmb_nvidia_codec.currentIndexChanged.connect(lambda _: _update_nvidia_quality_options())
+
+        def _update_backend_visibility():
+            enc = self.cmb_encoder.currentText().strip().lower()
+            if enc == "auto":
+                try:
+                    from src.ffmpeg_pipeline import detect_best_encoder
+                    enc = detect_best_encoder().lower()
+                except Exception:
+                    enc = ""
+            is_amd = enc == "amd"
+            is_nv = enc in ("nv", "nvidia")
+            self.widget_amd_options.setVisible(is_amd)
+            self.widget_nvidia_options.setVisible(is_nv)
+            if is_nv:
+                self.cmb_nvidia_codec.setEnabled(True)
+                self.cmb_nvidia_quality.setEnabled(True)
+                self.chk_compression_analysis.setEnabled(True)
+
+        self.cmb_encoder.currentIndexChanged.connect(lambda _: _update_backend_visibility())
+        self.cmb_nvidia_backend.currentIndexChanged.connect(lambda _: _update_backend_visibility())
+        _update_backend_visibility()
+
+        form.addRow(self.widget_nvidia_options)
+
 
         self.cmb_resolution = QComboBox()
         self.cmb_resolution.addItems(
@@ -379,8 +463,14 @@ class RenderTab(QWidget):
         self.lbl_stats.setStyleSheet("QLabel { color: black; font-size: 12px; }")
         self.lbl_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_stats.setWordWrap(False)
-        self.lbl_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         vbox.addWidget(self.lbl_stats)
+        self.lbl_compression_stats = QLabel("")
+        self.lbl_compression_stats.setStyleSheet("QLabel { color: #0066cc; font-size: 11px; font-weight: bold; }")
+        self.lbl_compression_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_compression_stats.setWordWrap(False)
+        self.lbl_compression_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.lbl_compression_stats.setVisible(False)
+        vbox.addWidget(self.lbl_compression_stats)
 
     def _build_inout_bar(self) -> QHBoxLayout:
         """Pasek narzędzi zakresu eksportu: IN / OUT / Wyczyść z krokami klatkowymi."""
@@ -871,7 +961,17 @@ class RenderTab(QWidget):
             "amd_decode_mode": self.cmb_amd_decode.currentData() or "gpu",
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
+            "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
+            "nvidia_codec": self.cmb_nvidia_codec.currentText(),
+            "nvidia_quality": self.cmb_nvidia_quality.currentText(),
+            "compression_analysis": self.chk_compression_analysis.isChecked(),
+            # Diagnostic provenance only.  The production NVIDIA dispatch has
+            # historically not forwarded this checkbox as ``hud_preview``;
+            # keep behavior unchanged while recording what the GUI displayed.
+            "_gui_hud_preview_checkbox": self.chk_hud_preview.isChecked(),
         }
+        self.lbl_compression_stats.setText("")
+        self.lbl_compression_stats.setVisible(False)
         self._render_generation_id = next_render_generation_id()
         options["_render_generation_id"] = self._render_generation_id
         # Zakres IN/OUT jako cięcia graniczne — istniejący backend
@@ -917,14 +1017,20 @@ class RenderTab(QWidget):
                 resolved_amd = detect_best_encoder() == "amd"
             except Exception:
                 resolved_amd = False
-        # AMD export Preview consumes the already-composed native D3D11 frame.
+        is_nv_selected = selected_encoder in ("nv", "nvidia")
+        is_nv_native = bool(
+            is_nv_selected
+            and options.get("nvidia_backend") in ("native_d3d11", "NVIDIA Native D3D11")
+        )
+        # AMD and NVIDIA export Preview consume the already-composed native D3D11 frame.
         # Edit mode remains on the ordinary MPV/QMedia/PIL path.
         self._export_preview_hevc = bool(hud_on and resolved_amd)
-        self._export_preview_gpu_tap = self._export_preview_hevc
+        self._export_preview_gpu_tap = bool(hud_on and (resolved_amd or is_nv_native))
         self._export_preview_lightweight = False
         self._export_preview_native = bool(
             hud_on and self._uses_native_export_video()
             and not self._export_preview_hevc
+            and not is_nv_native
         )
         if self._export_preview_hevc:
             preview_width = max(2, int(os.environ.get("AMD_EXPORT_PREVIEW_WIDTH", "960")))
@@ -942,6 +1048,11 @@ class RenderTab(QWidget):
             self._preview_decoder = "native D3D11 GPU frame tap"
             self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
             self._preview_device = "AMD native D3D11"
+        elif hud_on and is_nv_native:
+            self._preview_decoder = "native D3D11 GPU frame tap"
+            self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
+            self._preview_device = "NVIDIA native D3D11"
+            options["_nvidia_preview_tap"] = lambda buf, w, h, s, f, pts: self._on_amd_gpu_preview_frame(buf, w, h)
         elif self._export_preview_native:
             self._preview_decoder = "MPV/QMedia"
             self._preview_hardware_decode = "existing preview setting"
@@ -973,12 +1084,12 @@ class RenderTab(QWidget):
             }
             if self._export_preview_hevc else None
         )
-        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else 0
-        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else 0
-        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else 0.0
+        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else (960 if (hud_on and is_nv_native) else 0)
+        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else (540 if (hud_on and is_nv_native) else 0)
+        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else (8.0 if (hud_on and is_nv_native) else 0.0)
         print(
-            f"[EXPORT PREVIEW] enabled={'True' if self._export_preview_hevc else 'False'} "
-            f"backend={'gpu_frame_tap' if self._export_preview_hevc else 'disabled'} "
+            f"[EXPORT PREVIEW] enabled={'True' if (self._export_preview_hevc or (hud_on and is_nv_native)) else 'False'} "
+            f"backend={'gpu_frame_tap' if (self._export_preview_hevc or (hud_on and is_nv_native)) else 'disabled'} "
             f"target_fps={preview_fps:g} target_size={preview_w}x{preview_h}",
             flush=True,
         )
@@ -1006,6 +1117,7 @@ class RenderTab(QWidget):
         self._preview_cached_video_frame = None
         self._preview_last_video_decode_ts = None
         self._preview_had_lifecycle = self.chk_hud_preview.isChecked()
+        self._pending_hud_switch_log = False
 
     def _stop_export_preview(self, reason: str, *, wait: bool = True) -> None:
         """Stop Preview and release all resources owned by its generation."""
@@ -1136,14 +1248,24 @@ class RenderTab(QWidget):
         elif snapshot.state == "finalizing":
             status = snapshot.finalization_stage or "Finalizacja..."
         elif snapshot.state == "preparing":
-            status = "Przygotowywanie HUD..."
+            status = snapshot.prep_label or "Przygotowywanie HUD..."
         else:
             status = "Renderowanie..."
         eta = None if snapshot.eta_s is None else self._fmt_time(snapshot.eta_s)
+        item_label = "HUD" if snapshot.state == "preparing" else "Frame"
+        completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
+        total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
         self._set_stats(
-            snapshot.frame, snapshot.total_frames, snapshot.elapsed_s,
+            completed_val, total_val, snapshot.elapsed_s,
             snapshot.fps, status, final_eta=eta,
+            item_label=item_label,
         )
+        comp_txt = getattr(snapshot, "compression_text", "")
+        if comp_txt:
+            if snapshot.completed:
+                comp_txt = re.sub(r"\s*\|\s*q teraz:\s*[\d\.]+", "", comp_txt)
+            self.lbl_compression_stats.setText(comp_txt)
+            self.lbl_compression_stats.setVisible(True)
         if snapshot.completed:
             self._render_target = 100.0
             self._render_display = 100.0
@@ -1291,14 +1413,28 @@ class RenderTab(QWidget):
         pct = max(0.0, min(1.0, float(hud_state.get("pct", 0.0) or 0.0)))
         label = str(hud_state.get("label", "") or "Renderowanie...")
         if phase == "prep":
-            overall = self._HUD_PREP_START + pct * (self._HUD_PREP_END - self._HUD_PREP_START)
+            if "global_pct" in hud_state:
+                overall = float(hud_state.get("global_pct"))
+            else:
+                overall = self._HUD_PREP_START + pct * (self._HUD_PREP_END - self._HUD_PREP_START)
+            work_done = int(hud_state.get("work_done", 0))
+            work_total = int(hud_state.get("work_total", 0))
+            item_label = "HUD"
+            completed = work_done
+            total = work_total
         elif phase == "finalize":
-            overall = self._FINALIZE_START + pct * (self._FINALIZE_END - self._FINALIZE_START)
+            if "global_pct" in hud_state:
+                overall = float(hud_state.get("global_pct"))
+            else:
+                overall = self._FINALIZE_START + pct * (self._FINALIZE_END - self._FINALIZE_START)
+            item_label = "Frame"
+            completed = 0
+            total = 0
         else:
             return
         if overall > self._render_target:
             self._render_target = overall
-        self._set_stats(0, 0, elapsed, 0.0, label)
+        self._set_stats(completed, total, elapsed, 0.0, label, item_label=item_label)
 
     def _render_tick(self) -> None:
         """Płynna animacja wspólnego paska postępu eksportu (30 ms) oraz timer finalizacji."""
@@ -1378,8 +1514,8 @@ class RenderTab(QWidget):
         if self._render_state_enabled:
             return
         if not self._rendering:
-            if self._render_state is not None and self._render_state.failed:
-                QMessageBox.critical(self, "Błąd", msg)
+            # Note: MainWindow._on_error odpowiada centralnie za prezentacje
+            # okna dialogowego bledu. Brak duplikacji z poziomu RenderTab.
             return
         self._set_stats(
             self.progress.value(), self._render_total,
@@ -1688,39 +1824,97 @@ class RenderTab(QWidget):
             local_ts = float(resolved.get("local_time", global_ts))
             clip_index = resolved.get("clip_index")
             clip = resolved.get("clip")
+            old_clip_index = getattr(ctrl, "_active_preview_clip_index", None)
+
+            mpv = getattr(ctrl, "mpv_player", None)
+            mpv_path_before = (
+                getattr(mpv, "path", None) or getattr(mpv, "filename", None)
+            ) if mpv is not None else None
+
             ensure_clip = getattr(ctrl, "_preview_ensure_active_clip", None)
             switched = bool(
                 callable(ensure_clip)
                 and ensure_clip(clip_index, clip, local_ts, global_ts)
             )
 
-            mpv = getattr(ctrl, "mpv_player", None)
             if mpv is not None:
-                # Seek on every exporter snapshot; do not let idle/first-frame
-                # playback state determine the visible export frame.
-                # Export Preview is indicative only.  A keyframe/approximate
-                # seek avoids a second exact-seek decode pipeline beside AMD.
-                mpv.seek(local_ts, reference="absolute")
-                mpv.pause = True
                 if switched:
-                    ctrl._source_transition_in_progress = False
-                return
+                    self._pending_hud_switch_log = True
+                    file_loaded_ok = False
+                    # Bounded event-driven wait for MPV to finish loading the new clip
+                    if hasattr(mpv, "wait_for_event"):
+                        try:
+                            file_loaded_ok = bool(mpv.wait_for_event("file-loaded", timeout=0.5))
+                        except Exception:
+                            file_loaded_ok = False
+                    if not file_loaded_ok and hasattr(mpv, "wait_for_property"):
+                        try:
+                            file_loaded_ok = bool(mpv.wait_for_property("seekable", lambda v: v is True, timeout=0.3))
+                        except Exception:
+                            pass
+
+                    mpv_path_after = getattr(mpv, "path", None) or getattr(mpv, "filename", None)
+                    dur = getattr(mpv, "duration", None)
+                    seek_result = "PENDING"
+                    try:
+                        mpv.seek(local_ts, reference="absolute")
+                        mpv.pause = True
+                        ctrl._source_transition_in_progress = False
+                        seek_result = "OK"
+                    except Exception as e:
+                        seek_result = f"FAILED ({e})"
+                        ctrl._mpv_pending_seek_s = local_ts
+
+                    time_pos = getattr(mpv, "time_pos", None)
+                    clip_path_str = str(getattr(clip, "path", "?"))
+                    file_loaded_str = "YES" if file_loaded_ok else "NO"
+
+                    print(
+                        f"[MultiFile Export Preview Switch]\n"
+                        f"  requested global timestamp: {global_ts:.3f}\n"
+                        f"  old clip index: {old_clip_index}\n"
+                        f"  new clip index: {clip_index}\n"
+                        f"  new file path: {clip_path_str}\n"
+                        f"  requested local timestamp: {local_ts:.3f}\n"
+                        f"  mpv path before load: {mpv_path_before}\n"
+                        f"  loadfile issued: YES\n"
+                        f"  file-loaded received: {file_loaded_str}\n"
+                        f"  mpv path after load: {mpv_path_after}\n"
+                        f"  duration: {dur}\n"
+                        f"  seek issued: {local_ts:.3f}\n"
+                        f"  seek result: {seek_result}\n"
+                        f"  time-pos: {time_pos}",
+                        flush=True,
+                    )
+                    return
+                else:
+                    try:
+                        if getattr(ctrl, "_source_transition_in_progress", False):
+                            if getattr(mpv, "seekable", False):
+                                mpv.seek(local_ts, reference="absolute")
+                                mpv.pause = True
+                                ctrl._source_transition_in_progress = False
+                        else:
+                            mpv.seek(local_ts, reference="absolute")
+                            mpv.pause = True
+                    except Exception as e:
+                        # Transient seek warning - do not kill preview generation!
+                        print(f"[Export Preview] Transient MPV seek warning at global_ts={global_ts:.3f}, local_ts={local_ts:.3f}: {e}", flush=True)
+                    return
 
             media_player = getattr(ctrl, "media_player", None)
             if media_player is not None:
-                media_player.setPosition(max(0, int(round(local_ts * 1000.0))))
-                # QVideoSink needs the player running to deliver a new frame;
-                # _on_video_frame pauses it again after the pending seek.
-                if not getattr(ctrl, "_playing", False):
-                    ctrl._seek_pending = True
-                    media_player.play()
+                try:
+                    media_player.setPosition(max(0, int(round(local_ts * 1000.0))))
+                    # QVideoSink needs the player running to deliver a new frame;
+                    # _on_video_frame pauses it again after the pending seek.
+                    if not getattr(ctrl, "_playing", False):
+                        ctrl._seek_pending = True
+                        media_player.play()
+                except Exception as exc:
+                    print(f"[Export Preview] QMedia seek warning: {exc}", flush=True)
         except Exception as exc:  # noqa: BLE001
-            self._record_export_preview_error(
-                generation=self._render_generation_id,
-                timestamp=float(global_ts), stage="video_sync", exc=exc,
-                worker=threading.current_thread().name,
-                stop_event=self._preview_stop_event,
-            )
+            print(f"[Export Preview] Warning in video sync at global_ts={global_ts:.3f}: {exc}", flush=True)
 
     def _preview_is_foreground(self) -> bool:
         """Preview is an optional foreground consumer, never a render dependency."""
@@ -2164,8 +2358,20 @@ class RenderTab(QWidget):
                 rgba = rgba.resize((tw, th), Image.Resampling.BILINEAR)
             data = rgba.tobytes("raw", "RGBA")
             qimg = QImage(data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888).copy()
+            if getattr(self, "_pending_hud_switch_log", False):
+                self._pending_hud_switch_log = False
+                print(
+                    f"[MultiFile Export Preview Switch] HUD preview composition result: OK ({qimg.width()}x{qimg.height()})",
+                    flush=True,
+                )
             return qimg
-        except Exception:
+        except Exception as exc:
+            if getattr(self, "_pending_hud_switch_log", False):
+                self._pending_hud_switch_log = False
+                print(
+                    f"[MultiFile Export Preview Switch] HUD preview composition result: FAILED ({exc})",
+                    flush=True,
+                )
             raise
 
     def _on_amd_decode_mode_restored(self, mode: str) -> None:

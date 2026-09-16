@@ -33,12 +33,13 @@ class PresetMixin:
         if not path:
             return
         try:
-            from src.indicators.compositor import normalize_layout_for_save
+            from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
             layout_copy = normalize_layout_for_save(self.layout)
             if hasattr(self, "_cut_regions") and self._cut_regions:
                 layout_copy["cut_regions"] = self._cut_regions
             else:
                 layout_copy.pop("cut_regions", None)
+            layout_copy = sanitize_layout_for_json(layout_copy)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(layout_copy, f, indent=2, ensure_ascii=False)
             self._layout_dirty = False
@@ -107,17 +108,23 @@ class PresetMixin:
         # czcionka — muszą być niezależne (patrz _sync_size_font_fields).
         _sync_size_font_fields(cfg, field_name)
 
-        # Jeśli zmieniono formę lub styl bara — wyślij nowy schemat
+        # Jeśli zmieniono formę, pole semantyczne lub styl bara — wyślij nowy schemat
         if (
             (field_name == "form" and value != old_form)
+            or (field_name == "field")
             or (field_name == "bar_style" and cfg.get("form") in ("bar", "segment_bar"))
             or (field_name == "chart_time_scope" and cfg.get("form") == "chart")
         ):
+            from src.telemetry_resolver import is_integer_only_field
+            if is_integer_only_field(stream_key, cfg):
+                cfg.pop("decimals", None)
+                cfg.pop("decimal_places", None)
             schema = get_schema_for_indicator(
                 stream_key,
                 cfg.get("form", "text"),
                 bar_style=cfg.get("bar_style", "ruler"),
                 chart_time_scope=cfg.get("chart_time_scope", "activity"),
+                cfg=cfg,
             )
             self.signals.sig_properties_ready.emit(stream_key, schema, dict(cfg))
 
@@ -169,12 +176,28 @@ class PresetMixin:
         if not proj_path:
             return None
         try:
-            from src.indicators.compositor import normalize_layout_for_save
+            from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
             saved = normalize_layout_for_save(self.layout)
             if hasattr(self, "_cut_regions") and self._cut_regions:
                 saved["cut_regions"] = self._cut_regions
             else:
                 saved.pop("cut_regions", None)
+
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            if render_tab is not None:
+                exp = saved.setdefault("export_settings", {})
+                if hasattr(render_tab, "cmb_nvidia_backend"):
+                    exp["nvidia_backend"] = render_tab.cmb_nvidia_backend.currentData()
+                if hasattr(render_tab, "cmb_nvidia_codec"):
+                    exp["codec"] = render_tab.cmb_nvidia_codec.currentText()
+                if hasattr(render_tab, "cmb_nvidia_quality"):
+                    exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentText()
+                if hasattr(render_tab, "edit_bitrate"):
+                    exp["bitrate"] = render_tab.edit_bitrate.text().strip()
+                if hasattr(render_tab, "chk_compression_analysis"):
+                    exp["compression_analysis"] = render_tab.chk_compression_analysis.isChecked()
+
+            saved = sanitize_layout_for_json(saved)
             with open(proj_path, "w", encoding="utf-8") as f:
                 json.dump(saved, f, indent=2, ensure_ascii=False)
             print(f"[ProjectLayout] Zapisano roboczy layout filmu do {proj_path}", flush=True)
@@ -189,7 +212,7 @@ class PresetMixin:
             base = getattr(self, "base_dir", None)
             if not base:
                 return
-            from src.indicators.compositor import normalize_layout_for_save
+            from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
             def_layout = Path(base) / "def_layout.json"
             self._startup_preset_path = ""
             self.layout["_startup_preset"] = ""
@@ -220,6 +243,7 @@ class PresetMixin:
             saved.setdefault("global", {})["amd_decode_mode"] = amd_mode
             saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
 
+            saved = sanitize_layout_for_json(saved)
             with open(def_layout, "w", encoding="utf-8") as f:
                 json.dump(saved, f, indent=2, ensure_ascii=False)
             self._layout_dirty = False

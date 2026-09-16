@@ -140,6 +140,31 @@ def _plain_paste_safe(overlay: Image.Image, cache_key) -> bool:
     return _WIDGET_CLEAN_TRANSPARENCY[key]
 
 
+_EMPTY_BUFFERS: dict[tuple[int, int], Image.Image] = {}
+
+
+def _composite_over_empty(base_img: Image.Image, overlay: Image.Image, x: int, y: int) -> None:
+    """Composite overlay over proven-empty destination ROI without cropping base_img.
+    Byte-identical to base_img.alpha_composite(overlay, (x, y)) when destination is transparent.
+    """
+    if (
+        x >= 0
+        and y >= 0
+        and x + overlay.width <= base_img.width
+        and y + overlay.height <= base_img.height
+    ):
+        k = (overlay.width, overlay.height)
+        empty = _EMPTY_BUFFERS.get(k)
+        if empty is None:
+            empty = Image.new("RGBA", k, (0, 0, 0, 0))
+            if len(_EMPTY_BUFFERS) < 32:
+                _EMPTY_BUFFERS[k] = empty
+        res = Image.alpha_composite(empty, overlay)
+        base_img.paste(res, (x, y))
+    else:
+        base_img.alpha_composite(overlay, (x, y))
+
+
 def composite_final(
     base_img: Image.Image,
     overlay: Image.Image,
@@ -207,27 +232,38 @@ def composite_final(
         base_img.alpha_composite(overlay, (x, y))
         return
 
-    # ETAP 4D: clean-transparency widgets over a fully-transparent
-    # destination composite byte-identically with a plain paste (see
-    # _clean_transparency and _plain_paste_safe).  This removes the
-    # alpha_composite blend + its internal dest crop for all non-overlapping
-    # HUD widgets (distance ruler, altitude bar, battery, text).
+    # NV-PERF-3: Cache bbox on overlay to avoid repeated getbbox scans across layers
+    bbox = getattr(overlay, "_bbox", ...)
+    if bbox is ...:
+        bbox = overlay.getbbox()
+        try:
+            overlay._bbox = bbox
+        except Exception:
+            pass
+
+    if bbox is None:
+        # Fully transparent widget — compositing is a no-op on the canvas.
+        return
+
+    # NV-PERF-3: Clean-transparency / empty-destination fast path.
+    # When destination is provably empty (no overlap with earlier widgets) and
+    # the source transparency is clean (alpha=0 implies RGB=0), plain paste is
+    # byte-identical to alpha_composite over transparent destination.
+    # Pillow's paste natively clips to canvas bounds, eliminating edge-clipping fallbacks.
+    dest_empty = (
+        (prior_bboxes is not None and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes))
+        or (prior_bboxes is None and destination_proven_empty)
+    )
     if (
         _CLEAN_PASTE_ENABLED
-        and prior_bboxes is not None
-        and x >= 0
-        and y >= 0
-        and x + overlay.width <= base_img.width
-        and y + overlay.height <= base_img.height
-        and not _intersects_any((x, y, overlay.width, overlay.height), prior_bboxes)
+        and dest_empty
+        and x < base_img.width
+        and y < base_img.height
+        and x + overlay.width > 0
+        and y + overlay.height > 0
         and _plain_paste_safe(overlay, cache_key)
     ):
         base_img.paste(overlay, (x, y))
-        return
-
-    bbox = overlay.getbbox()
-    if bbox is None:
-        # Fully transparent widget — compositing is a no-op on the canvas.
         return
 
     if bbox != (0, 0, overlay.width, overlay.height):
@@ -238,17 +274,26 @@ def composite_final(
         content_area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
         full_area = overlay.width * overlay.height
         if content_area >= 0.75 * full_area:
-            base_img.alpha_composite(overlay, (x, y))
+            if dest_empty:
+                _composite_over_empty(base_img, overlay, x, y)
+            else:
+                base_img.alpha_composite(overlay, (x, y))
             return
         content = overlay.crop(bbox)
-        base_img.alpha_composite(content, (x + bbox[0], y + bbox[1]))
+        if dest_empty:
+            _composite_over_empty(base_img, content, x + bbox[0], y + bbox[1])
+        else:
+            base_img.alpha_composite(content, (x + bbox[0], y + bbox[1]))
         return
 
     # Content fills the whole widget.  The plain-paste shortcut is only
     # byte-identical when the source has no fully-transparent (non-zero RGB)
     # pixels and the destination region is still fully transparent.
     if _alpha_min(overlay, cache_key) <= 0:
-        base_img.alpha_composite(overlay, (x, y))
+        if dest_empty:
+            _composite_over_empty(base_img, overlay, x, y)
+        else:
+            base_img.alpha_composite(overlay, (x, y))
         return
     if prior_bboxes is not None and _intersects_any(
         (x, y, overlay.width, overlay.height), prior_bboxes
@@ -270,9 +315,11 @@ def rotated_paste(
     tight_bboxes=None,
     tight_key=None,
     coordinate_offset: tuple[int, int] = (0, 0),
-) -> None:
+    canvas_rot180: bool = False,
+    canvas_size: tuple[int, int] = (0, 0),
+) -> tuple[int, int, int, int]:
     """Paste *overlay* onto *base_img* centred at (center_x, center_y) with rotation.
-    Modifies base_img in place.
+    Modifies base_img in place. Returns (x, y, width, height) of the pasted overlay.
 
     ETAP 10R: *tight_bboxes* / *tight_key* are forwarded to composite_final
     (alpha-tight bbox capture).  When *tight_bboxes* is None behaviour is
@@ -280,19 +327,42 @@ def rotated_paste(
 
     ETAP 4B: *coordinate_offset* allows exact sub-tile / cluster rendering
     without floating-point banker's rounding flips when offsetting coordinates.
+
+    NV-PERF-4: *canvas_rot180* maps upright coordinates directly into 180° canvas
+    coordinates so the full-frame HUD is rendered directly in raw video orientation,
+    eliminating the full-canvas Pillow ROTATE_180 transpose.
     """
     rotation = int(rotation) % 360
-    if rotation == 90:
-        overlay = overlay.transpose(Image.Transpose.ROTATE_90)
-    elif rotation == 180:
-        overlay = overlay.transpose(Image.Transpose.ROTATE_180)
-    elif rotation == 270:
-        overlay = overlay.transpose(Image.Transpose.ROTATE_270)
-    x = int(round(center_x - overlay.width / 2.0)) - coordinate_offset[0]
-    y = int(round(center_y - overlay.height / 2.0)) - coordinate_offset[1]
+    if canvas_rot180:
+        eff_w = overlay.height if rotation in (90, 270) else overlay.width
+        eff_h = overlay.width if rotation in (90, 270) else overlay.height
+        ux = int(round(center_x - eff_w / 2.0)) - coordinate_offset[0]
+        uy = int(round(center_y - eff_h / 2.0)) - coordinate_offset[1]
+        cw = canvas_size[0] if canvas_size[0] > 0 else base_img.width
+        ch = canvas_size[1] if canvas_size[1] > 0 else base_img.height
+        x = cw - ux - eff_w
+        y = ch - uy - eff_h
+        rot_eff = (rotation + 180) % 360
+        if rot_eff == 90:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_90)
+        elif rot_eff == 180:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_180)
+        elif rot_eff == 270:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_270)
+    else:
+        if rotation == 90:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_90)
+        elif rotation == 180:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_180)
+        elif rotation == 270:
+            overlay = overlay.transpose(Image.Transpose.ROTATE_270)
+        x = int(round(center_x - overlay.width / 2.0)) - coordinate_offset[0]
+        y = int(round(center_y - overlay.height / 2.0)) - coordinate_offset[1]
+
     composite_final(
         base_img, overlay, x, y, prior_bboxes, cache_key,
         destination_proven_empty=destination_proven_empty,
         tight_bboxes=tight_bboxes,
         tight_key=tight_key,
     )
+    return (x, y, overlay.width, overlay.height)

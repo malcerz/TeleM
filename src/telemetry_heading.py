@@ -20,8 +20,11 @@ DEFAULT_SMOOTHING_WINDOW_S = 2.0
 DEFAULT_MAX_SEGMENT_SPEED_KMH = 180.0
 
 
-def _naive_dt(value: datetime) -> datetime:
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
+def _naive_dt(value: datetime | float | int) -> datetime:
+    if isinstance(value, (int, float)):
+        from datetime import timezone
+        return datetime.fromtimestamp(float(value), timezone.utc).replace(tzinfo=None)
+    return value.replace(tzinfo=None) if getattr(value, "tzinfo", None) is not None else value
 
 
 def normalize_heading(degrees: float) -> float:

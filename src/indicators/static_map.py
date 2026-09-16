@@ -109,7 +109,7 @@ def _render_static_map_indicator(
                 return _placeholder(
                     progress=snap["progress"],
                     loaded=snap["loaded_tiles"],
-                    total=snap["total_tiles"],
+                    required=snap["required_tiles"],
                 )
             # Context ready: if detail tiles are cached for the current
             # position, render the real map; otherwise Level 1 overview.

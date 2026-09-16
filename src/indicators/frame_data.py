@@ -763,22 +763,27 @@ def prepare_overlay_frame_data(
     elapsed_seconds = 0.0
 
     if active_mapper is not None and target_dt is not None:
-        candidate = active_mapper.wall_to_active_seconds(target_dt)
-        mapper_start_naive = _to_naive_dt(getattr(active_mapper, "start_dt", None))
-        if mapper_start_naive is not None and target_dt_naive is not None:
-            wall_elapsed = max(0.0, (target_dt_naive - mapper_start_naive).total_seconds())
-            # Sanity check: active elapsed cannot exceed wall elapsed + tolerance (5s) or 30 days
-            if 0.0 <= candidate <= wall_elapsed + 5.0 and wall_elapsed < 2592000.0:
-                elapsed_seconds = candidate
-            else:
-                print(
-                    f"[SanityCheck] Invalid active_elapsed {candidate}s (wall {wall_elapsed}s); "
-                    f"falling back cleanly to wall elapsed",
-                    flush=True,
-                )
-                elapsed_seconds = wall_elapsed if wall_elapsed < 2592000.0 else max(0.0, float(project_elapsed_s or 0.0))
+        from src.telemetry_resolver import _map_wall_to_seconds
+        candidate = _map_wall_to_seconds(active_mapper, target_dt)
+        if candidate is None:
+            # Mapper couldn't resolve this timestamp — fall through to fallback
+            pass
         else:
-            elapsed_seconds = max(0.0, candidate)
+            mapper_start_naive = _to_naive_dt(getattr(active_mapper, "start_dt", None))
+            if mapper_start_naive is not None and target_dt_naive is not None:
+                wall_elapsed = max(0.0, (target_dt_naive - mapper_start_naive).total_seconds())
+                # Sanity check: active elapsed cannot exceed wall elapsed + tolerance (5s) or 30 days
+                if 0.0 <= candidate <= wall_elapsed + 5.0 and wall_elapsed < 2592000.0:
+                    elapsed_seconds = candidate
+                else:
+                    print(
+                        f"[SanityCheck] Invalid active_elapsed {candidate}s (wall {wall_elapsed}s); "
+                        f"falling back cleanly to wall elapsed",
+                        flush=True,
+                    )
+                    elapsed_seconds = wall_elapsed if wall_elapsed < 2592000.0 else max(0.0, float(project_elapsed_s or 0.0))
+            else:
+                elapsed_seconds = max(0.0, candidate)
 
     elif (fit_data or gpx_track_samples) and target_dt_naive is not None:
         activity_start_dt = None

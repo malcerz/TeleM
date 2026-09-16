@@ -931,21 +931,45 @@ class TelemetryDataManager:
         )
         self.available_fit_fields = self.fit_data.available_fit_fields
 
+        if self.start_dt_utc is None:
+            for stream_key in ("speed", "alt", "distance", "heart_rate", "cadence", "power"):
+                if self.fit_data.get(stream_key):
+                    self.start_dt_utc = self.fit_data[stream_key][0][0]
+                    break
+
+        fit_end_dt_utc = None
+        for stream_key in ("speed", "alt", "distance", "heart_rate", "cadence", "power", "garmin_battery_percent", "gopro_battery"):
+            stream = self.fit_data.get(stream_key)
+            if stream:
+                last_dt = stream[-1][0]
+                if fit_end_dt_utc is None or last_dt > fit_end_dt_utc:
+                    fit_end_dt_utc = last_dt
+
+        coverage_end = fit_end_dt_utc
+        if getattr(self, "video_duration", None) and self.start_dt_utc is not None:
+            try:
+                vid_end = self.start_dt_utc + timedelta(seconds=float(self.video_duration))
+                if coverage_end is None or vid_end > coverage_end:
+                    coverage_end = vid_end
+            except Exception:
+                pass
+
+        self._coverage_start = self.start_dt_utc
+        self._coverage_end = coverage_end
+
         # Full-FIT Battery prepass: build the lightweight presentation plan at
         # source load, before the first Preview frame requests a value.
         # Warm both GoPro and Garmin quantized battery plans before the first
         # Preview request.  They are independent streams and do not depend on
         # GPS availability or on the first asynchronous paint.
-        for battery_field in ("garmin_battery_percent", "gopro_battery"):
+        for battery_field in ("garmin_battery_percent", "gopro_battery", "battery_pct", "battery_soc"):
             battery_samples = self.fit_data.get(battery_field, [])
             if battery_samples:
                 battery_presentation_plan(
                     battery_samples,
                     coverage_start=self.start_dt_utc,
+                    coverage_end=coverage_end,
                 )
-
-        if self.start_dt_utc is None and self.fit_data.get("speed"):
-            self.start_dt_utc = self.fit_data["speed"][0][0]
 
         print(
             f"[TelemetryManager] FIT loaded: keys={list(self.fit_data.keys())}, "
@@ -953,6 +977,28 @@ class TelemetryDataManager:
             flush=True,
         )
         return True
+
+    def update_battery_coverage(
+        self, coverage_start: Optional[datetime], coverage_end: Optional[datetime],
+        timeline: Optional[Any] = None,
+    ) -> None:
+        """Warm global battery presentation plans for the full project timeline."""
+        self._coverage_start = coverage_start
+        self._coverage_end = coverage_end
+        if timeline is not None:
+            self.timeline = timeline
+        if not hasattr(self, "fit_data") or not isinstance(self.fit_data, dict):
+            return
+        eff_timeline = timeline or getattr(self, "timeline", None) or getattr(self, "video_timeline", None)
+        for battery_field in ("garmin_battery_percent", "gopro_battery", "battery_pct", "battery_soc"):
+            battery_samples = self.fit_data.get(battery_field, [])
+            if battery_samples:
+                battery_presentation_plan(
+                    battery_samples,
+                    coverage_start=coverage_start,
+                    coverage_end=coverage_end,
+                    timeline=eff_timeline,
+                )
 
     # ------------------------------------------------------------------
     # Clearing
@@ -1187,11 +1233,19 @@ class TelemetryDataManager:
             return interpolate_heading(samples, target_dt)
         if field_name == 'slope':
             return interpolate_slope(samples, target_dt)
+        if hasattr(self, "_coverage_start") and self._coverage_start is not None:
+            cfg.setdefault("_presentation_video_start", self._coverage_start)
+        elif self.start_dt_utc is not None:
+            cfg.setdefault("_presentation_video_start", self.start_dt_utc)
+        if hasattr(self, "_coverage_end") and self._coverage_end is not None:
+            cfg.setdefault("_presentation_video_end", self._coverage_end)
+        active_mapper = getattr(self, "timeline", None) or getattr(self, "video_timeline", None)
+        if active_mapper is None and selected_source == 'fit':
+            active_mapper = getattr(self.fit_data, 'active_time_mapper', None)
         from src.telemetry_resolver import resolve_current_presentation
         return resolve_current_presentation(
             samples, target_dt, field_name, cfg,
-            active_time_mapper=getattr(self.fit_data, 'active_time_mapper', None)
-            if selected_source == 'fit' else None,
+            active_time_mapper=active_mapper,
         )
 
     def _interpolate_field(

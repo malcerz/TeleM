@@ -439,7 +439,7 @@ def _render_chart_indicator(
         legacy_decimal_default = 0
     else:
         legacy_decimal_default = 1
-    decimal_places = resolve_decimal_places(cfg, legacy_decimal_default)
+    decimal_places = resolve_decimal_places(cfg, legacy_decimal_default, field=key)
 
     # label_font_size (Właściwości) → pixel size, clamped to fit the chart
     lfs = cfg.get("label_font_size")
@@ -522,10 +522,12 @@ def _render_chart_indicator(
         aligned_target = target_dt
         if getattr(history_data, "skip_pauses", False) and getattr(history_data, "active_time_mapper", None) is not None:
             from datetime import timedelta
+            from src.telemetry_resolver import _map_wall_to_seconds
             mapper = history_data.active_time_mapper
             base = getattr(history_data, "base_start_dt", None) or timestamps[0]
-            sec = mapper.wall_to_active_seconds(target_dt)
-            aligned_target = base + timedelta(seconds=sec)
+            sec = _map_wall_to_seconds(mapper, target_dt)
+            if sec is not None:
+                aligned_target = base + timedelta(seconds=sec)
         if sample_tz is None and aligned_target.tzinfo is not None:
             aligned_target = aligned_target.replace(tzinfo=None)
         elif sample_tz is not None and aligned_target.tzinfo is None:

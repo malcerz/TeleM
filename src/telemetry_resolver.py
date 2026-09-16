@@ -63,7 +63,37 @@ def canonical_telemetry_field(name: str) -> str:
             'battery_text': 'battery', 'power_text': 'power', 'iso_text': 'iso',
             'exposure_text': 'exposure', 'speed_text': 'speed', 'speed_visual': 'speed',
             'dist_text': 'distance', 'dist_visual': 'distance', 'alt_text': 'alt',
-            'alt_visual': 'alt'}.get(name, name)
+            'alt_visual': 'alt', 'hr_text': 'hr', 'cad_text': 'cad'}.get(name, name)
+
+
+# Integer-only presentation fields: presentation is strictly integer (0 decimals)
+# without altering internal raw telemetry, resolver, or interpolation precision.
+INTEGER_ONLY_FIELDS = frozenset({
+    "heart_rate", "hr",
+    "cadence", "cad",
+    "power", "curvpower",
+    "iso",
+    "exposure",
+})
+
+
+def is_integer_only_field(field_or_key: str, cfg: Mapping[str, Any] | None = None) -> bool:
+    """Return True if the semantic field is strictly integer-only presentation."""
+    if cfg and isinstance(cfg, Mapping):
+        field_attr = str(cfg.get("field", "")).strip().lower()
+        if field_attr:
+            if field_attr in INTEGER_ONLY_FIELDS:
+                return True
+            canon_field = canonical_telemetry_field(field_attr).lower()
+            if canon_field in INTEGER_ONLY_FIELDS:
+                return True
+    key = str(field_or_key or "").strip().lower()
+    if key in INTEGER_ONLY_FIELDS:
+        return True
+    canon = canonical_telemetry_field(key).lower()
+    if canon in INTEGER_ONLY_FIELDS:
+        return True
+    return False
 
 
 # Presentation policy is deliberately backend-neutral: the same logical field
@@ -93,7 +123,8 @@ for _name in ('battery', 'battery_pct', 'battery_soc', 'garmin_battery_percent',
 for _name in ('battery_voltage', 'garmin_battery_voltage'):
     FIELD_SEMANTICS[_name] = FieldSemantics('continuous', .001, 'auto', 'never_cross_gap', True, 'quantized_reconstruct')
 for _name in ('speed', 'enhanced_speed', 'ground_speed', 'alt', 'altitude',
-              'enhanced_altitude', 'distance', 'dist', 'track'):
+              'enhanced_altitude', 'distance', 'dist', 'track',
+              'temperature', 'atemp', 'garmin_temperature', 'device_temperature'):
     FIELD_SEMANTICS[_name] = FieldSemantics('continuous', default_interpolation='linear', presentation_strategy='linear')
 
 
@@ -110,11 +141,16 @@ def field_semantics(name: str) -> FieldSemantics:
 
 def presentation_default_precision(field: str, cfg: Mapping | None = None) -> int:
     cfg = cfg or {}
+    if is_integer_only_field(field, cfg):
+        return 0
+    canon = canonical_telemetry_field(field).lower()
+    if "garmin_battery" in canon or canon in ("battery", "battery_pct", "battery_soc") or "garmin_battery" in str(cfg.get("field", "")).lower():
+        return 2
     if cfg.get('form') in ('bar', 'segment_bar', 'gauge', 'chart'):
         return 1  # form schema default
-    if 'voltage' in canonical_telemetry_field(field).lower():
+    if 'voltage' in canon:
         return 2
-    if not field.startswith('fit_') and canonical_telemetry_field(field) in (
+    if not field.startswith('fit_') and canon in (
             'speed', 'enhanced_speed', 'ground_speed', 'distance', 'dist', 'alt', 'altitude'):
         return 1
     return 0
@@ -149,6 +185,22 @@ class BatteryPlanSegment:
     kind: str
 
 
+def _map_wall_to_seconds(mapper, dt):
+    """Central wall-time → project/active-seconds dispatch.
+
+    Handles both ``VideoTimeline`` (``absolute_to_global``) and
+    ``ActiveTimeMapper`` (``wall_to_active_seconds``).  Returns ``None``
+    when no mapping is possible.
+    """
+    if mapper is None or dt is None:
+        return None
+    if hasattr(mapper, "absolute_to_global"):
+        return mapper.absolute_to_global(dt)
+    if hasattr(mapper, "wall_to_active_seconds"):
+        return mapper.wall_to_active_seconds(dt)
+    return None
+
+
 @dataclass(frozen=True)
 class NumericPresentationPlan:
     """Immutable full-series presentation plan shared by numeric indicators."""
@@ -163,11 +215,56 @@ class NumericPresentationPlan:
     median_interval: float | None = None
     gap_multiplier: float = 5.0
     segment_start_indices: tuple[int, ...] = ()
+    total_render_duration_s: float | None = None
+    timeline: Any = None
 
     def value_at(self, target_dt: datetime, *, active_time_mapper: Any = None) -> float | None:
         if target_dt is None:
             return None
         target = _naive_dt(target_dt)
+        if self.strategy == 'monotonic_depletion':
+            if self.segments:
+                seg = self.segments[0]
+                mapper = active_time_mapper if active_time_mapper is not None else self.timeline
+                t_render = None
+                if mapper is not None:
+                    if hasattr(mapper, 'absolute_to_global'):
+                        t_render = mapper.absolute_to_global(target)
+                        if t_render is None and hasattr(mapper, 'clips') and mapper.clips:
+                            clips = mapper.clips
+                            first_start = _naive_dt(clips[0].absolute_start_dt)
+                            last_end = _naive_dt(clips[-1].absolute_end_dt)
+                            if first_start is not None and target <= first_start:
+                                t_render = 0.0
+                            elif last_end is not None and target >= last_end:
+                                t_render = float(getattr(mapper, 'project_duration_s', (last_end - first_start).total_seconds()))
+                            else:
+                                for k in range(len(clips) - 1):
+                                    c1_end = _naive_dt(clips[k].absolute_end_dt)
+                                    c2_start = _naive_dt(clips[k + 1].absolute_start_dt)
+                                    if c1_end is not None and c2_start is not None and c1_end <= target <= c2_start:
+                                        t_render = float(clips[k].global_end_s)
+                                        break
+                    elif hasattr(mapper, 'wall_to_active_seconds'):
+                        ref_t = self.coverage_start or seg.start_time
+                        t_render = mapper.wall_to_active_seconds(target) - mapper.wall_to_active_seconds(ref_t)
+                
+                if t_render is None:
+                    if target < seg.start_time:
+                        return float(max(0.0, min(100.0, seg.start_value)))
+                    t_render = (target - seg.start_time).total_seconds()
+                
+                span = self.total_render_duration_s
+                if span is None or span <= 0:
+                    span = (seg.end_time - seg.start_time).total_seconds()
+                if span <= 0:
+                    return float(max(0.0, min(100.0, seg.end_value)))
+                fraction = max(0.0, min(1.0, t_render / span))
+                val = seg.start_value + (seg.end_value - seg.start_value) * fraction
+                return float(max(0.0, min(100.0, val)))
+            if self.raw_samples:
+                return float(max(0.0, min(100.0, float(self.raw_samples[0][1]))))
+            return None
         if self.coverage_start is not None and target < _naive_dt(self.coverage_start):
             return None
         if not self.segments and self.raw_samples:
@@ -175,45 +272,58 @@ class NumericPresentationPlan:
             if idx == 0:
                 return None
             if idx >= len(self.raw_samples) or self.strategy in ('raw_step', 'hold', 'counter_step'):
-                return self.raw_samples[min(idx, len(self.raw_samples)) - 1][1]
+                val = float(self.raw_samples[min(idx, len(self.raw_samples)) - 1][1])
+                return val
             left = self.raw_samples[idx - 1]
             right = self.raw_samples[idx]
             span = (_naive_dt(right[0]) - _naive_dt(left[0])).total_seconds()
             if span <= 0:
-                return left[1]
+                val = float(left[1])
+                return val
             if (idx in self.segment_start_indices or
                     (self.median_interval is not None and
                      span > self.median_interval * max(1.0, self.gap_multiplier))):
-                return left[1]
+                val = float(left[1])
+                return val
             if active_time_mapper is not None:
-                active_span = (active_time_mapper.wall_to_active_seconds(right[0]) -
-                               active_time_mapper.wall_to_active_seconds(left[0]))
-                if active_span + 1e-6 < span:
-                    return left[1]
+                _right_s = _map_wall_to_seconds(active_time_mapper, right[0])
+                _left_s = _map_wall_to_seconds(active_time_mapper, left[0])
+                if _right_s is not None and _left_s is not None:
+                    active_span = _right_s - _left_s
+                    if active_span + 1e-6 < span:
+                        val = float(left[1])
+                        return val
             f = (target - _naive_dt(left[0])).total_seconds() / span
-            return float(left[1]) + (float(right[1]) - float(left[1])) * f
+            val = float(left[1]) + (float(right[1]) - float(left[1])) * f
+            return val
         if not self.segments:
             return None
         if target < self.segments[0].start_time:
-            return self.segments[0].start_value
+            val = self.segments[0].start_value
+            return val
         for segment in self.segments:
             if target < segment.start_time:
                 continue
             if target <= segment.end_time:
                 span = (segment.end_time - segment.start_time).total_seconds()
                 if span <= 0:
-                    return segment.end_value
+                    val = segment.end_value
+                    return val
                 if active_time_mapper is not None:
-                    active_span = (active_time_mapper.wall_to_active_seconds(segment.end_time) -
-                                   active_time_mapper.wall_to_active_seconds(segment.start_time))
-                    if active_span + 1e-6 < span:
-                        return segment.start_value
+                    _end_s = _map_wall_to_seconds(active_time_mapper, segment.end_time)
+                    _start_s = _map_wall_to_seconds(active_time_mapper, segment.start_time)
+                    if _end_s is not None and _start_s is not None:
+                        active_span = _end_s - _start_s
+                        if active_span + 1e-6 < span:
+                            val = segment.start_value
+                            return val
                 fraction = max(0.0, min(1.0,
                     (target - segment.start_time).total_seconds() / span))
-                return segment.start_value + (segment.end_value - segment.start_value) * fraction
-        # A plan normally ends in an open-tail segment. Preserve endpoint hold
-        # if the caller queries beyond an explicitly bounded coverage range.
-        return self.segments[-1].end_value
+                val = segment.start_value + (segment.end_value - segment.start_value) * fraction
+                return val
+        last_seg = self.segments[-1]
+        val = last_seg.end_value
+        return val
 
 
 _BATTERY_PLAN_CACHE = OrderedDict()
@@ -223,21 +333,31 @@ _NUMERIC_PLAN_CACHE = OrderedDict()
 BatteryPresentationPlan = NumericPresentationPlan
 
 
-def resolve_presentation_precision(config: Mapping[str, Any] | None, default: int = 0) -> int:
+def resolve_presentation_precision(
+    config: Mapping[str, Any] | None,
+    default: int = 0,
+    field: str | None = None,
+) -> int:
     """Return one effective display precision for resolver and renderer.
 
-    ``decimals`` is the GUI property used by text/bar/gauge indicators;
-    ``decimal_places`` is retained as a compatibility fallback for chart-era
-    layouts.  Prefer an explicitly present ``decimals`` value, including zero,
-    so a stale ``decimal_places=0`` cannot discard a user's ``decimals=1``.
+    Clamped to range 0..2.
+    For integer-only semantic fields (heart_rate, cadence, ISO, exposure, power),
+    returns strictly 0 regardless of config or legacy layout decimals.
+    For chart form, ``decimal_places`` is canonical; for other forms,
+    ``decimals`` is preferred.
     """
     cfg = config if isinstance(config, Mapping) else {}
-    raw = cfg["decimals"] if "decimals" in cfg else cfg.get("decimal_places", default)
+    if (field and is_integer_only_field(field, cfg)) or (cfg and is_integer_only_field(str(cfg.get("field", "")), cfg)):
+        return 0
+    if cfg.get("form") == "chart":
+        raw = cfg["decimal_places"] if "decimal_places" in cfg else cfg.get("decimals", default)
+    else:
+        raw = cfg["decimals"] if "decimals" in cfg else cfg.get("decimal_places", default)
     try:
-        return max(0, min(6, int(raw)))
+        return max(0, min(2, int(raw)))
     except (TypeError, ValueError, OverflowError):
         try:
-            return max(0, min(6, int(default)))
+            return max(0, min(2, int(default)))
         except (TypeError, ValueError, OverflowError):
             return 0
 
@@ -257,25 +377,30 @@ def interpolation_policy(field_name: str, configured: str | None = None) -> str:
     return metadata.default_interpolation
 
 
-def _naive_dt(value: datetime) -> datetime:
-    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo is not None else value
+def _naive_dt(value: datetime | float | int) -> datetime:
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), timezone.utc).replace(tzinfo=None)
+    return value.astimezone(timezone.utc).replace(tzinfo=None) if getattr(value, "tzinfo", None) is not None else value
 
 
 def build_battery_presentation_plan(
     samples, *, coverage_start: datetime | None = None,
     coverage_end: datetime | None = None,
+    timeline: Any = None,
+    active_time_mapper: Any = None,
 ) -> BatteryPresentationPlan:
-    """Read one complete Battery series and create its presentation curve.
+    """Read one complete Battery series and create its global presentation curve.
 
-    Raw input is only referenced (never rewritten).  Identical quantized
-    values are collapsed to first-change events.  The first unknown drop is
-    back-predicted with the duration of the next observed transition; the
-    final unconfirmed level gets an N→N-.99 open tail when coverage is known.
+    Raw input is only referenced (never rewritten). Monotonic milestone drops
+    are extracted to derive a robust global depletion rate (slope <= 0).
+    Temporary upward sensor fluctuations / noise are ignored.
+    The global linear trend covers the full project on the concatenated render timeline.
     """
     raw = tuple(samples or ())
     if not raw:
-        return BatteryPresentationPlan((), (), (), (), coverage_start, coverage_end)
-    events: list[tuple[datetime, float]] = []
+        return BatteryPresentationPlan((), (), (), (), coverage_start, coverage_end, 'monotonic_depletion')
+
+    cleaned: list[tuple[datetime, float]] = []
     for sample in raw:
         try:
             dt, value = _naive_dt(sample[0]), float(sample[1])
@@ -283,99 +408,125 @@ def build_battery_presentation_plan(
             continue
         if not math.isfinite(value):
             continue
-        if not events or value != events[-1][1]:
-            events.append((dt, value))
-    if not events:
-        return BatteryPresentationPlan(raw, (), (), (), coverage_start, coverage_end)
-    starts = _naive_dt(coverage_start) if coverage_start is not None else events[0][0]
-    ends = _naive_dt(coverage_end) if coverage_end is not None else _naive_dt(raw[-1][0])
-    durations = tuple(max(0.0, (events[i + 1][0] - events[i][0]).total_seconds())
-                      for i in range(len(events) - 1))
+        cleaned.append((dt, max(0.0, min(100.0, value))))
+
+    if not cleaned:
+        return BatteryPresentationPlan(raw, (), (), (), coverage_start, coverage_end, 'monotonic_depletion')
+
+    cleaned.sort(key=lambda item: item[0])
+    starts = _naive_dt(coverage_start) if coverage_start is not None else cleaned[0][0]
+    ends = _naive_dt(coverage_end) if coverage_end is not None else cleaned[-1][0]
+    if ends < starts:
+        ends = starts
+
+    # Extract monotonic descending milestones (filtering out upward noise / outliers)
+    milestones: list[tuple[datetime, float]] = [cleaned[0]]
+    for dt, val in cleaned[1:]:
+        if val < milestones[-1][1] and dt > milestones[-1][0]:
+            milestones.append((dt, val))
+
+    # Calculate drop rates (s/%) across consecutive milestones
+    rates_s_per_pct: list[float] = []
+    for i in range(len(milestones) - 1):
+        dt1, v1 = milestones[i]
+        dt2, v2 = milestones[i + 1]
+        dt_s = (dt2 - dt1).total_seconds()
+        dv = v1 - v2
+        if dt_s > 0 and dv > 0:
+            rates_s_per_pct.append(dt_s / dv)
+
     segments: list[BatteryPlanSegment] = []
-    if len(events) == 1:
-        # Explicit single-state estimate; without a known video endpoint there
-        # is no safe place to invent a depletion tail.
-        if coverage_end is not None and ends > starts:
-            segments.append(BatteryPlanSegment(starts, ends, events[0][1],
-                                               events[0][1] - .99,
-                                               'single_state_estimate'))
+    first_dt, first_val = cleaned[0]
+
+    eff_timeline = timeline if timeline is not None else active_time_mapper
+    if eff_timeline is not None and getattr(eff_timeline, 'project_duration_s', 0) > 0:
+        total_span = float(eff_timeline.project_duration_s)
+    elif eff_timeline is not None and coverage_start is not None and coverage_end is not None:
+        _cs = _map_wall_to_seconds(eff_timeline, coverage_start)
+        _ce = _map_wall_to_seconds(eff_timeline, coverage_end)
+        if _cs is not None and _ce is not None:
+            total_span = float(_ce - _cs)
         else:
-            segments.append(BatteryPlanSegment(starts, ends, events[0][1],
-                                               events[0][1], 'open_tail_hold'))
+            total_span = (ends - starts).total_seconds()
     else:
-        first_start = events[0][0]
-        predicted_start = first_start
-        if len(events) >= 3 and durations[1] > 0:
-            predicted_start = events[1][0] - (events[2][0] - events[1][0])
-            first_start = predicted_start
-        first_start = max(starts, first_start)
-        first_value = events[0][1]
-        if first_start > predicted_start and len(events) >= 3:
-            full_span = (events[1][0] - predicted_start).total_seconds()
-            if full_span > 0:
-                first_value = events[0][1] + (events[1][1] - events[0][1]) * ((first_start - predicted_start).total_seconds() / full_span)
-        # Product contract: when the first real sample visible in the video
-        # explicitly reports the first integer level, begin at that level even
-        # if the inferred historical ramp started before the clip.
-        if coverage_start is not None:
-            for sample in raw:
-                try:
-                    if _naive_dt(sample[0]) >= starts:
-                        if float(sample[1]) == events[0][1]:
-                            first_value = events[0][1]
-                        break
-                except (TypeError, ValueError, IndexError):
-                    continue
-        if first_start < events[1][0]:
-            segments.append(BatteryPlanSegment(first_start, events[1][0],
-                                               first_value, events[1][1],
-                                               'back_predicted_first_transition' if len(events) >= 3
-                                               else 'observed_transition'))
-        for index in range(1, len(events) - 1):
-            segments.append(BatteryPlanSegment(events[index][0], events[index + 1][0],
-                                               events[index][1], events[index + 1][1],
-                                               'observed_transition'))
-        if coverage_end is not None and ends > events[-1][0]:
-            segments.append(BatteryPlanSegment(events[-1][0], ends, events[-1][1],
-                                               events[-1][1] - .99, 'open_tail_estimate'))
-        elif not segments or ends > segments[-1].end_time:
-            segments.append(BatteryPlanSegment(events[-1][0], ends, events[-1][1],
-                                               events[-1][1], 'open_tail_hold'))
-    plan = BatteryPresentationPlan(raw, tuple(events), durations, tuple(segments), starts, ends)
+        total_span = (ends - starts).total_seconds()
+
+    if not rates_s_per_pct:
+        # Fallback: no confirmed drop across the entire dataset (or single sample).
+        # Stable flat hold at the initial known value.
+        segments.append(BatteryPlanSegment(starts, ends, first_val, first_val, 'open_tail_hold'))
+        end_val = first_val
+        start_val = first_val
+    else:
+        import statistics
+        median_s_per_pct = float(statistics.median(rates_s_per_pct))
+        slope = -1.0 / median_s_per_pct  # % per second (slope <= 0)
+
+        # Determine anchor at coverage_start:
+        if starts <= first_dt:
+            # Video starts at or before the first sample: anchor at starts with first_val
+            start_val = first_val
+        else:
+            # Video starts after first sample: project down from first_val at the robust slope
+            elapsed_from_first = (starts - first_dt).total_seconds()
+            start_val = max(0.0, min(100.0, first_val + slope * elapsed_from_first))
+
+        end_val = max(0.0, min(100.0, start_val + slope * total_span))
+
+        segments.append(BatteryPlanSegment(
+            starts, ends, start_val, end_val, 'global_monotonic_trend'
+        ))
+
+    plan = BatteryPresentationPlan(
+        raw, tuple(milestones), tuple(rates_s_per_pct), tuple(segments),
+        starts, ends, 'monotonic_depletion',
+        total_render_duration_s=total_span,
+        timeline=eff_timeline,
+    )
     if os.environ.get('TELEM_BATTERY_PLAN_DEBUG') == '1':
-        print('[BatteryPlan] raw_samples=%d change_events=%d' % (len(raw), len(events)), flush=True)
+        print(f'[BatteryPlan] raw={len(raw)} milestones={len(milestones)} starts={starts} ends={ends} total_span={total_span}', flush=True)
         for segment in plan.segments:
-            print('[BatteryPlan] SEG %s %s -> %s %.3f -> %.3f' %
-                  (segment.kind, segment.start_time, segment.end_time,
-                   segment.start_value, segment.end_value), flush=True)
+            print(f'[BatteryPlan] SEG {segment.kind} {segment.start_time} -> {segment.end_time} '
+                  f'{segment.start_value:.3f} -> {segment.end_value:.3f}', flush=True)
     return plan
 
 
-def battery_presentation_plan(samples, *, coverage_start=None, coverage_end=None):
+def battery_presentation_plan(samples, *, coverage_start=None, coverage_end=None,
+                              timeline=None, active_time_mapper=None):
     """Return the cached full-FIT Battery plan for an immutable sample series."""
     if not samples:
         return build_battery_presentation_plan(samples, coverage_start=coverage_start,
-                                               coverage_end=coverage_end)
+                                               coverage_end=coverage_end,
+                                               timeline=timeline,
+                                               active_time_mapper=active_time_mapper)
+    eff_tl = timeline if timeline is not None else active_time_mapper
+    tl_id = id(eff_tl) if eff_tl is not None else None
     key = (id(samples), len(samples), samples[0][0], samples[-1][0],
            _naive_dt(coverage_start) if coverage_start else None,
-           _naive_dt(coverage_end) if coverage_end else None)
+           _naive_dt(coverage_end) if coverage_end else None,
+           tl_id)
     cached = _BATTERY_PLAN_CACHE.get(key)
     if cached is not None:
         return cached[1]
     plan = build_battery_presentation_plan(samples, coverage_start=coverage_start,
-                                           coverage_end=coverage_end)
+                                           coverage_end=coverage_end,
+                                           timeline=timeline,
+                                           active_time_mapper=active_time_mapper)
     if len(_BATTERY_PLAN_CACHE) >= 64:
         _BATTERY_PLAN_CACHE.popitem(last=False)
     _BATTERY_PLAN_CACHE[key] = (samples, plan)
     return plan
 
 
-def numeric_presentation_plan(samples, field, *, coverage_start=None, coverage_end=None):
+def numeric_presentation_plan(samples, field, *, coverage_start=None, coverage_end=None,
+                              timeline=None, active_time_mapper=None):
     """Select one generic plan strategy from the field semantics registry."""
     canonical = canonical_telemetry_field(field)
     if field_semantics(canonical).presentation_strategy == 'monotonic_depletion':
         return battery_presentation_plan(samples, coverage_start=coverage_start,
-                                         coverage_end=coverage_end)
+                                         coverage_end=coverage_end,
+                                         timeline=timeline,
+                                         active_time_mapper=active_time_mapper)
     metadata = field_semantics(canonical)
     if not samples:
         return NumericPresentationPlan((), (), (), (), coverage_start, coverage_end, 'hold')
@@ -390,6 +541,8 @@ def numeric_presentation_plan(samples, field, *, coverage_start=None, coverage_e
     plan = NumericPresentationPlan(
         tuple(samples), (), (), (), coverage_start, coverage_end, strategy,
         cadence, 5.0, tuple(getattr(samples, 'segment_start_indices', ())),
+        total_render_duration_s=None,
+        timeline=timeline or active_time_mapper,
     )
     if len(_NUMERIC_PLAN_CACHE) >= 128:
         _NUMERIC_PLAN_CACHE.popitem(last=False)
@@ -405,6 +558,7 @@ def _native_decimal_places(step: float | None) -> int:
         if math.isclose(scaled, round(scaled), rel_tol=1e-7, abs_tol=1e-9):
             return decimals
     return max(0, min(6, int(math.ceil(-math.log10(step)))))
+
 
 
 def _presentation_meta(
@@ -556,10 +710,12 @@ def _interpolate_quantized_change_events(
         if span <= 0:
             return left_value
         if active_time_mapper is not None:
-            active_span = (active_time_mapper.wall_to_active_seconds(right_t)
-                           - active_time_mapper.wall_to_active_seconds(left_t))
-            if active_span + 1e-6 < span:
-                return left_value
+            _right_s = _map_wall_to_seconds(active_time_mapper, right_t)
+            _left_s = _map_wall_to_seconds(active_time_mapper, left_t)
+            if _right_s is not None and _left_s is not None:
+                active_span = _right_s - _left_s
+                if active_span + 1e-6 < span:
+                    return left_value
         fraction = (target_n - left_t).total_seconds() / span
         return float(left_value) + (float(right_value) - float(left_value)) * fraction
     return previous_segment_value
@@ -590,6 +746,8 @@ def interpolate_presentation_value(
     except (TypeError, AttributeError, IndexError):
         return None
     if idx == 0:
+        if field_semantics(field_name).presentation_strategy == 'monotonic_depletion' and samples:
+            return round(float(samples[0][1]), 2)
         return None
     if idx >= len(samples):
         return samples[-1][1]
@@ -636,9 +794,9 @@ def interpolate_presentation_value(
         if active_time_mapper is not None:
             # Compare active elapsed with wall elapsed: any timer pause inside
             # this sample pair forbids a ramp, even when the cadence is sparse.
-            active_span = (active_time_mapper.wall_to_active_seconds(right_dt)
-                           - active_time_mapper.wall_to_active_seconds(left_dt))
-            if active_span + 1e-6 < span:
+            _right_s = _map_wall_to_seconds(active_time_mapper, right_t)
+            _left_s = _map_wall_to_seconds(active_time_mapper, left_t)
+            if _right_s is not None and _left_s is not None and (_right_s - _left_s) + 1e-6 < span:
                 return left_value
         cadence, _native_decimals = _presentation_meta(samples, field_name)
         if cadence is not None and span > max(1e-9, cadence * max(1.0, float(gap_multiplier))):
@@ -661,6 +819,7 @@ def presentation_value(
     active_time_mapper: Any = None,
     coverage_start: datetime | None = None,
     coverage_end: datetime | None = None,
+    timeline: Any = None,
     indicator_config: Mapping | None = None,
 ) -> Any:
     """Canonical raw-series → current presentation float operation.
@@ -691,9 +850,12 @@ def presentation_value(
         # presentation precision opts into the generic plan.
         use_plan = True
     if use_plan:
+        eff_tl = timeline if timeline is not None else getattr(active_time_mapper, 'timeline', active_time_mapper)
         return numeric_presentation_plan(
             samples, canonical, coverage_start=coverage_start,
             coverage_end=coverage_end,
+            timeline=eff_tl,
+            active_time_mapper=active_time_mapper,
         ).value_at(target_dt, active_time_mapper=active_time_mapper)
     return interpolate_presentation_value(
         samples, target_dt, canonical, precision=effective_precision,
@@ -702,16 +864,18 @@ def presentation_value(
     )
 
 
-def resolve_current_presentation(samples, target_dt, field, cfg=None, *, active_time_mapper=None):
+def resolve_current_presentation(samples, target_dt, field, cfg=None, *, active_time_mapper=None, timeline=None):
     """Canonical scalar presentation contract, shared by Preview and exports."""
     field = canonical_telemetry_field(field)
     cfg = cfg or {}
-    precision = resolve_presentation_precision(cfg, presentation_default_precision(field, cfg))
+    precision = resolve_presentation_precision(cfg, presentation_default_precision(field, cfg), field=field)
+    eff_tl = timeline if timeline is not None else active_time_mapper
     value = presentation_value(
         samples, target_dt, field, effective_precision=precision,
         policy=cfg.get('interpolation_policy'), active_time_mapper=active_time_mapper,
         coverage_start=cfg.get('_presentation_video_start'),
         coverage_end=cfg.get('_presentation_video_end'),
+        timeline=eff_tl,
         indicator_config=cfg,
     )
     if value is not None and field in ('speed', 'enhanced_speed', 'ground_speed'):

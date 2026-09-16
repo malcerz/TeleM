@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -62,6 +63,7 @@ def render_overlay_frame(
     target_fps: float,
     update_rate_step: int = 1,
     target_image: Optional[Image.Image] = None,
+    breakdown: Optional[dict[str, float]] = None,
 ) -> Any:
     """Render a single overlay frame – returns PIL Image RGBA. Uses WORKER_CACHE."""
     video_width = WORKER_CACHE["video_width"]
@@ -127,6 +129,7 @@ def render_overlay_frame(
     total_frames = WORKER_CACHE.get("total_overlay_frames", 1)
     chart_data = WORKER_CACHE.get("_precomputed_chart_data", {})
 
+    t_data0 = time.perf_counter_ns() if breakdown is not None else 0
     telemetry_cache = WORKER_CACHE.get("_telemetry_cache")
     if telemetry_cache is not None:
         data = telemetry_cache.lookup(index)
@@ -159,6 +162,8 @@ def render_overlay_frame(
             _range_cache=WORKER_CACHE.get("_prep_cache"),
             project_elapsed_s=sample_t,
         )
+    if breakdown is not None:
+        breakdown["build_frame_data_ms"] = (time.perf_counter_ns() - t_data0) / 1_000_000.0
 
     hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")
@@ -289,6 +294,7 @@ def render_overlay_frame(
         WORKER_CACHE["_prev_atlas_img"] = atlas_img
         return atlas_img
     else:
+        rot180 = bool(WORKER_CACHE.get("hud_rotate_180", False))
         img = compose_overlay(
             video_width, video_height, layout, font_path,
             data["date_text"], data["time_text"],
@@ -311,15 +317,14 @@ def render_overlay_frame(
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
             avg_speed_kmh=data["avg_speed_kmh"],
+            breakdown=breakdown,
+            rot180=rot180,
         )
         if hud_bbox:
             hx, hy, hw, hh = hud_bbox
             img = img.crop((hx, hy, hx + hw, hy + hh))
-        # NVIDIA ROT180: rotate the whole final HUD canvas 180 deg (pixel-exact,
-        # no resampling) BEFORE handing it to FFmpeg, so that after the output's
-        # display-matrix rotation the HUD is displayed in its logical orientation.
-        if WORKER_CACHE.get("hud_rotate_180"):
-            img = img.transpose(Image.Transpose.ROTATE_180)
+        if breakdown is not None:
+            breakdown["rot180_transpose_ms"] = 0.0
         return img
 
 
@@ -497,7 +502,9 @@ def render_overlay_job(job: tuple) -> int:
     active_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
     _elapsed = 0.0
     if active_mapper is not None and current_dt_utc is not None:
-        _elapsed = max(0.0, active_mapper.wall_to_active_seconds(current_dt_utc))
+        from src.telemetry_resolver import _map_wall_to_seconds
+        _el_candidate = _map_wall_to_seconds(active_mapper, current_dt_utc)
+        _elapsed = max(0.0, _el_candidate) if _el_candidate is not None else 0.0
     elif start_dt_utc is not None and current_dt_utc is not None:
         _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
         _td = current_dt_utc.replace(tzinfo=None) if current_dt_utc.tzinfo is not None else current_dt_utc

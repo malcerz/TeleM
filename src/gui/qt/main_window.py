@@ -17,7 +17,7 @@ from src.gui.qt.widgets.video_preview import VideoPreview
 from src.render_progress import RenderProgressState, format_render_progress_status
 
 
-APP_TITLE = "TeleMGP HUD Tuner"
+APP_TITLE = "BikeRideHUD"
 APP_VERSION = "0.7.9"
 
 
@@ -166,11 +166,18 @@ class MainWindow(QMainWindow):
         # Legacy progress is still used by loading and other operations.
         if self._render_state_active:
             return
+        # After reaching 100%, don't let stale lower-percent updates
+        # (e.g. from the background map preload thread) re-show the bar.
+        if percent <= 0:
+            self._progress_completed = False  # New operation starting
+        if getattr(self, "_progress_completed", False) and percent < 100:
+            return
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(percent)
         self.status_label.setText(text)
         if percent >= 100:
             self.progress_bar.setVisible(False)
+            self._progress_completed = True
 
     def _on_render_state(self, snapshot: RenderProgressState) -> None:
         """Display the same generation-tagged snapshot as RenderTab."""
@@ -302,8 +309,32 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event) -> None:
-        """Zamykanie okna — brak automatycznego zapisu (zapis tylko po jawnym kliknięciu 'Zapisz ustawienia')."""
+        """Zamykanie okna z kontrolowanym sprzątaniem renderera i procesów potomnych."""
+        from src.process_lifecycle import RenderProcessRegistry
+
+        controller = getattr(self, "_controller", None)
+        worker = getattr(controller, "render_worker_thread", None) if controller else None
+        render_active = worker is not None and worker.is_alive()
+
+        if render_active:
+            print("[PROC] GUI close requested", flush=True)
+            event.ignore()
+            cleaned_up = False
+            if hasattr(controller, "cancel_render_and_wait"):
+                cleaned_up = controller.cancel_render_and_wait(timeout=3.0)
+
+            if not cleaned_up:
+                print("[PROC] GUI closeEvent: timeout waiting for render cleanup; force terminating registry...", flush=True)
+                RenderProcessRegistry.get_instance().terminate_all_render_children(timeout=1.5)
+
+            event.accept()
+        else:
+            event.accept()
+
+        # Clean up any remaining registered children
+        RenderProcessRegistry.get_instance().terminate_all_render_children(timeout=0.5)
         super().closeEvent(event)
+        print("[PROC] GUI closeEvent complete", flush=True)
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)

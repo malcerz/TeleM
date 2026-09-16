@@ -177,6 +177,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             zero_copy_target = None
             zero_copy = False
 
+    breakdown = {} if audit_enabled else None
     if audit_enabled:
         worker_render_started_ns = time.perf_counter_ns()
     try:
@@ -185,6 +186,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             speed_samples, track_samples, alt_samples,
             target_fps, update_rate_step,
             target_image=zero_copy_target,
+            breakdown=breakdown,
         )
     except Exception:
         if not zero_copy:
@@ -199,6 +201,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             speed_samples, track_samples, alt_samples,
             target_fps, update_rate_step,
             target_image=None,
+            breakdown=breakdown,
         )
     if audit_enabled:
         worker_render_finished_ns = time.perf_counter_ns()
@@ -214,11 +217,25 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
         del zero_copy_target
         del shm_buf
     else:
-        frame_bytes = img.height * img.width * 4
-        shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
-        img_arr = np.asarray(img)
-        np.copyto(shm_arr, img_arr)
-        del shm_arr
+        copied = False
+        target = None
+        try:
+            target = writable_rgba_image(shm_buf, (img.width, img.height))
+            target.paste(img, (0, 0))
+            copied = True
+        except Exception:
+            pass
+        finally:
+            if target is not None:
+                close_writable_image(target)
+                del target
+        if not copied:
+            frame_bytes = img.height * img.width * 4
+            shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
+            img_arr = np.asarray(img)
+            np.copyto(shm_arr, img_arr)
+            del shm_arr
+            del img_arr
         del shm_buf
     if audit_enabled:
         if not zero_copy:
@@ -227,6 +244,6 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             index, slot, os.getpid(), worker_started_ns,
             worker_render_started_ns, worker_render_finished_ns,
             shm_copy_finished_ns, clear_started_ns, clear_finished_ns,
-            zero_copy,
+            zero_copy, breakdown,
         )
     return index, slot

@@ -208,7 +208,7 @@ def _cancel_log(message: str, started: float | None = None, process: Any = None)
 
 
 class _RenderExecutor:
-    """ProcessPoolExecutor context with non-blocking cancellation exit."""
+    """ProcessPoolExecutor context with guaranteed non-orphan cancellation exit."""
 
     def __init__(self, *args: Any, cancel_event: Any = None, **kwargs: Any) -> None:
         from concurrent.futures import ProcessPoolExecutor
@@ -216,26 +216,87 @@ class _RenderExecutor:
         self._kwargs = kwargs
         self._cancel_event = cancel_event
         self.executor = ProcessPoolExecutor(*args, **kwargs)
+        self._worker_pids: set[int] = set()
+        self._worker_processes: list[Any] = []
+
+    def _sync_workers(self) -> None:
+        """Capture active worker processes before executor clears internal dict."""
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            registry = RenderProcessRegistry.get_instance()
+        except Exception:
+            registry = None
+
+        processes = getattr(self.executor, "_processes", None) or {}
+        for child in list(processes.values()):
+            pid = getattr(child, "pid", None)
+            if pid and pid not in self._worker_pids:
+                self._worker_pids.add(pid)
+                self._worker_processes.append(child)
+                if registry is not None:
+                    registry.register(child, proc_type="nvidia_worker")
+
+    def submit(self, *args: Any, **kwargs: Any) -> Any:
+        fut = self.executor.submit(*args, **kwargs)
+        self._sync_workers()
+        return fut
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.executor, name)
 
     def __enter__(self):
-        return self.executor
+        return self
 
     def __exit__(self, exc_type, exc, tb):
+        self._sync_workers()
         cancelled = self._cancel_event is not None and self._cancel_event.is_set()
+
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            registry = RenderProcessRegistry.get_instance()
+        except Exception:
+            registry = None
+
         if cancelled:
-            # ``ProcessPoolExecutor.shutdown(wait=False)`` may already have
-            # cleared its private process mapping in the in-loop cancel path.
-            # Treat that as an already-clean executor, never as a CPU-cancel
-            # failure after FFmpeg has been stopped successfully.
-            processes = getattr(self.executor, "_processes", None) or {}
-            for child in list(processes.values()):
+            # User requirement: cancel futures -> terminate worker -> join (~1s) -> kill if alive -> shutdown executor
+            print(f"[PROC] _RenderExecutor.__exit__ cancel: terminating {len(self._worker_processes)} workers", flush=True)
+            for child in list(self._worker_processes):
+                pid = getattr(child, "pid", None)
+                print(f"[PROC] terminate pid={pid} type=nvidia_worker", flush=True)
                 try:
                     child.terminate()
                 except Exception:
                     pass
-            self.executor.shutdown(wait=False, cancel_futures=True)
+
+            deadline = time.monotonic() + 1.0
+            for child in list(self._worker_processes):
+                remaining = max(0.01, deadline - time.monotonic())
+                try:
+                    child.join(timeout=remaining)
+                except Exception:
+                    pass
+
+            for child in list(self._worker_processes):
+                try:
+                    if child.is_alive():
+                        pid = getattr(child, "pid", None)
+                        print(f"[PROC] kill pid={pid} type=nvidia_worker", flush=True)
+                        child.kill()
+                        child.join(timeout=0.5)
+                except Exception:
+                    pass
+
+            try:
+                self.executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
         else:
             self.executor.shutdown(wait=True)
+
+        if registry is not None:
+            for pid in list(self._worker_pids):
+                registry.unregister(pid)
+
         return False
 
 
@@ -254,10 +315,19 @@ def _stop_ffmpeg_process(
     """Graceful stdin close, then bounded terminate/kill process-tree fallback."""
     if process is None:
         return None
+    def _finish(rc: int | None) -> int | None:
+        print("[PROC] ffmpeg exit", flush=True)
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            RenderProcessRegistry.get_instance().unregister(process.pid)
+        except Exception:
+            pass
+        return rc
+
     if process.poll() is not None:
         setattr(process, "_telem_cancel_mode", "graceful")
         _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
-        return process.returncode
+        return _finish(process.returncode)
 
     _cancel_log("ffmpeg graceful stop requested", cancel_started, process)
     try:
@@ -278,7 +348,7 @@ def _stop_ffmpeg_process(
     if process.poll() is not None:
         setattr(process, "_telem_cancel_mode", "graceful")
         _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
-        return process.returncode
+        return _finish(process.returncode)
 
     _cancel_log("graceful timeout reached", cancel_started, process)
     try:
@@ -289,7 +359,7 @@ def _stop_ffmpeg_process(
     if _wait_process_bounded(process, 1.0):
         setattr(process, "_telem_cancel_mode", "terminate")
         _cancel_log(f"ffmpeg exited rc={process.returncode}", cancel_started, process)
-        return process.returncode
+        return _finish(process.returncode)
 
     # Windows terminate() is not guaranteed to include descendants.  Use the
     # built-in process-tree command only for the final hard-cleanup fallback.
@@ -312,7 +382,7 @@ def _stop_ffmpeg_process(
     _wait_process_bounded(process, 1.0)
     setattr(process, "_telem_cancel_mode", "kill")
     _cancel_log("cleanup done", cancel_started, process)
-    return process.poll()
+    return _finish(process.poll())
 
 
 def _validate_partial_mp4(output_file: str | Path) -> bool:
@@ -552,6 +622,8 @@ def _report_stream_progress(
     on_render_progress: Optional[Callable] = None,
     target_fps: Optional[float] = None,
     audit: PipelineAuditRecorder | None = None,
+    compression_tracker: Optional[Any] = None,
+    profile_name: str = "",
 ) -> None:
     """Report streaming progress and the latest export timestamp for preview."""
     elapsed = time.time() - start_time
@@ -570,15 +642,19 @@ def _report_stream_progress(
         # the visible counter at 0 despite real frames reaching FFmpeg stdin.
         # ``done`` is incremented only after bounded hand-off of a real frame;
         # no wall-clock timer is involved.
+        backend_tag = f"NVIDIA_LEGACY_{profile_name}" if profile_name else "cpu"
+        role_tag = "gpu" if profile_name else "cpu"
         hud_state = {
             "phase": "render",
-            "backend": "cpu",
-            "role": "cpu",
+            "backend": backend_tag,
+            "role": role_tag,
             "frame_done": int(done),
             "frame_total": int(total),
             "fps_instant": float(fps),
             "fps_average": float(fps),
         }
+        if compression_tracker is not None:
+            hud_state.update(compression_tracker.get_hud_state_dict())
         if target_fps and target_fps > 0 and done > 0:
             frame = min(max(0, total - 1), done - 1)
             hud_state.update({"frame": frame, "ts": frame / target_fps})
@@ -668,6 +744,11 @@ def run_ffmpeg_with_progress(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         universal_newlines=True, startupinfo=startupinfo,
     )
+    try:
+        from src.process_lifecycle import RenderProcessRegistry
+        RenderProcessRegistry.get_instance().register(process, proc_type="ffmpeg")
+    except Exception:
+        pass
     if active_process_holder is not None:
         active_process_holder["process"] = process
 
@@ -713,6 +794,11 @@ def run_ffmpeg_with_progress(
         raise RuntimeError(f"FFmpeg process failed with exit code {rc}\n{extra}")
     if active_process_holder is not None:
         active_process_holder["process"] = None
+    try:
+        from src.process_lifecycle import RenderProcessRegistry
+        RenderProcessRegistry.get_instance().unregister(process.pid)
+    except Exception:
+        pass
 
 
 def resolve_hud_resolution_policy(
@@ -753,7 +839,12 @@ def resolve_hud_resolution_policy(
 
         # Auto mode
         if opt_str in ("Auto", "auto", ""):
-            if encoder == "intel" and render_w == 3840 and render_h == 2160:
+            if encoder == "nv" and render_w == 3840 and render_h == 2160:
+                return 0.5, f"[NVIDIA] HUD resolution policy: AUTO -> 50% (1920x1080 -> {render_w}x{render_h})"
+            elif encoder == "nv" and render_w > 1920:
+                scale = 1920.0 / render_w
+                return scale, f"[NVIDIA] HUD resolution policy: AUTO -> {scale*100:.1f}% (Smart Canvas -> {render_w}x{render_h})"
+            elif encoder == "intel" and render_w == 3840 and render_h == 2160:
                 return 0.75, f"[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> {render_w}x{render_h})"
             elif encoder == "intel":
                 return 1.0, f"[INTEL] HUD resolution policy: AUTO -> 100% ({render_w}x{render_h})"
@@ -840,6 +931,11 @@ def stream_overlay_to_ffmpeg(
     preview_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
     preview_session: Optional[Any] = None,
     generation_id: int = 0,
+    nvidia_backend: str = "legacy_cuda",
+    nvidia_codec: str = "HEVC",
+    nvidia_quality: str = "Fast",
+    enable_compression_analysis: bool = True,
+    max_frames: Optional[int] = None,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
@@ -857,6 +953,9 @@ def stream_overlay_to_ffmpeg(
         if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
             overlay_w = 2560
             overlay_h = 1440
+        elif render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.5) < 1e-4:
+            overlay_w = 1920
+            overlay_h = 1080
         else:
             overlay_w = max(2, int(round(render_w * hud_resolution_scale)))
             overlay_h = max(2, int(round(render_h * hud_resolution_scale)))
@@ -888,6 +987,7 @@ def stream_overlay_to_ffmpeg(
     if pipeline_audit is not None:
         pipeline_audit.start(time.perf_counter_ns())
     t_prep_start = t_prod_start
+    BenchmarkTracker.get_instance().reset()
     BenchmarkTracker.get_instance().enable(True)
 
     phase_t0 = time.time()
@@ -933,7 +1033,29 @@ def stream_overlay_to_ffmpeg(
         duration_s = output_frames / target_fps
     else:
         total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
-    _report_phase(on_render_progress, "prep", 0.05, "Przygotowywanie HUD...", time.time() - phase_t0)
+
+    env_max = os.environ.get("TELEM_MAX_FRAMES")
+    if env_max and env_max.isdigit() and int(env_max) > 0:
+        if max_frames is None:
+            max_frames = int(env_max)
+        else:
+            max_frames = min(max_frames, int(env_max))
+    if max_frames is not None and int(max_frames) > 0:
+        total_overlay_frames = min(total_overlay_frames, int(max_frames))
+        print(f"[STREAM] max_frames limit active: {total_overlay_frames} frames", flush=True)
+
+    from src.render_progress import HudPrepProgressTracker
+    prep_tracker = HudPrepProgressTracker(
+        phases=[
+            ("worker_init", "Inicjalizacja workerów i wykresów", 0.05),
+            ("map_preload", "Preload kafelków mapy", 0.05),
+            ("telemetry_cache", "Cache telemetrii", 0.75),
+            ("workers_setup", "Alokacja procesów", 0.15),
+        ],
+        callback=on_render_progress,
+        backend_name=f"STREAMING_{str(encoder).upper()}",
+    )
+    prep_tracker.start_phase("worker_init", items_total=1)
 
     # ── ETAP 4B: multi-file render diagnostics (once per export) ──────────
     is_multi_file = (
@@ -1283,7 +1405,7 @@ def stream_overlay_to_ffmpeg(
             print(f"[NVIDIA] HUD SHM total: {full_shm_mb:.1f} MB", flush=True)
             print(f"[NVIDIA] HUD transport reduction: 0.0%", flush=True)
 
-    _report_phase(on_render_progress, "prep", 0.45, "Przygotowywanie HUD...", time.time() - phase_t0)
+    prep_tracker.start_phase("worker_init", items_total=1)
 
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
@@ -1306,11 +1428,13 @@ def stream_overlay_to_ffmpeg(
         hud_rotate_180=nv_rot180_cuda,
         video_timeline=video_timeline,
     )
+    prep_tracker.complete_phase("worker_init")
+    prep_tracker.start_phase("map_preload", items_total=1)
 
     if cancel_event is not None and cancel_event.is_set():
         return 0
 
-    _report_phase(on_render_progress, "prep", 0.70, "Przygotowywanie HUD...", time.time() - phase_t0)
+    prep_tracker.complete_phase("map_preload")
 
     # Build FFmpeg input args
     if encoder == "intel":
@@ -1386,6 +1510,13 @@ def stream_overlay_to_ffmpeg(
         else:
             print("[NVIDIA] ROT180 CPU FALLBACK", flush=True)
 
+    is_10bit_source = False
+    first_input = (input_files if isinstance(input_files, (str, Path)) else (input_files[0] if input_files else None))
+    if encoder == "nv" and first_input:
+        is_10bit_source = (_probe_intel_cpu_download_format(str(first_input), ffmpeg_exe) == "p010le")
+        if is_10bit_source:
+            print(f"[NVIDIA] Detected 10-bit HDR source: {first_input}", flush=True)
+
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
         overlay_w, overlay_h, stream_w, stream_h, generation_fps,
@@ -1403,6 +1534,11 @@ def stream_overlay_to_ffmpeg(
         intel_gpu_resident=intel_gpu_resident,
         intel_cpu_download_format=intel_cpu_download_format,
         intel_cpu_software_decode=intel_cpu_software_decode,
+        nvidia_codec=nvidia_codec,
+        nvidia_quality=nvidia_quality,
+        enable_compression_analysis=enable_compression_analysis,
+        is_10bit=is_10bit_source,
+        max_frames=max_frames,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
@@ -1426,6 +1562,11 @@ def stream_overlay_to_ffmpeg(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             universal_newlines=True, startupinfo=startupinfo
         )
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            RenderProcessRegistry.get_instance().register(process, proc_type="ffmpeg")
+        except Exception:
+            pass
         if active_process_holder is not None:
             active_process_holder["process"] = process
 
@@ -1437,6 +1578,11 @@ def stream_overlay_to_ffmpeg(
             _wait_process_bounded(process, 10.0)
         if active_process_holder is not None:
             active_process_holder["process"] = None
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            RenderProcessRegistry.get_instance().unregister(process.pid)
+        except Exception:
+            pass
         return total_overlay_frames
 
     # Start FFmpeg
@@ -1452,8 +1598,36 @@ def stream_overlay_to_ffmpeg(
         stderr=subprocess.STDOUT, universal_newlines=True,
         startupinfo=startupinfo,
     )
+    try:
+        from src.process_lifecycle import RenderProcessRegistry
+        RenderProcessRegistry.get_instance().register(process, proc_type="ffmpeg")
+    except Exception:
+        pass
     if active_process_holder is not None:
         active_process_holder["process"] = process
+
+    compression_tracker = None
+    nv_profile_name = ""
+    if encoder == "nv":
+        from src.ffmpeg.compression_tracker import CompressionTracker
+        from src.ffmpeg.nvidia_config import resolve_nvidia_profile
+        try:
+            nv_profile_name = resolve_nvidia_profile(nvidia_codec, nvidia_quality)
+        except Exception:
+            nv_profile_name = "HEVC_FAST"
+        is_av1 = "av1" in str(nvidia_codec).lower()
+        compression_tracker = CompressionTracker(
+            is_av1=is_av1,
+            is_active=enable_compression_analysis,
+        )
+
+    def _report_progress_step(piped: int) -> None:
+        _report_stream_progress(
+            piped, total_overlay_frames, start_time,
+            progress_cb, on_render_progress, target_fps, pipeline_audit,
+            compression_tracker=compression_tracker,
+            profile_name=nv_profile_name,
+        )
 
     # ── Async stdout reader thread (prevents FFmpeg stdout buffer deadlock) ──
     stdout_lines: list[str] = []
@@ -1461,7 +1635,10 @@ def stream_overlay_to_ffmpeg(
     def _stdout_reader() -> None:
         try:
             for line in process.stdout:
-                stdout_lines.append(line.strip())
+                line_str = line.strip()
+                stdout_lines.append(line_str)
+                if compression_tracker is not None:
+                    compression_tracker.feed_progress_line(line_str)
         except Exception:
             pass
 
@@ -1549,6 +1726,7 @@ def stream_overlay_to_ffmpeg(
     try:
         if n_workers <= 1:
             # Single worker — no IPC, direct rendering
+            prep_tracker.finish()
             for i in range(total_overlay_frames):
                 if cancel_event is not None and cancel_event.is_set():
                     _note_cancel()
@@ -1557,7 +1735,7 @@ def stream_overlay_to_ffmpeg(
                 if not _put_frame(raw_bytes):
                     break
                 total_piped += 1
-                _report_stream_progress(total_piped, total_overlay_frames, start_time, progress_cb, on_render_progress, target_fps, pipeline_audit)
+                _report_progress_step(total_piped)
         else:
             from concurrent.futures import wait, FIRST_COMPLETED
 
@@ -1583,59 +1761,6 @@ def stream_overlay_to_ffmpeg(
                     gpx_track=gpx_track_samples,
                 )
                 _range_cache["max_distance_m"] = distance_max_m(distance_stream)
-                spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
-                spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
-                if spd_src == "gpx":
-                    spd_for_range = gpx_speed_samples
-                elif spd_src == "fit":
-                    spd_for_range = fit_data.get("speed", []) if fit_data else []
-                else:
-                    spd_for_range = speed_samples
-                if spd_for_range:
-                    spd_vals = [s for _, s in spd_for_range]
-                    _range_cache["max_speed_kmh"] = max(spd_vals) if spd_vals else None
-                else:
-                    _range_cache["max_speed_kmh"] = None
-
-                alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
-                alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
-                if alt_src == "gpx":
-                    alt_for_range = gpx_alt_samples
-                elif alt_src == "fit":
-                    alt_for_range = fit_data.get("alt", []) if fit_data else []
-                else:
-                    alt_for_range = alt_samples
-                if alt_for_range:
-                    alts = [a for _, a in alt_for_range]
-                    _range_cache["min_alt"] = min(alts) if alts else None
-                    _range_cache["max_alt"] = max(alts) if alts else None
-                else:
-                    _range_cache["min_alt"] = None
-                    _range_cache["max_alt"] = None
-
-                duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
-                # ETAP 4B: with a multi-file timeline the telemetry/chart range
-                # is the REAL absolute end (max clip absolute_end), never
-                # start_dt_utc + project_duration (wrong with large gaps).
-                end_dt_utc = None
-                if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
-                    end_dt_utc = timeline_absolute_end(video_timeline)
-                if end_dt_utc is None and start_dt_utc and duration_s:
-                    end_dt_utc = start_dt_utc + timedelta(seconds=duration_s)
-                source_ranges = {}
-                if fit_data:
-                    all_fit_pts = [s for s in fit_data.values() if s]
-                    if all_fit_pts:
-                        source_ranges["fit"] = (
-                            min(s[0][0] for s in all_fit_pts),
-                            max(s[-1][0] for s in all_fit_pts),
-                        )
-                
-                def _get_src_samples(src_name: str) -> tuple[list, list, list]:
-                    if src_name == "gpx":
-                        return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
-                    if src_name == "fit":
-                        fit_d = fit_data or {}
                 spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
                 spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
                 if spd_src == "gpx":
@@ -1742,6 +1867,7 @@ def stream_overlay_to_ffmpeg(
                     active_time_mapper=act_mapper,
                 )
 
+                prep_tracker.start_phase("telemetry_cache", items_total=total_overlay_frames)
                 telemetry_cache = build_telemetry_cache(
                     layout=layout,
                     base_dt=start_dt_utc,
@@ -1769,7 +1895,10 @@ def stream_overlay_to_ffmpeg(
                     target_fps=target_fps or 29.97,
                     video_timeline=video_timeline,
                     update_rate_step=update_rate_step,
+                    progress_cb=lambda done, tot, det: prep_tracker.update(done, tot, detail=det),
                 )
+                prep_tracker.complete_phase("telemetry_cache")
+                prep_tracker.start_phase("workers_setup", items_total=n_workers)
                 t_pre_build = time.perf_counter() - t_pre_start
                 stats = telemetry_cache.stats()
                 cache_mb = stats["memory_mib"]
@@ -1820,6 +1949,7 @@ def stream_overlay_to_ffmpeg(
                     flush=True,
                 )
 
+            prep_tracker.finish()
             with _RenderExecutor(
                 max_workers=n_workers,
                 initializer=_init_worker_with_shm,
@@ -1871,22 +2001,25 @@ def stream_overlay_to_ffmpeg(
                         result = fut.result()
                         result_observed_ns = time.perf_counter_ns()
                         if len(result) >= 10:
+                            breakdown = result[10] if len(result) >= 11 else None
                             (
                                 idx, slot, worker_pid, worker_started_ns,
                                 worker_render_started_ns, worker_render_finished_ns,
                                 shm_copy_finished_ns, clear_started_ns,
                                 clear_finished_ns, zero_copy,
-                            ) = result
+                            ) = result[:10]
                             if pipeline_audit is not None:
                                 pipeline_audit.mark(idx, "worker_clear_started_ns", clear_started_ns)
                                 pipeline_audit.mark(idx, "worker_clear_finished_ns", clear_finished_ns)
                                 pipeline_audit.mark(idx, "worker_zero_copy", bool(zero_copy))
-                            if pipeline_audit is not None:
                                 pipeline_audit.mark(idx, "worker_pid", worker_pid)
                                 pipeline_audit.mark(idx, "worker_started_ns", worker_started_ns)
                                 pipeline_audit.mark(idx, "worker_render_started_ns", worker_render_started_ns)
                                 pipeline_audit.mark(idx, "worker_render_finished_ns", worker_render_finished_ns)
                                 pipeline_audit.mark(idx, "shm_copy_finished_ns", shm_copy_finished_ns)
+                                if breakdown and hasattr(pipeline_audit, "mark_render_stat"):
+                                    for k, v in breakdown.items():
+                                        pipeline_audit.mark_render_stat(k, v)
                         elif len(result) >= 7:
                             (
                                 idx, slot, worker_pid, worker_started_ns,
@@ -1937,10 +2070,7 @@ def stream_overlay_to_ffmpeg(
                             pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                         total_piped += 1
                         next_idx += 1
-                        _report_stream_progress(
-                            total_piped, total_overlay_frames,
-                            start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
-                        )
+                        _report_progress_step(total_piped)
 
                     # Aggressive top-up: fill ALL available slots in the window
                     while (
@@ -1961,7 +2091,6 @@ def stream_overlay_to_ffmpeg(
                     for f in pending:
                         f.cancel()
                     _cancel_log("producer stopped", cancel_started, process)
-                    ex.shutdown(wait=False, cancel_futures=True)
 
                 # On cancel, discard pending/reordered frames. Never encode
                 # the backlog just to reach a clean queue state.
@@ -1988,10 +2117,7 @@ def stream_overlay_to_ffmpeg(
                             pipeline_audit.mark(idx, "queue_put_finished_ns", time.perf_counter_ns())
                         total_piped += 1
                         next_idx += 1
-                        _report_stream_progress(
-                            total_piped, total_overlay_frames,
-                            start_time, progress_cb, on_render_progress, target_fps, pipeline_audit,
-                        )
+                        _report_progress_step(total_piped)
                 else:
                     for slot in reorder_buf.values():
                         try:
@@ -2078,6 +2204,15 @@ def stream_overlay_to_ffmpeg(
         if shm_pool is not None:
             shm_pool.close()
 
+        if active_process_holder is not None:
+            active_process_holder["process"] = None
+        if process is not None and process.poll() is not None:
+            try:
+                from src.process_lifecycle import RenderProcessRegistry
+                RenderProcessRegistry.get_instance().unregister(process.pid)
+            except Exception:
+                pass
+
     stdout_t.join(timeout=2.0)
     if process.poll() is None:
         _stop_ffmpeg_process(process, cancel_started)
@@ -2086,6 +2221,11 @@ def stream_overlay_to_ffmpeg(
 
     if active_process_holder is not None:
         active_process_holder["process"] = None
+    try:
+        from src.process_lifecycle import RenderProcessRegistry
+        RenderProcessRegistry.get_instance().unregister(process.pid)
+    except Exception:
+        pass
 
     rc = process.returncode
     if rc != 0 and not (cancel_event is not None and cancel_event.is_set()):

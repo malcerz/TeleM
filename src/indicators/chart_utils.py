@@ -317,7 +317,7 @@ def generate_nice_value_ticks(
     step = multiplier * magnitude
     nice_min = math.floor(data_min / step) * step
     nice_max = math.ceil(data_max / step) * step
-    decimals = max(0, min(3, int(decimal_places)))
+    decimals = max(0, min(2, int(decimal_places)))
     labels = [
         f"{nice_min + i * step:.{decimals}f}"
         for i in range(int(round((nice_max - nice_min) / step)) + 1)
@@ -799,7 +799,7 @@ def _build_chart_bg(
 
     count = max(2, label_count)
     base_value_labels = value_labels or auto_value_labels or [
-        f"{min_val + (i / (count - 1)) * val_range:.{max(0, min(3, int(decimal_places)))}f}"
+        f"{min_val + (i / (count - 1)) * val_range:.{max(0, min(2, int(decimal_places)))}f}"
         for i in range(count)
     ]
     y_label_values = [

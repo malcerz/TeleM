@@ -59,6 +59,7 @@ class IndicatorMixin:
                 stream_key,
                 form, bar_style=bar_style,
                 chart_time_scope=cfg.get("chart_time_scope", "activity"),
+                cfg=cfg,
             )
         )
 
@@ -80,7 +81,7 @@ class IndicatorMixin:
             "rotation": 0, "form": "text", "font_size": 2.5,
             "font": "",
             "size": 2.5, "thickness": 3, "min_val": 0, "max_val": 100,
-            "ticks": 0, "show_value": True, "source": "gpmf", "decimals": 1,
+            "ticks": 0, "show_value": True, "source": "gpmf",
             # Ticks (decoupled)
             "major_tick_length": 4.0, "minor_tick_length": 2.0,
             "major_tick_thickness": 4, "minor_tick_thickness": 2,
@@ -132,9 +133,6 @@ class IndicatorMixin:
                         "enhanced_altitude": "m", "distance": "km",
                     }
                     defaults["unit"] = unit_map.get(field_name, "")
-                # BAR Ruler używa trybu COUNT (major_ticks) — NIE ustawiamy już
-                # ukrytego major_step>0, który ignorowałby major_ticks w GUI.
-                # Stare projekty z jawnym major_step>0 zachowują tryb STEP.
         elif key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
             defaults["source"] = "gpx"
 
@@ -152,9 +150,7 @@ class IndicatorMixin:
 
         # Specjalne domyślne wartości dla time_display.
         # ETAP 15: bazujemy na sprawdzonym wizualnie baseline z v10
-        # (font_size 1.8, per-line 1.2/1.9/1.5/1.5).  Globalny "size" ustawiamy
-        # poniżej (druga sekcja time_display), bo wcześniejsza linia
-        # ``form=="text" → size=font_size`` nadpisałaby go.
+        # (font_size 1.8, per-line 1.2/1.9/1.5/1.5).
         if key == "time_display":
             defaults["show_date"] = True
             defaults["show_time"] = True
@@ -178,19 +174,20 @@ class IndicatorMixin:
 
         # Ustal domyślną formę na podstawie klucza (z rejestru indicators.py)
         from src.indicators import get_form_for_key
+        from src.telemetry_resolver import is_integer_only_field
         _form, _form_overrides = get_form_for_key(key)
         defaults["form"] = _form
         defaults.update(_form_overrides)
-        _decimal_default = indicator_default_decimals(key)
-        if _decimal_default is not None:
-            defaults["decimals"] = _decimal_default
+        if is_integer_only_field(key, defaults):
+            defaults.pop("decimals", None)
+            defaults.pop("decimal_places", None)
+        else:
+            _decimal_default = indicator_default_decimals(key, defaults)
+            if _decimal_default is not None:
+                defaults["decimals"] = _decimal_default
         if defaults.get("form") == "text":
             defaults["size"] = defaults["font_size"]
 
-        # time_display – własna forma, po get_form_for_key (jak track_map).
-        # ETAP 15: Rozmiar to teraz globalna skala master (1.0 = standardowy
-        # wygląd, identyczny z legacy size=0.1 z presetów v1..v10), a domyślna
-        # ikona to zegar.
         if key == "time_display":
             defaults["form"] = "time_display"
             defaults["size"] = 1.0
@@ -314,10 +311,25 @@ class IndicatorMixin:
                 defaults.get("form", "text"),
                 bar_style=defaults.get("bar_style", "ruler"),
                 chart_time_scope=defaults.get("chart_time_scope", "activity"),
+                cfg=defaults,
             )
         for _field_name, _field_default in canonical_defaults(_schema).items():
             if _field_name not in defaults:
                 defaults[_field_name] = _field_default
+
+        # Auto-placement: ensure newly created indicator does not overlap active widgets
+        from src.gui.autoplacement import find_non_overlapping_position
+        _cw = getattr(getattr(self, "src_img", None), "width", 3840) or 3840
+        _ch = getattr(getattr(self, "src_img", None), "height", 2160) or 2160
+        _font_path = getattr(self, "font_path", "C:/Windows/Fonts/arial.ttf") or "C:/Windows/Fonts/arial.ttf"
+        _pos = find_non_overlapping_position(
+            self.layout, key, defaults,
+            canvas_w=_cw, canvas_h=_ch,
+            margin=8, grid=8,
+            default_font_path=str(_font_path),
+        )
+        defaults["x"] = _pos["x"]
+        defaults["y"] = _pos["y"]
 
         self.layout["indicators"][key] = defaults
 
@@ -335,6 +347,9 @@ class IndicatorMixin:
             # nie automatyczny zakres z danych — nie nadpisuj.
             return None, None
 
+        if not getattr(self, "telemetry", None):
+            return None, None
+
         samples: list[tuple] | None = None
 
         # FIT fields: fit_{field_name}_text
@@ -347,6 +362,26 @@ class IndicatorMixin:
         elif key in ("hr_text",):
             samples = self.telemetry.gpx_hr_samples
         elif key in ("cad_text",):
+            samples = self.telemetry.gpx_cad_samples
+        elif key in ("power_text",):
+            samples = self.telemetry.gpx_power_samples
+        elif key in ("atemp_text",):
+            samples = self.telemetry.gpx_atemp_samples
+        elif key == "speed_text_gpx":
+            samples = self.telemetry.gpx_speed_samples
+
+        # GPMF fields
+        elif key in ("speed_text",):
+            samples = self.telemetry.speed_samples
+        elif key in ("dist_text", "dist_visual"):
+            samples = self.telemetry.track_samples
+        elif key in ("alt_text",):
+            samples = self.telemetry.alt_samples
+        elif key in ("iso_text",):
+            samples = self.telemetry.iso_samples
+        elif key in ("exposure_text",):
+            samples = self.telemetry.exposure_samples
+        elif key in ("temp_text",):
             samples = self.telemetry.gpx_cad_samples
         elif key in ("power_text",):
             samples = self.telemetry.gpx_power_samples
@@ -428,6 +463,7 @@ class IndicatorMixin:
             key,
             form, bar_style=bar_style,
             chart_time_scope=cfg.get("chart_time_scope", "activity"),
+            cfg=cfg,
         )
         self.signals.sig_properties_ready.emit(key, schema, dict(cfg))
 
@@ -477,34 +513,6 @@ class IndicatorMixin:
             )
         self._render_preview()
         return
-
-        time_cfg = None
-        try:
-            from src.gui.layout_manager import normalize_layout
-            base = getattr(self, "base_dir", None)
-            if base is not None:
-                fresh = normalize_layout(Path(base) / "def_layout.json", 1280, 720)
-                time_cfg = fresh.get("indicators", {}).get("time_display")
-        except Exception:
-            time_cfg = None
-        if not time_cfg:
-            time_cfg = {
-                "enabled": True, "label": "Czas", "x": 2.0, "y": 3.0,
-                "rotation": 0, "form": "time_display", "size": 1.0, "icon": "clock",
-                "show_date": True, "show_time": True, "show_elapsed": True,
-                "show_avg_speed": True, "show_date_label": True, "date_label": "Data",
-                "show_time_label": True, "time_label": "Godzina",
-                "show_elapsed_label": True, "elapsed_label": "Czas",
-                "show_avg_speed_label": True, "avg_speed_label": "Średnia prędkość",
-                "font_size": 1.8, "date_font_size": 1.2, "time_font_size": 1.9,
-                "elapsed_font_size": 1.5, "avg_speed_font_size": 1.5,
-            }
-        self.layout["indicators"] = {"time_display": time_cfg}
-        self.layout["custom_texts"] = []
-        if self.layout_mgr:
-            self.layout_mgr.layout = self.layout
-        self._selected_stream_key = ""
-        self._render_preview()
 
     def _discover_data_streams(self) -> list[DataStream]:
         """Analizuje dane telemetryczne i zwraca listę dostępnych strumieni.

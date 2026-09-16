@@ -368,6 +368,13 @@ class _ChildCancelState:
                     continue
                 message = self._conn.recv()
             except (EOFError, OSError, BrokenPipeError):
+                with self._lock:
+                    self.reason = "PARENT_EXIT_EOF"
+                self.event.set()
+                print(
+                    f"[PROC] parent EOF detected, cancel triggered for child pid={os.getpid()}",
+                    flush=True,
+                )
                 return
             if not isinstance(message, dict) or message.get("kind") != "cancel":
                 continue
@@ -383,6 +390,76 @@ class _ChildCancelState:
     def reason_value(self) -> str:
         with self._lock:
             return self.reason
+
+
+class _ParentDeathWatchdog:
+    """Lightweight watchdog detecting parent process termination."""
+
+    def __init__(self, parent_pid: int, cancel_state: _ChildCancelState) -> None:
+        self.parent_pid = int(parent_pid)
+        self.cancel_state = cancel_state
+        self._stop = threading.Event()
+        self.thread = threading.Thread(
+            target=self._watch,
+            name="TeleM-AMD-ParentDeathWatchdog",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def close(self) -> None:
+        self._stop.set()
+        if self.thread.is_alive():
+            self.thread.join(timeout=0.5)
+
+    def _watch(self) -> None:
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel32.WaitForSingleObject.restype = wintypes.DWORD
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel32.CloseHandle.restype = wintypes.BOOL
+
+            SYNCHRONIZE = 0x00100000
+            h_parent = kernel32.OpenProcess(SYNCHRONIZE, False, self.parent_pid)
+            if not h_parent:
+                print(f"[PROC] parent death detected (cannot open parent pid={self.parent_pid})", flush=True)
+                with self.cancel_state._lock:
+                    self.cancel_state.reason = "PARENT_PROCESS_EXIT"
+                self.cancel_state.event.set()
+                return
+
+            try:
+                while not self._stop.is_set():
+                    res = kernel32.WaitForSingleObject(h_parent, 500)
+                    if res == 0:  # WAIT_OBJECT_0: parent died
+                        print(f"[PROC] parent death detected pid={self.parent_pid}", flush=True)
+                        with self.cancel_state._lock:
+                            self.cancel_state.reason = "PARENT_PROCESS_EXIT"
+                        self.cancel_state.event.set()
+                        return
+                    elif res != 0x102:  # not WAIT_TIMEOUT
+                        break
+            finally:
+                kernel32.CloseHandle(h_parent)
+        else:
+            while not self._stop.is_set():
+                time.sleep(0.5)
+                try:
+                    if os.getppid() != self.parent_pid:
+                        print(f"[PROC] parent death detected (ppid changed from {self.parent_pid})", flush=True)
+                        with self.cancel_state._lock:
+                            self.cancel_state.reason = "PARENT_PROCESS_EXIT"
+                        self.cancel_state.event.set()
+                        return
+                except Exception:
+                    pass
 
 
 class _ChildIpcEmitter:
@@ -577,8 +654,12 @@ def _child_entry(
     conn: Any,
     diagnostics_path: str,
     spawn_started_at: float,
+    parent_pid: Optional[int] = None,
 ) -> None:
     """Spawn target.  Keep this top-level for Windows multiprocessing spawn."""
+
+    if parent_pid is None:
+        parent_pid = int(render_kwargs.get("_parent_pid") or os.getppid())
 
     log_path = Path(diagnostics_path)
     emitter = _ChildIpcEmitter(conn)
@@ -586,6 +667,7 @@ def _child_entry(
     # have a primary error channel independent of stderr.
     emitter.start()
     cancel = _ChildCancelState(conn)
+    watchdog = _ParentDeathWatchdog(parent_pid, cancel)
     preview_session: Any = None
     log_file: Any = None
     stdio_guard: Optional[_ChildStdioRedirect] = None
@@ -631,6 +713,7 @@ def _child_entry(
             "startup_ms": (time.perf_counter() - spawn_started_at) * 1000.0,
         }, critical=True)
         cancel.start()
+        watchdog.start()
 
         def progress_cb(value: Any, text: Any) -> None:
             emitter.send({
@@ -712,6 +795,7 @@ def _child_entry(
                 preview_session.stop("child_exit")
             except Exception:
                 pass
+        watchdog.close()
         cancel.close()
         if _child_handle_diagnostics_enabled():
             _write_diagnostic_line(
@@ -778,12 +862,17 @@ def run_amd_render_child(
         target=_child_entry,
         args=(
             dict(render_kwargs), preview_config, child_conn,
-            str(diagnostics_path), spawn_started_at,
+            str(diagnostics_path), spawn_started_at, os.getpid(),
         ),
         name=f"TeleM-AMD-Render-{generation_id}",
     )
     process.start()
     child_conn.close()
+    try:
+        from src.process_lifecycle import RenderProcessRegistry
+        RenderProcessRegistry.get_instance().register(process, proc_type="amd_child")
+    except Exception:
+        pass
     handle = AMDChildProcessHandle(process, parent_conn, diagnostics_path)
     active_process_holder["process"] = handle
     active_process_holder["child_pid"] = process.pid
@@ -935,6 +1024,11 @@ def run_amd_render_child(
         active_process_holder.pop("child_pid", None)
         active_process_holder.pop("child_generation_id", None)
         active_process_holder.pop("child_diagnostics_path", None)
+        try:
+            from src.process_lifecycle import RenderProcessRegistry
+            RenderProcessRegistry.get_instance().unregister(process.pid)
+        except Exception:
+            pass
 
     if lifecycle_error is not None:
         tail = _tail(diagnostics_path)

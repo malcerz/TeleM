@@ -18,7 +18,7 @@ from PIL import Image
 from src.gui.indicator_schemas import BUILTIN_FIELDS
 from src.gui.layout_manager import normalize_layout
 from src.gui.qt.models import normalize_indicator_decimal_defaults
-from src.multifile import build_timeline_from_paths, format_timeline_diagnostics
+from src.multifile import build_timeline_from_paths, format_timeline_diagnostics, timeline_absolute_end
 from src.telemetry_processed_cache import (
     apply_processed_cache,
     processed_cache_path,
@@ -459,6 +459,16 @@ class ProjectMixin:
                     self.video_timeline = timeline
                     self.video_clips = list(timeline.clips)
                     self.video_duration_s = timeline.project_duration_s
+                    # Warm global multi-file battery presentation plan
+                    try:
+                        self.telemetry.timeline = timeline
+                        self.telemetry.update_battery_coverage(
+                            self.telemetry.start_dt_utc,
+                            timeline_absolute_end(timeline),
+                            timeline=timeline,
+                        )
+                    except Exception:
+                        pass
                     # FIX A: emit the canonical project duration (video-stream
                     # frame-count based) so the seek bar receives the correct
                     # value.  This replaces the earlier provisional emission of

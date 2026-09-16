@@ -105,6 +105,30 @@ class PreviewMixin:
             flush=True,
         )
 
+    def _is_nvidia_native_preview_active(self) -> bool:
+        """Return True if NVIDIA Native D3D11 backend is currently selected in RenderTab."""
+        try:
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            if render_tab is not None:
+                enc = render_tab.cmb_encoder.currentText().strip().lower()
+                if enc == "auto":
+                    from src.ffmpeg_pipeline import detect_best_encoder
+                    enc = detect_best_encoder().lower()
+                if enc in ("nv", "nvidia"):
+                    return render_tab.cmb_nvidia_backend.currentData() == "native_d3d11"
+        except Exception:
+            pass
+        return False
+
+    def _close_native_preview_renderer(self) -> None:
+        """Release native D3D11 preview renderer resources."""
+        if getattr(self, "_nv_native_preview_renderer", None) is not None:
+            try:
+                self._nv_native_preview_renderer.close()
+            except Exception:
+                pass
+            self._nv_native_preview_renderer = None
+
     def _preview_ensure_active_clip(
         self, clip_index, clip, local_time: float, global_time: float = 0.0
     ) -> bool:
@@ -795,39 +819,91 @@ class PreviewMixin:
                 bt.start_timer("overlay_rendering")
                 try:
                     if overlay_data is not None:
-                        preview = render_preview(
-                            self.src_img, self.layout, self.font_path,
-                            overlay_data["date_text"], overlay_data["time_text"],
-                            overlay_data["speed_value"],
-                            overlay_data["distance_m"],
-                            overlay_data["max_distance_m"],
-                            overlay_data["alt_value"],
-                            overlay_data["min_alt"],
-                            overlay_data["max_alt"],
-                            overlay_data["iso_value"],
-                            overlay_data["exposure_value"],
-                            overlay_data["temp_value"],
-                            indicator_values=overlay_data["indicator_values"],
-                            max_speed_kmh=overlay_data["max_speed_kmh"],
-                            power_value=overlay_data["power_value"],
-                            atemp_value=overlay_data["atemp_value"],
-                            hr_value=overlay_data["hr_value"],
-                            cad_value=overlay_data["cad_value"],
-                            battery_value=overlay_data["battery_value"],
-                            _bboxes=self.indicator_bboxes,
-                            extra_indicators=overlay_data["extra_indicators"],
-                            chart_data=overlay_data["chart_data"],
-                            current_position=current_position,
-                            gps_track=overlay_data["gps_track"],
-                            map_heading=overlay_data.get("map_heading"),
-                            target_dt=overlay_data["target_dt"],
-                            start_dt_utc=overlay_data["start_dt_utc"],
-                            elapsed_seconds=overlay_data["elapsed_seconds"],
-                            avg_speed_kmh=overlay_data["avg_speed_kmh"],
-                            inplace=self._playing,
-                            async_map=True,
-                            auto_ranges=overlay_data.get("auto_ranges"),
-                        )
+                        native_rendered = False
+                        if self._is_nvidia_native_preview_active():
+                            try:
+                                if (
+                                    getattr(self, "_nv_native_preview_renderer", None) is None
+                                    or getattr(self, "_nv_native_preview_layout_id", None) != id(self.layout)
+                                ):
+                                    from src.ffmpeg.nvidia_native_preview import NvidiaNativePreviewRenderer
+                                    if getattr(self, "_nv_native_preview_renderer", None) is not None:
+                                        try:
+                                            self._nv_native_preview_renderer.close()
+                                        except Exception:
+                                            pass
+                                    self._nv_native_preview_renderer = NvidiaNativePreviewRenderer(
+                                        layout=self.layout, telemetry=self.telemetry
+                                    )
+                                    self._nv_native_preview_layout_id = id(self.layout)
+
+                                from src.ffmpeg.nvidia_config import TelemFrameState
+                                st = TelemFrameState(
+                                    speed_mps=float(overlay_data.get("speed_value") or 0.0),
+                                    heart_rate_bpm=float(overlay_data.get("hr_value") or 0.0),
+                                    cadence_rpm=float(overlay_data.get("cad_value") or 0.0),
+                                    power_watts=float(overlay_data.get("power_value") or 0.0),
+                                    altitude_m=float(overlay_data.get("alt_value") or 0.0),
+                                    grade_pct=float((overlay_data.get("indicator_values") or {}).get("slope", 0.0) or 0.0),
+                                    temperature_c=float(overlay_data.get("temp_value") or 0.0),
+                                    distance_m=float(overlay_data.get("distance_m") or 0.0),
+                                    heading_deg=float(overlay_data.get("map_heading") or 0.0),
+                                    time_str=str(overlay_data.get("time_text") or "").encode("utf-8"),
+                                    date_str=str(overlay_data.get("date_text") or "").encode("utf-8"),
+                                )
+                                track = overlay_data.get("gps_track") or []
+                                if track:
+                                    curr_pt = track[-1]
+                                    st.lat_deg = float(curr_pt[1])
+                                    st.lon_deg = float(curr_pt[2])
+                                self._nv_native_preview_renderer.set_telemetry_state(st)
+                                native_qimg = self._nv_native_preview_renderer.render_hud_qimage(0, target_w, target_h)
+                                if native_qimg is not None and not native_qimg.isNull():
+                                    hud_pil = Image.fromqimage(native_qimg)
+                                    if self.is_using_mpv():
+                                        preview = hud_pil
+                                    else:
+                                        preview = self.src_img.convert("RGBA").copy()
+                                        preview.alpha_composite(hud_pil)
+                                    native_rendered = True
+                            except Exception as ex:
+                                print(f"[NATIVE PREVIEW ERROR] {ex}", flush=True)
+                                native_rendered = False
+
+                        if not native_rendered:
+                            preview = render_preview(
+                                self.src_img, self.layout, self.font_path,
+                                overlay_data["date_text"], overlay_data["time_text"],
+                                overlay_data["speed_value"],
+                                overlay_data["distance_m"],
+                                overlay_data["max_distance_m"],
+                                overlay_data["alt_value"],
+                                overlay_data["min_alt"],
+                                overlay_data["max_alt"],
+                                overlay_data["iso_value"],
+                                overlay_data["exposure_value"],
+                                overlay_data["temp_value"],
+                                indicator_values=overlay_data["indicator_values"],
+                                max_speed_kmh=overlay_data["max_speed_kmh"],
+                                power_value=overlay_data["power_value"],
+                                atemp_value=overlay_data["atemp_value"],
+                                hr_value=overlay_data["hr_value"],
+                                cad_value=overlay_data["cad_value"],
+                                battery_value=overlay_data["battery_value"],
+                                _bboxes=self.indicator_bboxes,
+                                extra_indicators=overlay_data["extra_indicators"],
+                                chart_data=overlay_data["chart_data"],
+                                current_position=current_position,
+                                gps_track=overlay_data["gps_track"],
+                                map_heading=overlay_data.get("map_heading"),
+                                target_dt=overlay_data["target_dt"],
+                                start_dt_utc=overlay_data["start_dt_utc"],
+                                elapsed_seconds=overlay_data["elapsed_seconds"],
+                                avg_speed_kmh=overlay_data["avg_speed_kmh"],
+                                inplace=self._playing,
+                                async_map=True,
+                                auto_ranges=overlay_data.get("auto_ranges"),
+                            )
                     else:
                         # Check if preview already set (cut region or no telemetry)
                         try:

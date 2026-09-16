@@ -1,16 +1,17 @@
-# Dokumentacja modułów projektu TeleM
+# Dokumentacja modułów projektu BikeRideHUD
 
-Projekt TeleM to aplikacja do nakładania telemetrii GoPro (prędkość, wysokość, mapa GPS, dane FIT/GPX) na wideo, z GUI w PySide6.
+Projekt BikeRideHUD to aplikacja do nakładania telemetrii (prędkość, wysokość, mapa GPS, dane FIT/GPX) na wideo, z GUI w PySide6.
 
 ## Struktura ogólna
 
 Repozytorium dzieli się na katalogi: `src/gui` (interfejs PySide6), `src/indicators` (renderowanie wskaźników overlayu), pliki telemetryczne na poziomie głównym repo, oraz `tests/` i `archive/`.
 
-## Moduł startowy
+## Moduły startowe
 
 | Plik | Rola | Zależności |
 |---|---|---|
-| TeleMGP0.py | Launcher aplikacji — uruchamia GUI PySide6 z zakładkami; re-eksportuje funkcje telemetrii dla kompatybilności testów | src.telemetry_extract, src.gui.qt.application |
+| BikeRideHUD.py | Główny kanoniczny launcher aplikacji — uruchamia GUI PySide6 z zakładkami | src.telemetry_extract, src.gui.qt.application |
+| TeleMGP.py | Kompatybilny shim startowy zachowujący zgodność wsteczną | BikeRideHUD.py, src.gui.qt.application |
 
 ## Moduły telemetryczne (root)
 

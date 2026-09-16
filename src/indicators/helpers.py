@@ -29,15 +29,16 @@ PREVIEW_VIDEO_BRIGHTNESS = 0.55
 _PREVIEW_DIM_LUT_CACHE: dict[float, tuple[int, ...]] = {}
 
 
-def resolve_decimal_places(cfg: dict[str, Any], default: int = 1) -> int:
+def resolve_decimal_places(cfg: dict[str, Any], default: int = 1, field: str | None = None) -> int:
     """Resolve displayed numeric precision without changing source values.
 
     ``decimal_places`` is canonical for charts.  ``decimals`` remains a
     compatibility alias used by older indicator forms and saved presets.
     Presence is tested explicitly so that a configured value of zero is kept.
+    For integer-only semantic fields, returns strictly 0.
     """
     from src.telemetry_resolver import resolve_presentation_precision
-    return resolve_presentation_precision(cfg, default)
+    return resolve_presentation_precision(cfg, default, field=field)
 
 
 def dim_preview_video(img, brightness: float = PREVIEW_VIDEO_BRIGHTNESS):

@@ -72,9 +72,12 @@ class LayoutManager:
         Returns:
             The path the layout was saved to.
         """
+        from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
         path = Path(layout_path)
+        saved = normalize_layout_for_save(self.layout)
+        saved = sanitize_layout_for_json(saved)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.layout, f, indent=2, ensure_ascii=False)
+            json.dump(saved, f, indent=2, ensure_ascii=False)
         return path
 
     # ------------------------------------------------------------------

@@ -3,9 +3,9 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "telem"
+name = "bikeridehud"
 version = "0.16.9"
-description = "GoPro video telemetry overlay application"
+description = "BikeRideHUD – Action camera & cycling video telemetry overlay application"
 requires-python = ">=3.10"
 dependencies = [
     "PySide6>=6.6",
@@ -28,6 +28,7 @@ tools = [
 ]
 
 [project.scripts]
+bikeridehud = "src.gui.qt.application:main"
 telem = "src.gui.qt.application:main"
 
 [project.urls]

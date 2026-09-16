@@ -171,9 +171,13 @@ def clip_chart_data_for_target(
         skip_pauses = getattr(values, "skip_pauses", False)
         active_mapper = getattr(values, "active_time_mapper", None)
         if skip_pauses and active_mapper is not None:
+            from src.telemetry_resolver import _map_wall_to_seconds
             base_start = getattr(values, "base_start_dt", None) or timestamps[0]
-            sec = active_mapper.wall_to_active_seconds(target_dt)
-            aligned_target = align(base_start + timedelta(seconds=sec))
+            sec = _map_wall_to_seconds(active_mapper, target_dt)
+            if sec is not None:
+                aligned_target = align(base_start + timedelta(seconds=sec))
+            else:
+                aligned_target = align(target_dt)
         else:
             aligned_target = align(target_dt)
 
@@ -219,6 +223,8 @@ def build_chart_data(
     skip_pauses = bool(
         layout.get("charts_skip_pauses", layout.get("global", {}).get("charts_skip_pauses", False))
     )
+    if skip_pauses:
+        from src.telemetry_resolver import _map_wall_to_seconds
     chart_data: dict[str, list[float]] = {}
     for ind_key, ind_cfg in layout.get("indicators", {}).items():
         if ind_cfg.get("form") != "chart" or not ind_cfg.get("enabled", True):
@@ -273,9 +279,10 @@ def build_chart_data(
             mapped_samples = []
             for s_ts, s_val in samples:
                 if not active_time_mapper.is_paused(s_ts):
-                    act_sec = active_time_mapper.wall_to_active_seconds(s_ts)
-                    act_ts = base_start_dt + timedelta(seconds=act_sec)
-                    mapped_samples.append((act_ts, s_val))
+                    act_sec = _map_wall_to_seconds(active_time_mapper, s_ts)
+                    if act_sec is not None:
+                        act_ts = base_start_dt + timedelta(seconds=act_sec)
+                        mapped_samples.append((act_ts, s_val))
             samples = mapped_samples
 
         if samples:
@@ -296,13 +303,13 @@ def build_chart_data(
                 v_end = end_dt_utc
                 if skip_pauses and active_time_mapper is not None and base_start_dt is not None:
                     if v_start is not None:
-                        v_start = base_start_dt + timedelta(
-                            seconds=active_time_mapper.wall_to_active_seconds(v_start)
-                        )
+                        _vs = _map_wall_to_seconds(active_time_mapper, v_start)
+                        if _vs is not None:
+                            v_start = base_start_dt + timedelta(seconds=_vs)
                     if v_end is not None:
-                        v_end = base_start_dt + timedelta(
-                            seconds=active_time_mapper.wall_to_active_seconds(v_end)
-                        )
+                        _ve = _map_wall_to_seconds(active_time_mapper, v_end)
+                        if _ve is not None:
+                            v_end = base_start_dt + timedelta(seconds=_ve)
                 start_b = align(v_start)
                 end_b = align(v_end)
                 start_i = bisect_left(sample_ts, start_b) if start_b is not None else 0
@@ -317,9 +324,10 @@ def build_chart_data(
                     raw_start, raw_end = source_activity_ranges[src]
                     if skip_pauses and active_time_mapper is not None and base_start_dt is not None:
                         chart_start = align(base_start_dt)
+                        _re = _map_wall_to_seconds(active_time_mapper, raw_end)
                         chart_end = align(
                             base_start_dt
-                            + timedelta(seconds=active_time_mapper.wall_to_active_seconds(raw_end))
+                            + timedelta(seconds=_re if _re is not None else 0.0)
                         )
                     else:
                         chart_start = align(raw_start) or sample_ts[0]

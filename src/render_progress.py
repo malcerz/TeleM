@@ -75,13 +75,25 @@ class RenderProgressState:
     frame_total: int = 0
     fps_instant: float = 0.0
     fps_average: float = 0.0
+    compression_text: str = ""
+    # HUD preparation state
+    prep_phase: str = ""
+    prep_done: int = 0
+    prep_total: int = 0
+    prep_pct: float = 0.0
+    prep_label: str = ""
 
 
 def format_render_progress_status(snapshot: RenderProgressState) -> str:
     """Format the canonical snapshot for the application status bar."""
-    frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
-    pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
-    fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
+    if snapshot.state == "preparing":
+        frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
+        pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
+        fps = "--"
+    else:
+        frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
+        pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
+        fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
     elapsed = max(0, int(snapshot.elapsed_s))
     mins, secs = divmod(elapsed, 60)
     hours, mins = divmod(mins, 60)
@@ -104,13 +116,238 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
     elif snapshot.state == "finalizing":
         status = snapshot.finalization_stage or "Finalizacja..."
     elif snapshot.state == "preparing":
-        status = "Przygotowywanie HUD..."
+        status = snapshot.prep_label or snapshot.finalization_stage or "Przygotowywanie HUD..."
     else:
         status = "Renderowanie..."
+    item_label = "HUD" if snapshot.state == "preparing" else "Frame"
     return (
-        f"Frame: {frame} | {pct} | FPS: {fps} | Czas: {elapsed_txt} "
+        f"{item_label}: {frame} | {pct} | FPS: {fps} | Czas: {elapsed_txt} "
         f"| ETA: {eta_txt} | {status}"
     )
+
+
+@dataclass
+class HudPhaseProfile:
+    phase_id: str
+    name: str
+    weight: float
+    start_time: float = 0.0
+    end_time: float = 0.0
+    elapsed_ms: float = 0.0
+    items_done: int = 0
+    items_total: int = 0
+    completed: bool = False
+
+
+class HudPrepProgressTracker:
+    """Central source of truth for HUD Preparation Progress.
+
+    Tracks registered phases with measured weights and real items counters (current / total).
+    Computes monotonic 0..100% HUD preparation progress and reports to GUI.
+    """
+
+    def __init__(
+        self,
+        phases: list[tuple[str, str, float]],
+        callback: Optional[Callable] = None,
+        *,
+        global_prep_start_pct: float = 0.0,
+        global_prep_end_pct: float = 10.0,
+        backend_name: str = "",
+    ):
+        self.callback = callback
+        self.global_prep_start_pct = float(global_prep_start_pct)
+        self.global_prep_end_pct = float(global_prep_end_pct)
+        self.backend_name = backend_name
+        self.start_time = time.perf_counter()
+
+        total_w = sum(w for _, _, w in phases) or 1.0
+        self.phases: list[HudPhaseProfile] = [
+            HudPhaseProfile(
+                phase_id=p_id,
+                name=name,
+                weight=w / total_w,
+            )
+            for p_id, name, w in phases
+        ]
+        self._phase_index_map = {p.phase_id: i for i, p in enumerate(self.phases)}
+        self.current_phase_idx = -1
+        self._last_overall_pct = 0.0
+        self._last_emit_time = 0.0
+        self._last_logged_pct = -5.0
+        self.is_finished = False
+
+    def start_phase(self, phase_id: str, items_total: int = 1, detail: str = "") -> None:
+        """Begin a new phase. Any prior incomplete phases are marked complete."""
+        now = time.perf_counter()
+        target_idx = self._phase_index_map.get(phase_id)
+        if target_idx is None:
+            return
+
+        for idx in range(target_idx):
+            p = self.phases[idx]
+            if not p.completed:
+                if p.start_time == 0.0:
+                    p.start_time = now
+                p.end_time = now
+                p.elapsed_ms = (p.end_time - p.start_time) * 1000.0
+                p.items_done = max(p.items_done, p.items_total)
+                p.completed = True
+
+        self.current_phase_idx = target_idx
+        cur = self.phases[target_idx]
+        cur.start_time = now
+        cur.items_total = max(1, items_total)
+        cur.items_done = 0
+        cur.completed = False
+
+        self._emit(force=True, detail=detail)
+
+    def update(self, items_done: int, items_total: Optional[int] = None, detail: str = "") -> None:
+        """Update items count for the current phase and report progress."""
+        if self.current_phase_idx < 0 or self.current_phase_idx >= len(self.phases):
+            return
+        cur = self.phases[self.current_phase_idx]
+        if items_total is not None and items_total > 0:
+            cur.items_total = items_total
+        cur.items_done = min(items_done, cur.items_total)
+        self._emit(force=False, detail=detail)
+
+    def step(self, delta: int = 1, detail: str = "") -> None:
+        """Increment items done by delta."""
+        if self.current_phase_idx < 0 or self.current_phase_idx >= len(self.phases):
+            return
+        cur = self.phases[self.current_phase_idx]
+        self.update(cur.items_done + delta, cur.items_total, detail=detail)
+
+    def complete_phase(self, phase_id: Optional[str] = None) -> None:
+        """Mark current (or specified) phase as complete."""
+        now = time.perf_counter()
+        idx = self._phase_index_map.get(phase_id) if phase_id else self.current_phase_idx
+        if idx is None or idx < 0 or idx >= len(self.phases):
+            return
+        cur = self.phases[idx]
+        cur.end_time = now
+        cur.elapsed_ms = (cur.end_time - (cur.start_time or now)) * 1000.0
+        cur.items_done = cur.items_total
+        cur.completed = True
+        self._emit(force=True)
+
+    def finish(self) -> dict:
+        """Complete all phases and mark HUD prep 100% complete."""
+        now = time.perf_counter()
+        for p in self.phases:
+            if not p.completed:
+                if p.start_time == 0.0:
+                    p.start_time = now
+                p.end_time = now
+                p.elapsed_ms = (p.end_time - p.start_time) * 1000.0
+                p.items_done = p.items_total
+                p.completed = True
+        self.is_finished = True
+        self._last_overall_pct = 100.0
+        self._emit(force=True)
+
+        total_ms = (now - self.start_time) * 1000.0
+        print(f"[HUD PREP PROGRESS] TOTAL HUD PREPARATION: {total_ms:.1f} ms ({total_ms/1000.0:.2f} s)", flush=True)
+        return self.get_profile()
+
+    def get_profile(self) -> dict:
+        """Return diagnostic profile of all phases."""
+        total_ms = sum(p.elapsed_ms for p in self.phases)
+        slowest = sorted(self.phases, key=lambda p: p.elapsed_ms, reverse=True)
+        return {
+            "total_prep_ms": total_ms,
+            "total_prep_s": total_ms / 1000.0,
+            "phases": [
+                {
+                    "phase_id": p.phase_id,
+                    "name": p.name,
+                    "weight": p.weight,
+                    "elapsed_ms": p.elapsed_ms,
+                    "items_done": p.items_done,
+                    "items_total": p.items_total,
+                }
+                for p in self.phases
+            ],
+            "slowest_3": [
+                {"phase_id": p.phase_id, "name": p.name, "elapsed_ms": p.elapsed_ms}
+                for p in slowest[:3]
+            ],
+        }
+
+    def _emit(self, force: bool = False, detail: str = "") -> None:
+        now = time.perf_counter()
+        completed_weight = sum(p.weight for p in self.phases if p.completed)
+        if self.current_phase_idx >= 0 and self.current_phase_idx < len(self.phases):
+            cur = self.phases[self.current_phase_idx]
+            if not cur.completed and cur.items_total > 0:
+                frac = max(0.0, min(1.0, cur.items_done / cur.items_total))
+                completed_weight += cur.weight * frac
+                phase_done = cur.items_done
+                phase_total = cur.items_total
+                phase_name = cur.name
+                phase_id = cur.phase_id
+                phase_pct = frac * 100.0
+            else:
+                phase_done = cur.items_total
+                phase_total = cur.items_total
+                phase_name = cur.name
+                phase_id = cur.phase_id
+                phase_pct = 100.0
+        else:
+            phase_done = 0
+            phase_total = 0
+            phase_name = "Przygotowanie HUD"
+            phase_id = "prep"
+            phase_pct = 0.0
+
+        overall_pct = min(100.0, max(self._last_overall_pct, completed_weight * 100.0))
+        self._last_overall_pct = overall_pct
+
+        if not force and not self.is_finished:
+            if (now - self._last_emit_time < 0.08) and (overall_pct - self._last_overall_pct < 0.5):
+                return
+        self._last_emit_time = now
+
+        if force or (overall_pct - self._last_logged_pct >= 2.0) or self.is_finished:
+            self._last_logged_pct = overall_pct
+            elapsed_ms = (now - self.start_time) * 1000.0
+            print(
+                f"[HUD PREP PROGRESS] phase={phase_id} done={phase_done} total={phase_total} "
+                f"phase_pct={phase_pct:.1f}% overall_pct={overall_pct:.1f}% elapsed_ms={elapsed_ms:.1f}",
+                flush=True,
+            )
+
+        if self.is_finished:
+            label = "Przygotowanie HUD — 100% · Gotowe"
+        elif phase_total > 1:
+            label = f"Przygotowanie HUD — {overall_pct:.0f}% · {phase_name} {phase_done}/{phase_total}"
+        elif detail:
+            label = f"Przygotowanie HUD — {overall_pct:.0f}% · {detail}"
+        else:
+            label = f"Przygotowanie HUD — {overall_pct:.0f}% · {phase_name}"
+
+        global_pct = self.global_prep_start_pct + (overall_pct / 100.0) * (self.global_prep_end_pct - self.global_prep_start_pct)
+
+        hud_state = {
+            "phase": "prep",
+            "prep_phase": phase_id,
+            "pct": overall_pct / 100.0,
+            "overall_hud_pct": overall_pct,
+            "phase_pct": phase_pct,
+            "work_done": phase_done,
+            "work_total": phase_total,
+            "label": label,
+            "global_pct": global_pct,
+            "backend": self.backend_name,
+        }
+
+        if self.callback:
+            try:
+                self.callback(phase_done, phase_total, now - self.start_time, 0.0, hud_state)
+            except Exception:
+                pass
 
 
 class RenderProgressTracker:
@@ -132,6 +369,7 @@ class RenderProgressTracker:
         self.last_emit = 0.0
         default_fps = float(os.environ.get("TELEM_PROGRESS_BASELINE_FPS", "26.359"))
         self.render_estimate = self.total_frames / max(1.0, default_fps)
+        self.hud_initial_estimate = max(1.0, self.total_frames * 0.00035)
         self.other_estimate = 0.5
         render_debug_print("[Progress] HUD estimated time/cost initial=learning from measured work", flush=True)
         render_debug_print(f"[Progress] Render estimated time/cost={self.render_estimate:.3f}s baseline_fps={default_fps:.3f}", flush=True)
@@ -141,7 +379,7 @@ class RenderProgressTracker:
             return max(self.hud_actual_estimate, 0.001)
         if self.hud_done > 0 and self.hud_total > 0:
             return max(0.001, (time.perf_counter() - self.hud_started) / (self.hud_done / self.hud_total))
-        return 0.001
+        return self.hud_initial_estimate
 
     def _emit(self, *, phase: str, internal: float, label: str, done: int = 0, total: int = 0,
               elapsed: Optional[float] = None, force: bool = False, **extra) -> None:

@@ -90,11 +90,16 @@ def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
 # Indicator-specific defaults that are part of the generic numeric property
 # contract.  These are presentation defaults only; resolver semantics and
 # source values remain untouched.
-def indicator_default_decimals(indicator_key: str) -> int | None:
+def indicator_default_decimals(indicator_key: str, cfg: Mapping[str, Any] | None = None) -> int | None:
     """Return an explicit canonical decimal default for known indicators."""
+    from src.telemetry_resolver import is_integer_only_field
+    if is_integer_only_field(indicator_key, cfg):
+        return 0
     key = str(indicator_key or "").strip().lower()
     if key in {"iso_text", "fit_gopro_battery_text"}:
         return 0
+    if "garmin_battery" in key or key == "battery_text":
+        return 2
     return None
 
 
@@ -104,39 +109,59 @@ def get_schema_for_indicator(
     *,
     bar_style: str = "ruler",
     chart_time_scope: str = "activity",
+    cfg: Mapping[str, Any] | None = None,
 ) -> list[FieldSchema]:
     """Build a form schema with the indicator's canonical numeric defaults."""
+    from src.telemetry_resolver import is_integer_only_field
     schema = get_schema_for_form(
         form, bar_style=bar_style, chart_time_scope=chart_time_scope,
     )
-    default = indicator_default_decimals(indicator_key)
+    if is_integer_only_field(indicator_key, cfg):
+        # Fixed integer presentation: hide/omit decimals & decimal_places from GUI
+        return [
+            field for field in schema
+            if field.name not in ("decimals", "decimal_places")
+        ]
+    default = indicator_default_decimals(indicator_key, cfg)
     if default is None:
         return schema
     # Do not mutate shared factory results or alter the generic form defaults.
     return [
         replace(field, default=default,
                 label="Liczba miejsc po przecinku"
-                if field.name == "decimals" else field.label)
-        if field.name == "decimals" else field
+                if field.name in ("decimals", "decimal_places") else field.label)
+        if field.name in ("decimals", "decimal_places") else field
         for field in schema
     ]
 
 
 def normalize_indicator_decimal_defaults(layout: dict[str, Any]) -> dict[str, Any]:
-    """Fill missing canonical decimal defaults in an in-memory layout.
-
-    Existing explicit ``decimals`` values are preserved.  In particular this
-    prevents legacy ``decimal_places`` from reviving the old generic default
-    of one decimal place for ISO while retaining any explicit modern setting.
-    """
+    """Fill missing canonical decimal defaults and clamp precision to 0-2 in layout."""
+    from src.telemetry_resolver import is_integer_only_field
     indicators = layout.get("indicators", {}) if isinstance(layout, dict) else {}
     if isinstance(indicators, dict):
         for key, cfg in indicators.items():
-            if not isinstance(cfg, dict) or "decimals" in cfg:
+            if not isinstance(cfg, dict):
                 continue
-            default = indicator_default_decimals(key)
-            if default is not None:
-                cfg["decimals"] = default
+            if is_integer_only_field(key, cfg):
+                # Integer-only fields do not retain redundant decimals in new saved layouts
+                cfg.pop("decimals", None)
+                cfg.pop("decimal_places", None)
+                continue
+            if "decimals" in cfg and cfg["decimals"] is not None:
+                try:
+                    cfg["decimals"] = max(0, min(2, int(cfg["decimals"])))
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            if "decimal_places" in cfg and cfg["decimal_places"] is not None:
+                try:
+                    cfg["decimal_places"] = max(0, min(2, int(cfg["decimal_places"])))
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            if "decimals" not in cfg:
+                default = indicator_default_decimals(key, cfg)
+                if default is not None:
+                    cfg["decimals"] = default
     return layout
 
 
@@ -205,7 +230,7 @@ def _text_tab_fields(
                                    default=2.5))
     if with_decimals:
         fields.append(FieldSchema("decimals", "int", "Decimals",
-                                  tab="Text", min_val=0, max_val=3, step=1, default=1))
+                                  tab="Text", min_val=0, max_val=2, step=1, default=1))
     fields += [
         FieldSchema("show_value", "bool", "Value", tab="Text", default=True),
         FieldSchema("show_units", "bool", "Units", tab="Text", default=True),
@@ -436,7 +461,7 @@ def _bar_ruler_fields() -> list[FieldSchema]:
         FieldSchema("show_mid_label", "bool", "Środek", tab="Text", default=True),
         FieldSchema("range_units", "bool", "Jednostki", tab="Text", default=True),
         FieldSchema("title_with_unit", "bool", "Tytuł z jednostką", tab="Text", default=True),
-        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=3, step=1, default=1),
+        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=2, step=1, default=1),
         FieldSchema("text_color", "color", "Kolor tekstu", tab="Text", default="#F4F4F4"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text", default="#E0E0E0"),
         FieldSchema("text_offset_x", "float", "Pos X", tab="Text", min_val=-0.5, max_val=0.5, step=0.01, default=0.0),
@@ -491,7 +516,7 @@ def _bar_segments_fields() -> list[FieldSchema]:
         FieldSchema("show_max", "bool", "Pokaż max", tab="Text", default=True),
         FieldSchema("show_marker", "bool", "Pokaż marker", tab="Text", default=True),
         FieldSchema("range_units", "bool", "Jednostki", tab="Text", default=False),
-        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=3, step=1, default=1),
+        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=2, step=1, default=1),
         FieldSchema("value_font", "font", "Font wartości", tab="Text", default=""),
         FieldSchema("value_font_size", "float", "Rozmiar wartości", tab="Text", min_val=0.5, max_val=5.0, step=0.05, default=1.70),
         FieldSchema("label_font", "font", "Font etykiety", tab="Text", default=""),
@@ -563,7 +588,7 @@ def _bar_slope_fields() -> list[FieldSchema]:
         FieldSchema("show_label", "bool", "Etykieta", tab="Text", default=True),
         FieldSchema("show_tick_labels", "bool", "Etykiety ticków", tab="Text", default=True),
         FieldSchema("show_units", "bool", "Jednostki", tab="Text", default=True),
-        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=3, step=1, default=1),
+        FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text", min_val=0, max_val=2, step=1, default=1),
         FieldSchema("text_color", "color", "Kolor tekstu", tab="Text", default="#FFFFFF"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text", default="#DDE7F2"),
         FieldSchema("opacity", "float", "Przezroczystość", tab="Text", min_val=0.0, max_val=1.0, step=0.05, default=1.0),
@@ -641,7 +666,7 @@ def lean_indicator_fields() -> list[FieldSchema]:
             FieldSchema("title_text", "text", "Własna etykieta", tab="Text", default=""),
             FieldSchema("uppercase_title", "bool", "Etykieta WIELKIMI", tab="Text", default=False),
             FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text",
-                        min_val=0, max_val=3, step=1, default=0),
+                        min_val=0, max_val=2, step=1, default=0),
         ]
     )
 
@@ -652,7 +677,7 @@ def chart_indicator_fields(chart_time_scope: str = "activity") -> list[FieldSche
         _header_fields(with_icon=False) + _form_field()
         + _text_tab_fields(with_color=True, with_decimals=False)
         + [FieldSchema("decimal_places", "int", "Miejsca po przecinku", tab="Text",
-                       min_val=0, max_val=3, step=1, default=1)]
+                       min_val=0, max_val=2, step=1, default=1)]
         + _labels_tab_fields()
         + _ticks_tab_fields(with_ticks=False, with_step=False, with_tick_geometry=False)
         + _chart_tab_fields(chart_time_scope=chart_time_scope)
