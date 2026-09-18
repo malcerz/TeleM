@@ -57,7 +57,7 @@ SKIP:
 SOURCE_BRANCH=main
 SNAPSHOT_BRANCH=nvidia-final-20260918
 BASE_COMMIT=1b5485c
-NEW_COMMIT=8ed1472 (final branch tip; primary snapshot content was committed as b1518cc)
+NEW_COMMIT=b1518cc (primary snapshot commit; subsequent commits only finalize report/NTFY bookkeeping)
 PUSH_RESULT=SUCCESS (origin/nvidia-final-20260918)
 
 STAGED_FILES=28 files: native/d3d11_nvenc_pipeline NVIDIA source/config (15 files), src/ffmpeg/nvidia_config.py, src/ffmpeg/nvidia_native_exporter.py, src/ffmpeg/streaming.py, src/ffmpeg/worker_cache.py, scratch/nvidia_real_perf_truth/run_gui_render.py, and 8 Raporty reports (including this report and cadence parity)
