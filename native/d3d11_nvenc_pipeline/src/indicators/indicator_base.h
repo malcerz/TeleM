@@ -7,6 +7,32 @@
 #include <memory>
 #include "telem_nvenc_api.h"
 
+// Diagnostic-only Direct2D stack accounting.  The pointer is set by the
+// native pipeline on the rendering thread; production leaves it null.
+struct TelemD2DStateTrace {
+    int clip_depth = 0;
+    int layer_depth = 0;
+    int begin_draw_depth = 0;
+};
+
+extern thread_local TelemD2DStateTrace* g_telem_d2d_state_trace;
+
+inline void TelemD2DTracePushClip() {
+    if (g_telem_d2d_state_trace) ++g_telem_d2d_state_trace->clip_depth;
+}
+
+inline void TelemD2DTracePopClip() {
+    if (g_telem_d2d_state_trace) --g_telem_d2d_state_trace->clip_depth;
+}
+
+inline void TelemD2DTracePushLayer() {
+    if (g_telem_d2d_state_trace) ++g_telem_d2d_state_trace->layer_depth;
+}
+
+inline void TelemD2DTracePopLayer() {
+    if (g_telem_d2d_state_trace) --g_telem_d2d_state_trace->layer_depth;
+}
+
 // Helper to convert 0xAARRGGBB to D2D1_COLOR_F
 inline D2D1_COLOR_F ColorFromHex(uint32_t c) {
     float a = ((c >> 24) & 0xFF) / 255.0f;

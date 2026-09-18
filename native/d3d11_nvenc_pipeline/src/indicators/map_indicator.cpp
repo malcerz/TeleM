@@ -1,4 +1,5 @@
 #include "map_indicator.h"
+#include "../hud_profile.h"
 #include <iostream>
 
 MapIndicator::MapIndicator(const TelemIndicatorDesc& desc)
@@ -77,18 +78,24 @@ bool MapIndicator::CreateDeviceResources(ID2D1DeviceContext* pD2D, IDWriteFactor
 
     m_pD2D->CreateSolidColorBrush(ColorFromHex(m_desc.style.map.track_color), &m_pTrackBrush);
     m_pD2D->CreateSolidColorBrush(ColorFromHex(m_desc.style.map.marker_color), &m_pMarkerBrush);
+    TelemHudProfile::Count("resource", "CreateSolidColorBrush");
+    TelemHudProfile::Count("resource", "CreateSolidColorBrush");
     
     uint32_t markerBorderColor = m_desc.style.map.marker_border_color;
     if ((markerBorderColor & 0xFF000000) == 0) markerBorderColor = 0xDC000000;
     m_pD2D->CreateSolidColorBrush(ColorFromHex(markerBorderColor), &m_pMarkerBorderBrush);
+    TelemHudProfile::Count("resource", "CreateSolidColorBrush");
 
     uint32_t borderColor = m_desc.style.map.border_color;
     if ((borderColor & 0xFF000000) == 0) borderColor = 0xFF333333;
     m_pD2D->CreateSolidColorBrush(ColorFromHex(borderColor), &m_pBorderBrush);
+    TelemHudProfile::Count("resource", "CreateSolidColorBrush");
 
     m_pD2D->CreateSolidColorBrush(D2D1::ColorF(0.1176f, 0.1176f, 0.1176f, 1.0f), &m_pBgBrush);
+    TelemHudProfile::Count("resource", "CreateSolidColorBrush");
 
     m_pD2D->CreateLayer(nullptr, &m_pLayer);
+    TelemHudProfile::Count("resource", "CreateLayer");
 
     ID2D1Factory* pFactory = nullptr;
     m_pD2D->GetFactory(&pFactory);
@@ -100,6 +107,7 @@ bool MapIndicator::CreateDeviceResources(ID2D1DeviceContext* pD2D, IDWriteFactor
             D2D1_LINE_JOIN_ROUND
         );
         pFactory->CreateStrokeStyle(&strokeProps, nullptr, 0, &m_pTrackStrokeStyle);
+        TelemHudProfile::Count("resource", "CreateStrokeStyle");
 
         BuildRouteGeometry(pFactory);
         pFactory->Release();
@@ -251,6 +259,12 @@ void MapIndicator::BuildRouteGeometry(ID2D1Factory* pFactory) {
 
 void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state) {
     if (!pD2D || !m_pLayer) return;
+    const bool profile = TelemHudProfile::Enabled();
+    auto mark = [&](const char* stage, double started) {
+        if (profile) TelemHudProfile::Record("map", m_key.c_str(), stage,
+                                             (TelemHudProfile::NowSeconds() - started) * 1000.0);
+    };
+    double stage_t = TelemHudProfile::NowSeconds();
 
     float cx = m_desc.style.map.canvas_x;
     float cy = m_desc.style.map.canvas_y;
@@ -284,6 +298,9 @@ void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state
     );
 
     pD2D->PushLayer(&layerParams, m_pLayer);
+    TelemD2DTracePushLayer();
+    mark("setup_layer", stage_t);
+    stage_t = TelemHudProfile::NowSeconds();
 
     // 1. Background fill
     if (m_pBgBrush) {
@@ -309,6 +326,8 @@ void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state
         D2D1::Matrix3x2F::Translation(cx, cy);
 
     pD2D->SetTransform(mapTransform);
+    mark("position_transform", stage_t);
+    stage_t = TelemHudProfile::NowSeconds();
 
     // 3. Tile selection & drawing
     float render_w = m_desc.style.map.rotate_map ? (float)std::ceil(w * 1.41421356f) : w;
@@ -341,11 +360,15 @@ void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state
             }
         }
     }
+    mark("tile_lookup_draw", stage_t);
+    stage_t = TelemHudProfile::NowSeconds();
 
     // 4. Track vector route
     if (m_pRouteGeometry && m_pTrackBrush) {
         pD2D->DrawGeometry(m_pRouteGeometry, m_pTrackBrush, m_desc.style.map.track_width, m_pTrackStrokeStyle);
     }
+    mark("route", stage_t);
+    stage_t = TelemHudProfile::NowSeconds();
 
     // 5. Reset transform for marker
     pD2D->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -379,9 +402,11 @@ void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state
         if (m_pMarkerBrush) pD2D->FillEllipse(&el, m_pMarkerBrush);
         if (m_pMarkerBorderBrush) pD2D->DrawEllipse(&el, m_pMarkerBorderBrush, 2.0f);
     }
+    mark("marker", stage_t);
 
     // Pop layer
     pD2D->PopLayer();
+    TelemD2DTracePopLayer();
 
     if (pRoundedGeom) pRoundedGeom->Release();
     pFactory->Release();
@@ -390,4 +415,5 @@ void MapIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state
     if (m_desc.style.map.border_width > 0.0f && m_pBorderBrush) {
         pD2D->DrawRoundedRectangle(&roundedRect, m_pBorderBrush, m_desc.style.map.border_width);
     }
+    mark("border", TelemHudProfile::NowSeconds());
 }

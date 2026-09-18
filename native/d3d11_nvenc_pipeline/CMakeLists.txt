@@ -12,6 +12,7 @@ include_directories(
 add_library(telem_nvenc_native SHARED
     src/telem_nvenc_native.cpp
     src/d3d11_nvenc_pipeline.cpp
+    src/hud_profile.cpp
     src/indicators/font_cache.cpp
     src/indicators/icon_cache.cpp
     src/indicators/text_indicator.cpp
@@ -21,6 +22,7 @@ add_library(telem_nvenc_native SHARED
     src/indicators/gauge_indicator.cpp
     src/indicators/chart_indicator.cpp
     src/indicators/map_indicator.cpp
+    src/indicators/lean_indicator.cpp
 )
 
 target_compile_definitions(telem_nvenc_native PRIVATE TELEM_NVENC_BUILD_DLL)

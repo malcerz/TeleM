@@ -20,6 +20,7 @@ from ctypes import wintypes
 import subprocess
 import threading
 import uuid
+import csv
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -73,6 +74,26 @@ def parse_color_hex(hex_str: Optional[str], default: int = 0xFFFFFFFF) -> int:
     return default
 
 
+def _append_cadence_alpha_trace(stage: str, raw_value: float,
+                                normalized_value: float) -> None:
+    """Write opt-in cadence alpha transport evidence without affecting renders."""
+    trace_dir = os.environ.get("TELEM_CADENCE_TRACE_DIR", "").strip()
+    if not trace_dir:
+        return
+    path = Path(trace_dir) / "fill_alpha_trace.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_file = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if new_file:
+            writer.writerow(("stage", "field_name", "type", "raw_value",
+                             "normalized_value", "expected_value"))
+        writer.writerow((stage, "fill_alpha", "float",
+                         f"{float(raw_value):.9g}",
+                         f"{float(normalized_value):.9g}",
+                         f"{200.0 / 255.0:.11f}"))
+
+
 def _map_render_plan(canvas_w: int, canvas_box_px: int, target_zoom: int) -> dict:
     if canvas_box_px <= 0:
         canvas_box_px = 691
@@ -110,12 +131,272 @@ def _native_layout_px(cfg: dict[str, Any], canvas_w: int, canvas_h: int) -> tupl
     return float(s(cfg.get("x", 0.0), canvas_w)), float(s(cfg.get("y", 0.0), canvas_h))
 
 
+def _native_legacy_probe_value(key: str, cfg: dict[str, Any], form: str):
+    """Return a geometry-only representative value for the Legacy probe.
+
+    Widget dimensions are value-independent in the production contract.  The
+    representative strings only let Pillow/DWrite use the same line-height
+    and text metric branch as the real compositor; telemetry values are never
+    copied into the Native state by this helper.
+    """
+    unit = str(cfg.get("unit", "") or "")
+    label = str(cfg.get("label", key) or key)
+    if form == "chart":
+        return 0.0, unit, label, "0"
+    if form == "gauge":
+        return 0.0, unit, label, "0"
+    if form == "segment_bar":
+        return 72.5, unit, label, "72.50%" if unit == "%" else "72.5"
+    if form == "bar":
+        return 0.0, unit, label, "0"
+    return 0.0, unit, label, "0"
+
+
+def _native_legacy_widget_size(key: str, cfg: dict[str, Any], form: str,
+                               canvas_w: int, canvas_h: int):
+    """Ask the existing Legacy dispatcher for the outer raster dimensions.
+
+    This is run once while descriptors are built (not per frame) and keeps the
+    Native descriptor's outer rect tied to the actual Legacy geometry contract
+    instead of duplicating a second size formula here.
+    """
+    try:
+        from src.indicators.dispatcher import render_value_indicator
+        from src.indicators.helpers import load_font
+        value, unit, label, formatted = _native_legacy_probe_value(key, cfg, form)
+        history = [0.0, 1.0, 0.0, 1.0] if form == "chart" else None
+        layout = {"global": {"text_outline": 3}, "indicators": {key: cfg}}
+        res, rx, ry, _ = render_value_indicator(
+            canvas_w, canvas_h, layout, r"C:\Windows\Fonts\arial.ttf", key,
+            value, unit, label, formatted_val=formatted,
+            history_data=history, current_position=0.5, supersample=1,
+        )
+        if res is None:
+            return None
+        return res, float(rx), float(ry)
+    except Exception:
+        # Descriptor construction must remain deterministic even on a host
+        # without Pillow/font access.  The caller falls back to its safe
+        # descriptor dimensions in that case.
+        return None
+
+
+def _native_font_metrics(text: str, size: int, stroke: int) -> tuple[int, int, int]:
+    """Pillow metric tuple (width, height, bottom) used by the size contract."""
+    try:
+        from PIL import Image, ImageDraw
+        from src.indicators.helpers import load_font
+        d = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+        f = load_font(r"C:\Windows\Fonts\arial.ttf", max(4, int(size)))
+        box = d.textbbox((0, 0), str(text), font=f, stroke_width=max(0, int(stroke)))
+        return max(0, box[2] - box[0]), max(0, box[3] - box[1]), int(box[3])
+    except Exception:
+        # Arial's fallback metrics are only used if font setup is unavailable.
+        return max(1, len(str(text)) * max(4, size // 2)), max(4, int(size)), max(4, int(size))
+
+
+def _native_bar_contract(cfg: dict[str, Any], key: str, desc: TelemIndicatorDesc,
+                         canvas_w: int, canvas_h: int, min_dim: int,
+                         layout: dict[str, Any]) -> dict[str, float]:
+    """Resolve Legacy ruler geometry in absolute canvas pixels.
+
+    The Native bar renderer consumes absolute track/title/range/value anchors;
+    this helper mirrors the Legacy local-raster contract and translates those
+    anchors once to the widget's global top-left.
+    """
+    from src.indicators.bar import _resolve_major_tick_plan, _resolve_range_decimals
+
+    scale = min_dim / 1080.0
+    ss = 1
+    raw_thickness = float(cfg.get("thickness", 1) or 1)
+    if raw_thickness < 1.0:
+        thickness = max(0.25, (0.6 * min_dim / 100.0) * raw_thickness)
+    else:
+        thickness = max(1.0, (0.6 + (raw_thickness - 1.0) * 0.2) * min_dim / 100.0)
+    outline = max(0, int(round(float(layout.get("global", {}).get("text_outline", 3)) * min_dim / 1000.0)))
+    fs = max(8, s(cfg.get("font_size", cfg.get("size", 0.02)), min_dim))
+    orientation = str(cfg.get("orientation", "horizontal")).strip().lower()
+    val_min = float(cfg.get("min_val", 0.0))
+    val_max = float(cfg.get("max_val", 100.0))
+    if val_max <= val_min:
+        val_max = val_min + 1.0
+    unit = str(cfg.get("unit", "") or "")
+    label = str(cfg.get("label", key) or key)
+    show_label = bool(cfg.get("show_label", True))
+    show_value = bool(cfg.get("show_value", True))
+    show_range = bool(cfg.get("show_range_labels", True))
+    title_with_unit = bool(cfg.get("title_with_unit", True))
+    uppercase = bool(cfg.get("uppercase_title", True))
+    raw_title = str(cfg.get("title_text") or label or "").strip()
+    title = raw_title.upper() if uppercase else raw_title
+    if show_label and title_with_unit and unit and unit != "%":
+        title = f"{title} | {unit.upper() if uppercase else unit}" if title else unit
+    title_fs = max(4, int(round(float(cfg.get("title_font_scale", 0.9 if orientation == "vertical" else 1.0)) * fs)))
+    range_fs = max(4, int(round(float(cfg.get("range_font_scale", 0.82)) * fs)))
+    value_fs = max(4, int(round(float(cfg.get("value_font_scale", 1.0)) * fs)))
+    stroke = max(0, int(round(max(1, outline))))
+    title_h = _native_font_metrics(title, title_fs, stroke)[1] if show_label and title else 0
+    range_decimals = _resolve_range_decimals(
+        cfg, int(cfg.get("decimals", 0)), val_min, val_max,
+        percent_scale=(unit == "%" or "battery" in label.lower()),
+    )
+    range_sample = f"{val_max:.{range_decimals}f} {unit}".strip()
+    range_h = _native_font_metrics(range_sample, range_fs, stroke)[1] if show_range else 0
+    value_h = _native_font_metrics("8888.8", value_fs, stroke)[1] if show_value else 0
+    _mode, major_step, major_divs, minor_per = _resolve_major_tick_plan(
+        cfg, val_min, val_max, int(cfg.get("ticks", 0) or 0),
+    )
+    if orientation == "vertical":
+        size_px = s(cfg.get("size", 20.0), canvas_w)
+        def geom(v: float, minimum: float = 1.0) -> int:
+            return max(int(round(minimum * scale)), int(round(v * scale)))
+        track_h = max(int(round(scale)), int(round(max(200.0 * scale, float(size_px)))))
+        track_w = geom(float(cfg.get("track_width", max(1.0, thickness * 0.45))))
+        major_len = geom(float(cfg.get("major_tick_length", 22.0)))
+        minor_len = geom(float(cfg.get("minor_tick_length", 12.0)))
+        marker_len = geom(float(cfg.get("marker_length", 28.0)))
+        marker_radius = geom(float(cfg.get("marker_size", 6.0)))
+        marker_style = str(cfg.get("marker_style", "dot")).strip().lower()
+        label_width = 0
+        if bool(cfg.get("show_tick_labels", False)):
+            for v in [val_min + (val_max - val_min) * i / max(1, major_divs) for i in range(major_divs + 1)]:
+                label_width = max(label_width, _native_font_metrics(f"{v:.0f}", range_fs, stroke)[0])
+        elif show_range:
+            label_width = max(
+                _native_font_metrics(f"{val_min:.{range_decimals}f} {unit}".strip(), range_fs, stroke)[0],
+                _native_font_metrics(f"{val_max:.{range_decimals}f} {unit}".strip(), range_fs, stroke)[0],
+            )
+        pad_x = geom(8.0)
+        pad_top = geom(5.0)
+        side_left = 0
+        top_label_extra = title_h + geom(5.0) if show_label and title else 0
+        track_x = side_left + pad_x + label_width + major_len + geom(10.0)
+        top = pad_top + top_label_extra
+        bottom = top + track_h
+        value_x = track_x + (marker_len + geom(12.0) if marker_style == "line" else marker_radius + geom(10.0))
+        value_width = _native_font_metrics("8888.8", value_fs, stroke)[0] if show_value else 0
+        raster_w = max(track_x + track_w + pad_x, value_x + value_width + pad_x)
+        raster_h = bottom + geom(8.0)
+        left = float(round(desc.x - raster_w / 2.0))
+        top_abs = float(round(desc.y - raster_h / 2.0))
+        return {
+            "outer_w": float(raster_w), "outer_h": float(raster_h),
+            "left": left, "top": top_abs,
+            "track_x": left + track_x, "track_y": top_abs + top,
+            "track_len": float(track_h), "track_width": float(track_w),
+            "major_len": float(major_len), "minor_len": float(minor_len),
+            "major_divs": float(major_divs), "minor_per": float(minor_per),
+            "title_x": left + side_left + pad_x, "title_y": top_abs + pad_top,
+            "range_y": top_abs + bottom, "value_x": left + value_x,
+            "value_y": top_abs + top,
+        }
+
+    size_px = s(cfg.get("size", 60.0), canvas_w)
+    width = max(int(round(80.0 * scale)), int(size_px))
+    title_fs = max(4, int(round(float(cfg.get("title_font_scale", 1.0)) * fs)))
+    title_h = _native_font_metrics(title, title_fs, stroke)[1] if show_label and title else 0
+    title_gap = int(round(5.0 * scale)) if title_h else 0
+    range_h = _native_font_metrics(range_sample, range_fs, stroke)[1] if show_range else 0
+    value_h = _native_font_metrics("8888.8", value_fs, stroke)[1] if show_value else 0
+    major_len = max(int(round(8.0 * scale)), int(round(float(cfg.get("major_tick_length", 17.0)) * scale)))
+    minor_len = max(int(round(4.0 * scale)), int(round(float(cfg.get("minor_tick_length", 10.0)) * scale)))
+    marker_radius = max(int(round(3.0 * scale)), int(round(float(cfg.get("marker_size", 7.0)) * scale)))
+    side_left = side_right = 0
+    label_position = str(cfg.get("label_position", "auto")).lower()
+    if label_position == "left":
+        side_left = _native_font_metrics(title, title_fs, stroke)[0] + int(round(6.0 * scale))
+    elif label_position == "right":
+        side_right = _native_font_metrics(title, title_fs, stroke)[0] + int(round(6.0 * scale))
+    pad_x = max(marker_radius + int(round(4.0 * scale)), int(round(8.0 * scale)))
+    pad_top = int(round(4.0 * scale))
+    top_label_extra = title_h + title_gap if label_position == "top" or label_position == "auto" else 0
+    value_gap = int(round(4.0 * scale)) if value_h else 0
+    track_y = pad_top + top_label_extra + value_h + value_gap + major_len + marker_radius
+    bottom_gap = int(round(6.0 * scale))
+    height = int(track_y + marker_radius + bottom_gap + range_h + int(round(5.0 * scale)))
+    raster_w = width + pad_x * 2 + side_left + side_right
+    left = float(round(desc.x - raster_w / 2.0))
+    top_abs = float(round(desc.y - height / 2.0))
+    return {
+        "outer_w": float(raster_w), "outer_h": float(height),
+        "left": left, "top": top_abs,
+        "track_x": left + side_left + pad_x, "track_y": top_abs + track_y,
+        "track_len": float(width), "track_width": float(max(1.0, round(max(1.0, thickness) * 0.35 * scale))),
+        "major_len": float(major_len), "minor_len": float(minor_len),
+        "major_divs": float(major_divs), "minor_per": float(minor_per),
+        "title_x": left + side_left + pad_x + width / 2.0, "title_y": top_abs + pad_top,
+        "range_y": top_abs + track_y + marker_radius + bottom_gap,
+        "value_y": top_abs + pad_top + title_h + title_gap,
+    }
+
+
+def _native_chart_contract(cfg: dict[str, Any], desc: TelemIndicatorDesc,
+                           canvas_w: int, canvas_h: int, min_dim: int,
+                           layout: dict[str, Any]) -> dict[str, float]:
+    """Resolve Legacy chart outer/plot/header/value geometry."""
+    from src.indicators.chart_utils import get_history_chart_background
+    size_px = s(cfg.get("size", 30.0), canvas_w)
+    chart_w = size_px
+    chart_h = max(40, int(chart_w * 0.4))
+    fs = max(8, s(cfg.get("font_size", cfg.get("size", 0.02)), min_dim))
+    outline = max(0, int(round(float(layout.get("global", {}).get("text_outline", 3)) * min_dim / 1000.0)))
+    center_x = s(cfg.get("x", 50.0), canvas_w)
+    center_y = s(cfg.get("y", 50.0), canvas_h)
+    margin_top = (fs + 8 + outline) if cfg.get("label", "") else 0
+    max_chart_h = max(20, 2 * min(center_y, canvas_h - center_y) - margin_top - 4)
+    chart_h = min(chart_h, max_chart_h)
+    label_fs = cfg.get("label_font_size")
+    label_fs_px = max(7, s(float(label_fs), min_dim)) if label_fs else 0
+    if label_fs_px:
+        label_fs_px = min(label_fs_px, max(8, chart_h // 2))
+    unit = str(cfg.get("unit", "") or "")
+    desc_key = bytes(desc.key).split(b"\0", 1)[0].decode("utf-8", "replace").lower()
+    line = (255, 50, 50) if "heart" in desc_key else (0, 170, 255)
+    try:
+        from src.gui.layout_manager import resolve_font_path
+        chart_font_path = str(resolve_font_path(layout.get("global", {}).get("font", "Arial")))
+    except Exception:
+        chart_font_path = r"C:\Windows\Fonts\arial.ttf"
+    try:
+        bg, points, py1, py2, _thick, _ = get_history_chart_background(
+            [0.0, 1.0, 0.0, 1.0], chart_w, chart_h,
+            line_color=line, line_thickness=max(1, int(cfg.get("line_width", cfg.get("thickness", 2)))),
+            fill_alpha=int(cfg.get("fill_alpha", 40)), fill_color=line,
+            show_axes=True, grid_color=(68, 68, 68, 60), time_labels=None,
+            supersample=1,
+            custom_min_val=float(desc.style.chart.min_val), custom_max_val=float(desc.style.chart.max_val),
+            label_count=int(cfg.get("label_count", 2)), label_units=bool(cfg.get("label_units", False)),
+            unit=unit, show_average=False, label_font_size=label_fs_px,
+            font_path=chart_font_path,
+            show_x_axis_values=bool(cfg.get("show_x_axis_values", True)),
+            show_y_axis_values=bool(cfg.get("show_y_axis_values", True)),
+            axis_font_size=label_fs_px or fs, axis_outline=outline, decimal_places=0,
+        )
+    except Exception:
+        py1, py2 = 4.0, float(chart_h - 4)
+    final_w, final_h = chart_w + 8, chart_h + margin_top + 4
+    left = float(round(center_x - final_w / 2.0)); top = float(round(center_y - final_h / 2.0))
+    px1 = float(points[0][0]) if points else 4.0
+    px2 = float(points[-1][0]) if points else float(chart_w - 4)
+    return {
+        "outer_w": float(final_w), "outer_h": float(final_h), "left": left, "top": top,
+        "plot_x1": left + 4.0 + px1,
+        "plot_y1": top + margin_top + float(py1),
+        "plot_x2": left + 4.0 + px2,
+        "plot_y2": top + margin_top + float(py2),
+        "header_x": left + 4.0, "header_y": top + float(outline),
+        "value_x": left + 4.0 + float(chart_w), "value_y": top + float(outline),
+    }
+
+
 def _apply_native_layout_geometry(
     indicators: List[TelemIndicatorDesc],
     ind_cfg: dict[str, Any],
     canvas_w: int,
     canvas_h: int,
     min_dim: int,
+    auto_ranges: Optional[dict[str, Any]] = None,
+    global_cfg: Optional[dict[str, Any]] = None,
 ) -> None:
     """Bind Native renderer anchors to the layout instead of old absolute pixels.
 
@@ -131,6 +412,13 @@ def _apply_native_layout_geometry(
         if not isinstance(cfg, dict):
             continue
 
+        # Geometry probes must see the same resolved auto-range labels as the
+        # Legacy compositor.  Keep the layout object immutable and use a
+        # local effective copy only for size/anchor calculations.
+        geom_cfg = dict(cfg)
+        if cfg.get("auto_scale") and auto_ranges and key in auto_ranges:
+            geom_cfg["min_val"], geom_cfg["max_val"] = map(float, auto_ranges[key])
+
         layout_x, layout_y = _native_layout_px(cfg, canvas_w, canvas_h)
         try:
             desc.rotation = float(int(float(cfg.get("rotation", 0) or 0)) % 360)
@@ -143,74 +431,143 @@ def _apply_native_layout_geometry(
         elif int(desc.type) == 1:
             desc.style.time_display.canvas_x = layout_x
             desc.style.time_display.canvas_y = layout_y
-        elif int(desc.type) == 2:
-            # Legacy horizontal rulers have a small local raster margin.  The
-            # offsets below are local widget geometry; the layout-dependent
-            # anchor is always ``layout_x/layout_y``.
-            local_track_x = max(20.0, round(float(desc.width) * 0.0087))
-            local_track_y = {
-                "fit_distance_text": 167.0,
-                "fit_solar_text": 172.0,
-                "fit_curVpower_text": 111.0,
-            }.get(key, 111.0)
-            desc.style.bar.track_canvas_x = layout_x + local_track_x
-            desc.style.bar.track_canvas_y = layout_y + local_track_y
-            desc.style.bar.track_len = float(desc.width)
-            # Derive title/range/value placement from the track, not from a
-            # stale full-canvas coordinate.  The C++ renderer's fallback keeps
-            # these elements in the same local relationship to the track.
-            desc.style.bar.title_canvas_x = 0.0
-            desc.style.bar.title_canvas_y = 0.0
-            desc.style.bar.range_canvas_y = 0.0
-            desc.style.bar.value_canvas_y = 0.0
-        elif int(desc.type) == 3:
-            # Vertical altitude ruler: track is at the right side of the
-            # Legacy raster and spans its configured height.
-            desc.style.bar.track_canvas_x = layout_x + float(desc.width) + 35.0
-            desc.style.bar.track_canvas_y = layout_y + 8.0
-            desc.style.bar.track_len = float(desc.height)
-            desc.style.bar.value_canvas_y = 0.0
-            desc.style.bar.range_canvas_y = 0.0
+        elif int(desc.type) in (2, 3):
+            # Legacy rulers are local rasters centred on the layout x/y.  The
+            # Native bar renderer instead consumes absolute track/text anchors.
+            # Resolve both from the same Legacy geometry contract once here.
+            desc.style.bar.title = str(cfg.get("title_text", cfg.get("label", key)) or "")
+            desc.style.bar.unit = str(cfg.get("unit", "") or "")
+            desc.style.bar.show_label = 1 if cfg.get("show_label", True) else 0
+            desc.style.bar.show_range = 1 if cfg.get("show_range_labels", True) else 0
+            desc.style.bar.show_value = 1 if cfg.get("show_value", True) else 0
+            desc.style.bar.show_mid = 1 if cfg.get("show_mid_label", True) else 0
+            desc.style.bar.show_tick_labels = 1 if cfg.get("show_tick_labels", False) else 0
+            desc.style.bar.range_units = 1 if cfg.get("range_units", True) else 0
+            # ``build_canonical_indicators`` has already resolved telemetry
+            # auto-ranges for the canonical workload.  Do not replace those
+            # data-contract limits with the static layout defaults here: the
+            # Native widget must use the same range as Legacy while its
+            # geometry is being rebound.
+            if not cfg.get("auto_scale", False):
+                desc.style.bar.min_val = float(cfg.get("min_val", desc.style.bar.min_val))
+                desc.style.bar.max_val = float(cfg.get("max_val", desc.style.bar.max_val))
+            desc.style.bar.title_font_size = float(max(4, s(float(cfg.get("title_font_scale", 1.0)) * float(cfg.get("font_size", 2.5)), min_dim)))
+            desc.style.bar.range_font_size = float(max(4, s(float(cfg.get("range_font_scale", 0.82)) * float(cfg.get("font_size", 2.5)), min_dim)))
+            desc.style.bar.value_font_size = float(max(4, s(float(cfg.get("value_font_scale", 1.0)) * float(cfg.get("font_size", 2.5)), min_dim)))
+            geom = _native_bar_contract(geom_cfg, key, desc, canvas_w, canvas_h, min_dim, {"global": {"text_outline": 3}})
+            desc.width = float(geom["outer_w"])
+            desc.height = float(geom["outer_h"])
+            desc.x = layout_x
+            desc.y = layout_y
+            desc.style.bar.track_canvas_x = geom["track_x"]
+            desc.style.bar.track_canvas_y = geom["track_y"]
+            desc.style.bar.track_len = geom["track_len"]
+            desc.style.bar.track_width = geom["track_width"]
+            desc.style.bar.major_len = geom["major_len"]
+            desc.style.bar.minor_len = geom["minor_len"]
+            desc.style.bar.major_divisions = int(round(geom["major_divs"]))
+            desc.style.bar.minor_per_major = int(round(geom["minor_per"]))
+            desc.style.bar.title_canvas_x = geom.get("title_x", 0.0)
+            desc.style.bar.title_canvas_y = geom.get("title_y", 0.0)
+            desc.style.bar.range_canvas_y = geom.get("range_y", 0.0)
+            if int(desc.type) == 3:
+                # The historical ABI names this field value_canvas_y; for a
+                # vertical ruler it is the absolute X origin of the value
+                # text (the C++ renderer consumes it as such).
+                desc.style.bar.value_canvas_y = geom.get("value_x", 0.0)
+                desc.style.bar.value_offset_y = geom.get("value_y", 0.0) - geom["track_y"]
+            else:
+                desc.style.bar.value_canvas_y = geom.get("value_y", 0.0)
         elif int(desc.type) == 4:
-            desc.style.segment_bar.seg_canvas_x = layout_x + 1.0
-            desc.style.segment_bar.seg_canvas_y = layout_y + 15.0
-            desc.style.segment_bar.seg_width = float(desc.width) + 2.0
-            desc.style.segment_bar.value_canvas_x = 0.0
-            desc.style.segment_bar.value_canvas_y = 0.0
-            desc.style.segment_bar.label_canvas_x = 0.0
-            desc.style.segment_bar.label_canvas_y = 0.0
+            # Segment bars retain the Legacy raster's centre anchor; only the
+            # segment body and text origins need absolute translation.
+            desc.style.segment_bar.label = str(cfg.get("label", key) or "")
+            desc.style.segment_bar.unit = str(cfg.get("unit", "") or "")
+            desc.style.segment_bar.segments = max(2, int(cfg.get("segments", cfg.get("segment_count", desc.style.segment_bar.segments or 30)) or 30))
+            desc.style.segment_bar.gap = float(cfg.get("segment_gap", desc.style.segment_bar.gap or 3.0) or 3.0)
+            desc.style.segment_bar.radius = float(cfg.get("segment_radius", desc.style.segment_bar.radius or 4.0) or 4.0)
+            desc.style.segment_bar.min_val = float(cfg.get("min_val", desc.style.segment_bar.min_val))
+            desc.style.segment_bar.max_val = float(cfg.get("max_val", desc.style.segment_bar.max_val))
+            desc.style.segment_bar.grow_height = 1 if cfg.get("grow_height", True) else 0
+            desc.style.segment_bar.grow_start = float(cfg.get("grow_start", 0.55) or 0.55)
+            probe = _native_legacy_widget_size(key, geom_cfg, "segment_bar", canvas_w, canvas_h)
+            if probe:
+                res, _rx, _ry = probe
+                desc.width = float(res.width)
+                desc.height = float(res.height)
+            desc.x = layout_x
+            desc.y = layout_y
+            seg_w = float(s(cfg.get("size", 15.0), canvas_w))
+            pad = 4.0
+            gap = float(cfg.get("segment_gap", 3.0) or 3.0)
+            seg_n = max(2, int(cfg.get("segments", cfg.get("segment_count", 30)) or 30))
+            seg_h = float(cfg.get("segment_height", 0.0) or 0.0)
+            if seg_h <= 0.0:
+                seg_h = max(16.0, seg_w * float(cfg.get("segment_height_ratio", 0.105)))
+            seg_fs = max(10, int(round(float(cfg.get("value_font_size", cfg.get("value_font_scale", 1.70))) * s(cfg.get("font_size", 2.5), min_dim))))
+            label_fs = max(7, int(round(float(cfg.get("label_font_size", cfg.get("label_font_scale", 0.72))) * s(cfg.get("font_size", 2.5), min_dim))))
+            stroke = max(0, int(round(3 * min_dim / 1000.0)))
+            value_h = _native_font_metrics("8888.8", seg_fs, stroke)[1]
+            label_h = _native_font_metrics(str(cfg.get("label", key) or key), label_fs, stroke)[1] if cfg.get("show_label", True) else 0
+            top_pad = 3.0
+            value_gap = float(max(0, int(cfg.get("value_gap", 3)) or 0)) if value_h else 0.0
+            seg_top_local = top_pad + value_h + value_gap
+            seg_bottom_local = seg_top_local + seg_h
+            bottom_y_local = seg_bottom_local + 5.0 + (float(cfg.get("label_gap", 0)) if cfg.get("show_label", True) else 0.0)
+            # C++ treats seg_canvas_y as the segment body's top edge.
+            desc.style.segment_bar.seg_canvas_x = layout_x - seg_w / 2.0 + pad
+            desc.style.segment_bar.seg_canvas_y = layout_y - float(desc.height) / 2.0 + seg_top_local
+            desc.style.segment_bar.seg_width = seg_w
+            desc.style.segment_bar.seg_height = seg_h
+            desc.style.segment_bar.value_canvas_x = layout_x - seg_w / 2.0 + pad
+            desc.style.segment_bar.value_canvas_y = layout_y - float(desc.height) / 2.0 + top_pad
+            desc.style.segment_bar.label_canvas_x = layout_x
+            desc.style.segment_bar.label_canvas_y = layout_y - float(desc.height) / 2.0 + bottom_y_local
         elif int(desc.type) == 5:
             # Legacy gauge returns a square raster whose side is 2.4 * the
-            # configured radius.  GaugeIndicator expects its descriptor x/y
-            # to be the center, not the Legacy raster's top-left corner.
+            # configured radius, centred exactly at layout x/y.
+            desc.style.gauge.unit = str(cfg.get("unit", "km/h") or "km/h")
+            desc.style.gauge.min_val = float(cfg.get("min_val", desc.style.gauge.min_val))
+            desc.style.gauge.max_val = float(cfg.get("max_val", desc.style.gauge.max_val))
+            desc.style.gauge.start_deg = float(cfg.get("start_angle", 180.0) or 180.0)
+            desc.style.gauge.sweep_deg = float(cfg.get("sweep_angle", 180.0) or 180.0)
+            desc.style.gauge.needle_length = float(cfg.get("needle_length", 0.9) or 0.9)
+            desc.style.gauge.needle_width = float(cfg.get("needle_width", 8.0) or 8.0)
+            desc.style.gauge.value_font_size = float(max(8, s(float(cfg.get("font_size", 2.5)), min_dim)))
+            desc.style.gauge.gauge_font_size = float(max(8, s(float(cfg.get("font_size", 2.5)), min_dim)))
+            desc.style.gauge.unit_font_size = float(max(8, s(float(cfg.get("font_size", 2.5)) * 0.78, min_dim)))
             radius_px = float(s(cfg.get("size", 15.0), min_dim))
             side_px = float(int(radius_px * 2.4))
             desc.width = side_px
             desc.height = side_px
-            desc.x = layout_x + side_px * 0.5
-            desc.y = layout_y + side_px * 0.5
+            desc.x = layout_x
+            desc.y = layout_y
         elif int(desc.type) == 6:
-            # Charts use the configured ``size`` in Legacy (not width/height
-            # defaults).  ChartIndicator positions its descriptor by center.
-            chart_w = float(s(cfg.get("size", 30.0), canvas_w)) + 8.0
-            chart_h = max(40.0, chart_w * 0.4)
-            chart_fs = float(max(14, s(cfg.get("font_size", 0.025), min_dim)))
-            outline = float(max(0, int(round(3 * min_dim / 1000))))
-            final_h = chart_h + (chart_fs + 8.0 + outline) + 4.0
-            desc.width = chart_w
-            desc.height = final_h
-            desc.x = layout_x + chart_w * 0.5
-            desc.y = layout_y + final_h * 0.5
-            # Zero means ChartIndicator derives all plot/header/value anchors
-            # from this descriptor's layout-relative geometry.
-            desc.style.chart.plot_canvas_x1 = 0.0
-            desc.style.chart.plot_canvas_y1 = 0.0
-            desc.style.chart.plot_canvas_x2 = 0.0
-            desc.style.chart.plot_canvas_y2 = 0.0
-            desc.style.chart.header_canvas_x = 0.0
-            desc.style.chart.header_canvas_y = 0.0
-            desc.style.chart.value_canvas_x = 0.0
-            desc.style.chart.value_canvas_y = 0.0
+            # Match the Preview/Legacy chart metric source.  The canonical
+            # layout uses Digital-7 Mono; keeping Arial here changes axis
+            # margins and therefore the real plot rectangle.
+            desc.style.chart.font_family = str((global_cfg or {}).get("font", "Arial") or "Arial")
+            desc.style.chart.label = str(cfg.get("label", key) or "")
+            desc.style.chart.unit = str(cfg.get("unit", "") or "")
+            desc.style.chart.header_font_size = float(max(8, s(float(cfg.get("font_size", 2.5)), min_dim)))
+            desc.style.chart.axis_font_size = float(max(8, s(float(cfg.get("label_font_size", cfg.get("font_size", 2.5))), min_dim)))
+            desc.style.chart.value_font_size = float(max(8, s(float(cfg.get("font_size", 2.5)), min_dim)))
+            geom = _native_chart_contract(geom_cfg, desc, canvas_w, canvas_h, min_dim,
+                                          {"global": dict(global_cfg or {}, text_outline=3)})
+            desc.width = float(geom["outer_w"])
+            desc.height = float(geom["outer_h"])
+            desc.x = layout_x
+            desc.y = layout_y
+            # ChartIndicator's explicit canvas fields are absolute.  Keep the
+            # same plot/header/value origins as the Legacy chart raster.
+            desc.style.chart.plot_canvas_x1 = geom["plot_x1"]
+            desc.style.chart.plot_canvas_y1 = geom["plot_y1"]
+            desc.style.chart.plot_canvas_x2 = geom["plot_x2"]
+            desc.style.chart.plot_canvas_y2 = geom["plot_y2"]
+            desc.style.chart.header_canvas_x = geom["header_x"]
+            desc.style.chart.header_canvas_y = geom["header_y"]
+            desc.style.chart.value_canvas_x = geom["value_x"]
+            desc.style.chart.value_canvas_y = geom["value_y"]
 
 
 def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None) -> List[TelemIndicatorDesc]:
@@ -634,7 +991,19 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.chart.max_val = 86.0 if (auto_ranges and "fit_cadence_text" in auto_ranges) else 120.0
         desc.style.chart.line_color = parse_color_hex(cfg.get("chart_color"), 0xFF00AAFF)
         desc.style.chart.fill_color = parse_color_hex(cfg.get("fill_color"), 0xFF00AAFF)
-        desc.style.chart.fill_alpha = float(cfg.get("fill_alpha", 80)) / 255.0
+        raw_fill_alpha = float(cfg.get("fill_alpha", 80))
+        resolved_preview_alpha = raw_fill_alpha if raw_fill_alpha > 1.0 else raw_fill_alpha * 255.0
+        native_fill_alpha = raw_fill_alpha / 255.0 if raw_fill_alpha > 1.0 else raw_fill_alpha
+        desc.style.chart.fill_alpha = native_fill_alpha
+        if bytes(desc.key).split(b"\0", 1)[0] == b"fit_cadence_text":
+            _append_cadence_alpha_trace("layout raw fill alpha",
+                                        raw_fill_alpha, native_fill_alpha)
+            _append_cadence_alpha_trace("resolved Preview fill alpha",
+                                        resolved_preview_alpha,
+                                        resolved_preview_alpha / 255.0)
+            _append_cadence_alpha_trace("Python Native descriptor fill alpha",
+                                        desc.style.chart.fill_alpha,
+                                        desc.style.chart.fill_alpha)
         desc.style.chart.grid_color = parse_color_hex(cfg.get("grid_color"), 0x66444444)
         desc.style.chart.text_color = parse_color_hex(cfg.get("text_color"), 0xFFF4F4F4)
         desc.style.chart.show_grid = 1
@@ -693,7 +1062,68 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.chart.value_canvas_y = 1935.0
         indicators.append(desc)
 
-    _apply_native_layout_geometry(indicators, ind_cfg, canvas_w, canvas_h, min_dim)
+    # 14. lean_indicator (physical Y/Roll, not raw Gyroscope Z)
+    # The Native pipeline has a dedicated Lean descriptor so the same
+    # canonical state contract drives value/sign/clamp and the D2D widget
+    # keeps the layout anchor/pivot stable while the bike graphic rotates.
+    for lean_key, cfg in ind_cfg.items():
+        if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+            continue
+        if lean_key != "lean_indicator" and str(cfg.get("form", "")).lower() != "lean":
+            continue
+        desc = TelemIndicatorDesc()
+        desc.type = 8  # TELEM_IND_LEAN
+        desc.key = str(lean_key).encode("ascii", "replace")[:63]
+        desc.x = float(s(cfg.get("x", 50.0), canvas_w))
+        desc.y = float(s(cfg.get("y", 50.0), canvas_h))
+        size_px = max(32, int(s(cfg.get("size", 14.0), canvas_w)))
+        pad = 8
+        g = size_px
+        fs = max(8, int(s(cfg.get("font_size", 2.5), min_dim)))
+        title_fs = max(8, int(round(float(cfg.get("title_font_scale", 1.0)) * fs)))
+        value_fs = max(8, int(round(float(cfg.get("value_font_scale", 0.9)) * fs)))
+        show_label = bool(cfg.get("show_label", True))
+        show_value = bool(cfg.get("show_value", True))
+        title = str(cfg.get("title_text", cfg.get("label", ""))).strip()
+        title_h = int(round(title_fs * 1.25)) if show_label and title else 0
+        value_h = int(round(value_fs * 1.25)) if show_value else 0
+        title_gap = 5 if title_h else 0
+        value_gap = 4 if value_h else 0
+        desc.width = float(max(g + 2 * pad, 2 * pad + 40))
+        desc.height = float(pad + title_h + title_gap + g + value_gap + value_h + pad)
+        desc.alpha = 1.0
+        desc.rotation = float(cfg.get("rotation", 0.0) or 0.0)
+        desc.z_order = int(cfg.get("z_order", 14))
+        desc.style.lean.font_family = "Arial"
+        desc.style.lean.title_font_size = float(title_fs)
+        desc.style.lean.value_font_size = float(value_fs)
+        desc.style.lean.outline_width = float(max(0, int(round(6 * min_dim / 2160))))
+        desc.style.lean.title = title
+        desc.style.lean.unit = str(cfg.get("unit", "°"))
+        desc.style.lean.show_label = 1 if show_label else 0
+        desc.style.lean.show_value = 1 if show_value else 0
+        desc.style.lean.show_reference = 1 if cfg.get("show_reference", True) else 0
+        desc.style.lean.show_ticks = 1 if cfg.get("show_ticks", True) else 0
+        desc.style.lean.decimals = max(0, int(cfg.get("decimals", 1) or 0))
+        desc.style.lean.uppercase_title = 1 if cfg.get("uppercase_title", True) else 0
+        desc.style.lean.size_px = float(size_px)
+        desc.style.lean.max_angle = abs(float(cfg.get("max_angle", 30.0)))
+        desc.style.lean.calibration = float(cfg.get("calibration", cfg.get("zero_offset", 0.0)))
+        desc.style.lean.sensitivity = float(cfg.get("sensitivity", 1.0))
+        desc.style.lean.invert_axis = 1 if cfg.get("invert_axis", False) else 0
+        desc.style.lean.telemetry_field = 14
+        desc.style.lean.marker_color = parse_color_hex(cfg.get("marker_color"), 0xFFFFFFFF)
+        desc.style.lean.track_color = parse_color_hex(cfg.get("track_color"), 0x8CFFFFFF)
+        desc.style.lean.tick_color = parse_color_hex(cfg.get("tick_color"), 0x59FFFFFF)
+        desc.style.lean.text_color = parse_color_hex(cfg.get("text_color"), 0xFFFFFFFF)
+        desc.style.lean.pivot_x = max(0.0, min(1.0, float(cfg.get("pivot_x", 0.5))))
+        desc.style.lean.pivot_y = max(0.0, min(1.0, float(cfg.get("pivot_y", 1.0))))
+        desc.style.lean.canvas_x = desc.x
+        desc.style.lean.canvas_y = desc.y
+        indicators.append(desc)
+
+    _apply_native_layout_geometry(indicators, ind_cfg, canvas_w, canvas_h, min_dim,
+                                  auto_ranges, layout.get("global", {}))
     return indicators
 
 
@@ -946,6 +1376,7 @@ def export_nvidia_native_d3d11(
     preview_fps: float = 8.0,
     on_preview_frame: Optional[Callable[[bytes, int, int, int, int, float], None]] = None,
     gui_runtime_snapshot: Optional[dict[str, Any]] = None,
+    tz_offset_hours: float = 2.0,
 ) -> bool:
     """Execute complete single-pass NVIDIA Native D3D11/NVENC export."""
     override = os.environ.get("TELEM_NVENC_DLL_OVERRIDE")
@@ -1072,6 +1503,7 @@ def export_nvidia_native_d3d11(
 
     # 3. Setup Telemetry States & Indicators
     from src.render_progress import HudPrepProgressTracker
+    ind_cfg = layout.get("indicators", {})
 
     prep_tracker = HudPrepProgressTracker(
         phases=[
@@ -1112,13 +1544,67 @@ def export_nvidia_native_d3d11(
         fps=fps,
         prep_tracker=prep_tracker,
         chunk_size=500,
+        layout=layout,
+        tz_offset_hours=tz_offset_hours,
+        canonical_contract=True,
     )
     prep_tracker.complete_phase("telemetry_states")
 
+    # Chart samples are keyed by the exact indicator IDs sent through
+    # SetIndicators.  For activity/video charts the Legacy/Preview renderer
+    # draws the complete FIT history, not merely the exported video frames.
+    # Passing only ``states`` made the Native cadence trace collapse to the
+    # current 10-second window (often a flat line) even though geometry and
+    # fill were correct.  Keep the bounded state fallback for callers without
+    # a usable history and for the exact-good330 payload probe.
     chart_samples_dict = {
-        "cadence": [st.cadence_rpm for st in states[::30]],
-        "heart_rate": [st.heart_rate_bpm for st in states[::30]],
+        "fit_cadence_text": [st.cadence_rpm for st in states],
+        "fit_heart_rate_text": [st.heart_rate_bpm for st in states],
     }
+    if os.environ.get("TELEM_PAYLOAD_BISECT_MODE") not in ("exact_good330", "clean_child_exact_good330"):
+        for chart_key, field_name in (
+            ("fit_cadence_text", "cadence"),
+            ("fit_heart_rate_text", "heart_rate"),
+        ):
+            cfg = ind_cfg.get(chart_key, {})
+            if not isinstance(cfg, dict) or str(cfg.get("chart_time_scope", "activity")) != "window":
+                try:
+                    history = telemetry.resolve_samples(field_name, str(cfg.get("source", "fit")))
+                except Exception:
+                    history = []
+                values = []
+                for _ts, value in history or []:
+                    try:
+                        values.append(float(value) if value is not None else 0.0)
+                    except (TypeError, ValueError):
+                        values.append(0.0)
+                if len(values) >= 2:
+                    chart_samples_dict[chart_key] = values
+
+    # Carry the same history duration into the Native axis-label contract.
+    # This field was appended to the packed chart style, so old callers keep
+    # the one-minute C++ fallback.
+    history_duration_s = {}
+    if os.environ.get("TELEM_PAYLOAD_BISECT_MODE") not in ("exact_good330", "clean_child_exact_good330"):
+        for chart_key, field_name in (
+            ("fit_cadence_text", "cadence"),
+            ("fit_heart_rate_text", "heart_rate"),
+        ):
+            cfg = ind_cfg.get(chart_key, {})
+            try:
+                history = telemetry.resolve_samples(field_name, str(cfg.get("source", "fit"))) if isinstance(cfg, dict) else []
+                if len(history) >= 2:
+                    history_duration_s[chart_key] = max(1.0, (history[-1][0] - history[0][0]).total_seconds())
+            except Exception:
+                pass
+    for desc in indicators_list:
+        desc_key = bytes(desc.key).split(b"\0", 1)[0].decode("utf-8", "replace")
+        if desc_key in history_duration_s and int(desc.type) == 6:
+            desc.style.chart.time_duration_s = float(history_duration_s[desc_key])
+    # FIT loading stores the canonical route in ``fit_gps_track``; the old
+    # adapter referenced an undefined local ``track`` and failed before the
+    # Native DLL was even invoked.
+    track = getattr(telemetry, "fit_gps_track", None) or getattr(telemetry, "gps_track", None)
     route_points = [(p[0], p[1], p[2]) for p in track] if track else []
 
     if os.environ.get("TELEM_PAYLOAD_BISECT_MODE") in ("exact_good330", "clean_child_exact_good330"):
@@ -1284,6 +1770,34 @@ def export_nvidia_native_d3d11(
         encoder_config=enc_cfg,
     )
 
+    # Production GUI Native D3D11 uses the already validated Device-B
+    # topology.  Keep this opt-in at the GUI dispatch boundary: direct
+    # harnesses retain their explicit environment, while Legacy/AMD/Intel are
+    # never affected.  The native DLL samples these flags during Configure().
+    gui_device_b_requested = bool(
+        gui_runtime_snapshot
+        and gui_runtime_snapshot.get("origin") == "TeleM GUI Render button"
+    )
+    gui_device_b_previous_env: dict[str, Optional[str]] = {}
+    if gui_device_b_requested:
+        for _env_name, _env_value in {
+            "TELEM_NATIVE_HUD_SEPARATE_DEVICE": "1",
+            "TELEM_NATIVE_HUD_CROSS_DEVICE": "1",
+            "TELEM_NATIVE_HUD_SEPARATE_MODE": "NVENC",
+        }.items():
+            gui_device_b_previous_env[_env_name] = os.environ.get(_env_name)
+            os.environ[_env_name] = _env_value
+
+    def _restore_gui_device_b_env() -> None:
+        if not gui_device_b_previous_env:
+            return
+        for _env_name, _old_value in gui_device_b_previous_env.items():
+            if _old_value is None:
+                os.environ.pop(_env_name, None)
+            else:
+                os.environ[_env_name] = _old_value
+        gui_device_b_previous_env.clear()
+
     # Production-GUI provenance snapshot.  This is intentionally opt-in at
     # the GUI dispatch boundary, so direct Python/harness calls cannot produce
     # evidence that looks like a real Render-button export.
@@ -1379,6 +1893,12 @@ def export_nvidia_native_d3d11(
                 },
             },
             "gui_options": gui_runtime_snapshot.get("gui_options", {}),
+            "device_b_production_mode": gui_device_b_requested,
+            "device_b_contract": {
+                "separate_device": gui_device_b_requested,
+                "cross_device": gui_device_b_requested,
+                "separate_mode": "NVENC" if gui_device_b_requested else None,
+            },
         }
         snapshot_path = Path(__file__).resolve().parents[2] / "scratch" / "gui_nvidia_runtime_snapshot.json"
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1390,15 +1910,56 @@ def export_nvidia_native_d3d11(
         temp_path.replace(snapshot_path)
         print(f"[GUI NVIDIA RUNTIME SNAPSHOT] {snapshot_path}", flush=True)
 
+        compare_path = (
+            Path(__file__).resolve().parents[2]
+            / "scratch"
+            / "nvidia_native_production_parity"
+            / "gui_config_compare.json"
+        )
+        compare_path.parent.mkdir(parents=True, exist_ok=True)
+        compare_payload = {
+            "source": "TeleM GUI Render button",
+            "backend": "NVIDIA Native D3D11",
+            "native": snapshot,
+            "legacy_comparison_contract": {
+                "codec": codec,
+                "bitrate_input": str(video_bitrate),
+                "resolution": gui_runtime_snapshot.get("gui_options", {}).get("resolution"),
+                "hud_resolution_scale": gui_runtime_snapshot.get("gui_options", {}).get("hud_resolution_scale"),
+                "hud_frequency": gui_runtime_snapshot.get("gui_options", {}).get("hud_frequency"),
+                "layout_absolute_path": snapshot.get("layout_absolute_path"),
+                "fit_path": snapshot.get("fit_path"),
+                "time_range": gui_runtime_snapshot.get("gui_options", {}).get("time_range"),
+                "start_frame": int(start_frame),
+                "max_frames": max_frames,
+                "output_absolute_path": str(output_final_path),
+            },
+            "parity_fields": [
+                "codec", "bitrate", "preset", "resolution", "hud_resolution",
+                "hud_frequency", "layout", "telemetry", "time_range", "output",
+            ],
+        }
+        compare_path.write_text(
+            json.dumps(compare_payload, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        print(f"[GUI NVIDIA CONFIG COMPARE] {compare_path}", flush=True)
+
     if not dll.telem_nvenc_configure(handle, ctypes.byref(cfg)):
+        _restore_gui_device_b_env()
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
         if audio_feeder:
             audio_feeder.stop()
         raise RuntimeError(f"Configure failed for profile {profile_name}")
+    # Configure() has copied the feature flags into the native pipeline.  Drop
+    # the process-level overrides immediately so even later setup exceptions
+    # cannot leak GUI-only Device-B state into another backend/export.
+    _restore_gui_device_b_env()
 
     c_clips = (TelemVideoClipDesc * len(clips_desc))(*clips_desc)
     if not dll.telem_nvenc_set_video_sequence(handle, c_clips, len(clips_desc)):
+        _restore_gui_device_b_env()
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
         if audio_feeder:
@@ -1429,12 +1990,42 @@ def export_nvidia_native_d3d11(
             c_samples = (ctypes.c_float * len(samples))(*[float(v) for v in samples])
             dll.telem_nvenc_set_chart_samples(handle, name.encode("ascii"), c_samples, len(samples))
 
+    # Test-only capture of the exact configured D2D HUD texture.  This is
+    # deliberately opt-in so the production export path remains GPU-only.
+    hud_snapshot_dir = os.environ.get("TELEM_NATIVE_HUD_SNAPSHOT_DIR")
+    if hud_snapshot_dir:
+        snapshot_dir = Path(hud_snapshot_dir)
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_frames = (0, 50, 150, 250, 299)
+        requested_frames = os.environ.get("TELEM_NATIVE_HUD_SNAPSHOT_FRAMES", "").strip()
+        if requested_frames:
+            parsed_frames = []
+            for token in requested_frames.split(","):
+                try:
+                    parsed_frames.append(int(token.strip()))
+                except ValueError:
+                    continue
+            if parsed_frames:
+                snapshot_frames = tuple(dict.fromkeys(parsed_frames))
+        for sample_frame in snapshot_frames:
+            if sample_frame >= export_frames:
+                continue
+            snapshot_path = snapshot_dir / f"native_hud_{sample_frame:03d}.png"
+            ok = dll.telem_nvenc_render_hud_frame_to_file(
+                handle, sample_frame, str(snapshot_path.resolve())
+            )
+            print(
+                f"[NATIVE HUD SNAPSHOT] frame={sample_frame} ok={bool(ok)} path={snapshot_path}",
+                flush=True,
+            )
+
     # 7. Start Export
     if enable_preview:
         dll.telem_nvenc_set_preview_tap(handle, 1, int(preview_width), int(preview_height), ctypes.c_double(preview_fps))
 
     t_start = time.perf_counter()
     if not dll.telem_nvenc_start_export(handle, c_output_arg, start_frame, export_frames, 1):
+        _restore_gui_device_b_env()
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
         if audio_feeder:
@@ -1556,6 +2147,45 @@ def export_nvidia_native_d3d11(
         else:
             dll.telem_nvenc_wait_completion(handle, 1000)
 
+        # Preserve the end-to-end native timing returned by the production
+        # DLL for GUI parity/performance evidence.  This is a diagnostic file
+        # only and does not alter the encoder or transport path.
+        if gui_device_b_requested:
+            try:
+                pipeline_stats = TelemPipelineStats()
+                dll.telem_nvenc_get_stats(handle, ctypes.byref(pipeline_stats))
+                stats_path = (
+                    Path(__file__).resolve().parents[2]
+                    / "scratch"
+                    / "nvidia_native_production_parity"
+                    / f"native_stats_{output_final_path.stem}.json"
+                )
+                stats_path.parent.mkdir(parents=True, exist_ok=True)
+                stats_payload = {
+                    "backend": "NVIDIA Native D3D11",
+                    "output": str(output_final_path),
+                    "frames": int(export_frames),
+                    "wall_time_sec_python": float(time.perf_counter() - t_start),
+                    "completed_frames": int(pipeline_stats.completed_frames),
+                    "wall_time_sec_native": float(pipeline_stats.wall_time_sec),
+                    "throughput_fps_native": float(pipeline_stats.throughput_fps),
+                    "decode_acquire_ms": float(pipeline_stats.decode_acquire_ms),
+                    "telemetry_lookup_ms": float(pipeline_stats.telemetry_lookup_ms),
+                    "hud_device_b_ms": float(pipeline_stats.hud_d2d_ms),
+                    "vp_ms": float(pipeline_stats.vp_composite_ms),
+                    "nvenc_ms": float(pipeline_stats.nvenc_submit_ms),
+                    "bitstream_handling_ms": float(pipeline_stats.bitstream_handling_ms),
+                    "cross_device_sync_ms": None,
+                    "full_frame_readback_count": 0,
+                    "device_b_enabled": True,
+                }
+                stats_path.write_text(
+                    json.dumps(stats_payload, indent=2), encoding="utf-8"
+                )
+                print(f"[GUI NVIDIA PERFORMANCE] {stats_path}", flush=True)
+            except Exception as stats_exc:
+                print(f"[GUI NVIDIA PERFORMANCE WARNING] {stats_exc!r}", flush=True)
+
     finally:
         if audio_feeder:
             audio_feeder.stop()
@@ -1571,6 +2201,7 @@ def export_nvidia_native_d3d11(
             proc_mux.kill()
 
         dll.telem_nvenc_destroy(handle)
+        _restore_gui_device_b_env()
 
     if cancelled:
         if output_tmp_path.exists():

@@ -62,6 +62,12 @@ typedef struct TelemFrameState {
     double   map_longitude;
     float    map_heading_deg;
     int32_t  has_map_heading;
+    // Canonical Lean state: physical Y/Roll in degrees, visual angle after
+    // the layout calibration/sign/sensitivity/clamp contract, and raw Z gyro
+    // kept separate for diagnostics (never used as the Lean angle).
+    float    lean_roll_deg;
+    float    lean_visual_angle_deg;
+    float    lean_gyro_z_deg_s;
 } TelemFrameState;
 
 // Telemetry field mapping enum
@@ -79,7 +85,8 @@ typedef enum TelemFieldId {
     TELEM_FIELD_GOPRO_BATTERY = 10,
     TELEM_FIELD_TEMPERATURE = 11,
     TELEM_FIELD_ISO = 12,
-    TELEM_FIELD_EXPOSURE = 13
+      TELEM_FIELD_EXPOSURE = 13,
+      TELEM_FIELD_LEAN_ROLL = 14
 } TelemFieldId;
 
 // Indicator Types
@@ -91,7 +98,8 @@ typedef enum TelemIndicatorType {
     TELEM_IND_BAR_SEGMENTS = 4,
     TELEM_IND_GAUGE = 5,
     TELEM_IND_CHART = 6,
-    TELEM_IND_MAP = 7
+    TELEM_IND_MAP = 7,
+    TELEM_IND_LEAN = 8
 } TelemIndicatorType;
 
 // Styles for individual indicator types
@@ -264,6 +272,9 @@ typedef struct TelemChartStyle {
     float    header_canvas_y;
     float    value_canvas_x;
     float    value_canvas_y;
+    // Activity/video duration represented by the history samples, in seconds.
+    // Zero preserves the historical one-minute fallback for older callers.
+    float    time_duration_s;
 } TelemChartStyle;
 
 typedef struct TelemMapStyle {
@@ -286,6 +297,35 @@ typedef struct TelemMapStyle {
     int32_t  marker_style;   // 0 = dot, 1 = directional
 } TelemMapStyle;
 
+typedef struct TelemLeanStyle {
+    wchar_t  font_family[64];
+    float    title_font_size;
+    float    value_font_size;
+    float    outline_width;
+    wchar_t  title[64];
+    wchar_t  unit[32];
+    int32_t  show_label;
+    int32_t  show_value;
+    int32_t  show_reference;
+    int32_t  show_ticks;
+    int32_t  decimals;
+    int32_t  uppercase_title;
+    float    size_px;
+    float    max_angle;
+    float    calibration;
+    float    sensitivity;
+    int32_t  invert_axis;
+    int32_t  telemetry_field;
+    uint32_t marker_color;
+    uint32_t track_color;
+    uint32_t tick_color;
+    uint32_t text_color;
+    float    pivot_x;
+    float    pivot_y;
+    float    canvas_x;
+    float    canvas_y;
+} TelemLeanStyle;
+
 // Unified descriptor for an active indicator
 typedef struct TelemIndicatorDesc {
     TelemIndicatorType type;
@@ -306,6 +346,7 @@ typedef struct TelemIndicatorDesc {
         TelemGaugeStyle        gauge;
         TelemChartStyle        chart;
         TelemMapStyle          map;
+        TelemLeanStyle         lean;
     } style;
 } TelemIndicatorDesc;
 

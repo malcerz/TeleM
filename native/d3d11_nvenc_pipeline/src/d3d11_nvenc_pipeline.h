@@ -24,6 +24,7 @@
 #include <atomic>
 #include <mutex>
 #include <fstream>
+#include <cstdio>
 #include <cmath>
 
 #include "nvEncodeAPI.h"
@@ -140,11 +141,68 @@ private:
     ID3D11VideoProcessorInputView* AcquireDecoderFrame(int64_t& out_pts, uint32_t& out_flags);
 
     // Direct2D HUD
-    HRESULT RenderHud(const TelemFrameState& state, int slot);
+    HRESULT RenderHud(const TelemFrameState& state, int slot, ID2D1Bitmap1* target = nullptr, bool clear_target = true);
     bool SaveTextureToPng(ID3D11Texture2D* pTex, const wchar_t* output_png_path);
+    void InitDeterminismDiagnostics();
+    void CloseDeterminismDiagnostics();
+    void RecordD2DThread(const char* operation, uint32_t frame = UINT32_MAX);
+    void RecordD2DTransform(uint32_t frame, const char* phase, const char* widget = "");
+    void RecordD2DStateStack(uint32_t frame, int clip_begin, int layer_begin, int begin_depth,
+                             int clip_end, int layer_end, int end_depth);
+    void RecordTargetBinding(uint32_t frame, const char* phase);
+    void DumpD3D11InfoQueue(const char* label, uint32_t frame);
+    void RecordEndDrawTrace(uint32_t frame, HRESULT end_hr, HRESULT flush_hr,
+                            uint64_t tag1, uint64_t tag2);
+    bool CreateFreshD2DContextForTexture(ID3D11Texture2D* texture,
+                                         ID2D1DeviceContext** context,
+                                         ID2D1Bitmap1** target);
+    void EnsureDeferredIndicatorResources();
+    bool ReadbackHudMarker(ID3D11Texture2D* texture, bool p010);
+    void RecordDeterminismStage(uint32_t frame, const char* stage, bool present, HRESULT hr = S_OK);
+    bool CreateFreshHudResources(ID3D11Texture2D** texture, ID2D1Bitmap1** target, ID3D11VideoProcessorInputView** view);
+    bool CreateFreshHudTargetForTexture(ID3D11Texture2D* texture, ID2D1Bitmap1** target, ID3D11VideoProcessorInputView** view);
+    void ReleaseFreshHudResources();
+    bool RenderD3D11DynamicHud(uint32_t frame, int slot);
+    bool PrepareCopyOutDrawTexture();
+    bool PrepareCopyOutHudTexture(ID3D11Texture2D* source_texture);
+    void ReleaseCopyOutHudTexture();
+
+    // NVIDIA production-pipeline interaction diagnostics. These are opt-in
+    // and remain inert unless TELEM_NATIVE_PIPELINE_INTERACTION_DIR is set.
+    void RecordInteractionIdentity(const char* subsystem, const char* phase,
+                                   const char* object_name, void* object_ptr,
+                                   void* context_ptr = nullptr);
+    void RecordD3D11ContextOperation(const char* operation, uint32_t frame,
+                                     void* resource_ptr = nullptr, int slot = -1);
+    void RecordInteractionTimeline(uint32_t frame, const char* event_name,
+                                   HRESULT hr = S_OK);
+    void RecordDecoderDeviceAudit(ID3D11Texture2D* texture, UINT subresource,
+                                  uint32_t frame);
+    bool CreateLadderHudResources();
+    bool CreateSeparateHudDevice();
+    bool CreateSeparateHudTexture(bool shared_resource);
+    bool RenderSeparateHudMarker(uint32_t frame);
+    bool ReadbackSeparateHudMarker();
+    bool WaitSeparateContextEvent(ID3D11DeviceContext* context,
+                                  ID3D11Device* device,
+                                  const char* label,
+                                  uint32_t frame);
+    bool CreateCrossDeviceHudResource();
+    bool RunSeparateHudMarkerFrames(uint32_t start_frame, uint32_t frame_count);
+    bool RunSharedResourceCapabilityFrames(uint32_t start_frame, uint32_t frame_count);
+    bool RenderSeparateHudFullFrame(const TelemFrameState& state, uint32_t frame);
+    bool RunSeparateHudFullFrames(uint32_t start_frame, uint32_t frame_count);
+    bool RunSeparateVpHudFrames(uint32_t start_frame, uint32_t frame_count);
+    void RecordSeparateDeviceIdentity();
+    void RunInteractionLadderFrames(std::wstring output_path,
+                                    uint32_t start_frame, uint32_t frame_count,
+                                    bool include_hud);
 
     // Compositing
     bool Composite(ID3D11VideoProcessorInputView* pVideoInView, int ring_slot, bool include_hud);
+    bool CompositeVideoToBgra(ID3D11VideoProcessorInputView* pVideoInView, int ring_slot);
+    bool CompositeBgraToP010(int ring_slot);
+    bool ComposeVideoAndHudOnBgra(int ring_slot);
 
 struct TelemEncodeDiagInfo {
     uint32_t encode_status = 0;
@@ -227,8 +285,14 @@ private:
     std::vector<ID3D11VideoProcessorOutputView*>  m_ring_vp_out_views;
     std::vector<ID3D11Texture2D*>                m_ring_hud_textures;
     std::vector<ID3D11Texture2D*>                m_ring_hud_resolved_textures;
+    std::vector<ID3D11Texture2D*>                m_ring_bgra_composite_textures;
     std::vector<ID2D1Bitmap1*>                   m_ring_d2d_bitmap_targets;
+    std::vector<ID2D1Bitmap1*>                   m_ring_d2d_hud_sources;
+    std::vector<ID2D1Bitmap1*>                   m_ring_d2d_bgra_video_sources;
     std::vector<ID3D11VideoProcessorInputView*>  m_ring_vp_in_view_huds;
+    std::vector<ID3D11VideoProcessorOutputView*> m_ring_vp_bgra_out_views;
+    std::vector<ID3D11VideoProcessorInputView*>  m_ring_vp_in_view_bgra_composites;
+    std::vector<ID2D1Bitmap1*>                   m_ring_d2d_bgra_composite_targets;
     std::vector<ID3D11Query*>                    m_ring_hud_queries;
     std::vector<ID3D11Query*>                    m_ring_vp_queries;
     ID3D11Texture2D*                             m_pHudSyncStagingTex;
@@ -253,12 +317,15 @@ private:
         void* bitstream;
         uint32_t input_frame;
         int ring_slot;
+        void* mapped_resource;
+        uint32_t generation;
     };
     std::queue<InFlightBitstreamOwnership> m_in_flight_bitstream_ownership;
     std::vector<HANDLE>           m_ring_completion_events;
     uint32_t                      m_consumer_index{0};
     bool                          m_first_bs_seen{false};
     std::vector<int>              m_slot_in_flight;
+    std::vector<uint32_t>         m_slot_generation;
     struct RingReleaseDiag {
         uint32_t submitted_input_frame;
         uint32_t lock_frame_idx;
@@ -349,6 +416,92 @@ private:
     HRESULT                             m_last_d2d_flush_hr{S_OK};
     uint64_t                            m_last_d2d_tag1{0};
     uint64_t                            m_last_d2d_tag2{0};
+
+    bool                                m_determinism_diag{false};
+    bool                                m_determinism_serialized{false};
+    std::string                         m_determinism_dir;
+    FILE*                               m_determinism_file{nullptr};
+    ID3D11Texture2D*                    m_diag_fresh_hud_texture{nullptr};
+    ID2D1Bitmap1*                       m_diag_fresh_hud_target{nullptr};
+    ID3D11VideoProcessorInputView*      m_diag_fresh_hud_view{nullptr};
+    ID3D11Texture2D*                    m_diag_copy_hud_texture{nullptr};
+    ID3D11VideoProcessorInputView*      m_diag_copy_hud_view{nullptr};
+    ID3D11Texture2D*                    m_diag_copy_draw_texture{nullptr};
+    ID2D1Bitmap1*                       m_diag_copy_draw_target{nullptr};
+    int                                 m_diag_hud_slot_override{-1};
+
+    // Diagnostic-only D2D context/state/thread controls.
+    bool                                m_d2d_reset_state{false};
+    bool                                m_d2d_fresh_context{false};
+    bool                                m_d2d_single_thread{false};
+    bool                                m_d2d_minimal_draw{false};
+    bool                                m_diag_indicator_resources_deferred{false};
+    DWORD                               m_d2d_owner_thread_id{0};
+    TelemD2DStateTrace                  m_d2d_state_trace{};
+    FILE*                               m_d2d_state_stack_file{nullptr};
+    FILE*                               m_d2d_transform_file{nullptr};
+    FILE*                               m_d2d_thread_file{nullptr};
+    FILE*                               m_d2d_enddraw_file{nullptr};
+    FILE*                               m_d2d_debug_file{nullptr};
+    FILE*                               m_d2d_target_binding_file{nullptr};
+    FILE*                               m_d3d11_debug_file{nullptr};
+    ID3D11InfoQueue*                    m_diag_info_queue{nullptr};
+
+    // Shared-device contract audit (diagnostic-only).
+    uint32_t                            m_interaction_stage{0};
+    bool                                m_context_serialize{false};
+    std::string                         m_interaction_dir;
+    FILE*                               m_interaction_identity_file{nullptr};
+    FILE*                               m_interaction_trace_file{nullptr};
+    FILE*                               m_interaction_timeline_file{nullptr};
+    FILE*                               m_interaction_decoder_file{nullptr};
+    ID3D10Multithread*                  m_diag_multithread{nullptr};
+    bool                                m_diag_multithread_available{false};
+    BOOL                                m_diag_multithread_before{FALSE};
+    BOOL                                m_diag_multithread_after{FALSE};
+    DWORD                               m_interaction_worker_thread_id{0};
+    uint32_t                            m_interaction_current_frame{UINT32_MAX};
+    std::mutex                          m_d3d11_context_mutex;
+
+    // Opt-in separate HUD-device diagnostics. These remain null/inactive for
+    // the production shared-device path.
+    bool                                m_hud_separate_device{false};
+    bool                                m_hud_cross_device{false};
+    std::string                         m_hud_separate_mode;
+    ID3D11Device*                       m_hud_b_device{nullptr};
+    ID3D11DeviceContext*                m_hud_b_context{nullptr};
+    IDXGIDevice*                        m_hud_b_dxgi_device{nullptr};
+    ID2D1Device*                        m_hud_b_d2d_device{nullptr};
+    ID2D1DeviceContext*                 m_hud_b_d2d_context{nullptr};
+    IDWriteFactory*                     m_hud_b_dwrite_factory{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_time{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_speed_val{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_speed_unit{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_hr_val{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_hr_unit{nullptr};
+    IDWriteTextFormat*                  m_hud_b_fmt_label{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush_text_muted{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush_cyan{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush_coral{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush_card_bg{nullptr};
+    ID2D1SolidColorBrush*               m_hud_b_brush_card_border{nullptr};
+    ID3D11Texture2D*                    m_hud_b_texture{nullptr};
+    ID2D1Bitmap1*                       m_hud_b_target{nullptr};
+    ID3D11Texture2D*                    m_hud_b_staging{nullptr};
+    ID3D11Query*                        m_hud_b_query{nullptr};
+    IDXGIKeyedMutex*                    m_hud_b_mutex{nullptr};
+    HANDLE                              m_hud_shared_handle{nullptr};
+    ID3D11Texture2D*                    m_hud_a_shared_texture{nullptr};
+    IDXGIKeyedMutex*                    m_hud_a_mutex{nullptr};
+    ID3D11VideoProcessorInputView*      m_hud_a_shared_view{nullptr};
+    ID3D11Texture2D*                    m_hud_a_shared_staging{nullptr};
+    ID3D11Query*                        m_hud_a_shared_query{nullptr};
+    FILE*                               m_separate_identity_file{nullptr};
+    FILE*                               m_resource_alias_file{nullptr};
+    UINT                                m_adapter_index{0};
+    bool                                m_rendering_separate_hud{false};
 };
 
 #endif // D3D11_NVENC_PIPELINE_H

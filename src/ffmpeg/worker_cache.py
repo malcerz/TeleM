@@ -259,7 +259,7 @@ def _get_source_samples(source_type: str) -> tuple[list, list, list]:
     return (gpmf_spd, gpmf_trk, gpmf_alt)
 
 
-def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
+def _worker_lean_roll(axis: str = "y", smoothing_s: float = 0.0) -> list:
     """Precomputed roll timeline for the final-render worker (ETAP 13).
 
     Mirrors ``TelemetryDataManager._get_lean_roll_samples`` so the AMD/NVIDIA/
@@ -267,7 +267,7 @@ def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
     """
     axis = str(axis).strip().lower()
     if axis not in ("x", "y", "z"):
-        axis = "x"
+        axis = "y"
     smoothing_s = max(0.0, float(smoothing_s or 0.0))
     cache_key = f"{axis}_{smoothing_s:.2f}"
     cache: dict = WORKER_CACHE.setdefault("_lean_roll", {})
@@ -290,6 +290,33 @@ def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
     return timeline
 
 
+def _worker_raw_gyro(axis: str = "z", smoothing_s: float = 0.0) -> list:
+    """Precomputed raw gyroscope angular rate timeline [deg/s] (GPMF).
+
+    Extracts angular velocity (rad/s -> deg/s) without complementary filtering
+    or gravity integration.
+    """
+    axis = str(axis).strip().lower()
+    if axis not in ("x", "y", "z"):
+        axis = "z"
+    smoothing_s = max(0.0, float(smoothing_s or 0.0))
+    cache_key = f"{axis}_{smoothing_s:.2f}"
+    cache: dict = WORKER_CACHE.setdefault("_raw_gyro", {})
+    if cache_key in cache:
+        return cache[cache_key]
+    import math
+    from src.telemetry_imu import smooth_roll_samples
+    fs = WORKER_CACHE.get("field_samples", {}) or {}
+    raw_samples = fs.get(f"gyro_{axis}_samples", []) or []
+    timeline: list[tuple[datetime, float]] = []
+    for dt, rad_s in raw_samples:
+        timeline.append((dt, float(rad_s) * 180.0 / math.pi))
+    if smoothing_s > 0.0 and timeline:
+        timeline = smooth_roll_samples(timeline, smoothing_s)
+    cache[cache_key] = timeline
+    return timeline
+
+
 def _resolve_cache_value(
     field_name: str, source: str, target_dt: datetime,
     indicator_key: str | None = None,
@@ -298,6 +325,16 @@ def _resolve_cache_value(
     """Resolve one field from one explicit source using the shared contract."""
     from src.telemetry_resolver import canonical_telemetry_field, resolve_current_presentation
     field_name = canonical_telemetry_field(field_name)
+    if str(field_name).startswith("raw_gyro_") or str(field_name) == "raw_gyro_z":
+        from src.telemetry_imu import interpolate_roll
+        axis = str(field_name).split("_")[-1]
+        if axis not in ("x", "y", "z"):
+            axis = "z"
+        smooth_s = 0.0
+        if indicator_key:
+            ind_cfg = WORKER_CACHE.get("layout", {}).get("indicators", {}).get(indicator_key, {})
+            smooth_s = float(ind_cfg.get("lean_smoothing_s", 0.0) or 0.0)
+        return interpolate_roll(_worker_raw_gyro(axis, smooth_s), target_dt)
     if str(field_name).startswith("lean_roll_"):
         from src.telemetry_imu import interpolate_roll
         axis = str(field_name).split("_")[-1]

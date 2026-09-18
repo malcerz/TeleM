@@ -644,20 +644,15 @@ def _report_stream_progress(
         # no wall-clock timer is involved.
         backend_tag = f"NVIDIA_LEGACY_{profile_name}" if profile_name else "cpu"
         role_tag = "gpu" if profile_name else "cpu"
-        hud_state = {
-            "phase": "render",
-            "backend": backend_tag,
-            "role": role_tag,
-            "frame_done": int(done),
-            "frame_total": int(total),
-            "fps_instant": float(fps),
-            "fps_average": float(fps),
-        }
+        hud_state = {"frame": min(max(0, total - 1), done - 1), "ts": min(max(0, total - 1), done - 1) / target_fps} if target_fps and target_fps > 0 and done > 0 else {}
+        if profile_name or compression_tracker is not None:
+            hud_state.update({
+                "phase": "render", "backend": backend_tag, "role": role_tag,
+                "frame_done": int(done), "frame_total": int(total),
+                "fps_instant": float(fps), "fps_average": float(fps),
+            })
         if compression_tracker is not None:
             hud_state.update(compression_tracker.get_hud_state_dict())
-        if target_fps and target_fps > 0 and done > 0:
-            frame = min(max(0, total - 1), done - 1)
-            hud_state.update({"frame": frame, "ts": frame / target_fps})
         callback_started = time.perf_counter_ns() if audit is not None else 0
         on_render_progress(done, total, elapsed, fps, hud_state)
         if audit is not None:

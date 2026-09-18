@@ -25,9 +25,53 @@ class TelemFrameState(ctypes.Structure):
         ('timestamp_sec', ctypes.c_double),
         ('speed_kmh', ctypes.c_float),
         ('heart_rate_bpm', ctypes.c_float),
-        ('time_str', ctypes.c_char * 32),
+        ('cadence_rpm', ctypes.c_float),
+        ('power_w', ctypes.c_float),
+        ('distance_km', ctypes.c_float),
+        ('altitude_m', ctypes.c_float),
+        ('solar_pct', ctypes.c_float),
+        ('garmin_battery_pct', ctypes.c_float),
+        ('gopro_battery_pct', ctypes.c_float),
+        ('temperature_c', ctypes.c_float),
+        ('iso', ctypes.c_float),
+        ('exposure_denom', ctypes.c_float),
+        ('avg_speed_kmh', ctypes.c_float),
+        ('elapsed_sec', ctypes.c_double),
+        ('activity_progress', ctypes.c_float),
+        ('time_display_date', ctypes.c_char * 32),
+        ('time_display_time', ctypes.c_char * 32),
+        ('time_display_elapsed', ctypes.c_char * 32),
+        ('time_display_avg_speed', ctypes.c_char * 32),
         ('speed_str', ctypes.c_char * 32),
         ('hr_str', ctypes.c_char * 32),
+        ('cad_str', ctypes.c_char * 32),
+        ('power_str', ctypes.c_char * 32),
+        ('distance_str', ctypes.c_char * 32),
+        ('altitude_str', ctypes.c_char * 32),
+        ('solar_str', ctypes.c_char * 32),
+        ('garmin_battery_str', ctypes.c_char * 32),
+        ('gopro_battery_str', ctypes.c_char * 32),
+        ('temp_str', ctypes.c_char * 32),
+        ('iso_str', ctypes.c_char * 32),
+        ('exposure_str', ctypes.c_char * 32),
+        ('map_latitude', ctypes.c_double),
+        ('map_longitude', ctypes.c_double),
+        ('map_heading_deg', ctypes.c_float),
+        ('has_map_heading', ctypes.c_int32),
+    ]
+
+class TelemEncoderConfig(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ('codec', ctypes.c_uint32), ('quality_mode', ctypes.c_uint32),
+        ('bit_depth', ctypes.c_uint32), ('bitrate_bps', ctypes.c_uint32),
+        ('max_bitrate_bps', ctypes.c_uint32), ('vbv_size_bits', ctypes.c_uint32),
+        ('gop_length', ctypes.c_uint32), ('b_frames', ctypes.c_uint32),
+        ('multipass', ctypes.c_uint32), ('enable_lookahead', ctypes.c_uint32),
+        ('lookahead_depth', ctypes.c_uint32), ('enable_aq', ctypes.c_uint32),
+        ('aq_strength', ctypes.c_uint32), ('enable_temporal_aq', ctypes.c_uint32),
+        ('enable_compression_analysis', ctypes.c_uint32),
+        ('compression_csv_path', ctypes.c_wchar * 512),
     ]
 
 class TelemNvencConfig(ctypes.Structure):
@@ -43,6 +87,7 @@ class TelemNvencConfig(ctypes.Structure):
         ('tuning_info', ctypes.c_uint32),
         ('async_nvenc', ctypes.c_int32),
         ('enable_debug_layer', ctypes.c_int32),
+        ('encoder_config', TelemEncoderConfig),
     ]
 
 class TelemProgressInfo(ctypes.Structure):
@@ -86,6 +131,7 @@ class TelemPipelineStats(ctypes.Structure):
         ('ram_end_bytes', ctypes.c_uint64),
         ('vram_budget_bytes', ctypes.c_uint64),
         ('vram_usage_bytes', ctypes.c_uint64),
+        ('clip_switch_ms', ctypes.c_double),
     ]
 
 # ── NATIVE DLL BINDINGS ───────────────────────────────────────────────────────
@@ -220,7 +266,7 @@ def precompute_telemetry(fit_path: str, total_frames: int = 5395, fps_num: int =
             timestamp_sec=t_sec,
             speed_kmh=spd,
             heart_rate_bpm=hr,
-            time_str=time_str.encode('utf-8'),
+            time_display_elapsed=time_str.encode('utf-8'),
             speed_str=speed_str.encode('utf-8'),
             hr_str=hr_str.encode('utf-8'),
         )
@@ -232,9 +278,9 @@ def precompute_telemetry(fit_path: str, total_frames: int = 5395, fps_num: int =
 
 # ── RUN BENCHMARK FUNCTION ────────────────────────────────────────────────────
 
-def run_pipeline(mode: str, frames: int, out_hevc: str, fit_path: str = None, cancel_after: float = 0.0, debug_layer: bool = False):
+def run_pipeline(mode: str, frames: int, out_hevc: str, fit_path: str = None, cancel_after: float = 0.0, debug_layer: bool = False, video_path: str = None, codec: str = "hevc", quality: str = "fast"):
     dll_path = ROOT / "native" / "d3d11_nvenc_pipeline" / "bin" / "telem_nvenc_native.dll"
-    video_path = str(ROOT / "Video" / "GX030120.MP4")
+    video_path = video_path or str(ROOT / "Video" / "GX030120.MP4")
     if not fit_path:
         fit_path = str(ROOT / "Video" / "Popoludniowa_jazda_na_rowerze_solar_battery.fit")
 
@@ -258,17 +304,25 @@ def run_pipeline(mode: str, frames: int, out_hevc: str, fit_path: str = None, ca
     pipe = NativeNvencPipeline(dll_path)
 
     # 3. Configure
+    codec_id = 1 if codec.lower() == "av1" else 0
+    quality_id = {"fast": 0, "quality": 1, "max": 2}[quality.lower()]
+    encoder_config = TelemEncoderConfig(
+        codec=codec_id, quality_mode=quality_id, bit_depth=10,
+        bitrate_bps=40_000_000, max_bitrate_bps=50_000_000,
+        vbv_size_bits=40_000_000, gop_length=250,
+        enable_compression_analysis=0)
     config = TelemNvencConfig(
         width=3840,
         height=2160,
         fps_num=30000,
         fps_den=1001,
-        ring_size=4,
-        bit_depth=8,             # NV12 output for Stage 8F
+        ring_size=32 if codec_id else 8,
+        bit_depth=10,            # P010/Main10 native output
         preset_p1_to_p7=1,       # P1 Fastest
         tuning_info=1,           # HIGH_QUALITY
         async_nvenc=1 if mode == "async" else 0,
-        enable_debug_layer=1 if debug_layer else 0
+        enable_debug_layer=1 if debug_layer else 0,
+        encoder_config=encoder_config,
     )
 
     if not pipe.configure(config):
@@ -412,6 +466,9 @@ if __name__ == '__main__':
     parser.add_argument('--cancel-after', type=float, default=0.0, help="Simulate cancel after N seconds")
     parser.add_argument('--debug-layer', action='store_true', help="Enable D3D11 Debug Layer")
     parser.add_argument('--fit', type=str, default=None, help="Path to FIT telemetry file")
+    parser.add_argument('--video', type=str, default=None, help="Path to source video")
+    parser.add_argument('--codec', choices=['hevc', 'av1'], default='hevc')
+    parser.add_argument('--quality', choices=['fast', 'quality', 'max'], default='fast')
     parser.add_argument('--save-json', type=str, default=None, help="Path to save JSON benchmark summary")
     args = parser.parse_args()
 
@@ -419,7 +476,7 @@ if __name__ == '__main__':
     if not out_file:
         out_file = str(ROOT / "scratch" / f"nvidia_stage8f_{args.mode}_output.hevc")
 
-    res = run_pipeline(mode=args.mode, frames=args.frames, out_hevc=out_file, fit_path=args.fit, cancel_after=args.cancel_after, debug_layer=args.debug_layer)
+    res = run_pipeline(mode=args.mode, frames=args.frames, out_hevc=out_file, fit_path=args.fit, cancel_after=args.cancel_after, debug_layer=args.debug_layer, video_path=args.video, codec=args.codec, quality=args.quality)
     if args.save_json:
         with open(args.save_json, 'w') as f:
             json.dump(res, f, indent=2)

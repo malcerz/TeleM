@@ -339,6 +339,9 @@ class TelemFrameState(ctypes.Structure):
         ("map_longitude", ctypes.c_double),
         ("map_heading_deg", ctypes.c_float),
         ("has_map_heading", ctypes.c_int32),
+        ("lean_roll_deg", ctypes.c_float),
+        ("lean_visual_angle_deg", ctypes.c_float),
+        ("lean_gyro_z_deg_s", ctypes.c_float),
     ]
 
 
@@ -528,6 +531,7 @@ class TelemChartStyle(ctypes.Structure):
         ("header_canvas_y", ctypes.c_float),
         ("value_canvas_x", ctypes.c_float),
         ("value_canvas_y", ctypes.c_float),
+        ("time_duration_s", ctypes.c_float),
     ]
 
 
@@ -554,6 +558,38 @@ class TelemMapStyle(ctypes.Structure):
     ]
 
 
+class TelemLeanStyle(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("font_family", ctypes.c_wchar * 64),
+        ("title_font_size", ctypes.c_float),
+        ("value_font_size", ctypes.c_float),
+        ("outline_width", ctypes.c_float),
+        ("title", ctypes.c_wchar * 64),
+        ("unit", ctypes.c_wchar * 32),
+        ("show_label", ctypes.c_int32),
+        ("show_value", ctypes.c_int32),
+        ("show_reference", ctypes.c_int32),
+        ("show_ticks", ctypes.c_int32),
+        ("decimals", ctypes.c_int32),
+        ("uppercase_title", ctypes.c_int32),
+        ("size_px", ctypes.c_float),
+        ("max_angle", ctypes.c_float),
+        ("calibration", ctypes.c_float),
+        ("sensitivity", ctypes.c_float),
+        ("invert_axis", ctypes.c_int32),
+        ("telemetry_field", ctypes.c_int32),
+        ("marker_color", ctypes.c_uint32),
+        ("track_color", ctypes.c_uint32),
+        ("tick_color", ctypes.c_uint32),
+        ("text_color", ctypes.c_uint32),
+        ("pivot_x", ctypes.c_float),
+        ("pivot_y", ctypes.c_float),
+        ("canvas_x", ctypes.c_float),
+        ("canvas_y", ctypes.c_float),
+    ]
+
+
 class TelemIndicatorStyle(ctypes.Union):
     _pack_ = 1
     _fields_ = [
@@ -564,6 +600,7 @@ class TelemIndicatorStyle(ctypes.Union):
         ("gauge", TelemGaugeStyle),
         ("chart", TelemChartStyle),
         ("map", TelemMapStyle),
+        ("lean", TelemLeanStyle),
     ]
 
 

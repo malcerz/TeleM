@@ -70,7 +70,11 @@ void GaugeIndicator::DiscardDeviceResources() {
 void GaugeIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& state) {
     if (!pD2D || !m_pTickBrush || !m_pNeedleBrush) return;
 
-    float radius = m_width > 0 ? (m_width * 0.42f) : 320.0f;
+    // Legacy gauge rasters are 2.4 * radius wide.  Native descriptors now
+    // carry that exact outer side, so derive the dial radius from the same
+    // contract instead of the old 0.42 approximation (which was several
+    // pixels too large at 4K).
+    float radius = m_width > 0 ? (m_width / 2.4f) : 320.0f;
     float cx = m_cx;
     float cy = m_cy;
 
@@ -167,7 +171,11 @@ void GaugeIndicator::Render(ID2D1DeviceContext* pD2D, const TelemFrameState& sta
     }
 
     if (m_pFmtValue) {
-        D2D1_RECT_F valRect = D2D1::RectF(cx - 200.0f, cy + radius * 0.32f, cx + 200.0f, cy + radius * 0.32f + 75.0f);
+        // Pillow's Legacy value anchor is 15% of the dial radius below the
+        // centre (the surrounding 2.4R raster already provides the lower
+        // margin).  Keep the semantic baseline; glyph rasterisation is
+        // intentionally allowed to differ between Pillow and DirectWrite.
+        D2D1_RECT_F valRect = D2D1::RectF(cx - 200.0f, cy + radius * 0.15f, cx + 200.0f, cy + radius * 0.15f + 75.0f);
         FontCache::DrawTextOutlined(pD2D, fullDigitalText.c_str(), m_pFmtValue, valRect, m_pTextBrush, m_pOutlineBrush, outline_w, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
 }

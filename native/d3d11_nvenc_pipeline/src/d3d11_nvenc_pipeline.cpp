@@ -2,6 +2,36 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <cstdlib>
+#include <cstdio>
+#include "indicators/lean_indicator.h"
+#include "hud_profile.h"
+
+thread_local TelemD2DStateTrace* g_telem_d2d_state_trace = nullptr;
+
+static std::string CadenceTraceFile(const char* name) {
+    char dir[1024] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_CADENCE_TRACE_DIR", dir, (DWORD)sizeof(dir));
+    if (len == 0 || len >= sizeof(dir)) return {};
+    std::string path(dir, len);
+    if (!path.empty() && path.back() != '\\' && path.back() != '/') path += '\\';
+    path += name;
+    return path;
+}
+
+static void AppendCadenceAlphaTrace(const char* stage, float raw, float normalized) {
+    const std::string path = CadenceTraceFile("fill_alpha_trace.csv");
+    if (path.empty()) return;
+    FILE* f = nullptr;
+    if (fopen_s(&f, path.c_str(), "a+") != 0 || !f) return;
+    fseek(f, 0, SEEK_END);
+    if (ftell(f) == 0) {
+        std::fprintf(f, "stage,field_name,type,raw_value,normalized_value,expected_value\n");
+    }
+    std::fprintf(f, "%s,fill_alpha,float,%.9g,%.9g,%.9g\n",
+                 stage, raw, normalized, 200.0f / 255.0f);
+    std::fclose(f);
+}
 
 // Static GUID definitions
 static const GUID GUID_IID_ID3D11Multithread = { 0x9B7E4E00, 0x342C, 0x4106, { 0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0 } };
@@ -16,6 +46,210 @@ static bool IsStage8L4C2MfLogEnabled() {
     char value[8] = {};
     DWORD size = GetEnvironmentVariableA("TELEM_STAGE8L4C2_MF_LOG", value, (DWORD)sizeof(value));
     return size > 0 && size < sizeof(value) && value[0] == '1';
+}
+
+static bool IsDeterminismProbeFrame(uint32_t frame) {
+    switch (frame) {
+        case 0: case 1: case 2: case 5: case 10: case 20: case 30:
+        case 40: case 50: case 60: case 80: case 99:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool IsTargetBindingProbeFrame(uint32_t frame) {
+    switch (frame) {
+        case 0: case 1: case 2: case 5: case 10: case 20: case 30:
+        case 40: case 60: case 80: case 99:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool IsStaticHudDiagnostic() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_STATIC_HUD", value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static bool IsFreshResourceDiagnostic() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_FRESH_RESOURCES", value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static bool IsSingleHudDiagnostic() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_SINGLE_HUD", value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static std::string DeterminismD2DMode() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_D2D_MODE", value, (DWORD)sizeof(value));
+    if (len > 0 && len < sizeof(value)) return std::string(value, len);
+    return "P";
+}
+
+static bool IsHoldHudUntilEncodeDiagnostic() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_HOLD_HUD_UNTIL_ENCODE", value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static int DeterminismHudPoolSize() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_HUD_POOL", value, (DWORD)sizeof(value));
+    if (len > 0 && len < sizeof(value)) {
+        int n = atoi(value);
+        if (n >= 2 && n <= 4) return n;
+    }
+    return 0;
+}
+
+static bool IsD2DStateDiagnostic(const char* name) {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA(name, value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static bool IsD2DResetStateDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_D2D_RESET_STATE");
+}
+
+static bool IsFreshD2DContextDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_FRESH_D2D_CONTEXT");
+}
+
+static bool IsD2DSingleThreadDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_D2D_SINGLE_THREAD");
+}
+
+static bool IsD2DMinimalDrawDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_D2D_MINIMAL_DRAW");
+}
+
+static std::string D2DTargetDetachMode() {
+    char value[16] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_D2D_DETACH_MODE", value, (DWORD)sizeof(value));
+    if (len > 0 && len < sizeof(value)) {
+        std::string mode(value, len);
+        if (mode == "A" || mode == "B" || mode == "C" || mode == "D") return mode;
+    }
+    // The production path already detaches the D2D target before the VP use.
+    // Mode B is therefore the safe diagnostic default when a caller only
+    // enables the determinism directory.
+    return "B";
+}
+
+static bool IsD3D11DynamicControlDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_D3D11_DYNAMIC_CONTROL");
+}
+
+static bool IsCopyOutControlDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_COPY_OUT");
+}
+
+static bool IsD3D11CrossApiDebugDiagnostic() {
+    return IsD2DStateDiagnostic("TELEM_NATIVE_D3D11_DEBUG");
+}
+
+static uint32_t InteractionLadderStage() {
+    char value[16] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_PIPELINE_INTERACTION_STAGE",
+                                       value, (DWORD)sizeof(value));
+    if (len == 0 || len >= sizeof(value)) return 0;
+    const char* digit = (value[0] == 'L' || value[0] == 'l') ? value + 1 : value;
+    if (digit[0] >= '1' && digit[0] <= '6' && digit[1] == '\0') {
+        return (uint32_t)(digit[0] - '0');
+    }
+    return 0;
+}
+
+static bool IsInteractionContextSerializationRequested() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_CONTEXT_SERIALIZE",
+                                       value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static const char* InteractionStageName(uint32_t stage) {
+    switch (stage) {
+        case 1: return "L1_PROD_DEVICE_D2D";
+        case 2: return "L2_PROD_RESOURCES";
+        case 3: return "L3_DECODE_ACTIVE";
+        case 4: return "L4_VP_BACKGROUND";
+        case 5: return "L5_VP_HUD";
+        case 6: return "L6_NVENC";
+        default: return "NONE";
+    }
+}
+
+static bool IsSeparateHudDeviceRequested() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_HUD_SEPARATE_DEVICE",
+                                       value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static bool IsSeparateHudCrossDeviceRequested() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_HUD_CROSS_DEVICE",
+                                       value, (DWORD)sizeof(value));
+    return len > 0 && len < sizeof(value) && value[0] == '1';
+}
+
+static std::string SeparateHudMode() {
+    char value[32] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_HUD_SEPARATE_MODE",
+                                       value, (DWORD)sizeof(value));
+    if (len > 0 && len < sizeof(value)) return std::string(value, len);
+    return "L3_MARKER";
+}
+
+static std::string AdapterDescriptionUtf8(const DXGI_ADAPTER_DESC& desc) {
+    char buffer[512] = {};
+    int n = WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1,
+                                buffer, (int)sizeof(buffer), nullptr, nullptr);
+    if (n <= 0) return std::string();
+    return std::string(buffer, (size_t)(n - 1));
+}
+
+static std::string D2DWidgetGroupDiagnostic() {
+    char value[8] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_WIDGET_GROUP", value, (DWORD)sizeof(value));
+    if (len > 0 && len < sizeof(value)) return std::string(value, len);
+    return "G";
+}
+
+static bool IncludeD2DWidgetForGroup(const IndicatorBase& indicator, const std::string& group) {
+    if (group.empty() || group == "G") return true;
+    TelemIndicatorType type = indicator.GetType();
+    if (group == "A") {
+        return type == TELEM_IND_TEXT || type == TELEM_IND_TIME_DISPLAY;
+    }
+    if (group == "B") {
+        return type == TELEM_IND_TEXT || type == TELEM_IND_TIME_DISPLAY ||
+               type == TELEM_IND_BAR_RULER_H || type == TELEM_IND_BAR_RULER_V ||
+               type == TELEM_IND_BAR_SEGMENTS;
+    }
+    if (group == "C") {
+        return IncludeD2DWidgetForGroup(indicator, "B") || type == TELEM_IND_GAUGE;
+    }
+    if (group == "D") {
+        return IncludeD2DWidgetForGroup(indicator, "C") || type == TELEM_IND_CHART;
+    }
+    if (group == "E") {
+        return IncludeD2DWidgetForGroup(indicator, "D") || type == TELEM_IND_MAP;
+    }
+    if (group == "F") {
+        // Lean is represented by text/geometry indicators in the canonical
+        // layout; keep all non-map widgets in this intermediate diagnostic.
+        return type != TELEM_IND_MAP;
+    }
+    return true;
 }
 
 static void LogMfMediaType(FILE* file, const char* label, IMFMediaType* type) {
@@ -153,6 +387,8 @@ D3D11NvencPipeline::~D3D11NvencPipeline() {
 bool D3D11NvencPipeline::Configure(const TelemNvencConfig& config) {
     if (m_is_active) return false;
     m_config = config;
+    TelemHudProfile::Reset();
+    InitDeterminismDiagnostics();
 
     // Synchronize bit depth from encoder_config if specified
     if (m_config.encoder_config.bit_depth != 0) {
@@ -178,9 +414,25 @@ bool D3D11NvencPipeline::Configure(const TelemNvencConfig& config) {
     m_b_frame_qp_sum = 0;
     m_total_qp_sum = 0;
 
-    // Ring size for persistent D3D11 textures (needs >= 64 for lookahead 25 + 7 B-frames)
-    uint32_t min_ring = 64;
-    if (m_config.ring_size < min_ring) m_config.ring_size = min_ring;
+    // Production keeps the profile-safe ring minimum.  A deliberately
+    // opt-in diagnostic override lets the ring-wrap experiment exercise
+    // smaller rings without changing the default architecture.
+    char ring_override[32] = {};
+    DWORD ring_override_len = GetEnvironmentVariableA(
+        "TELEM_NATIVE_RING_SIZE", ring_override, (DWORD)sizeof(ring_override));
+    const bool diagnostic_ring_override =
+        ring_override_len > 0 && ring_override_len < sizeof(ring_override);
+    if (diagnostic_ring_override) {
+        unsigned long requested = std::strtoul(ring_override, nullptr, 10);
+        if (requested >= 1 && requested <= 256) {
+            m_config.ring_size = (uint32_t)requested;
+            printf("[RING DIAG] TELEM_NATIVE_RING_SIZE=%u\n", m_config.ring_size);
+            fflush(stdout);
+        }
+    }
+    // Ring size for persistent D3D11 textures (needs >= 64 for the normal
+    // lookahead/B-frame profile; diagnostic override is intentionally exempt).
+    if (!diagnostic_ring_override && m_config.ring_size < 64) m_config.ring_size = 64;
 
     if (m_config.fps_den == 0) m_config.fps_den = 1001;
     if (m_config.fps_num == 0) m_config.fps_num = 30000;
@@ -192,8 +444,19 @@ bool D3D11NvencPipeline::Configure(const TelemNvencConfig& config) {
     if (!CreateHudResources()) return false;
     if (!CreateDWrite()) return false;
     if (!CreateBrushes()) return false;
+    if (m_interaction_stage == 1) {
+        // L1 deliberately stops after the production device and D2D setup.
+        // A single production-format HUD texture/target is enough for the
+        // dynamic D2D sanity loop; no decoder, VP or NVENC object is created.
+        if (!CreateLadderHudResources()) return false;
+        m_configured = true;
+        return true;
+    }
     if (!CreateVideoProcessor()) return false;
     if (!CreateRingResources()) return false;
+    if (m_hud_separate_device) {
+        if (!CreateSeparateHudDevice()) return false;
+    }
 
     m_configured = true;
     return true;
@@ -215,6 +478,7 @@ bool D3D11NvencPipeline::SelectAdapter() {
         if (desc.VendorId == 0x10DE) { // NVIDIA
             m_pAdapter = pAdapter;
             m_adapter_desc = desc;
+            m_adapter_index = idx;
             break;
         }
         pAdapter->Release();
@@ -235,7 +499,8 @@ bool D3D11NvencPipeline::CreateDevice() {
     // Stage 8L.4C.2 proved that host access to the MF/GPU decoder, rather than
     // an encoder profile or additional D3D11 creation flag, is the gate here.
     UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    if (m_config.enable_debug_layer) {
+    if (m_config.enable_debug_layer ||
+        (m_determinism_diag && IsD3D11CrossApiDebugDiagnostic())) {
         flags |= D3D11_CREATE_DEVICE_DEBUG;
     }
 
@@ -263,6 +528,23 @@ bool D3D11NvencPipeline::CreateDevice() {
 
     if (FAILED(hr)) return false;
 
+    RecordInteractionIdentity("PRODUCTION_DEVICE", "created", "ID3D11Device",
+                              m_pDevice, m_pContext);
+    RecordInteractionIdentity("PRODUCTION_DEVICE", "created", "ID3D11DeviceContext",
+                              m_pContext, m_pContext);
+    RecordInteractionIdentity("PRODUCTION_DEVICE", "created", "IDXGIAdapter1",
+                              m_pAdapter, m_pContext);
+
+    if (m_determinism_diag && IsD3D11CrossApiDebugDiagnostic()) {
+        HRESULT qhr = m_pDevice->QueryInterface(__uuidof(ID3D11InfoQueue),
+                                                reinterpret_cast<void**>(&m_diag_info_queue));
+        if (m_d3d11_debug_file) {
+            fprintf(m_d3d11_debug_file, "device_create_hr=0x%08X,debug_flags=0x%08X,info_queue_hr=0x%08X\n",
+                    (unsigned int)hr, (unsigned int)flags, (unsigned int)qhr);
+            fflush(m_d3d11_debug_file);
+        }
+    }
+
     if (IsStage8L4C2MfLogEnabled()) {
         CreateDirectoryA("scratch", NULL);
         CreateDirectoryA("scratch/stage8l4c2_logs", NULL);
@@ -275,11 +557,45 @@ bool D3D11NvencPipeline::CreateDevice() {
         }
     }
 
-    // Enable multithread protection
+    // Production historically enables multithread protection. The interaction
+    // audit records the real state and offers explicit MT-OFF/MT-ON probes
+    // without changing the default behavior.
     ID3D10Multithread* pMultithread = nullptr;
     if (SUCCEEDED(m_pDevice->QueryInterface(__uuidof(ID3D10Multithread), (void**)&pMultithread))) {
-        pMultithread->SetMultithreadProtected(TRUE);
+        m_diag_multithread_available = true;
+        m_diag_multithread_before = pMultithread->GetMultithreadProtected();
+        char mode[16] = {};
+        DWORD mode_len = GetEnvironmentVariableA("TELEM_NATIVE_MULTITHREAD_MODE",
+                                                 mode, (DWORD)sizeof(mode));
+        bool explicit_off = mode_len > 0 && mode_len < sizeof(mode) &&
+                            (_stricmp(mode, "OFF") == 0 || mode[0] == '0');
+        bool explicit_on = mode_len > 0 && mode_len < sizeof(mode) &&
+                           (_stricmp(mode, "ON") == 0 || mode[0] == '1');
+        if (explicit_off) pMultithread->SetMultithreadProtected(FALSE);
+        else if (explicit_on || mode_len == 0 || _stricmp(mode, "DEFAULT") == 0) {
+            pMultithread->SetMultithreadProtected(TRUE);
+        } else {
+            // Preserve the production default for unknown diagnostic values.
+            pMultithread->SetMultithreadProtected(TRUE);
+        }
+        m_diag_multithread_after = pMultithread->GetMultithreadProtected();
+        if (m_interaction_decoder_file) {
+            fprintf(m_interaction_decoder_file,
+                    "MULTITHREAD_INTERFACE=available\nMULTITHREAD_PROTECTED_BEFORE=%s\nMULTITHREAD_PROTECTED_AFTER=%s\nMULTITHREAD_MODE=%s\n",
+                    m_diag_multithread_before ? "TRUE" : "FALSE",
+                    m_diag_multithread_after ? "TRUE" : "FALSE",
+                    mode_len ? mode : "DEFAULT");
+            fflush(m_interaction_decoder_file);
+        }
+        if (m_interaction_identity_file) {
+            RecordInteractionIdentity("PRODUCTION_DEVICE", "multithread", "ID3D10Multithread",
+                                      pMultithread, m_pContext);
+        }
         pMultithread->Release();
+    } else if (m_interaction_decoder_file) {
+        fprintf(m_interaction_decoder_file,
+                "MULTITHREAD_INTERFACE=unavailable\nMULTITHREAD_PROTECTED_BEFORE=UNKNOWN\nMULTITHREAD_PROTECTED_AFTER=UNKNOWN\n");
+        fflush(m_interaction_decoder_file);
     }
 
     return true;
@@ -298,7 +614,16 @@ bool D3D11NvencPipeline::CreateHudResources() {
     PFN_D2D1CreateDevice pfnCreateDevice = (PFN_D2D1CreateDevice)GetProcAddress(hD2D, "D2D1CreateDevice");
     if (!pfnCreateDevice) { pDxgiDevice->Release(); return false; }
 
-    hr = pfnCreateDevice(pDxgiDevice, NULL, &m_pD2DDevice);
+    D2D1_CREATION_PROPERTIES creation_properties{};
+    const D2D1_CREATION_PROPERTIES* creation_properties_ptr = nullptr;
+    if (m_determinism_diag && IsD2DStateDiagnostic("TELEM_NATIVE_D2D_DEBUG")) {
+        creation_properties.threadingMode = D2D1_THREADING_MODE_MULTI_THREADED;
+        creation_properties.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+        creation_properties.options = D2D1_DEVICE_CONTEXT_OPTIONS_NONE;
+        creation_properties_ptr = &creation_properties;
+    }
+    hr = pfnCreateDevice(pDxgiDevice, creation_properties_ptr, &m_pD2DDevice);
+    RecordInteractionIdentity("HUD/D2D", "created", "IDXGIDevice", pDxgiDevice, m_pContext);
     pDxgiDevice->Release();
     if (FAILED(hr)) return false;
 
@@ -307,6 +632,9 @@ bool D3D11NvencPipeline::CreateHudResources() {
 
     m_pD2DContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     m_pD2DContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+    RecordInteractionIdentity("HUD/D2D", "created", "ID2D1Device", m_pD2DDevice, m_pContext);
+    RecordInteractionIdentity("HUD/D2D", "created", "ID2D1DeviceContext", m_pD2DContext, m_pContext);
 
     return true;
 }
@@ -372,6 +700,11 @@ bool D3D11NvencPipeline::CreateVideoProcessor() {
     hr = m_pContext->QueryInterface(__uuidof(ID3D11VideoContext), (void**)&m_pVideoContext);
     if (FAILED(hr)) return false;
 
+    RecordInteractionIdentity("VIDEO_PROCESSOR", "created", "ID3D11VideoDevice",
+                              m_pVideoDevice, m_pContext);
+    RecordInteractionIdentity("VIDEO_PROCESSOR", "created", "ID3D11VideoContext",
+                              m_pVideoContext, m_pContext);
+
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC vpDesc{};
     vpDesc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     vpDesc.InputFrameRate.Numerator = m_config.fps_num;
@@ -390,6 +723,14 @@ bool D3D11NvencPipeline::CreateVideoProcessor() {
     hr = m_pVideoDevice->CreateVideoProcessor(m_pVPEnum, 0, &m_pVP);
     if (FAILED(hr)) return false;
 
+    D3D11_VIDEO_PROCESSOR_CAPS vpCaps{};
+    if (SUCCEEDED(m_pVPEnum->GetVideoProcessorCaps(&vpCaps))) {
+        printf("[VP CAPS] max_input_streams=%u max_stream_states=%u feature_caps=0x%08X filter_caps=0x%08X\n",
+               vpCaps.MaxInputStreams, vpCaps.MaxStreamStates,
+               vpCaps.FeatureCaps, vpCaps.FilterCaps);
+        fflush(stdout);
+    }
+
     UINT formatFlags = 0;
     DXGI_FORMAT outFormat = (m_config.bit_depth == 10) ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
     HRESULT hrCheck = m_pVPEnum->CheckVideoProcessorFormat(outFormat, &formatFlags);
@@ -402,26 +743,44 @@ bool D3D11NvencPipeline::CreateVideoProcessor() {
                (formatFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_OUTPUT) ? 1 : 0);
         fflush(stdout);
     }
+    UINT hudFormatFlags = 0;
+    HRESULT hrHudCheck = m_pVPEnum->CheckVideoProcessorFormat(DXGI_FORMAT_B8G8R8A8_UNORM, &hudFormatFlags);
+    printf("[VP FORMAT %p] Format BGRA8: hr=0x%08X flags=0x%X (Input: %d)\n",
+           this, (unsigned int)hrHudCheck, hudFormatFlags,
+           (hudFormatFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ? 1 : 0);
+    fflush(stdout);
 
     return true;
 }
 
 bool D3D11NvencPipeline::CreateRingResources() {
     for (auto* pView : m_ring_vp_out_views) SafeRelease(pView);
+    for (auto* pView : m_ring_vp_bgra_out_views) SafeRelease(pView);
     for (auto* pTex : m_ring_nv12_textures) SafeRelease(pTex);
     for (auto* pInView : m_ring_vp_in_view_huds) SafeRelease(pInView);
     for (auto* pTarget : m_ring_d2d_bitmap_targets) SafeRelease(pTarget);
+    for (auto* pTarget : m_ring_d2d_bgra_composite_targets) SafeRelease(pTarget);
+    for (auto* pInView : m_ring_vp_in_view_bgra_composites) SafeRelease(pInView);
     for (auto* pTex : m_ring_hud_textures) SafeRelease(pTex);
     for (auto* pTex : m_ring_hud_resolved_textures) SafeRelease(pTex);
+    for (auto* pTex : m_ring_bgra_composite_textures) SafeRelease(pTex);
+    for (auto* pSource : m_ring_d2d_hud_sources) SafeRelease(pSource);
+    for (auto* pSource : m_ring_d2d_bgra_video_sources) SafeRelease(pSource);
     for (auto* pView : m_ring_preview_in_views) SafeRelease(pView);
     for (auto* pQuery : m_ring_hud_queries) SafeRelease(pQuery);
     for (auto* pQuery : m_ring_vp_queries) SafeRelease(pQuery);
     m_ring_vp_out_views.clear();
+    m_ring_vp_bgra_out_views.clear();
     m_ring_nv12_textures.clear();
     m_ring_vp_in_view_huds.clear();
     m_ring_d2d_bitmap_targets.clear();
+    m_ring_d2d_bgra_composite_targets.clear();
+    m_ring_vp_in_view_bgra_composites.clear();
     m_ring_hud_textures.clear();
     m_ring_hud_resolved_textures.clear();
+    m_ring_bgra_composite_textures.clear();
+    m_ring_d2d_hud_sources.clear();
+    m_ring_d2d_bgra_video_sources.clear();
     m_ring_preview_in_views.clear();
     m_ring_hud_queries.clear();
     m_ring_vp_queries.clear();
@@ -495,6 +854,21 @@ bool D3D11NvencPipeline::CreateRingResources() {
         if (FAILED(hr)) return false;
         m_ring_d2d_bitmap_targets.push_back(pD2DTarget);
 
+        D2D1_BITMAP_PROPERTIES1 sourceBp = bp;
+        sourceBp.bitmapOptions = D2D1_BITMAP_OPTIONS_NONE;
+        ID2D1Bitmap1* pHudSource = nullptr;
+        IDXGISurface1* pHudSourceSurface = nullptr;
+        hr = pHudTex->QueryInterface(
+            __uuidof(IDXGISurface1), (void**)&pHudSourceSurface
+        );
+        if (FAILED(hr)) return false;
+        hr = m_pD2DContext->CreateBitmapFromDxgiSurface(
+            pHudSourceSurface, &sourceBp, &pHudSource
+        );
+        pHudSourceSurface->Release();
+        if (FAILED(hr)) return false;
+        m_ring_d2d_hud_sources.push_back(pHudSource);
+
         ID3D11VideoProcessorInputView* pVPInViewHUD = nullptr;
         hr = m_pVideoDevice->CreateVideoProcessorInputView(pHudTex, m_pVPEnum, &inDesc, &pVPInViewHUD);
         if (FAILED(hr)) {
@@ -503,7 +877,55 @@ bool D3D11NvencPipeline::CreateRingResources() {
         }
         m_ring_vp_in_view_huds.push_back(pVPInViewHUD);
 
-        // 3. Persistent GPU slot completion query fences (HUD & VP)
+        // 3. GPU-only composition surfaces.  Keep the VP BGRA output as a
+        // source texture and use a separate BGRA render target for D2D.  A
+        // D2D target cannot safely be written by VideoProcessor and D2D in
+        // the same frame on all drivers (D2DERR_RECREATE_TARGET).
+        ID3D11Texture2D* pVideoBgraTex = nullptr;
+        hr = m_pDevice->CreateTexture2D(&hudDesc, NULL, &pVideoBgraTex);
+        if (FAILED(hr)) return false;
+        m_ring_hud_resolved_textures.push_back(pVideoBgraTex);
+
+        ID3D11VideoProcessorOutputView* pVideoBgraOutView = nullptr;
+        hr = m_pVideoDevice->CreateVideoProcessorOutputView(
+            pVideoBgraTex, m_pVPEnum, &outDesc, &pVideoBgraOutView
+        );
+        if (FAILED(hr)) return false;
+        m_ring_vp_bgra_out_views.push_back(pVideoBgraOutView);
+
+        ID2D1Bitmap1* pVideoBgraSource = nullptr;
+        IDXGISurface1* pVideoBgraSurface = nullptr;
+        hr = pVideoBgraTex->QueryInterface(
+            __uuidof(IDXGISurface1), (void**)&pVideoBgraSurface
+        );
+        if (FAILED(hr)) return false;
+        hr = m_pD2DContext->CreateBitmapFromDxgiSurface(
+            pVideoBgraSurface, &sourceBp, &pVideoBgraSource
+        );
+        pVideoBgraSurface->Release();
+        if (FAILED(hr)) return false;
+        m_ring_d2d_bgra_video_sources.push_back(pVideoBgraSource);
+
+        ID3D11Texture2D* pCompositeTex = nullptr;
+        hr = m_pDevice->CreateTexture2D(&hudDesc, NULL, &pCompositeTex);
+        if (FAILED(hr)) return false;
+        m_ring_bgra_composite_textures.push_back(pCompositeTex);
+
+        ID3D11VideoProcessorInputView* pCompositeInView = nullptr;
+        hr = m_pVideoDevice->CreateVideoProcessorInputView(pCompositeTex, m_pVPEnum, &inDesc, &pCompositeInView);
+        if (FAILED(hr)) return false;
+        m_ring_vp_in_view_bgra_composites.push_back(pCompositeInView);
+
+        IDXGISurface1* pCompositeSurface = nullptr;
+        hr = pCompositeTex->QueryInterface(__uuidof(IDXGISurface1), (void**)&pCompositeSurface);
+        if (FAILED(hr)) return false;
+        ID2D1Bitmap1* pCompositeD2DTarget = nullptr;
+        hr = m_pD2DContext->CreateBitmapFromDxgiSurface(pCompositeSurface, &bp, &pCompositeD2DTarget);
+        pCompositeSurface->Release();
+        if (FAILED(hr)) return false;
+        m_ring_d2d_bgra_composite_targets.push_back(pCompositeD2DTarget);
+
+        // 4. Persistent GPU slot completion query fences (HUD & VP)
         D3D11_QUERY_DESC qDesc{};
         qDesc.Query = D3D11_QUERY_EVENT;
         qDesc.MiscFlags = 0;
@@ -555,6 +977,21 @@ bool D3D11NvencPipeline::CreateRingResources() {
                 }
             }
         }
+    }
+
+    if (!m_ring_hud_textures.empty()) {
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "HUD_Texture_slot0",
+                                  m_ring_hud_textures[0], m_pContext);
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "D2D_Target_slot0",
+                                  m_ring_d2d_bitmap_targets[0], m_pContext);
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "VP_HUD_InputView_slot0",
+                                  m_ring_vp_in_view_huds[0], m_pContext);
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "P010_Output_slot0",
+                                  m_ring_nv12_textures[0], m_pContext);
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "HUD_Query_slot0",
+                                  m_ring_hud_queries[0], m_pContext);
+        RecordInteractionIdentity("RESOURCE_ALLOCATOR", "created", "VP_Query_slot0",
+                                  m_ring_vp_queries[0], m_pContext);
     }
 
     return true;
@@ -612,6 +1049,8 @@ bool D3D11NvencPipeline::OpenClip(uint32_t clip_idx) {
             fflush(stdout);
             return false;
         }
+        RecordInteractionIdentity("DECODER", "created", "IMFDXGIDeviceManager",
+                                  m_pDevMgr, m_pContext);
     }
 
     if (!m_pReaderAttributes) {
@@ -641,6 +1080,15 @@ bool D3D11NvencPipeline::OpenClip(uint32_t clip_idx) {
         printf("[OPENCLIP ERROR] MFCreateSourceReaderFromURL clip=%u path=%ls hr=0x%08X\n", clip_idx, clip.path, (unsigned int)hr);
         fflush(stdout);
         return false;
+    }
+    RecordInteractionIdentity("DECODER", "created", "IMFSourceReader",
+                              m_pSourceReader, m_pContext);
+    if (m_interaction_decoder_file) {
+        fprintf(m_interaction_decoder_file,
+                "clip=%u path=%ls dxgi_manager_ptr=0x%p compositor_device_ptr=0x%p immediate_context_ptr=0x%p\n",
+                clip_idx, clip.path, (void*)m_pDevMgr, (void*)m_pDevice,
+                (void*)m_pContext);
+        fflush(m_interaction_decoder_file);
     }
 
     m_pSourceReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
@@ -884,6 +1332,8 @@ ID3D11VideoProcessorInputView* D3D11NvencPipeline::AcquireDecoderFrame(int64_t& 
             DWORD streamFlags = 0;
             LONGLONG timestamp = 0;
 
+            RecordD3D11ContextOperation("MF_ReadSample", m_clip_frames_decoded,
+                                        m_pSourceReader, -1);
             HRESULT hr = m_pSourceReader->ReadSample(
                 MF_SOURCE_READER_FIRST_VIDEO_STREAM,
                 0,
@@ -927,6 +1377,9 @@ ID3D11VideoProcessorInputView* D3D11NvencPipeline::AcquireDecoderFrame(int64_t& 
         UINT subresource = 0;
         pDXGIBuffer->GetResource(IID_ID3D11Texture2D, (void**)&pVideoTexture);
         pDXGIBuffer->GetSubresourceIndex(&subresource);
+        RecordDecoderDeviceAudit(pVideoTexture, subresource, m_clip_frames_decoded);
+        RecordD3D11ContextOperation("Decoder_GetResource", m_clip_frames_decoded,
+                                    pVideoTexture, -1);
 
         std::pair<ID3D11Texture2D*, UINT> key(pVideoTexture, subresource);
         ID3D11VideoProcessorInputView* pInputView = nullptr;
@@ -941,6 +1394,8 @@ ID3D11VideoProcessorInputView* D3D11NvencPipeline::AcquireDecoderFrame(int64_t& 
             inDesc.Texture2D.ArraySlice = subresource;
 
             HRESULT hr_v = m_pVideoDevice->CreateVideoProcessorInputView(pVideoTexture, m_pVPEnum, &inDesc, &pInputView);
+            RecordD3D11ContextOperation("CreateVideoProcessorInputView", m_clip_frames_decoded,
+                                        pVideoTexture, -1);
             if (SUCCEEDED(hr_v)) {
                 m_view_cache[key] = pInputView;
                 if (m_config.enable_debug_layer) {
@@ -975,11 +1430,37 @@ bool D3D11NvencPipeline::SetIndicators(const TelemIndicatorDesc* indicators, uin
         ind->DiscardDeviceResources();
     }
     m_indicators.clear();
+    m_diag_indicator_resources_deferred = false;
     if (!indicators || count == 0) return true;
+
+    // The opt-in separate-HUD diagnostics own their D2D/DWrite resources on
+    // Device B.  Rebind the shared font cache before constructing widgets so
+    // every text format and icon bitmap is created by the B device/context.
+    const bool use_separate_hud = m_hud_separate_device &&
+        (m_hud_separate_mode == "FULL_HUD" ||
+         m_hud_separate_mode == "VP_HUD" ||
+         m_hud_separate_mode == "NVENC");
+    if (use_separate_hud && m_hud_b_d2d_context && m_hud_b_dwrite_factory) {
+        m_font_cache.Init(m_hud_b_dwrite_factory);
+        // Any icon bitmaps cached while configuring the ordinary A path are
+        // tied to that D2D device.  Discard them before B creates its copies.
+        m_icon_cache.Clear();
+    }
+    ID2D1DeviceContext* indicator_d2d = use_separate_hud ? m_hud_b_d2d_context : m_pD2DContext;
+    IDWriteFactory* indicator_dwrite = use_separate_hud ? m_hud_b_dwrite_factory : m_pDWriteFactory;
 
     for (uint32_t i = 0; i < count; ++i) {
         const auto& desc = indicators[i];
         std::unique_ptr<IndicatorBase> pInd;
+
+        if (desc.type == TELEM_IND_CHART &&
+            std::string(desc.key) == "fit_cadence_text") {
+            const float raw_alpha = desc.style.chart.fill_alpha;
+            const float normalized_alpha = raw_alpha > 1.0f
+                ? raw_alpha / 255.0f : raw_alpha;
+            AppendCadenceAlphaTrace("C ABI received field value",
+                                    raw_alpha, normalized_alpha);
+        }
 
         switch (desc.type) {
             case TELEM_IND_TEXT:
@@ -1004,6 +1485,13 @@ bool D3D11NvencPipeline::SetIndicators(const TelemIndicatorDesc* indicators, uin
                 if (it != m_chart_samples.end() && !it->second.empty()) {
                     chartInd->SetSamples(it->second.data(), (uint32_t)it->second.size());
                 }
+                if (std::string(desc.key) == "fit_cadence_text") {
+                    const float raw_alpha = desc.style.chart.fill_alpha;
+                    const float normalized_alpha = raw_alpha > 1.0f
+                        ? raw_alpha / 255.0f : raw_alpha;
+                    AppendCadenceAlphaTrace("C++ descriptor copied to ChartIndicator",
+                                            raw_alpha, normalized_alpha);
+                }
                 pInd = std::move(chartInd);
                 break;
             }
@@ -1026,13 +1514,19 @@ bool D3D11NvencPipeline::SetIndicators(const TelemIndicatorDesc* indicators, uin
                 pInd = std::move(mapInd);
                 break;
             }
+            case TELEM_IND_LEAN:
+                pInd = std::make_unique<LeanIndicator>(desc, &m_font_cache);
+                break;
             default:
                 break;
         }
 
         if (pInd) {
-            if (m_pD2DContext && m_pDWriteFactory) {
-                pInd->CreateDeviceResources(m_pD2DContext, m_pDWriteFactory);
+            if (indicator_d2d && indicator_dwrite && !m_d2d_single_thread) {
+                RecordD2DThread("CreateDeviceResources", UINT32_MAX);
+                pInd->CreateDeviceResources(indicator_d2d, indicator_dwrite);
+            } else if (m_d2d_single_thread) {
+                m_diag_indicator_resources_deferred = true;
             }
             m_indicators.push_back(std::move(pInd));
         }
@@ -1159,6 +1653,1534 @@ bool D3D11NvencPipeline::SaveTextureToPng(ID3D11Texture2D* pTex, const wchar_t* 
     return SUCCEEDED(hr);
 }
 
+void D3D11NvencPipeline::InitDeterminismDiagnostics() {
+    m_determinism_diag = false;
+    m_determinism_serialized = false;
+    m_interaction_stage = InteractionLadderStage();
+    m_context_serialize = IsInteractionContextSerializationRequested();
+    m_hud_separate_device = IsSeparateHudDeviceRequested();
+    m_hud_cross_device = IsSeparateHudCrossDeviceRequested();
+    m_hud_separate_mode = SeparateHudMode();
+    m_determinism_dir.clear();
+    m_interaction_dir.clear();
+    m_d2d_reset_state = false;
+    m_d2d_fresh_context = false;
+    m_d2d_single_thread = false;
+    m_d2d_minimal_draw = false;
+    m_diag_indicator_resources_deferred = false;
+    m_d2d_owner_thread_id = 0;
+    m_interaction_worker_thread_id = 0;
+    m_d2d_state_trace = TelemD2DStateTrace{};
+    ReleaseCopyOutHudTexture();
+    SafeRelease(m_diag_info_queue);
+    SafeRelease(m_diag_multithread);
+    m_diag_multithread_available = false;
+    m_diag_multithread_before = FALSE;
+    m_diag_multithread_after = FALSE;
+    if (m_determinism_file) {
+        fclose(m_determinism_file);
+        m_determinism_file = nullptr;
+    }
+    for (FILE** file : {&m_d2d_state_stack_file, &m_d2d_transform_file,
+                        &m_d2d_thread_file, &m_d2d_enddraw_file, &m_d2d_debug_file,
+                        &m_d2d_target_binding_file, &m_d3d11_debug_file}) {
+        if (*file) {
+            fclose(*file);
+            *file = nullptr;
+        }
+    }
+    for (FILE** file : {&m_interaction_identity_file, &m_interaction_trace_file,
+                        &m_interaction_timeline_file, &m_interaction_decoder_file,
+                        &m_separate_identity_file, &m_resource_alias_file}) {
+        if (*file) {
+            fclose(*file);
+            *file = nullptr;
+        }
+    }
+    char dir[512] = {};
+    DWORD len = GetEnvironmentVariableA("TELEM_NATIVE_DETERMINISM_DIR", dir, (DWORD)sizeof(dir));
+    if (len > 0 && len < sizeof(dir)) {
+        m_determinism_diag = true;
+        m_determinism_dir.assign(dir, len);
+    }
+
+    char interaction_dir[512] = {};
+    DWORD interaction_len = GetEnvironmentVariableA(
+        "TELEM_NATIVE_PIPELINE_INTERACTION_DIR", interaction_dir,
+        (DWORD)sizeof(interaction_dir));
+    if (interaction_len > 0 && interaction_len < sizeof(interaction_dir)) {
+        m_interaction_dir.assign(interaction_dir, interaction_len);
+        CreateDirectoryA(m_interaction_dir.c_str(), nullptr);
+        auto open_interaction = [&](const char* name, const char* header) {
+            std::string path = m_interaction_dir + "\\" + name;
+            FILE* file = fopen(path.c_str(), "w");
+            if (file && header) {
+                fputs(header, file);
+                fflush(file);
+            }
+            return file;
+        };
+        m_interaction_identity_file = open_interaction(
+            "device_context_identity.csv",
+            "subsystem,phase,object,pointer,context_ptr,thread_id,adapter_luid_low,adapter_luid_high,vendor_id\n");
+        m_interaction_trace_file = open_interaction(
+            "d3d11_context_thread_trace.csv",
+            "qpc,frame,thread_id,operation,context_ptr,resource_ptr,slot\n");
+        m_interaction_timeline_file = open_interaction(
+            "first_failure_timeline.csv",
+            "qpc,frame,event,hr,thread_id\n");
+        m_interaction_decoder_file = open_interaction("decoder_device_audit.txt", nullptr);
+        m_separate_identity_file = open_interaction(
+            "device_a_b_identity.csv",
+            "device,adapter_index,luid_low,luid_high,vendor_id,description,device_ptr,context_ptr,dxgi_device_ptr,d2d_device_ptr,d2d_context_ptr,thread_id\n");
+        m_resource_alias_file = open_interaction(
+            "resource_alias_audit.csv",
+            "frame,hud_texture_ptr,hud_underlying_resource_ptr,decoder_texture_ptr,decoder_queue_texture_ptr,resource_alias\n");
+        if (m_interaction_decoder_file) {
+            fprintf(m_interaction_decoder_file,
+                    "stage=%s\nrequested_stage=%u\ncontext_serialize=%s\n",
+                    InteractionStageName(m_interaction_stage), m_interaction_stage,
+                    m_context_serialize ? "True" : "False");
+            fflush(m_interaction_decoder_file);
+        }
+    }
+
+    if (!m_determinism_diag) return;
+    m_d2d_reset_state = IsD2DResetStateDiagnostic();
+    m_d2d_fresh_context = IsFreshD2DContextDiagnostic();
+    m_d2d_single_thread = IsD2DSingleThreadDiagnostic();
+    m_d2d_minimal_draw = IsD2DMinimalDrawDiagnostic();
+    char serialized[8] = {};
+    DWORD slen = GetEnvironmentVariableA("TELEM_NATIVE_SERIALIZED", serialized, (DWORD)sizeof(serialized));
+    m_determinism_serialized = slen > 0 && slen < sizeof(serialized) && serialized[0] == '1';
+    CreateDirectoryA(m_determinism_dir.c_str(), nullptr);
+    std::string path = m_determinism_dir + "\\stage_presence.csv";
+    m_determinism_file = fopen(path.c_str(), "w");
+    if (m_determinism_file) {
+        fprintf(m_determinism_file, "frame,stage,present,hr\n");
+        fflush(m_determinism_file);
+    }
+    auto open_diag = [&](const char* name, const char* header) {
+        std::string path = m_determinism_dir + "\\" + name;
+        FILE* file = fopen(path.c_str(), "w");
+        if (file && header) {
+            fputs(header, file);
+            fflush(file);
+        }
+        return file;
+    };
+    m_d2d_state_stack_file = open_diag(
+        "state_stack_trace.csv",
+        "frame,clip_depth_begin,clip_depth_end,layer_depth_begin,layer_depth_end,BeginDraw_depth_begin,BeginDraw_depth_end,state_stack_leak,thread_id\n");
+    m_d2d_transform_file = open_diag(
+        "transform_trace.csv",
+        "frame,phase,widget,m11,m12,m21,m22,dx,dy,thread_id\n");
+    m_d2d_thread_file = open_diag(
+        "thread_trace.csv",
+        "frame,operation,thread_id,owner_thread_id,thread_mismatch\n");
+    m_d2d_enddraw_file = open_diag(
+        "enddraw_trace.csv",
+        "frame,enddraw_hr,flush_hr,tag1,tag2,thread_id\n");
+    m_d2d_target_binding_file = open_diag(
+        "target_binding_trace.csv",
+        "frame,phase,target_ptr,target_is_null,detach_mode,thread_id\n");
+    m_d2d_debug_file = open_diag("d2d_debug_messages.txt", nullptr);
+    if (m_d2d_debug_file) {
+        fprintf(m_d2d_debug_file,
+                "requested=%s\ndebug_level=D2D1_DEBUG_LEVEL_INFORMATION\n",
+                IsD2DStateDiagnostic("TELEM_NATIVE_D2D_DEBUG") ? "True" : "False");
+        fflush(m_d2d_debug_file);
+    }
+    m_d3d11_debug_file = open_diag("d3d11_cross_api_debug.txt", nullptr);
+    if (m_d3d11_debug_file) {
+        fprintf(m_d3d11_debug_file,
+                "requested=%s\nmode=%s\ninfo_queue=initializing\n",
+                IsD3D11CrossApiDebugDiagnostic() ? "True" : "False",
+                D2DTargetDetachMode().c_str());
+        fflush(m_d3d11_debug_file);
+    }
+}
+
+void D3D11NvencPipeline::CloseDeterminismDiagnostics() {
+    if (m_determinism_file) {
+        fflush(m_determinism_file);
+        fclose(m_determinism_file);
+        m_determinism_file = nullptr;
+    }
+    for (FILE** file : {&m_d2d_state_stack_file, &m_d2d_transform_file,
+                        &m_d2d_thread_file, &m_d2d_enddraw_file, &m_d2d_debug_file,
+                        &m_d2d_target_binding_file, &m_d3d11_debug_file}) {
+        if (*file) {
+            fflush(*file);
+            fclose(*file);
+            *file = nullptr;
+        }
+    }
+    for (FILE** file : {&m_interaction_identity_file, &m_interaction_trace_file,
+                        &m_interaction_timeline_file, &m_interaction_decoder_file,
+                        &m_separate_identity_file, &m_resource_alias_file}) {
+        if (*file) {
+            fflush(*file);
+            fclose(*file);
+            *file = nullptr;
+        }
+    }
+    SafeRelease(m_diag_multithread);
+}
+
+void D3D11NvencPipeline::RecordInteractionIdentity(const char* subsystem,
+                                                   const char* phase,
+                                                   const char* object_name,
+                                                   void* object_ptr,
+                                                   void* context_ptr) {
+    if (!m_interaction_identity_file) return;
+    fprintf(m_interaction_identity_file, "%s,%s,%s,0x%p,0x%p,%lu,%llu,%llu,0x%04X\n",
+            subsystem ? subsystem : "", phase ? phase : "",
+            object_name ? object_name : "", object_ptr, context_ptr,
+            (unsigned long)GetCurrentThreadId(),
+            (unsigned long long)m_adapter_desc.AdapterLuid.LowPart,
+            (unsigned long long)m_adapter_desc.AdapterLuid.HighPart,
+            (unsigned int)m_adapter_desc.VendorId);
+    fflush(m_interaction_identity_file);
+}
+
+void D3D11NvencPipeline::RecordD3D11ContextOperation(const char* operation,
+                                                    uint32_t frame,
+                                                    void* resource_ptr,
+                                                    int slot) {
+    if (!m_interaction_trace_file || !m_pContext) return;
+    LARGE_INTEGER qpc{};
+    QueryPerformanceCounter(&qpc);
+    fprintf(m_interaction_trace_file, "%lld,%u,%lu,%s,0x%p,0x%p,%d\n",
+            (long long)qpc.QuadPart,
+            frame == UINT32_MAX ? m_interaction_current_frame : frame,
+            (unsigned long)GetCurrentThreadId(), operation ? operation : "",
+            (void*)m_pContext, resource_ptr, slot);
+    fflush(m_interaction_trace_file);
+}
+
+void D3D11NvencPipeline::RecordInteractionTimeline(uint32_t frame,
+                                                   const char* event_name,
+                                                   HRESULT hr) {
+    if (!m_interaction_timeline_file) return;
+    LARGE_INTEGER qpc{};
+    QueryPerformanceCounter(&qpc);
+    fprintf(m_interaction_timeline_file, "%lld,%u,%s,0x%08X,%lu\n",
+            (long long)qpc.QuadPart, frame, event_name ? event_name : "",
+            (unsigned int)hr, (unsigned long)GetCurrentThreadId());
+    fflush(m_interaction_timeline_file);
+}
+
+void D3D11NvencPipeline::RecordDecoderDeviceAudit(ID3D11Texture2D* texture,
+                                                  UINT subresource,
+                                                  uint32_t frame) {
+    if (!m_interaction_decoder_file) return;
+    ID3D11Device* texture_device = nullptr;
+    HRESULT hr = E_POINTER;
+    if (texture) {
+        texture->GetDevice(&texture_device);
+        hr = texture_device ? S_OK : E_FAIL;
+    }
+    fprintf(m_interaction_decoder_file,
+            "frame=%u thread_id=%lu texture_ptr=0x%p subresource=%u texture_device_ptr=0x%p compositor_device_ptr=0x%p device_equal=%s get_device_hr=0x%08X\n",
+            frame, (unsigned long)GetCurrentThreadId(), (void*)texture,
+            subresource, (void*)texture_device, (void*)m_pDevice,
+            texture_device == m_pDevice ? "True" : "False",
+            (unsigned int)hr);
+    if (texture_device) texture_device->Release();
+    fflush(m_interaction_decoder_file);
+    if (m_resource_alias_file) {
+        ID3D11Texture2D* hud_texture = m_hud_separate_device
+            ? m_hud_b_texture
+            : (m_ring_hud_textures.empty() ? nullptr : m_ring_hud_textures[0]);
+        void* hud_resource = hud_texture;
+        bool alias = hud_texture && texture && hud_texture == texture;
+        fprintf(m_resource_alias_file, "%u,0x%p,0x%p,0x%p,0x%p,%s\n",
+                frame, (void*)hud_texture, hud_resource, (void*)texture,
+                (void*)texture, alias ? "True" : "False");
+        fflush(m_resource_alias_file);
+    }
+}
+
+void D3D11NvencPipeline::RecordSeparateDeviceIdentity() {
+    if (!m_separate_identity_file || !m_pAdapter || !m_hud_b_device) return;
+    IDXGIAdapter1* b_adapter = nullptr;
+    DXGI_ADAPTER_DESC b_desc{};
+    if (m_hud_b_dxgi_device) {
+        m_hud_b_dxgi_device->GetAdapter(reinterpret_cast<IDXGIAdapter**>(&b_adapter));
+        if (b_adapter) b_adapter->GetDesc(&b_desc);
+    }
+    const std::string a_name = AdapterDescriptionUtf8(m_adapter_desc);
+    const std::string b_name = AdapterDescriptionUtf8(b_desc);
+    fprintf(m_separate_identity_file,
+            "DEVICE_A,%u,%llu,%llu,0x%04X,\"%s\",0x%p,0x%p,0x%p,0x%p,0x%p,%lu\n",
+            m_adapter_index,
+            (unsigned long long)m_adapter_desc.AdapterLuid.LowPart,
+            (unsigned long long)m_adapter_desc.AdapterLuid.HighPart,
+            (unsigned int)m_adapter_desc.VendorId, a_name.c_str(),
+            (void*)m_pDevice, (void*)m_pContext, nullptr,
+            (void*)m_pD2DDevice, (void*)m_pD2DContext,
+            (unsigned long)GetCurrentThreadId());
+    fprintf(m_separate_identity_file,
+            "DEVICE_B,%u,%llu,%llu,0x%04X,\"%s\",0x%p,0x%p,0x%p,0x%p,0x%p,%lu\n",
+            m_adapter_index,
+            (unsigned long long)b_desc.AdapterLuid.LowPart,
+            (unsigned long long)b_desc.AdapterLuid.HighPart,
+            (unsigned int)b_desc.VendorId, b_name.c_str(),
+            (void*)m_hud_b_device, (void*)m_hud_b_context,
+            (void*)m_hud_b_dxgi_device, (void*)m_hud_b_d2d_device,
+            (void*)m_hud_b_d2d_context,
+            (unsigned long)GetCurrentThreadId());
+    fflush(m_separate_identity_file);
+    if (b_adapter) b_adapter->Release();
+}
+
+bool D3D11NvencPipeline::CreateSeparateHudDevice() {
+    if (!m_pAdapter) return false;
+    SafeRelease(m_hud_b_d2d_context);
+    SafeRelease(m_hud_b_d2d_device);
+    SafeRelease(m_hud_b_dxgi_device);
+    SafeRelease(m_hud_b_context);
+    SafeRelease(m_hud_b_device);
+
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    if (m_config.enable_debug_layer) flags |= D3D11_CREATE_DEVICE_DEBUG;
+    D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+    D3D_FEATURE_LEVEL fl_out{};
+    HRESULT hr = D3D11CreateDevice(m_pAdapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr,
+                                   flags, levels, 2, D3D11_SDK_VERSION,
+                                   &m_hud_b_device, &fl_out, &m_hud_b_context);
+    if (FAILED(hr) && (flags & D3D11_CREATE_DEVICE_DEBUG)) {
+        flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        hr = D3D11CreateDevice(m_pAdapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr,
+                               flags, levels, 2, D3D11_SDK_VERSION,
+                               &m_hud_b_device, &fl_out, &m_hud_b_context);
+    }
+    if (FAILED(hr) || !m_hud_b_device || !m_hud_b_context) return false;
+
+    hr = m_hud_b_device->QueryInterface(__uuidof(IDXGIDevice),
+                                        reinterpret_cast<void**>(&m_hud_b_dxgi_device));
+    if (FAILED(hr) || !m_hud_b_dxgi_device) return false;
+    HMODULE h_d2d = LoadLibraryW(L"d2d1.dll");
+    if (!h_d2d) return false;
+    PFN_D2D1CreateDevice pfn_create =
+        (PFN_D2D1CreateDevice)GetProcAddress(h_d2d, "D2D1CreateDevice");
+    if (!pfn_create) return false;
+    D2D1_CREATION_PROPERTIES creation{};
+    const D2D1_CREATION_PROPERTIES* creation_ptr = nullptr;
+    if (m_determinism_diag && IsD2DStateDiagnostic("TELEM_NATIVE_D2D_DEBUG")) {
+        creation.threadingMode = D2D1_THREADING_MODE_MULTI_THREADED;
+        creation.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+        creation.options = D2D1_DEVICE_CONTEXT_OPTIONS_NONE;
+        creation_ptr = &creation;
+    }
+    hr = pfn_create(m_hud_b_dxgi_device, creation_ptr, &m_hud_b_d2d_device);
+    if (FAILED(hr) || !m_hud_b_d2d_device) return false;
+    hr = m_hud_b_d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                                  &m_hud_b_d2d_context);
+    if (FAILED(hr) || !m_hud_b_d2d_context) return false;
+    m_hud_b_d2d_context->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    m_hud_b_d2d_context->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+    HMODULE h_dw = LoadLibraryW(L"dwrite.dll");
+    if (!h_dw) return false;
+    PFN_DWriteCreateFactory pfn_dw =
+        (PFN_DWriteCreateFactory)GetProcAddress(h_dw, "DWriteCreateFactory");
+    if (!pfn_dw) return false;
+    hr = pfn_dw(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                reinterpret_cast<IUnknown**>(&m_hud_b_dwrite_factory));
+    if (FAILED(hr) || !m_hud_b_dwrite_factory) return false;
+    hr = m_hud_b_dwrite_factory->CreateTextFormat(
+        L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL, 68.0f, L"en-us", &m_hud_b_fmt);
+    if (FAILED(hr) || !m_hud_b_fmt) return false;
+    hr = m_hud_b_d2d_context->CreateSolidColorBrush(
+        D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &m_hud_b_brush);
+    if (FAILED(hr) || !m_hud_b_brush) return false;
+    auto make_fmt = [&](IDWriteTextFormat** out, DWRITE_FONT_WEIGHT weight, float size) {
+        return SUCCEEDED(m_hud_b_dwrite_factory->CreateTextFormat(
+            L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, size, L"en-us", out));
+    };
+    if (!make_fmt(&m_hud_b_fmt_time, DWRITE_FONT_WEIGHT_BOLD, 68.0f) ||
+        !make_fmt(&m_hud_b_fmt_speed_val, DWRITE_FONT_WEIGHT_BOLD, 112.0f) ||
+        !make_fmt(&m_hud_b_fmt_speed_unit, DWRITE_FONT_WEIGHT_SEMI_BOLD, 36.0f) ||
+        !make_fmt(&m_hud_b_fmt_hr_val, DWRITE_FONT_WEIGHT_BOLD, 112.0f) ||
+        !make_fmt(&m_hud_b_fmt_hr_unit, DWRITE_FONT_WEIGHT_SEMI_BOLD, 36.0f) ||
+        !make_fmt(&m_hud_b_fmt_label, DWRITE_FONT_WEIGHT_SEMI_BOLD, 26.0f)) {
+        return false;
+    }
+    if (FAILED(m_hud_b_d2d_context->CreateSolidColorBrush(
+            D2D1::ColorF(0.75f, 0.82f, 0.90f, 0.90f), &m_hud_b_brush_text_muted)) ||
+        FAILED(m_hud_b_d2d_context->CreateSolidColorBrush(
+            D2D1::ColorF(0.0f, 0.88f, 1.0f, 1.0f), &m_hud_b_brush_cyan)) ||
+        FAILED(m_hud_b_d2d_context->CreateSolidColorBrush(
+            D2D1::ColorF(1.0f, 0.32f, 0.32f, 1.0f), &m_hud_b_brush_coral)) ||
+        FAILED(m_hud_b_d2d_context->CreateSolidColorBrush(
+            D2D1::ColorF(0.04f, 0.06f, 0.10f, 0.68f), &m_hud_b_brush_card_bg)) ||
+        FAILED(m_hud_b_d2d_context->CreateSolidColorBrush(
+            D2D1::ColorF(0.25f, 0.35f, 0.50f, 0.60f), &m_hud_b_brush_card_border))) {
+        return false;
+    }
+    if (!CreateSeparateHudTexture(m_hud_cross_device)) return false;
+    RecordSeparateDeviceIdentity();
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "ID3D11Device",
+                              m_hud_b_device, m_hud_b_context);
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "ID3D11DeviceContext",
+                              m_hud_b_context, m_hud_b_context);
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "IDXGIDevice",
+                              m_hud_b_dxgi_device, m_hud_b_context);
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "ID2D1Device",
+                              m_hud_b_d2d_device, m_hud_b_context);
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "ID2D1DeviceContext",
+                              m_hud_b_d2d_context, m_hud_b_context);
+    return true;
+}
+
+bool D3D11NvencPipeline::CreateSeparateHudTexture(bool shared_resource) {
+    if (!m_hud_b_device || !m_hud_b_d2d_context) return false;
+    SafeRelease(m_hud_b_target);
+    SafeRelease(m_hud_b_texture);
+    SafeRelease(m_hud_b_staging);
+    SafeRelease(m_hud_b_mutex);
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = m_config.width;
+    desc.Height = m_config.height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    if (shared_resource) {
+        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE |
+                         D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+    }
+    HRESULT hr = m_hud_b_device->CreateTexture2D(&desc, nullptr, &m_hud_b_texture);
+    if (FAILED(hr) || !m_hud_b_texture) return false;
+    IDXGISurface1* surface = nullptr;
+    hr = m_hud_b_texture->QueryInterface(__uuidof(IDXGISurface1),
+                                         reinterpret_cast<void**>(&surface));
+    if (FAILED(hr) || !surface) return false;
+    D2D1_BITMAP_PROPERTIES1 bp{};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bp.dpiX = 96.0f;
+    bp.dpiY = 96.0f;
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    hr = m_hud_b_d2d_context->CreateBitmapFromDxgiSurface(surface, &bp,
+                                                            &m_hud_b_target);
+    surface->Release();
+    if (FAILED(hr) || !m_hud_b_target) return false;
+    D3D11_TEXTURE2D_DESC staging = desc;
+    staging.Width = (std::min)(96u, desc.Width);
+    staging.Height = (std::min)(96u, desc.Height);
+    staging.Usage = D3D11_USAGE_STAGING;
+    staging.BindFlags = 0;
+    staging.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    staging.MiscFlags = 0;
+    hr = m_hud_b_device->CreateTexture2D(&staging, nullptr, &m_hud_b_staging);
+    if (FAILED(hr) || !m_hud_b_staging) return false;
+    if (shared_resource) {
+        hr = m_hud_b_texture->QueryInterface(__uuidof(IDXGIKeyedMutex),
+                                             reinterpret_cast<void**>(&m_hud_b_mutex));
+        if (FAILED(hr) || !m_hud_b_mutex) return false;
+        if (!CreateCrossDeviceHudResource()) return false;
+    }
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "HUD_Texture2D",
+                              m_hud_b_texture, m_hud_b_context);
+    RecordInteractionIdentity("HUD_DEVICE_B", "created", "D2D_Target",
+                              m_hud_b_target, m_hud_b_context);
+    return true;
+}
+
+bool D3D11NvencPipeline::CreateCrossDeviceHudResource() {
+    if (!m_hud_b_texture || !m_pDevice) return false;
+    if (m_hud_shared_handle) {
+        CloseHandle(m_hud_shared_handle);
+        m_hud_shared_handle = nullptr;
+    }
+    SafeRelease(m_hud_a_shared_texture);
+    SafeRelease(m_hud_a_mutex);
+    SafeRelease(m_hud_a_shared_view);
+    SafeRelease(m_hud_a_shared_staging);
+    SafeRelease(m_hud_a_shared_query);
+    IDXGIResource1* resource = nullptr;
+    HRESULT hr = m_hud_b_texture->QueryInterface(__uuidof(IDXGIResource1),
+                                                 reinterpret_cast<void**>(&resource));
+    if (FAILED(hr) || !resource) return false;
+    hr = resource->CreateSharedHandle(nullptr,
+                                      DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+                                      nullptr, &m_hud_shared_handle);
+    resource->Release();
+    if (FAILED(hr) || !m_hud_shared_handle) return false;
+    ID3D11Device1* device1 = nullptr;
+    hr = m_pDevice->QueryInterface(__uuidof(ID3D11Device1),
+                                   reinterpret_cast<void**>(&device1));
+    if (FAILED(hr) || !device1) return false;
+    hr = device1->OpenSharedResource1(m_hud_shared_handle,
+                                      __uuidof(ID3D11Texture2D),
+                                      reinterpret_cast<void**>(&m_hud_a_shared_texture));
+    device1->Release();
+    if (FAILED(hr) || !m_hud_a_shared_texture) return false;
+    hr = m_hud_a_shared_texture->QueryInterface(__uuidof(IDXGIKeyedMutex),
+                                                reinterpret_cast<void**>(&m_hud_a_mutex));
+    if (FAILED(hr) || !m_hud_a_mutex) return false;
+    if (m_pVideoDevice && m_pVPEnum) {
+        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC view_desc{};
+        view_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+        hr = m_pVideoDevice->CreateVideoProcessorInputView(
+            m_hud_a_shared_texture, m_pVPEnum, &view_desc, &m_hud_a_shared_view);
+        if (FAILED(hr) || !m_hud_a_shared_view) return false;
+    }
+    D3D11_TEXTURE2D_DESC desc{};
+    m_hud_a_shared_texture->GetDesc(&desc);
+    desc.Width = (std::min)(96u, desc.Width);
+    desc.Height = (std::min)(96u, desc.Height);
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.MiscFlags = 0;
+    hr = m_pDevice->CreateTexture2D(&desc, nullptr, &m_hud_a_shared_staging);
+    if (FAILED(hr) || !m_hud_a_shared_staging) return false;
+    D3D11_QUERY_DESC query_desc{};
+    query_desc.Query = D3D11_QUERY_EVENT;
+    hr = m_pDevice->CreateQuery(&query_desc, &m_hud_a_shared_query);
+    if (FAILED(hr) || !m_hud_a_shared_query) return false;
+    if (m_interaction_dir.size()) {
+        std::string path = m_interaction_dir + "\\shared_resource_caps.txt";
+        FILE* file = fopen(path.c_str(), "w");
+        if (file) {
+            fprintf(file, "create_shared_handle_hr=0x%08X\nopen_shared_resource1_hr=0x%08X\n",
+                    (unsigned int)S_OK, (unsigned int)S_OK);
+            fprintf(file, "keyed_mutex=available\nopened_texture_ptr=0x%p\n",
+                    (void*)m_hud_a_shared_texture);
+            fclose(file);
+        }
+    }
+    RecordInteractionIdentity("HUD_CROSS_DEVICE", "opened", "Shared_HUD_Texture_A",
+                              m_hud_a_shared_texture, m_pContext);
+    RecordInteractionIdentity("HUD_CROSS_DEVICE", "opened", "IDXGIKeyedMutex_A",
+                              m_hud_a_mutex, m_pContext);
+    return true;
+}
+
+bool D3D11NvencPipeline::WaitSeparateContextEvent(ID3D11DeviceContext* context,
+                                                  ID3D11Device* device,
+                                                  const char* label,
+                                                  uint32_t frame) {
+    if (!context || !device) return false;
+    D3D11_QUERY_DESC desc{};
+    desc.Query = D3D11_QUERY_EVENT;
+    ID3D11Query* query = nullptr;
+    HRESULT hr = device->CreateQuery(&desc, &query);
+    if (FAILED(hr) || !query) {
+        RecordInteractionTimeline(frame, label, hr);
+        return false;
+    }
+    context->End(query);
+    context->Flush();
+    const double event_t0 = TelemHudProfile::NowSeconds();
+    BOOL done = FALSE;
+    while (!done) {
+        hr = context->GetData(query, &done, sizeof(done), 0);
+        if (FAILED(hr)) break;
+        if (!done) YieldProcessor();
+    }
+    const double event_ms = (TelemHudProfile::NowSeconds() - event_t0) * 1000.0;
+    TelemHudProfile::Record("wait", "event_wait", label ? label : "event", event_ms);
+    if (label && (::strstr(label, "full_hud") || ::strstr(label, "hud_complete"))) {
+        TelemHudProfile::Record("wait", "device_b_completion_wait", label, event_ms);
+    }
+    query->Release();
+    RecordInteractionTimeline(frame, label, hr);
+    return SUCCEEDED(hr) && done == TRUE;
+}
+
+bool D3D11NvencPipeline::RenderSeparateHudMarker(uint32_t frame) {
+    if (!m_hud_b_d2d_context || !m_hud_b_target || !m_hud_b_brush) return false;
+    const double acquire_t0 = TelemHudProfile::NowSeconds();
+    HRESULT acquire_hr = m_hud_b_mutex ? m_hud_b_mutex->AcquireSync(0, INFINITE) : S_OK;
+    TelemHudProfile::Record("wait", "keyed_mutex_acquire_device_b", "marker",
+                            (TelemHudProfile::NowSeconds() - acquire_t0) * 1000.0);
+    if (FAILED(acquire_hr)) return false;
+    m_hud_b_d2d_context->SetTarget(m_hud_b_target);
+    m_hud_b_d2d_context->BeginDraw();
+    m_hud_b_d2d_context->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    D2D1_RECT_F marker = D2D1::RectF(0.0f, 0.0f, 96.0f, 96.0f);
+    m_hud_b_d2d_context->FillRectangle(&marker, m_hud_b_brush);
+    wchar_t frame_text[64] = {};
+    swprintf_s(frame_text, L"FRAME %u", frame);
+    D2D1_RECT_F text_rect = D2D1::RectF(120.0f, 40.0f, 1200.0f, 160.0f);
+    m_hud_b_d2d_context->DrawText(frame_text, (UINT32)wcslen(frame_text),
+                                  m_hud_b_fmt, &text_rect, m_hud_b_brush);
+    D2D1_TAG tag1 = 0, tag2 = 0;
+    HRESULT hr_flush = m_hud_b_d2d_context->Flush(&tag1, &tag2);
+    HRESULT hr_end = m_hud_b_d2d_context->EndDraw(&tag1, &tag2);
+    m_hud_b_d2d_context->SetTarget(nullptr);
+    m_hud_b_context->Flush();
+    bool done = SUCCEEDED(hr_flush) && SUCCEEDED(hr_end) &&
+                WaitSeparateContextEvent(m_hud_b_context, m_hud_b_device,
+                                         "device_b_hud_complete", frame);
+    if (m_hud_b_mutex) {
+        const double release_t0 = TelemHudProfile::NowSeconds();
+        HRESULT release_hr = m_hud_b_mutex->ReleaseSync(1);
+        TelemHudProfile::Record("wait", "keyed_mutex_release_device_b", "marker",
+                                (TelemHudProfile::NowSeconds() - release_t0) * 1000.0);
+        done = done && SUCCEEDED(release_hr);
+    }
+    RecordInteractionTimeline(frame, done ? "HUD_DEVICE_B" : "HUD_DEVICE_B_FAIL",
+                              done ? S_OK : E_FAIL);
+    return done;
+}
+
+bool D3D11NvencPipeline::ReadbackSeparateHudMarker() {
+    if (!m_hud_b_context || !m_hud_b_device || !m_hud_b_texture || !m_hud_b_staging) return false;
+    D3D11_BOX box{0, 0, 0,
+                  (std::min)(96u, m_config.width),
+                  (std::min)(96u, m_config.height), 1};
+    m_hud_b_context->CopySubresourceRegion(m_hud_b_staging, 0, 0, 0, 0,
+                                           m_hud_b_texture, 0, &box);
+    if (!WaitSeparateContextEvent(m_hud_b_context, m_hud_b_device,
+                                  "device_b_readback_complete", m_interaction_current_frame)) {
+        return false;
+    }
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = m_hud_b_context->Map(m_hud_b_staging, 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) return false;
+    uint32_t hits = 0;
+    for (uint32_t y = 0; y < (std::min)(96u, m_config.height); ++y) {
+        const uint8_t* row = static_cast<const uint8_t*>(mapped.pData) + y * mapped.RowPitch;
+        for (uint32_t x = 0; x < (std::min)(96u, m_config.width); ++x) {
+            const uint8_t* px = row + x * 4;
+            if (px[0] > 220 && px[1] > 220 && px[2] > 220 && px[3] > 200) ++hits;
+        }
+    }
+    m_hud_b_context->Unmap(m_hud_b_staging, 0);
+    return hits >= 128u;
+}
+
+bool D3D11NvencPipeline::RenderSeparateHudFullFrame(const TelemFrameState& state,
+                                                    uint32_t frame) {
+    if (!m_hud_b_d2d_context || !m_hud_b_target || !m_hud_b_texture) return false;
+    const double hud_total_t0 = TelemHudProfile::NowSeconds();
+    TelemHudProfile::Timeline(frame, "HUD begin");
+    const double acquire_t0 = TelemHudProfile::NowSeconds();
+    HRESULT acquire_hr = m_hud_b_mutex ? m_hud_b_mutex->AcquireSync(0, INFINITE) : S_OK;
+    TelemHudProfile::Record("wait", "keyed_mutex_acquire_device_b", "full_hud",
+                            (TelemHudProfile::NowSeconds() - acquire_t0) * 1000.0);
+    if (FAILED(acquire_hr)) return false;
+
+    // RenderHud is the canonical widget compositor.  Temporarily redirect its
+    // context, target pool and legacy fallback resources to B; no A resource
+    // is written or aliased by this path.
+    ID2D1DeviceContext* saved_d2d = m_pD2DContext;
+    IDWriteFactory* saved_dwrite = m_pDWriteFactory;
+    auto saved_hud_textures = std::move(m_ring_hud_textures);
+    auto saved_hud_targets = std::move(m_ring_d2d_bitmap_targets);
+    IDWriteTextFormat* saved_fmt_time = m_fmt_time;
+    IDWriteTextFormat* saved_fmt_speed_val = m_fmt_speed_val;
+    IDWriteTextFormat* saved_fmt_speed_unit = m_fmt_speed_unit;
+    IDWriteTextFormat* saved_fmt_hr_val = m_fmt_hr_val;
+    IDWriteTextFormat* saved_fmt_hr_unit = m_fmt_hr_unit;
+    IDWriteTextFormat* saved_fmt_label = m_fmt_label;
+    ID2D1SolidColorBrush* saved_brush_white = m_brush_white;
+    ID2D1SolidColorBrush* saved_brush_text_muted = m_brush_text_muted;
+    ID2D1SolidColorBrush* saved_brush_cyan = m_brush_cyan;
+    ID2D1SolidColorBrush* saved_brush_coral = m_brush_coral;
+    ID2D1SolidColorBrush* saved_brush_card_bg = m_brush_card_bg;
+    ID2D1SolidColorBrush* saved_brush_card_border = m_brush_card_border;
+
+    m_pD2DContext = m_hud_b_d2d_context;
+    m_pDWriteFactory = m_hud_b_dwrite_factory;
+    m_ring_hud_textures.push_back(m_hud_b_texture);
+    m_ring_d2d_bitmap_targets.push_back(m_hud_b_target);
+    m_fmt_time = m_hud_b_fmt_time;
+    m_fmt_speed_val = m_hud_b_fmt_speed_val;
+    m_fmt_speed_unit = m_hud_b_fmt_speed_unit;
+    m_fmt_hr_val = m_hud_b_fmt_hr_val;
+    m_fmt_hr_unit = m_hud_b_fmt_hr_unit;
+    m_fmt_label = m_hud_b_fmt_label;
+    m_brush_white = m_hud_b_brush;
+    m_brush_text_muted = m_hud_b_brush_text_muted;
+    m_brush_cyan = m_hud_b_brush_cyan;
+    m_brush_coral = m_hud_b_brush_coral;
+    m_brush_card_bg = m_hud_b_brush_card_bg;
+    m_brush_card_border = m_hud_b_brush_card_border;
+    m_rendering_separate_hud = true;
+    HRESULT hr = RenderHud(state, 0);
+    TelemHudProfile::Timeline(frame, "HUD render returned");
+    bool done = SUCCEEDED(hr) &&
+        WaitSeparateContextEvent(m_hud_b_context, m_hud_b_device,
+                                 "device_b_full_hud_complete", frame);
+    TelemHudProfile::Timeline(frame, "completion wait");
+    m_rendering_separate_hud = false;
+
+    m_pD2DContext = saved_d2d;
+    m_pDWriteFactory = saved_dwrite;
+    m_ring_hud_textures = std::move(saved_hud_textures);
+    m_ring_d2d_bitmap_targets = std::move(saved_hud_targets);
+    m_fmt_time = saved_fmt_time;
+    m_fmt_speed_val = saved_fmt_speed_val;
+    m_fmt_speed_unit = saved_fmt_speed_unit;
+    m_fmt_hr_val = saved_fmt_hr_val;
+    m_fmt_hr_unit = saved_fmt_hr_unit;
+    m_fmt_label = saved_fmt_label;
+    m_brush_white = saved_brush_white;
+    m_brush_text_muted = saved_brush_text_muted;
+    m_brush_cyan = saved_brush_cyan;
+    m_brush_coral = saved_brush_coral;
+    m_brush_card_bg = saved_brush_card_bg;
+    m_brush_card_border = saved_brush_card_border;
+    if (m_hud_b_mutex) {
+        const double release_t0 = TelemHudProfile::NowSeconds();
+        HRESULT release_hr = m_hud_b_mutex->ReleaseSync(1);
+        TelemHudProfile::Record("wait", "keyed_mutex_release_device_b", "full_hud",
+                                (TelemHudProfile::NowSeconds() - release_t0) * 1000.0);
+        done = done && SUCCEEDED(release_hr);
+    }
+    TelemHudProfile::Timeline(frame, "ReleaseSync");
+    TelemHudProfile::Record("hud", "total", "full", (TelemHudProfile::NowSeconds() - hud_total_t0) * 1000.0);
+    RecordInteractionTimeline(frame, done ? "HUD_DEVICE_B_FULL" : "HUD_DEVICE_B_FULL_FAIL",
+                               done ? S_OK : FAILED(hr) ? hr : E_FAIL);
+    return done;
+}
+
+bool D3D11NvencPipeline::RunSeparateHudFullFrames(uint32_t start_frame,
+                                                  uint32_t frame_count) {
+    bool failed = false;
+    uint32_t completed = 0;
+    for (uint32_t i = 0; i < frame_count; ++i) {
+        const uint32_t frame = start_frame + i;
+        m_interaction_current_frame = frame;
+        int64_t pts = 0;
+        uint32_t flags = 0;
+        ID3D11VideoProcessorInputView* view = AcquireDecoderFrame(pts, flags);
+        if (!view) {
+            failed = true;
+            break;
+        }
+        TelemFrameState state{};
+        if (frame < m_telemetry_table.size()) state = m_telemetry_table[frame];
+        else if (!m_telemetry_table.empty()) state = m_telemetry_table.back();
+        state.frame_index = frame;
+        const bool rendered = RenderSeparateHudFullFrame(state, frame);
+        const bool present = rendered && ReadbackSeparateHudMarker();
+        RecordDeterminismStage(frame, "HUD_DEVICE_B_FULL", present, present ? S_OK : E_FAIL);
+        if (!present) {
+            failed = true;
+            break;
+        }
+        ++completed;
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+    }
+    CloseDecoder();
+    {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+        m_progress.is_active = 0;
+        m_progress.is_finished = 1;
+        m_progress.error_code = failed ? -10 : 0;
+        strcpy_s(m_progress.error_message, failed ? "Device B full HUD stage failed" : "");
+    }
+    RecordInteractionTimeline(start_frame + completed, "ladder_end", failed ? E_FAIL : S_OK);
+    m_is_active = false;
+    m_is_finished = true;
+    return !failed && completed == frame_count;
+}
+
+bool D3D11NvencPipeline::RunSeparateVpHudFrames(uint32_t start_frame,
+                                                uint32_t frame_count) {
+    if (!m_hud_b_mutex || !m_hud_a_mutex || !m_hud_a_shared_view ||
+        m_ring_vp_in_view_huds.empty()) return false;
+    bool failed = false;
+    uint32_t completed = 0;
+    for (uint32_t i = 0; i < frame_count; ++i) {
+        const uint32_t frame = start_frame + i;
+        m_interaction_current_frame = frame;
+        int64_t pts = 0;
+        uint32_t flags = 0;
+        ID3D11VideoProcessorInputView* video_view = AcquireDecoderFrame(pts, flags);
+        if (!video_view) {
+            failed = true;
+            break;
+        }
+        TelemFrameState state{};
+        if (frame < m_telemetry_table.size()) state = m_telemetry_table[frame];
+        else if (!m_telemetry_table.empty()) state = m_telemetry_table.back();
+        state.frame_index = frame;
+        const double consume_t0 = TelemHudProfile::NowSeconds();
+        HRESULT consume_hr = S_OK;
+        if (!RenderSeparateHudFullFrame(state, frame)) {
+            consume_hr = E_FAIL;
+        } else {
+            consume_hr = m_hud_a_mutex->AcquireSync(1, INFINITE);
+        }
+        TelemHudProfile::Record("wait", "device_a_consume_wait", "separate_vp",
+                                (TelemHudProfile::NowSeconds() - consume_t0) * 1000.0);
+        if (FAILED(consume_hr)) {
+            failed = true;
+            break;
+        }
+        const int slot = (int)(frame % m_config.ring_size);
+        if (slot >= (int)m_ring_vp_in_view_huds.size() ||
+            slot >= (int)m_ring_vp_out_views.size() ||
+            slot >= (int)m_ring_nv12_textures.size()) {
+            m_hud_a_mutex->ReleaseSync(0);
+            failed = true;
+            break;
+        }
+        ID3D11VideoProcessorInputView* saved_view = m_ring_vp_in_view_huds[slot];
+        m_ring_vp_in_view_huds[slot] = m_hud_a_shared_view;
+        bool vp_ok = Composite(video_view, slot, true);
+        m_ring_vp_in_view_huds[slot] = saved_view;
+        if (vp_ok && slot < (int)m_ring_vp_queries.size() && m_ring_vp_queries[slot]) {
+            m_pContext->End(m_ring_vp_queries[slot]);
+            m_pContext->Flush();
+            BOOL done = FALSE;
+            while (!done) {
+                HRESULT qhr = m_pContext->GetData(m_ring_vp_queries[slot], &done,
+                                                  sizeof(done), 0);
+                if (FAILED(qhr)) {
+                    vp_ok = false;
+                    break;
+                }
+                if (!done) YieldProcessor();
+            }
+        }
+        const bool present = vp_ok && ReadbackHudMarker(m_ring_nv12_textures[slot], true);
+        const double consume_release_t0 = TelemHudProfile::NowSeconds();
+        m_hud_a_mutex->ReleaseSync(0);
+        TelemHudProfile::Record("wait", "device_a_consume_release", "separate_vp",
+                                (TelemHudProfile::NowSeconds() - consume_release_t0) * 1000.0);
+        RecordDeterminismStage(frame, "HUD_AFTER_VP", present, present ? S_OK : E_FAIL);
+        RecordDeterminismStage(frame, "HUD_BEFORE_NVENC", present, present ? S_OK : E_FAIL);
+        if (!present) {
+            failed = true;
+            break;
+        }
+        ++completed;
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+    }
+    CloseDecoder();
+    {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+        m_progress.is_active = 0;
+        m_progress.is_finished = 1;
+        m_progress.error_code = failed ? -10 : 0;
+        strcpy_s(m_progress.error_message, failed ? "Device A VP HUD stage failed" : "");
+    }
+    RecordInteractionTimeline(start_frame + completed, "ladder_end", failed ? E_FAIL : S_OK);
+    m_is_active = false;
+    m_is_finished = true;
+    return !failed && completed == frame_count;
+}
+
+bool D3D11NvencPipeline::RunSeparateHudMarkerFrames(uint32_t start_frame,
+                                                    uint32_t frame_count) {
+    bool failed = false;
+    uint32_t completed = 0;
+    for (uint32_t i = 0; i < frame_count; ++i) {
+        uint32_t frame = start_frame + i;
+        m_interaction_current_frame = frame;
+        int64_t pts = 0;
+        uint32_t flags = 0;
+        RecordInteractionTimeline(frame, "decode_start", S_OK);
+        ID3D11VideoProcessorInputView* view = AcquireDecoderFrame(pts, flags);
+        RecordInteractionTimeline(frame, "decode_end", view ? S_OK : E_FAIL);
+        if (!view || !RenderSeparateHudMarker(frame)) {
+            failed = true;
+            break;
+        }
+        bool present = ReadbackSeparateHudMarker();
+        RecordDeterminismStage(frame, "HUD_DEVICE_B", present, present ? S_OK : E_FAIL);
+        RecordInteractionTimeline(frame, present ? "HUD_DEVICE_B_READBACK" : "HUD_DEVICE_B_MISSING",
+                                  present ? S_OK : E_FAIL);
+        if (!present) {
+            failed = true;
+            break;
+        }
+        ++completed;
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+    }
+    CloseDecoder();
+    {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+        m_progress.is_active = 0;
+        m_progress.is_finished = 1;
+        m_progress.error_code = failed ? -10 : 0;
+        strcpy_s(m_progress.error_message, failed ? "separate HUD device stage failed" : "");
+    }
+    RecordInteractionTimeline(start_frame + completed, "ladder_end",
+                              failed ? E_FAIL : S_OK);
+    m_is_active = false;
+    m_is_finished = true;
+    return !failed && completed == frame_count;
+}
+
+bool D3D11NvencPipeline::RunSharedResourceCapabilityFrames(uint32_t start_frame,
+                                                           uint32_t frame_count) {
+    if (!m_hud_b_mutex || !m_hud_a_mutex || !m_hud_a_shared_texture ||
+        !m_hud_a_shared_staging) return false;
+    bool failed = false;
+    uint32_t completed = 0;
+    for (uint32_t i = 0; i < frame_count; ++i) {
+        uint32_t frame = start_frame + i;
+        m_interaction_current_frame = frame;
+        int64_t pts = 0;
+        uint32_t flags = 0;
+        ID3D11VideoProcessorInputView* view = AcquireDecoderFrame(pts, flags);
+        if (!view || !RenderSeparateHudMarker(frame)) {
+            failed = true;
+            break;
+        }
+        if (FAILED(m_hud_a_mutex->AcquireSync(1, INFINITE))) {
+            failed = true;
+            break;
+        }
+        D3D11_BOX box{0, 0, 0,
+                      (std::min)(96u, m_config.width),
+                      (std::min)(96u, m_config.height), 1};
+        m_pContext->CopySubresourceRegion(m_hud_a_shared_staging, 0, 0, 0, 0,
+                                          m_hud_a_shared_texture, 0, &box);
+        bool copied = WaitSeparateContextEvent(m_pContext, m_pDevice,
+                                               "device_a_shared_copy_complete", frame);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        bool present = false;
+        if (copied && SUCCEEDED(m_pContext->Map(m_hud_a_shared_staging, 0,
+                                                D3D11_MAP_READ, 0, &mapped))) {
+            uint32_t hits = 0;
+            for (uint32_t y = 0; y < (std::min)(96u, m_config.height); ++y) {
+                const uint8_t* row = static_cast<const uint8_t*>(mapped.pData) + y * mapped.RowPitch;
+                for (uint32_t x = 0; x < (std::min)(96u, m_config.width); ++x) {
+                    const uint8_t* px = row + x * 4;
+                    if (px[0] > 220 && px[1] > 220 && px[2] > 220 && px[3] > 200) ++hits;
+                }
+            }
+            m_pContext->Unmap(m_hud_a_shared_staging, 0);
+            present = hits >= 128u;
+        }
+        m_hud_a_mutex->ReleaseSync(0);
+        if (!present) {
+            failed = true;
+            break;
+        }
+        ++completed;
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+    }
+    CloseDecoder();
+    {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+        m_progress.is_active = 0;
+        m_progress.is_finished = 1;
+        m_progress.error_code = failed ? -10 : 0;
+        strcpy_s(m_progress.error_message, failed ? "shared GPU resource capability failed" : "");
+    }
+    RecordInteractionTimeline(start_frame + completed, "ladder_end",
+                              failed ? E_FAIL : S_OK);
+    m_is_active = false;
+    m_is_finished = true;
+    return !failed && completed == frame_count;
+}
+
+bool D3D11NvencPipeline::CreateLadderHudResources() {
+    if (!m_pDevice || !m_pD2DContext) return false;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = m_config.width;
+    desc.Height = m_config.height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    ID3D11Texture2D* texture = nullptr;
+    HRESULT hr = m_pDevice->CreateTexture2D(&desc, nullptr, &texture);
+    if (FAILED(hr) || !texture) return false;
+    IDXGISurface1* surface = nullptr;
+    hr = texture->QueryInterface(__uuidof(IDXGISurface1), (void**)&surface);
+    if (FAILED(hr) || !surface) {
+        SafeRelease(texture);
+        return false;
+    }
+    D2D1_BITMAP_PROPERTIES1 bp{};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bp.dpiX = 96.0f;
+    bp.dpiY = 96.0f;
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    ID2D1Bitmap1* target = nullptr;
+    hr = m_pD2DContext->CreateBitmapFromDxgiSurface(surface, &bp, &target);
+    surface->Release();
+    if (FAILED(hr) || !target) {
+        SafeRelease(texture);
+        return false;
+    }
+    m_ring_hud_textures.push_back(texture);
+    m_ring_d2d_bitmap_targets.push_back(target);
+    RecordInteractionIdentity("HUD/D2D", "ladder_resource_create", "ID3D11Texture2D", texture, m_pContext);
+    RecordInteractionIdentity("HUD/D2D", "ladder_resource_create", "ID2D1Bitmap1", target, m_pContext);
+    return true;
+}
+
+void D3D11NvencPipeline::RunInteractionLadderFrames(std::wstring output_path,
+                                                    uint32_t start_frame,
+                                                    uint32_t frame_count,
+                                                    bool include_hud) {
+    (void)output_path;
+    const uint32_t stage = m_interaction_stage;
+    m_interaction_worker_thread_id = GetCurrentThreadId();
+    RecordInteractionTimeline(start_frame, "ladder_start", S_OK);
+    if (m_hud_separate_device) {
+        if (m_hud_separate_mode == "SHARED_CAP") {
+            RunSharedResourceCapabilityFrames(start_frame, frame_count);
+        } else if (m_hud_separate_mode == "FULL_HUD") {
+            RunSeparateHudFullFrames(start_frame, frame_count);
+        } else if (m_hud_separate_mode == "VP_HUD") {
+            RunSeparateVpHudFrames(start_frame, frame_count);
+        } else {
+            RunSeparateHudMarkerFrames(start_frame, frame_count);
+        }
+        return;
+    }
+    if (m_interaction_decoder_file) {
+        fprintf(m_interaction_decoder_file,
+                "device_ptr=0x%p context_ptr=0x%p dxgi_device_ptr=0x%p d2d_device_ptr=0x%p d2d_context_ptr=0x%p video_device_ptr=0x%p video_context_ptr=0x%p worker_thread_id=%lu\n",
+                (void*)m_pDevice, (void*)m_pContext, (void*)m_pAdapter,
+                (void*)m_pD2DDevice, (void*)m_pD2DContext,
+                (void*)m_pVideoDevice, (void*)m_pVideoContext,
+                (unsigned long)m_interaction_worker_thread_id);
+        fflush(m_interaction_decoder_file);
+    }
+
+    bool failed = false;
+    uint32_t completed = 0;
+    const bool needs_decode = stage >= 3;
+    const bool needs_vp = stage >= 4;
+    const bool uses_hud_vp = stage >= 5;
+    for (uint32_t i = 0; i < frame_count; ++i) {
+        uint32_t frame = start_frame + i;
+        m_interaction_current_frame = frame;
+        int64_t pts = 0;
+        uint32_t flags = 0;
+        ID3D11VideoProcessorInputView* video_view = nullptr;
+        if (needs_decode) {
+            RecordInteractionTimeline(frame, "decode_start", S_OK);
+            video_view = AcquireDecoderFrame(pts, flags);
+            RecordInteractionTimeline(frame, "decode_end", video_view ? S_OK : E_FAIL);
+            if (!video_view) {
+                failed = true;
+                break;
+            }
+        }
+
+        if (m_context_serialize && needs_decode) {
+            // Strict diagnostic mode also waits for the immediate-context
+            // queue after MF/D3D11 decoder work, before D2D starts writing a
+            // separate HUD resource.  The mutex below cannot serialize an
+            // internal Media Foundation worker, whereas this EVENT fence can
+            // prove completion of commands already submitted to this queue.
+            D3D11_QUERY_DESC idle_desc{};
+            idle_desc.Query = D3D11_QUERY_EVENT;
+            ID3D11Query* idle_query = nullptr;
+            HRESULT idle_hr = m_pDevice->CreateQuery(&idle_desc, &idle_query);
+            if (SUCCEEDED(idle_hr) && idle_query) {
+                RecordD3D11ContextOperation("End_query_decoder_idle", frame, idle_query, -1);
+                m_pContext->End(idle_query);
+                RecordD3D11ContextOperation("Flush_decoder_idle", frame, nullptr, -1);
+                m_pContext->Flush();
+                BOOL idle_done = FALSE;
+                while (!idle_done) {
+                    HRESULT qhr = m_pContext->GetData(idle_query, &idle_done,
+                                                      sizeof(idle_done), 0);
+                    RecordD3D11ContextOperation("GetData_decoder_idle", frame,
+                                                idle_query, -1);
+                    if (FAILED(qhr)) {
+                        idle_hr = qhr;
+                        break;
+                    }
+                    if (!idle_done) YieldProcessor();
+                }
+                idle_query->Release();
+            }
+            RecordInteractionTimeline(frame, "strict_decoder_idle",
+                                       SUCCEEDED(idle_hr) ? S_OK : idle_hr);
+            if (FAILED(idle_hr)) {
+                failed = true;
+                break;
+            }
+        }
+
+        int slot = m_ring_hud_textures.empty() ? 0 : (int)(frame % m_ring_hud_textures.size());
+        TelemFrameState state{};
+        state.frame_index = frame;
+        bool hud_ok = true;
+        if (include_hud) {
+            RecordInteractionTimeline(frame, "HUD_BeginDraw", S_OK);
+            hud_ok = SUCCEEDED(RenderHud(state, slot));
+            RecordInteractionTimeline(frame, "HUD_EndDraw", m_last_end_draw_hr);
+            RecordInteractionTimeline(frame, "HUD_Flush", m_last_d2d_flush_hr);
+            RecordD3D11ContextOperation("D2D_Flush_after_EndDraw", frame,
+                                         m_ring_hud_textures.empty() ? nullptr : m_ring_hud_textures[slot], slot);
+            bool present = !m_ring_hud_textures.empty() &&
+                          ReadbackHudMarker(m_ring_hud_textures[slot], false);
+            RecordInteractionTimeline(frame, present ? "HUD_readback_present" : "HUD_readback_missing",
+                                       present ? S_OK : E_FAIL);
+            RecordDeterminismStage(frame, "HUD_AFTER_D2D", present, hud_ok ? S_OK : E_FAIL);
+            if (!hud_ok || !present) failed = true;
+        }
+
+        if (needs_vp) {
+            bool vp_ok = false;
+            if (stage == 4) {
+                RecordInteractionTimeline(frame, "VPBlt_background", S_OK);
+                vp_ok = CompositeVideoToBgra(video_view, slot);
+            } else if (uses_hud_vp) {
+                RecordInteractionTimeline(frame, "VPBlt_hud", S_OK);
+                vp_ok = Composite(video_view, slot, true);
+                if (slot < (int)m_ring_vp_queries.size() && m_ring_vp_queries[slot]) {
+                    RecordD3D11ContextOperation("End_query_VP", frame, m_ring_vp_queries[slot], slot);
+                    m_pContext->End(m_ring_vp_queries[slot]);
+                    RecordD3D11ContextOperation("Flush_VP", frame, nullptr, slot);
+                    m_pContext->Flush();
+                    BOOL done = FALSE;
+                    while (!done) {
+                        HRESULT qhr = m_pContext->GetData(m_ring_vp_queries[slot], &done,
+                                                         sizeof(done), 0);
+                        RecordD3D11ContextOperation("GetData_VP", frame,
+                                                     m_ring_vp_queries[slot], slot);
+                        if (FAILED(qhr)) { vp_ok = false; break; }
+                        if (!done) YieldProcessor();
+                    }
+                }
+            }
+            RecordInteractionTimeline(frame, "VP_complete", vp_ok ? S_OK : E_FAIL);
+            if (!vp_ok) failed = true;
+            if (uses_hud_vp) {
+                bool vp_present = ReadbackHudMarker(m_ring_nv12_textures[slot], true);
+                RecordDeterminismStage(frame, "HUD_AFTER_VP", vp_present,
+                                       vp_ok ? S_OK : E_FAIL);
+                RecordDeterminismStage(frame, "HUD_BEFORE_NVENC", vp_present,
+                                       vp_ok ? S_OK : E_FAIL);
+                if (!vp_present) failed = true;
+            }
+        }
+        if (m_context_serialize) {
+            // All explicit D3D calls in this ladder execute on this worker;
+            // the lock is the diagnostic serialization boundary for our code.
+            std::lock_guard<std::mutex> lock(m_d3d11_context_mutex);
+            RecordD3D11ContextOperation("serialized_boundary", frame, nullptr, slot);
+        }
+        ++completed;
+        {
+            std::lock_guard<std::mutex> lock(m_progress_mutex);
+            m_progress.completed_frames = completed;
+            m_progress.total_frames = frame_count;
+            m_progress.current_fps = 0.0;
+        }
+        if (failed) break;
+    }
+
+    if (needs_decode) CloseDecoder();
+    RecordInteractionTimeline(start_frame + completed, "ladder_end",
+                              failed ? E_FAIL : S_OK);
+    {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_stats.completed_frames = completed;
+        m_stats.wall_time_sec = 0.0;
+        m_stats.throughput_fps = 0.0;
+        m_progress.completed_frames = completed;
+        m_progress.total_frames = frame_count;
+        m_progress.is_active = 0;
+        m_progress.is_finished = 1;
+        m_progress.error_code = failed ? -10 : 0;
+        strcpy_s(m_progress.error_message,
+                 failed ? "interaction ladder stage failed" : "");
+    }
+    m_is_active = false;
+    m_is_finished = true;
+}
+
+void D3D11NvencPipeline::RecordDeterminismStage(uint32_t frame, const char* stage, bool present, HRESULT hr) {
+    if (!m_determinism_diag || !m_determinism_file || !IsDeterminismProbeFrame(frame)) return;
+    fprintf(m_determinism_file, "%u,%s,%s,0x%08X\n", frame, stage, present ? "True" : "False", (unsigned int)hr);
+    fflush(m_determinism_file);
+}
+
+void D3D11NvencPipeline::RecordD2DThread(const char* operation, uint32_t frame) {
+    if (!m_determinism_diag || !m_d2d_thread_file) return;
+    DWORD thread_id = GetCurrentThreadId();
+    if (m_d2d_owner_thread_id == 0) m_d2d_owner_thread_id = thread_id;
+    bool mismatch = thread_id != m_d2d_owner_thread_id;
+    fprintf(m_d2d_thread_file, "%s,%s,%lu,%lu,%s\n",
+            frame == UINT32_MAX ? "" : std::to_string(frame).c_str(),
+            operation ? operation : "", (unsigned long)thread_id,
+            (unsigned long)m_d2d_owner_thread_id, mismatch ? "True" : "False");
+    fflush(m_d2d_thread_file);
+}
+
+void D3D11NvencPipeline::RecordD2DTransform(uint32_t frame, const char* phase, const char* widget) {
+    if (!m_determinism_diag || !m_d2d_transform_file || !m_pD2DContext ||
+        !IsDeterminismProbeFrame(frame)) return;
+    D2D1_MATRIX_3X2_F matrix{};
+    m_pD2DContext->GetTransform(&matrix);
+    fprintf(m_d2d_transform_file, "%u,%s,%s,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%lu\n",
+            frame, phase ? phase : "", widget ? widget : "",
+            matrix._11, matrix._12, matrix._21, matrix._22,
+            matrix._31, matrix._32, (unsigned long)GetCurrentThreadId());
+    fflush(m_d2d_transform_file);
+}
+
+void D3D11NvencPipeline::RecordD2DStateStack(uint32_t frame, int clip_begin, int layer_begin,
+                                             int begin_depth, int clip_end, int layer_end,
+                                             int end_depth) {
+    if (!m_determinism_diag || !m_d2d_state_stack_file) return;
+    bool leak = clip_begin != 0 || layer_begin != 0 || begin_depth != 0 ||
+                clip_end != 0 || layer_end != 0 || end_depth != 0;
+    fprintf(m_d2d_state_stack_file, "%u,%d,%d,%d,%d,%d,%d,%s,%lu\n",
+            frame, clip_begin, clip_end, layer_begin, layer_end,
+            begin_depth, end_depth, leak ? "True" : "False",
+            (unsigned long)GetCurrentThreadId());
+    fflush(m_d2d_state_stack_file);
+}
+
+void D3D11NvencPipeline::RecordTargetBinding(uint32_t frame, const char* phase) {
+    if (!m_determinism_diag || !m_d2d_target_binding_file ||
+        !IsTargetBindingProbeFrame(frame) || !m_pD2DContext) return;
+    ID2D1Image* target = nullptr;
+    m_pD2DContext->GetTarget(&target);
+    bool is_null = target == nullptr;
+    fprintf(m_d2d_target_binding_file, "%u,%s,0x%p,%s,%s,%lu\n",
+            frame, phase ? phase : "", (void*)target,
+            is_null ? "True" : "False", D2DTargetDetachMode().c_str(),
+            (unsigned long)GetCurrentThreadId());
+    fflush(m_d2d_target_binding_file);
+    if (target) target->Release();
+}
+
+void D3D11NvencPipeline::DumpD3D11InfoQueue(const char* label, uint32_t frame) {
+    if (!m_d3d11_debug_file) return;
+    if (!m_diag_info_queue) {
+        fprintf(m_d3d11_debug_file, "frame=%u,label=%s,info_queue=unavailable\n",
+                frame, label ? label : "");
+        fflush(m_d3d11_debug_file);
+        return;
+    }
+    UINT64 count = m_diag_info_queue->GetNumStoredMessagesAllowedByRetrievalFilter();
+    fprintf(m_d3d11_debug_file, "frame=%u,label=%s,message_count=%llu\n",
+            frame, label ? label : "", (unsigned long long)count);
+    for (UINT64 i = 0; i < count; ++i) {
+        SIZE_T bytes = 0;
+        if (FAILED(m_diag_info_queue->GetMessage(i, nullptr, &bytes)) || bytes == 0) continue;
+        std::vector<uint8_t> buffer(bytes);
+        auto* message = reinterpret_cast<D3D11_MESSAGE*>(buffer.data());
+        if (SUCCEEDED(m_diag_info_queue->GetMessage(i, message, &bytes)) && message->pDescription) {
+            fprintf(m_d3d11_debug_file, "  id=%u,severity=%u,category=%u,%s\n",
+                    (unsigned int)message->ID, (unsigned int)message->Severity,
+                    (unsigned int)message->Category, message->pDescription);
+        }
+    }
+    m_diag_info_queue->ClearStoredMessages();
+    fflush(m_d3d11_debug_file);
+}
+
+void D3D11NvencPipeline::RecordEndDrawTrace(uint32_t frame, HRESULT end_hr, HRESULT flush_hr,
+                                            uint64_t tag1, uint64_t tag2) {
+    if (!m_determinism_diag || !m_d2d_enddraw_file) return;
+    fprintf(m_d2d_enddraw_file, "%u,0x%08X,0x%08X,%llu,%llu,%lu\n",
+            frame, (unsigned int)end_hr, (unsigned int)flush_hr,
+            (unsigned long long)tag1, (unsigned long long)tag2,
+            (unsigned long)GetCurrentThreadId());
+    fflush(m_d2d_enddraw_file);
+}
+
+void D3D11NvencPipeline::EnsureDeferredIndicatorResources() {
+    if (!m_diag_indicator_resources_deferred || !m_pD2DContext) return;
+    RecordD2DThread("CreateDeviceResources", UINT32_MAX);
+    for (auto& ind : m_indicators) {
+        ind->CreateDeviceResources(m_pD2DContext, m_pDWriteFactory);
+    }
+    m_diag_indicator_resources_deferred = false;
+}
+
+bool D3D11NvencPipeline::CreateFreshHudResources(ID3D11Texture2D** texture, ID2D1Bitmap1** target, ID3D11VideoProcessorInputView** view) {
+    if (!texture || !target || !view || !m_pDevice || !m_pVideoDevice || !m_pVPEnum || !m_pD2DContext) return false;
+    *texture = nullptr; *target = nullptr; *view = nullptr;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = m_config.width; desc.Height = m_config.height;
+    desc.MipLevels = 1; desc.ArraySize = 1; desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    HRESULT hr = m_pDevice->CreateTexture2D(&desc, nullptr, texture);
+    if (FAILED(hr)) return false;
+    IDXGISurface1* surface = nullptr;
+    hr = (*texture)->QueryInterface(__uuidof(IDXGISurface1), (void**)&surface);
+    if (FAILED(hr)) { SafeRelease(*texture); return false; }
+    D2D1_BITMAP_PROPERTIES1 bp{};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bp.dpiX = 96.0f; bp.dpiY = 96.0f;
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    hr = m_pD2DContext->CreateBitmapFromDxgiSurface(surface, &bp, target);
+    surface->Release();
+    if (FAILED(hr)) { SafeRelease(*texture); return false; }
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC in_desc{};
+    in_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    hr = m_pVideoDevice->CreateVideoProcessorInputView(*texture, m_pVPEnum, &in_desc, view);
+    if (FAILED(hr)) { SafeRelease(*target); SafeRelease(*texture); return false; }
+    return true;
+}
+
+static bool CreateD2DTargetAndOptionalView(
+    ID3D11Device* device, ID3D11VideoDevice* video_device,
+    ID3D11VideoProcessorEnumerator* vp_enum, ID3D11Texture2D* texture,
+    ID2D1DeviceContext* d2d, ID2D1Bitmap1** target,
+    ID3D11VideoProcessorInputView** view) {
+    if (!device || !video_device || !vp_enum || !texture || !d2d || (!target && !view)) return false;
+    if (target) *target = nullptr;
+    if (view) *view = nullptr;
+    HRESULT hr = S_OK;
+    if (target) {
+        IDXGISurface1* surface = nullptr;
+        hr = texture->QueryInterface(__uuidof(IDXGISurface1), (void**)&surface);
+        if (FAILED(hr)) return false;
+        D2D1_BITMAP_PROPERTIES1 bp{};
+        bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        bp.dpiX = 96.0f; bp.dpiY = 96.0f;
+        bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+        hr = d2d->CreateBitmapFromDxgiSurface(surface, &bp, target);
+        surface->Release();
+        if (FAILED(hr)) return false;
+    }
+    if (view) {
+        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC in_desc{};
+        in_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+        hr = video_device->CreateVideoProcessorInputView(texture, vp_enum, &in_desc, view);
+        if (FAILED(hr)) { if (target) SafeRelease(*target); return false; }
+    }
+    return true;
+}
+
+bool D3D11NvencPipeline::CreateFreshHudTargetForTexture(ID3D11Texture2D* texture, ID2D1Bitmap1** target, ID3D11VideoProcessorInputView** view) {
+    return CreateD2DTargetAndOptionalView(m_pDevice, m_pVideoDevice, m_pVPEnum, texture, m_pD2DContext, target, view);
+}
+
+bool D3D11NvencPipeline::CreateFreshD2DContextForTexture(ID3D11Texture2D* texture,
+                                                         ID2D1DeviceContext** context,
+                                                         ID2D1Bitmap1** target) {
+    if (!texture || !context || !target || !m_pD2DDevice) return false;
+    *context = nullptr;
+    *target = nullptr;
+    HRESULT hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, context);
+    if (FAILED(hr) || !*context) return false;
+    (*context)->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    (*context)->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    (*context)->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_SOURCE_OVER);
+    (*context)->SetUnitMode(D2D1_UNIT_MODE_DIPS);
+    (*context)->SetDpi(96.0f, 96.0f);
+    IDXGISurface1* surface = nullptr;
+    hr = texture->QueryInterface(__uuidof(IDXGISurface1), (void**)&surface);
+    if (FAILED(hr) || !surface) {
+        SafeRelease(*context);
+        return false;
+    }
+    D2D1_BITMAP_PROPERTIES1 bp{};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bp.dpiX = 96.0f;
+    bp.dpiY = 96.0f;
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    hr = (*context)->CreateBitmapFromDxgiSurface(surface, &bp, target);
+    surface->Release();
+    if (FAILED(hr) || !*target) {
+        SafeRelease(*context);
+        return false;
+    }
+    return true;
+}
+
+void D3D11NvencPipeline::ReleaseFreshHudResources() {
+    SafeRelease(m_diag_fresh_hud_view);
+    SafeRelease(m_diag_fresh_hud_target);
+    SafeRelease(m_diag_fresh_hud_texture);
+}
+
+bool D3D11NvencPipeline::PrepareCopyOutHudTexture(ID3D11Texture2D* source_texture) {
+    if (!source_texture || !m_pDevice || !m_pVideoDevice || !m_pVPEnum) return false;
+    SafeRelease(m_diag_copy_hud_view);
+    SafeRelease(m_diag_copy_hud_texture);
+    D3D11_TEXTURE2D_DESC desc{};
+    source_texture->GetDesc(&desc);
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    desc.MiscFlags = 0;
+    HRESULT hr = m_pDevice->CreateTexture2D(&desc, nullptr, &m_diag_copy_hud_texture);
+    if (FAILED(hr) || !m_diag_copy_hud_texture) {
+        ReleaseCopyOutHudTexture();
+        return false;
+    }
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC view_desc{};
+    view_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    hr = m_pVideoDevice->CreateVideoProcessorInputView(
+        m_diag_copy_hud_texture, m_pVPEnum, &view_desc, &m_diag_copy_hud_view);
+    if (FAILED(hr) || !m_diag_copy_hud_view) {
+        ReleaseCopyOutHudTexture();
+        return false;
+    }
+    return true;
+}
+
+bool D3D11NvencPipeline::PrepareCopyOutDrawTexture() {
+    if (!m_pDevice || !m_pD2DContext || !m_pVideoDevice || !m_pVPEnum) return false;
+    SafeRelease(m_diag_copy_draw_target);
+    SafeRelease(m_diag_copy_draw_texture);
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = m_config.width;
+    desc.Height = m_config.height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    HRESULT hr = m_pDevice->CreateTexture2D(&desc, nullptr, &m_diag_copy_draw_texture);
+    if (FAILED(hr) || !m_diag_copy_draw_texture) return false;
+    if (!CreateD2DTargetAndOptionalView(m_pDevice, m_pVideoDevice, m_pVPEnum,
+                                        m_diag_copy_draw_texture, m_pD2DContext,
+                                        &m_diag_copy_draw_target, nullptr)) {
+        SafeRelease(m_diag_copy_draw_texture);
+        return false;
+    }
+    return true;
+}
+
+void D3D11NvencPipeline::ReleaseCopyOutHudTexture() {
+    SafeRelease(m_diag_copy_hud_view);
+    SafeRelease(m_diag_copy_hud_texture);
+    SafeRelease(m_diag_copy_draw_target);
+    SafeRelease(m_diag_copy_draw_texture);
+}
+
+bool D3D11NvencPipeline::RenderD3D11DynamicHud(uint32_t frame, int slot) {
+    if (!m_pContext || !m_pDevice || slot < 0 || slot >= (int)m_ring_hud_textures.size()) return false;
+    // The pure-D3D11 control must not leave a D2D target bound while the same
+    // texture is written through its RTV and subsequently consumed by the VP.
+    if (m_pD2DContext) m_pD2DContext->SetTarget(nullptr);
+    RecordTargetBinding(frame, "d3d11_control_before_clear");
+    ID3D11RenderTargetView* rtv = nullptr;
+    HRESULT hr = m_pDevice->CreateRenderTargetView(m_ring_hud_textures[slot], nullptr, &rtv);
+    if (FAILED(hr) || !rtv) return false;
+    // Keep every probe pixel above the marker threshold while changing the
+    // clear value deterministically on every frame.
+    const float v = 0.90f + 0.01f * static_cast<float>(frame % 10u);
+    const float color[4] = { v, v, v, 1.0f };
+    RecordD3D11ContextOperation("ClearRenderTargetView", frame, rtv, slot);
+    m_pContext->ClearRenderTargetView(rtv, color);
+    rtv->Release();
+    RecordD3D11ContextOperation("Flush_D3D11_control", frame, nullptr, slot);
+    m_pContext->Flush();
+    DumpD3D11InfoQueue("ClearRenderTargetView", frame);
+    RecordTargetBinding(frame, "d3d11_control_after_clear");
+    return true;
+}
+
+bool D3D11NvencPipeline::ReadbackHudMarker(ID3D11Texture2D* texture, bool p010) {
+    if (!m_determinism_diag || !texture || !m_pDevice || !m_pContext) return false;
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+    const uint32_t sample_w = (std::min)(96u, desc.Width);
+    const uint32_t sample_h = (std::min)(96u, desc.Height);
+    D3D11_TEXTURE2D_DESC staging = desc;
+    staging.Width = sample_w;
+    staging.Height = sample_h;
+    staging.Usage = D3D11_USAGE_STAGING;
+    staging.BindFlags = 0;
+    staging.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    staging.MiscFlags = 0;
+    ID3D11Texture2D* staging_tex = nullptr;
+    if (FAILED(m_pDevice->CreateTexture2D(&staging, nullptr, &staging_tex)) || !staging_tex) return false;
+    RecordD3D11ContextOperation("CopyResource_readback", UINT32_MAX, texture, -1);
+    D3D11_BOX box{0, 0, 0, sample_w, sample_h, 1};
+    m_pContext->CopySubresourceRegion(staging_tex, 0, 0, 0, 0, texture, 0, &box);
+    // Match the standalone D3D11 readback contract: the copy is followed by
+    // an EVENT query and GetData completion before Map.  A bare Flush does
+    // not prove that the copy has completed on every driver/queue timing.
+    D3D11_QUERY_DESC event_desc{};
+    event_desc.Query = D3D11_QUERY_EVENT;
+    ID3D11Query* event_query = nullptr;
+    HRESULT event_hr = m_pDevice->CreateQuery(&event_desc, &event_query);
+    if (FAILED(event_hr) || !event_query) {
+        RecordInteractionTimeline(m_interaction_current_frame, "readback_event_create", event_hr);
+        staging_tex->Release();
+        return false;
+    }
+    RecordD3D11ContextOperation("End_query_readback", UINT32_MAX, event_query, -1);
+    m_pContext->End(event_query);
+    RecordD3D11ContextOperation("Flush_readback", UINT32_MAX, staging_tex, -1);
+    m_pContext->Flush();
+    BOOL done = FALSE;
+    while (!done) {
+        HRESULT get_hr = m_pContext->GetData(event_query, &done, sizeof(done), 0);
+        RecordD3D11ContextOperation("GetData_readback", UINT32_MAX, event_query, -1);
+        if (FAILED(get_hr)) {
+            RecordInteractionTimeline(m_interaction_current_frame, "readback_event_getdata", get_hr);
+            event_query->Release();
+            staging_tex->Release();
+            return false;
+        }
+        if (!done) YieldProcessor();
+    }
+    event_query->Release();
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    RecordD3D11ContextOperation("Map_readback", UINT32_MAX, staging_tex, -1);
+    HRESULT hr = m_pContext->Map(staging_tex, 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        staging_tex->Release();
+        return false;
+    }
+    uint32_t hits = 0;
+    if (!p010) {
+        for (uint32_t y = 0; y < sample_h; ++y) {
+            const uint8_t* row = static_cast<const uint8_t*>(mapped.pData) + y * mapped.RowPitch;
+            for (uint32_t x = 0; x < sample_w; ++x) {
+                const uint8_t* px = row + x * 4;
+                if (px[2] > 220 && px[1] > 220 && px[0] > 220 && px[3] > 200) hits++;
+            }
+        }
+    } else {
+        const uint8_t* base = static_cast<const uint8_t*>(mapped.pData);
+        for (uint32_t y = 0; y < sample_h; y += 2) {
+            const uint16_t* yrow = reinterpret_cast<const uint16_t*>(base + y * mapped.RowPitch);
+            const uint16_t* uvrow = reinterpret_cast<const uint16_t*>(base + staging.Height * mapped.RowPitch + (y / 2) * mapped.RowPitch);
+            for (uint32_t x = 0; x < sample_w; x += 2) {
+                uint32_t y10 = yrow[x] >> 6;
+                uint32_t u10 = uvrow[x & ~1u] >> 6;
+                uint32_t v10 = uvrow[(x & ~1u) + 1] >> 6;
+                if (y10 > 820 && u10 > 400 && u10 < 650 && v10 > 400 && v10 < 650) hits++;
+            }
+        }
+    }
+    RecordD3D11ContextOperation("Unmap_readback", UINT32_MAX, staging_tex, -1);
+    m_pContext->Unmap(staging_tex, 0);
+    staging_tex->Release();
+    return hits >= (p010 ? 12u : 128u);
+}
+
 bool D3D11NvencPipeline::RenderHudFrameToFile(uint32_t frame_index, const std::wstring& output_png_path) {
     if (!m_pD2DContext || m_ring_hud_textures.empty() || !m_pDevice || !m_pContext) return false;
 
@@ -1222,25 +3244,110 @@ bool D3D11NvencPipeline::RenderHudFrameToBuffer(uint32_t frame_index, void* out_
     return true;
 }
 
-HRESULT D3D11NvencPipeline::RenderHud(const TelemFrameState& state, int slot) {
+HRESULT D3D11NvencPipeline::RenderHud(const TelemFrameState& state, int slot, ID2D1Bitmap1* target, bool clear_target) {
     if (!m_pD2DContext || slot < 0 || slot >= (int)m_ring_d2d_bitmap_targets.size()) return E_FAIL;
 
-    m_pD2DContext->SetTarget(m_ring_d2d_bitmap_targets[slot]);
-    m_pD2DContext->SetTransform(D2D1::Matrix3x2F::Identity());
+    int clip_depth_begin = m_d2d_state_trace.clip_depth;
+    int layer_depth_begin = m_d2d_state_trace.layer_depth;
+    int begin_draw_depth_begin = m_d2d_state_trace.begin_draw_depth;
+    RecordD2DThread("SetTarget", state.frame_index);
+    TelemHudProfile::Count("d2d", "SetTarget");
+    TelemHudProfile::Timeline(state.frame_index, "SetTarget");
+    RecordD2DTransform(state.frame_index, "before_begin_draw", "");
+    m_pD2DContext->SetTarget(target ? target : m_ring_d2d_bitmap_targets[slot]);
+    RecordTargetBinding(state.frame_index, "target_before_BeginDraw");
+    if (m_determinism_diag && IsDeterminismProbeFrame(state.frame_index)) {
+        ID2D1Image* bound_target = nullptr;
+        m_pD2DContext->GetTarget(&bound_target);
+        ID2D1Bitmap1* expected_target = target ? target : m_ring_d2d_bitmap_targets[slot];
+        ID3D11Texture2D* expected_texture = m_diag_fresh_hud_texture ? m_diag_fresh_hud_texture : m_ring_hud_textures[slot];
+        std::string identity_path = m_determinism_dir + "\\d2d_target_identity.csv";
+        FILE* identity = fopen(identity_path.c_str(), "a+");
+        if (identity) {
+            fseek(identity, 0, SEEK_END);
+            if (ftell(identity) == 0) fprintf(identity, "frame,texture_ptr,bitmap_ptr,d2d_gettarget_ptr,gettarget_equals_expected,surface_ptr\n");
+            IDXGISurface1* surface = nullptr;
+            if (expected_texture) expected_texture->QueryInterface(__uuidof(IDXGISurface1), (void**)&surface);
+            fprintf(identity, "%u,0x%p,0x%p,0x%p,%s,0x%p\n", state.frame_index,
+                    (void*)expected_texture, (void*)expected_target, (void*)bound_target,
+                    bound_target == expected_target ? "True" : "False", (void*)surface);
+            if (surface) surface->Release();
+            if (bound_target) bound_target->Release();
+            fclose(identity);
+        }
+    }
+    if (m_d2d_reset_state) {
+        m_pD2DContext->SetTarget(target ? target : m_ring_d2d_bitmap_targets[slot]);
+        m_pD2DContext->SetTransform(D2D1::Matrix3x2F::Identity());
+        m_pD2DContext->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_SOURCE_OVER);
+        m_pD2DContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        m_pD2DContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        m_pD2DContext->SetUnitMode(D2D1_UNIT_MODE_DIPS);
+        m_pD2DContext->SetDpi(96.0f, 96.0f);
+    } else {
+        m_pD2DContext->SetTransform(D2D1::Matrix3x2F::Identity());
+    }
+    RecordD2DThread("BeginDraw", state.frame_index);
+    TelemHudProfile::Count("d2d", "BeginDraw");
+    TelemHudProfile::Timeline(state.frame_index, "BeginDraw");
+    g_telem_d2d_state_trace = &m_d2d_state_trace;
     m_pD2DContext->BeginDraw();
-    m_pD2DContext->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    ++m_d2d_state_trace.begin_draw_depth;
+    RecordTargetBinding(state.frame_index, "target_during_draw");
+    if (clear_target) {
+        m_pD2DContext->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    }
 
     if ((state.frame_index >= 146 && state.frame_index <= 155) || (state.frame_index >= 1255 && state.frame_index <= 1265)) {
         printf("[FRAME %u RENDERHUD START] slot=%d inds=%zu\n", state.frame_index, slot, m_indicators.size());
         fflush(stdout);
     }
 
-    if (!m_indicators.empty()) {
+    bool marker_only = false;
+    if (m_determinism_diag) {
+        char marker_mode[8] = {};
+        DWORD marker_len = GetEnvironmentVariableA("TELEM_NATIVE_MARKER_ONLY", marker_mode, (DWORD)sizeof(marker_mode));
+        marker_only = marker_len > 0 && marker_len < sizeof(marker_mode) && marker_mode[0] == '1';
+    }
+    bool minimal_draw = m_d2d_minimal_draw;
+    if (minimal_draw) {
+        D2D1_RECT_F minimal_rect = D2D1::RectF(0.0f, 0.0f, 320.0f, 180.0f);
+        m_pD2DContext->FillRectangle(&minimal_rect, m_brush_card_bg);
+        wchar_t frame_text[64] = {};
+        swprintf_s(frame_text, L"FRAME %u", state.frame_index);
+        D2D1_RECT_F text_rect = D2D1::RectF(12.0f, 12.0f, 300.0f, 160.0f);
+        m_pD2DContext->DrawText(frame_text, (UINT32)wcslen(frame_text), m_fmt_label, &text_rect, m_brush_white);
+    } else if (!marker_only && !m_indicators.empty()) {
+        const std::string widget_group = D2DWidgetGroupDiagnostic();
         for (size_t k = 0; k < m_indicators.size(); ++k) {
             auto& ind = m_indicators[k];
+            if (!IncludeD2DWidgetForGroup(*ind, widget_group)) continue;
+            const double widget_t0 = TelemHudProfile::NowSeconds();
+            TelemHudProfile::Timeline(state.frame_index, ind->GetKey().c_str());
+            const std::string& key = ind->GetKey();
+            const char* update_value = "";
+            if (key == "time_display") update_value = state.time_display_time;
+            else if (key == "exposure_text") update_value = state.exposure_str;
+            else if (key == "iso_text") update_value = state.iso_str;
+            else if (key == "temp_text") update_value = state.temp_str;
+            else if (key == "fit_gopro_battery_text") update_value = state.gopro_battery_str;
+            else if (key == "fit_distance_text") update_value = state.distance_str;
+            else if (key == "fit_solar_text") update_value = state.solar_str;
+            else if (key == "alt_text") update_value = state.altitude_str;
+            else if (key == "fit_curVpower_text") update_value = state.power_str;
+            else if (key == "fit_garmin_battery_percent_text") update_value = state.garmin_battery_str;
+            else if (key == "speed_text") update_value = state.speed_str;
+            else if (key == "fit_heart_rate_text") update_value = state.hr_str;
+            else if (key == "fit_cadence_text") update_value = state.cad_str;
+            TelemHudProfile::Update(state.frame_index, key.c_str(), update_value);
             ind->Render(m_pD2DContext, state);
+            TelemHudProfile::Timeline(state.frame_index, (key + " done").c_str());
+            TelemHudProfile::Record("widget", ind->GetKey().c_str(), "render",
+                                    (TelemHudProfile::NowSeconds() - widget_t0) * 1000.0);
+            RecordD2DThread((std::string("draw:") + ind->GetKey()).c_str(), state.frame_index);
+            RecordD2DTransform(state.frame_index, "after_widget", ind->GetKey().c_str());
         }
-    } else {
+    } else if (!marker_only) {
         // Fallback prototype cards
         D2D1_ROUNDED_RECT rcTime = D2D1::RoundedRect(D2D1::RectF(100.0f, 80.0f, 560.0f, 220.0f), 20.0f, 20.0f);
         m_pD2DContext->FillRoundedRectangle(&rcTime, m_brush_card_bg);
@@ -1285,26 +3392,95 @@ HRESULT D3D11NvencPipeline::RenderHud(const TelemFrameState& state, int slot) {
 
         D2D1_RECT_F rUnitHr = D2D1::RectF(1160.0f, 1850.0f, 1280.0f, 1930.0f);
         m_pD2DContext->DrawText(L"bpm", 3, m_fmt_hr_unit, &rUnitHr, m_brush_coral);
+        RecordD2DTransform(state.frame_index, "after_widget", "fallback");
+    }
+    if (minimal_draw) {
+        RecordD2DThread("draw:minimal", state.frame_index);
+        RecordD2DTransform(state.frame_index, "after_widget", "minimal");
     }
 
+    if (m_determinism_diag) {
+        // Diagnostic-only opaque red marker. It is never emitted unless the
+        // caller explicitly sets TELEM_NATIVE_DETERMINISM_DIR.
+        D2D1_RECT_F marker = D2D1::RectF(0.0f, 0.0f, 96.0f, 96.0f);
+        m_pD2DContext->FillRectangle(&marker, m_brush_white);
+    }
+
+    // D2D requires Flush while the draw is open on this driver.  The
+    // transition experiment below separates this D2D flush from the
+    // immediate-context completion flush that fences the VP read.
     D2D1_TAG tag_flush1 = 0, tag_flush2 = 0;
+    const double flush_t0 = TelemHudProfile::NowSeconds();
     HRESULT hr_flush = m_pD2DContext->Flush(&tag_flush1, &tag_flush2);
+    TelemHudProfile::Record("hud", "flush", "d2d", (TelemHudProfile::NowSeconds() - flush_t0) * 1000.0);
+    TelemHudProfile::Count("d2d", "Flush");
+    TelemHudProfile::Timeline(state.frame_index, "Flush");
     if (FAILED(hr_flush)) {
         printf("[D2D ERROR] Flush before EndDraw failed at slot=%d: 0x%08X tag1=%llu tag2=%llu\n", slot, (unsigned int)hr_flush, (unsigned long long)tag_flush1, (unsigned long long)tag_flush2);
         fflush(stdout);
     }
+    DumpD3D11InfoQueue("D2D_Flush", state.frame_index);
 
     D2D1_TAG tag1 = 0, tag2 = 0;
+    const double enddraw_t0 = TelemHudProfile::NowSeconds();
     HRESULT hr_d2d = m_pD2DContext->EndDraw(&tag1, &tag2);
+    TelemHudProfile::Record("hud", "enddraw", "d2d", (TelemHudProfile::NowSeconds() - enddraw_t0) * 1000.0);
+    TelemHudProfile::Count("d2d", "EndDraw");
+    TelemHudProfile::Timeline(state.frame_index, "EndDraw");
+    --m_d2d_state_trace.begin_draw_depth;
     if (FAILED(hr_d2d)) {
         printf("[D2D ERROR] EndDraw failed at slot=%d: 0x%08X tag1=%llu tag2=%llu\n", slot, (unsigned int)hr_d2d, (unsigned long long)tag1, (unsigned long long)tag2);
         fflush(stdout);
+    }
+
+    RecordTargetBinding(state.frame_index, "target_after_EndDraw");
+
+    // Mode C deliberately detaches before the D2D/device flush.  Modes B and
+    // D retain the target through the flush and detach immediately after it;
+    // mode A intentionally leaves it bound for the VP hazard control.
+    const std::string detach_mode = D2DTargetDetachMode();
+    if (detach_mode == "C") {
+        m_pD2DContext->SetTarget(nullptr);
+        RecordTargetBinding(state.frame_index, "target_after_detach_before_flush");
+        DumpD3D11InfoQueue("SetTarget(nullptr)_before_flush", state.frame_index);
     }
 
     m_last_end_draw_hr = hr_d2d;
     m_last_d2d_flush_hr = hr_flush;
     m_last_d2d_tag1 = tag1;
     m_last_d2d_tag2 = tag2;
+    RecordD2DThread("EndDraw", state.frame_index);
+    RecordD2DThread("Flush", state.frame_index);
+    RecordEndDrawTrace(state.frame_index, hr_d2d, hr_flush, tag1, tag2);
+    RecordD2DTransform(state.frame_index, "end_frame", "");
+    RecordD2DStateStack(state.frame_index, clip_depth_begin, layer_depth_begin,
+                        begin_draw_depth_begin, m_d2d_state_trace.clip_depth,
+                        m_d2d_state_trace.layer_depth, m_d2d_state_trace.begin_draw_depth);
+    g_telem_d2d_state_trace = nullptr;
+
+    if (m_determinism_diag) {
+        std::string sequence_path = m_determinism_dir + "\\d2d_draw_sequence.csv";
+        FILE* sequence = fopen(sequence_path.c_str(), "a+");
+        if (sequence) {
+            fseek(sequence, 0, SEEK_END);
+            if (ftell(sequence) == 0) {
+                fprintf(sequence, "frame,slot,set_target,begin_draw,clear,draw_count_expected,draw_count_actual,enddraw_hr,flush_hr\n");
+            }
+            uint32_t text_draws = 0, bitmap_draws = 0, geometry_draws = 0, chart_primitives = 0;
+            for (const auto& ind : m_indicators) {
+                auto type = ind->GetType();
+                if (type == TELEM_IND_TEXT || type == TELEM_IND_TIME_DISPLAY) text_draws++;
+                else if (type == TELEM_IND_MAP) bitmap_draws++;
+                else if (type == TELEM_IND_CHART) chart_primitives++;
+                else geometry_draws++;
+            }
+            uint32_t expected = text_draws + bitmap_draws + geometry_draws + chart_primitives + 1u;
+            fprintf(sequence, "%u,%d,1,1,%d,%u,%u,0x%08X,0x%08X\n",
+                    state.frame_index, slot, clear_target ? 1 : 0, expected,
+                    SUCCEEDED(hr_d2d) ? expected : 0u, (unsigned int)hr_d2d, (unsigned int)hr_flush);
+            fclose(sequence);
+        }
+    }
 
     // Critical: force D2D's GPU commands into the immediate context command queue NOW.
     // D2D's EndDraw() queues D3D11 commands but does not call ID3D11DeviceContext::Flush().
@@ -1312,7 +3488,20 @@ HRESULT D3D11NvencPipeline::RenderHud(const TelemFrameState& state, int slot) {
     // be recorded BEFORE D2D's actual GPU work arrives in the command stream, so the fence
     // would complete before the HUD texture is rendered — causing VideoProcessorBlt to sample
     // an empty/stale HUD texture.
-    m_pContext->Flush();
+    RecordD3D11ContextOperation("Flush_after_D2D_EndDraw", state.frame_index,
+                                target ? target : (void*)m_ring_hud_textures[slot], slot);
+    ID3D11DeviceContext* hud_flush_context =
+        m_rendering_separate_hud ? m_hud_b_context : m_pContext;
+    if (hud_flush_context) hud_flush_context->Flush();
+    TelemHudProfile::Count("d2d", "D3D11Flush");
+    DumpD3D11InfoQueue("D3D11_Flush_after_EndDraw", state.frame_index);
+    RecordTargetBinding(state.frame_index, "target_after_Flush");
+
+    if (detach_mode != "A" && detach_mode != "C") {
+        m_pD2DContext->SetTarget(nullptr);
+        RecordTargetBinding(state.frame_index, "target_after_detach");
+        DumpD3D11InfoQueue("SetTarget(nullptr)_after_flush", state.frame_index);
+    }
 
     if ((state.frame_index >= 146 && state.frame_index <= 155) || (state.frame_index >= 1255 && state.frame_index <= 1265)) {
         printf("[FRAME %u ENDDRAW] hr_d2d=0x%08X tag1=%llu tag2=%llu hr_flush=0x%08X\n",
@@ -1320,9 +3509,15 @@ HRESULT D3D11NvencPipeline::RenderHud(const TelemFrameState& state, int slot) {
         fflush(stdout);
     }
 
-    m_pD2DContext->SetTarget(nullptr);
+    // Production keeps the explicit target detach.  Mode A is diagnostic-only
+    // and intentionally skips it to expose a simultaneous D2D-target/VP-input
+    // role hazard.
+    if (!m_determinism_diag || detach_mode != "A") {
+        m_pD2DContext->SetTarget(nullptr);
+    }
     ID3D11RenderTargetView* nullRTV[1] = { nullptr };
-    m_pContext->OMSetRenderTargets(1, nullRTV, nullptr);
+    RecordD3D11ContextOperation("OMSetRenderTargets_null", state.frame_index, nullptr, slot);
+    if (m_pContext) m_pContext->OMSetRenderTargets(1, nullRTV, nullptr);
     return hr_d2d;
 }
 
@@ -1359,15 +3554,29 @@ bool D3D11NvencPipeline::Composite(ID3D11VideoProcessorInputView* pVideoInView, 
         D3D11_VIDEO_PROCESSOR_STREAM stream{};
         stream.Enable = TRUE;
         stream.pInputSurface = pVideoInView;
+        RecordD3D11ContextOperation("VideoProcessorBlt_background", UINT32_MAX,
+                                    pVideoInView, ring_slot);
         HRESULT hr = m_pVideoContext->VideoProcessorBlt(m_pVP, pOutView, 0, 1, &stream);
         result = SUCCEEDED(hr);
     } else {
         D3D11_VIDEO_PROCESSOR_STREAM streams[2]{};
+        // D3D11 VideoProcessor composites stream 0 behind higher numbered
+        // streams.  Keep decoded P010 video as the base and D2D BGRA HUD as
+        // the alpha-blended overlay.
         streams[0].Enable = TRUE;
         streams[0].pInputSurface = pVideoInView;
 
         streams[1].Enable = TRUE;
-        streams[1].pInputSurface = m_ring_vp_in_view_huds[ring_slot];
+        if (m_diag_copy_hud_view) {
+            streams[1].pInputSurface = m_diag_copy_hud_view;
+        } else if (m_diag_fresh_hud_view) {
+            streams[1].pInputSurface = m_diag_fresh_hud_view;
+        } else {
+            int hud_view_slot = m_diag_hud_slot_override >= 0
+                ? m_diag_hud_slot_override
+                : ((IsStaticHudDiagnostic() || IsSingleHudDiagnostic()) ? 0 : ring_slot);
+            streams[1].pInputSurface = m_ring_vp_in_view_huds[hud_view_slot];
+        }
 
         m_pVideoContext->VideoProcessorSetStreamFrameFormat(m_pVP, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
         m_pVideoContext->VideoProcessorSetStreamFrameFormat(m_pVP, 1, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
@@ -1375,6 +3584,8 @@ bool D3D11NvencPipeline::Composite(ID3D11VideoProcessorInputView* pVideoInView, 
         m_pVideoContext->VideoProcessorSetStreamAutoProcessingMode(m_pVP, 1, FALSE);
         m_pVideoContext->VideoProcessorSetStreamAlpha(m_pVP, 0, FALSE, 1.0f);
         m_pVideoContext->VideoProcessorSetStreamAlpha(m_pVP, 1, TRUE, 1.0f);
+        RecordD3D11ContextOperation("VideoProcessorBlt_hud", UINT32_MAX,
+                                    streams[1].pInputSurface, ring_slot);
         HRESULT hr = m_pVideoContext->VideoProcessorBlt(m_pVP, pOutView, 0, 2, streams);
         m_last_vp_blt_hr = hr;
         if (FAILED(hr)) {
@@ -1383,6 +3594,106 @@ bool D3D11NvencPipeline::Composite(ID3D11VideoProcessorInputView* pVideoInView, 
         result = SUCCEEDED(hr);
     }
     return result;
+}
+
+bool D3D11NvencPipeline::CompositeVideoToBgra(ID3D11VideoProcessorInputView* pVideoInView, int ring_slot) {
+    if (!m_pVideoContext || !m_pVP || !pVideoInView ||
+        ring_slot < 0 || ring_slot >= (int)m_ring_vp_bgra_out_views.size()) {
+        return false;
+    }
+    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+    stream.Enable = TRUE;
+    stream.pInputSurface = pVideoInView;
+    RecordD3D11ContextOperation("VideoProcessorBlt_to_bgra", UINT32_MAX,
+                                pVideoInView, ring_slot);
+    HRESULT hr = m_pVideoContext->VideoProcessorBlt(
+        m_pVP, m_ring_vp_bgra_out_views[ring_slot], 0, 1, &stream
+    );
+    if (FAILED(hr)) {
+        printf("[VP ERROR] P010-to-BGRA VideoProcessorBlt failed: 0x%08X\n", (unsigned int)hr);
+        return false;
+    }
+    // The D2D immediate context consumes this texture next.  Submit and wait
+    // for the base-video write without a CPU texture readback.
+    if (ring_slot < (int)m_ring_vp_queries.size() && m_ring_vp_queries[ring_slot]) {
+        m_pContext->End(m_ring_vp_queries[ring_slot]);
+        m_pContext->Flush();
+        BOOL done = FALSE;
+        while (!done) {
+            HRESULT qhr = m_pContext->GetData(
+                m_ring_vp_queries[ring_slot], &done, sizeof(BOOL), 0
+            );
+            if (FAILED(qhr)) {
+                break;
+            }
+            YieldProcessor();
+        }
+    }
+    return true;
+}
+
+bool D3D11NvencPipeline::CompositeBgraToP010(int ring_slot) {
+    if (!m_pVideoContext || !m_pVP ||
+        ring_slot < 0 || ring_slot >= (int)m_ring_vp_in_view_bgra_composites.size() ||
+        ring_slot >= (int)m_ring_vp_out_views.size()) {
+        return false;
+    }
+    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+    stream.Enable = TRUE;
+    stream.pInputSurface = m_ring_vp_in_view_bgra_composites[ring_slot];
+    RecordD3D11ContextOperation("VideoProcessorBlt_to_p010", UINT32_MAX,
+                                stream.pInputSurface, ring_slot);
+    HRESULT hr = m_pVideoContext->VideoProcessorBlt(
+        m_pVP, m_ring_vp_out_views[ring_slot], 0, 1, &stream
+    );
+    m_last_vp_blt_hr = hr;
+    if (FAILED(hr)) {
+        printf("[VP ERROR] BGRA-to-P010 VideoProcessorBlt failed: 0x%08X\n", (unsigned int)hr);
+    }
+    return SUCCEEDED(hr);
+}
+
+bool D3D11NvencPipeline::ComposeVideoAndHudOnBgra(int ring_slot) {
+    if (!m_pD2DContext ||
+        ring_slot < 0 ||
+        ring_slot >= (int)m_ring_d2d_bgra_composite_targets.size() ||
+        ring_slot >= (int)m_ring_d2d_hud_sources.size() ||
+        ring_slot >= (int)m_ring_d2d_bgra_video_sources.size()) {
+        printf("[D2D HUD BLEND] invalid slot/context slot=%d\n", ring_slot);
+        fflush(stdout);
+        return false;
+    }
+    ID2D1Bitmap1* target = m_ring_d2d_bgra_composite_targets[ring_slot];
+    ID2D1Bitmap1* hud = m_ring_d2d_hud_sources[ring_slot];
+    ID2D1Bitmap1* video = m_ring_d2d_bgra_video_sources[ring_slot];
+    if (!target || !hud || !video) {
+        printf("[D2D HUD BLEND] null bitmap slot=%d target=%p video=%p hud=%p\n",
+               ring_slot, target, video, hud);
+        fflush(stdout);
+        return false;
+    }
+
+    m_pD2DContext->SetTarget(target);
+    m_pD2DContext->SetTransform(D2D1::Matrix3x2F::Identity());
+    m_pD2DContext->BeginDraw();
+    D2D1_SIZE_F size = target->GetSize();
+    D2D1_RECT_F dst = D2D1::RectF(0.0f, 0.0f, size.width, size.height);
+    m_pD2DContext->DrawBitmap(video, &dst, 1.0f,
+        D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, nullptr);
+    m_pD2DContext->DrawBitmap(hud, &dst, 1.0f,
+        D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, nullptr);
+    HRESULT hr = m_pD2DContext->EndDraw();
+    if (FAILED(hr)) {
+        printf("[D2D HUD COMPOSE] EndDraw failed slot=%d hr=0x%08X\n",
+               ring_slot, (unsigned int)hr);
+        fflush(stdout);
+    }
+    m_last_end_draw_hr = hr;
+    m_pContext->Flush();
+    m_pD2DContext->SetTarget(nullptr);
+    ID3D11RenderTargetView* nullRTV[1] = { nullptr };
+    m_pContext->OMSetRenderTargets(1, nullRTV, nullptr);
+    return SUCCEEDED(hr);
 }
 
 bool D3D11NvencPipeline::ResolveEncoderProfile(GUID& outCodecGuid, GUID& outProfileGuid, GUID& outPresetGuid, NV_ENC_TUNING_INFO& outTuningInfo, NV_ENC_CONFIG& outConfig, uint32_t& outRequiredRingSize) {
@@ -1534,9 +3845,11 @@ bool D3D11NvencPipeline::ResolveEncoderProfile(GUID& outCodecGuid, GUID& outProf
 }
 
 bool D3D11NvencPipeline::StartNvencSession() {
+    printf("[NATIVE] StartNvencSession begin\n"); fflush(stdout);
     EndNvencSession();
 
     if (!m_hNvencDll) {
+        printf("[NATIVE] Loading nvEncodeAPI64.dll\n"); fflush(stdout);
         m_hNvencDll = LoadLibraryW(L"nvEncodeAPI64.dll");
         if (!m_hNvencDll) return false;
 
@@ -1545,7 +3858,9 @@ bool D3D11NvencPipeline::StartNvencSession() {
         if (!pfnCreate) return false;
 
         m_nvenc.version = NV_ENCODE_API_FUNCTION_LIST_VER;
+        printf("[NATIVE] Calling NvEncodeAPICreateInstance\n"); fflush(stdout);
         if (pfnCreate(&m_nvenc) != NV_ENC_SUCCESS) return false;
+        printf("[NATIVE] NvEncodeAPICreateInstance returned\n"); fflush(stdout);
     }
 
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS openParams{};
@@ -1554,7 +3869,9 @@ bool D3D11NvencPipeline::StartNvencSession() {
     openParams.device = m_pDevice;
     openParams.apiVersion = NVENCAPI_VERSION;
 
+    printf("[NATIVE] Calling nvEncOpenEncodeSessionEx device=%p\n", m_pDevice); fflush(stdout);
     NVENCSTATUS status = m_nvenc.nvEncOpenEncodeSessionEx(&openParams, &m_hEncoder);
+    printf("[NATIVE] nvEncOpenEncodeSessionEx returned status=%d handle=%p\n", status, m_hEncoder); fflush(stdout);
     if (status != NV_ENC_SUCCESS) return false;
 
     while (!m_free_bitstream_buffers.empty()) m_free_bitstream_buffers.pop();
@@ -1563,6 +3880,7 @@ bool D3D11NvencPipeline::StartNvencSession() {
     m_consumer_index = 0;
     m_first_bs_seen = false;
     m_slot_in_flight.assign(m_config.ring_size, -1);
+    m_slot_generation.assign(m_config.ring_size, 0);
     m_ring_release_diags.clear();
 
     GUID codecGuid{};
@@ -1572,9 +3890,11 @@ bool D3D11NvencPipeline::StartNvencSession() {
     NV_ENC_CONFIG encConfig{};
     uint32_t reqRingSize = 8;
 
+    printf("[NATIVE] Resolving encoder profile\n"); fflush(stdout);
     if (!ResolveEncoderProfile(codecGuid, profileGuid, presetGuid, tuningInfo, encConfig, reqRingSize)) {
         return false;
     }
+    printf("[NATIVE] Encoder profile resolved\n"); fflush(stdout);
 
     NV_ENC_INITIALIZE_PARAMS initParams{};
     initParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
@@ -1591,7 +3911,9 @@ bool D3D11NvencPipeline::StartNvencSession() {
     initParams.tuningInfo = tuningInfo;
     initParams.encodeConfig = &encConfig;
 
+    printf("[NATIVE] Calling nvEncInitializeEncoder\n"); fflush(stdout);
     status = m_nvenc.nvEncInitializeEncoder(m_hEncoder, &initParams);
+    printf("[NATIVE] nvEncInitializeEncoder returned status=%d\n", status); fflush(stdout);
     if (status != NV_ENC_SUCCESS) {
         printf("[NVENC INIT ERROR] nvEncInitializeEncoder failed: %d (0x%08X)\n", status, status);
         return false;
@@ -1601,6 +3923,7 @@ bool D3D11NvencPipeline::StartNvencSession() {
     m_ring_registered_handles.clear();
     NV_ENC_BUFFER_FORMAT bufFmt = (m_config.bit_depth == 10) ? NV_ENC_BUFFER_FORMAT_YUV420_10BIT : NV_ENC_BUFFER_FORMAT_NV12;
 
+    printf("[NATIVE] Registering %u input textures\n", m_config.ring_size); fflush(stdout);
     for (UINT i = 0; i < m_config.ring_size; ++i) {
         NV_ENC_REGISTER_RESOURCE reg{};
         reg.version = NV_ENC_REGISTER_RESOURCE_VER;
@@ -1615,6 +3938,8 @@ bool D3D11NvencPipeline::StartNvencSession() {
         status = m_nvenc.nvEncRegisterResource(m_hEncoder, &reg);
         if (status != NV_ENC_SUCCESS) return false;
         m_ring_registered_handles.push_back(reg.registeredResource);
+        RecordInteractionIdentity("NVENC", "register", "registered_resource",
+                                  reg.registeredResource, m_pContext);
     }
 
     // Allocate decoupled bitstream buffer pool (64 buffers to support lookahead + B-frames)
@@ -1624,6 +3949,7 @@ bool D3D11NvencPipeline::StartNvencSession() {
     while (!m_in_flight_bitstream_ownership.empty()) m_in_flight_bitstream_ownership.pop();
 
     const size_t NUM_BS_BUFFERS = 64;
+    printf("[NATIVE] Creating %zu bitstream buffers\n", NUM_BS_BUFFERS); fflush(stdout);
     for (size_t i = 0; i < NUM_BS_BUFFERS; ++i) {
         NV_ENC_CREATE_BITSTREAM_BUFFER bs{};
         bs.version = NV_ENC_CREATE_BITSTREAM_BUFFER_VER;
@@ -1724,11 +4050,9 @@ bool D3D11NvencPipeline::EncodeFrame(int ring_slot, uint32_t session_frame_idx, 
     picParams.encodePicFlags = 0;
 
     status = m_nvenc.nvEncEncodePicture(m_hEncoder, &picParams);
-    m_nvenc.nvEncUnmapInputResource(m_hEncoder, mapRes.mappedResource);
-    if (ring_slot == 0) {
-        m_slot0_mapped_handle = nullptr;
-        m_slot0_map_state = "UNMAPPED";
-    }
+    // NVENC owns the mapped input until the corresponding bitstream has been
+    // locked successfully.  Unmapping here races a wrapped slot (the API
+    // explicitly requires UnmapInputResource after LockBitstream).
 
     if (pDiag) {
         pDiag->encode_status = (uint32_t)status;
@@ -1737,6 +4061,7 @@ bool D3D11NvencPipeline::EncodeFrame(int ring_slot, uint32_t session_frame_idx, 
 
     if (status != NV_ENC_SUCCESS && status != NV_ENC_ERR_NEED_MORE_INPUT) {
         printf("[NVENC ERROR] nvEncEncodePicture failed: %d\n", status);
+        m_nvenc.nvEncUnmapInputResource(m_hEncoder, mapRes.mappedResource);
         m_free_bitstream_buffers.push(curBs);
         return false;
     }
@@ -1750,7 +4075,10 @@ bool D3D11NvencPipeline::EncodeFrame(int ring_slot, uint32_t session_frame_idx, 
         m_slot_in_flight[ring_slot] = global_frame_idx;
     }
     m_in_flight_bitstream_buffers.push(curBs);
-    m_in_flight_bitstream_ownership.push({curBs, global_frame_idx, ring_slot});
+    uint32_t generation = (ring_slot >= 0 && ring_slot < (int)m_slot_generation.size())
+        ? m_slot_generation[ring_slot] : 0;
+    m_in_flight_bitstream_ownership.push({curBs, global_frame_idx, ring_slot,
+                                          mapRes.mappedResource, generation});
     double t_sub1 = GetQpcTimeSec();
 
     double t_bs0 = GetQpcTimeSec();
@@ -1783,7 +4111,7 @@ bool D3D11NvencPipeline::EncodeFrame(int ring_slot, uint32_t session_frame_idx, 
 bool D3D11NvencPipeline::ProcessBitstreamQueue(HANDLE hOutputFile, bool blocking, TelemEncodeDiagInfo* pDiag) {
     if (!m_hEncoder || m_in_flight_bitstream_buffers.empty() || m_in_flight_bitstream_ownership.empty()) return false;
     void* readyBs = m_in_flight_bitstream_buffers.front();
-    const auto& ownership = m_in_flight_bitstream_ownership.front();
+    const auto ownership = m_in_flight_bitstream_ownership.front();
     if (ownership.bitstream != readyBs) {
         printf("[NVENC OWNERSHIP ERROR] bitstream queue desynchronized\n");
         fflush(stdout);
@@ -1853,6 +4181,19 @@ bool D3D11NvencPipeline::ProcessBitstreamQueue(HANDLE hOutputFile, bool blocking
         }
         m_stats.total_bitstream_bytes += lockBs.bitstreamSizeInBytes;
         m_nvenc.nvEncUnlockBitstream(m_hEncoder, readyBs);
+        if (ownership.mapped_resource) {
+            NVENCSTATUS unmap_status = m_nvenc.nvEncUnmapInputResource(
+                m_hEncoder, ownership.mapped_resource);
+            if (unmap_status != NV_ENC_SUCCESS) {
+                printf("[NVENC OWNERSHIP ERROR] UnmapInputResource failed for frame %u slot %d: %d\n",
+                       ownership.input_frame, ownership.ring_slot, unmap_status);
+                fflush(stdout);
+            }
+        }
+        if (ownership.ring_slot == 0) {
+            m_slot0_mapped_handle = nullptr;
+            m_slot0_map_state = "UNMAPPED";
+        }
         m_free_bitstream_buffers.push(readyBs);
         return true;
     }
@@ -1881,7 +4222,8 @@ bool D3D11NvencPipeline::DrainNvenc(HANDLE hOutputFile) {
 
 bool D3D11NvencPipeline::StartExport(const std::wstring& output_hevc_path, uint32_t start_frame, uint32_t frame_count, bool include_hud) {
     if (m_is_active) return false;
-    if (!m_configured || !m_video_opened) return false;
+    if (!m_configured) return false;
+    if (!m_video_opened && m_interaction_stage > 2) return false;
 
     m_is_active = true;
     m_cancel_requested = false;
@@ -1917,6 +4259,15 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         } else {
             hOutputFile = CreateFileW(output_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         }
+    }
+
+    if (m_interaction_stage >= 1 && m_interaction_stage <= 5) {
+        // The ladder stages intentionally avoid the normal NVENC frame loop.
+        // They still use the production-created D3D11/D2D/decoder/VP objects
+        // selected by the stage, and finish through the same progress API.
+        RunInteractionLadderFrames(output_path, start_frame, frame_count, include_hud);
+        if (hOutputFile != INVALID_HANDLE_VALUE) CloseHandle(hOutputFile);
+        return;
     }
 
     if (!StartNvencSession()) {
@@ -1992,6 +4343,11 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
     m_lifecycle_logs.clear();
     m_lifecycle_logs.reserve(frame_count + 100);
 
+    // In the single-thread diagnostic, defer indicator resource creation
+    // until this worker owns the D2D context.
+    EnsureDeferredIndicatorResources();
+    RecordD2DThread("worker_loop_begin", UINT32_MAX);
+
     bool frame_loop_error = false;
     for (uint32_t i = 0; i < frame_count; ++i) {
         if (m_cancel_requested) {
@@ -2005,15 +4361,20 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
 
         double frame_t0 = GetQpcTimeSec();
         uint32_t frame_idx = start_frame + i;
+        m_interaction_current_frame = frame_idx;
         int slot = (int)(frame_idx % m_config.ring_size);
+        const bool single_hud = IsSingleHudDiagnostic();
+        const int hud_pool = m_determinism_diag ? DeterminismHudPoolSize() : 0;
+        const int hud_slot = hud_pool > 0 ? (int)(frame_idx % hud_pool) : (single_hud ? 0 : slot);
+        m_diag_hud_slot_override = hud_pool > 0 ? hud_slot : -1;
         int slot_in_flight_before = (slot >= 0 && slot < (int)m_slot_in_flight.size()) ? m_slot_in_flight[slot] : -1;
         m_ring_release_diags.clear();
 
         HRESULT hud_q_status_before = S_OK;
         HRESULT vp_q_status_before = S_OK;
-        if (slot < (int)m_ring_hud_queries.size() && m_ring_hud_queries[slot]) {
+        if (hud_slot < (int)m_ring_hud_queries.size() && m_ring_hud_queries[hud_slot]) {
             BOOL done = FALSE;
-            HRESULT hrQ = m_pContext->GetData(m_ring_hud_queries[slot], &done, sizeof(BOOL), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+            HRESULT hrQ = m_pContext->GetData(m_ring_hud_queries[hud_slot], &done, sizeof(BOOL), D3D11_ASYNC_GETDATA_DONOTFLUSH);
             if (hrQ == S_OK) {
                 hud_q_status_before = done ? S_OK : S_FALSE;
             } else {
@@ -2028,6 +4389,49 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
             } else {
                 vp_q_status_before = hrQ;
             }
+        }
+
+        // A slot can be free from NVENC ownership while the D3D11 command
+        // stream is still reading its HUD/input or output resource.  Do not
+        // begin the next D2D draw until both per-slot fences report TRUE.
+        if (hud_slot < (int)m_ring_hud_queries.size() && m_ring_hud_queries[hud_slot] &&
+            hud_q_status_before == S_FALSE) {
+            const double wait_t0 = TelemHudProfile::NowSeconds();
+            BOOL done = FALSE;
+            while (!done) {
+                HRESULT qhr = m_pContext->GetData(
+                    m_ring_hud_queries[hud_slot], &done, sizeof(BOOL), 0
+                );
+                if (FAILED(qhr)) break;
+                YieldProcessor();
+            }
+            TelemHudProfile::Record("wait", "getdata_hud", "slot_reuse",
+                                    (TelemHudProfile::NowSeconds() - wait_t0) * 1000.0);
+        }
+        if (slot < (int)m_ring_vp_queries.size() && m_ring_vp_queries[slot] &&
+            vp_q_status_before == S_FALSE) {
+            const double wait_t0 = TelemHudProfile::NowSeconds();
+            BOOL done = FALSE;
+            while (!done) {
+                HRESULT qhr = m_pContext->GetData(
+                    m_ring_vp_queries[slot], &done, sizeof(BOOL), 0
+                );
+                if (FAILED(qhr)) break;
+                YieldProcessor();
+            }
+            TelemHudProfile::Record("wait", "getdata_vp", "slot_reuse",
+                                    (TelemHudProfile::NowSeconds() - wait_t0) * 1000.0);
+        }
+        if (single_hud && i > 0 && !m_ring_vp_queries.empty() && m_ring_vp_queries[0]) {
+            const double wait_t0 = TelemHudProfile::NowSeconds();
+            BOOL done = FALSE;
+            while (!done) {
+                HRESULT qhr = m_pContext->GetData(m_ring_vp_queries[0], &done, sizeof(BOOL), 0);
+                if (FAILED(qhr)) break;
+                YieldProcessor();
+            }
+            TelemHudProfile::Record("wait", "getdata_vp", "single_hud_reuse",
+                                    (TelemHudProfile::NowSeconds() - wait_t0) * 1000.0);
         }
 
         // Ring Wrap-Around / Slot Reuse Guard:
@@ -2091,19 +4495,148 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         HRESULT hr_d2d = S_OK;
         uint32_t hud_nonzero_alpha = 0;
         bool hud_query_done = false;
+        ID2D1DeviceContext* frame_d2d_context = nullptr;
+        ID2D1Bitmap1* frame_d2d_target = nullptr;
+        ID2D1DeviceContext* saved_d2d_context = nullptr;
+        const bool dynamic_control = include_hud && m_determinism_diag && IsD3D11DynamicControlDiagnostic();
+        const bool copy_out_control = include_hud && m_determinism_diag && IsCopyOutControlDiagnostic();
+        bool static_hud = false;
+        bool mode_fresh_all = false;
+        std::string d2d_mode = DeterminismD2DMode();
+        const bool separate_nvenc_hud = m_hud_separate_device &&
+                                        m_hud_separate_mode == "NVENC";
         if (include_hud) {
-            hr_d2d = RenderHud(cur_state, slot);
-
-            // GPU Fence: ensure Direct2D rendering to m_ring_hud_textures[slot] is 100% complete
+            if (separate_nvenc_hud) {
+                hr_d2d = RenderSeparateHudFullFrame(cur_state, frame_idx) ? S_OK : E_FAIL;
+                // The dedicated FULL_HUD stage already readbacks the B target
+                // under its non-shared mutex contract.  NVENC keeps key=1 on
+                // the shared resource for A's VP handoff, so a second B-side
+                // CPU readback here would be an illegal ownership transition.
+                const bool b_present = SUCCEEDED(hr_d2d);
+                RecordDeterminismStage(frame_idx, "HUD_AFTER_D2D", b_present, hr_d2d);
+                hud_query_done = b_present;
+            } else {
+            // Render the HUD into its slot-owned BGRA texture and hand it to
+            // the established two-stream VideoProcessor compositor.
+            static_hud = IsStaticHudDiagnostic();
+            mode_fresh_all = d2d_mode == "F" || IsFreshResourceDiagnostic();
+            const bool mode_fresh_target = d2d_mode == "T" || d2d_mode == "TV";
+            const bool mode_fresh_view = d2d_mode == "V" || d2d_mode == "TV";
+            const bool mode_is_isolation = m_determinism_diag && d2d_mode != "P";
+            const bool use_fresh_context = m_d2d_fresh_context && !mode_fresh_all && !mode_is_isolation;
+            if (dynamic_control) {
+                hr_d2d = RenderD3D11DynamicHud(frame_idx, hud_slot) ? S_OK : E_FAIL;
+            } else if (copy_out_control) {
+                if (!PrepareCopyOutDrawTexture()) {
+                    hr_d2d = E_FAIL;
+                } else {
+                    // Strict copy-out: D2D writes only the draw texture.  It
+                    // is never exposed as the VP input view.
+                    hr_d2d = RenderHud(cur_state, hud_slot, m_diag_copy_draw_target);
+                }
+            } else if (use_fresh_context) {
+                if (!CreateFreshD2DContextForTexture(m_ring_hud_textures[hud_slot],
+                                                     &frame_d2d_context, &frame_d2d_target)) {
+                    hr_d2d = E_FAIL;
+                } else {
+                    saved_d2d_context = m_pD2DContext;
+                    m_pD2DContext = frame_d2d_context;
+                    hr_d2d = RenderHud(cur_state, hud_slot, frame_d2d_target);
+                    m_pD2DContext = saved_d2d_context;
+                    saved_d2d_context = nullptr;
+                }
+            } else if (mode_fresh_all) {
+                ReleaseFreshHudResources();
+                if (!CreateFreshHudResources(&m_diag_fresh_hud_texture, &m_diag_fresh_hud_target, &m_diag_fresh_hud_view)) {
+                    hr_d2d = E_FAIL;
+                } else {
+                    hr_d2d = RenderHud(cur_state, 0, m_diag_fresh_hud_target);
+                }
+            } else if (mode_is_isolation && (mode_fresh_target || mode_fresh_view)) {
+                ReleaseFreshHudResources();
+                ID3D11Texture2D* persistent_texture = m_ring_hud_textures[hud_slot];
+                ID2D1Bitmap1** target_out = mode_fresh_target ? &m_diag_fresh_hud_target : nullptr;
+                ID3D11VideoProcessorInputView** view_out = mode_fresh_view ? &m_diag_fresh_hud_view : nullptr;
+                if (!CreateFreshHudTargetForTexture(persistent_texture, target_out, view_out)) {
+                    hr_d2d = E_FAIL;
+                } else {
+                    hr_d2d = RenderHud(cur_state, hud_slot, m_diag_fresh_hud_target);
+                }
+            } else if (!static_hud || i == 0) {
+                hr_d2d = RenderHud(cur_state, static_hud ? 0 : hud_slot);
+            } else {
+                hr_d2d = S_OK;
+                hud_query_done = true;
+            }
+            // GPU Fence: ensure Direct2D rendering to the persistent BGRA
+            // composite is complete before VideoProcessor converts it to P010.
             // before VideoProcessorBlt samples it on the video processing engine
-            if (slot < (int)m_ring_hud_queries.size() && m_ring_hud_queries[slot]) {
-                m_pContext->End(m_ring_hud_queries[slot]);
+            if ((!static_hud || i == 0) && hud_slot < (int)m_ring_hud_queries.size() && m_ring_hud_queries[hud_slot]) {
+                RecordD3D11ContextOperation("End_query_HUD", frame_idx,
+                                            m_ring_hud_queries[hud_slot], hud_slot);
+                m_pContext->End(m_ring_hud_queries[hud_slot]);
+                RecordD3D11ContextOperation("Flush_HUD_query", frame_idx, nullptr, hud_slot);
                 m_pContext->Flush();
+                const double wait_t0 = TelemHudProfile::NowSeconds();
                 BOOL done = FALSE;
-                while (m_pContext->GetData(m_ring_hud_queries[slot], &done, sizeof(BOOL), 0) == S_FALSE) {
+                while (!done) {
+                    HRESULT qhr = m_pContext->GetData(
+                        m_ring_hud_queries[hud_slot], &done, sizeof(BOOL), 0
+                    );
+                    RecordD3D11ContextOperation("GetData_HUD", frame_idx,
+                                                m_ring_hud_queries[hud_slot], hud_slot);
+                    if (FAILED(qhr)) {
+                        break;
+                    }
                     YieldProcessor();
                 }
+                TelemHudProfile::Record("wait", "getdata_hud", "hud_complete",
+                                        (TelemHudProfile::NowSeconds() - wait_t0) * 1000.0);
                 hud_query_done = (done == TRUE);
+            }
+            if (copy_out_control && !dynamic_control && SUCCEEDED(hr_d2d)) {
+                ID3D11Texture2D* draw_texture = m_diag_copy_draw_texture;
+                if (!PrepareCopyOutHudTexture(draw_texture)) {
+                    hr_d2d = E_FAIL;
+                } else {
+                    m_pContext->CopyResource(m_diag_copy_hud_texture, draw_texture);
+                    RecordD3D11ContextOperation("CopyResource_HUD_DRAW_TO_VP", frame_idx,
+                                                draw_texture, hud_slot);
+                    RecordD3D11ContextOperation("Flush_HUD_DRAW_TO_VP", frame_idx,
+                                                m_diag_copy_hud_texture, hud_slot);
+                    m_pContext->Flush();
+                    DumpD3D11InfoQueue("CopyResource_HUD_DRAW_TO_VP", frame_idx);
+                }
+            }
+            if (m_determinism_diag && IsDeterminismProbeFrame(frame_idx)) {
+                ID3D11Texture2D* hud_texture = copy_out_control
+                    ? m_diag_copy_draw_texture
+                    : (mode_fresh_all ? m_diag_fresh_hud_texture : m_ring_hud_textures[static_hud ? 0 : hud_slot]);
+                bool hud_present = ReadbackHudMarker(hud_texture, false);
+                RecordDeterminismStage(frame_idx, "HUD_AFTER_D2D", hud_present, hr_d2d);
+                std::string counts_path = m_determinism_dir + "\\draw_call_counts.csv";
+                FILE* counts = fopen(counts_path.c_str(), "a+");
+                if (counts) {
+                    fseek(counts, 0, SEEK_END);
+                    if (ftell(counts) == 0) fprintf(counts, "frame,mode,text_draws,bitmap_draws,geometry_draws,chart_primitives,draw_count_expected,draw_count_actual\n");
+                    uint32_t text_draws = 0, bitmap_draws = 0, geometry_draws = 0, chart_primitives = 0;
+                    for (const auto& ind : m_indicators) {
+                        auto type = ind->GetType();
+                        if (type == TELEM_IND_TEXT || type == TELEM_IND_TIME_DISPLAY) text_draws++;
+                        else if (type == TELEM_IND_MAP) bitmap_draws++;
+                        else if (type == TELEM_IND_CHART) chart_primitives++;
+                        else geometry_draws++;
+                    }
+                    uint32_t expected = text_draws + bitmap_draws + geometry_draws + chart_primitives + (m_determinism_diag ? 1u : 0u);
+                    fprintf(counts, "%u,%s,%u,%u,%u,%u,%u,%u\n", frame_idx, d2d_mode.c_str(), text_draws, bitmap_draws, geometry_draws, chart_primitives, expected, SUCCEEDED(hr_d2d) ? expected : 0u);
+                    fclose(counts);
+                }
+                if (frame_idx == 0 && !m_determinism_dir.empty() && hud_texture) {
+                    std::string png_path = m_determinism_dir + "\\hud_after_d2d_000.png";
+                    std::wstring wpath(png_path.begin(), png_path.end());
+                    SaveTextureToPng(hud_texture, wpath.c_str());
+                }
+            }
             }
         }
         double thud1 = GetQpcTimeSec();
@@ -2112,7 +4645,34 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         // 4. VideoProcessor Composite
         double tvp0 = GetQpcTimeSec();
 
-        bool comp_ok = Composite(pVideoInView, slot, include_hud);
+        if (include_hud) {
+            RecordTargetBinding(frame_idx, "target_before_VP");
+        }
+
+        bool comp_ok = false;
+        bool separate_nvenc_mutex_held = false;
+        ID3D11VideoProcessorInputView* separate_saved_hud_view = nullptr;
+        if (include_hud) {
+            if (separate_nvenc_hud) {
+                const double consume_t0 = TelemHudProfile::NowSeconds();
+                HRESULT consume_hr = m_hud_a_mutex ? m_hud_a_mutex->AcquireSync(1, INFINITE) : E_FAIL;
+                TelemHudProfile::Record("wait", "device_a_consume_wait", "nvenc",
+                                        (TelemHudProfile::NowSeconds() - consume_t0) * 1000.0);
+                if (SUCCEEDED(consume_hr) &&
+                    slot < (int)m_ring_vp_in_view_huds.size()) {
+                    separate_nvenc_mutex_held = true;
+                    separate_saved_hud_view = m_ring_vp_in_view_huds[slot];
+                    m_ring_vp_in_view_huds[slot] = m_hud_a_shared_view;
+                    comp_ok = Composite(pVideoInView, slot, true);
+                    m_ring_vp_in_view_huds[slot] = separate_saved_hud_view;
+                }
+            } else {
+                comp_ok = Composite(pVideoInView, slot, true);
+            }
+        } else {
+            comp_ok = Composite(pVideoInView, slot, false);
+        }
+        DumpD3D11InfoQueue("VideoProcessorBlt", frame_idx);
         if (i >= 115 && i <= 122) {
             printf("[FRAME %u DIAG] slot=%d hr_d2d=0x%08X comp_ok=%d\n", i, slot, (unsigned int)hr_d2d, comp_ok ? 1 : 0);
             fflush(stdout);
@@ -2122,14 +4682,31 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
 
         // GPU Fence: ensure VideoProcessorBlt writes to m_ring_nv12_textures[slot] are complete before NVENC reads it
         if (slot < (int)m_ring_vp_queries.size() && m_ring_vp_queries[slot]) {
+            RecordD3D11ContextOperation("End_query_VP", frame_idx,
+                                        m_ring_vp_queries[slot], slot);
             m_pContext->End(m_ring_vp_queries[slot]);
+            RecordD3D11ContextOperation("Flush_VP_query", frame_idx, nullptr, slot);
             m_pContext->Flush();
+            const double wait_t0 = TelemHudProfile::NowSeconds();
             BOOL done = FALSE;
-            while (m_pContext->GetData(m_ring_vp_queries[slot], &done, sizeof(BOOL), 0) == S_FALSE) {
-                Sleep(0);
+            while (!done) {
+                HRESULT qhr = m_pContext->GetData(
+                    m_ring_vp_queries[slot], &done, sizeof(BOOL), 0
+                );
+                RecordD3D11ContextOperation("GetData_VP", frame_idx,
+                                            m_ring_vp_queries[slot], slot);
+                if (FAILED(qhr)) {
+                    break;
+                }
+                YieldProcessor();
             }
+            TelemHudProfile::Record("wait", "getdata_vp", "vp_complete",
+                                    (TelemHudProfile::NowSeconds() - wait_t0) * 1000.0);
         }
-
+        // The copy-out texture is used only by this frame's VP submission.
+        // Release it after the completion query, never while the VP may still
+        // sample it.
+        ReleaseCopyOutHudTexture();
         if (i == 0) LogSlot0State("after_compose_frame_0");
         if (i == 64) LogSlot0State("after_compose_frame_64");
 
@@ -2205,6 +4782,27 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
                 }
             }
         }
+        if (m_determinism_diag && include_hud && IsDeterminismProbeFrame(frame_idx)) {
+            bool vp_present = ReadbackHudMarker(m_ring_nv12_textures[slot], true);
+            RecordDeterminismStage(frame_idx, "HUD_AFTER_VP", vp_present, m_last_vp_blt_hr);
+            RecordDeterminismStage(frame_idx, "HUD_BEFORE_NVENC", vp_present, m_last_vp_blt_hr);
+        }
+        if (separate_nvenc_mutex_held && m_hud_a_mutex) {
+            const double consume_release_t0 = TelemHudProfile::NowSeconds();
+            m_hud_a_mutex->ReleaseSync(0);
+            TelemHudProfile::Record("wait", "device_a_consume_release", "nvenc",
+                                    (TelemHudProfile::NowSeconds() - consume_release_t0) * 1000.0);
+            separate_nvenc_mutex_held = false;
+        }
+        if (frame_d2d_context || frame_d2d_target) {
+            SafeRelease(frame_d2d_target);
+            SafeRelease(frame_d2d_context);
+        }
+        if ((IsFreshResourceDiagnostic() || DeterminismD2DMode() != "P") && !IsHoldHudUntilEncodeDiagnostic()) {
+            // The VP completion query above is the last consumer of the
+            // per-frame HUD view/resource.
+            ReleaseFreshHudResources();
+        }
 
         // 5 & 6. NVENC Encode & Bitstream
         double submit_sec = 0.0, bs_sec = 0.0;
@@ -2212,6 +4810,18 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         bool enc_ok = EncodeFrame(slot, i, frame_idx, hOutputFile, submit_sec, bs_sec, &diag);
         t_nvenc_total += submit_sec;
         t_bs_total += bs_sec;
+        if (enc_ok && m_determinism_serialized) {
+            while (!m_in_flight_bitstream_buffers.empty()) {
+                if (!ProcessBitstreamQueue(hOutputFile, true, nullptr)) {
+                    enc_ok = false;
+                    break;
+                }
+            }
+        }
+        if (IsHoldHudUntilEncodeDiagnostic()) {
+            ReleaseFreshHudResources();
+        }
+        m_diag_hud_slot_override = -1;
 
         if (i == 0) {
             m_slot0_last_input = 0;
@@ -2296,6 +4906,7 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         }
 
         // Continuous GPU command drain
+        RecordD3D11ContextOperation("Flush_frame_end", frame_idx, nullptr, slot);
         m_pContext->Flush();
 
         if (m_config.enable_debug_layer && ((i < 5) || (i >= 26 && i <= 31))) {
@@ -2472,6 +5083,7 @@ void D3D11NvencPipeline::FrameLoopThread(std::wstring output_path, uint32_t star
         m_pSlot0File = nullptr;
     }
 
+    TelemHudProfile::Dump();
     DumpLifecycleLogs();
 
     m_is_active = false;
@@ -2503,22 +5115,35 @@ void D3D11NvencPipeline::Destroy() {
     }
 
     EndNvencSession();
+    ReleaseFreshHudResources();
+    ReleaseCopyOutHudTexture();
+    CloseDeterminismDiagnostics();
     CloseDecoder();
 
     for (auto* pView : m_ring_vp_out_views) SafeRelease(pView);
+    for (auto* pView : m_ring_vp_bgra_out_views) SafeRelease(pView);
     for (auto* pTex : m_ring_nv12_textures) SafeRelease(pTex);
     for (auto* pInView : m_ring_vp_in_view_huds) SafeRelease(pInView);
+    for (auto* pInView : m_ring_vp_in_view_bgra_composites) SafeRelease(pInView);
     for (auto* pTarget : m_ring_d2d_bitmap_targets) SafeRelease(pTarget);
+    for (auto* pTarget : m_ring_d2d_bgra_composite_targets) SafeRelease(pTarget);
     for (auto* pTex : m_ring_hud_textures) SafeRelease(pTex);
     for (auto* pTex : m_ring_hud_resolved_textures) SafeRelease(pTex);
+    for (auto* pTex : m_ring_bgra_composite_textures) SafeRelease(pTex);
+    for (auto* pSource : m_ring_d2d_bgra_video_sources) SafeRelease(pSource);
     for (auto* pQuery : m_ring_hud_queries) SafeRelease(pQuery);
     for (auto* pQuery : m_ring_vp_queries) SafeRelease(pQuery);
     m_ring_vp_out_views.clear();
+    m_ring_vp_bgra_out_views.clear();
     m_ring_nv12_textures.clear();
     m_ring_vp_in_view_huds.clear();
+    m_ring_vp_in_view_bgra_composites.clear();
     m_ring_d2d_bitmap_targets.clear();
+    m_ring_d2d_bgra_composite_targets.clear();
     m_ring_hud_textures.clear();
     m_ring_hud_resolved_textures.clear();
+    m_ring_bgra_composite_textures.clear();
+    m_ring_d2d_bgra_video_sources.clear();
     m_ring_hud_queries.clear();
     m_ring_vp_queries.clear();
     m_pHudTexture = nullptr;
@@ -2553,11 +5178,46 @@ void D3D11NvencPipeline::Destroy() {
     m_font_cache.Clear();
     m_icon_cache.Clear();
 
+    SafeRelease(m_hud_a_shared_view);
+    SafeRelease(m_hud_a_mutex);
+    SafeRelease(m_hud_a_shared_texture);
+    SafeRelease(m_hud_a_shared_staging);
+    SafeRelease(m_hud_a_shared_query);
+    if (m_hud_shared_handle) {
+        CloseHandle(m_hud_shared_handle);
+        m_hud_shared_handle = nullptr;
+    }
+    SafeRelease(m_hud_b_mutex);
+    SafeRelease(m_hud_b_target);
+    SafeRelease(m_hud_b_texture);
+    SafeRelease(m_hud_b_staging);
+    SafeRelease(m_hud_b_query);
+    SafeRelease(m_hud_b_brush);
+    SafeRelease(m_hud_b_brush_text_muted);
+    SafeRelease(m_hud_b_brush_cyan);
+    SafeRelease(m_hud_b_brush_coral);
+    SafeRelease(m_hud_b_brush_card_bg);
+    SafeRelease(m_hud_b_brush_card_border);
+    SafeRelease(m_hud_b_fmt_time);
+    SafeRelease(m_hud_b_fmt_speed_val);
+    SafeRelease(m_hud_b_fmt_speed_unit);
+    SafeRelease(m_hud_b_fmt_hr_val);
+    SafeRelease(m_hud_b_fmt_hr_unit);
+    SafeRelease(m_hud_b_fmt_label);
+    SafeRelease(m_hud_b_fmt);
+    SafeRelease(m_hud_b_dwrite_factory);
+    SafeRelease(m_hud_b_d2d_context);
+    SafeRelease(m_hud_b_d2d_device);
+    SafeRelease(m_hud_b_dxgi_device);
+    SafeRelease(m_hud_b_context);
+    SafeRelease(m_hud_b_device);
+
     SafeRelease(m_pDWriteFactory);
     SafeRelease(m_pD2DContext);
     SafeRelease(m_pD2DDevice);
 
     SafeRelease(m_pContext);
+    SafeRelease(m_diag_info_queue);
     SafeRelease(m_pDevice);
     SafeRelease(m_pAdapter3);
     SafeRelease(m_pAdapter);

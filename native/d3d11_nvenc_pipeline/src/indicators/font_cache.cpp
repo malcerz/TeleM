@@ -1,4 +1,5 @@
 #include "font_cache.h"
+#include "../hud_profile.h"
 #include <cmath>
 
 FontCache::FontCache() : m_pDWriteFactory(nullptr) {}
@@ -67,6 +68,7 @@ IDWriteTextFormat* FontCache::GetFormat(const std::wstring& family, float size, 
     }
 
     if (SUCCEEDED(hr) && pFormat) {
+        TelemHudProfile::Count("resource", "CreateTextFormat");
         m_formats[key] = pFormat;
         return pFormat;
     }
@@ -85,6 +87,7 @@ void FontCache::DrawTextOutlined(
     DWRITE_TEXT_ALIGNMENT align
 ) {
     if (!pD2D || !pFormat || text.empty()) return;
+    const double text_t0 = TelemHudProfile::NowSeconds();
 
     pFormat->SetTextAlignment(align);
 
@@ -111,9 +114,12 @@ void FontCache::DrawTextOutlined(
             r.top    += offsets[i][1];
             r.bottom += offsets[i][1];
             pD2D->DrawText(text.c_str(), (UINT32)text.length(), pFormat, &r, pOutlineBrush);
+            TelemHudProfile::Count("d2d", "DrawText");
         }
     }
 
     // Fill at exact origin
     pD2D->DrawText(text.c_str(), (UINT32)text.length(), pFormat, &layoutRect, pTextBrush);
+    TelemHudProfile::Count("d2d", "DrawText");
+    TelemHudProfile::Record("text", "dynamic", "DrawTextOutlined", (TelemHudProfile::NowSeconds() - text_t0) * 1000.0);
 }
