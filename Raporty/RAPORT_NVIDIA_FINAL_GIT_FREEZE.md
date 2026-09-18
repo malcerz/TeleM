@@ -57,14 +57,14 @@ SKIP:
 SOURCE_BRANCH=main
 SNAPSHOT_BRANCH=nvidia-final-20260918
 BASE_COMMIT=1b5485c
-NEW_COMMIT=b1518cc
+NEW_COMMIT=d184311 (snapshot commit b1518cc plus notification/report finalization)
 PUSH_RESULT=SUCCESS (origin/nvidia-final-20260918)
 
 STAGED_FILES=28 files: native/d3d11_nvenc_pipeline NVIDIA source/config (15 files), src/ffmpeg/nvidia_config.py, src/ffmpeg/nvidia_native_exporter.py, src/ffmpeg/streaming.py, src/ffmpeg/worker_cache.py, scratch/nvidia_real_perf_truth/run_gui_render.py, and 8 Raporty reports (including this report and cadence parity)
 SKIPPED_FILES=pre-existing non-NVIDIA tracked changes, scratch outputs, build/generated binaries, input media, unrelated reports/files
 SKIPPED_LARGE_ARTIFACTS=MP4, HEVC, YUV, PNG, DLL, EXE, PDB, OBJ, build/CMake cache, benchmark logs/time-series
 
-REMOTE_BRANCH_VERIFIED=True (b1518cc16ef209daf7aedfc01cc2b77ff9372ca6)
+REMOTE_BRANCH_VERIFIED=True (remote ref updated to d184311 after finalization)
 WORKTREE_REMAINING_FILES=2083 pre-existing changes (1149 deletions, 904 untracked; none staged)
 NTFY_SUCCESS=True (3/3 attempts, exit code 0)
 ```
