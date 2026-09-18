@@ -64,7 +64,7 @@ STAGED_FILES=28 files: native/d3d11_nvenc_pipeline NVIDIA source/config (15 file
 SKIPPED_FILES=pre-existing non-NVIDIA tracked changes, scratch outputs, build/generated binaries, input media, unrelated reports/files
 SKIPPED_LARGE_ARTIFACTS=MP4, HEVC, YUV, PNG, DLL, EXE, PDB, OBJ, build/CMake cache, benchmark logs/time-series
 
-REMOTE_BRANCH_VERIFIED=True (8ed14725d29744669a37cba20782b169994ec2f7)
+REMOTE_BRANCH_VERIFIED=True (git ls-remote --heads origin nvidia-final-20260918 matched the local upstream branch)
 WORKTREE_REMAINING_FILES=2083 pre-existing changes (1149 deletions, 904 untracked; none staged)
 NTFY_SUCCESS=True (3/3 attempts, exit code 0)
 ```
