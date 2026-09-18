@@ -1,0 +1,15 @@
+NTFY_ATTEMPTS=3
+ATTEMPT=1
+EXIT_CODE=0
+STDOUT={"id":"3xJYtg26bs5J","time":1789761504,"expires":1789804704,"event":"message","topic":"MalcerzPOP","title":"TeleM GoPro","message":"NVIDIA final snapshot pushed: nvidia-final-20260918.","tags":["white_check_mark"]}
+STDERR=
+
+ATTEMPT=2
+EXIT_CODE=0
+STDOUT={"id":"31PpvS56t2wY","time":1789761505,"expires":1789804705,"event":"message","topic":"MalcerzPOP","title":"TeleM GoPro","message":"NVIDIA final snapshot pushed: nvidia-final-20260918.","tags":["white_check_mark"]}
+STDERR=
+
+ATTEMPT=3
+EXIT_CODE=0
+STDOUT={"id":"basWnTU07xFu","time":1789761505,"expires":1789804705,"event":"message","topic":"MalcerzPOP","title":"TeleM GoPro","message":"NVIDIA final snapshot pushed: nvidia-final-20260918.","tags":["white_check_mark"]}
+STDERR=
