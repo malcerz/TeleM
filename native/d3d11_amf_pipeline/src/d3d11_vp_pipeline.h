@@ -274,6 +274,13 @@ public:
     UINT64 GetLeanStaticUploadedBytes() const { return m_leanStaticUploadedBytes; }
 
     bool CanUseInputSurface(ID3D11Texture2D* texture, UINT arrayIndex);
+    bool WaitForComputeCompletion(UINT frameIndex);
+    bool IsP010PlaneOutputEnabled() const { return m_p010PlaneOutputEnabled; }
+    ID3D11Texture2D* GetLastP010YTexture() const { return m_lastP010YTexture; }
+    ID3D11Texture2D* GetLastP010UVTexture() const { return m_lastP010UVTexture; }
+    UINT GetLastP010PlanePoolIndex() const { return m_lastP010PlanePoolIndex; }
+    // Gate B diagnostic: create plane SRVs only on an ordinary copied texture.
+    bool ProbeCopied8KSRV(ID3D11Texture2D* texture);
     bool SetStreamRotation(UINT degrees);
 
     bool ProcessFrame(
@@ -332,6 +339,10 @@ public:
     UINT GetProcessorRingSize() const { return m_processorRingSize; }
     void SetBaseConvertMode(bool compute) { m_baseConvertCompute = compute; }
     bool IsBaseConvertCompute() const { return m_baseConvertCompute; }
+    // CPU-x265 8K is a compute-only path.  It must not depend on the
+    // VideoProcessor output view pool or call VideoProcessorBlt.
+    void SetCpuX265Path(bool enabled) { m_cpuX265Path = enabled; }
+    bool IsCpuX265Path() const { return m_cpuX265Path; }
 
     // ETAP 5T — asynchronous GPU timestamp timeline (zero per-frame wait).
     void SetGpuTimestampProfile(bool enabled);
@@ -384,6 +395,9 @@ public:
 private:
     static const UINT POOL_SIZE_DEFAULT = 8;
     bool InitializeNV12ComputeCompositor();
+    bool InitializeP010PlaneOutput();
+    bool ProcessP010PlaneOutput(ID3D11Texture2D* input, UINT arrayIndex,
+                                UINT poolIndex, double* outMs);
     bool ComposeHUDDirectNV12(ID3D11Texture2D* outputTexture, UINT poolIndex);
     bool NormalizeD3D11VARangeNV12(UINT poolIndex);
     bool InitializeMapCompositor();
@@ -410,7 +424,24 @@ private:
     ID3D11VideoProcessor* m_activeVideoProcessor = nullptr;
     UINT m_processorRingSize = 1;
     bool m_baseConvertCompute = false;
+    bool m_cpuX265Path = false;
+    UINT m_traceFrameIndex = UINT_MAX;
+    UINT m_vpConfiguredInputWidth = 0;  // InputWidth used for CreateVideoProcessorEnumerator.
     ID3D11ComputeShader* m_baseConvertShader = nullptr;
+    ID3D11Query* m_computeCompletionQuery = nullptr;
+    bool m_computeCompletionPending = false;
+    ID3D11ComputeShader* m_shaderScalerShader = nullptr;
+    ID3D11Buffer* m_shaderScalerCB = nullptr;
+    ID3D11SamplerState* m_shaderScalerSampler = nullptr;
+    bool m_p010PlaneOutputEnabled = false;
+    ID3D11ComputeShader* m_p010PlaneShader = nullptr;
+    std::vector<ID3D11Texture2D*> m_p010YPool;
+    std::vector<ID3D11Texture2D*> m_p010UVPool;
+    std::vector<ID3D11UnorderedAccessView*> m_p010YUAVPool;
+    std::vector<ID3D11UnorderedAccessView*> m_p010UVUAVPool;
+    ID3D11Texture2D* m_lastP010YTexture = nullptr;
+    ID3D11Texture2D* m_lastP010UVTexture = nullptr;
+    UINT m_lastP010PlanePoolIndex = UINT_MAX;
 
     // Export Preview frame-tap resources.  These are created lazily only when
     // the checkbox is enabled and are released with the render context.
@@ -697,6 +728,9 @@ private:
     void EndLocalCompletionMarker(UINT frameIndex);
     bool InitializeBaseConvertCompute();
     bool ConvertP010ToNV12Compute(ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs);
+    bool InitializeShaderScaler();
+    void ReleaseShaderScaler();
+    bool DownscaleCompute(ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs);
 
     UINT m_width = 3840;
     UINT m_height = 2160;
