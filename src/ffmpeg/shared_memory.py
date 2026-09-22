@@ -16,6 +16,43 @@ from src.ffmpeg.worker_cache import WORKER_CACHE, init_worker
 from src.ffmpeg.frame_renderer import _direct_region_members, render_overlay_frame
 from src.ffmpeg.shm_image import close_writable_image, writable_rgba_image
 
+import warnings
+
+_WARNED_UNKNOWN_DIRECT_SHM = False
+
+
+def get_intel_direct_shm_config() -> tuple[bool, str]:
+    """Return (enabled, source_description) for Intel Direct SHM rendering.
+
+    Default: ON (Direct SHM) when TELEM_INTEL_HUD_DIRECT_SHM is absent or empty.
+    Explicit ON: 1, true, yes, on
+    Explicit OFF: 0, false, no, off
+    Unknown values: warn once and use default Direct SHM (ON).
+    """
+    global _WARNED_UNKNOWN_DIRECT_SHM
+    raw = os.environ.get("TELEM_INTEL_HUD_DIRECT_SHM")
+    if raw is None or not raw.strip():
+        return True, "default"
+    cleaned = raw.strip().lower()
+    if cleaned in ("1", "true", "yes", "on"):
+        return True, "env"
+    if cleaned in ("0", "false", "no", "off"):
+        return False, "env legacy-fallback"
+    if not _WARNED_UNKNOWN_DIRECT_SHM:
+        _WARNED_UNKNOWN_DIRECT_SHM = True
+        warnings.warn(
+            f"TELEM_INTEL_HUD_DIRECT_SHM has unrecognized value {raw!r}; using default Direct SHM (ON).",
+            UserWarning,
+            stacklevel=2,
+        )
+    return True, "default"
+
+
+def is_intel_direct_shm_enabled() -> bool:
+    """Check whether Intel Direct SHM rendering is active."""
+    enabled, _ = get_intel_direct_shm_config()
+    return enabled
+
 
 class SharedFramePool:
     """Pool of pre-allocated shared memory blocks for zero-copy IPC.
@@ -30,10 +67,15 @@ class SharedFramePool:
         self.frame_size = frame_size_bytes
         self._shm_blocks: list[shared_memory.SharedMemory] = []
         self._free: queue.Queue[int] = queue.Queue()
+        self._shm_addrs: list[int] = []
         for i in range(n_slots):
             shm = shared_memory.SharedMemory(create=True, size=frame_size_bytes)
             self._shm_blocks.append(shm)
             self._free.put(i)
+            import ctypes
+            ptr = (ctypes.c_char * frame_size_bytes).from_buffer(shm.buf)
+            self._shm_addrs.append(ctypes.addressof(ptr))
+            del ptr
 
     def shm_names(self) -> list[str]:
         """Return list of SHM block names (for passing to worker processes)."""
@@ -54,6 +96,10 @@ class SharedFramePool:
     def get_memview(self, slot: int) -> memoryview:
         """Return memoryview of the shared memory slot directly without copying."""
         return self._shm_blocks[slot].buf[:self.frame_size]
+
+    def get_ptr_addr(self, slot: int) -> int:
+        """Return raw memory address of the shared memory slot directly (zero-copy)."""
+        return self._shm_addrs[slot]
 
     def read_into(self, slot: int, dest: Any) -> None:
         """Write slot contents directly to a writable file-like object."""
@@ -114,6 +160,12 @@ def _init_worker_with_shm(
 ) -> None:
     """Combined initialiser: set up WORKER_CACHE + attach SHM blocks."""
     import atexit
+    if os.environ.get("TELEM_INTEL_HUD_PRIORITY") == "BELOW_NORMAL":
+        try:
+            import psutil
+            psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+        except Exception:
+            pass
     init_worker(*init_worker_args)
     _init_shm_in_worker(shm_names, frame_size)
     atexit.register(_close_shm_in_worker)
@@ -129,6 +181,8 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
         (frame_index, shm_slot_id) — only ~50 bytes through pickle.
     """
     index, slot = job[:2]
+    if os.environ.get("TELEM_INTEL_FROZEN_HUD") == "1" and index > 0:
+        return index, slot
     audit_enabled = len(job) >= 3 and bool(job[2])
     if audit_enabled:
         worker_started_ns = time.perf_counter_ns()
@@ -150,6 +204,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     zero_copy = False
     clear_started_ns = None
     clear_finished_ns = None
+    intel_direct_shm = is_intel_direct_shm_enabled()
     if (
         zero_copy_requested
         and hud_regions
@@ -176,7 +231,24 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             close_writable_image(zero_copy_target)
             zero_copy_target = None
             zero_copy = False
+    elif zero_copy_requested and intel_direct_shm:
+        overlay_w = int(WORKER_CACHE.get("video_width", 2560))
+        overlay_h = int(WORKER_CACHE.get("video_height", 1440))
+        frame_bytes = overlay_w * overlay_h * 4
+        try:
+            clear_started_ns = time.perf_counter_ns() if audit_enabled else None
+            clear_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8, count=frame_bytes)
+            clear_arr.fill(0)
+            del clear_arr
+            clear_finished_ns = time.perf_counter_ns() if audit_enabled else None
+            zero_copy_target = writable_rgba_image(shm_buf, (overlay_w, overlay_h))
+            zero_copy = True
+        except Exception:
+            close_writable_image(zero_copy_target)
+            zero_copy_target = None
+            zero_copy = False
 
+    breakdown = {} if audit_enabled else None
     if audit_enabled:
         worker_render_started_ns = time.perf_counter_ns()
     try:
@@ -185,6 +257,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             speed_samples, track_samples, alt_samples,
             target_fps, update_rate_step,
             target_image=zero_copy_target,
+            breakdown=breakdown,
         )
     except Exception:
         if not zero_copy:
@@ -199,6 +272,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             speed_samples, track_samples, alt_samples,
             target_fps, update_rate_step,
             target_image=None,
+            breakdown=breakdown,
         )
     if audit_enabled:
         worker_render_finished_ns = time.perf_counter_ns()
@@ -214,11 +288,25 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
         del zero_copy_target
         del shm_buf
     else:
-        frame_bytes = img.height * img.width * 4
-        shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
-        img_arr = np.asarray(img)
-        np.copyto(shm_arr, img_arr)
-        del shm_arr
+        copied = False
+        target = None
+        try:
+            target = writable_rgba_image(shm_buf, (img.width, img.height))
+            target.paste(img, (0, 0))
+            copied = True
+        except Exception:
+            pass
+        finally:
+            if target is not None:
+                close_writable_image(target)
+                del target
+        if not copied:
+            frame_bytes = img.height * img.width * 4
+            shm_arr = np.frombuffer(shm_buf[:frame_bytes], dtype=np.uint8).reshape((img.height, img.width, 4))
+            img_arr = np.asarray(img)
+            np.copyto(shm_arr, img_arr)
+            del shm_arr
+            del img_arr
         del shm_buf
     if audit_enabled:
         if not zero_copy:
@@ -227,6 +315,6 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             index, slot, os.getpid(), worker_started_ns,
             worker_render_started_ns, worker_render_finished_ns,
             shm_copy_finished_ns, clear_started_ns, clear_finished_ns,
-            zero_copy,
+            zero_copy, breakdown,
         )
     return index, slot
