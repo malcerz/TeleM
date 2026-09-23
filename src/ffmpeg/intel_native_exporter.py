@@ -588,6 +588,13 @@ def export_intel_native_d3d11(
     else:
         render_print(f"[Intel][HUD] DirectSHM=OFF source={direct_shm_source}", flush=True)
 
+    from src.indicators.chart import get_intel_chart_fastpath_config
+    fastpath_enabled, fastpath_source = get_intel_chart_fastpath_config()
+    if fastpath_enabled:
+        render_print(f"[Intel][Charts] Fastpath=ON source={fastpath_source}", flush=True)
+    else:
+        render_print(f"[Intel][Charts] Fastpath=OFF source={fastpath_source}", flush=True)
+
     overlay_w, overlay_h = 2560, 1440
     frame_size = overlay_w * overlay_h * 4  # 14,745,600 bytes
     env_w = os.environ.get("TELEM_INTEL_HUD_WORKERS")

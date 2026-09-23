@@ -9,6 +9,7 @@ import math
 import os
 import time
 import threading
+import warnings
 try:
     from PIL import Image, ImageDraw
 except ImportError:
@@ -33,6 +34,17 @@ from src.indicators.helpers import (
     parse_hex_color,
     s,
 )
+try:
+    from src.indicators.helpers import resolve_decimal_places
+except ImportError:
+    def resolve_decimal_places(cfg: dict, default: int = 1, field: str | None = None) -> int:
+        try:
+            from src.telemetry_resolver import resolve_presentation_precision
+            return resolve_presentation_precision(cfg, default, field=field)
+        except Exception:
+            val = cfg.get("decimals") if "decimals" in cfg else cfg.get("decimal_places")
+            return int(val) if val is not None else default
+
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
 from src.indicators.profiling import get_overlay_profiler
 
@@ -95,6 +107,101 @@ def _prefix_static_buffers():
     return buffers
 _FINAL_STATIC_CHART_KEYS = frozenset(("fit_cadence_text", "fit_heart_rate_text"))
 _TIMESTAMP_GAP_LIMIT_CACHE: dict[tuple[int, int, Any, Any], float | None] = {}
+
+_CHART_SCRATCH_LOCAL = threading.local()
+
+
+_WARNED_UNKNOWN_CHART_FASTPATH = False
+
+
+def get_intel_chart_fastpath_config(key: str | None = None) -> tuple[bool, str]:
+    """Return (enabled, source_description) for Intel Chart Fastpath.
+
+    Default: OFF (Legacy) when TELEM_INTEL_CHART_FASTPATH is absent or empty (3C.3 verdict).
+    Explicit ON: 1, true, yes, on, both
+    Explicit OFF: 0, false, no, off
+    Widget selective: cadence (cadence only), hr / heart / heart_rate (HR only)
+    Unknown values: warn once and use default Fastpath (OFF/Legacy).
+    """
+    global _WARNED_UNKNOWN_CHART_FASTPATH
+    raw = os.environ.get("TELEM_INTEL_CHART_FASTPATH")
+    if raw is None or not raw.strip():
+        return False, "default"
+    cleaned = raw.strip().lower()
+    if cleaned in ("1", "true", "yes", "on", "both"):
+        return True, "env"
+    if cleaned in ("0", "false", "no", "off"):
+        return False, "env legacy-fallback"
+    if cleaned == "cadence":
+        if key == "fit_cadence_text" or key is None:
+            return True, "env cadence-only"
+        return False, "env cadence-only"
+    if cleaned in ("hr", "heart", "heart_rate"):
+        if key == "fit_heart_rate_text" or key is None:
+            return True, "env hr-only"
+        return False, "env hr-only"
+    if not _WARNED_UNKNOWN_CHART_FASTPATH:
+        _WARNED_UNKNOWN_CHART_FASTPATH = True
+        warnings.warn(
+            f"TELEM_INTEL_CHART_FASTPATH has unrecognized value {raw!r}; using default Chart Fastpath (OFF/Legacy).",
+            UserWarning,
+            stacklevel=2,
+        )
+    return False, "default"
+
+
+def is_chart_fastpath_enabled(key: str | None = None) -> bool:
+    """Check whether Intel Chart Fastpath rendering is active."""
+    enabled, _ = get_intel_chart_fastpath_config(key)
+    return enabled
+
+
+_is_chart_fastpath_enabled = is_chart_fastpath_enabled
+
+
+def _get_worker_scratch_chart(key: str, final_static: Any, margin_top: int) -> Any:
+    buffers = getattr(_CHART_SCRATCH_LOCAL, "buffers", None)
+    if buffers is None:
+        buffers = {}
+        _CHART_SCRATCH_LOCAL.buffers = buffers
+    entry = buffers.get(key)
+    base_id = id(final_static)
+    if entry is None or entry["base_id"] != base_id or entry["scratch"].size != final_static.size:
+        scratch = final_static.copy()
+        text_zone = (final_static.width // 2, 0, final_static.width, margin_top)
+        text_zone_img = final_static.crop(text_zone)
+        buffers[key] = {
+            "scratch": scratch,
+            "base_id": base_id,
+            "prev_cur_box": None,
+            "text_zone_box": text_zone,
+            "text_zone_img": text_zone_img,
+        }
+        return scratch
+
+    scratch = entry["scratch"]
+    prev_cur = entry["prev_cur_box"]
+    # 1. Restore previous cursor column
+    if prev_cur is not None:
+        cx0, cy0, cx1, cy1 = prev_cur
+        scratch.paste(final_static.crop((cx0, cy0, cx1, cy1)), (cx0, cy0))
+    # 2. Restore value text header region (pre-cropped, zero per-frame allocation)
+    text_zone = entry.get("text_zone_box")
+    text_zone_img = entry.get("text_zone_img")
+    if text_zone_img is not None and text_zone is not None:
+        scratch.paste(text_zone_img, (text_zone[0], text_zone[1]))
+    return scratch
+
+
+def _record_worker_scratch_cursor(key: str, cursor_x: float, calc_thickness: int, final_w: int, final_h: int) -> None:
+    buffers = getattr(_CHART_SCRATCH_LOCAL, "buffers", None)
+    if buffers and key in buffers:
+        dot_r = max(3, calc_thickness + 1)
+        cx = int(round(cursor_x + 4))
+        m = 10
+        cx0 = max(0, cx - dot_r - m)
+        cx1 = min(final_w, cx + dot_r + m + 1)
+        buffers[key]["prev_cur_box"] = (cx0, 0, cx1, final_h)
 
 
 def _get_timestamp_gap_limit(timestamps) -> float | None:
@@ -380,6 +487,12 @@ def _render_chart_indicator(
     split_mode=False, target_dt=None,
 ):
     """Render a chart-form indicator."""
+    if os.environ.get("TELEM_CHARTS_FROZEN") == "1":
+        if not hasattr(_render_chart_indicator, "_frozen_cache"):
+            _render_chart_indicator._frozen_cache = {}
+        if key in _render_chart_indicator._frozen_cache:
+            return _render_chart_indicator._frozen_cache[key]
+
     profiler = get_overlay_profiler()
     time_labels = None
     chart_vals = None
@@ -434,6 +547,11 @@ def _render_chart_indicator(
     label_count = int(cfg.get("label_count", 2))
     label_units = bool(cfg.get("label_units", False))
     show_average = bool(cfg.get("show_average", False))
+    if key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text") or key.startswith("fit_") or unit == "%":
+        legacy_decimal_default = 0
+    else:
+        legacy_decimal_default = 1
+    decimal_places = resolve_decimal_places(cfg, legacy_decimal_default, field=key)
 
     # label_font_size (Właściwości) → pixel size, clamped to fit the chart
     lfs = cfg.get("label_font_size")
@@ -462,6 +580,11 @@ def _render_chart_indicator(
         axis_font_size=label_fs_px or fs,
         axis_outline=outline,
     )
+    try:
+        if hasattr(get_history_chart_background, "__code__") and "decimal_places" in get_history_chart_background.__code__.co_varnames:
+            graph_kwargs["decimal_places"] = decimal_places
+    except Exception:
+        pass
     optimized_static = key in _FINAL_STATIC_CHART_KEYS
     chart_start_dt = getattr(history_data, "chart_start_dt", None)
     chart_end_dt = getattr(history_data, "chart_end_dt", None)
@@ -513,11 +636,19 @@ def _render_chart_indicator(
     if timestamps and len(timestamps) >= 1 and target_dt is not None and t_start is not None and t_end is not None:
         sample_tz = timestamps[0].tzinfo
         aligned_target = target_dt
-        if sample_tz is None and target_dt.tzinfo is not None:
-            aligned_target = target_dt.replace(tzinfo=None)
-        elif sample_tz is not None and target_dt.tzinfo is None:
+        if getattr(history_data, "skip_pauses", False) and getattr(history_data, "active_time_mapper", None) is not None:
+            from datetime import timedelta
+            from src.telemetry_resolver import _map_wall_to_seconds
+            mapper = history_data.active_time_mapper
+            base = getattr(history_data, "base_start_dt", None) or timestamps[0]
+            sec = _map_wall_to_seconds(mapper, target_dt)
+            if sec is not None:
+                aligned_target = base + timedelta(seconds=sec)
+        if sample_tz is None and aligned_target.tzinfo is not None:
+            aligned_target = aligned_target.replace(tzinfo=None)
+        elif sample_tz is not None and aligned_target.tzinfo is None:
             from datetime import timezone
-            aligned_target = target_dt.replace(tzinfo=timezone.utc)
+            aligned_target = aligned_target.replace(tzinfo=timezone.utc)
 
         if sample_tz is None:
             if align_start.tzinfo is not None:
@@ -622,7 +753,10 @@ def _render_chart_indicator(
 
     tox = int(round(cfg.get("text_offset_x", 0.0) * chart_w))
     toy = int(round(cfg.get("text_offset_y", 0.0) * chart_h))
-    v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
+    v_str = formatted_val if formatted_val is not None else (
+        f"{value:.{decimal_places}f} {unit}".strip()
+        if value is not None else f"-- {unit}".strip()
+    )
 
     from src.indicators.helpers import _STATIC_CACHE, _static_cache_key, load_font
     hdr_key = _static_cache_key("chart_hdr", chart_w + 8, final_h, label, font_path, fs, outline, text_color, tox, toy)
@@ -704,7 +838,10 @@ def _render_chart_indicator(
                     "graph.final_static_build",
                     (time.perf_counter() - static_started) * 1000.0,
                 )
-        v_str = formatted_val if formatted_val is not None else (f"{value:.1f} {unit}".strip() if value is not None else f"-- {unit}".strip())
+        v_str = formatted_val if formatted_val is not None else (
+            f"{value:.{decimal_places}f} {unit}".strip()
+            if value is not None else f"-- {unit}".strip()
+        )
         if split_mode and not prefix_dynamic:
             # ETAP 5K: hand the exporter a static layer + two small dynamic
             # tiles instead of a full per-frame chart image.  No final_static
@@ -770,12 +907,17 @@ def _render_chart_indicator(
             _max_rx = canvas_w - int(math.ceil(_final_w / 2.0))
             _effective_rx = min(_max_rx, max(_min_rx, _center_x)) if _max_rx >= _min_rx else canvas_w // 2
             return split, _effective_rx, _effective_ry, None
-        final_img = final_static.copy()
+        if _is_chart_fastpath_enabled(key):
+            final_img = _get_worker_scratch_chart(key, final_static, margin_top)
+        else:
+            final_img = final_static.copy()
         cursor_started = time.perf_counter()
         _draw_post_paste_cursor(
             final_img, points, ci, plot_y1, plot_y2, calc_thickness,
             (255, 255, 255), line_clr, 4, margin_top, chart_w, chart_h,
         )
+        if _is_chart_fastpath_enabled(key) and ci is not None:
+            _record_worker_scratch_cursor(key, ci[0], calc_thickness, chart_w + 8, final_h)
         profiler.record(
             "graph.current_cursor",
             (time.perf_counter() - cursor_started) * 1000.0,
@@ -818,4 +960,9 @@ def _render_chart_indicator(
     _min_rx = int(math.ceil(_final_w / 2.0))
     _max_rx = canvas_w - int(math.ceil(_final_w / 2.0))
     _effective_rx = min(_max_rx, max(_min_rx, _center_x)) if _max_rx >= _min_rx else canvas_w // 2
-    return final_img, _effective_rx, _effective_ry, None
+    ret = (final_img, _effective_rx, _effective_ry, None)
+    if os.environ.get("TELEM_CHARTS_FROZEN") == "1":
+        if not hasattr(_render_chart_indicator, "_frozen_cache"):
+            _render_chart_indicator._frozen_cache = {}
+        _render_chart_indicator._frozen_cache[key] = ret
+    return ret
