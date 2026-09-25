@@ -2115,11 +2115,15 @@ class RenderTab(QWidget):
         item_label = "HUD" if snapshot.state == "preparing" else "Frame"
         completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
         total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
+        qp_val = getattr(snapshot, "qp", None)
+        if qp_val is None:
+            qp_val = getattr(snapshot, "avg_qp", None)
         self._set_stats(
             completed_val, total_val, snapshot.elapsed_s,
             snapshot.fps, status, final_eta=eta,
             item_label=item_label,
             is_indeterminate=is_indeterminate,
+            qp=qp_val,
         )
         comp_txt = getattr(snapshot, "compression_text", "")
         if comp_txt:
@@ -2188,6 +2192,19 @@ class RenderTab(QWidget):
             self._update_finalize_status_label()
             return
 
+        qp_val = None
+        if isinstance(hud_state, dict):
+            for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
+                v = hud_state.get(k)
+                if v is not None:
+                    try:
+                        fv = float(v)
+                        if fv > 0:
+                            qp_val = fv
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
         if hud_state is not None and isinstance(hud_state, dict) and "global_pct" in hud_state:
             overall = max(self._render_target, float(hud_state.get("global_pct", 0.0)))
             self._render_target = min(99.9, overall)
@@ -2200,7 +2217,7 @@ class RenderTab(QWidget):
                 completed = hud_state.get("work_done", completed)
                 total = hud_state.get("work_total", total)
                 item_label = "HUD"
-            self._set_stats(completed, total, elapsed, fps, status, item_label=item_label)
+            self._set_stats(completed, total, elapsed, fps, status, item_label=item_label, qp=qp_val)
             if phase == "render" and "ts" in hud_state and self.chk_hud_preview.isChecked():
                 self._hud_ts = hud_state.get("ts")
                 now = time.monotonic()
@@ -2226,7 +2243,7 @@ class RenderTab(QWidget):
         # Nigdy nie cofaj paska
         if overall > self._render_target:
             self._render_target = overall
-        self._set_stats(completed, total, elapsed, fps, status)
+        self._set_stats(completed, total, elapsed, fps, status, qp=qp_val)
 
         # HUD Preview — latest-state, tylko dla raportów klatek (mają "ts")
         if hud_state is not None and isinstance(hud_state, dict) and "ts" in hud_state and self.chk_hud_preview.isChecked():
@@ -2323,7 +2340,8 @@ class RenderTab(QWidget):
 
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
                    status: str, final_eta: str | None = None,
-                   item_label: str = "Frame", is_indeterminate: bool = False) -> None:
+                   item_label: str = "Frame", is_indeterminate: bool = False,
+                   qp: float | None = None) -> None:
         total = max(total, 0)
         if not is_indeterminate and total and completed >= 0:
             pct = (completed / total) * 100.0
@@ -2344,11 +2362,12 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if elapsed > 0 else "--:--"
         fps_txt = f"{fps:.1f}" if (fps > 0 and not is_indeterminate) else "--"
+        qp_str = f"{qp:.1f}" if (qp is not None and qp > 0 and not is_indeterminate) else "--"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
             f"{item_label}: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
-            f"   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+            f"   |   QP: {qp_str}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
             f"   |   {status}"
         )
 
@@ -2414,7 +2433,7 @@ class RenderTab(QWidget):
         self._render_timer.stop()
         self.progress.setValue(100)
         self._set_stats(self._render_total, self._render_total, elapsed, avg_fps,
-                        "Gotowe", final_eta="00:00")
+                        "Gotowe", final_eta="00:00", qp=qp)
         self._end_render()
         self._show_export_finished_popup(_stats, output, elapsed)
 

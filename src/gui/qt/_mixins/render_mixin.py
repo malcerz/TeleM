@@ -274,7 +274,18 @@ class RenderMixin:
                 global_pct = min(99.9, global_pct)
 
                 comp_txt = ""
+                qp_val = None
                 if isinstance(hud_state, dict):
+                    for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
+                        v = hud_state.get(k)
+                        if v is not None:
+                            try:
+                                fv = float(v)
+                                if fv > 0:
+                                    qp_val = fv
+                                    break
+                            except (ValueError, TypeError):
+                                pass
                     if "compression_text" in hud_state and hud_state["compression_text"]:
                         comp_txt = str(hud_state["compression_text"])
                     elif "qp_avg" in hud_state and hud_state["qp_avg"] is not None:
@@ -282,6 +293,8 @@ class RenderMixin:
                             comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
                         except (ValueError, TypeError):
                             comp_txt = f"QP avg: {hud_state['qp_avg']}"
+                if qp_val is None and getattr(latest, "qp", None) is not None:
+                    qp_val = latest.qp
 
                 is_done_frames = (total_frames > 0 and frame >= total_frames)
                 st_val = "cancelling" if self.render_cancel_event.is_set() else ("finalizing" if is_done_frames else "rendering")
@@ -310,6 +323,7 @@ class RenderMixin:
                     fps_instant=effective_fps,
                     fps_average=effective_fps,
                     compression_text=comp_txt or getattr(latest, "compression_text", ""),
+                    qp=qp_val,
                 )
             elif phase == "finalize":
                 prev_global = float(getattr(latest, "global_percent", 0.0))

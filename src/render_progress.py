@@ -83,6 +83,8 @@ class RenderProgressState:
     prep_total: int = 0
     prep_pct: float = 0.0
     prep_label: str = ""
+    qp: float | None = None
+    avg_qp: float | None = None
 
 
 def format_render_progress_status(snapshot: RenderProgressState) -> str:
@@ -91,14 +93,20 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
         fps = "--"
+        qp_str = "--"
     elif snapshot.progress_mode == "indeterminate":
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = "--"
         fps = "--"
+        qp_str = "--"
     else:
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
         fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
+        qp_val = getattr(snapshot, "qp", None)
+        if qp_val is None:
+            qp_val = getattr(snapshot, "avg_qp", None)
+        qp_str = f"{qp_val:.1f}" if (qp_val is not None and qp_val > 0) else "--"
     elapsed = max(0, int(snapshot.elapsed_s))
     mins, secs = divmod(elapsed, 60)
     hours, mins = divmod(mins, 60)
@@ -128,7 +136,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
     return (
-        f"{item_label}: {frame} | {pct} | FPS: {fps} | Czas: {elapsed_txt} "
+        f"{item_label}: {frame} | {pct} | FPS: {fps} | QP: {qp_str} | Czas: {elapsed_txt} "
         f"| ETA: {eta_txt} | {status}"
     )
 

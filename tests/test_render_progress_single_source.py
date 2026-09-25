@@ -106,8 +106,11 @@ def test_main_window_consumes_the_same_canonical_snapshot():
         eta_s=1260.0,
     )
     window._on_render_state(snapshot)
-    assert "10330 / 55649" in window.status_label.text()
-    assert "FPS: 35.7" in window.status_label.text()
+    # ONE_RENDER_PROGRESS_BAR and ONE_RENDER_PROGRESS_TEXT:
+    # MainWindow status bar avoids duplicating the RenderTab progress bar and text.
+    assert window.progress_bar.isVisible() is False
+    assert "10330 / 55649" not in window.status_label.text()
+    assert window._render_state_active is True
 
     window._on_render_state(RenderProgressState(
         generation_id=40,
@@ -116,7 +119,17 @@ def test_main_window_consumes_the_same_canonical_snapshot():
         total_frames=55649,
         cancelled=True,
     ))
-    assert "10330 / 55649" in window.status_label.text()
+    # Stale cancelled generation ignored
+    assert window._render_generation_id == 41
+    assert window._render_state_active is True
+
+    window._on_render_state(RenderProgressState(
+        generation_id=41,
+        state="completed",
+        completed=True,
+    ))
+    assert window._render_state_active is False
+    assert window.status_label.text() == "Gotowy"
     app.processEvents()
 
 
@@ -196,3 +209,78 @@ def test_user_cancel_sets_user_reason():
     assert harness.render_cancel_event.is_set()
     assert harness._render_cancel_reason is RenderCancelReason.USER_CANCEL
     assert harness._render_cancel_source == "GUI_BUTTON"
+
+
+def test_render_tab_indeterminate_progress_mode_lifecycle():
+    app = QApplication.instance() or QApplication(sys.argv)
+    tab = RenderTab(preview=VideoPreview())
+    tab._on_render()
+    gen_id = tab._render_generation_id
+
+    # 1. During render: determinate mode (0..100)
+    tab._on_render_state(RenderProgressState(
+        generation_id=gen_id,
+        state="rendering",
+        frame=500,
+        total_frames=1000,
+        percent=50.0,
+        global_percent=46.0,
+        progress_mode="determinate",
+    ))
+    assert tab.progress.minimum() == 0
+    assert tab.progress.maximum() == 100
+    assert not tab._is_indeterminate
+
+    # 2. Transition to Muxowanie MP4 (indeterminate / busy)
+    tab._on_render_state(RenderProgressState(
+        generation_id=gen_id,
+        state="finalizing",
+        phase="finalize",
+        progress_mode="indeterminate",
+        frame=1000,
+        total_frames=1000,
+        global_percent=92.0,
+        finalization_stage="Muxowanie MP4...",
+    ))
+    assert tab._is_indeterminate is True
+    assert tab.progress.minimum() == 0
+    assert tab.progress.maximum() == 0  # Qt marquee / busy mode
+    assert "Muxowanie MP4..." in tab.lbl_stats.text()
+    assert "|   --   |" in tab.lbl_stats.text()
+
+    # Tick does not overwrite indeterminate mode
+    tab._render_tick()
+    assert tab.progress.minimum() == 0
+    assert tab.progress.maximum() == 0
+
+    # 3. Transition to verification (back to determinate mode)
+    tab._on_render_state(RenderProgressState(
+        generation_id=gen_id,
+        state="finalizing",
+        phase="finalize",
+        progress_mode="determinate",
+        frame=1000,
+        total_frames=1000,
+        global_percent=99.1,
+        finalization_stage="Finalizacja: weryfikacja pliku...",
+    ))
+    assert tab._is_indeterminate is False
+    assert tab.progress.minimum() == 0
+    assert tab.progress.maximum() == 100
+
+    # 4. Completion: exactly 100% and determinate
+    tab._on_render_state(RenderProgressState(
+        generation_id=gen_id,
+        state="completed",
+        phase="complete",
+        progress_mode="determinate",
+        frame=1000,
+        total_frames=1000,
+        global_percent=100.0,
+        completed=True,
+    ))
+    assert tab._is_indeterminate is False
+    assert tab.progress.minimum() == 0
+    assert tab.progress.maximum() == 100
+    assert tab._rendering is False
+    app.processEvents()

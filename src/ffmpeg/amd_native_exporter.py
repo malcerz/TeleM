@@ -2699,6 +2699,18 @@ def export_amd_native_d3d11(
             POINTER(ctypes.c_double),
         ]
 
+    if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+        native_dll.telem_amd_get_encoder_qp_stats.restype = None
+        native_dll.telem_amd_get_encoder_qp_stats.argtypes = [
+            c_void_p,
+            POINTER(c_double),
+            POINTER(ctypes.c_int64),
+            POINTER(ctypes.c_int64),
+            POINTER(c_uint64),
+            POINTER(ctypes.c_int64),
+            POINTER(c_int),
+        ]
+
     native_dll.telem_amd_set_diagnostics.restype = c_int
     native_dll.telem_amd_set_diagnostics.argtypes = [c_void_p, c_int]
 
@@ -6275,10 +6287,38 @@ def export_amd_native_d3d11(
             pct = int(((prepared.frame_idx + 1) / expected_progress_frames) * 100)
             m, s = divmod(int(elapsed), 60)
             em, es = divmod(int(eta), 60)
-            stats_str = f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | {fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+
+            qp_avg_val = c_double(0.0)
+            qp_min_val = ctypes.c_int64(0)
+            qp_max_val = ctypes.c_int64(0)
+            qp_samples_val = c_uint64(0)
+            qp_last_val = ctypes.c_int64(0)
+            qp_supp_val = c_int(0)
+            if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+                native_dll.telem_amd_get_encoder_qp_stats(
+                    h_context,
+                    byref(qp_avg_val),
+                    byref(qp_min_val),
+                    byref(qp_max_val),
+                    byref(qp_samples_val),
+                    byref(qp_last_val),
+                    byref(qp_supp_val),
+                )
+
+            qp_txt = f"QP avg: {qp_avg_val.value:.1f}" if qp_samples_val.value > 0 else "QP avg: N/A"
+            stats_str = (
+                f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | "
+                f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+            )
             if progress_cb:
                 progress_dispatcher.submit(progress_cb, pct, stats_str)
-            progress_tracker.frame(prepared.frame_idx + 1, elapsed, fps)
+            progress_tracker.frame(
+                prepared.frame_idx + 1,
+                elapsed,
+                fps,
+                qp_avg=qp_avg_val.value if qp_samples_val.value > 0 else None,
+                compression_text=qp_txt,
+            )
         return True
 
     # GUI phase-report: HUD preparation finished, frame rendering begins.
@@ -6591,6 +6631,24 @@ def export_amd_native_d3d11(
             byref(c_hardware_decode_confirmed),
             byref(c_decoder_format),
         )
+
+        c_qp_avg = c_double(0.0)
+        c_qp_min = ctypes.c_int64(0)
+        c_qp_max = ctypes.c_int64(0)
+        c_qp_samples = c_uint64(0)
+        c_qp_last = ctypes.c_int64(0)
+        c_qp_supp = c_int(0)
+        if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+            native_dll.telem_amd_get_encoder_qp_stats(
+                h_context,
+                byref(c_qp_avg),
+                byref(c_qp_min),
+                byref(c_qp_max),
+                byref(c_qp_samples),
+                byref(c_qp_last),
+                byref(c_qp_supp),
+            )
+
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         _cleanup_native_resources()
     except Exception:
@@ -7652,6 +7710,7 @@ def export_amd_native_d3d11(
                     "dropped": int(c_dropped.value),
                     "submitted": int(c_sub.value),
                     "received": int(c_rec.value),
+                    "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
                 },
                 "direct_mux": {
                     "enabled": direct_mux_enabled,
