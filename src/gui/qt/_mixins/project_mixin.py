@@ -1235,6 +1235,7 @@ class ProjectMixin:
                     processed = read_processed_cache(video_path)
                     if processed:
                         _profile_load_stage("gpmf_decode_ms", t0, video_path, len(native_data.get("gps_track", [])))
+                        print(f"[GPMF] parser=NATIVE file={video_path.name}", flush=True)
                         print(f"[Telemetry Native] Extracted {video_path.name} in {(_time.perf_counter() - t_native)*1000.0:.1f}ms", flush=True)
                         _print_gpmf_load_diagnostic(
                             video_path,
@@ -1303,7 +1304,8 @@ class ProjectMixin:
                     )
                     return processed, []
         if not records:
-            # Generuj bezpośrednio z GPMF (FFmpeg) lub ExifTool
+            # Generuj bezpośrednio z GPMF (FFmpeg) lub ExifTool (emergency fallback only)
+            print(f"[GPMF] native parser failed -> ExifTool fallback ({video_path.name})", flush=True)
             t_extract = _time.perf_counter()
             data = None
             method = ""
