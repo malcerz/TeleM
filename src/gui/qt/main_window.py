@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
@@ -15,6 +17,7 @@ from src.gui.qt.tabs.render_tab import RenderTab
 from src.gui.qt.tabs.settings_tab import SettingsTab
 from src.gui.qt.widgets.video_preview import VideoPreview
 from src.render_progress import RenderProgressState, format_render_progress_status
+from src.telemetry_file_validation import TelemetryValidationRequest
 
 
 APP_TITLE = "BikeRideHUD"
@@ -66,6 +69,9 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel("Gotowy")
         self.status_bar.addWidget(self.status_label, 1)
+
+        self.map_status_label = QLabel("")
+        self.status_bar.addPermanentWidget(self.map_status_label)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(300)
@@ -160,6 +166,14 @@ class MainWindow(QMainWindow):
         s.sig_render_state.connect(self._on_render_state)
         s.sig_error.connect(self._on_error)
         s.sig_video_info_ready.connect(self._on_video_info)
+        s.sig_map_status.connect(self._on_map_status)
+        s.sig_telemetry_validation_request.connect(self._on_telemetry_validation_request)
+
+    def _on_map_status(self, text: str) -> None:
+        t0 = time.perf_counter()
+        self.map_status_label.setText(text)
+        block_ms = (time.perf_counter() - t0) * 1000.0
+        self._last_map_status_block_ms = block_ms
 
     def _on_progress(self, percent: int, text: str) -> None:
         # During export the generation-tagged render state is canonical.
@@ -180,7 +194,7 @@ class MainWindow(QMainWindow):
             self._progress_completed = True
 
     def _on_render_state(self, snapshot: RenderProgressState) -> None:
-        """Display the same generation-tagged snapshot as RenderTab."""
+        """Track render active state without duplicating render progress bar / text."""
         if not isinstance(snapshot, RenderProgressState):
             return
         if snapshot.generation_id < self._render_generation_id:
@@ -189,10 +203,18 @@ class MainWindow(QMainWindow):
         self._render_state_active = not (
             snapshot.completed or snapshot.cancelled or snapshot.failed
         )
-        self.status_label.setText(format_render_progress_status(snapshot))
-        if snapshot.total_frames:
-            self.progress_bar.setValue(int(round(snapshot.global_percent)))
-        self.progress_bar.setVisible(not (snapshot.completed or snapshot.cancelled or snapshot.failed))
+        # ONE_RENDER_PROGRESS_BAR and ONE_RENDER_PROGRESS_TEXT:
+        # The canonical render progress bar and text live exclusively in RenderTab.
+        # Bottom status bar keeps progress_bar hidden and avoids duplicate render status text.
+        self.progress_bar.setVisible(False)
+        if snapshot.completed:
+            self.status_label.setText("Gotowy")
+        elif snapshot.cancelled:
+            self.status_label.setText("Anulowano")
+        elif snapshot.failed:
+            self.status_label.setText("Błąd")
+        else:
+            self.status_label.setText("")
 
     def _on_error(self, msg: str) -> None:
         if self._render_state_active:
@@ -200,6 +222,31 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Błąd: {msg}")
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "Błąd", msg)
+
+    def _on_telemetry_validation_request(self, request: object) -> None:
+        """Ask in the GUI thread whether a suspicious FIT/GPX may be forced."""
+        if not isinstance(request, TelemetryValidationRequest):
+            return
+        result = request.result
+        try:
+            box = QMessageBox(self)
+            box.setWindowTitle(f"Weryfikacja pliku {result.file_type}")
+            box.setText(result.message)
+            if result.can_force_load:
+                box.setIcon(QMessageBox.Warning)
+                cancel = box.addButton("Anuluj", QMessageBox.RejectRole)
+                override = box.addButton("Wczytaj mimo to", QMessageBox.AcceptRole)
+                box.setDefaultButton(cancel)
+                box.exec()
+                request.accepted = box.clickedButton() is override
+                request.user_override = request.accepted
+            else:
+                box.setIcon(QMessageBox.Critical)
+                box.setStandardButtons(QMessageBox.Ok)
+                box.exec()
+                request.accepted = False
+        finally:
+            request.completed.set()
 
     def _on_video_info(self, info: str) -> None:
         self.status_label.setText(f"Wideo: {info}")

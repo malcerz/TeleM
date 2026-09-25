@@ -41,6 +41,7 @@ from src.telemetry_extract import (
     smooth_speed_samples,
     smooth_speed_values,
     find_metadata_json,
+    find_metadata_json_for_write,
 )
 from src.video_helpers import find_local_tool
 from src.gui.qt.signals import get_signals
@@ -115,6 +116,22 @@ class AppController(
         self.signals = get_signals()
         self.base_dir = Path(__file__).resolve().parent.parent.parent.parent
 
+        # Central capability snapshot is resolved once per application start.
+        # The service validates the persistent cache against the active DXGI
+        # adapter before reusing it; it never applies an AMD-wide resolution
+        # fallback when the runtime probe is UNKNOWN.
+        try:
+            from src.ffmpeg.amd_capabilities import (
+                format_startup_capabilities,
+                get_gpu_capabilities,
+            )
+            self.gpu_capabilities = get_gpu_capabilities()
+            print(format_startup_capabilities(self.gpu_capabilities), flush=True)
+        except Exception as exc:
+            from src.ffmpeg.amd_capabilities import GpuCapabilities
+            self.gpu_capabilities = GpuCapabilities(error=str(exc))
+            print(f"[GPU CAPABILITIES] UNKNOWN: {exc}", flush=True)
+
         # ── Stan ────────────────────────────────────────────────────────
         self.video_paths: list[Path] = []
         self.video_path: Optional[Path] = None
@@ -153,7 +170,20 @@ class AppController(
 
         # Tryb dekodowania wideo w backendzie AMD: "gpu" (domyślny) lub "cpu"
         self.amd_decode_mode: str = "gpu"
+        # Preset jakości enkodera AMD: "FAST" (domyślny), "BALANCED", "QUALITY"
+        self.amd_encoder_quality: str = "FAST"
         self.render_mode: str = "gpu"
+
+        # ── Map background prefetch callbacks ──────────────────────────
+        try:
+            from src.gui.map_prefetch import MapBackgroundPrefetchManager
+            _map_mgr = MapBackgroundPrefetchManager.get_instance()
+            _map_mgr.set_callbacks(
+                on_status=lambda text: self.signals.sig_map_status.emit(text),
+                on_progress=lambda cur, tot: self.signals.sig_map_progress.emit(cur, tot),
+            )
+        except Exception as _e:
+            print(f"[Controller] MapBackgroundPrefetchManager init warning: {_e}", flush=True)
 
         # Wczytaj startowy preset z def_layout.json jeśli istnieje
         self._startup_preset_path: str = ""
@@ -178,7 +208,7 @@ class AppController(
             get_rotation_meta_fn=get_rotation_from_metadata,
             get_container_rotation_fn=get_container_rotation,
             find_meta_json_fn=find_metadata_json,
-            find_meta_json_write_fn=lambda p: p.with_suffix(".json"),
+            find_meta_json_write_fn=find_metadata_json_for_write,
             load_telemetry_fn=lambda *a: None,
             ensure_records_fn=ensure_records_list,
             load_json_fallback_fn=load_json_with_fallback,
@@ -274,13 +304,13 @@ class AppController(
         except Exception:
             pass
         try:
-            from src.indicators.moving_map import clear_moving_map_cache
-            clear_moving_map_cache()
+            from src.indicators.text import clear_text_cache
+            clear_text_cache()
         except Exception:
             pass
         try:
-            from src.indicators.text import clear_text_cache
-            clear_text_cache()
+            from src.indicators.moving_map import clear_moving_map_renderers
+            clear_moving_map_renderers()
         except Exception:
             pass
 
@@ -329,7 +359,10 @@ class AppController(
                 # Przywróć tryb dekodowania AMD zapisany w pliku
                 saved_decode_mode = self.layout.get("global", {}).get("amd_decode_mode", "gpu")
                 self.amd_decode_mode = (saved_decode_mode or "gpu").lower()
+                saved_quality = self.layout.get("global", {}).get("amd_encoder_quality", "FAST")
+                self.amd_encoder_quality = (saved_quality or "FAST").upper()
                 self.render_mode = str(self.layout.get("global", {}).get("render_mode", "gpu") or "gpu").lower()
                 self.signals.sig_amd_decode_mode_restored.emit(self.amd_decode_mode)
+                self.signals.sig_amd_encoder_quality_restored.emit(self.amd_encoder_quality)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

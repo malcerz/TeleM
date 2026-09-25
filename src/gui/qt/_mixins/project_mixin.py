@@ -11,6 +11,7 @@ import threading
 import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QTimer, QUrl
 from PIL import Image
@@ -26,6 +27,16 @@ from src.telemetry_processed_cache import (
     write_processed_cache,
 )
 from src.telemetry_extract import ensure_records_list, load_json_with_fallback
+from src.telemetry_file_validation import (
+    TelemetryFileValidationResult,
+    TelemetryValidationRequest,
+    ValidationState,
+    inspect_gpx_structure,
+    log_validation,
+    normalize_utc,
+    sample_time_range,
+    validate_telemetry_range,
+)
 from src.video_helpers import (
     clear_capture_cache,
     extract_frame,
@@ -139,10 +150,61 @@ except ImportError:
 
 GPMF_CACHE_VERSION = 5
 
+_PROCESSED_TELEMETRY_FIELDS = (
+    "speed_samples", "alt_samples", "track_samples", "gps_track",
+    "accelerometer_samples", "gyroscope_samples", "iso_samples",
+    "exposure_samples", "temperature_samples",
+)
+
+
+def _processed_cache_has_payload(processed: dict | None) -> bool:
+    """Return true when any useful telemetry stream is present in the cache."""
+    return bool(
+        processed
+        and any(bool(processed.get(field)) for field in _PROCESSED_TELEMETRY_FIELDS)
+    )
+
+
+def _print_gpmf_load_diagnostic(
+    source_path: Path,
+    *,
+    cache_hit: bool,
+    native_module_available: bool,
+    native_parse_ok: bool,
+    channel_data: dict | None,
+    native_channels: tuple[str, ...] = (),
+    python_fallback_channels: tuple[str, ...] = (),
+    native_result_accepted: bool = False,
+    fallback_reason: str = "",
+    parse_ms: float = 0.0,
+    cache_load_ms: float = 0.0,
+) -> None:
+    """Emit one compact diagnostic block per telemetry source load."""
+    data = channel_data or {}
+    print(
+        "[GPMF LOAD]\n"
+        f"SOURCE={source_path}\n"
+        f"CACHE_HIT={bool(cache_hit)}\n"
+        f"NATIVE_MODULE_AVAILABLE={bool(native_module_available)}\n"
+        f"NATIVE_PARSE_OK={bool(native_parse_ok)}\n"
+        f"GPS_SAMPLES={len(data.get('gps_track') or [])}\n"
+        f"ACC_SAMPLES={len(data.get('accelerometer_samples') or [])}\n"
+        f"GYRO_SAMPLES={len(data.get('gyroscope_samples') or [])}\n"
+        f"ISO_SAMPLES={len(data.get('iso_samples') or [])}\n"
+        f"TEMP_SAMPLES={len(data.get('temperature_samples') or [])}\n"
+        f"NATIVE_CHANNELS_USED={','.join(native_channels) or '-'}\n"
+        f"PYTHON_FALLBACK_CHANNELS={','.join(python_fallback_channels) or '-'}\n"
+        f"NATIVE_RESULT_ACCEPTED={bool(native_result_accepted)}\n"
+        f"FALLBACK_REASON={fallback_reason or '-'}\n"
+        f"PARSE_MS={parse_ms:.2f}\n"
+        f"CACHE_LOAD_MS={cache_load_ms:.2f}",
+        flush=True,
+    )
+
 
 def _gpmf_cache_metadata_path(cache_path: Path) -> Path:
     """Return the sidecar path kept separate from telemetry JSON consumers."""
-    return cache_path.with_name(f"{cache_path.name}.meta.json")
+    return cache_path.with_name(f"{cache_path.stem}.meta.json")
 
 
 def _atomic_write_json(path: Path, value: object) -> None:
@@ -169,8 +231,16 @@ def _write_gpmf_cache(
     source_path: Path,
     data: object,
     generator: str,
-) -> None:
-    """Atomically write telemetry JSON and its source/version contract."""
+) -> Path:
+    """Atomically write telemetry JSON and its source/version contract to central AppData cache."""
+    from src.telemetry_cache_manager import (
+        get_gpmf_json_path,
+        get_gpmf_metadata_path,
+        update_source_metadata,
+        log_cache_event,
+    )
+    target_cache_path = get_gpmf_json_path(source_path)
+    target_meta_path = get_gpmf_metadata_path(source_path)
     source_stat = source_path.stat()
     metadata = {
         "_telem_cache": {
@@ -181,57 +251,295 @@ def _write_gpmf_cache(
             "generator": generator.lower(),
         }
     }
-    _atomic_write_json(cache_path, data)
-    _atomic_write_json(_gpmf_cache_metadata_path(cache_path), metadata)
+    _atomic_write_json(target_cache_path, data)
+    _atomic_write_json(target_meta_path, metadata)
+    try:
+        update_source_metadata(source_path, "gpmf_json", target_cache_path.stat().st_size)
+    except Exception:
+        pass
+    log_cache_event(source_path, "STORED", target_cache_path, extra="gpmf_json")
+    return target_cache_path
 
 
 def _load_valid_gpmf_cache(
     source_path: Path,
-    cache_path: Path,
+    cache_path: Path | None = None,
 ) -> tuple[object | None, str | None]:
-    """Load cache only when its version and source fingerprint are proven."""
-    if not cache_path.exists():
-        return None, "cache_missing"
+    """Load cache only when its version and source fingerprint are proven.
 
-    metadata_path = _gpmf_cache_metadata_path(cache_path)
-    if not metadata_path.exists():
-        return None, "legacy_cache_no_version"
-
-    try:
-        metadata = load_json_with_fallback(
-            metadata_path, profile_cb=_profile_json_stage,
-        )
-    except Exception:
-        return None, "invalid_metadata"
-
-    contract = metadata.get("_telem_cache") if isinstance(metadata, dict) else None
-    required = ("version", "source_size", "source_mtime_ns", "generator")
-    if not isinstance(contract, dict) or any(key not in contract for key in required):
-        return None, "missing_metadata"
-    if contract["version"] != GPMF_CACHE_VERSION:
-        return None, "cache_version_mismatch"
+    Checks central AppData cache first, with read-only fallback/migration from legacy sidecar.
+    """
+    from src.telemetry_cache_manager import (
+        get_gpmf_json_path,
+        get_gpmf_metadata_path,
+        get_legacy_gpmf_json_path,
+        get_legacy_gpmf_meta_paths,
+        log_cache_event,
+        update_source_metadata,
+    )
 
     try:
         source_stat = source_path.stat()
     except OSError:
         return None, "source_missing"
-    if contract["source_size"] != source_stat.st_size:
-        return None, "source_size_changed"
-    if contract["source_mtime_ns"] != source_stat.st_mtime_ns:
-        return None, "source_mtime_changed"
 
-    try:
-        data = load_json_with_fallback(
-            cache_path, profile_cb=_profile_json_stage,
-        )
-    except Exception:
-        return None, "invalid_json"
-    if not data:
-        return None, "invalid_payload"
-    return data, None
+    def _verify_and_load(c_path: Path, m_path: Path) -> tuple[object | None, str | None]:
+        if not c_path.exists():
+            return None, "cache_missing"
+        if not m_path.exists():
+            return None, "legacy_cache_no_version"
+        try:
+            metadata = load_json_with_fallback(m_path, profile_cb=_profile_json_stage)
+        except Exception:
+            return None, "invalid_metadata"
+        contract = metadata.get("_telem_cache") if isinstance(metadata, dict) else None
+        required = ("version", "source_size", "source_mtime_ns", "generator")
+        if not isinstance(contract, dict) or any(key not in contract for key in required):
+            return None, "missing_metadata"
+        if contract["version"] != GPMF_CACHE_VERSION:
+            return None, "cache_version_mismatch"
+        if contract["source_size"] != source_stat.st_size:
+            return None, "source_size_changed"
+        if contract["source_mtime_ns"] != source_stat.st_mtime_ns:
+            return None, "source_mtime_changed"
+        try:
+            data = load_json_with_fallback(c_path, profile_cb=_profile_json_stage)
+        except Exception:
+            return None, "invalid_json"
+        if not data:
+            return None, "invalid_payload"
+        return data, None
+
+    # 1. Central AppData cache
+    appdata_cache = get_gpmf_json_path(source_path)
+    appdata_meta = get_gpmf_metadata_path(source_path)
+    data, reason = _verify_and_load(appdata_cache, appdata_meta)
+    if data is not None:
+        log_cache_event(source_path, "HIT", appdata_cache, extra="gpmf_json")
+        return data, None
+
+    # 2. Legacy sidecar (read-only import into AppData, source files NEVER modified)
+    legacy_json = get_legacy_gpmf_json_path(source_path)
+    if legacy_json.exists() and legacy_json != appdata_cache:
+        for legacy_meta in get_legacy_gpmf_meta_paths(source_path):
+            if legacy_meta.exists():
+                data, reason = _verify_and_load(legacy_json, legacy_meta)
+                if data is not None:
+                    try:
+                        appdata_cache.parent.mkdir(parents=True, exist_ok=True)
+                        import shutil
+                        shutil.copy2(legacy_json, appdata_cache)
+                        shutil.copy2(legacy_meta, appdata_meta)
+                        update_source_metadata(source_path, "gpmf_json", appdata_cache.stat().st_size)
+                    except Exception as exc:
+                        print(f"[TelemetryCache] Legacy GPMF import copy failed: {exc}", flush=True)
+                    log_cache_event(source_path, "MIGRATED", appdata_cache, extra=f"from={legacy_json.name}")
+                    return data, None
+
+    return None, reason or "cache_missing"
 
 
 class ProjectMixin:
+    def _probe_candidate_video_state(
+        self,
+        video_path: str | Path,
+        ffprobe_exe: str,
+        *,
+        default_fps: float = 30.0,
+    ) -> dict[str, Any]:
+        """Probe the complete video metadata contract before project commit."""
+        from src.telemetry_extract import get_container_rotation
+
+        info = ffprobe_stream_info(ffprobe_exe, Path(video_path))
+        streams = info.get("streams", [])
+        stream = streams[0] if streams else {}
+        width = int(stream.get("width", 1920) or 1920)
+        height = int(stream.get("height", 1080) or 1080)
+        fps = parse_fps(
+            stream.get("avg_frame_rate") or stream.get("r_frame_rate")
+        ) if stream else default_fps
+        rotation = get_container_rotation(ffprobe_exe, Path(video_path))
+        return {
+            "path": Path(video_path),
+            "width": width,
+            "height": height,
+            "fps": fps,
+            "rotation": rotation,
+            "video_info": {
+                "width": width,
+                "height": height,
+                "fps": fps,
+                "rotation": rotation,
+            },
+        }
+
+    def _project_video_time_range(
+        self,
+        video_paths: list[str | Path] | None = None,
+        *,
+        ffmpeg_exe: str | None = None,
+        ffprobe_exe: str | None = None,
+    ) -> tuple[object | None, object | None]:
+        """Return the absolute UTC range for the current or candidate video set.
+
+        An explicit ``video_paths`` value is a candidate transaction.  It must
+        never fall back to the already committed timeline, otherwise selecting
+        a new MP4 while an old project is open validates FIT/GPX against the
+        old video's timestamps.
+        """
+        if video_paths is not None:
+            paths = [Path(path) for path in video_paths]
+            if not paths:
+                return None, None
+            try:
+                from src.multifile import probe_clip_time_interval
+                intervals = [
+                    probe_clip_time_interval(
+                        path,
+                        ffmpeg_exe=ffmpeg_exe or "ffmpeg",
+                        ffprobe_exe=ffprobe_exe or "ffprobe",
+                    )
+                    for path in paths
+                ]
+                known = [
+                    (normalize_utc(item[0]), normalize_utc(item[1]))
+                    for item in intervals
+                    if item[0] is not None and item[1] is not None
+                ]
+                if known:
+                    result = min(item[0] for item in known), max(item[1] for item in known)
+                    print(
+                        "[TELEMETRY VALIDATION] "
+                        f"VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe "
+                        f"VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths "
+                        f"paths={len(paths)} range={result[0]}..{result[1]}",
+                        flush=True,
+                    )
+                    return result
+            except Exception as exc:
+                print(f"[TELEMETRY VALIDATION] candidate video probe failed: {exc}", flush=True)
+            print(
+                "[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe "
+                "VALIDATION_VIDEO_TIME_SOURCE=unavailable",
+                flush=True,
+            )
+            return None, None
+
+        """Return the absolute UTC range for the complete current video set."""
+        timeline = getattr(self, "video_timeline", None)
+        clips = list(getattr(timeline, "clips", []) or []) if timeline else []
+        starts = [normalize_utc(getattr(clip, "absolute_start_dt", None)) for clip in clips]
+        ends = [normalize_utc(getattr(clip, "absolute_end_dt", None)) for clip in clips]
+        starts = [value for value in starts if value is not None]
+        ends = [value for value in ends if value is not None]
+        if starts and ends:
+            return min(starts), max(ends)
+        paths = list(getattr(self, "video_paths", []) or [])
+        if paths:
+            try:
+                from src.multifile import probe_clip_time_interval
+                intervals = [probe_clip_time_interval(path) for path in paths]
+                known = [
+                    (normalize_utc(item[0]), normalize_utc(item[1]))
+                    for item in intervals
+                    if item[0] is not None and item[1] is not None
+                ]
+                if known:
+                    return min(item[0] for item in known), max(item[1] for item in known)
+            except Exception as exc:
+                print(f"[TELEMETRY VALIDATION] video range probe failed: {exc}", flush=True)
+        start = normalize_utc(getattr(getattr(self, "telemetry", None), "start_dt_utc", None))
+        duration = getattr(self, "video_duration_s", None)
+        if start is not None and duration is not None:
+            from datetime import timedelta
+            return start, start + timedelta(seconds=float(duration))
+        return None, None
+
+    def _request_telemetry_validation(self, result: TelemetryFileValidationResult) -> bool:
+        """Synchronously ask the GUI thread for a mismatch/unknown decision."""
+        if result.state is ValidationState.VALID:
+            log_validation(result, user_override=False)
+            return True
+        request = TelemetryValidationRequest(result)
+        try:
+            self.signals.sig_telemetry_validation_request.emit(request)
+            if not request.completed.wait(timeout=120.0):
+                print("[TELEMETRY VALIDATION] GUI decision timeout; rejecting candidate", flush=True)
+                return False
+        except Exception as exc:
+            print(f"[TELEMETRY VALIDATION] GUI request failed: {exc}", flush=True)
+            return False
+        log_validation(result, user_override=request.user_override)
+        return bool(request.accepted)
+
+    def _validate_external_telemetry_candidate(
+        self,
+        file_type: str,
+        file_path: str | Path,
+        parsed: Any = None,
+        video_time_range: tuple[object | None, object | None] | None = None,
+    ) -> tuple[bool, Any]:
+        """Parse/validate a candidate without mutating project telemetry state."""
+        path = Path(file_path)
+        if video_time_range is None:
+            video_start, video_end = self._project_video_time_range()
+        else:
+            video_start, video_end = video_time_range
+        kind = str(file_type).upper()
+        parse_error = None
+        point_count = 0
+        telemetry_range = None
+
+        if not path.is_file():
+            parse_error = "missing_file"
+        elif kind == "FIT":
+            try:
+                if parsed is None:
+                    from telemetry_fit import parse_fit
+                    parsed = parse_fit(path)
+                point_count = len(parsed or [])
+                telemetry_range = sample_time_range(
+                    (record.get("timestamp"),) for record in (parsed or [])
+                    if record.get("timestamp") is not None
+                )
+                if not parsed:
+                    parse_error = "empty_or_corrupt_fit"
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                parse_error = str(exc)
+                parsed = None
+        elif kind == "GPX":
+            point_count, timed_count, telemetry_range, structure_error = inspect_gpx_structure(path)
+            if structure_error:
+                parse_error = structure_error
+            elif parsed is None and timed_count > 0:
+                try:
+                    from telemetry_gpx import parse_gpx
+                    parsed = parse_gpx(path)
+                except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
+                    parse_error = str(exc)
+                    parsed = None
+            if timed_count > 0 and not parsed and not parse_error:
+                parse_error = "empty_or_corrupt_gpx"
+        else:
+            parse_error = "unsupported_file_type"
+
+        result = validate_telemetry_range(
+            file_type=kind,
+            file_path=path,
+            video_start=video_start,
+            video_end=video_end,
+            telemetry_start=telemetry_range[0] if telemetry_range else None,
+            telemetry_end=telemetry_range[1] if telemetry_range else None,
+            point_count=point_count,
+            parse_error=parse_error,
+        )
+        accepted = self._request_telemetry_validation(result)
+        return accepted, parsed
+
     def _on_files_selected(
         self,
         video_paths: list[str],
@@ -239,7 +547,6 @@ class ProjectMixin:
         fit_path: str,
     ) -> None:
         """Użytkownik wybrał pliki w zakładce Wczytywanie."""
-        self._clear_caches()
         # Suppress decoder callbacks until an explicitly selected FIT has
         # loaded and its presentation plans have been warmed.
         self._preview_telemetry_loading = bool(fit_path)
@@ -249,8 +556,8 @@ class ProjectMixin:
             try:
                 effective_fit_path = fit_path
                 effective_gpx_path = gpx_path
-                self.video_paths = [Path(p) for p in video_paths]
-                self.video_path = self.video_paths[0]
+                candidate_video_paths = [Path(p) for p in video_paths]
+                candidate_video_path = candidate_video_paths[0]
 
                 # Wykryj narzędzia
                 ffprobe_exe = find_executable(
@@ -265,33 +572,96 @@ class ProjectMixin:
                     self.signals.sig_error.emit(
                         "Nie znaleziono ffprobe.exe / ffmpeg.exe"
                     )
+                    self._preview_telemetry_loading = False
+                    self.signals.sig_progress.emit(100, "Gotowe")
                     return
+                # Candidate preflight must happen before any committed project
+                # state is replaced.  In particular, do not let the previous
+                # self.video_timeline win over this candidate's GPMF range.
+                candidate_video_range = self._project_video_time_range(
+                    candidate_video_paths,
+                    ffmpeg_exe=ffmpeg_exe,
+                    ffprobe_exe=ffprobe_exe,
+                )
+                if not effective_fit_path and not effective_gpx_path:
+                    try:
+                        from src.multifile import probe_clip_time_interval
+                        from telemetry_fit import find_best_fit_match
+                        candidate_intervals = []
+                        for candidate_path in candidate_video_paths:
+                            start_dt, end_dt, duration_s, confidence = probe_clip_time_interval(
+                                candidate_path,
+                                ffmpeg_exe=ffmpeg_exe,
+                                ffprobe_exe=ffprobe_exe,
+                            )
+                            if start_dt is not None and end_dt is not None:
+                                candidate_intervals.append(
+                                    (start_dt, end_dt, duration_s, confidence)
+                                )
+                        if candidate_intervals:
+                            matched_fit, _diag = find_best_fit_match(
+                                candidate_intervals, candidate_video_paths[0].parent,
+                            )
+                            if matched_fit is not None:
+                                effective_fit_path = str(matched_fit)
+                    except Exception as exc:
+                        print(f"[AutoFIT] Candidate preflight failed: {exc}", flush=True)
+                validated_fit_records = None
+                validated_gpx_points = None
+                if effective_fit_path:
+                    fit_ok, validated_fit_records = self._validate_external_telemetry_candidate(
+                        "FIT", effective_fit_path, video_time_range=candidate_video_range,
+                    )
+                    if not fit_ok:
+                        self._preview_telemetry_loading = False
+                        self.signals.sig_progress.emit(100, "Gotowe")
+                        return
+                if effective_gpx_path:
+                    gpx_ok, validated_gpx_points = self._validate_external_telemetry_candidate(
+                        "GPX", effective_gpx_path, video_time_range=candidate_video_range,
+                    )
+                    if not gpx_ok:
+                        self._preview_telemetry_loading = False
+                        self.signals.sig_progress.emit(100, "Gotowe")
+                        return
+
+                # Atomic project-state commit starts only after candidate
+                # telemetry has passed validation or the user explicitly
+                # selected the override action.
+                self.video_paths = candidate_video_paths
+                self.video_path = candidate_video_path
                 self.ffprobe_exe = ffprobe_exe
                 self.ffmpeg_exe = ffmpeg_exe
+                self._clear_caches()
+                try:
+                    from src.indicators.moving_map import clear_moving_map_cache
+                    clear_moving_map_cache()
+                except Exception:
+                    pass
 
                 # Ustaw źródło QMediaPlayer (GPU-accelerated preview)
                 if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
                     self.media_player.setSource(
-                        QUrl.fromLocalFile(str(self.video_path))
+                        QUrl.fromLocalFile(str(candidate_video_path))
                     )
 
                 if self.is_using_mpv():
-                    self.mpv_player.play(str(self.video_path))
+                    self.mpv_player.play(str(candidate_video_path))
                     self.mpv_player.pause = True
 
                 # Analiza wideo
                 self.signals.sig_progress.emit(15, "Analiza strumienia...")
-                info = ffprobe_stream_info(ffprobe_exe, self.video_paths[0])
-                streams = info.get("streams", [])
-                w = int(streams[0].get("width", 1920)) if streams else 1920
-                h = int(streams[0].get("height", 1080)) if streams else 1080
+                candidate_state = self._probe_candidate_video_state(
+                    candidate_video_path, ffprobe_exe,
+                    default_fps=self.fps if hasattr(self, "fps") else 30.0,
+                )
+                w = candidate_state["width"]
+                h = candidate_state["height"]
                 self.video_width = w
                 self.video_height = h
-                self.video_info = {"width": w, "height": h, "fps": self.fps if hasattr(self, "fps") else 30.0}
-                self.fps = parse_fps(
-                    streams[0].get("avg_frame_rate")
-                    or streams[0].get("r_frame_rate")
-                ) if streams else 30.0
+                self.video_info = dict(candidate_state["video_info"])
+                self.video_rotation_degrees = candidate_state["rotation"]
+                self.fps = float(candidate_state["fps"])
                 self.video_info["fps"] = self.fps
                 total_dur = sum(
                     float(
@@ -315,20 +685,21 @@ class ProjectMixin:
                 # if timeline build fails.
 
                 # Layout — priorytet:
-                # 1. Istniejący layout roboczy powiązany z filmem (video.layout.json)
+                # 1. Legacy import z istniejącego sidecara (video.layout.json) — tylko do pamięci RAM
                 # 2. Startowy preset użytkownika jeśli skonfigurowany
                 # 3. Szablon bazowy def_layout.json
                 proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
+                loaded_legacy = False
                 if proj_layout.exists():
                     try:
                         self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
                         normalize_indicator_decimal_defaults(self.layout)
-                        print(f"[ProjectLayout] Wczytano istniejący layout filmu z {proj_layout}", flush=True)
+                        loaded_legacy = True
+                        print(f"[ProjectLayout] Zaimportowano legacy layout z {proj_layout} (in-memory only)", flush=True)
                     except Exception as e:
-                        print(f"[ProjectLayout] Błąd odczytu {proj_layout}: {e}", flush=True)
-                        proj_layout = None
-                if not proj_layout or not proj_layout.exists():
-                    preset_path = self._startup_preset_path or self.layout.get("_startup_preset", "")
+                        print(f"[ProjectLayout] Błąd odczytu legacy {proj_layout}: {e}", flush=True)
+                if not loaded_legacy:
+                    preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
                     if preset_path and Path(preset_path).exists():
                         self.layout = json.loads(
                             Path(preset_path).read_text(encoding="utf-8")
@@ -344,8 +715,8 @@ class ProjectMixin:
                 # Parse FIT/GPX GPS EARLY (fast) so the coarse overview map can
                 # start downloading tiles while GPMF/JSON is still parsing.
                 # The parsed records are REUSED later (no double parsing).
-                self._map_preload_fit_records = None
-                self._map_preload_gpx_points = None
+                self._map_preload_fit_records = validated_fit_records
+                self._map_preload_gpx_points = validated_gpx_points
                 map_gps = None
                 map_source = None
                 if not effective_fit_path and not effective_gpx_path and self.video_paths:
@@ -361,10 +732,16 @@ class ProjectMixin:
                             matched_fit, diag = find_best_fit_match(intervals, Path(self.video_paths[0]).parent)
                             if matched_fit is not None:
                                 effective_fit_path = str(matched_fit)
-                                self.fit_path = Path(effective_fit_path)
                     except Exception as e:
                         print(f"[AutoFIT] Error in project auto-fit: {e}", flush=True)
-                if effective_fit_path and _FIT_AVAILABLE and _parse_fit is not None:
+                configured_gps_src = (self.layout or {}).get("indicators", {}).get("track_map", {}).get("gps_source", "auto")
+                if (
+                    self._map_preload_fit_records is None
+                    and configured_gps_src != "gpmf"
+                    and effective_fit_path
+                    and _FIT_AVAILABLE
+                    and _parse_fit is not None
+                ):
                     try:
                         records = _parse_fit(effective_fit_path)
                         if records:
@@ -381,7 +758,13 @@ class ProjectMixin:
                             )
                     except Exception as exc:
                         print(f"[MapPreload] FIT preparse failed: {exc}", flush=True)
-                if map_gps is None and effective_gpx_path and _GPX_AVAILABLE and _parse_gpx is not None:
+                if (
+                    self._map_preload_gpx_points is None
+                    and map_gps is None
+                    and effective_gpx_path
+                    and _GPX_AVAILABLE
+                    and _parse_gpx is not None
+                ):
                     try:
                         points = _parse_gpx(effective_gpx_path)
                         if points:
@@ -403,7 +786,7 @@ class ProjectMixin:
                 # provider makes a saved Satellite map fail the async
                 # renderer's provider gate and remain on the placeholder.
                 map_provider = _map_provider_from_layout(self.layout)
-                if map_gps is not None:
+                if map_gps is not None and not (effective_fit_path or effective_gpx_path):
                     self._start_map_preload(
                         map_gps, map_source, provider=map_provider,
                     )
@@ -412,6 +795,29 @@ class ProjectMixin:
                 # with the map preload thread started above)
                 self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
                 self._load_or_generate_telemetry()
+
+                # Candidate validation/decision was completed before commit;
+                # only reuse the accepted temporary data here.
+                map_gps = None
+                map_source = None
+                if effective_fit_path and validated_fit_records:
+                    map_gps = [
+                        (r["timestamp"], r["lat"], r["lon"])
+                        for r in validated_fit_records
+                        if r.get("lat") is not None and r.get("lon") is not None
+                    ]
+                    map_source = "fit"
+                elif effective_gpx_path and validated_gpx_points:
+                    map_gps = [
+                        (p[0], p[1], p[2])
+                        for p in validated_gpx_points
+                        if p[1] is not None and p[2] is not None
+                    ]
+                    map_source = "gpx"
+                if map_gps is not None:
+                    self._start_map_preload(
+                        map_gps, map_source, provider=map_provider,
+                    )
 
                 # If no FIT/GPX GPS was available, start the map preload from
                 # the GPMF GPS track once it exists (fallback contract).
@@ -426,21 +832,23 @@ class ProjectMixin:
 
                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
                 if effective_gpx_path and _GPX_AVAILABLE:
-                    self.gpx_path = Path(effective_gpx_path)
-                    self.telemetry.load_gpx(
+                    gpx_loaded = self.telemetry.load_gpx(
                         self.video_path, self.telemetry.start_dt_utc,
-                        manual_path=self.gpx_path,
-                        preparsed=self._map_preload_gpx_points,
+                        manual_path=Path(effective_gpx_path),
+                        preparsed=validated_gpx_points,
                     )
+                    if gpx_loaded:
+                        self.gpx_path = Path(effective_gpx_path)
 
                 # Wczytaj FIT (jeśli podano) — reuse the preparsed records
                 if effective_fit_path and _FIT_AVAILABLE:
-                    self.fit_path = Path(effective_fit_path)
-                    self.telemetry.load_fit(
+                    fit_loaded = self.telemetry.load_fit(
                         self.video_path, self.telemetry.start_dt_utc,
-                        manual_path=self.fit_path,
-                        preparsed=self._map_preload_fit_records,
+                        manual_path=Path(effective_fit_path),
+                        preparsed=validated_fit_records,
                     )
+                    if fit_loaded:
+                        self.fit_path = Path(effective_fit_path)
 
                 # ── Multi-file timeline (ETAP MULTIFILE) ──────────────────
                 # Build the per-clip model + global timeline now that
@@ -459,6 +867,11 @@ class ProjectMixin:
                     self.video_timeline = timeline
                     self.video_clips = list(timeline.clips)
                     self.video_duration_s = timeline.project_duration_s
+                    if timeline.clips and timeline.clips[0].absolute_start_dt is not None:
+                        proj_start = timeline.clips[0].absolute_start_dt
+                        if getattr(self, "telemetry", None) is not None:
+                            self.telemetry.start_dt_utc = proj_start
+                            self.telemetry._coverage_start = proj_start
                     # Warm global multi-file battery presentation plan
                     try:
                         self.telemetry.timeline = timeline
@@ -510,15 +923,13 @@ class ProjectMixin:
                 self._active_preview_clip_index = 0
                 self._pending_seek_ms = None
 
-                # Odczytaj cut_regions z layoutu
-                self._cut_regions = self.layout.get("cut_regions", [])
-                if isinstance(self._cut_regions, list):
-                    self._cut_regions = [
-                        (float(a), float(b)) for a, b in self._cut_regions
-                        if isinstance(a, (int, float)) and isinstance(b, (int, float))
-                    ]
-                else:
-                    self._cut_regions = []
+                # P0-FIX: cut_regions from the layout file are stale IN/OUT
+                # boundaries that were incorrectly persisted by a previous
+                # version of _save_project_layout.  Loading them would lock
+                # scrubbing to the previously-set range and cap the render
+                # duration.  Always start a fresh session with no cuts; the
+                # RenderTab manages IN/OUT per-session only.
+                self._cut_regions = []
 
                 # Zarejestruj pola FIT; clear dynamic availability when the
                 # newly selected file has no FIT data.
@@ -599,12 +1010,17 @@ class ProjectMixin:
                     print(f"[AutoExportName] Failed to generate default name: {e}", flush=True)
 
                 self.signals.sig_progress.emit(100, "Gotowe")
+                try:
+                    self._trigger_map_background_prefetch(reason="telemetry_loaded")
+                except Exception:
+                    pass
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 self._preview_telemetry_loading = False
                 self.signals.sig_error.emit(str(e))
+                self.signals.sig_progress.emit(100, "Gotowe")
 
         threading.Thread(target=bg_load, daemon=True).start()
 
@@ -635,7 +1051,6 @@ class ProjectMixin:
 
         def _on_progress(loaded: int, total: int) -> None:
             try:
-                self.signals.sig_map_progress.emit(loaded, total)
                 self.signals.sig_progress.emit(
                     32, f"Mapa: {loaded}/{total} kafelków",
                 )
@@ -673,6 +1088,51 @@ class ProjectMixin:
         )
         self._map_preload_worker = worker
         worker.start()
+        # Trigger full route tile prefetch in background (non-blocking)
+        self._trigger_map_background_prefetch(reason="map_preload_start")
+
+    def _trigger_map_background_prefetch(self, reason: str = "") -> None:
+        """Trigger project-level background prefetch of moving map tiles."""
+        try:
+            layout = getattr(self, "layout", None)
+            if not layout or not isinstance(layout, dict):
+                return
+            map_source = layout.get("indicators", {}).get("track_map", {}).get("gps_source", "auto")
+
+            gps_track = None
+            if hasattr(self, "telemetry") and self.telemetry:
+                if hasattr(self.telemetry, "resolve_gps_track"):
+                    gps_track = self.telemetry.resolve_gps_track(map_source)[0]
+                elif hasattr(self.telemetry, "get_gps_track_for_source"):
+                    gps_track = self.telemetry.get_gps_track_for_source(map_source)
+                else:
+                    gps_track = getattr(self.telemetry, "gps_track", None)
+            if not gps_track and getattr(self, "map_context", None):
+                snap = self.map_context.snapshot()
+                gps_track = snap.get("gps_track")
+            if not gps_track or len(gps_track) < 2:
+                return
+
+            canvas_w = 3840
+            canvas_h = 2160
+            if hasattr(self, "video_metadata") and self.video_metadata:
+                w = getattr(self.video_metadata, "width", 0)
+                h = getattr(self.video_metadata, "height", 0)
+                if w and h:
+                    canvas_w, canvas_h = int(w), int(h)
+
+            from src.gui.map_prefetch import MapBackgroundPrefetchManager
+            mgr = MapBackgroundPrefetchManager.get_instance()
+            mgr.schedule_prefetch(
+                gps_track=gps_track,
+                layout=layout,
+                canvas_w=canvas_w,
+                canvas_h=canvas_h,
+                key="track_map",
+                reason=reason,
+            )
+        except Exception as exc:
+            print(f"[MapPrefetch] Failed to trigger background prefetch: {exc}", flush=True)
 
     def _map_preload_provider_switch(self, provider: str) -> None:
         """Re-run the preload for a different provider/style (Satellite).
@@ -693,13 +1153,15 @@ class ProjectMixin:
             flush=True,
         )
         self._start_map_preload(snap["gps_track"], snap.get("gps_source") or "gps", provider=provider)
+        self._trigger_map_background_prefetch(reason="provider_switch")
 
     def _load_single_clip_telemetry(self, video_path: Path, clip_idx: int = 0, total_clips: int = 1) -> tuple[dict, list]:
         """Wczytaj cache procesowany (.telemetry.npz) lub wygeneruj metadane dla jednego klipu."""
         t0 = _time.perf_counter()
-        meta = video_path.with_suffix(".json")
+        from src.telemetry_cache_manager import get_gpmf_json_path
+        meta = get_gpmf_json_path(video_path)
         processed = read_processed_cache(video_path)
-        if processed is not None and (processed.get("speed_samples") or processed.get("track_samples")):
+        if _processed_cache_has_payload(processed):
             print(
                 f"[Telemetry Cache] PROCESSED HIT file="
                 f"{processed_cache_path(video_path).name}",
@@ -707,12 +1169,29 @@ class ProjectMixin:
             )
             data, _ = _load_valid_gpmf_cache(video_path, meta)
             records = ensure_records_list(data) if data else []
+            try:
+                from src.telemetry_native_gpmf import is_native_gpmf_available
+                cached_native_available = is_native_gpmf_available()
+            except Exception:
+                cached_native_available = False
+            _print_gpmf_load_diagnostic(
+                video_path,
+                cache_hit=True,
+                native_module_available=cached_native_available,
+                native_parse_ok=False,
+                channel_data=processed,
+                fallback_reason="processed_cache",
+                cache_load_ms=(_time.perf_counter() - t0) * 1000.0,
+            )
             _profile_load_stage("gpmf_decode_ms", t0, video_path, len(records))
             return processed, records
 
         pct_clip_start = 30 + int(35 * (clip_idx / total_clips))
         pct_clip_end = 30 + int(35 * ((clip_idx + 1) / total_clips))
         clip_span = max(1, pct_clip_end - pct_clip_start)
+        native_data = None
+        native_module_available = False
+        native_parse_ok = False
 
         def _gpmf_subprogress(phase: str, done: int, tot: int) -> None:
             if phase == "extract":
@@ -740,8 +1219,14 @@ class ProjectMixin:
                 is_native_gpmf_available,
                 extract_gpmf_native,
                 populate_telemetry_from_native,
+                missing_native_channels,
+                native_channels_used,
+                native_result_usable,
+                extract_missing_gpmf_channels,
+                merge_native_channel_data,
             )
-            if is_native_gpmf_available():
+            native_module_available = is_native_gpmf_available()
+            if native_module_available:
                 t_native = _time.perf_counter()
                 try:
                     self.signals.sig_progress.emit(
@@ -752,7 +1237,8 @@ class ProjectMixin:
                     pass
 
                 native_data = extract_gpmf_native(video_path)
-                if native_data and native_data.get("gps_track"):
+                native_parse_ok = bool(native_data and native_data.get("success"))
+                if native_result_usable(native_data) and not missing_native_channels(native_data):
                     from src.gui.telemetry_manager import TelemetryDataManager
                     from src.telemetry_extract import (
                         extract_speed_samples, extract_altitude_samples, extract_track_samples,
@@ -780,13 +1266,72 @@ class ProjectMixin:
                     if processed:
                         _profile_load_stage("gpmf_decode_ms", t0, video_path, len(native_data.get("gps_track", [])))
                         print(f"[Telemetry Native] Extracted {video_path.name} in {(_time.perf_counter() - t_native)*1000.0:.1f}ms", flush=True)
+                        _print_gpmf_load_diagnostic(
+                            video_path,
+                            cache_hit=False,
+                            native_module_available=True,
+                            native_parse_ok=True,
+                            channel_data=processed,
+                            native_channels=native_channels_used(native_data),
+                            native_result_accepted=True,
+                            fallback_reason="none",
+                            parse_ms=(_time.perf_counter() - t_native) * 1000.0,
+                        )
                         return processed, []
         except Exception as exc:
             print(f"[Telemetry Native] Fallback to legacy parser: {exc}", flush=True)
+            # Keep the legacy path functional if the optional helper module
+            # itself cannot be imported.
+            native_result_usable = lambda _data: False
+            native_channels_used = lambda _data: ()
+            missing_native_channels = lambda _data: ()
+            extract_missing_gpmf_channels = lambda _records, _missing: {}
+            merge_native_channel_data = lambda data, _fallback: data
 
         # Sprawdź cache GPMF JSON
         data, cache_reason = _load_valid_gpmf_cache(video_path, meta)
         records = ensure_records_list(data) if data else None
+
+        # Accept native data per channel. A single legacy pass supplies only
+        # missing families; valid native ACC/GYRO/etc. are never re-parsed.
+        if native_result_usable(native_data):
+            missing = missing_native_channels(native_data)
+            if missing and records:
+                fallback_native = extract_missing_gpmf_channels(records, missing)
+                native_data = merge_native_channel_data(native_data, fallback_native)
+                print(
+                    "[GPMF partial fallback] "
+                    f"native={','.join(native_channels_used(native_data)) or '-'} "
+                    f"fallback={','.join(k for k in missing if fallback_native.get(k)) or '-'}",
+                    flush=True,
+                )
+            if not missing or native_channels_used(native_data):
+                from src.gui.telemetry_manager import TelemetryDataManager
+                temp_telem = TelemetryDataManager()
+                populate_telemetry_from_native(video_path, native_data, temp_telem)
+                temp_telem.records = records or []
+                write_processed_cache(video_path, temp_telem)
+                processed = read_processed_cache(video_path)
+                if processed:
+                    _profile_load_stage(
+                        "gpmf_decode_ms", t0, video_path,
+                        len(native_data.get("gps_track") or []),
+                    )
+                    _print_gpmf_load_diagnostic(
+                        video_path,
+                        cache_hit=False,
+                        native_module_available=True,
+                        native_parse_ok=True,
+                        channel_data=processed,
+                        native_channels=native_channels_used(native_data),
+                        python_fallback_channels=tuple(
+                            k for k in missing if k not in native_channels_used(native_data)
+                        ),
+                        native_result_accepted=True,
+                        fallback_reason="partial_channels_only",
+                        parse_ms=(_time.perf_counter() - t0) * 1000.0,
+                    )
+                    return processed, []
         if not records:
             # Generuj bezpośrednio z GPMF (FFmpeg) lub ExifTool
             t_extract = _time.perf_counter()
@@ -862,7 +1407,33 @@ class ProjectMixin:
             processed = read_processed_cache(video_path)
             if processed:
                 _profile_load_stage("gpmf_decode_ms", t0, video_path, len(records))
+                _print_gpmf_load_diagnostic(
+                    video_path,
+                    cache_hit=False,
+                    native_module_available=native_module_available,
+                    native_parse_ok=native_parse_ok,
+                    channel_data=processed,
+                    python_fallback_channels=_PROCESSED_TELEMETRY_FIELDS,
+                    fallback_reason="native_unavailable_or_rejected",
+                    parse_ms=(_time.perf_counter() - t0) * 1000.0,
+                )
                 return processed, records
+            # Fallback when processed cache read failed but records were extracted
+            fallback_fields = {
+                "speed_samples": getattr(temp_telem, "speed_samples", []),
+                "alt_samples": getattr(temp_telem, "alt_samples", []),
+                "track_samples": getattr(temp_telem, "track_samples", []),
+                "iso_samples": getattr(temp_telem, "iso_samples", []),
+                "exposure_samples": getattr(temp_telem, "exposure_samples", []),
+                "temperature_samples": getattr(temp_telem, "temperature_samples", []),
+                "slope_samples": getattr(temp_telem, "slope_samples", []),
+                "heading_samples": getattr(temp_telem, "heading_samples", []),
+                "gps_track": getattr(temp_telem, "gps_track", []),
+                "accelerometer_samples": getattr(temp_telem, "accelerometer_samples", []),
+                "gyroscope_samples": getattr(temp_telem, "gyroscope_samples", []),
+                "start_dt_utc": getattr(temp_telem, "start_dt_utc", None),
+            }
+            return fallback_fields, records
 
         return {}, records or []
 
@@ -916,6 +1487,22 @@ class ProjectMixin:
                 self.telemetry.records = list(records)
             else:
                 self.telemetry.records.extend(records)
+
+        # 4. Re-derive vector series (accel, gyro) after concatenation so
+        # that scalar streams (accel_x_samples, gyro_x_samples, etc.), NumPy arrays,
+        # and lean timelines cover all clips rather than freezing at clip 1.
+        if getattr(self.telemetry, "accelerometer_samples", None):
+            self.telemetry.accelerometer_array = getattr(self.telemetry.accelerometer_samples, "_arr", None)
+            if hasattr(self.telemetry, "_set_vector_series"):
+                self.telemetry._set_vector_series(self.telemetry.accelerometer_samples, "accel")
+        if getattr(self.telemetry, "gyroscope_samples", None):
+            self.telemetry.gyroscope_array = getattr(self.telemetry.gyroscope_samples, "_arr", None)
+            if hasattr(self.telemetry, "_set_vector_series"):
+                self.telemetry._set_vector_series(self.telemetry.gyroscope_samples, "gyro")
+        if hasattr(self.telemetry, "_lean_roll_cache"):
+            self.telemetry._lean_roll_cache.clear()
+        if hasattr(self.telemetry, "_raw_gyro_cache"):
+            self.telemetry._raw_gyro_cache.clear()
         _profile_load_stage("telemetry_merge_ms", t0)
 
     def _load_or_generate_telemetry(self) -> None:
@@ -938,7 +1525,8 @@ class ProjectMixin:
                 if fields:
                     apply_processed_cache(self.telemetry, fields)
                 self.telemetry.records = records or []
-                self.meta_path = p.with_suffix(".json")
+                from src.telemetry_cache_manager import get_gpmf_json_path
+                self.meta_path = get_gpmf_json_path(p)
             else:
                 self._merge_clip_telemetry(fields, records)
 
@@ -1006,7 +1594,8 @@ class ProjectMixin:
 
                 if data:
                     flat = data[0] if isinstance(data, list) else data
-                    json_path = self.video_path.with_suffix(".json")
+                    from src.telemetry_cache_manager import get_gpmf_json_path
+                    json_path = get_gpmf_json_path(self.video_path)
                     _write_gpmf_cache(json_path, self.video_path, flat, method)
                     print(
                         f"[Telemetry Cache] REGENERATED file={json_path.name}",

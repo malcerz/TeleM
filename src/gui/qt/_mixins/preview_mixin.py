@@ -427,12 +427,15 @@ class PreviewMixin:
         """Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render."""
         preview_widget = getattr(self, "video_preview_widget", None)
         if preview_widget is not None and hasattr(preview_widget, "get_physical_video_rect"):
-            if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
-                prect = preview_widget.get_physical_video_rect()
-                dpr = preview_widget.get_dpr()
-                if prect.width() > 10 and prect.height() > 10:
-                    self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
-                    return
+            try:
+                if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
+                    prect = preview_widget.get_physical_video_rect()
+                    dpr = preview_widget.get_dpr()
+                    if prect.width() > 10 and prect.height() > 10:
+                        self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
+                        return
+            except (RuntimeError, Exception):
+                pass
         if getattr(self, "video_path", None) and getattr(self, "_preview_target_w", None) and getattr(self, "_preview_target_h", None):
             self._render_preview()
 
@@ -458,6 +461,17 @@ class PreviewMixin:
                 self._render_preview()
 
 
+
+    def _invalidate_layout_visual_state(self) -> None:
+        """Invalidate layout visual state and caches."""
+        self._preview_visual_generation = getattr(self, "_preview_visual_generation", 0) + 1
+        if hasattr(self, "indicator_bboxes") and isinstance(self.indicator_bboxes, dict):
+            self.indicator_bboxes.clear()
+        self._chart_data_cache = None
+        if hasattr(self, "_prepare_cache") and isinstance(self._prepare_cache, dict):
+            self._prepare_cache.clear()
+        self.last_src_pil = None
+        self.last_src_qimg = None
 
     def _scale_qimg_to_preview(self, qimg: QImage) -> QImage:
         """Skaluje QImage do `_preview_target_w` (zachowując proporcje)."""
@@ -761,10 +775,10 @@ class PreviewMixin:
                                 gpx_hr_samples=self.telemetry.gpx_hr_samples,
                                 gpx_cad_samples=self.telemetry.gpx_cad_samples,
                                 fit_data=self.telemetry.fit_data,
-                                gps_track=self.telemetry.get_gps_track_for_source(
+                                gps_track=self.telemetry.resolve_gps_track(
                                     self.layout.get("indicators", {})
-                                    .get("track_map", {}).get("source", "fit")
-                                ),
+                                    .get("track_map", {}).get("gps_source", "auto")
+                                )[0],
                                 total_frames=max(1, int(self.video_duration_s)),
                                 current_index=int(global_time) if global_time else 0,
                                 chart_data=chart_data,

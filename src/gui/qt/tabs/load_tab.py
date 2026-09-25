@@ -1,15 +1,18 @@
-"""Zakładka Wczytywanie — wybór plików MP4, GPX, FIT."""
+"""Zakładka Wczytywanie — wybór plików MP4, GPX, FIT oraz diagnostyka sprzętu."""
 
 from __future__ import annotations
 
+import os
 import threading
 from datetime import timedelta
 from pathlib import Path
+from typing import Any, Callable, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
     QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox, QProgressBar,
+    QScrollArea, QFrame, QGridLayout, QSizePolicy,
 )
 
 from src.gui.qt.signals import get_signals
@@ -20,35 +23,348 @@ from src.gui.qt.mp4_inspector import (
     format_file_info_text,
     QP_PLACEHOLDER,
 )
+from src.gui.qt.hardware_info import HardwareCapabilitiesInfo, get_hardware_info
+
+
+class HardwareInfoWidget(QGroupBox):
+    """Panel informacyjny prezentujący możliwości sprzętowe systemu (tylko do odczytu)."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__("Możliwości sprzętu", parent)
+        self.setStyleSheet(
+            "QGroupBox { font-size: 13px; font-weight: bold; } "
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
+        )
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        info = get_hardware_info()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 12, 10, 10)
+        layout.setSpacing(6)
+
+        form = QFormLayout()
+        form.setSpacing(5)
+        form.setLabelAlignment(Qt.AlignLeft)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+
+        def _val_lbl(text: str, bold: bool = False, color: str = "#111111") -> QLabel:
+            lbl = QLabel(text)
+            lbl.setWordWrap(True)
+            weight = "bold" if bold else "normal"
+            lbl.setStyleSheet(
+                f"color: {color}; font-size: 11px; font-weight: {weight}; "
+                "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+            )
+            return lbl
+
+        def _key_lbl(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setStyleSheet("color: #666666; font-size: 11px; font-weight: bold;")
+            return lbl
+
+        # System & CPU
+        form.addRow(_key_lbl("System:"), _val_lbl(info.os_name))
+        form.addRow(_key_lbl("Procesor:"), _val_lbl(f"{info.cpu_name} ({info.cpu_threads})"))
+        form.addRow(_key_lbl("Pamięć RAM:"), _val_lbl(info.ram_total, bold=True))
+
+        # GPU
+        gpu_str = "\n".join(info.gpus) if info.gpus else "Nieznana"
+        form.addRow(_key_lbl("Karta graficzna:"), _val_lbl(gpu_str))
+        form.addRow(_key_lbl("Podgląd:"), _val_lbl(info.active_preview))
+
+        # Enkodery
+        enc_summary = (
+            f"AMD: {info.enc_amd}\n"
+            f"NVIDIA: {info.enc_nvidia}  |  Intel: {info.enc_intel}\n"
+            f"CPU: {info.enc_cpu}"
+        )
+        form.addRow(_key_lbl("Kodowanie:"), _val_lbl(enc_summary))
+
+        # Dekodery
+        dec_summary = (
+            f"H.264: {info.dec_h264}\n"
+            f"HEVC: {info.dec_hevc}\n"
+            f"AV1: {info.dec_av1}"
+        )
+        form.addRow(_key_lbl("Dekodowanie:"), _val_lbl(dec_summary))
+
+        # Maks. rozdzielczość
+        max_summary = f"Dekoder: {info.max_decode}\nEnkoder: {info.max_encode}"
+        form.addRow(_key_lbl("Maks. rozdz.:"), _val_lbl(max_summary))
+
+        layout.addLayout(form)
+
+
+class VideoFileCardWidget(QFrame):
+    """Karta reprezentująca pojedynczy plik wideo z własnym zestawem parametrów technicznych."""
+
+    sig_qp_clicked = Signal(str, int)  # (video_path, file_index)
+
+    def __init__(self, index: int, video_path: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.file_index = index
+        self.video_path = video_path
+        self.metadata: dict[str, Any] = {}
+        self._qp_active = False
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        self.setStyleSheet(
+            "VideoFileCardWidget { background-color: #ffffff; border: 1px solid #dcdcdc; "
+            "border-radius: 6px; } "
+            "VideoFileCardWidget:hover { border-color: #0078d4; }"
+        )
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(10, 8, 10, 8)
+        vbox.setSpacing(6)
+
+        # ── Nagłówek karty ──
+        header = QHBoxLayout()
+        header.setSpacing(8)
+
+        self.lbl_badge = QLabel(f"#{self.file_index + 1}")
+        self.lbl_badge.setStyleSheet(
+            "background-color: #0078d4; color: #ffffff; border-radius: 3px; "
+            "padding: 2px 7px; font-weight: bold; font-size: 11px;"
+        )
+        header.addWidget(self.lbl_badge)
+
+        self.lbl_filename = QLabel(Path(self.video_path).name)
+        self.lbl_filename.setStyleSheet(
+            "font-weight: bold; font-size: 13px; color: #111111; "
+            "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+        )
+        header.addWidget(self.lbl_filename)
+
+        header.addStretch()
+
+        self.lbl_badges = QLabel("⏱ —  |  💾 —")
+        self.lbl_badges.setStyleSheet(
+            "color: #444444; font-size: 11px; background-color: #f1f3f4; "
+            "border-radius: 3px; padding: 2px 6px;"
+        )
+        header.addWidget(self.lbl_badges)
+
+        self.btn_card_qp = QPushButton("Analiza QP")
+        self.btn_card_qp.setFixedHeight(24)
+        self.btn_card_qp.setCursor(Qt.PointingHandCursor)
+        self.btn_card_qp.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 10px; background-color: #f8f9fa; "
+            "border: 1px solid #cccccc; border-radius: 3px; font-weight: bold; color: #333333; } "
+            "QPushButton:hover { background-color: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }"
+        )
+        self.btn_card_qp.clicked.connect(self._on_qp_clicked)
+        header.addWidget(self.btn_card_qp)
+
+        vbox.addLayout(header)
+
+        # ── Siatka parametrów technicznych ──
+        self.grid = QGridLayout()
+        self.grid.setHorizontalSpacing(16)
+        self.grid.setVerticalSpacing(3)
+        self.grid.setContentsMargins(4, 2, 4, 2)
+
+        def _field_lbl(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setTextFormat(Qt.RichText)
+            lbl.setStyleSheet("font-size: 11px; color: #333333;")
+            return lbl
+
+        self.lbl_res = _field_lbl("<b>Rozdzielczość:</b> Odczytywanie...")
+        self.lbl_fps = _field_lbl("<b>FPS:</b> —")
+        self.lbl_codec = _field_lbl("<b>Kodek:</b> —")
+        self.lbl_pixfmt = _field_lbl("<b>Format:</b> —")
+        self.lbl_bitrate = _field_lbl("<b>Bitrate:</b> —")
+        self.lbl_color = _field_lbl("<b>Kolor:</b> —")
+        self.lbl_audio = _field_lbl("<b>Audio:</b> —")
+        self.lbl_gpmf = _field_lbl("<b>GPMF:</b> —")
+
+        # Row 0
+        self.grid.addWidget(self.lbl_res, 0, 0)
+        self.grid.addWidget(self.lbl_fps, 0, 1)
+        self.grid.addWidget(self.lbl_codec, 0, 2)
+        self.grid.addWidget(self.lbl_pixfmt, 0, 3)
+
+        # Row 1
+        self.grid.addWidget(self.lbl_bitrate, 1, 0)
+        self.grid.addWidget(self.lbl_color, 1, 1)
+        self.grid.addWidget(self.lbl_audio, 1, 2)
+        self.grid.addWidget(self.lbl_gpmf, 1, 3)
+
+        vbox.addLayout(self.grid)
+
+        # ── Wiersz telemetrii (FIT / GPX) ──
+        self.lbl_telem = QLabel("<b>FIT / GPX:</b> <span style='color:#666;'>Brak (auto / manualny)</span>")
+        self.lbl_telem.setTextFormat(Qt.RichText)
+        self.lbl_telem.setStyleSheet("font-size: 11px; color: #333333; padding-left: 4px;")
+        vbox.addWidget(self.lbl_telem)
+
+        # ── Wiersz wyniku QP (zwijany) ──
+        self.lbl_qp_info = QLabel("")
+        self.lbl_qp_info.setTextFormat(Qt.RichText)
+        self.lbl_qp_info.setWordWrap(True)
+        self.lbl_qp_info.setVisible(False)
+        self.lbl_qp_info.setStyleSheet(
+            "QLabel { background-color: #f1f8ff; border: 1px solid #c8e1ff; "
+            "border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #0366d6; }"
+        )
+        vbox.addWidget(self.lbl_qp_info)
+
+    def _on_qp_clicked(self) -> None:
+        self.sig_qp_clicked.emit(self.video_path, self.file_index)
+
+    def update_info(self, info: dict[str, Any], paired_telemetry: str = "") -> None:
+        self.metadata = dict(info)
+        v = info.get("video") or {}
+        c = info.get("color") or {}
+        a = info.get("audio")
+
+        dur = info.get("duration_text") or "—"
+        sz = info.get("size_text") or "—"
+        self.lbl_badges.setText(f"⏱ {dur}  |  💾 {sz}")
+
+        res = v.get("resolution") or "—"
+        self.lbl_res.setText(f"<b>Rozdzielczość:</b> <span style='color:#0078d4; font-weight:bold;'>{res}</span>")
+        self.lbl_fps.setText(f"<b>FPS:</b> {v.get('fps_text') or '—'}")
+
+        codec_lbl = v.get("codec_label") or "—"
+        prof = v.get("profile")
+        prof_str = f" ({prof})" if prof and prof != "—" else ""
+        self.lbl_codec.setText(f"<b>Kodek:</b> {codec_lbl}{prof_str}")
+
+        pix = v.get("pix_fmt") or "—"
+        depth = v.get("bit_depth_text") or ""
+        depth_str = f" ({depth})" if depth and depth != "—" else ""
+        self.lbl_pixfmt.setText(f"<b>Format:</b> {pix}{depth_str}")
+
+        self.lbl_bitrate.setText(f"<b>Bitrate:</b> {v.get('bitrate_text') or '—'}")
+
+        c_sum = c.get("summary") or "—"
+        c_rng = c.get("range")
+        rng_str = f" [{c_rng}]" if c_rng and c_rng != "—" else ""
+        self.lbl_color.setText(f"<b>Kolor:</b> {c_sum}{rng_str}")
+
+        if a:
+            a_lbl = a.get("codec_label") or "Audio"
+            sr = a.get("sample_rate_text") or ""
+            ch = a.get("channels_text") or ""
+            a_desc = f"{a_lbl}, {sr}, {ch}".strip(", ")
+            self.lbl_audio.setText(f"<b>Audio:</b> {a_desc}")
+        else:
+            self.lbl_audio.setText("<b>Audio:</b> <span style='color:#888;'>Brak</span>")
+
+        gpmf_txt = "<span style='color:#137333; font-weight:bold;'>TAK</span>" if info.get("gpmf") else "<span style='color:#666;'>NIE</span>"
+        self.lbl_gpmf.setText(f"<b>GPMF:</b> {gpmf_txt}")
+
+        self.update_telemetry(paired_telemetry)
+
+    def set_error(self, filename: str, error_msg: str = "") -> None:
+        self.lbl_res.setText("<span style='color:#d93025; font-weight:bold;'>Błąd odczytu</span>")
+        self.lbl_fps.setText("—")
+        self.lbl_codec.setText("—")
+        self.lbl_pixfmt.setText("—")
+        self.lbl_bitrate.setText("—")
+        self.lbl_color.setText("—")
+        self.lbl_audio.setText("—")
+        self.lbl_gpmf.setText("—")
+
+    def update_telemetry(self, paired_telemetry: str) -> None:
+        if paired_telemetry:
+            self.lbl_telem.setText(
+                f"<b>FIT / GPX:</b> <span style='color:#0969da; font-weight:bold;'>{paired_telemetry}</span>"
+            )
+        else:
+            self.lbl_telem.setText(
+                "<b>FIT / GPX:</b> <span style='color:#888;'>Brak (auto / manualny)</span>"
+            )
+
+    def set_qp_progress(self, pct: int) -> None:
+        self._qp_active = True
+        self.btn_card_qp.setText("Anuluj QP")
+        self.lbl_qp_info.setVisible(True)
+        self.lbl_qp_info.setText(f"<b>Analiza QP:</b> w toku... <b>{pct}%</b>")
+
+    def set_qp_result(self, info: dict[str, Any]) -> None:
+        self._qp_active = False
+        self.btn_card_qp.setText("Analiza QP")
+        self.lbl_qp_info.setVisible(True)
+        if not info.get("ok"):
+            err = info.get("error") or "Nie udało się odczytać QP."
+            self.lbl_qp_info.setStyleSheet(
+                "QLabel { background-color: #fdf2f2; border: 1px solid #f8b4b4; "
+                "border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #9b1c1c; }"
+            )
+            self.lbl_qp_info.setText(f"<b>Błąd QP:</b> {err}")
+            return
+
+        avg = f"{info['avg']:.2f}" if info.get("avg") is not None else "—"
+        med = str(info["median"]) if info.get("median") is not None else "—"
+        mn = str(info["minimum"]) if info.get("minimum") is not None else "—"
+        mx = str(info["maximum"]) if info.get("maximum") is not None else "—"
+        frames = info.get("frames", 0)
+        elapsed = f"{info.get('elapsed_s', 0.0):.1f}s"
+        self.lbl_qp_info.setStyleSheet(
+            "QLabel { background-color: #f1f8ff; border: 1px solid #c8e1ff; "
+            "border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #0366d6; }"
+        )
+        self.lbl_qp_info.setText(
+            f"<b>Rozkład QP:</b> Średnia <b>{avg}</b> | Mediana <b>{med}</b> | Min <b>{mn}</b> | Max <b>{mx}</b> "
+            f"<span style='color:#555;'>({frames} klatek, {elapsed})</span>"
+        )
+
+    def set_qp_error(self, err_msg: str) -> None:
+        self._qp_active = False
+        self.btn_card_qp.setText("Analiza QP")
+        self.lbl_qp_info.setVisible(True)
+        self.lbl_qp_info.setStyleSheet(
+            "QLabel { background-color: #fdf2f2; border: 1px solid #f8b4b4; "
+            "border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #9b1c1c; }"
+        )
+        self.lbl_qp_info.setText(f"<b>Błąd QP:</b> {err_msg}")
+
+    def reset_qp(self) -> None:
+        self._qp_active = False
+        self.btn_card_qp.setText("Analiza QP")
+        self.lbl_qp_info.setVisible(False)
+        self.lbl_qp_info.setText("")
 
 
 class LoadTab(QWidget):
-    """Zakładka wyboru plików źródłowych."""
+    """Zakładka wyboru plików źródłowych z podziałem na sekcję ładowania i diagnostykę sprzętu."""
 
-    # Wyniki asynchronicznej inspekcji pliku (worker → GUI, wątek główny)
+    # Wyniki asynchronicznej inspekcji plików (worker → GUI)
     sig_file_info_ready = Signal(dict, int)
     sig_file_info_error = Signal(str, int)
+    sig_card_info_ready = Signal(int, dict, int)
+    sig_card_info_error = Signal(int, str, int)
+
     # Wyniki asynchronicznej analizy QP
     sig_qp_progress = Signal(int, int)   # (percent, gen)
     sig_qp_done = Signal(dict, int)      # (info: dict, gen)
     sig_qp_error = Signal(str, int)      # (message, gen)
-    # Wynik asynchronicznego wyszukiwania AutoFIT (worker → GUI)
+
+    # Wynik asynchronicznego wyszukiwania AutoFIT
     sig_autofit_matched = Signal(str, int)  # (fit_path, gen)
 
     def __init__(self) -> None:
         super().__init__()
         self.signals = get_signals()
         self._video_paths: list[str] = []
+        self._files_metadata: list[dict[str, Any]] = []
+        self._card_widgets: list[VideoFileCardWidget] = []
         self._gpx_path: str = ""
         self._fit_path: str = ""
         self._user_selected_telemetry: bool = False
         self._autofit_gen: int = 0
-        # Generacja inspekcji — pozwala zignorować wyniki dla poprzedniego pliku
         self._inspection_gen: int = 0
-        # Stan analizy QP (token generacji + anulowanie)
+
+        # Stan analizy QP
         self._qp_gen: int = 0
         self._qp_path: str = ""
+        self._qp_card_idx: int = 0
         self._qp_cancel_event: threading.Event | None = None
+
         # Stan paska postępu wczytywania: target (backend) vs display (GUI)
         self._loading = False
         self._load_target = 0.0
@@ -56,21 +372,30 @@ class LoadTab(QWidget):
         self._load_timer = QTimer(self)
         self._load_timer.setInterval(30)
         self._load_timer.timeout.connect(self._load_tick)
+
         self._build_ui()
         self._connect_local_signals()
 
     def _build_ui(self) -> None:
         vbox = QVBoxLayout(self)
         vbox.setAlignment(Qt.AlignTop)
-        vbox.setContentsMargins(24, 24, 24, 24)
+        vbox.setContentsMargins(20, 16, 20, 16)
+        vbox.setSpacing(12)
 
-        # ── Sekcja Pliki źródłowe ──────────────────────────────────────
-        group = QGroupBox("Pliki źródłowe")
-        group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
-        form = QFormLayout(group)
-        form.setSpacing(14)
+        # ── Górny układ ekranu — podział poziomy (lewa ~2/3, prawa ~1/3) ──
+        top_hsplit = QHBoxLayout()
+        top_hsplit.setSpacing(16)
 
-        # Szerokie paski stylizowane na pola wejściowe z obsługą kliknięcia
+        # ── Lewa część (~2/3 szerokości) ──────────────────────────────────
+        left_box = QVBoxLayout()
+        left_box.setSpacing(10)
+
+        # Sekcja Pliki źródłowe
+        group_sources = QGroupBox("Pliki źródłowe")
+        group_sources.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
+        form_sources = QFormLayout(group_sources)
+        form_sources.setSpacing(10)
+
         self._placeholder_style = (
             "QPushButton { text-align: left; padding: 4px 12px; background-color: #ffffff; "
             "color: #666666; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; }"
@@ -88,7 +413,7 @@ class LoadTab(QWidget):
         self.btn_mp4.setCursor(Qt.PointingHandCursor)
         self.btn_mp4.setStyleSheet(self._placeholder_style)
         self.btn_mp4.clicked.connect(self._select_mp4)
-        form.addRow("MP4 (wymagane):", self.btn_mp4)
+        form_sources.addRow("MP4 (wymagane):", self.btn_mp4)
 
         # Telemetry bar (FIT / GPX)
         self.btn_telemetry = QPushButton("Wybierz FIT/GPX (opcjonalnie)...")
@@ -96,21 +421,21 @@ class LoadTab(QWidget):
         self.btn_telemetry.setCursor(Qt.PointingHandCursor)
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
         self.btn_telemetry.clicked.connect(self._select_telemetry)
-        form.addRow("FIT / GPX:", self.btn_telemetry)
+        form_sources.addRow("FIT / GPX:", self.btn_telemetry)
 
-        vbox.addWidget(group)
+        left_box.addWidget(group_sources)
 
-        # ── Przyciski akcji ────────────────────────────────────────────
+        # Przyciski akcji (Wczytaj / Wyczyść)
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
         self.btn_load = QPushButton("Wczytaj")
-        self.btn_load.setMinimumHeight(48)
-        self.btn_load.setMinimumWidth(160)
+        self.btn_load.setMinimumHeight(44)
+        self.btn_load.setMinimumWidth(150)
         self.btn_load.setStyleSheet(
             "QPushButton { background-color: #0078d4; color: white; "
             "font-size: 14px; font-weight: bold; border: none; "
-            "border-radius: 4px; padding: 8px 24px; }"
+            "border-radius: 4px; padding: 6px 20px; }"
             "QPushButton:hover { background-color: #1084d4; }"
             "QPushButton:disabled { background-color: #555; }"
         )
@@ -118,107 +443,132 @@ class LoadTab(QWidget):
         btn_row.addWidget(self.btn_load)
 
         self.btn_clear = QPushButton("Wyczyść")
-        self.btn_clear.setMinimumHeight(48)
+        self.btn_clear.setMinimumHeight(44)
         self.btn_clear.clicked.connect(self._on_clear)
         btn_row.addWidget(self.btn_clear)
 
-        vbox.addLayout(btn_row)
+        left_box.addLayout(btn_row)
 
-        # ── Pasek postępu wczytywania (szeroki, płynny, pod Wczytaj) ─────
+        # Pasek postępu wczytywania
         self.load_progress = QProgressBar()
         self.load_progress.setRange(0, 100)
         self.load_progress.setValue(0)
         self.load_progress.setVisible(False)
         self.load_progress.setMinimumHeight(10)
-        # Stylistycznie spójny z paskiem renderingu (gruby, zaokrąglony)
         self.load_progress.setStyleSheet(
             "QProgressBar { min-height: 10px; border: 1px solid #999; "
             "border-radius: 5px; background: #eee; text-align: center; }"
             "QProgressBar::chunk { background-color: #0078d4; "
             "border-radius: 5px; }"
         )
-        vbox.addWidget(self.load_progress)
+        left_box.addWidget(self.load_progress)
 
         self.lbl_load_status = QLabel("")
         self.lbl_load_status.setStyleSheet("color: #666; font-size: 12px;")
         self.lbl_load_status.setVisible(False)
-        vbox.addWidget(self.lbl_load_status)
+        left_box.addWidget(self.lbl_load_status)
 
-        # ── Informacje o filmie (automatyczna inspekcja po wyborze MP4) ──
-        info_group = QGroupBox("Informacje o filmie")
-        info_group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
-        info_vbox = QVBoxLayout(info_group)
-        info_vbox.setSpacing(8)
-
-        self.lbl_file_info = QLabel("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
-        self.lbl_file_info.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.lbl_file_info.setWordWrap(True)
-        self.lbl_file_info.setStyleSheet(
-            "QLabel { color: #111111; font-family: Consolas, 'Courier New', monospace; "
-            "font-size: 12px; background-color: #ffffff; border: 1px solid #cccccc; "
-            "border-radius: 4px; padding: 8px; }"
-        )
-        info_vbox.addWidget(self.lbl_file_info)
-
-        # Przycisk Analiza QP + miejsce na wynik
-        self.btn_analyze_qp = QPushButton("Analiza QP")
-        self.btn_analyze_qp.setMinimumHeight(30)
-        self.btn_analyze_qp.setEnabled(False)
-        self.btn_analyze_qp.setToolTip(
-            "Analiza rozkładu QP (średnia/mediana/min/max) — analiza zostanie "
-            "uruchomiona po wskazaniu pliku MP4."
-        )
-        self.btn_analyze_qp.clicked.connect(self._on_analyze_qp)
-        info_vbox.addWidget(self.btn_analyze_qp, alignment=Qt.AlignLeft)
-
-        self.lbl_qp_result = QLabel(QP_PLACEHOLDER)
-        self.lbl_qp_result.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.lbl_qp_result.setStyleSheet(
-            "QLabel { color: #333333; font-family: Consolas, 'Courier New', monospace; "
-            "font-size: 12px; background-color: #ffffff; border: 1px solid #cccccc; "
-            "border-radius: 4px; padding: 8px; }"
-        )
-        info_vbox.addWidget(self.lbl_qp_result)
-
-        vbox.addWidget(info_group)
-
-        # ── Akcelerator podglądu (nowy) ───────────────────────────────────
+        # Akcelerator podglądu GPU
         accel_row = QHBoxLayout()
         accel_row.setContentsMargins(0, 2, 0, 2)
         accel_row.setSpacing(6)
         lbl_gpu = QLabel("Podgląd GPU:")
-        lbl_gpu.setStyleSheet("color: #aaa; font-size: 12px;")
-        lbl_gpu.setFixedWidth(80)
+        lbl_gpu.setStyleSheet("color: #666; font-size: 12px; font-weight: bold;")
+        lbl_gpu.setFixedWidth(84)
         accel_row.addWidget(lbl_gpu)
 
         self.cmb_preview_accel = QComboBox()
-        self.cmb_preview_accel.setMinimumWidth(140)
+        self.cmb_preview_accel.setMinimumWidth(150)
         self.cmb_preview_accel.setStyleSheet(
             "QComboBox { background-color: #2a2a2a; color: #ddd; "
             "border: 1px solid #555; border-radius: 3px; padding: 2px 8px; font-size: 12px; }"
             "QComboBox::drop-down { border: none; }"
             "QComboBox QAbstractItemView { background-color: #2a2a2a; color: #ddd; selection-background-color: #0078d4; }"
         )
-
-        # Populate with "Auto" + detected vendors
         self.cmb_preview_accel.addItem("Auto", "auto")
-        best = detect_preview_vendor()
         for code in get_available_vendors():
             self.cmb_preview_accel.addItem(vendor_label(code), code)
-
-        # Pre-select "Auto"
         self.cmb_preview_accel.setCurrentIndex(0)
         self.cmb_preview_accel.currentIndexChanged.connect(self._on_accel_changed)
         accel_row.addWidget(self.cmb_preview_accel)
         accel_row.addStretch()
-        vbox.addLayout(accel_row)
+        left_box.addLayout(accel_row)
 
-        # Informacja
         self.lbl_info = QLabel("Nie wczytano plików.")
         self.lbl_info.setStyleSheet("color: #888; font-size: 12px;")
-        vbox.addWidget(self.lbl_info)
+        left_box.addWidget(self.lbl_info)
 
-        vbox.addStretch()
+        top_hsplit.addLayout(left_box, stretch=2)
+
+        # ── Prawa część (~1/3 szerokości) — Panel możliwości sprzętu ──────
+        self.hw_info_widget = HardwareInfoWidget(self)
+        top_hsplit.addWidget(self.hw_info_widget, stretch=1)
+
+        vbox.addLayout(top_hsplit)
+
+        # ── Dolna sekcja: Informacje o filmie (wieloplikowe karty) ───────────
+        info_group = QGroupBox("Informacje o filmie")
+        info_group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
+        info_vbox = QVBoxLayout(info_group)
+        info_vbox.setContentsMargins(10, 10, 10, 10)
+        info_vbox.setSpacing(8)
+
+        # Informacyjny komunikat przy miksie rozdzielczości
+        self.lbl_mixed_res_banner = QLabel(
+            "ℹ Wczytano pliki o różnych rozdzielczościach źródłowych. "
+            "Każdy plik zachowuje własne parametry wejściowe."
+        )
+        self.lbl_mixed_res_banner.setStyleSheet(
+            "QLabel { background-color: #e8f0fe; color: #1967d2; border: 1px solid #aecbfa; "
+            "border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: bold; }"
+        )
+        self.lbl_mixed_res_banner.setVisible(False)
+        info_vbox.addWidget(self.lbl_mixed_res_banner)
+
+        # Obszar przewijania kart (domyślnie ~5 kart, powyżej pionowy scrollbar)
+        self.cards_scroll = QScrollArea()
+        self.cards_scroll.setWidgetResizable(True)
+        self.cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.cards_scroll.setMinimumHeight(320)
+        self.cards_scroll.setStyleSheet(
+            "QScrollArea { border: 1px solid #dcdcdc; border-radius: 4px; background-color: #f8f9fa; }"
+        )
+
+        self.cards_container = QWidget()
+        self.cards_layout = QVBoxLayout(self.cards_container)
+        self.cards_layout.setAlignment(Qt.AlignTop)
+        self.cards_layout.setSpacing(8)
+        self.cards_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.lbl_no_files = QLabel("Wybierz plik(i) MP4, aby zobaczyć informacje o filmach.")
+        self.lbl_no_files.setAlignment(Qt.AlignCenter)
+        self.lbl_no_files.setStyleSheet("color: #777777; font-size: 13px; padding: 30px;")
+        self.cards_layout.addWidget(self.lbl_no_files)
+
+        self.cards_scroll.setWidget(self.cards_container)
+        info_vbox.addWidget(self.cards_scroll)
+
+        # Widgety kompatybilności wstecznej (dla testów jednostkowych i analizy QP)
+        self.lbl_file_info = QLabel("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
+        self.lbl_file_info.setVisible(False)
+        info_vbox.addWidget(self.lbl_file_info)
+
+        self.btn_analyze_qp = QPushButton("Analiza QP")
+        self.btn_analyze_qp.setVisible(False)
+        self.btn_analyze_qp.setEnabled(False)
+        self.btn_analyze_qp.clicked.connect(self._on_analyze_qp)
+        info_vbox.addWidget(self.btn_analyze_qp)
+
+        self.lbl_qp_result = QLabel(QP_PLACEHOLDER)
+        self.lbl_qp_result.setVisible(False)
+        info_vbox.addWidget(self.lbl_qp_result)
+
+        vbox.addWidget(info_group, stretch=1)
+
+    # ═════════════════════════════════════════════════════════════════════
+    # Wybór plików i obsługa kart
+    # ═════════════════════════════════════════════════════════════════════
 
     def _select_mp4(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -229,8 +579,8 @@ class LoadTab(QWidget):
             self._video_paths = paths
             self.btn_mp4.setText("; ".join(paths))
             self.btn_mp4.setStyleSheet(self._selected_style)
-            # Natychmiastowa (asynchroniczna) inspekcja — bez naciskania Wczytaj
-            self._start_info_inspection()
+            self._rebuild_cards(paths)
+            self._start_multi_info_inspection()
             self._autofit_gen += 1
             if not self._user_selected_telemetry:
                 self._try_auto_fit_search(paths, gen=self._autofit_gen)
@@ -251,6 +601,70 @@ class LoadTab(QWidget):
                 self._fit_path = ""
             self.btn_telemetry.setText(path)
             self.btn_telemetry.setStyleSheet(self._selected_style)
+            self._update_telemetry_on_all_cards()
+
+    def _get_current_telemetry_name(self) -> str:
+        if self._fit_path:
+            return Path(self._fit_path).name
+        if self._gpx_path:
+            return Path(self._gpx_path).name
+        return ""
+
+    def _update_telemetry_on_all_cards(self) -> None:
+        telem_name = self._get_current_telemetry_name()
+        for card in self._card_widgets:
+            card.update_telemetry(telem_name)
+
+    def _rebuild_cards(self, paths: list[str]) -> None:
+        self._clear_cards()
+        if not paths:
+            self.lbl_no_files.setVisible(True)
+            return
+
+        self.lbl_no_files.setVisible(False)
+        self._files_metadata = [{} for _ in paths]
+        telem_name = self._get_current_telemetry_name()
+        for idx, p in enumerate(paths):
+            card = VideoFileCardWidget(idx, p, self.cards_container)
+            card.update_telemetry(telem_name)
+            card.sig_qp_clicked.connect(self._on_card_qp_clicked)
+            self.cards_layout.addWidget(card)
+            self._card_widgets.append(card)
+
+    def _clear_cards(self) -> None:
+        for card in self._card_widgets:
+            card.deleteLater()
+        self._card_widgets.clear()
+        self._files_metadata.clear()
+        self.lbl_no_files.setVisible(True)
+
+    def _update_mixed_resolutions_banner(self) -> None:
+        resolutions: set[tuple[int, int]] = set()
+        for meta in self._files_metadata:
+            if meta and isinstance(meta, dict):
+                v = meta.get("video") or {}
+                w = v.get("width")
+                h = v.get("height")
+                if w and h:
+                    resolutions.add((int(w), int(h)))
+        if len(resolutions) > 1:
+            self.lbl_mixed_res_banner.setVisible(True)
+        else:
+            self.lbl_mixed_res_banner.setVisible(False)
+
+    def get_files_metadata(self) -> list[dict[str, Any]]:
+        """Zwraca listę metadanych dla wszystkich wczytanych plików."""
+        return list(self._files_metadata)
+
+    def get_file_metadata(self, index: int) -> dict[str, Any] | None:
+        """Zwraca metadane dla konkretnego pliku po indeksie."""
+        if 0 <= index < len(self._files_metadata):
+            return self._files_metadata[index]
+        return None
+
+    # ═════════════════════════════════════════════════════════════════════
+    # AutoFIT
+    # ═════════════════════════════════════════════════════════════════════
 
     def _try_auto_fit_search(self, paths: list[str], gen: int | None = None) -> None:
         """Asynchronously search folder for matching .fit file."""
@@ -284,6 +698,18 @@ class LoadTab(QWidget):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _on_autofit_matched(self, fit_path: str, gen: int) -> None:
+        """Obsłuż dopasowany plik FIT z asynchronicznego AutoFIT (wątek główny GUI)."""
+        if gen == self._autofit_gen and not self._user_selected_telemetry:
+            self._fit_path = fit_path
+            self._gpx_path = ""
+            self.btn_telemetry.setText(fit_path)
+            self.btn_telemetry.setStyleSheet(self._selected_style)
+            self._update_telemetry_on_all_cards()
+
+    # ═════════════════════════════════════════════════════════════════════
+    # Wczytywanie i obsługa paska postępu
+    # ═════════════════════════════════════════════════════════════════════
 
     def _on_load(self) -> None:
         if not self._video_paths:
@@ -291,18 +717,11 @@ class LoadTab(QWidget):
             return
 
         self._start_loading()
-        # Snapshot the explicit dialog selection.  The controller must never
-        # observe a later UI selection or an output-path edit as project input.
         self.signals.sig_files_selected.emit(
             list(self._video_paths), self._gpx_path, self._fit_path,
         )
 
-    # ═════════════════════════════════════════════════════════════════════
-    # Pasek postępu wczytywania (target_progress → display_progress)
-    # ═════════════════════════════════════════════════════════════════════
-
     def _start_loading(self) -> None:
-        """Rozpocznij wczytywanie: pokaż pasek i uruchom płynną animację."""
         self._loading = True
         self._load_target = 0.0
         self._load_display = 0.0
@@ -315,23 +734,17 @@ class LoadTab(QWidget):
         self._load_timer.start()
 
     def _on_load_progress(self, percent: int, text: str) -> None:
-        """Backend raportuje rzeczywisty (etapowy) postęp wczytywania.
-
-        ``percent`` to wartość docelowa (target_progress); pasek animuje
-        display_progress w jej kierunku w osobnym QTimerze.
-        """
         if not self._loading:
             return
         pct = float(max(0, min(100, percent)))
         if pct > self._load_target:
-            self._load_target = pct  # nigdy nie cofaj postępu
+            self._load_target = pct
         if text:
             self.lbl_load_status.setText(text)
         if percent >= 100:
             self._finish_loading_success()
 
     def _finish_loading_success(self) -> None:
-        """100% — ustawiane dopiero po faktycznym sukcesie wczytywania."""
         self._loading = False
         self._load_target = 100.0
         self.lbl_load_status.setText("Gotowe")
@@ -339,7 +752,6 @@ class LoadTab(QWidget):
         self.btn_load.setEnabled(True)
 
     def _on_load_error(self, msg: str) -> None:
-        """Błąd wczytywania — pasek nie udaje sukcesu (nigdy 100%)."""
         if not self._loading:
             return
         self._loading = False
@@ -349,7 +761,6 @@ class LoadTab(QWidget):
         self.btn_load.setEnabled(True)
 
     def _load_tick(self) -> None:
-        """Płynna animacja: display_progress płynie w kierunku target_progress."""
         delta = self._load_target - self._load_display
         if delta <= 0.2:
             self._load_display = self._load_target
@@ -363,7 +774,6 @@ class LoadTab(QWidget):
             self._load_timer.stop()
 
     def _reset_loading_ui(self) -> None:
-        """Powrót do stanu idle (np. przy Wyczyść w trakcie wczytywania)."""
         self._loading = False
         self._load_timer.stop()
         self._load_target = 0.0
@@ -373,7 +783,6 @@ class LoadTab(QWidget):
         self.btn_load.setEnabled(True)
 
     def _on_accel_changed(self, _index: int) -> None:
-        """Emit preview accelerator changed when the user picks a new GPU."""
         vendor = self.cmb_preview_accel.currentData()
         self.signals.sig_preview_accel_changed.emit(vendor or "auto")
 
@@ -385,68 +794,78 @@ class LoadTab(QWidget):
         self._video_paths = []
         self._gpx_path = ""
         self._fit_path = ""
+        self._files_metadata = []
         self._user_selected_telemetry = False
         self.lbl_info.setText("Nie wczytano plików.")
-        # Unieważnij oczekującą inspekcję i zresetuj panel informacji
         self._inspection_gen += 1
         self._autofit_gen += 1
         self.lbl_file_info.setText("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
+        self.lbl_mixed_res_banner.setVisible(False)
+        self._clear_cards()
         self._reset_qp_state()
         self.btn_analyze_qp.setEnabled(False)
-        # Przerwij ewentualne wczytywanie i schowaj pasek postępu
         self._reset_loading_ui()
 
     # ═════════════════════════════════════════════════════════════════════
-    # Asynchroniczna inspekcja pliku (ffprobe poza wątkiem GUI)
+    # Asynchroniczna inspekcja plików
     # ═════════════════════════════════════════════════════════════════════
 
     def _connect_local_signals(self) -> None:
         self.sig_file_info_ready.connect(self._on_file_info_ready)
         self.sig_file_info_error.connect(self._on_file_info_error)
+        self.sig_card_info_ready.connect(self._on_card_info_ready)
+        self.sig_card_info_error.connect(self._on_card_info_error)
         self.sig_qp_progress.connect(self._on_qp_progress)
         self.sig_qp_done.connect(self._on_qp_done)
         self.sig_qp_error.connect(self._on_qp_error)
         self.sig_autofit_matched.connect(self._on_autofit_matched)
-        # Globalne sygnały postępu/błędów — chronione flagą self._loading,
-        # aby nie reagować na postęp renderingu ani błędy spoza wczytywania.
         self.signals.sig_progress.connect(self._on_load_progress)
         self.signals.sig_error.connect(self._on_load_error)
 
-    def _on_autofit_matched(self, fit_path: str, gen: int) -> None:
-        """Obsłuż dopasowany plik FIT z asynchronicznego AutoFIT (wątek główny GUI)."""
-        if gen == self._autofit_gen and not self._user_selected_telemetry:
-            self._fit_path = fit_path
-            self._gpx_path = ""
-            self.btn_telemetry.setText(fit_path)
-            self.btn_telemetry.setStyleSheet(self._selected_style)
-
-
     def _start_info_inspection(self) -> None:
-        """Uruchom odczyt informacji o pierwszym wybranym pliku MP4."""
+        """Kompatybilność z istniejącym API — inspekcja wczytanych plików MP4."""
+        self._start_multi_info_inspection()
+
+    def _start_multi_info_inspection(self) -> None:
         if not self._video_paths:
             return
-        path = self._video_paths[0]
+
+        if len(self._card_widgets) != len(self._video_paths):
+            self._rebuild_cards(self._video_paths)
+
         self._inspection_gen += 1
         gen = self._inspection_gen
         self.lbl_file_info.setText("Odczytywanie informacji o filmie...")
         self.btn_analyze_qp.setEnabled(True)
-        # Nowy plik — unieważnij/zatrzymaj ewentualną analizę QP poprzedniego
         self._reset_qp_state()
 
+        paths_snapshot = list(self._video_paths)
+
         def worker() -> None:
-            try:
-                ffprobe = resolve_ffprobe()
-                info = inspect_mp4(path, ffprobe)
-                self.sig_file_info_ready.emit(info, gen)
-            except Exception:
-                # Nie ujawniamy szczegółów błędu w GUI — tylko komunikat ogólny
-                self.sig_file_info_error.emit(str(Path(path).name), gen)
+            ffprobe = resolve_ffprobe()
+            for idx, p in enumerate(paths_snapshot):
+                if gen != self._inspection_gen:
+                    return
+                try:
+                    info = inspect_mp4(p, ffprobe)
+                    if gen != self._inspection_gen:
+                        return
+                    self.sig_card_info_ready.emit(idx, info, gen)
+                    if idx == 0:
+                        self.sig_file_info_ready.emit(info, gen)
+                except Exception:
+                    if gen != self._inspection_gen:
+                        return
+                    name = str(Path(p).name)
+                    self.sig_card_info_error.emit(idx, name, gen)
+                    if idx == 0:
+                        self.sig_file_info_error.emit(name, gen)
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_file_info_ready(self, info: dict, gen: int) -> None:
         if gen != self._inspection_gen:
-            return  # wybrano już inny plik — zignoruj wynik
+            return
         self.lbl_file_info.setText(format_file_info_text(info))
 
     def _on_file_info_error(self, _name: str, gen: int) -> None:
@@ -454,31 +873,61 @@ class LoadTab(QWidget):
             return
         self.lbl_file_info.setText("Nie udało się odczytać informacji o filmie.")
 
+    def _on_card_info_ready(self, idx: int, info: dict, gen: int) -> None:
+        if gen != self._inspection_gen:
+            return
+        if 0 <= idx < len(self._files_metadata):
+            self._files_metadata[idx] = info
+        if 0 <= idx < len(self._card_widgets):
+            paired = self._get_current_telemetry_name()
+            self._card_widgets[idx].update_info(info, paired)
+        self._update_mixed_resolutions_banner()
+
+    def _on_card_info_error(self, idx: int, name: str, gen: int) -> None:
+        if gen != self._inspection_gen:
+            return
+        if 0 <= idx < len(self._card_widgets):
+            self._card_widgets[idx].set_error(name, "Nie udało się odczytać informacji o filmie.")
+
     # ═════════════════════════════════════════════════════════════════════
-    # Analiza QP — rzeczywista, asynchroniczna (src/qp_analyzer)
+    # Analiza QP
     # ═════════════════════════════════════════════════════════════════════
+
+    def _on_card_qp_clicked(self, video_path: str, card_idx: int) -> None:
+        if self._qp_cancel_event is not None and self._qp_card_idx == card_idx:
+            self._qp_cancel_event.set()
+            return
+        if not Path(video_path).exists():
+            if 0 <= card_idx < len(self._card_widgets):
+                self._card_widgets[card_idx].set_qp_error("Plik nie istnieje.")
+            return
+        self.analyze_qp(video_path, card_idx=card_idx)
 
     def _on_analyze_qp(self) -> None:
         if not self._video_paths:
             return
         path = self._video_paths[0]
-        # Jeśli analiza już trwa — kliknięcie anuluje
         if self._qp_cancel_event is not None:
             self._qp_cancel_event.set()
             return
         if not Path(path).exists():
             self._show_qp_error("Plik nie istnieje.")
+            if self._card_widgets:
+                self._card_widgets[0].set_qp_error("Plik nie istnieje.")
             return
-        self.analyze_qp(path)
+        self.analyze_qp(path, card_idx=0)
 
-    def analyze_qp(self, video_path: str) -> None:
+    def analyze_qp(self, video_path: str, card_idx: int = 0) -> None:
         """Uruchom rzeczywistą analizę QP poza wątkiem GUI."""
         self._qp_gen += 1
         gen = self._qp_gen
         self._qp_path = video_path
+        self._qp_card_idx = card_idx
         self._qp_cancel_event = threading.Event()
         self.btn_analyze_qp.setText("Anuluj analizę QP")
         self.lbl_qp_result.setText(QP_PLACEHOLDER + "\n\nAnaliza QP: 0%")
+        if 0 <= card_idx < len(self._card_widgets):
+            self._card_widgets[card_idx].set_qp_progress(0)
 
         def worker() -> None:
             try:
@@ -508,12 +957,16 @@ class LoadTab(QWidget):
         if gen != self._qp_gen:
             return
         self.lbl_qp_result.setText(QP_PLACEHOLDER + f"\n\nAnaliza QP: {pct}%")
+        if 0 <= self._qp_card_idx < len(self._card_widgets):
+            self._card_widgets[self._qp_card_idx].set_qp_progress(pct)
 
     def _on_qp_done(self, info: dict, gen: int) -> None:
         if gen != self._qp_gen:
             return
         self._qp_cancel_event = None
         self.btn_analyze_qp.setText("Analiza QP")
+        if 0 <= self._qp_card_idx < len(self._card_widgets):
+            self._card_widgets[self._qp_card_idx].set_qp_result(info)
         if not info.get("ok"):
             self._show_qp_error(info.get("error") or "Nie udało się odczytać QP.")
             return
@@ -537,6 +990,8 @@ class LoadTab(QWidget):
             return
         self._qp_cancel_event = None
         self.btn_analyze_qp.setText("Analiza QP")
+        if 0 <= self._qp_card_idx < len(self._card_widgets):
+            self._card_widgets[self._qp_card_idx].set_qp_error(msg)
         self._show_qp_error(msg)
 
     def _show_qp_error(self, msg: str) -> None:
@@ -545,11 +1000,13 @@ class LoadTab(QWidget):
         )
 
     def _reset_qp_state(self) -> None:
-        """Zatrzymaj trwającą analizę QP i zresetuj panel wyniku."""
         self._qp_gen += 1
         if self._qp_cancel_event is not None:
             self._qp_cancel_event.set()
         self._qp_cancel_event = None
         self._qp_path = ""
+        self._qp_card_idx = 0
         self.btn_analyze_qp.setText("Analiza QP")
         self.lbl_qp_result.setText(QP_PLACEHOLDER)
+        for card in self._card_widgets:
+            card.reset_qp()

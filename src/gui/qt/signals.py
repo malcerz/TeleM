@@ -62,6 +62,10 @@ class AppSignals(QObject):
     sig_amd_decode_mode_restored = Signal(str)
     # (mode: str – 'gpu' lub 'cpu')
 
+    # Kontroler → GUI: przywróć zapisany preset jakości AMD w UI (po starcie)
+    sig_amd_encoder_quality_restored = Signal(str)
+    # (quality: str – 'FAST', 'BALANCED', 'QUALITY')
+
     # Kontroler → GUI: wyliczona domyślna nazwa pliku eksportu
     sig_default_export_name_ready = Signal(str)
     # (filename: str)
@@ -154,6 +158,10 @@ class AppSignals(QObject):
     sig_error = Signal(str)
     # (error_message: str)
 
+    # Worker -> GUI request for a user decision on a suspicious FIT/GPX file.
+    # Payload is TelemetryValidationRequest; the worker waits on its Event.
+    sig_telemetry_validation_request = Signal(object)
+
     # Renderowanie zakończone sukcesem
     sig_render_finished = Signal(dict, str)
     # (stats: dict, output_path: str)
@@ -167,6 +175,22 @@ class AppSignals(QObject):
     sig_map_ready = Signal()
     # (loaded_tiles, required_tiles)
     sig_map_progress = Signal(int, int)
+    # Lightweight status text (e.g. "Mapa: przygotowywanie 123/493", "Mapa: gotowa", "")
+    sig_map_status = Signal(str)
+
+    # ── Export Queue ─────────────────────────────────────────────────────
+
+    # Aktualizacja stanu jobu kolejki (emitowany z wątku kolejki przez Qt queued connection)
+    sig_queue_job_updated = Signal(object)
+    # (ExportJob instance)
+
+    # Kolejka uruchomiona / wstrzymana
+    sig_queue_started = Signal()
+    sig_queue_paused = Signal()
+
+    # Dispatch zadania renderowania do wątku GUI (zastępuje zawodny QTimer.singleShot z wątku tła)
+    sig_queue_dispatch_render = Signal(object)
+    # (ExportJob instance)
 
     # Request GUI-thread-only deferred MPV diagnostics from a loading worker.
     sig_schedule_mpv_hwdec_check = Signal()

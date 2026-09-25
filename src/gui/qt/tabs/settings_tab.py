@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
-    QStyleFactory, QCheckBox,
+    QStyleFactory, QCheckBox, QMessageBox,
 )
 from PySide6.QtGui import QFontDatabase
 
@@ -19,9 +19,13 @@ class SettingsTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.signals = get_signals()
+        self._render_job_active = False
+        self._analysis_active = False
         self._build_ui()
         # Przywróć font z kontrolera po jego inicjalizacji (emitowany przez sig_global_font_restored)
         self.signals.sig_global_font_restored.connect(self._on_global_font_restored)
+        self.signals.sig_render_state.connect(self._on_render_state)
+        self.signals.sig_progress.connect(self._on_progress)
 
     def _build_ui(self) -> None:
         vbox = QVBoxLayout(self)
@@ -133,6 +137,13 @@ class SettingsTab(QWidget):
         btn_cache.setMinimumHeight(28)
         btn_cache.clicked.connect(lambda: self._browse_dir(self.edit_cache))
         row_cache.addWidget(btn_cache)
+        self.btn_clear_cache = QPushButton("Czyść cache")
+        self.btn_clear_cache.setMinimumHeight(28)
+        self.btn_clear_cache.setToolTip(
+            "Cache można wyczyścić po zakończeniu aktywnego zadania."
+        )
+        self.btn_clear_cache.clicked.connect(self._clear_generated_cache)
+        row_cache.addWidget(self.btn_clear_cache)
         perf_form.addRow("Katalog cache:", row_cache)
 
         # Ścieżka ffmpeg
@@ -177,6 +188,69 @@ class SettingsTab(QWidget):
         )
         if path:
             target.setText(path)
+
+    def _refresh_cache_button_state(self) -> None:
+        active = self._render_job_active or self._analysis_active
+        self.btn_clear_cache.setEnabled(not active)
+        if active:
+            self.btn_clear_cache.setToolTip(
+                "Cache można wyczyścić po zakończeniu aktywnego zadania."
+            )
+        else:
+            self.btn_clear_cache.setToolTip(
+                "Usuń wygenerowany cache telemetryczny BikeRideHUD."
+            )
+
+    def _on_render_state(self, snapshot: object) -> None:
+        state = str(getattr(snapshot, "state", "")).lower()
+        self._render_job_active = state in {
+            "running", "rendering", "preparing", "finalizing", "cancelling",
+        }
+        self._refresh_cache_button_state()
+
+    def _on_progress(self, percent: int, text: str) -> None:
+        status = str(text or "").lower()
+        loading = any(token in status for token in ("analiza gpmf", "wczytywanie telemetrii"))
+        if loading and int(percent) < 100:
+            self._analysis_active = True
+        elif "metadane gotowe" in status or int(percent) >= 100:
+            self._analysis_active = False
+        self._refresh_cache_button_state()
+
+    def _clear_generated_cache(self) -> None:
+        if self._render_job_active or self._analysis_active:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Czyść cache",
+            "Czy wyczyścić cache BikeRideHUD?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            from src.telemetry_cache_manager import clear_generated_cache
+            result = clear_generated_cache()
+            files = int(result.get("files_removed", 0))
+            bytes_removed = int(result.get("bytes_removed", 0))
+            megabytes = bytes_removed / (1024 * 1024)
+            QMessageBox.information(
+                self,
+                "Czyść cache",
+                f"Wyczyszczono cache.\nUsunięto: {files} plików\nZwolniono: {megabytes:.2f} MB",
+            )
+            print(
+                f"[TelemetryCache] cleared files={files} bytes={bytes_removed}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"[TelemetryCache] Cleanup failed: {exc}", flush=True)
+            QMessageBox.warning(
+                self,
+                "Czyść cache",
+                f"Nie udało się wyczyścić cache:\n{exc}",
+            )
 
     def _on_global_font_restored(self, family_name: str) -> None:
         """Przywraca zaznaczenie fontu w cmb_font bez emitowania sig_settings_changed."""

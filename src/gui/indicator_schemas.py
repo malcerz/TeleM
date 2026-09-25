@@ -142,6 +142,7 @@ BUILTIN_FIELDS: dict[str, list[tuple]] = {
     ],
     "track_map":     get_common_schema() + [
         ("source", "choice", TELEMETRY_SOURCES, None, None),
+        ("gps_source", "choice", ["auto", "fit", "gpmf"], None, None),
         ("map_orientation", "choice", ["north_up", "track_up"], None, None),
         ("map_rotation_smoothing_s", "float", 0.0, 5.0, 0.1),
         ("size", "float", 5.0, 40.0, 0.1),

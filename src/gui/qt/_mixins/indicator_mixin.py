@@ -194,16 +194,48 @@ class IndicatorMixin:
             defaults["icon"] = "clock"
 
         if key == "track_map":
-            # Mapa – ma własne ustawienia niezależnie od rejestru
+            # Mapa – ma własne ustawienia
             defaults["form"] = "map"
             defaults["size"] = 18.0
-            defaults["zoom"] = 16
-            defaults["map_orientation"] = "north_up"
-            defaults["map_style"] = "light_all"
+            defaults["zoom"] = 15
+            defaults["map_orientation"] = "track_up"
             defaults["marker_size"] = 7
             defaults["marker_color"] = "#FFFFFF"
-            defaults["x"] = 2.0
-            defaults["y"] = 15.0
+            defaults["x"] = 90.57
+            defaults["y"] = 27.53
+            defaults["map_shape"] = "square"
+
+            # Zachowaj / użyj aktywnego źródła GPS projektu (FIT > GPX > GPMF)
+            ctx = getattr(self, "map_context", None)
+            tm = getattr(self, "telemetry", None)
+            if ctx is not None and getattr(ctx, "gps_source", None):
+                defaults["source"] = ctx.gps_source
+            elif tm is not None and getattr(tm, "fit_gps_track", None):
+                defaults["source"] = "fit"
+            elif tm is not None and getattr(tm, "gpx_gps_track", None):
+                defaults["source"] = "gpx"
+            else:
+                defaults["source"] = "gpmf"
+
+            # Użyj aktywnego/przygotowanego stylu mapy z MapContext, jeśli dostępny
+            if ctx is not None and getattr(ctx, "provider", None):
+                defaults["map_style"] = ctx.provider
+            else:
+                defaults["map_style"] = "light_all"
+
+            # W razie rozbieżności z MapContext natychmiast rozpocznij preload w tle
+            if ctx is not None and getattr(ctx, "provider", None) != defaults["map_style"]:
+                try:
+                    if hasattr(self, "_map_preload_provider_switch"):
+                        self._map_preload_provider_switch(defaults["map_style"])
+                except Exception:
+                    pass
+
+            try:
+                if hasattr(self, "_trigger_map_background_prefetch"):
+                    self._trigger_map_background_prefetch(reason="add_track_map")
+            except Exception:
+                pass
 
         if key == "compass":
             defaults["label"] = "COMPASS"
@@ -269,13 +301,14 @@ class IndicatorMixin:
             # Przechył / Lean — osobny wskaźnik animowany (NIE BAR).
             # ETAP 13: źródło IMU = fizyczny roll z complementary filter
             # (precompute deterministyczny); sensitivity działa NA kącie.
+            # Domyślna oś: Roll (canonical Y).
             defaults["label"] = "PRZECHYŁ"
-            defaults["field"] = "lean_roll_x"
+            defaults["field"] = "lean_roll_y"
             defaults["form"] = "lean"
             defaults["source"] = "gyro"
-            defaults["axis"] = "x"
-            defaults["calibration"] = 6.0
-            defaults["zero_offset"] = 6.0
+            defaults["axis"] = "y"
+            defaults["calibration"] = 0.0
+            defaults["zero_offset"] = 0.0
             defaults["invert_axis"] = False
             defaults["pivot_x"] = 0.5
             defaults["pivot_y"] = 1.0
@@ -483,35 +516,84 @@ class IndicatorMixin:
         self._render_preview()
 
     def _on_reset_layout(self) -> None:
-        """Resetuje układ — tylko nowoczesny time_display (bez legacy time_block).
+        """Resetuje układ do stanu całkowicie pustego HUD (INDICATOR_COUNT = 0).
 
-        Legacy ``time_block`` indicator został zastąpiony przez ``time_display``
-        i NIE jest już tworzony ani przywracany (ETAP 4A.1).
+        Usuwa wszystkie wskaźniki i teksty użytkownika bez przywracania domyślnego
+        presetu czy def_layout.json. Czyści zaznaczenie, edytor właściwości, bounding
+        boxy, cache'e i natychmiast odświeża podgląd.
         """
-        old_count = len(self.layout.get("indicators", {}))
-        try:
-            from src.gui.layout_manager import normalize_layout
-            base = getattr(self, "base_dir", None)
-            source_image = getattr(self, "src_img", None)
-            width, height = source_image.size if source_image is not None else (1280, 720)
-            self.layout = normalize_layout(
-                Path(base) / "def_layout.json" if base is not None else None,
-                width, height,
-            )
-        except Exception:
-            self.layout = {"indicators": {}, "custom_texts": []}
-        if self.layout_mgr:
+        old_count = len(self.layout.get("indicators", {})) if isinstance(getattr(self, "layout", None), dict) else 0
+
+        source_image = getattr(self, "src_img", None)
+        width, height = source_image.size if source_image is not None else (1280, 720)
+        current_w = (self.layout.get("width") if isinstance(getattr(self, "layout", None), dict) else None) or width
+        current_h = (self.layout.get("height") if isinstance(getattr(self, "layout", None), dict) else None) or height
+
+        # 1. Pusty HUD — zero wskaźników
+        self.layout = {
+            "width": int(current_w),
+            "height": int(current_h),
+            "indicators": {},
+            "custom_texts": [],
+        }
+        if getattr(self, "layout_mgr", None) is not None:
             self.layout_mgr.layout = self.layout
-        if hasattr(self, "_invalidate_layout_visual_state"):
-            self._invalidate_layout_visual_state()
+
+        # 2. Wyczyszczenie stanu zaznaczenia i edytora
         self._selected_stream_key = ""
+        if hasattr(self, "signals") and self.signals:
+            if hasattr(self.signals, "sig_properties_ready"):
+                self.signals.sig_properties_ready.emit("", [], {})
+            if hasattr(self.signals, "sig_bboxes_ready"):
+                self.signals.sig_bboxes_ready.emit({}, int(current_w), int(current_h))
+
+        if hasattr(self, "indicator_bboxes") and isinstance(self.indicator_bboxes, dict):
+            self.indicator_bboxes.clear()
+
+        vp = getattr(self, "video_preview_widget", None)
+        if vp is not None and hasattr(vp, "clear_editor_state"):
+            try:
+                vp.clear_editor_state()
+            except Exception:
+                pass
+
+        # 3. Unieważnienie cache'y zależnych od layoutu
+        self._chart_data_cache = None
+        if hasattr(self, "_prepare_cache") and isinstance(self._prepare_cache, dict):
+            self._prepare_cache.clear()
+        if hasattr(self, "_invalidate_layout_visual_state"):
+            try:
+                self._invalidate_layout_visual_state()
+            except Exception:
+                pass
+        try:
+            from src.indicators.compositor import clear_reusable_canvases
+            clear_reusable_canvases()
+        except Exception:
+            pass
+        try:
+            from src.indicators.helpers import clear_map_mask_caches
+            clear_map_mask_caches()
+        except Exception:
+            pass
+
+        # 4. Oznaczenie jako zmodyfikowany (dirty) i zapis stanu w sesji AppData
+        self._layout_dirty = True
+        if hasattr(self, "_save_session_layout"):
+            try:
+                self._save_session_layout()
+            except Exception:
+                pass
+
         if os.environ.get("TELEM_HUD_LIFECYCLE_DEBUG", "0") == "1":
             print(
-                f"[HUD Lifecycle] reset old={old_count} "
-                f"new={len(self.layout.get('indicators', {}))}",
+                f"[HUD Lifecycle] reset old={old_count} new=0 (EMPTY HUD)",
                 flush=True,
             )
-        self._render_preview()
+
+        # 5. Natychmiastowe odświeżenie podglądu (video only)
+        if hasattr(self, "_render_preview"):
+            self._render_preview()
         return
 
     def _discover_data_streams(self) -> list[DataStream]:

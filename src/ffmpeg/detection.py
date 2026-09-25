@@ -266,3 +266,108 @@ def detect_amd_compose_backend(preferred_backend: str = "AUTO", ffmpeg_exe: str 
     return "SOFTWARE"
 
 
+_AMF_MAX_RES_CACHE: tuple[int, int] | None = None
+
+
+def get_amf_max_encode_resolution(ffmpeg_exe: str = "ffmpeg") -> tuple[int, int]:
+    """Return detected AMF limits, or ``(0, 0)`` when capability is unknown.
+
+    Unknown must never become a hidden ``AMD => 4096`` policy.  Resolution
+    decisions use ``is_resolution_supported_by_encoder`` and its one-frame
+    hardware preflight instead.
+    """
+    global _AMF_MAX_RES_CACHE
+    if _AMF_MAX_RES_CACHE is not None:
+        return _AMF_MAX_RES_CACHE
+
+    try:
+        from src.ffmpeg.amd_capabilities import get_gpu_capabilities
+        caps = get_gpu_capabilities()
+        if caps.status == "OK" and caps.max_encode_width and caps.max_encode_height:
+            _AMF_MAX_RES_CACHE = (caps.max_encode_width, caps.max_encode_height)
+            return _AMF_MAX_RES_CACHE
+    except Exception:
+        pass
+
+    # Unknown is not a vendor-specific limit.
+    _AMF_MAX_RES_CACHE = (0, 0)
+    return _AMF_MAX_RES_CACHE
+
+
+def _test_encoder_resolution(encoder_name: str, width: int, height: int, ffmpeg_exe: str = "ffmpeg") -> bool:
+    """Quick probe if encoder accepts the given resolution."""
+    try:
+        r = subprocess.run(
+            [
+                ffmpeg_exe, "-hide_banner",
+                "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d=0.03",
+                "-frames:v", "1",
+                "-c:v", encoder_name,
+                "-f", "null", "-",
+            ],
+            capture_output=True, timeout=5,
+            **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def is_resolution_supported_by_encoder(
+    resolution_name: str,
+    encoder: str,
+    source_dimensions: tuple[int, int] | None = None,
+    ffmpeg_exe: str = "ffmpeg",
+) -> tuple[bool, str, tuple[int, int] | None]:
+    """Check if requested resolution is supported by the target encoder.
+
+    Returns (is_supported, reason_message, (max_w, max_h) | None).
+    """
+    from src.ffmpeg.command_builder import RESOLUTION_MAP
+    enc = str(encoder).strip().lower()
+    res_lower = str(resolution_name).strip().lower()
+
+    target_res = RESOLUTION_MAP.get(res_lower)
+    if target_res is None:
+        if res_lower == "source" and source_dimensions:
+            target_res = source_dimensions
+        else:
+            return True, "", None
+
+    req_w, req_h = target_res
+
+    # CPU software encoder (libx264/libx265) supports up to 8K+
+    if enc in ("cpu", "libx264", "libx265"):
+        return True, "", (8192, 8192)
+
+    # AMD AMF hardware encoder
+    if enc in ("amd", "amd_native", "hevc_amf", "h264_amf", "auto"):
+        if enc == "auto":
+            try:
+                resolved = detect_best_encoder(ffmpeg_exe).lower()
+            except Exception:
+                resolved = "cpu"
+            if resolved not in ("amd", "amd_native"):
+                return True, "", None
+
+        # The central capability service owns both the known-limit decision
+        # and UNKNOWN one-frame preflight.  Do not substitute a vendor-wide
+        # fallback limit when the runtime query is unavailable.
+        from src.ffmpeg.amd_capabilities import check_amd_encode_resolution
+        supported, reason, caps = check_amd_encode_resolution(
+            req_w, req_h, ffmpeg_exe=ffmpeg_exe
+        )
+        max_pair = (
+            (caps.max_encode_width, caps.max_encode_height)
+            if caps.max_encode_width and caps.max_encode_height
+            else None
+        )
+        if not supported:
+            msg = (
+                f"Eksport zablokowany: {reason}\n"
+                "Nie uruchomiono automatycznego CPU x265; wybierz jawnie inny encoder."
+            )
+            return False, msg, max_pair
+        return True, reason, max_pair
+
+    return True, "", None
