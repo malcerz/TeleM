@@ -46,6 +46,19 @@ RecordDict = dict[str, Any]
 Sample = tuple[datetime, float]
 
 
+class FitSampleList(list):
+    """List of (datetime, value) samples with source metadata."""
+
+    def __init__(
+        self,
+        samples: Any = (),
+        *,
+        source_start: datetime | None = None,
+    ) -> None:
+        super().__init__(samples)
+        self.source_start = source_start
+
+
 class FitRecords(list[RecordDict]):
     """Parsed FIT records with an activity-wide, generic field catalog."""
 
@@ -118,8 +131,10 @@ class FitDataset(dict[str, list[Sample]]):
         session_total_distance: float | None = None,
         lap_summaries: list[dict[str, Any]] | None = None,
         distance_normalization: Any = None,
+        source_start: datetime | None = None,
     ) -> None:
         super().__init__(fields or {})
+        self.source_start = source_start
         self.active_time_mapper = active_time_mapper
         self.timezone_offset_hours = timezone_offset_hours
         self.session_total_distance = session_total_distance
@@ -551,6 +566,8 @@ def sync_fit_to_video(
 
     result: dict[str, list[Sample]] = {}
 
+    fit_source_start = pts[0]["timestamp"] if pts else None
+
     # --- speed ---
     speed_samples = [
         (r["timestamp"], r["speed"]) for r in pts if r.get("speed") is not None
@@ -567,7 +584,7 @@ def sync_fit_to_video(
             dist_m = _haversine(lat1, lon1, lat2, lon2)
             speed_samples.append((t2, dist_m / dt_delta * 3.6))
     if speed_samples:
-        result["speed"] = speed_samples
+        result["speed"] = FitSampleList(speed_samples, source_start=fit_source_start)
 
     # --- track (cumulative distance) ---
     track: list[Sample] = []
@@ -601,7 +618,7 @@ def sync_fit_to_video(
     for key in sorted(field_keys):
         samples = [(r["timestamp"], r[key]) for r in pts if r.get(key) is not None]
         if samples:
-            result[key] = samples
+            result[key] = FitSampleList(samples, source_start=fit_source_start)
 
     session_total_distance = getattr(records, "session_total_distance", None)
     distance_normalization = None
@@ -632,6 +649,7 @@ def sync_fit_to_video(
         session_total_distance=session_total_distance,
         lap_summaries=getattr(records, "lap_summaries", None),
         distance_normalization=distance_normalization,
+        source_start=fit_source_start,
     )
 
 
