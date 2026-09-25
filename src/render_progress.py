@@ -60,6 +60,12 @@ class RenderProgressState:
     fps: float = 0.0
     eta_s: float | None = None
     finalization_stage: str = ""
+    finalize_stage: str = ""
+    finalize_internal: float | None = None
+    file_size_bytes: int | None = None
+    write_speed_mbps: float | None = None
+    stall_warning: bool = False
+    stall_seconds: float | None = None
     cancel_requested: bool = False
     cancelled: bool = False
     failed: bool = False
@@ -89,6 +95,49 @@ class RenderProgressState:
 
 def format_render_progress_status(snapshot: RenderProgressState) -> str:
     """Format the canonical snapshot for the application status bar."""
+    elapsed = max(0, int(snapshot.elapsed_s))
+    mins, secs = divmod(elapsed, 60)
+    hours, mins = divmod(mins, 60)
+    elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
+
+    if snapshot.completed or snapshot.phase == "complete":
+        return "Gotowe"
+    if snapshot.cancelled:
+        return "Anulowano"
+    if snapshot.failed:
+        return "Błąd"
+
+    # Faza finalizacji (opróżnianie pipeline'u, zamykanie enkodera, zapis/remux MP4, weryfikacja)
+    if snapshot.state == "finalizing" or snapshot.phase == "finalize":
+        stage_title = snapshot.finalize_stage or snapshot.finalization_stage or "Finalizacja..."
+        if getattr(snapshot, "stall_warning", False) and getattr(snapshot, "stall_seconds", None) is not None:
+            stall_s = int(snapshot.stall_seconds)
+            stage_title = f"{stage_title} — brak zapisu na dysk od {stall_s} s"
+
+        parts = [stage_title]
+
+        # Procent dla etapów determinate
+        is_indeterminate = getattr(snapshot, "progress_mode", "determinate") == "indeterminate"
+        if not is_indeterminate and snapshot.global_percent > 0:
+            parts.append(f"{snapshot.global_percent:.1f}%")
+
+        # Rozmiar pliku
+        file_sz = getattr(snapshot, "file_size_bytes", None)
+        if file_sz is not None and file_sz > 0:
+            sz_mb = file_sz / (1024.0 * 1024.0)
+            if sz_mb >= 2048.0:
+                parts.append(f"Rozmiar: {sz_mb / 1024.0:.1f} GB")
+            else:
+                parts.append(f"Rozmiar: {sz_mb:.1f} MB")
+
+        # Prędkość zapisu
+        speed_mbps = getattr(snapshot, "write_speed_mbps", None)
+        if speed_mbps is not None and speed_mbps > 0:
+            parts.append(f"Zapis: {speed_mbps:.1f} MB/s")
+
+        parts.append(f"Czas: {elapsed_txt}")
+        return "   |   ".join(parts)
+
     if snapshot.state == "preparing":
         frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
@@ -107,10 +156,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         if qp_val is None:
             qp_val = getattr(snapshot, "avg_qp", None)
         qp_str = f"{qp_val:.1f}" if (qp_val is not None and qp_val > 0) else "--"
-    elapsed = max(0, int(snapshot.elapsed_s))
-    mins, secs = divmod(elapsed, 60)
-    hours, mins = divmod(mins, 60)
-    elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
+
     if snapshot.eta_s is None:
         eta_txt = "--:--"
     else:
@@ -118,16 +164,9 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         eta_m, eta_s = divmod(eta, 60)
         eta_h, eta_m = divmod(eta_m, 60)
         eta_txt = f"{eta_h}:{eta_m:02d}:{eta_s:02d}" if eta_h else f"{eta_m:02d}:{eta_s:02d}"
-    if snapshot.completed or snapshot.phase == "complete":
-        status = "Gotowe"
-    elif snapshot.cancelled:
-        status = "Anulowano"
-    elif snapshot.failed:
-        status = "Błąd"
-    elif snapshot.cancel_requested:
+
+    if snapshot.cancel_requested:
         status = "Anulowanie..."
-    elif snapshot.state == "finalizing" or snapshot.phase == "finalize":
-        status = snapshot.finalization_stage or "Finalizacja..."
     elif snapshot.state == "preparing":
         status = snapshot.prep_label or snapshot.finalization_stage or "Przygotowywanie HUD..."
     elif snapshot.frame >= snapshot.total_frames and snapshot.total_frames > 0:
@@ -136,8 +175,8 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
     return (
-        f"{item_label}: {frame} | {pct} | FPS: {fps} | QP: {qp_str} | Czas: {elapsed_txt} "
-        f"| ETA: {eta_txt} | {status}"
+        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   QP: {qp_str}   |   Czas: {elapsed_txt} "
+        f"  |   ETA: {eta_txt}   |   {status}"
     )
 
 
@@ -415,10 +454,12 @@ class RenderProgressTracker:
             raw_render_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
             global_pct = min(self.RENDER_PROGRESS_END_PERCENT, raw_render_pct)
         elif phase == "finalize":
-            drain_pct = extra.get("drain_pct")
-            if drain_pct is not None:
-                # Map drain to 92..94%
-                global_pct = self.FINALIZATION_START_PERCENT + (max(0.0, min(100.0, float(drain_pct))) / 100.0) * 2.0
+            if "global_pct" in extra and extra["global_pct"] is not None:
+                global_pct = float(extra.pop("global_pct"))
+            elif "drain_pct" in extra and extra["drain_pct"] is not None:
+                drain_pct_val = max(0.0, min(100.0, float(extra["drain_pct"])))
+                # Map drain to 92.0..94.0%
+                global_pct = self.FINALIZATION_START_PERCENT + (drain_pct_val / 100.0) * 2.0
             else:
                 internal_pct = max(0.0, min(1.0, float(internal)))
                 global_pct = self.FINALIZATION_START_PERCENT + (self.FINALIZATION_MAX_PERCENT - self.FINALIZATION_START_PERCENT) * internal_pct

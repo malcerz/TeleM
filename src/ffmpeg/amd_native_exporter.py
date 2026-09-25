@@ -6514,6 +6514,22 @@ def export_amd_native_d3d11(
         )
 
         # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
+        c_decoded = c_uint64(0)
+        c_vp = c_uint64(0)
+        c_sub = c_uint64(0)
+        c_rec = c_uint64(0)
+        native_dll.telem_amd_get_stats(
+            h_context, byref(c_decoded), byref(c_vp), byref(c_sub), byref(c_rec)
+        )
+        drain_pct = (float(c_rec.value) / float(total_frames)) * 100.0 if total_frames > 0 else 100.0
+        drain_pct = max(0.0, min(100.0, drain_pct))
+        progress_tracker.finalize(
+            "Finalizacja: opróżnianie pipeline'u",
+            drain_pct / 100.0,
+            progress_mode="determinate",
+            drain_pct=drain_pct,
+        )
+
         flush_start = time.perf_counter()
         flush_ok = native_dll.telem_amd_flush(h_context)
         flush_ms = (time.perf_counter() - flush_start) * 1000.0
@@ -6522,12 +6538,16 @@ def export_amd_native_d3d11(
             _cleanup_native_resources()
             return False
 
-        c_decoded = c_uint64(0)
-        c_vp = c_uint64(0)
-        c_sub = c_uint64(0)
-        c_rec = c_uint64(0)
         native_dll.telem_amd_get_stats(
             h_context, byref(c_decoded), byref(c_vp), byref(c_sub), byref(c_rec)
+        )
+        drain_pct = (float(c_rec.value) / float(total_frames)) * 100.0 if total_frames > 0 else 100.0
+        drain_pct = max(0.0, min(100.0, drain_pct))
+        progress_tracker.finalize(
+            "Finalizacja: zamykanie enkodera",
+            0.94,
+            progress_mode="determinate",
+            drain_pct=drain_pct,
         )
 
         c_hud_updates = c_uint64(0)
@@ -6692,15 +6712,77 @@ def export_amd_native_d3d11(
                     flush=True,
                 )
         adaptive_wait = max(60.0, duration_s * 0.25)
+        live_target = stage_video_str if (is_multi_file and stage_video_str) else output_part_str
+        t_wait_start = time.perf_counter()
+        prev_size = 0
         try:
-            proc_mux.wait(timeout=adaptive_wait)
-        except subprocess.TimeoutExpired:
-            print(
-                f"[AMD NATIVE D3D11] WARNING: Live muxer did not exit within {adaptive_wait:.1f}s, terminating...",
-                flush=True,
-            )
-            proc_mux.kill()
-            proc_mux.wait()
+            if os.path.exists(live_target):
+                prev_size = os.path.getsize(live_target)
+        except OSError:
+            prev_size = 0
+        prev_time = t_wait_start
+        last_growth_time = t_wait_start
+
+        # Initial emission for live mux stage
+        progress_tracker.finalize(
+            "Finalizacja: zapis MP4",
+            0.96,
+            progress_mode="indeterminate",
+            file_size_bytes=prev_size,
+            write_speed_mbps=0.0,
+            stall_warning=False,
+            stall_seconds=None,
+        )
+
+        while True:
+            rc = proc_mux.poll()
+            now = time.perf_counter()
+            if cancel_event is not None and cancel_event.is_set():
+                proc_mux.kill()
+                break
+
+            cur_size = 0
+            try:
+                if os.path.exists(live_target):
+                    cur_size = os.path.getsize(live_target)
+            except OSError:
+                cur_size = 0
+
+            dt = now - prev_time
+            if dt >= 0.2:
+                write_speed = (cur_size - prev_size) / (1024.0 * 1024.0) / dt if (dt > 0 and cur_size >= prev_size) else 0.0
+                if cur_size > prev_size:
+                    last_growth_time = now
+                prev_size = cur_size
+                prev_time = now
+
+                stall_s = now - last_growth_time
+                is_stalled = (rc is None) and (stall_s > 10.0)
+
+                progress_tracker.finalize(
+                    "Finalizacja: zapis MP4",
+                    0.96,
+                    progress_mode="indeterminate",
+                    file_size_bytes=cur_size,
+                    write_speed_mbps=write_speed,
+                    stall_warning=is_stalled,
+                    stall_seconds=stall_s if is_stalled else None,
+                )
+
+            if rc is not None:
+                break
+
+            if now - t_wait_start > adaptive_wait:
+                print(
+                    f"[AMD NATIVE D3D11] WARNING: Live muxer did not exit within {adaptive_wait:.1f}s, terminating...",
+                    flush=True,
+                )
+                proc_mux.kill()
+                proc_mux.wait()
+                break
+
+            time.sleep(0.2)
+
         if stderr_thread is not None:
             stderr_thread.join(timeout=5.0)
         if active_process_holder is not None and active_process_holder.get("process") is proc_mux:
@@ -6721,7 +6803,6 @@ def export_amd_native_d3d11(
         if logical_stderr:
             print(f"[AMD DIRECT MUX STDERR] {logical_stderr}", flush=True)
 
-        live_target = stage_video_str if (is_multi_file and stage_video_str) else output_part_str
         if proc_mux.returncode != 0 or mux_pump_error:
             print(
                 f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})!\n"
@@ -6803,11 +6884,73 @@ def export_amd_native_d3d11(
                     pass
             remux_stderr_t = threading.Thread(target=_remux_stderr_reader, daemon=True)
             remux_stderr_t.start()
-            while p_remux.poll() is None:
+
+            prev_remux_size = 0
+            try:
+                if os.path.exists(output_part_str):
+                    prev_remux_size = os.path.getsize(output_part_str)
+            except OSError:
+                prev_remux_size = 0
+            prev_remux_time = t_remux_0
+            last_remux_growth_time = t_remux_0
+
+            # Initial emission for Stage C remux
+            progress_tracker.finalize(
+                "Finalizacja: remux MP4",
+                0.0,
+                progress_mode="determinate",
+                global_pct=94.0,
+                file_size_bytes=prev_remux_size,
+                write_speed_mbps=0.0,
+                stall_warning=False,
+                stall_seconds=None,
+            )
+
+            while True:
+                rc_remux = p_remux.poll()
+                now = time.perf_counter()
                 if cancel_event is not None and cancel_event.is_set():
                     p_remux.kill()
                     break
-                time.sleep(0.1)
+
+                cur_part_sz = 0
+                try:
+                    if os.path.exists(output_part_str):
+                        cur_part_sz = os.path.getsize(output_part_str)
+                except OSError:
+                    cur_part_sz = 0
+
+                dt = now - prev_remux_time
+                if dt >= 0.2:
+                    write_speed = (cur_part_sz - prev_remux_size) / (1024.0 * 1024.0) / dt if (dt > 0 and cur_part_sz >= prev_remux_size) else 0.0
+                    if cur_part_sz > prev_remux_size:
+                        last_remux_growth_time = now
+                    prev_remux_size = cur_part_sz
+                    prev_remux_time = now
+
+                    ratio = (cur_part_sz / float(stage_a_size_bytes)) if stage_a_size_bytes > 0 else 0.0
+                    clamped_ratio = max(0.0, min(0.995, ratio))
+                    remux_global = 94.0 + clamped_ratio * (98.0 - 94.0)
+
+                    stall_s = now - last_remux_growth_time
+                    is_remux_stalled = (rc_remux is None) and (stall_s > 10.0)
+
+                    progress_tracker.finalize(
+                        "Finalizacja: remux MP4",
+                        clamped_ratio,
+                        progress_mode="determinate",
+                        global_pct=remux_global,
+                        file_size_bytes=cur_part_sz,
+                        write_speed_mbps=write_speed,
+                        stall_warning=is_remux_stalled,
+                        stall_seconds=stall_s if is_remux_stalled else None,
+                    )
+
+                if rc_remux is not None:
+                    break
+
+                time.sleep(0.2)
+
             remux_stderr_t.join(timeout=2.0)
             t_remux_1 = time.perf_counter()
             remux_ms = (t_remux_1 - t_remux_0) * 1000.0
@@ -6854,6 +6997,12 @@ def export_amd_native_d3d11(
         timing_samples["Audio mux"].append(mux_elapsed_ms)
 
         # Probe sanity check on .part before atomic rename
+        progress_tracker.finalize(
+            "Finalizacja: weryfikacja pliku",
+            0.985,
+            progress_mode="determinate",
+            global_pct=98.5,
+        )
         final_probe = _probe_video_summary(ffmpeg_exe, output_part_str)
         muxed_frames = _stream_frame_count(final_probe, "video")
         audio_present = any(
@@ -6867,6 +7016,13 @@ def export_amd_native_d3d11(
             raise AMDNativeFinalizationError(
                 "AMD direct A/V mux produced zero video frames"
             )
+
+        progress_tracker.finalize(
+            "Finalizacja: zapis końcowy",
+            0.995,
+            progress_mode="determinate",
+            global_pct=99.5,
+        )
 
         # Atomic rename .part -> final .mp4
         if os.path.exists(output_file_str):

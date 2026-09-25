@@ -246,7 +246,7 @@ def test_render_tab_indeterminate_progress_mode_lifecycle():
     assert tab.progress.minimum() == 0
     assert tab.progress.maximum() == 0  # Qt marquee / busy mode
     assert "Muxowanie MP4..." in tab.lbl_stats.text()
-    assert "|   --   |" in tab.lbl_stats.text()
+    assert "Czas:" in tab.lbl_stats.text()
 
     # Tick does not overwrite indeterminate mode
     tab._render_tick()

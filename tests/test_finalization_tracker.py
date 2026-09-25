@@ -135,26 +135,26 @@ class TestFinalizationTracker(unittest.TestCase):
         self.assertEqual(tracker.stage, FinalizationTracker.STAGE_DRAIN)
         self.assertAlmostEqual(tracker._drain_pct, 0.0, places=1)
         
-        # Test RenderProgressTracker mapping for drain: 95..98%
+        # Test RenderProgressTracker mapping for drain: 92..94%
         rpt._emit(phase="finalize", internal=0.0, label="Drain 0%", drain_pct=0.0)
-        self.assertAlmostEqual(emitted[-1]["global_pct"], 95.0, places=1)
+        self.assertAlmostEqual(emitted[-1]["global_pct"], 92.0, places=1)
 
-        # 5 remaining (half drained) -> drain_pct = 50% -> 96.5%
+        # 5 remaining (half drained) -> drain_pct = 50% -> 93.0%
         tracker.set_stage(FinalizationTracker.STAGE_DRAIN, queue_size=5, frames_written=95, total_frames=100)
         self.assertAlmostEqual(tracker._drain_pct, 50.0, places=1)
         rpt._emit(phase="finalize", internal=0.5, label="Drain 50%", drain_pct=50.0)
-        self.assertAlmostEqual(emitted[-1]["global_pct"], 96.5, places=1)
+        self.assertAlmostEqual(emitted[-1]["global_pct"], 93.0, places=1)
 
-        # 0 remaining -> drain_pct = 100% -> 98.0%
+        # 0 remaining -> drain_pct = 100% -> 94.0%
         tracker.set_stage(FinalizationTracker.STAGE_DRAIN, queue_size=0, frames_written=100, total_frames=100)
         self.assertAlmostEqual(tracker._drain_pct, 100.0, places=1)
         rpt._emit(phase="finalize", internal=1.0, label="Drain 100%", drain_pct=100.0)
-        self.assertAlmostEqual(emitted[-1]["global_pct"], 98.0, places=1)
+        self.assertAlmostEqual(emitted[-1]["global_pct"], 94.0, places=1)
 
         # Finished -> 100%
         rpt.complete(elapsed=10.0)
         self.assertAlmostEqual(emitted[-1]["global_pct"], 100.0, places=1)
-        self.assertEqual(emitted[-1]["label"], "Zakończono")
+        self.assertEqual(emitted[-1]["label"], "Gotowe")
 
     def test_file_growth_and_mbs_calculation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
