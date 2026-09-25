@@ -78,12 +78,12 @@ def test_find_intel_adapter_none() -> None:
 # ── INTEL_FORCE resolution ───────────────────────────────────────────────
 
 def test_resolve_intel_force_success() -> None:
-    """Intel adapter present + usable QSV → resolution succeeds."""
+    """Intel adapter present + usable QSV -> resolution succeeds with HEVC when available."""
     log_lines: list[str] = []
     res = resolve_intel_force(
         adapters=[_NVIDIA_A, _INTEL_A],
-        qsv_hw_usable=True,
-        ffmpeg_qsv_info={"ffmpeg_has_qsv": True, "hevc_qsv": True, "h264_qsv": False},
+        qsv_codecs_usable={"hevc_qsv": True, "av1_qsv": True, "h264_qsv": True},
+        ffmpeg_qsv_info={"ffmpeg_has_qsv": True, "hevc_qsv": True, "av1_qsv": True, "h264_qsv": False},
         log=log_lines.append,
     )
     assert res.adapter_found is True
@@ -91,6 +91,9 @@ def test_resolve_intel_force_success() -> None:
     assert res.vendor_id == VENDOR_ID_INTEL
     assert res.qsv_available is True
     assert res.hevc_qsv is True
+    assert res.av1_qsv is True
+    assert res.selected_codec == "hevc"
+    assert res.selected_encoder == "hevc_qsv"
     assert res.encode_path == "QSV-HEVC"
     joined = "\n".join(log_lines)
     assert "[GPU] Requested backend: INTEL_FORCE" in joined
@@ -100,6 +103,43 @@ def test_resolve_intel_force_success() -> None:
     assert "[INTEL] Selected adapter: Intel UHD Graphics" in joined
     assert "[NVIDIA] Adapter ignored: INTEL_FORCE active" in joined
     assert "[INTEL] INTEL_CROSS_GPU_FALLBACK: DISABLED" in joined
+
+
+def test_resolve_intel_force_hevc_unavailable_av1_available_selects_av1() -> None:
+    """HEVC unavailable + AV1 available -> selects AV1 QSV without fallback."""
+    log_lines: list[str] = []
+    res = resolve_intel_force(
+        adapters=[_INTEL_A],
+        qsv_codecs_usable={"hevc_qsv": False, "av1_qsv": True, "h264_qsv": False},
+        ffmpeg_qsv_info={"ffmpeg_has_qsv": True, "hevc_qsv": True, "av1_qsv": True, "h264_qsv": False},
+        log=log_lines.append,
+    )
+    assert res.adapter_found is True
+    assert res.qsv_available is True
+    assert res.hevc_qsv_usable is False
+    assert res.av1_qsv_usable is True
+    assert res.selected_codec == "av1"
+    assert res.selected_encoder == "av1_qsv"
+    assert res.encode_path == "QSV-AV1"
+    joined = "\n".join(log_lines)
+    assert "[INTEL] INTEL_SELECTED_CODEC: AV1" in joined
+    assert "[INTEL] INTEL_SELECTED_ENCODER: av1_qsv" in joined
+    assert "[INTEL] INTEL_ENCODE_PATH: QSV-AV1" in joined
+    assert "[INTEL] INTEL_CROSS_GPU_FALLBACK: DISABLED" in joined
+
+
+def test_resolve_intel_force_hevc_and_av1_unavailable_raises() -> None:
+    """HEVC and AV1 unavailable -> raises IntelBackendError loudly."""
+    log_lines: list[str] = []
+    with pytest.raises(IntelBackendError) as exc:
+        resolve_intel_force(
+            adapters=[_INTEL_A],
+            qsv_codecs_usable={"hevc_qsv": False, "av1_qsv": False, "h264_qsv": False},
+            ffmpeg_qsv_info={"ffmpeg_has_qsv": True, "hevc_qsv": True, "av1_qsv": True, "h264_qsv": False},
+            log=log_lines.append,
+        )
+    assert "INTEL_FORCE_FAILED" in str(exc.value)
+    assert "cross-GPU fallback disabled" in str(exc.value)
 
 
 def test_resolve_intel_force_no_intel_adapter_raises() -> None:
