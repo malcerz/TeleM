@@ -110,10 +110,15 @@ class RenderMixin:
             render_w, render_h = src_w, src_h
 
         layout = dict(self.layout, cut_regions=list(self._cut_regions))
-        records = ensure_records_list(load_json_with_fallback(meta))
+        records = []
+        if meta and meta.exists() and not getattr(self.telemetry, "speed_samples", None):
+            try:
+                records = ensure_records_list(load_json_with_fallback(meta))
+            except Exception:
+                records = []
 
         # Odczytaj rotację z metadanych (tak samo jak w export_controller)
-        rotation_degrees = get_rotation_from_metadata(records)
+        rotation_degrees = get_rotation_from_metadata(records) if records else (getattr(self.telemetry, "rotation_degrees", 0) or 0)
         container_rotation = get_container_rotation(ffprobe_exe, self.video_path)
         if container_rotation != 0:
             effective_rotation = container_rotation

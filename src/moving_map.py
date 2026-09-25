@@ -19,6 +19,7 @@ import sqlite3
 import threading
 import time
 import urllib.request
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -87,6 +88,77 @@ def _lat_lon_to_tile(lat: float, lon: float, zoom: int):
     return tx, ty, px, py
 
 
+def tile_range_for_center_tile(
+    cx: int, cy: int, width: int, height: int,
+) -> tuple[int, int, int, int]:
+    """Return the renderer's half-open tile range for a center tile.
+
+    This is the single tile-range contract shared by render and prefetch.
+    ``cx/cy`` are already floor-rounded Web-Mercator tile coordinates.
+    """
+    half_w = int(math.ceil(max(1, int(width)) / 2 / TILE_SIZE)) + 1
+    half_h = int(math.ceil(max(1, int(height)) / 2 / TILE_SIZE)) + 1
+    return cx - half_w, cx + half_w + 1, cy - half_h, cy + half_h + 1
+
+
+def tile_range_for_lat_lon(
+    lat: float, lon: float, zoom: int, width: int, height: int,
+) -> tuple[int, int, int, int]:
+    """Return the exact render tile range for a geographic center."""
+    tx, ty, _, _ = _lat_lon_to_tile(lat, lon, zoom)
+    return tile_range_for_center_tile(tx, ty, width, height)
+
+
+def iter_track_center_tiles(
+    gps_track: list[tuple[datetime, float, float]], zoom: int,
+) -> set[tuple[int, int]]:
+    """Return every tile cell crossed by linearly interpolated GPS samples.
+
+    ``MovingMapRenderer`` interpolates projected pixel coordinates between
+    samples.  A supercover traversal keeps prefetch coverage correct even
+    when the segment crosses a tile corner between two samples.
+    """
+    if not gps_track:
+        return set()
+    projected = []
+    for _, lat, lon in gps_track:
+        tx, ty, px, py = _lat_lon_to_tile(lat, lon, zoom)
+        projected.append((tx + px / TILE_SIZE, ty + py / TILE_SIZE))
+
+    cells: set[tuple[int, int]] = set()
+    for point in projected:
+        cells.add((math.floor(point[0]), math.floor(point[1])))
+    for (x0, y0), (x1, y1) in zip(projected, projected[1:]):
+        cx, cy = math.floor(x0), math.floor(y0)
+        end_x, end_y = math.floor(x1), math.floor(y1)
+        cells.add((cx, cy))
+        dx, dy = x1 - x0, y1 - y0
+        step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+        step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+        t_delta_x = abs(1.0 / dx) if dx else math.inf
+        t_delta_y = abs(1.0 / dy) if dy else math.inf
+        next_x = ((cx + 1) - x0) / dx if dx > 0 else (x0 - cx) / -dx if dx < 0 else math.inf
+        next_y = ((cy + 1) - y0) / dy if dy > 0 else (y0 - cy) / -dy if dy < 0 else math.inf
+        while (cx, cy) != (end_x, end_y):
+            if next_x < next_y:
+                cx += step_x
+                next_x += t_delta_x
+                cells.add((cx, cy))
+            elif next_y < next_x:
+                cy += step_y
+                next_y += t_delta_y
+                cells.add((cx, cy))
+            else:
+                # At a corner include both side cells and the diagonal cell.
+                cx += step_x
+                cells.add((cx, cy))
+                cy += step_y
+                cells.add((cx, cy))
+                next_x += t_delta_x
+                next_y += t_delta_y
+    return cells
+
+
 # ── Tile Accounting & Network Policy ─────────────────────────────────────
 
 class MapTileStats:
@@ -96,6 +168,16 @@ class MapTileStats:
     disk_hits: int = 0
     network_misses: int = 0
     network_requests: int = 0
+    tile_lookup_ms: float = 0.0
+    tile_disk_read_ms: float = 0.0
+    tile_decode_ms: float = 0.0
+    tile_download_ms: float = 0.0
+    map_assemble_ms: float = 0.0
+    render_frames: int = 0
+    frames_with_cache_miss: int = 0
+    requested_keys: set[tuple] = set()
+    frame_times_with_miss_ms = deque(maxlen=4096)
+    frame_times_without_miss_ms = deque(maxlen=4096)
     _lock = threading.Lock()
 
     @classmethod
@@ -106,9 +188,42 @@ class MapTileStats:
             cls.disk_hits = 0
             cls.network_misses = 0
             cls.network_requests = 0
+            cls.tile_lookup_ms = 0.0
+            cls.tile_disk_read_ms = 0.0
+            cls.tile_decode_ms = 0.0
+            cls.tile_download_ms = 0.0
+            cls.map_assemble_ms = 0.0
+            cls.render_frames = 0
+            cls.frames_with_cache_miss = 0
+            cls.requested_keys.clear()
+            cls.frame_times_with_miss_ms.clear()
+            cls.frame_times_without_miss_ms.clear()
 
     @classmethod
-    def get_stats(cls) -> dict[str, int]:
+    def record_timing(cls, field: str, elapsed_ms: float) -> None:
+        with cls._lock:
+            setattr(cls, field, getattr(cls, field) + float(elapsed_ms))
+
+    @classmethod
+    def record_render_frame(cls, elapsed_ms: float, cache_miss: bool) -> None:
+        with cls._lock:
+            cls.render_frames += 1
+            if cache_miss:
+                cls.frames_with_cache_miss += 1
+                cls.frame_times_with_miss_ms.append(float(elapsed_ms))
+            else:
+                cls.frame_times_without_miss_ms.append(float(elapsed_ms))
+
+    @staticmethod
+    def _p90(values) -> float:
+        if not values:
+            return 0.0
+        ordered = sorted(values)
+        index = min(len(ordered) - 1, int(math.ceil(len(ordered) * 0.90)) - 1)
+        return float(ordered[index])
+
+    @classmethod
+    def get_stats(cls) -> dict[str, int | float]:
         with cls._lock:
             return {
                 "tiles_requested": cls.tiles_requested,
@@ -116,6 +231,19 @@ class MapTileStats:
                 "disk_hits": cls.disk_hits,
                 "network_misses": cls.network_misses,
                 "network_requests": cls.network_requests,
+                "map_cache_hits": cls.memory_hits + cls.disk_hits,
+                "map_cache_misses": cls.network_misses,
+                "network_fetches": cls.network_requests,
+                "render_unique_tiles": len(cls.requested_keys),
+                "tile_lookup_ms": round(cls.tile_lookup_ms, 3),
+                "tile_disk_read_ms": round(cls.tile_disk_read_ms, 3),
+                "tile_decode_ms": round(cls.tile_decode_ms, 3),
+                "tile_download_ms": round(cls.tile_download_ms, 3),
+                "map_assemble_ms": round(cls.map_assemble_ms, 3),
+                "render_frames": cls.render_frames,
+                "frames_with_cache_miss": cls.frames_with_cache_miss,
+                "p90_frame_time_with_miss_ms": cls._p90(cls.frame_times_with_miss_ms),
+                "p90_frame_time_without_miss_ms": cls._p90(cls.frame_times_without_miss_ms),
             }
 
 
@@ -123,7 +251,7 @@ def reset_map_tile_stats() -> None:
     MapTileStats.reset()
 
 
-def get_map_tile_stats() -> dict[str, int]:
+def get_map_tile_stats() -> dict[str, int | float]:
     return MapTileStats.get_stats()
 
 
@@ -176,29 +304,48 @@ class TileCache:
             return False
 
     def get(self, z, x, y, style) -> Image.Image | None:
+        lookup_started = time.perf_counter()
         key = (z, x, y, style)
         with MapTileStats._lock:
             MapTileStats.tiles_requested += 1
+            MapTileStats.requested_keys.add(key)
         with self._lock:
             if key in self._mem:
                 self._mem_order.remove(key); self._mem_order.append(key)
                 with MapTileStats._lock:
                     MapTileStats.memory_hits += 1
+                MapTileStats.record_timing(
+                    "tile_lookup_ms", (time.perf_counter() - lookup_started) * 1000.0,
+                )
                 return self._mem[key].copy()
+        disk_started = time.perf_counter()
         try:
             with sqlite3.connect(str(self._db)) as c:
                 r = c.execute("SELECT data FROM tiles WHERE z=? AND x=? "
                               "AND y=? AND style=?", key).fetchone()
+            MapTileStats.record_timing(
+                "tile_disk_read_ms", (time.perf_counter() - disk_started) * 1000.0,
+            )
             if r:
+                decode_started = time.perf_counter()
                 img = Image.open(io.BytesIO(r[0])).convert("RGBA")
+                MapTileStats.record_timing(
+                    "tile_decode_ms", (time.perf_counter() - decode_started) * 1000.0,
+                )
                 self._put_mem(key, img)
                 with MapTileStats._lock:
                     MapTileStats.disk_hits += 1
+                MapTileStats.record_timing(
+                    "tile_lookup_ms", (time.perf_counter() - lookup_started) * 1000.0,
+                )
                 return img.copy()
         except Exception:
             pass
         with MapTileStats._lock:
             MapTileStats.network_misses += 1
+        MapTileStats.record_timing(
+            "tile_lookup_ms", (time.perf_counter() - lookup_started) * 1000.0,
+        )
         return None
 
     def put(self, z, x, y, style, data: bytes):
@@ -234,6 +381,7 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
     with MapTileStats._lock:
         MapTileStats.network_requests += 1
     url = MAP_STYLES.get(style, MAP_STYLES[DEFAULT_STYLE]).format(z=z, x=x, y=y)
+    download_started = time.perf_counter()
     with _fetch_lock:
         e = time.time() - _last_fetch
         if e < REQUEST_DELAY: time.sleep(REQUEST_DELAY - e)
@@ -242,7 +390,11 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
             with urllib.request.urlopen(req, timeout=2) as r:
                 data = r.read()
         except Exception: return None
-        finally: _last_fetch = time.time()
+        finally:
+            MapTileStats.record_timing(
+                "tile_download_ms", (time.perf_counter() - download_started) * 1000.0,
+            )
+            _last_fetch = time.time()
     return data
 
 
@@ -486,10 +638,10 @@ class MovingMapRenderer:
             
         needed: set[tuple] = set()
         for z in zooms:
-            # We must recalculate tile coords for each zoom level!
-            for _, lat, lon in self._gps:
-                from src.moving_map import _lat_lon_to_tile
-                tx, ty, _, _ = _lat_lon_to_tile(lat, lon, z)
+            # Recalculate projected tile cells for each zoom.  Use the same
+            # center-cell traversal as render; per-point squares miss diagonal
+            # combinations created by interpolated x/y positions.
+            for tx, ty in iter_track_center_tiles(self._gps, z):
                 for dx in range(-margin, margin + 1):
                     for dy in range(-margin, margin + 1):
                         needed.add((z, tx + dx, ty + dy))
@@ -524,7 +676,7 @@ class MovingMapRenderer:
     def missing_tiles(self) -> int:
         """Return # of tiles not yet cached."""
         needed: set[tuple] = set()
-        for tx, ty in self._tiles:
+        for tx, ty in iter_track_center_tiles(self._gps, self._zoom):
             for dx in range(-2, 3):
                 for dy in range(-2, 3):
                     needed.add((self._zoom, tx + dx, ty + dy))
@@ -547,15 +699,14 @@ class MovingMapRenderer:
         """
         # Interpolowana pozycja → płynny ruch co klatkę (nie skok co ~1 s)
         profiler = get_overlay_profiler()
+        frame_started = time.perf_counter()
+        frame_cache_miss = False
         position_started = time.perf_counter()
         cpx, cpy = self._interp_pos(ts)
         cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
 
-        # Tile range covering output size
-        half_w = int(math.ceil(w / 2 / TILE_SIZE)) + 1
-        half_h = int(math.ceil(h / 2 / TILE_SIZE)) + 1
-        tx1, tx2 = cx - half_w, cx + half_w + 1
-        ty1, ty2 = cy - half_h, cy + half_h + 1
+        # Tile range covering output size.  Keep this in sync with prefetch.
+        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(cx, cy, w, h)
         profiler.record(
             "map.position_lookup",
             (time.perf_counter() - position_started) * 1000.0,
@@ -576,18 +727,22 @@ class MovingMapRenderer:
             img = Image.new("RGBA", (tw, th), (30, 30, 30, 255))
 
             # Fetch & paste tiles
+            assemble_started = None
             for ty in range(ty1, ty2):
                 for tx in range(tx1, tx2):
                     tile = self._cache.get(self._zoom, tx, ty, self._style)
-                    if tile is None and download_missing:
-                        d = _download_tile_raw(self._zoom, tx, ty, self._style)
-                        if d:
-                            self._cache.put(self._zoom, tx, ty, self._style, d)
-                            tile = self._cache.get(self._zoom, tx, ty, self._style)
+                    if tile is None:
+                        frame_cache_miss = True
+                        if download_missing:
+                            d = _download_tile_raw(self._zoom, tx, ty, self._style)
+                            if d:
+                                self._cache.put(self._zoom, tx, ty, self._style, d)
+                                tile = self._cache.get(self._zoom, tx, ty, self._style)
                     if tile:
                         dx, dy = (tx - tx1) * TILE_SIZE, (ty - ty1) * TILE_SIZE
                         img.paste(tile, (dx, dy))
 
+            assemble_started = time.perf_counter()
             if draw_track and len(self._gps) >= 2:
                 route_started = time.perf_counter()
                 ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
@@ -626,6 +781,11 @@ class MovingMapRenderer:
                     (time.perf_counter() - route_started) * 1000.0,
                 )
 
+            MapTileStats.record_timing(
+                "map_assemble_ms",
+                (time.perf_counter() - assemble_started) * 1000.0
+                if assemble_started is not None else 0.0,
+            )
             self._grid_cache_key = grid_key
             self._grid_cache_img = img
         profiler.record(
@@ -655,11 +815,10 @@ class MovingMapRenderer:
             mx, my = scx - x1, scy - y1
             r = self._mkr_radius
             d = ImageDraw.Draw(cropped)
-            if self._mkr_style == "directional" and heading is not None:
+            if self._mkr_style == "directional":
                 # North-up: canonical heading points clockwise from screen-up.
-                # Track-up calls this renderer with heading=None and draws an
-                # upright marker after map rotation below.
-                angle = float(heading)
+                # If heading is not provided, default to screen-up (0 deg).
+                angle = float(heading) if heading is not None else 0.0
                 a = math.radians(angle)
                 tip = (mx + math.sin(a) * r * 1.8, my - math.cos(a) * r * 1.8)
                 left = (mx + math.sin(a + 2.45) * r, my - math.cos(a + 2.45) * r)
@@ -681,10 +840,18 @@ class MovingMapRenderer:
                 "map.crop_resize",
                 (time.perf_counter() - crop_started) * 1000.0,
             )
+            MapTileStats.record_render_frame(
+                (time.perf_counter() - frame_started) * 1000.0,
+                frame_cache_miss,
+            )
             return pad
         profiler.record(
             "map.crop_resize",
             (time.perf_counter() - crop_started) * 1000.0,
+        )
+        MapTileStats.record_render_frame(
+            (time.perf_counter() - frame_started) * 1000.0,
+            frame_cache_miss,
         )
         return cropped
 
@@ -730,15 +897,18 @@ class MovingMapRenderer:
             download_missing=download_missing,
             heading=None,
         )
-        resampling = getattr(Image, "Resampling", Image)
-        rotated = north_up.rotate(
-            angle,
-            resample=resampling.BICUBIC,
-            expand=False,
-            fillcolor=(30, 30, 30, 255),
-        )
+        if os.environ.get("TELEM_MAP_BYPASS_ROTATE") == "1":
+            rotated = north_up.copy()
+        else:
+            resampling = getattr(Image, "Resampling", Image)
+            rotated = north_up.rotate(
+                angle,
+                resample=resampling.BICUBIC,
+                expand=False,
+                fillcolor=(30, 30, 30, 255),
+            )
         # Repaint the marker in output space so it remains directional-up.
-        if draw_marker and self._mkr_style == "directional" and heading is not None:
+        if draw_marker and self._mkr_style == "directional":
             d = ImageDraw.Draw(rotated)
             c = working / 2.0
             r = self._mkr_radius
@@ -788,17 +958,16 @@ class MovingMapRenderer:
         cpx, cpy = self._interp_pos(ts)
         cx = int(cpx // TILE_SIZE)
         cy = int(cpy // TILE_SIZE)
-        half_w = int(math.ceil(int(w) / 2 / TILE_SIZE)) + 1
-        half_h = int(math.ceil(int(h) / 2 / TILE_SIZE)) + 1
-        return cx, cy, half_w, half_h
+        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(cx, cy, w, h)
+        return tx1, tx2, ty1, ty2
 
     def viewport_tile_coverage(self, ts: float, w: int, h: int) -> float:
         """Fraction of the current-viewport tiles present in the cache (0..1)."""
-        cx, cy, half_w, half_h = self._viewport_range(ts, w, h)
+        tx1, tx2, ty1, ty2 = self._viewport_range(ts, w, h)
         total = 0
         cached = 0
-        for ty in range(cy - half_h, cy + half_h + 1):
-            for tx in range(cx - half_w, cx + half_w + 1):
+        for ty in range(ty1, ty2):
+            for tx in range(tx1, tx2):
                 total += 1
                 if self._cache.get(self._zoom, tx, ty, self._style) is not None:
                     cached += 1
@@ -812,11 +981,11 @@ class MovingMapRenderer:
         max_tiles: int = 25,
     ) -> int:
         """Download the current-viewport detail tiles (worker thread, bounded)."""
-        cx, cy, half_w, half_h = self._viewport_range(ts, w, h)
+        tx1, tx2, ty1, ty2 = self._viewport_range(ts, w, h)
         needed = [
             (self._zoom, tx, ty)
-            for ty in range(cy - half_h, cy + half_h + 1)
-            for tx in range(cx - half_w, cx + half_w + 1)
+            for ty in range(ty1, ty2)
+            for tx in range(tx1, tx2)
         ]
         if len(needed) > max_tiles:
             needed = needed[:max_tiles]

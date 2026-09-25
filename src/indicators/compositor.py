@@ -20,13 +20,20 @@ except ImportError:
 from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator
-from src.indicators.helpers import indicator_font_path, load_font, s, parse_hex_color
+from src.indicators.helpers import (
+    indicator_font_path, load_font, s, parse_hex_color,
+    resolve_indicator_font_path,
+)
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_display import render_time_display
 from src.indicators.profiling import (
     get_overlay_profiler,
     indicator_scope,
     record_production_accounting,
+)
+from src.telemetry_resolver import (
+    distance_m_to_km, resolve_presentation_precision, presentation_debug,
+    presentation_default_precision,
 )
 
 
@@ -67,14 +74,109 @@ def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
     return effective
 
 
+from datetime import date, datetime, timedelta
+from pathlib import Path, PurePath
+
+
+def sanitize_layout_for_json(obj: Any, path: str = "root") -> Any:
+    """Recursively convert runtime/non-JSON objects to strict JSON primitives.
+
+    - None -> None
+    - bool -> bool
+    - str, int, float -> primitive values
+    - datetime / date -> ISO 8601 formatted string
+    - timedelta -> float seconds
+    - Path / os.PathLike -> str
+    - numpy scalars/arrays -> Python int/float/bool/list
+    - bytes -> str
+    - set / frozenset -> deterministic sorted list
+    - tuple / list -> list
+    - Qt types (QDate, QTime, QDateTime, QColor, QUrl, QPoint, QSize, QRect) -> primitives
+    - dict -> dict with string keys and sanitized values
+
+    Raises TypeError with exact structure path if an unsupported runtime type is encountered.
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, (str, int, float)):
+        return obj
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, timedelta):
+        return obj.total_seconds()
+    if isinstance(obj, (Path, PurePath, os.PathLike)):
+        return str(obj)
+    try:
+        import numpy as np
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return [sanitize_layout_for_json(x, f"{path}[{i}]") for i, x in enumerate(obj.tolist())]
+    except ImportError:
+        pass
+    type_name = type(obj).__name__
+    if type_name in ("QDate", "QTime", "QDateTime") and hasattr(obj, "toString"):
+        return str(obj.toString("yyyy-MM-ddTHH:mm:ss.zzz"))
+    if type_name == "QColor" and hasattr(obj, "name"):
+        return str(obj.name())
+    if type_name == "QUrl" and hasattr(obj, "toString"):
+        return str(obj.toString())
+    if type_name in ("QPoint", "QPointF") and hasattr(obj, "x") and hasattr(obj, "y"):
+        return [sanitize_layout_for_json(obj.x(), f"{path}[0]"), sanitize_layout_for_json(obj.y(), f"{path}[1]")]
+    if type_name in ("QSize", "QSizeF") and hasattr(obj, "width") and hasattr(obj, "height"):
+        return [sanitize_layout_for_json(obj.width(), f"{path}[0]"), sanitize_layout_for_json(obj.height(), f"{path}[1]")]
+    if type_name in ("QRect", "QRectF") and hasattr(obj, "x") and hasattr(obj, "width"):
+        return [
+            sanitize_layout_for_json(obj.x(), f"{path}[0]"),
+            sanitize_layout_for_json(obj.y(), f"{path}[1]"),
+            sanitize_layout_for_json(obj.width(), f"{path}[2]"),
+            sanitize_layout_for_json(obj.height(), f"{path}[3]"),
+        ]
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, (list, tuple)):
+        return [sanitize_layout_for_json(x, f"{path}[{idx}]") for idx, x in enumerate(obj)]
+    if isinstance(obj, (set, frozenset)):
+        def _set_sort_key(item: Any) -> tuple[str, str]:
+            return (type(item).__name__, str(item))
+        try:
+            sorted_items = sorted(obj)
+        except TypeError:
+            sorted_items = sorted(obj, key=_set_sort_key)
+        return [sanitize_layout_for_json(x, f"{path}[{idx}]") for idx, x in enumerate(sorted_items)]
+    if isinstance(obj, dict):
+        return {str(k): sanitize_layout_for_json(v, f"{path}.{k}") for k, v in obj.items()}
+
+    safe_repr = repr(obj)
+    if len(safe_repr) > 80:
+        safe_repr = safe_repr[:77] + "..."
+    raise TypeError(
+        f"Unsupported layout JSON type at {path}: {type(obj).__name__} (value: {safe_repr})"
+    )
+
+
 def normalize_layout_for_save(layout: dict[str, Any]) -> dict[str, Any]:
-    """Persist modern orientation fields instead of the legacy rotation hack."""
+    """Persist modern orientation fields and guarantee strict JSON serializability."""
     saved = copy.deepcopy(layout)
+    # Persist canonical indicator presentation defaults as well.  This keeps
+    # old layouts (which may contain only ``decimal_places``) from reloading
+    # ISO or GoPro Battery with the generic one-decimal default.
+    try:
+        from src.gui.qt.models import normalize_indicator_decimal_defaults
+        normalize_indicator_decimal_defaults(saved)
+    except Exception:
+        pass
     for cfg in saved.get("indicators", {}).values():
         if isinstance(cfg, dict) and _is_legacy_vertical_ruler(cfg):
             cfg["orientation"] = "vertical"
             cfg["rotation"] = 0
-    return saved
+    return sanitize_layout_for_json(saved)
 
 def _get_reusable_canvas(
     canvas_w: int, canvas_h: int, canvas_type: str = "below"
@@ -153,6 +255,9 @@ def compose_overlay(
     map_heading: Optional[float] = None,
     async_map: bool = False,
     _production_accounting_role: Optional[str] = None,
+    auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
+    breakdown: Optional[dict[str, float]] = None,
+    rot180: bool = False,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
 
@@ -167,7 +272,9 @@ def compose_overlay(
     _above_start = time.perf_counter() if _audit_above else None
     widget_fonts: dict[str, str] = {}
 
-    def _font_for(key: str) -> str:
+    def _font_for(key: str, custom_font: Any = None) -> str:
+        if custom_font:
+            return resolve_indicator_font_path(custom_font, font_path)
         if key not in widget_fonts:
             widget_fonts[key] = indicator_font_path(layout, key, font_path)
         return widget_fonts[key]
@@ -199,6 +306,8 @@ def compose_overlay(
                     "above.regional_clear",
                     (time.perf_counter() - clear_started) * 1000.0,
                 )
+            if breakdown is not None:
+                breakdown["regional_clear_ms"] = (time.perf_counter() - clear_started) * 1000.0
         elif not canvas_state.get("is_clean", False):
             clear_started = time.perf_counter()
             img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
@@ -213,8 +322,13 @@ def compose_overlay(
                     "above.regional_clear",
                     (time.perf_counter() - clear_started) * 1000.0,
                 )
+            if breakdown is not None:
+                breakdown["regional_clear_ms"] = (time.perf_counter() - clear_started) * 1000.0
     else:
+        t_alloc0 = time.perf_counter_ns() if breakdown is not None else 0
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        if breakdown is not None:
+            breakdown["canvas_alloc_ms"] = (time.perf_counter_ns() - t_alloc0) / 1_000_000.0
         prev_bboxes = None
         canvas_state = None
 
@@ -236,24 +350,39 @@ def compose_overlay(
         render_keys is None or "time_display" in render_keys
     ):
         with indicator_scope("time_display"):
+            t_td0 = time.perf_counter_ns() if breakdown is not None else 0
             with profiler.measure("indicator.time_display.render"):
                 td, tdx, tdy = render_time_display(
                     canvas_w, canvas_h, layout, _font_for("time_display"),
                     date_text, time_text, elapsed_seconds, avg_speed_kmh,
                 )
+            if breakdown is not None:
+                td_r_ms = (time.perf_counter_ns() - t_td0) / 1_000_000.0
+                breakdown["time_display_render_ms"] = td_r_ms
+                breakdown["time_display.render"] = td_r_ms
         if td:
             td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
             cx = tdx + td.width // 2
             cy = tdy + td.height // 2
             with indicator_scope("time_display"):
+                t_td_paste0 = time.perf_counter_ns() if breakdown is not None else 0
                 with profiler.measure("indicator.time_display.paste_composite"):
-                    rotated_paste(
+                    box = rotated_paste(
                         img, td, cx, cy, td_rotation,
                         prior_bboxes=_paste_prior_bboxes(), cache_key="time_display",
                         tight_bboxes=_tight_bboxes, tight_key="time_display",
                         coordinate_offset=(origin_x, origin_y),
+                        canvas_rot180=rot180,
+                        canvas_size=(canvas_w, canvas_h),
                     )
-            if td_rotation in (90, 270):
+                if breakdown is not None:
+                    td_p_ms = (time.perf_counter_ns() - t_td_paste0) / 1_000_000.0
+                    breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + td_p_ms
+                    breakdown["time_display.paste"] = td_p_ms
+                    breakdown["time_display.total"] = breakdown.get("time_display.render", 0.0) + td_p_ms
+            if rot180:
+                _bboxes["time_display"] = box
+            elif td_rotation in (90, 270):
                 _bboxes["time_display"] = (
                     int(cx - td.height // 2),
                     int(cy - td.width // 2),
@@ -279,8 +408,8 @@ def compose_overlay(
     known_vals: dict[str, tuple[float, str, str]] = {
         "speed_visual": (speed_value, "km/h", ""),
         "speed_text": (speed_value, "km/h", ""),
-        "dist_visual": (None if distance_m is None else distance_m / 1000.0, "km", ""),
-        "dist_text": (None if distance_m is None else distance_m / 1000.0, "km", ""),
+        "dist_visual": (distance_m_to_km(distance_m), "km", ""),
+        "dist_text": (distance_m_to_km(distance_m), "km", ""),
         "alt_visual": (alt_value, "m", "Alt"),
         "alt_text": (alt_value, "m", "Alt"),
         "iso_text": (iso_value, "ISO", "ISO"),
@@ -307,7 +436,7 @@ def compose_overlay(
         if raw is None:
             return raw
         if "distance" in k or "dist_" in k:
-            return raw / 1000.0
+            return distance_m_to_km(raw)
         return raw
 
     if extra_indicators:
@@ -339,7 +468,7 @@ def compose_overlay(
             continue
         if not ind_cfg or not ind_cfg.get("enabled", True):
             continue
-        indicator_started = time.perf_counter()
+        indicator_started_ns = time.perf_counter_ns()
 
         val_entry = known_vals.get(key)
         if val_entry is None or not isinstance(val_entry, (tuple, list)):
@@ -374,17 +503,32 @@ def compose_overlay(
             current_cfg.get("form") in ("bar", "gauge", "segment_bar")
             and (current_cfg.get("unit") == "km" or "distance" in key or "dist_" in key)
         )
-        if (
+        auto_scale_active = bool(
+            current_cfg.get("auto_scale")
+            or current_cfg.get("auto_min")
+            or current_cfg.get("auto_max")
+        )
+        is_range_form = current_cfg.get("form") in ("bar", "ruler", "gauge", "segment_bar", "chart")
+        if auto_scale_active and is_range_form and auto_ranges and key in auto_ranges:
+            amin, amax = auto_ranges[key]
+            if current_cfg.get("auto_scale") or current_cfg.get("auto_min"):
+                current_cfg["min_val"] = amin
+            if current_cfg.get("auto_scale") or current_cfg.get("auto_max"):
+                current_cfg["max_val"] = max(current_cfg.get("min_val", amin) + 0.001, amax)
+        elif (
             is_dist_key
             and current_cfg.get("auto_scale", False)
             and max_distance_m is not None
         ):
-            current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, max_distance_m / 1000.0)
+            current_cfg["max_val"] = max(
+                current_cfg.get("min_val", 0) + 0.001,
+                distance_m_to_km(max_distance_m),
+            )
         elif (
             key in ("speed_visual", "speed_text")
             and current_cfg.get("auto_scale", False)
             and max_speed_kmh is not None
-            and current_cfg.get("form") in ("bar", "gauge", "segment_bar")
+            and is_range_form
         ):
             rounded = math.ceil(max_speed_kmh / 10.0) * 10
             current_cfg["max_val"] = max(current_cfg.get("min_val", 0) + 0.001, rounded)
@@ -402,13 +546,21 @@ def compose_overlay(
         if not show_value:
             fv = ""
         else:
-            if "voltage" in key or unit == "V":
+            if key.startswith('fit_'):
+                default_decimals = presentation_default_precision(key, current_cfg)
+            elif "voltage" in key or unit == "V":
                 default_decimals = 2
-            elif key in ("iso_text", "exposure_text", "temp_text", "atemp_text", "power_text", "hr_text", "cad_text", "battery_text", "compass") or key.startswith("fit_"):
+            elif (
+                key in ("iso_text", "exposure_text", "power_text", "hr_text", "cad_text", "battery_text", "compass")
+                or key.startswith("fit_")
+                or "solar" in key.lower()
+                or "battery" in key.lower()
+                or unit == "%"
+            ):
                 default_decimals = 0
             else:
                 default_decimals = 1
-            decimals = int(current_cfg.get("decimals", default_decimals))
+            decimals = resolve_presentation_precision(current_cfg, default_decimals, field=key)
             show_units = current_cfg.get("show_units", True)
 
             if key == "compass":
@@ -425,7 +577,11 @@ def compose_overlay(
                 suffix = "%" if show_units else ""
                 val_str = f"--{suffix}" if slope_missing else f"{float(value):+.{decimals}f}{suffix}"
             elif key == "exposure_text":
-                val_str = f"1/{int(value)}" if value and int(value) > 0 else ""
+                try:
+                    exp_val = int(round(float(value)))
+                    val_str = f"1/{exp_val}" if exp_val > 0 else ""
+                except (TypeError, ValueError):
+                    val_str = ""
             elif value is None:
                 val_str = "--"
             else:
@@ -442,7 +598,7 @@ def compose_overlay(
                     fv = f"{val_str} BPM"
                 elif key == "cad_text":
                     fv = f"{val_str} RPM"
-                elif key == "battery_text":
+                elif key == "battery_text" or unit == "%":
                     fv = f"{val_str}%"
                 elif key == "iso_text":
                     fv = val_str
@@ -451,12 +607,15 @@ def compose_overlay(
             else:
                 fv = val_str
 
+        presentation_debug('compositor', indicator=key, target_dt=target_dt,
+                           known_vals=value, formatted_val=fv)
         chart_vals = chart_data.get(key) if chart_data else None
 
         global_ss = 1 if fast_preview else layout.get("global", {}).get("antialiasing", 1)
         ss = 1 if fast_preview else current_cfg.get("supersample", global_ss)
 
         with indicator_scope(key):
+            t_ind0 = time.perf_counter_ns() if breakdown is not None else 0
             with profiler.measure(f"indicator.{key}.render"):
                 res, rx, ry, extra = render_value_indicator(
                     canvas_w, canvas_h, layout, _font_for(key),
@@ -473,6 +632,12 @@ def compose_overlay(
                     map_heading=map_heading,
                     async_map=async_map,
                 )
+            if breakdown is not None:
+                dt = (time.perf_counter_ns() - t_ind0) / 1_000_000.0
+                form = current_cfg.get("form", "text")
+                breakdown[f"indicator_{form}_ms"] = breakdown.get(f"indicator_{form}_ms", 0.0) + dt
+                breakdown[f"widget_{key}_ms"] = dt
+                breakdown[f"{key}.render"] = dt
 
         if res:
             rotation = int(current_cfg.get("rotation", 0))
@@ -555,8 +720,9 @@ def compose_overlay(
                     }
             else:
                 with indicator_scope(key):
+                    t_rp0 = time.perf_counter_ns() if breakdown is not None else 0
                     with profiler.measure(f"indicator.{key}.paste_composite"):
-                        rotated_paste(
+                        box = rotated_paste(
                             img, res, center_x, center_y, rotation,
                             prior_bboxes=_paste_prior_bboxes(), cache_key=key,
                             destination_proven_empty=(
@@ -565,9 +731,16 @@ def compose_overlay(
                             ),
                             tight_bboxes=_tight_bboxes, tight_key=key,
                             coordinate_offset=(origin_x, origin_y),
+                            canvas_rot180=rot180,
+                            canvas_size=(canvas_w, canvas_h),
                         )
+                    if breakdown is not None:
+                        p_dt = (time.perf_counter_ns() - t_rp0) / 1_000_000.0
+                        breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + p_dt
+                        breakdown[f"widget_{key}_paste_ms"] = p_dt
+                        breakdown[f"{key}.paste"] = p_dt
 
-                _bboxes[key] = widget_bbox
+                _bboxes[key] = box if rot180 else widget_bbox
 
                 # Extra text annotations / range labels
                 annotation_started = time.perf_counter()
@@ -599,6 +772,16 @@ def compose_overlay(
                             stroke_width=outline,
                             stroke_fill=(0, 0, 0, 255),
                         )
+                        # ETAP 10R FIX: extend tight and loose bboxes to include standalone text
+                        actual_bbox = draw.textbbox((text_x, text_y), text, font=font, stroke_width=outline)
+                        bx, by = actual_bbox[0] + origin_x - 2, actual_bbox[1] + origin_y - 2
+                        bw, bh = actual_bbox[2] - actual_bbox[0] + 4, actual_bbox[3] - actual_bbox[1] + 4
+                        if _bboxes is not None and key in _bboxes:
+                            r = _bboxes[key]
+                            _bboxes[key] = (min(r[0], bx), min(r[1], by), max(r[0] + r[2], bx + bw) - min(r[0], bx), max(r[1] + r[3], by + bh) - min(r[1], by))
+                        if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                            r = _tight_bboxes[key]["rect"]
+                            _tight_bboxes[key]["rect"] = (min(r[0], bx), min(r[1], by), max(r[0] + r[2], bx + bw) - min(r[0], bx), max(r[1] + r[3], by + bh) - min(r[1], by))
 
                     if extra and extra.get("show_range_labels"):
                         left_text = extra.get("left_text", f"{cfg.get('min_val', 0):.0f}")
@@ -621,67 +804,122 @@ def compose_overlay(
                             left_x = int(center_x - res.height // 2 + extra["x1"] - left_w - 8 + rox)
                             left_y = int(center_y + res.width // 2 - left_h / 2 + roy)
                             draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                            abbox = draw.textbbox((left_x - origin_x, left_y - origin_y), left_text, font=font, stroke_width=outline)
+                            tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                            tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                            if _bboxes is not None and key in _bboxes:
+                                r = _bboxes[key]
+                                _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                            if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                r = _tight_bboxes[key]["rect"]
+                                _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+
                             if right_text:
                                 right_x = int(center_x - res.height // 2 + extra["x2"] + rox)
                                 right_y = int(center_y - res.width // 2 - right_h / 2 + roy - rspreadx)
                                 draw.text((right_x - origin_x, right_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                                abbox = draw.textbbox((right_x - origin_x, right_y - origin_y), right_text, font=font, stroke_width=outline)
+                                tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                                tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                                if _bboxes is not None and key in _bboxes:
+                                    r = _bboxes[key]
+                                    _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                                if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                    r = _tight_bboxes[key]["rect"]
+                                    _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
                         else:
                             left_y = int(center_y - res.height // 2 + extra["by"] + 4 + roy)
                             left_x = int(center_x - res.width // 2 + extra["x1"] + rox)
                             draw.text((left_x - origin_x, left_y - origin_y), left_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                            abbox = draw.textbbox((left_x - origin_x, left_y - origin_y), left_text, font=font, stroke_width=outline)
+                            tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                            tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                            if _bboxes is not None and key in _bboxes:
+                                r = _bboxes[key]
+                                _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                            if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                r = _tight_bboxes[key]["rect"]
+                                _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+
                             if right_text:
                                 right_x = int(center_x - res.width // 2 + extra["x2"] - right_w + rox + rspreadx)
                                 draw.text((right_x - origin_x, left_y - origin_y), right_text, font=font, fill=(220, 220, 220, 255), stroke_width=outline, stroke_fill=(0, 0, 0, 255))
+
+                                abbox = draw.textbbox((right_x - origin_x, left_y - origin_y), right_text, font=font, stroke_width=outline)
+                                tx, ty = abbox[0] + origin_x - 2, abbox[1] + origin_y - 2
+                                tw, th = abbox[2] - abbox[0] + 4, abbox[3] - abbox[1] + 4
+                                if _bboxes is not None and key in _bboxes:
+                                    r = _bboxes[key]
+                                    _bboxes[key] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
+                                if _tight_bboxes is not None and key in _tight_bboxes and _tight_bboxes[key].get("rect") is not None:
+                                    r = _tight_bboxes[key]["rect"]
+                                    _tight_bboxes[key]["rect"] = (min(r[0], tx), min(r[1], ty), max(r[0] + r[2], tx + tw) - min(r[0], tx), max(r[1] + r[3], ty + th) - min(r[1], ty))
                 profiler.record(
                     f"indicator.{key}.annotations",
                     (time.perf_counter() - annotation_started) * 1000.0,
                 )
         profiler.record(
             f"indicator.{key}.total",
-            (time.perf_counter() - indicator_started) * 1000.0,
+            (time.perf_counter_ns() - indicator_started_ns) / 1_000_000.0,
         )
-        _widget_ms = (time.perf_counter() - indicator_started) * 1000.0
+        _widget_ms = (time.perf_counter_ns() - indicator_started_ns) / 1_000_000.0
         if _production_accounting_role in {"above", "below"}:
             record_production_accounting(
                 f"{_production_accounting_role}.widget.{key}", _widget_ms
             )
+        if breakdown is not None:
+            breakdown[f"{key}.total"] = _widget_ms
+            if f"{key}.paste" not in breakdown:
+                breakdown[f"{key}.paste"] = 0.0
 
     # Custom texts – use resolution-scaled outline
     ct_outline = max(0, int(round(
         int(layout.get("global", {}).get("text_outline", 3)) * min(canvas_w, canvas_h) / 1000
     )))
-    custom_started = time.perf_counter()
+    custom_started_ns = time.perf_counter_ns()
     for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
         if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
             continue
         ct_res, ctx, cty = render_custom_text(
-            canvas_w, canvas_h, _font_for("custom_text"), ct_cfg, stroke_width=ct_outline
+            canvas_w, canvas_h, _font_for("custom_text", ct_cfg.get("font")), ct_cfg, stroke_width=ct_outline
         )
         if ct_res:
             ct_rotation = int(ct_cfg.get("rotation", 0))
-            rotated_paste(
+            box = rotated_paste(
                 img, ct_res, ctx - origin_x, cty - origin_y, ct_rotation,
                 prior_bboxes=_paste_prior_bboxes(), cache_key="custom_text",
                 tight_bboxes=_tight_bboxes,
                 tight_key=f"custom_text:{custom_index}",
+                canvas_rot180=rot180,
+                canvas_size=(canvas_w, canvas_h),
             )
-            # Keep the same conservative rendered geometry used by regular
-            # indicators.  This lets CPU_ABOVE_MAP reuse actual custom-text
-            # output without scanning the full canvas for alpha.
-            if ct_rotation in (90, 270):
+            if rot180:
+                _bboxes[f"custom_text:{custom_index}"] = box
+            elif ct_rotation in (90, 270):
                 ct_w, ct_h = ct_res.height, ct_res.width
+                _bboxes[f"custom_text:{custom_index}"] = (
+                    int(round(ctx - ct_w / 2)),
+                    int(round(cty - ct_h / 2)),
+                    int(ct_w),
+                    int(ct_h),
+                )
             else:
                 ct_w, ct_h = ct_res.width, ct_res.height
-            _bboxes[f"custom_text:{custom_index}"] = (
-                int(round(ctx - ct_w / 2)),
-                int(round(cty - ct_h / 2)),
-                int(ct_w),
-                int(ct_h),
-            )
+                _bboxes[f"custom_text:{custom_index}"] = (
+                    int(round(ctx - ct_w / 2)),
+                    int(round(cty - ct_h / 2)),
+                    int(ct_w),
+                    int(ct_h),
+                )
+    if breakdown is not None:
+        breakdown["custom_texts.total"] = (time.perf_counter_ns() - custom_started_ns) / 1_000_000.0
     if _production_accounting_role in {"above", "below"}:
         record_production_accounting(
             f"{_production_accounting_role}.custom_text_loop",
-            (time.perf_counter() - custom_started) * 1000.0,
+            (time.perf_counter_ns() - custom_started_ns) / 1_000_000.0,
         )
 
     if prev_bboxes is not None and _bboxes:
@@ -732,6 +970,7 @@ def render_preview(
     inplace: bool = False,
     map_heading: Optional[float] = None,
     async_map: bool = False,
+    auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top.
 
@@ -780,6 +1019,7 @@ def render_preview(
         fast_preview=True,
         map_heading=map_heading,
         async_map=async_map,
+        auto_ranges=auto_ranges,
     )
     # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)

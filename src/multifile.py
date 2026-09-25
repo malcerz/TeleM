@@ -426,11 +426,19 @@ def _load_valid_telem_time_cache(
         start = data.get("absolute_start_dt")
         if not start:
             return None
+        detail = data.get("timestamp_detail", "")
+        if "(.telemetry.json.gz)" in detail:
+            try:
+                from src.telemetry_processed_cache import PROCESSED_CACHE_SUFFIX, processed_cache_path
+                if processed_cache_path(Path(video_path)).exists():
+                    detail = detail.replace("(.telemetry.json.gz)", f"({PROCESSED_CACHE_SUFFIX})")
+            except Exception:
+                pass
         return ClipTimestampResolution(
             absolute_start_dt=_as_naive_utc(datetime.fromisoformat(start)),
             timestamp_source=data.get("timestamp_source", TIMESTAMP_SOURCE_UNKNOWN),
             timestamp_reliable=bool(data.get("timestamp_reliable", False)),
-            timestamp_detail=data.get("timestamp_detail", ""),
+            timestamp_detail=detail,
             # Version-1 caches predate the explicit quality field.  Preserve
             # their proven GPMF reliability instead of silently relabelling
             # them as continuous/fallback timestamps.
@@ -477,6 +485,24 @@ def resolve_clip_timestamp(
         if cached is not None:
             _TIME_RESOLUTION_CACHE[key] = cached
             return cached
+        try:
+            from src.telemetry_processed_cache import read_processed_cache, PROCESSED_CACHE_SUFFIX
+            proc = read_processed_cache(Path(path))
+            if proc is not None and proc.get("start_dt_utc") is not None:
+                start_dt = proc["start_dt_utc"]
+                suffix = proc.get("_cache_suffix", PROCESSED_CACHE_SUFFIX)
+                res = ClipTimestampResolution(
+                    absolute_start_dt=_as_naive_utc(start_dt),
+                    timestamp_source=TIMESTAMP_SOURCE_GPMF_GPS9,
+                    timestamp_reliable=True,
+                    timestamp_detail=f"resolved from valid processed telemetry cache ({suffix})",
+                    timestamp_quality=TIMESTAMP_QUALITY_EXACT,
+                )
+                _TIME_RESOLUTION_CACHE[key] = res
+                _write_telem_time_cache(path, res, duration_s=duration_s)
+                return res
+        except Exception:
+            pass
 
     res = _resolve_from_gpmf(path, ffmpeg_exe, ffprobe_exe, duration_s=duration_s)
     if res.timestamp_source in _GPMF_RELIABLE_SOURCES:
@@ -742,6 +768,18 @@ class VideoTimeline:
             anchor + local_frame / target_fps - clip.local_start_s,
         )
 
+    def global_to_activity_elapsed(self, global_time: float) -> float:
+        """Map a global video time to elapsed time on the original activity axis."""
+        clip_index, local_time = self.global_to_clip(global_time)
+        if clip_index is None:
+            return float(global_time)
+        clip = self.clips[clip_index]
+        anchor = (
+            float(clip.activity_start_s)
+            if clip.activity_start_s is not None else clip.global_start_s
+        )
+        return max(0.0, anchor + float(local_time) - float(clip.local_start_s))
+
     def subset(self, ranges: list[tuple[int, float, float]]) -> "VideoTimeline":
         """Create an export timeline from real per-source local ranges.
 
@@ -780,6 +818,68 @@ class VideoTimeline:
             ))
         return VideoTimeline(selected, base_dt=self.base_dt)
 
+    def subset_excluding(
+        self, cut_regions: list[tuple[float, float]]
+    ) -> "VideoTimeline":
+        """Return the canonical timeline left after global-axis cuts.
+
+        ``cut_regions`` use the compressed project axis exposed by the GUI.
+        The retained intervals are split at clip boundaries and converted to
+        the source-local ranges consumed by :meth:`subset`.  This keeps one
+        range contract for GUI selection, frame planning, decode seeks, HUD
+        timestamps, and audio muxing.
+        """
+        duration = float(self.project_duration_s)
+        if not self.clips or duration <= 0.0:
+            return VideoTimeline.from_clips([], base_dt=self.base_dt)
+        if not cut_regions:
+            return self
+
+        normalized: list[tuple[float, float]] = []
+        for raw_start, raw_end in cut_regions:
+            start = max(0.0, min(duration, float(raw_start)))
+            end = max(0.0, min(duration, float(raw_end)))
+            if end <= start:
+                continue
+            normalized.append((start, end))
+        normalized.sort(key=lambda item: item[0])
+        # Sorting can expose overlap when the caller supplied unsorted cuts.
+        merged: list[tuple[float, float]] = []
+        for start, end in normalized:
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+
+        retained: list[tuple[float, float]] = []
+        cursor = 0.0
+        for start, end in merged:
+            if start > cursor:
+                retained.append((cursor, start))
+            cursor = max(cursor, end)
+        if cursor < duration:
+            retained.append((cursor, duration))
+        if not retained:
+            raise ValueError("cut regions remove the entire video timeline")
+
+        source_ranges: list[tuple[int, float, float]] = []
+        for keep_start, keep_end in retained:
+            for clip_index, clip in enumerate(self.clips):
+                global_start = max(keep_start, float(clip.global_start_s))
+                global_end = min(keep_end, float(clip.global_end_s))
+                if global_end <= global_start:
+                    continue
+                local_start = (
+                    float(clip.local_start_s)
+                    + global_start - float(clip.global_start_s)
+                )
+                local_end = (
+                    float(clip.local_start_s)
+                    + global_end - float(clip.global_start_s)
+                )
+                source_ranges.append((clip_index, local_start, local_end))
+        return self.subset(source_ranges)
+
     # ── Global → clip / local ───────────────────────────────────────────────
 
     def global_to_clip(self, global_time: float) -> tuple[Optional[int], float]:
@@ -812,6 +912,30 @@ class VideoTimeline:
         if idx is None:
             return None, 0.0
         return self.clips[idx], local
+
+    def clip_local_to_global(self, clip_index: Optional[int], local_time: float) -> float:
+        """Map a clip's LOCAL time back to the GLOBAL project timeline."""
+        if clip_index is None or not self.clips:
+            return float(local_time)
+        if 0 <= clip_index < len(self.clips):
+            clip = self.clips[clip_index]
+            return float(clip.global_start_s) + (float(local_time) - float(clip.local_start_s))
+        return float(local_time)
+
+    def clip_local_to_absolute(
+        self, clip_index: Optional[int], local_time: float, base_dt: Optional[datetime] = None
+    ) -> Optional[datetime]:
+        """Map a clip's LOCAL time to the ABSOLUTE telemetry datetime."""
+        if clip_index is None or not self.clips or not (0 <= clip_index < len(self.clips)):
+            return None
+        clip = self.clips[clip_index]
+        start = clip.absolute_start_dt
+        if start is None:
+            base = base_dt if base_dt is not None else self.base_dt
+            if base is None:
+                return None
+            start = _as_naive_utc(base) + timedelta(seconds=clip.global_start_s)
+        return start + timedelta(seconds=(float(local_time) - float(clip.local_start_s)))
 
     # ── Global → absolute timestamp (the core resolver) ─────────────────────
 
@@ -960,6 +1084,49 @@ def resolve_clip_absolute_start(
     except (json.JSONDecodeError, ValueError):
         return None
     return _parse_creation_time(ct)
+
+
+def probe_clip_time_interval(
+    path: Path | str,
+    ffmpeg_exe: str = "ffmpeg",
+    ffprobe_exe: str = "ffprobe",
+    use_cache: bool = True,
+) -> tuple[Optional[datetime], Optional[datetime], float, str]:
+    """Probe real start, end, duration and confidence for an MP4 clip.
+
+    Returns:
+        (absolute_start_dt, absolute_end_dt, duration_s, confidence)
+        where confidence is 'exact', 'estimated', or 'degraded' (when duration or start fell back to 600s).
+    """
+    p = Path(path)
+    # 1. Probed duration
+    dur_s = 0.0
+    try:
+        from src.video_helpers import _FFPROBE_DURATION_CACHE
+        if str(p) in _FFPROBE_DURATION_CACHE:
+            dur_s = float(_FFPROBE_DURATION_CACHE[str(p)])
+    except Exception:
+        pass
+
+    if dur_s <= 0.0:
+        info = probe_video_info(ffprobe_exe, p)
+        dur_s = float(info.get("duration_s", 0.0) or 0.0)
+
+    # 2. Start resolution
+    res = resolve_clip_timestamp(p, ffmpeg_exe=ffmpeg_exe, ffprobe_exe=ffprobe_exe, use_cache=use_cache, duration_s=dur_s if dur_s > 0 else None)
+    start_dt = res.absolute_start_dt
+
+    if start_dt is None:
+        return None, None, 0.0, "degraded"
+
+    if dur_s > 0.0:
+        end_dt = start_dt + timedelta(seconds=dur_s)
+        confidence = "exact" if res.timestamp_quality == TIMESTAMP_QUALITY_EXACT else "estimated"
+        return start_dt, end_dt, dur_s, confidence
+    else:
+        # Fallback only when duration absolutely cannot be established
+        end_dt = start_dt + timedelta(seconds=600.0)
+        return start_dt, end_dt, 600.0, "degraded"
 
 
 def build_timeline_from_paths(
@@ -1124,3 +1291,35 @@ def format_timeline_diagnostics(timeline: "VideoTimeline") -> list[str]:
                 f"{mins}m{secs:02d}s between clip {i + 1} and clip {i + 2}"
             )
     return lines
+
+
+def canonical_global_to_clip(
+    timeline: Optional[VideoTimeline], global_time: float
+) -> tuple[Optional[int], float]:
+    """Canonical conversion: global project time -> (clip_index, local_time)."""
+    if timeline is not None and getattr(timeline, "clip_count", 0):
+        return timeline.global_to_clip(global_time)
+    return 0, float(global_time)
+
+
+def canonical_clip_local_to_global(
+    timeline: Optional[VideoTimeline], clip_index: Optional[int], local_time: float
+) -> float:
+    """Canonical conversion: clip local time -> global project time."""
+    if timeline is not None and getattr(timeline, "clip_count", 0):
+        return timeline.clip_local_to_global(clip_index, local_time)
+    return float(local_time)
+
+
+def canonical_clip_local_to_absolute(
+    timeline: Optional[VideoTimeline],
+    clip_index: Optional[int],
+    local_time: float,
+    base_dt: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """Canonical conversion: clip local time -> absolute datetime."""
+    if timeline is not None and getattr(timeline, "clip_count", 0):
+        return timeline.clip_local_to_absolute(clip_index, local_time, base_dt=base_dt)
+    if base_dt is not None:
+        return _as_naive_utc(base_dt) + timedelta(seconds=float(local_time))
+    return None

@@ -10,11 +10,17 @@ between ``_render_preview`` (controller.py) and ``render_overlay_frame``
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta
+import inspect
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from src.indicators.profiling import get_overlay_profiler
 from src.indicators.chart_builder import clip_chart_data_for_target
+from src.telemetry_resolver import (
+    distance_m_to_km, resolve_distance_samples, canonical_telemetry_field,
+    presentation_debug,
+    resolve_current_presentation,
+)
 
 
 _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
@@ -47,7 +53,7 @@ def build_active_fit_field_plan(
         if not isinstance(config, dict) or not config.get("enabled", True):
             continue
         if key.startswith("fit_") and key.endswith("_text"):
-            field_name = key[4:-5]
+            field_name = canonical_telemetry_field(key)
             if field_name:
                 configured_fit.add(field_name)
             continue
@@ -69,6 +75,178 @@ def build_active_fit_field_plan(
         "active_standard_resolve_fields": sorted(active_standard),
         "unique_resolve_fields": sorted((configured_fit & discovered) | active_standard),
     }
+
+
+def compute_indicator_auto_ranges(
+    layout: dict[str, Any],
+    *,
+    speed_samples: Optional[list] = None,
+    track_samples: Optional[list] = None,
+    alt_samples: Optional[list] = None,
+    iso_samples: Optional[list] = None,
+    exposure_samples: Optional[list] = None,
+    temperature_samples: Optional[list] = None,
+    gpx_speed_samples: Optional[list] = None,
+    gpx_track_samples: Optional[list] = None,
+    gpx_alt_samples: Optional[list] = None,
+    gpx_power_samples: Optional[list] = None,
+    gpx_atemp_samples: Optional[list] = None,
+    gpx_hr_samples: Optional[list] = None,
+    gpx_cad_samples: Optional[list] = None,
+    fit_data: Optional[Any] = None,
+) -> dict[str, tuple[float, float]]:
+    """Compute exact (min, max) data ranges for indicators with auto_scale enabled.
+
+    Uses the actual selected telemetry source (GPMF, FIT, GPX) across the
+    complete active activity/project dataset.
+    """
+    auto_ranges: dict[str, tuple[float, float]] = {}
+    indic_map = (layout or {}).get("indicators", {})
+    for ind_key, ind_cfg in indic_map.items():
+        if not isinstance(ind_cfg, dict) or not ind_cfg.get("enabled", True):
+            continue
+        if not (ind_cfg.get("auto_scale") or ind_cfg.get("auto_min") or ind_cfg.get("auto_max")):
+            continue
+
+        field_name = ind_cfg.get("field")
+        if ind_key.startswith("fit_") and ind_key.endswith("_text"):
+            field_name = field_name or ind_key[4:-5]
+            src = ind_cfg.get("source", "fit")
+        else:
+            src = ind_cfg.get("source")
+            if not field_name:
+                if ind_key in ("speed_visual", "speed_text", "fit_speed_text", "fit_enhanced_speed_text"):
+                    field_name = "speed"
+                elif ind_key in ("alt_visual", "alt_text", "fit_altitude_text", "fit_enhanced_altitude_text"):
+                    field_name = "alt"
+                elif ind_key in ("dist_visual", "dist_text", "fit_distance_text"):
+                    field_name = "distance"
+                elif ind_key in ("hr_text", "fit_heart_rate_text"):
+                    field_name = "hr"
+                elif ind_key in ("cad_text", "fit_cadence_text"):
+                    field_name = "cad"
+                elif ind_key in ("power_text", "fit_power_text"):
+                    field_name = "power"
+                elif ind_key in ("temp_text", "atemp_text", "fit_temperature_text"):
+                    field_name = "temp"
+                elif ind_key == "slope_text":
+                    field_name = "slope"
+                elif ind_key in ("heading_text", "compass"):
+                    field_name = "heading"
+                elif ind_key == "iso_text":
+                    field_name = "iso"
+                elif ind_key == "exposure_text":
+                    field_name = "exposure"
+                elif ind_key in _STANDARD_RESOLVE_CONSUMERS:
+                    field_name = _STANDARD_RESOLVE_CONSUMERS[ind_key]
+                else:
+                    for candidate in ("solar", "battery", "power", "hr", "cad", "temp", "speed", "distance", "dist", "alt"):
+                        if candidate in ind_key.lower():
+                            field_name = "distance" if candidate == "dist" else candidate
+                            break
+            if not src:
+                src = "fit" if (
+                    fit_data and field_name and (
+                        field_name in fit_data
+                        or (field_name == "speed" and "enhanced_speed" in fit_data)
+                        or (field_name == "alt" and "enhanced_altitude" in fit_data)
+                    )
+                ) else "gpmf"
+
+        if not field_name:
+            continue
+
+        s_list = None
+        if src == "fit" and fit_data:
+            if field_name in ("distance", "dist"):
+                from src.telemetry_resolver import resolve_distance_samples
+                s_list = resolve_distance_samples("fit", fit_data=fit_data)
+            elif field_name == "speed":
+                s_list = fit_data.get("enhanced_speed") or fit_data.get("speed")
+            elif field_name in ("alt", "altitude"):
+                s_list = fit_data.get("enhanced_altitude") or fit_data.get("alt") or fit_data.get("altitude")
+            elif field_name == "hr":
+                s_list = fit_data.get("hr") or fit_data.get("heart_rate")
+            elif field_name == "cad":
+                s_list = fit_data.get("cad") or fit_data.get("cadence")
+            elif field_name in ("temp", "atemp"):
+                s_list = fit_data.get("atemp") or fit_data.get("temperature") or fit_data.get("garmin_temperature")
+            elif field_name == "power":
+                s_list = fit_data.get("power") or fit_data.get("curVpower")
+            else:
+                s_list = fit_data.get(field_name)
+
+        elif src == "gpx":
+            if field_name == "speed":
+                s_list = gpx_speed_samples
+            elif field_name in ("distance", "dist"):
+                s_list = gpx_track_samples
+            elif field_name in ("alt", "altitude"):
+                s_list = gpx_alt_samples
+            elif field_name == "hr":
+                s_list = gpx_hr_samples
+            elif field_name == "cad":
+                s_list = gpx_cad_samples
+            elif field_name == "power":
+                s_list = gpx_power_samples
+            elif field_name in ("temp", "atemp"):
+                s_list = gpx_atemp_samples
+
+        elif src == "gpmf":
+            if field_name == "speed":
+                s_list = speed_samples
+            elif field_name in ("distance", "dist"):
+                s_list = track_samples
+            elif field_name in ("alt", "altitude"):
+                s_list = alt_samples
+            elif field_name in ("temp", "temperature"):
+                s_list = temperature_samples
+            elif field_name == "iso":
+                s_list = iso_samples
+            elif field_name == "exposure":
+                s_list = exposure_samples
+
+        if not s_list and fit_data:
+            if field_name in ("distance", "dist"):
+                from src.telemetry_resolver import resolve_distance_samples
+                s_list = resolve_distance_samples("fit", fit_data=fit_data)
+            elif field_name == "speed":
+                s_list = fit_data.get("enhanced_speed") or fit_data.get("speed")
+            elif field_name in ("alt", "altitude"):
+                s_list = fit_data.get("enhanced_altitude") or fit_data.get("alt") or fit_data.get("altitude")
+            elif field_name == "hr":
+                s_list = fit_data.get("hr") or fit_data.get("heart_rate")
+            elif field_name == "cad":
+                s_list = fit_data.get("cad") or fit_data.get("cadence")
+            elif field_name in ("temp", "atemp"):
+                s_list = fit_data.get("atemp") or fit_data.get("temperature") or fit_data.get("garmin_temperature")
+            elif field_name == "power":
+                s_list = fit_data.get("power") or fit_data.get("curVpower")
+            else:
+                s_list = fit_data.get(field_name)
+
+        if s_list:
+            vals = [
+                float(p[1]) for p in s_list
+                if p is not None and isinstance(p, (tuple, list))
+                and len(p) >= 2 and p[1] is not None and isinstance(p[1], (int, float))
+            ]
+            if vals:
+                is_dist = (
+                    field_name in ("distance", "dist")
+                    or "distance" in ind_key.lower()
+                    or "dist_" in ind_key.lower()
+                    or ind_cfg.get("unit") == "km"
+                )
+                if is_dist:
+                    vals = [distance_m_to_km(v) for v in vals]
+                min_v = float(min(vals))
+                max_v = float(max(vals))
+                if min_v == max_v:
+                    max_v = min_v + 1.0
+                auto_ranges[ind_key] = (min_v, max_v)
+
+    return auto_ranges
 
 
 def prepare_overlay_frame_data(
@@ -113,6 +291,25 @@ def prepare_overlay_frame_data(
     Returns a dict suitable for ``**kwargs`` to ``compose_overlay``.
     """
     profiler = get_overlay_profiler()
+    # The layout of THIS frame is authoritative. A data manager need not own
+    # a GUI layout, and export callbacks may hold a different snapshot.
+    if resolve_cache_value is not None:
+        callback = resolve_cache_value
+        try:
+            parameters = inspect.signature(callback).parameters
+            accepts_config = ('indicator_config' in parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()))
+            legacy = len(parameters) == 2
+        except (ValueError, TypeError):
+            accepts_config = False
+            legacy = False
+        def resolve_cache_value(field, source, dt, indicator_key=None):
+            if accepts_config:
+                return callback(field, source, dt, indicator_key,
+                                indicator_config=layout.get('indicators', {}).get(indicator_key, {}))
+            if legacy:
+                return callback(field, dt)
+            return callback(field, source, dt, indicator_key)
     from src.telemetry_extract import (
         interpolate_speed, interpolate_distance, interpolate_altitude,
         interpolate_iso, interpolate_exposure, interpolate_temperature,
@@ -147,7 +344,7 @@ def prepare_overlay_frame_data(
         gpx_trk = gpx_track_samples or []
         gpx_alt = gpx_alt_samples or []
         fit_spd = (fit_data or {}).get("speed", [])
-        fit_trk = (fit_data or {}).get("track", [])
+        fit_trk = resolve_distance_samples("fit", fit_data=fit_data or {})
         fit_alt = (fit_data or {}).get("alt", [])
         if src == "gpx":
             spd_s, trk_s, alt_s = gpx_spd, gpx_trk, gpx_alt
@@ -156,11 +353,13 @@ def prepare_overlay_frame_data(
         else:
             spd_s, trk_s, alt_s = speed_samples, track_samples, alt_samples
         if ind_key in ("speed_visual", "speed_text"):
-            indicator_values[ind_key] = interpolate_speed(spd_s, target_dt) if spd_s else None
+            samples, field = spd_s, 'speed'
         elif ind_key in ("dist_visual", "dist_text"):
-            indicator_values[ind_key] = interpolate_distance(trk_s, target_dt) if trk_s else None
+            samples, field = trk_s, 'distance'
         elif ind_key in ("alt_visual", "alt_text"):
-            indicator_values[ind_key] = interpolate_altitude(alt_s, target_dt) if alt_s else None
+            samples, field = alt_s, 'alt'
+        indicator_values[ind_key] = resolve_current_presentation(samples, target_dt, field, ind_cfg,
+            active_time_mapper=getattr(fit_data, 'active_time_mapper', None) if src == 'fit' else None)
 
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
@@ -174,10 +373,7 @@ def prepare_overlay_frame_data(
     if distance_m is None and fit_data and "distance" in fit_data:
         distance_m = interpolate_distance(fit_data["distance"], target_dt)
     if distance_m is None and resolve_cache_value:
-        try:
-            distance_m = resolve_cache_value("distance", "fit", target_dt, "fit_distance_text")
-        except TypeError:
-            distance_m = resolve_cache_value("distance", target_dt)
+        distance_m = resolve_cache_value("distance", "fit", target_dt, "fit_distance_text")
     if distance_m is None and gpx_track_samples:
         distance_m = interpolate_distance(gpx_track_samples, target_dt)
 
@@ -192,10 +388,7 @@ def prepare_overlay_frame_data(
             return None
         if not resolve_cache_value:
             return None
-        try:
-            return resolve_cache_value(field_name, source, target_dt, indicator_key)
-        except TypeError:
-            return resolve_cache_value(field_name, target_dt)
+        return resolve_cache_value(field_name, source, target_dt, indicator_key)
 
     iso_source = layout.get("indicators", {}).get("iso_text", {}).get("source", "gpmf")
     exposure_source = layout.get("indicators", {}).get("exposure_text", {}).get("source", "gpmf")
@@ -228,7 +421,7 @@ def prepare_overlay_frame_data(
             if gpx_trk_l:
                 max_distance_m = gpx_trk_l[-1][1]
         elif dist_src == "fit":
-            fit_trk_l = (fit_data or {}).get("track", [])
+            fit_trk_l = resolve_distance_samples("fit", fit_data=fit_data or {})
             if fit_trk_l:
                 max_distance_m = fit_trk_l[-1][1]
         if dist_src == "gpmf" and track_samples:
@@ -274,6 +467,32 @@ def prepare_overlay_frame_data(
             if alts:
                 min_alt = min(alts)
                 max_alt = max(alts)
+
+    # ── auto_ranges (generic auto min/max scaling for all indicators) ──
+    auto_ranges: dict[str, tuple[float, float]] = {}
+    if _range_cache and "auto_ranges" in _range_cache:
+        auto_ranges = _range_cache["auto_ranges"]
+    else:
+        auto_ranges = compute_indicator_auto_ranges(
+            layout,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+        )
+        if _range_cache is not None:
+            _range_cache["auto_ranges"] = auto_ranges
+
     profiler.record(
         "telemetry.range_calculations",
         (time.perf_counter() - section_started) * 1000.0,
@@ -292,12 +511,7 @@ def prepare_overlay_frame_data(
             resolved_this_frame[cache_key] = None
             return None
         resolve_started = time.perf_counter()
-        try:
-            value = resolve_cache_value(field_name, source, target_dt, indicator_key)
-        except TypeError:
-            # Compatibility adapter for third-party callers using the old
-            # callback shape.  Production preview/final paths use the new one.
-            value = resolve_cache_value(field_name, target_dt)
+        value = resolve_cache_value(field_name, source, target_dt, indicator_key)
         profiler.record(
             "telemetry.resolve_cache_value",
             (time.perf_counter() - resolve_started) * 1000.0,
@@ -377,22 +591,7 @@ def prepare_overlay_frame_data(
         if "slope" in standard_resolve_fields and slope_consumers else None
     )
 
-    # ── Elapsed time & average speed (for time_display) ───────────────
-    # Normalise tz-awareness: ``start_dt_utc`` may be tz-aware (GPMF anchor /
-    # ExifTool ``parse_exif_datetime`` attaches ``tzinfo=utc``) while the
-    # timeline's ``global_to_absolute`` returns naive-UTC (multifile
-    # convention).  Both represent the same UTC instant; stripping the marker
-    # makes the subtraction robust without changing the computed value.
-    elapsed_seconds = 0.0
-    if start_dt_utc is not None and target_dt is not None:
-        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
-        _td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
-        elapsed_seconds = max(0.0, (_td - _sd).total_seconds())
 
-    avg_speed_kmh = 0.0
-    if elapsed_seconds > 0 and distance_m is not None and distance_m > 0:
-        # average speed = total distance / total time * 3.6 (m/s → km/h)
-        avg_speed_kmh = (distance_m / elapsed_seconds) * 3.6
 
     # ── Build extra_indicators (FIT fields + remaining dynamic) ───────
     from src.indicators.registry import HARDCODED_KEYS
@@ -439,12 +638,14 @@ def prepare_overlay_frame_data(
                 fit_keys.append(k)
 
     for key in fit_keys:
-        field_name = key[4:-5]
+        field_name = canonical_telemetry_field(key)
         val = profiled_resolve(field_name, "fit", key)
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
         extra_indicators[key] = (val, unit, label)
+        presentation_debug('frame_data', indicator=key, field=field_name, source='fit',
+                           target_dt=target_dt, cfg=cfg, frame_data=val, extra_indicators=val)
 
     # Keep configured-but-unavailable FIT indicators represented as None so
     # presentation can hide them without deleting the user's layout config.
@@ -493,9 +694,12 @@ def prepare_overlay_frame_data(
                     cfg.get("label") or "Przechył",
                 )
             else:
-                axis = str(cfg.get("axis", "z")).strip().lower()
+                # GoPro mounting contract: X is the physical roll/lean axis.
+                # Keep an explicit user axis untouched; only missing/invalid
+                # configuration uses the canonical X fallback.
+                axis = str(cfg.get("axis", "x")).strip().lower()
                 if axis not in ("x", "y", "z"):
-                    axis = "z"
+                    axis = "x"
                 value = profiled_resolve(f"lean_roll_{axis}", "gpmf", key)
                 extra_indicators[key] = (
                     value,
@@ -527,47 +731,121 @@ def prepare_overlay_frame_data(
                 slope_cfg.get("label") or "Slope",
             )
 
-    # ── Elapsed time & average speed (for time_display) ───────────────
-    # Normalise tz-awareness: ``start_dt_utc`` may be tz-aware (GPMF anchor /
-    # ExifTool ``parse_exif_datetime`` attaches ``tzinfo=utc``) while the
-    # timeline's ``global_to_absolute`` returns naive-UTC (multifile
-    # convention).  Both represent the same UTC instant; stripping the marker
-    # makes the subtraction robust without changing the computed value.
+    # ── Elapsed time & average speed (for time_display and avg_speed) ─
+    # Normalise tz-awareness helper: both aware and naive UTC instants must subtract cleanly.
+    def _to_naive_dt(dt: Optional[Any]) -> Optional[datetime]:
+        if dt is None:
+            return None
+        if isinstance(dt, datetime):
+            return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+        if isinstance(dt, (int, float)):
+            return datetime.fromtimestamp(float(dt), timezone.utc).replace(tzinfo=None)
+        if isinstance(dt, str):
+            s = dt.strip()
+            if not s:
+                return None
+            dt_obj = datetime.fromisoformat(s)
+            return dt_obj.astimezone(timezone.utc).replace(tzinfo=None) if dt_obj.tzinfo is not None else dt_obj
+        return getattr(dt, "replace", lambda **kw: dt)(tzinfo=None) if getattr(dt, "tzinfo", None) is not None else dt
+
+    target_dt_naive = _to_naive_dt(target_dt)
+    start_dt_naive = _to_naive_dt(start_dt_utc)
+
+    # 1. Check for FIT ActiveTimeMapper
+    active_mapper = None
+    if isinstance(fit_data, dict):
+        active_mapper = fit_data.get("active_time_mapper")
+    if active_mapper is None and fit_data is not None:
+        active_mapper = getattr(fit_data, "active_time_mapper", None)
+
+    # Hierarchy:
+    # 1. FIT + valid ActiveTimeMapper -> active elapsed from activity start
+    # 2. FIT without valid mapper -> target_dt - FIT activity/session start
+    # 3. No FIT -> project_elapsed_s
+    # 4. Ultimate legacy fallback -> target_dt - video start
     elapsed_seconds = 0.0
-    if project_elapsed_s is not None:
-        elapsed_seconds = max(0.0, float(project_elapsed_s))
-    elif start_dt_utc is not None and target_dt is not None:
-        _sd = start_dt_utc.replace(tzinfo=None) if start_dt_utc.tzinfo is not None else start_dt_utc
-        _td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
-        elapsed_seconds = max(0.0, (_td - _sd).total_seconds())
 
-    # ── Activity elapsed time calculation for activity-global average speed ──
-    # When distance is cumulative across the FIT / GPX activity, its denominator
-    # must be the elapsed time within that activity, NOT a clip-local timer.
-    activity_start_dt = None
-    if fit_data:
-        fit_pts = fit_data.get("distance") or fit_data.get("speed") or fit_data.get("track")
-        if fit_pts:
-            activity_start_dt = fit_pts[0][0]
-    if activity_start_dt is None and gpx_track_samples:
-        activity_start_dt = gpx_track_samples[0][0]
-    if activity_start_dt is None:
-        activity_start_dt = start_dt_utc
+    if active_mapper is not None and target_dt is not None:
+        from src.telemetry_resolver import _map_wall_to_seconds
+        candidate = _map_wall_to_seconds(active_mapper, target_dt)
+        if candidate is None:
+            # Mapper couldn't resolve this timestamp — fall through to fallback
+            pass
+        else:
+            mapper_start_naive = _to_naive_dt(getattr(active_mapper, "start_dt", None))
+            if mapper_start_naive is not None and target_dt_naive is not None:
+                wall_elapsed = max(0.0, (target_dt_naive - mapper_start_naive).total_seconds())
+                # Sanity check: active elapsed cannot exceed wall elapsed + tolerance (5s) or 30 days
+                if 0.0 <= candidate <= wall_elapsed + 5.0 and wall_elapsed < 2592000.0:
+                    elapsed_seconds = candidate
+                else:
+                    print(
+                        f"[SanityCheck] Invalid active_elapsed {candidate}s (wall {wall_elapsed}s); "
+                        f"falling back cleanly to wall elapsed",
+                        flush=True,
+                    )
+                    elapsed_seconds = wall_elapsed if wall_elapsed < 2592000.0 else max(0.0, float(project_elapsed_s or 0.0))
+            else:
+                elapsed_seconds = max(0.0, candidate)
 
-    activity_elapsed_s = 0.0
-    if activity_start_dt is not None and target_dt is not None:
-        _act_sd = activity_start_dt.replace(tzinfo=None) if activity_start_dt.tzinfo is not None else activity_start_dt
-        _act_td = target_dt.replace(tzinfo=None) if target_dt.tzinfo is not None else target_dt
-        activity_elapsed_s = max(0.0, (_act_td - _act_sd).total_seconds())
+    elif (fit_data or gpx_track_samples) and target_dt_naive is not None:
+        activity_start_dt = None
+        if isinstance(fit_data, dict):
+            fit_pts = fit_data.get("distance") or fit_data.get("speed") or fit_data.get("track")
+            if fit_pts and len(fit_pts) > 0:
+                activity_start_dt = fit_pts[0][0]
+        elif fit_data is not None:
+            fit_pts = getattr(fit_data, "distance", None) or getattr(fit_data, "speed", None) or getattr(fit_data, "track", None)
+            if fit_pts and len(fit_pts) > 0:
+                activity_start_dt = fit_pts[0][0]
+        if activity_start_dt is None and gpx_track_samples:
+            activity_start_dt = gpx_track_samples[0][0]
+
+        if activity_start_dt is not None:
+            _act_sd = _to_naive_dt(activity_start_dt)
+            raw_diff = (target_dt_naive - _act_sd).total_seconds()
+            if 0.0 <= raw_diff < 2592000.0:
+                elapsed_seconds = raw_diff
+            else:
+                print(
+                    f"[SanityCheck] Invalid activity elapsed {raw_diff}s (start={activity_start_dt}, target={target_dt}); "
+                    f"falling back to project_elapsed_s",
+                    flush=True,
+                )
+                elapsed_seconds = max(0.0, float(project_elapsed_s or 0.0))
+        elif project_elapsed_s is not None:
+            elapsed_seconds = max(0.0, float(project_elapsed_s))
+        elif start_dt_naive is not None:
+            raw_diff = (target_dt_naive - start_dt_naive).total_seconds()
+            elapsed_seconds = max(0.0, raw_diff) if 0.0 <= raw_diff < 2592000.0 else 0.0
+
     elif project_elapsed_s is not None:
-        activity_elapsed_s = max(0.0, float(project_elapsed_s))
-    else:
-        activity_elapsed_s = elapsed_seconds
+        elapsed_seconds = max(0.0, float(project_elapsed_s))
 
-    avg_speed_kmh = 0.0
-    if activity_elapsed_s > 0 and distance_m is not None and distance_m > 0:
-        # average speed = total activity distance / total activity time * 3.6 (m/s → km/h)
-        avg_speed_kmh = (distance_m / activity_elapsed_s) * 3.6
+    elif start_dt_naive is not None and target_dt_naive is not None:
+        raw_diff = (target_dt_naive - start_dt_naive).total_seconds()
+        if 0.0 <= raw_diff < 2592000.0:
+            elapsed_seconds = raw_diff
+        else:
+            print(
+                f"[SanityCheck] Absurd video elapsed {raw_diff}s (start_dt={start_dt_utc}, target_dt={target_dt}); "
+                f"falling back to 0.0",
+                flush=True,
+            )
+            elapsed_seconds = 0.0
+
+    # Activity elapsed time is unified with elapsed_seconds
+    activity_elapsed_s = elapsed_seconds
+
+    from src.telemetry_active_time import compute_activity_distance_and_avg_speed
+    fit_active_dist_m, avg_speed_kmh = compute_activity_distance_and_avg_speed(
+        fit_data=fit_data,
+        gpx_track_samples=gpx_track_samples,
+        gpmf_track_samples=track_samples,
+        target_dt=target_dt,
+        active_elapsed_s=activity_elapsed_s,
+        fallback_distance_m=distance_m,
+    )
 
     # ── Position / chart data ─────────────────────────────────────────
     section_started = time.perf_counter()
@@ -618,4 +896,5 @@ def prepare_overlay_frame_data(
         "start_dt_utc": start_dt_utc,
         "elapsed_seconds": elapsed_seconds,
         "avg_speed_kmh": avg_speed_kmh,
+        "auto_ranges": auto_ranges,
     }

@@ -282,11 +282,11 @@ def _nt_startupinfo() -> Any:
 def ffmpeg_encoders_have_qsv(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
     """Check whether the FFmpeg binary itself contains QSV encoders.
 
-    Returns ``{ffmpeg_has_qsv, hevc_qsv, h264_qsv}``.  This answers "FFmpeg
+    Returns ``{ffmpeg_has_qsv, hevc_qsv, h264_qsv, av1_qsv}``.  This answers "FFmpeg
     contains a QSV encoder" and is deliberately separate from "usable Intel
     hardware exists" (see :func:`qsv_hardware_usable`).
     """
-    result = {"ffmpeg_has_qsv": False, "hevc_qsv": False, "h264_qsv": False}
+    result = {"ffmpeg_has_qsv": False, "hevc_qsv": False, "h264_qsv": False, "av1_qsv": False}
     try:
         r = subprocess.run(
             [ffmpeg_exe, "-hide_banner", "-encoders"],
@@ -297,14 +297,25 @@ def ffmpeg_encoders_have_qsv(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
             enc = r.stdout
             result["hevc_qsv"] = "hevc_qsv" in enc
             result["h264_qsv"] = "h264_qsv" in enc
-            result["ffmpeg_has_qsv"] = result["hevc_qsv"] or result["h264_qsv"]
+            result["av1_qsv"] = "av1_qsv" in enc
+            result["ffmpeg_has_qsv"] = result["hevc_qsv"] or result["h264_qsv"] or result["av1_qsv"]
     except Exception:
         pass
     return result
 
 
+def probe_qsv_codecs(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
+    """Probe hardware usability for each QSV encoder via real test encode."""
+    from src.ffmpeg.detection import _test_encoder
+    return {
+        "hevc_qsv": _test_encoder("hevc_qsv", ffmpeg_exe),
+        "av1_qsv": _test_encoder("av1_qsv", ffmpeg_exe),
+        "h264_qsv": _test_encoder("h264_qsv", ffmpeg_exe),
+    }
+
+
 def qsv_hardware_usable(ffmpeg_exe: str = "ffmpeg") -> bool:
-    """Test whether a QSV encode actually works on this hardware.
+    """Test whether any QSV encode actually works on this hardware.
 
     Runs a real short encode via the existing ``_test_encoder``.  This is the
     "usable Intel hardware exists" signal and is separate from merely having
@@ -312,6 +323,8 @@ def qsv_hardware_usable(ffmpeg_exe: str = "ffmpeg") -> bool:
     """
     from src.ffmpeg.detection import _test_encoder
     if _test_encoder("hevc_qsv", ffmpeg_exe):
+        return True
+    if _test_encoder("av1_qsv", ffmpeg_exe):
         return True
     return _test_encoder("h264_qsv", ffmpeg_exe)
 
@@ -331,7 +344,13 @@ class IntelResolution:
     ffmpeg_has_qsv: bool = False
     hevc_qsv: bool = False
     h264_qsv: bool = False
+    av1_qsv: bool = False
     qsv_available: bool = False
+    hevc_qsv_usable: bool = False
+    av1_qsv_usable: bool = False
+    h264_qsv_usable: bool = False
+    selected_codec: str = "hevc"
+    selected_encoder: str = "hevc_qsv"
     # Planned pipeline (ETAP 2 wiring; not force-enabled in ETAP 1).
     decode_path: str = "QSV/D3D11VA"
     render_path: str = "D3D11"
@@ -366,6 +385,8 @@ class IntelRenderCapabilities:
     qsv_available: bool = False
     qsv_h264_encode: bool = False
     qsv_hevc_encode: bool = False
+    qsv_av1_encode: bool = False
+    encode_codec: str = "HEVC"
     d3d11_device_available: bool = False
     input_codec: Optional[str] = None
     input_width: Optional[int] = None
@@ -384,9 +405,19 @@ class IntelRenderCapabilities:
     hud_width: int = 0
     hud_height: int = 0
     hud_bytes_per_frame: int = 0
+    hud_full_frame_bytes: int = 0
+    hud_transfer_reduction_percent: float = 0.0
+    hud_uploads_per_frame: int = 1
     hud_region_mode: str = "NONE"
-    hud_region_bbox: Optional[list[int]] = None
+    hud_region_bbox: Optional[list[int] | tuple[int, ...]] = None
+    hud_bbox_source: Optional[list[int] | tuple[int, ...]] = None
+    hud_bbox_output: Optional[list[int] | tuple[int, ...]] = None
+    hud_region_count: int = 1
+    hud_regions: Optional[list[Any]] = None
+    total_region_bytes_frame: int = 0
     compositor_path: str = ""
+    gpu_texture_format: str = "NV12/P010 / BGRA"
+    compositor_output_format: str = "QSV/P010"
     encode_path: str = ""
     encode_pixel_format: Optional[str] = None
     hwdownload_count_expected: int = 0
@@ -478,8 +509,11 @@ def validate_intel_graph_contract(
     cmd: list[str],
     filter_complex: str,
     *,
-    gpu_resident: bool,
-    software_decode: bool,
+    gpu_resident: bool = False,
+    gpu_compositor: bool = False,
+    software_decode: bool = False,
+    cpu_roi: bool = False,
+    expected_codec: str = "hevc",
 ) -> dict[str, Any]:
     """Classify the built Intel graph and compare it to the selected path."""
     graph = str(filter_complex)
@@ -489,14 +523,26 @@ def validate_intel_graph_contract(
     has_scale_qsv = "scale_qsv" in graph
     has_overlay_qsv = "overlay_qsv" in graph
     has_cpu_overlay = "overlay=" in graph and not has_overlay_qsv
-    expected_compositor = "QSV_GPU" if gpu_resident else "CPU_REFERENCE"
+    if gpu_compositor:
+        expected_compositor = "GPU_D3D11"
+    elif gpu_resident:
+        expected_compositor = "QSV_GPU"
+    elif cpu_roi:
+        expected_compositor = "CPU_ROI"
+    else:
+        expected_compositor = "CPU_REFERENCE"
+
     expected_residency = (
-        "GPU" if gpu_resident else ("CPU" if software_decode else "GPU_TO_CPU")
+        "GPU" if gpu_resident else ("CPU" if (software_decode or gpu_compositor) else "GPU_TO_CPU")
     )
-    expected_download = 0 if (gpu_resident or software_decode) else 1
-    actual_path = "QSV_GPU" if has_overlay_qsv else (
-        "CPU_REFERENCE" if has_cpu_overlay else "UNKNOWN"
-    )
+    expected_download = 0 if (gpu_resident or gpu_compositor or software_decode) else 1
+    if has_overlay_qsv:
+        actual_path = "GPU_D3D11" if expected_compositor == "GPU_D3D11" else "QSV_GPU"
+    elif has_cpu_overlay:
+        actual_path = "CPU_ROI" if ("split=" in graph or expected_compositor == "CPU_ROI") else "CPU_REFERENCE"
+    else:
+        actual_path = "UNKNOWN"
+
     mismatch_reasons: list[str] = []
     if actual_path != expected_compositor:
         mismatch_reasons.append(
@@ -506,8 +552,9 @@ def validate_intel_graph_contract(
         mismatch_reasons.append(
             f"hwdownload_expected={expected_download},actual={has_hwdownload}"
         )
-    if "hevc_qsv" not in command:
-        mismatch_reasons.append("hevc_qsv_missing")
+    expected_encoder = "av1_qsv" if str(expected_codec).lower() in ("av1", "av1_qsv") else "hevc_qsv"
+    if expected_encoder not in command:
+        mismatch_reasons.append(f"{expected_encoder}_missing")
     return {
         "expected_path": expected_compositor,
         "actual_path": actual_path,
@@ -521,6 +568,7 @@ def validate_intel_graph_contract(
             "format_p010le": "format=p010le" in graph,
             "format_nv12": "format=nv12" in graph,
             "hevc_qsv": "hevc_qsv" in command,
+            "av1_qsv": "av1_qsv" in command,
             "hwupload_derive_qsv": "hwupload=derive_device=qsv" in graph,
         },
         "mismatch": bool(mismatch_reasons),
@@ -590,6 +638,8 @@ def intel_proof_snapshot(
             "qsv_available": capabilities.qsv_available,
             "qsv_h264_encode": capabilities.qsv_h264_encode,
             "qsv_hevc_encode": capabilities.qsv_hevc_encode,
+            "qsv_av1_encode": capabilities.qsv_av1_encode,
+            "encode_codec": capabilities.encode_codec,
             "d3d11_device_available": capabilities.d3d11_device_available,
         },
         "input": input_info,
@@ -600,10 +650,22 @@ def intel_proof_snapshot(
             "canvas_size": [capabilities.hud_canvas_width, capabilities.hud_canvas_height],
             "transport_size": [capabilities.hud_width, capabilities.hud_height],
             "bytes_per_frame": capabilities.hud_bytes_per_frame,
+            "full_frame_bytes": capabilities.hud_full_frame_bytes or (capabilities.hud_canvas_width * capabilities.hud_canvas_height * 4),
+            "transfer_reduction_percent": capabilities.hud_transfer_reduction_percent,
+            "uploads_per_frame": capabilities.hud_uploads_per_frame,
             "region_mode": capabilities.hud_region_mode,
             "region_bbox": capabilities.hud_region_bbox,
+            "bbox_source": capabilities.hud_bbox_source or capabilities.hud_region_bbox,
+            "bbox_output": capabilities.hud_bbox_output or capabilities.hud_region_bbox,
+            "region_count": capabilities.hud_region_count,
+            "regions": capabilities.hud_regions,
+            "total_region_bytes_frame": capabilities.total_region_bytes_frame or capabilities.hud_bytes_per_frame,
         },
-        "compositor": {"path": capabilities.compositor_path},
+        "compositor": {
+            "path": capabilities.compositor_path,
+            "gpu_texture_format": capabilities.gpu_texture_format,
+            "compositor_output_format": capabilities.compositor_output_format,
+        },
         "encode": {"path": capabilities.encode_path, "pixel_format": capabilities.encode_pixel_format},
         "transfers": {
             "hwdownload_count_expected": capabilities.hwdownload_count_expected,
@@ -636,8 +698,10 @@ def emit_intel_proof(snapshot: dict[str, Any]) -> None:
     inp = snapshot["input"]
     dec = snapshot["decode"]
     hud = snapshot["hud"]
+    comp = snapshot.get("compositor", {})
     enc = snapshot["encode"]
     transfers = snapshot["transfers"]
+    full_bytes = hud.get("full_frame_bytes") or (hud["canvas_size"][0] * hud["canvas_size"][1] * 4)
     lines = [
         f"[INTEL PROOF] ADAPTER_NAME={adapter['name']}",
         f"[INTEL PROOF] ADAPTER_VENDOR=0x{int(adapter['vendor_id']):04X}",
@@ -645,6 +709,9 @@ def emit_intel_proof(snapshot: dict[str, Any]) -> None:
         f"[INTEL PROOF] ADAPTER_DXGI_INDEX={adapter['dxgi_index']}",
         f"[INTEL PROOF] DRIVER={adapter.get('driver_version') or 'NOT_AVAILABLE'}",
         f"[INTEL PROOF] CAPABILITY_CLASS={caps['class']}",
+        f"[INTEL PROOF] HEVC_QSV_AVAILABLE={'YES' if caps.get('qsv_hevc_encode') else 'NO'}",
+        f"[INTEL PROOF] AV1_QSV_AVAILABLE={'YES' if caps.get('qsv_av1_encode') else 'NO'}",
+        f"[INTEL PROOF] ENCODE_CODEC={caps.get('encode_codec') or 'NOT_AVAILABLE'}",
         f"[INTEL PROOF] INPUT_CODEC={inp.get('codec') or 'NOT_AVAILABLE'}",
         f"[INTEL PROOF] INPUT_SIZE={inp.get('width') or '?'}x{inp.get('height') or '?'}",
         f"[INTEL PROOF] INPUT_BIT_DEPTH={inp.get('bit_depth') or 'NOT_AVAILABLE'}",
@@ -656,15 +723,76 @@ def emit_intel_proof(snapshot: dict[str, Any]) -> None:
         f"[INTEL PROOF] HUD_CANVAS_SIZE={hud['canvas_size'][0]}x{hud['canvas_size'][1]}",
         f"[INTEL PROOF] HUD_SIZE={hud['transport_size'][0]}x{hud['transport_size'][1]}",
         f"[INTEL PROOF] HUD_BYTES_FRAME={hud['bytes_per_frame']}",
+        f"[INTEL PROOF] HUD_FULL_FRAME_BYTES={full_bytes}",
+        f"[INTEL PROOF] HUD_TRANSFER_REDUCTION_PERCENT={hud.get('transfer_reduction_percent', 0.0):.1f}",
+        f"[INTEL PROOF] HUD_UPLOADS_PER_FRAME={hud.get('uploads_per_frame', 1)}",
         f"[INTEL PROOF] HUD_REGION_MODE={hud['region_mode']}",
         f"[INTEL PROOF] HUD_BBOX={hud['region_bbox'] or 'FULL_RASTER'}",
-        f"[INTEL PROOF] COMPOSITOR_PATH={snapshot['compositor']['path']}",
+        f"[INTEL PROOF] HUD_BBOX_SOURCE={hud.get('bbox_source') or hud['region_bbox'] or 'FULL_RASTER'}",
+        f"[INTEL PROOF] HUD_BBOX_OUTPUT={hud.get('bbox_output') or hud['region_bbox'] or 'FULL_RASTER'}",
+    ]
+    if hud.get("region_mode") in ("MULTI_REGION", "MULTI_REGION_ATLAS", "MULTI_REGION_CPU"):
+        lines.extend([
+            f"[INTEL PROOF] HUD_REGION_COUNT={hud.get('region_count', 1)}",
+            f"[INTEL PROOF] REGION_COUNT={hud.get('region_count', 1)}",
+        ])
+        regions_list = hud.get("regions") or []
+        for i, r in enumerate(regions_list):
+            lines.append(f"[INTEL PROOF] HUD_REGION_{i}={tuple(r)}")
+        lines.extend([
+            f"[INTEL PROOF] HUD_TOTAL_REGION_BYTES_FRAME={hud.get('total_region_bytes_frame', hud['bytes_per_frame'])}",
+            f"[INTEL PROOF] TOTAL_REGION_BYTES_FRAME={hud.get('total_region_bytes_frame', hud['bytes_per_frame'])}",
+            f"[INTEL PROOF] HUD_PIPE_BYTES_FRAME={hud['bytes_per_frame']}",
+            f"[INTEL PROOF] HUD_ROI_PIXELS={sum(int(r[4]) * int(r[5]) for r in regions_list)}",
+            f"[INTEL PROOF] HUD_SCALED_ROI_PIXELS={sum(int(round(int(r[4]) * 1.5)) * int(round(int(r[5]) * 1.5)) for r in regions_list)}",
+        ])
+    lines.extend([
+        f"[INTEL PROOF] GPU_TEXTURE_FORMAT={comp.get('gpu_texture_format', 'NV12/P010 / BGRA')}",
+        f"[INTEL PROOF] COMPOSITOR_PATH={comp.get('path', snapshot['compositor']['path'])}",
+        f"[INTEL PROOF] COMPOSITOR_OUTPUT_FORMAT={comp.get('compositor_output_format', 'QSV/P010')}",
         f"[INTEL PROOF] ENCODE_PATH={enc['path']}",
         f"[INTEL PROOF] ENCODE_PIXEL_FORMAT={enc['pixel_format'] or 'NOT_AVAILABLE'}",
         f"[INTEL PROOF] HWDOWNLOAD_EXPECTED={transfers['hwdownload_count_expected']}",
         f"[INTEL PROOF] HWUPLOAD_EXPECTED={transfers['hwupload_count_expected']}",
         f"[INTEL PROOF] MULTIFILE={'YES' if snapshot['timeline']['multi_file'] else 'NO'}",
-    ]
+        f"[INTEL PROOF] CROSS_GPU_FALLBACK=DISABLED",
+    ])
+    if caps.get("class") in ("INTEL_NATIVE_7D_INPROCESS", "INTEL_NATIVE_7E_ASYNC"):
+        is_7e = (caps.get("class") == "INTEL_NATIVE_7E_ASYNC")
+        lines.extend([
+            f"[INTEL PROOF] PIPELINE_PATH={'NATIVE_INPROCESS_ASYNC' if is_7e else 'NATIVE_INPROCESS'}",
+            "[INTEL PROOF] DEMUX_PATH=LIBAVFORMAT_NATIVE",
+            "[INTEL PROOF] DECODE_PATH=LIBAVCODEC_SOFTWARE_NATIVE",
+            "[INTEL PROOF] DECODE_RESIDENCY=CPU_NATIVE",
+            "[INTEL PROOF] RAW_VIDEO_DECODER_PIPE=NO",
+            "[INTEL PROOF] RAW_VIDEO_ENCODER_PIPE=NO",
+            "[INTEL PROOF] BASE_FRAME_PYTHON_TRANSIT=NO",
+            "[INTEL PROOF] BASE_FORMAT=P010",
+            "[INTEL PROOF] BASE_UPLOADS_PER_FRAME=1",
+            "[INTEL PROOF] HUD_TRANSPORT=NATIVE_SHM",
+            "[INTEL PROOF] HUD_SOURCE_SIZE=2560x1440",
+            "[INTEL PROOF] HUD_UPLOADS_PER_FRAME=1",
+            "[INTEL PROOF] COMPOSITOR_PATH=NATIVE_D3D11",
+            "[INTEL PROOF] COMPOSITOR_IMPL=VIDEO_PROCESSOR",
+            "[INTEL PROOF] NATIVE_OUTPUT_FORMAT=P010",
+            "[INTEL PROOF] NATIVE_OUTPUT_RESIDENCY=GPU",
+            "[INTEL PROOF] GPU_TO_CPU_AFTER_COMPOSITE=NO",
+            "[INTEL PROOF] AV1_HANDOFF=DIRECT_ONEVPL_VIDEO_MEMORY",
+            "[INTEL PROOF] AV1_ZERO_DOWNLOAD=YES",
+            "[INTEL PROOF] ENCODE_PATH=ONEVPL_AV1_NATIVE",
+            f"[INTEL PROOF] ENCODER_ASYNC={'YES' if is_7e else 'NO'}",
+            f"[INTEL PROOF] ENCODER_ASYNC_DEPTH={8 if is_7e else 1}",
+            f"[INTEL PROOF] ENCODER_SURFACE_POOL={16 if is_7e else 1}",
+            f"[INTEL PROOF] PIPELINE_DECODE_QUEUE_DEPTH={4 if is_7e else 1}",
+            f"[INTEL PROOF] AV1_TARGET_USAGE={7 if is_7e else 4}",
+            "[INTEL PROOF] AV1_RATE_CONTROL=VBR",
+            "[INTEL PROOF] AV1_TARGET_KBPS=40000",
+            "[INTEL PROOF] AV1_MAX_KBPS=50000",
+            "[INTEL PROOF] AV1_GOP_SIZE=60",
+            "[INTEL PROOF] COLOR_RANGE=pc",
+            "[INTEL PROOF] HDR_TRANSFER=ARIB_STD_B67",
+            "[INTEL PROOF] MUX_PATH=FFMPEG_FAST_REMUX",
+        ])
     for line in lines:
         render_print(line, flush=True)
     contract = snapshot.get("contract_validation", {})
@@ -734,6 +862,7 @@ def resolve_intel_force(
     adapters: Optional[list[dict[str, Any]]] = None,
     qsv_hw_usable: Optional[bool] = None,
     ffmpeg_qsv_info: Optional[dict[str, bool]] = None,
+    qsv_codecs_usable: Optional[dict[str, bool]] = None,
 ) -> IntelResolution:
     """Resolve INTEL_FORCE.
 
@@ -745,8 +874,8 @@ def resolve_intel_force(
     On any failure raises :class:`IntelBackendError`; cross-GPU fallback is
     intentionally disabled.
 
-    *adapters*, *qsv_hw_usable* and *ffmpeg_qsv_info* are injectable so the
-    resolution is unit-testable without real Intel hardware or FFmpeg.
+    *adapters*, *qsv_hw_usable*, *ffmpeg_qsv_info* and *qsv_codecs_usable* are
+    injectable so the resolution is unit-testable without real Intel hardware or FFmpeg.
     """
     log = log or _default_log
     res = IntelResolution()
@@ -794,30 +923,64 @@ def resolve_intel_force(
     res.ffmpeg_has_qsv = bool(ffmpeg_qsv_info.get("ffmpeg_has_qsv", False))
     res.hevc_qsv = bool(ffmpeg_qsv_info.get("hevc_qsv", False))
     res.h264_qsv = bool(ffmpeg_qsv_info.get("h264_qsv", False))
+    res.av1_qsv = bool(ffmpeg_qsv_info.get("av1_qsv", False))
 
-    if qsv_hw_usable is None:
-        qsv_hw_usable = qsv_hardware_usable(ffmpeg_exe)
-    res.qsv_available = bool(qsv_hw_usable)
+    if qsv_codecs_usable is not None:
+        res.hevc_qsv_usable = bool(qsv_codecs_usable.get("hevc_qsv", False))
+        res.av1_qsv_usable = bool(qsv_codecs_usable.get("av1_qsv", False))
+        res.h264_qsv_usable = bool(qsv_codecs_usable.get("h264_qsv", False))
+    elif qsv_hw_usable is not None:
+        if isinstance(qsv_hw_usable, dict):
+            res.hevc_qsv_usable = bool(qsv_hw_usable.get("hevc_qsv", False))
+            res.av1_qsv_usable = bool(qsv_hw_usable.get("av1_qsv", False))
+            res.h264_qsv_usable = bool(qsv_hw_usable.get("h264_qsv", False))
+        elif qsv_hw_usable:
+            if res.hevc_qsv:
+                res.hevc_qsv_usable = True
+            elif res.av1_qsv:
+                res.av1_qsv_usable = True
+            elif res.h264_qsv:
+                res.h264_qsv_usable = True
+        else:
+            res.hevc_qsv_usable = False
+            res.av1_qsv_usable = False
+            res.h264_qsv_usable = False
+    else:
+        codecs_tested = probe_qsv_codecs(ffmpeg_exe)
+        res.hevc_qsv_usable = bool(codecs_tested.get("hevc_qsv", False))
+        res.av1_qsv_usable = bool(codecs_tested.get("av1_qsv", False))
+        res.h264_qsv_usable = bool(codecs_tested.get("h264_qsv", False))
+
+    res.qsv_available = res.hevc_qsv_usable or res.av1_qsv_usable or res.h264_qsv_usable
 
     log(f"[INTEL] INTEL_QSV_AVAILABLE: {'YES' if res.qsv_available else 'NO'}")
     log(f"[INTEL] INTEL_H264_QSV: {'YES' if res.h264_qsv else 'NO'}")
     log(f"[INTEL] INTEL_HEVC_QSV: {'YES' if res.hevc_qsv else 'NO'}")
+    log(f"[INTEL] INTEL_AV1_QSV: {'YES' if res.av1_qsv else 'NO'}")
     log(f"[INTEL] INTEL_D3D11_DEVICE: {'OK' if res.d3d11_device_ok else 'FAILED'}")
 
     res.decode_path = "QSV/D3D11VA"
     res.render_path = "D3D11"
-    # INTEL_ENCODE_PATH reflects the *usable* encode path, not merely the
-    # encoder's presence in FFmpeg.  When QSV is not usable on this hardware,
-    # the encode path is reported as NONE (the controlled-failure state).
-    if res.qsv_available:
-        if res.hevc_qsv:
-            res.encode_path = "QSV-HEVC"
-        elif res.h264_qsv:
-            res.encode_path = "QSV-H264"
-        else:
-            res.encode_path = "QSV"
+
+    if res.hevc_qsv_usable:
+        res.selected_codec = "hevc"
+        res.selected_encoder = "hevc_qsv"
+        res.encode_path = "QSV-HEVC"
+    elif res.av1_qsv_usable:
+        res.selected_codec = "av1"
+        res.selected_encoder = "av1_qsv"
+        res.encode_path = "QSV-AV1"
+    elif res.h264_qsv_usable:
+        res.selected_codec = "h264"
+        res.selected_encoder = "h264_qsv"
+        res.encode_path = "QSV-H264"
     else:
+        res.selected_codec = "none"
+        res.selected_encoder = "none"
         res.encode_path = "NONE"
+
+    log(f"[INTEL] INTEL_SELECTED_CODEC: {res.selected_codec.upper()}")
+    log(f"[INTEL] INTEL_SELECTED_ENCODER: {res.selected_encoder}")
     log(f"[INTEL] INTEL_DECODE_PATH: {res.decode_path}")
     log(f"[INTEL] INTEL_RENDER_PATH: {res.render_path}")
     log(f"[INTEL] INTEL_ENCODE_PATH: {res.encode_path}")

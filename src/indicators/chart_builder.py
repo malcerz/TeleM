@@ -43,7 +43,8 @@ class ChartHistory(list[float]):
 
     __slots__ = (
         "timestamps", "chart_start_dt", "chart_end_dt", "time_scope",
-        "window_s", "_chart_cache_token",
+        "window_s", "_chart_cache_token", "active_time_mapper",
+        "skip_pauses", "base_start_dt",
     )
 
     def __init__(
@@ -54,6 +55,9 @@ class ChartHistory(list[float]):
         chart_end_dt: datetime | None = None,
         time_scope: str = "activity",
         window_s: float | None = None,
+        active_time_mapper: Any | None = None,
+        skip_pauses: bool = False,
+        base_start_dt: datetime | None = None,
     ):
         super().__init__(values)
         self.timestamps = tuple(timestamps)
@@ -61,6 +65,9 @@ class ChartHistory(list[float]):
         self.chart_end_dt = chart_end_dt if chart_end_dt is not None else (timestamps[-1] if timestamps else None)
         self.time_scope = time_scope
         self.window_s = window_s
+        self.active_time_mapper = active_time_mapper
+        self.skip_pauses = skip_pauses
+        self.base_start_dt = base_start_dt
         # ``id(self)`` is not a safe immutable-history identity: Python may
         # reuse an object ID after a temporary prefix view is released.  A
         # monotonic token keeps worker-local chart caches isolated without
@@ -104,10 +111,15 @@ def clip_chart_data(
         end = bisect_right(timestamps, end_bound) if end_bound is not None else len(timestamps)
         scope = getattr(values, "time_scope", "activity")
         window_s = getattr(values, "window_s", None)
+        active_mapper = getattr(values, "active_time_mapper", None)
+        skip_pauses = getattr(values, "skip_pauses", False)
+        base_start = getattr(values, "base_start_dt", None)
         if end <= start:
             clipped[key] = ChartHistory(
                 [], [], chart_start_dt=start_bound, chart_end_dt=end_bound,
                 time_scope=scope, window_s=window_s,
+                active_time_mapper=active_mapper, skip_pauses=skip_pauses,
+                base_start_dt=base_start,
             )
         else:
             clipped[key] = ChartHistory(
@@ -116,6 +128,8 @@ def clip_chart_data(
                 chart_start_dt=start_bound or timestamps[start],
                 chart_end_dt=end_bound or timestamps[end - 1],
                 time_scope=scope, window_s=window_s,
+                active_time_mapper=active_mapper, skip_pauses=skip_pauses,
+                base_start_dt=base_start,
             )
     return clipped
 
@@ -154,7 +168,19 @@ def clip_chart_data_for_target(
                 return bound.replace(tzinfo=None) if bound.tzinfo is not None else bound
             return bound.replace(tzinfo=sample_tz) if bound.tzinfo is None else bound
 
-        aligned_target = align(target_dt)
+        skip_pauses = getattr(values, "skip_pauses", False)
+        active_mapper = getattr(values, "active_time_mapper", None)
+        if skip_pauses and active_mapper is not None:
+            from src.telemetry_resolver import _map_wall_to_seconds
+            base_start = getattr(values, "base_start_dt", None) or timestamps[0]
+            sec = _map_wall_to_seconds(active_mapper, target_dt)
+            if sec is not None:
+                aligned_target = align(base_start + timedelta(seconds=sec))
+            else:
+                aligned_target = align(target_dt)
+        else:
+            aligned_target = align(target_dt)
+
         aligned_start = align(chart_start)
         aligned_end = align(chart_end)
         window_s = normalize_chart_window_s(getattr(values, "window_s", None))
@@ -173,6 +199,7 @@ def build_chart_data(
     start_dt_utc: datetime | None = None,
     end_dt_utc: datetime | None = None,
     source_activity_ranges: dict[str, tuple[datetime, datetime]] | None = None,
+    active_time_mapper: Any | None = None,
 ) -> dict[str, list[float]]:
     """Build chart history data for all chart-type indicators in a layout.
 
@@ -188,10 +215,16 @@ def build_chart_data(
         end_dt_utc: Optional video-visible end time for range bounding.
         source_activity_ranges: Optional dict mapping source name ("fit", "gpx", "gpmf")
             to (global_activity_start_dt, global_activity_end_dt).
+        active_time_mapper: Optional ActiveTimeMapper for skip-pauses mode.
 
     Returns:
         ``{indicator_key: [values]}`` for every enabled chart indicator.
     """
+    skip_pauses = bool(
+        layout.get("charts_skip_pauses", layout.get("global", {}).get("charts_skip_pauses", False))
+    )
+    if skip_pauses:
+        from src.telemetry_resolver import _map_wall_to_seconds
     chart_data: dict[str, list[float]] = {}
     for ind_key, ind_cfg in layout.get("indicators", {}).items():
         if ind_cfg.get("form") != "chart" or not ind_cfg.get("enabled", True):
@@ -240,6 +273,18 @@ def build_chart_data(
         else:
             samples = []
 
+        base_start_dt = None
+        if samples and skip_pauses and active_time_mapper is not None:
+            base_start_dt = samples[0][0]
+            mapped_samples = []
+            for s_ts, s_val in samples:
+                if not active_time_mapper.is_paused(s_ts):
+                    act_sec = _map_wall_to_seconds(active_time_mapper, s_ts)
+                    if act_sec is not None:
+                        act_ts = base_start_dt + timedelta(seconds=act_sec)
+                        mapped_samples.append((act_ts, s_val))
+            samples = mapped_samples
+
         if samples:
             sample_ts = [sample[0] for sample in samples]
             sample_tz = sample_ts[0].tzinfo if sample_ts else None
@@ -254,8 +299,19 @@ def build_chart_data(
                 return bound
 
             if scope == "video":
-                start_b = align(start_dt_utc)
-                end_b = align(end_dt_utc)
+                v_start = start_dt_utc
+                v_end = end_dt_utc
+                if skip_pauses and active_time_mapper is not None and base_start_dt is not None:
+                    if v_start is not None:
+                        _vs = _map_wall_to_seconds(active_time_mapper, v_start)
+                        if _vs is not None:
+                            v_start = base_start_dt + timedelta(seconds=_vs)
+                    if v_end is not None:
+                        _ve = _map_wall_to_seconds(active_time_mapper, v_end)
+                        if _ve is not None:
+                            v_end = base_start_dt + timedelta(seconds=_ve)
+                start_b = align(v_start)
+                end_b = align(v_end)
                 start_i = bisect_left(sample_ts, start_b) if start_b is not None else 0
                 end_i = bisect_right(sample_ts, end_b) if end_b is not None else len(sample_ts)
 
@@ -266,8 +322,16 @@ def build_chart_data(
                 sliced_samples = samples
                 if source_activity_ranges and src in source_activity_ranges:
                     raw_start, raw_end = source_activity_ranges[src]
-                    chart_start = align(raw_start) or sample_ts[0]
-                    chart_end = align(raw_end) or sample_ts[-1]
+                    if skip_pauses and active_time_mapper is not None and base_start_dt is not None:
+                        chart_start = align(base_start_dt)
+                        _re = _map_wall_to_seconds(active_time_mapper, raw_end)
+                        chart_end = align(
+                            base_start_dt
+                            + timedelta(seconds=_re if _re is not None else 0.0)
+                        )
+                    else:
+                        chart_start = align(raw_start) or sample_ts[0]
+                        chart_end = align(raw_end) or sample_ts[-1]
                 else:
                     chart_start = sample_ts[0]
                     chart_end = sample_ts[-1]
@@ -280,6 +344,9 @@ def build_chart_data(
                     chart_end_dt=chart_end,
                     time_scope=scope,
                     window_s=window_s,
+                    active_time_mapper=active_time_mapper if skip_pauses else None,
+                    skip_pauses=skip_pauses,
+                    base_start_dt=base_start_dt,
                 )
             elif sliced_samples:
                 chart_data[ind_key] = ChartHistory(
@@ -289,10 +356,16 @@ def build_chart_data(
                     chart_end_dt=chart_end,
                     time_scope=scope,
                     window_s=window_s,
+                    active_time_mapper=active_time_mapper if skip_pauses else None,
+                    skip_pauses=skip_pauses,
+                    base_start_dt=base_start_dt,
                 )
             else:
                 chart_data[ind_key] = ChartHistory(
                     [], [], chart_start_dt=chart_start, chart_end_dt=chart_end,
                     time_scope=scope, window_s=window_s,
+                    active_time_mapper=active_time_mapper if skip_pauses else None,
+                    skip_pauses=skip_pauses,
+                    base_start_dt=base_start_dt,
                 )
     return chart_data

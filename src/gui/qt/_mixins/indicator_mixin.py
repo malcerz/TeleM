@@ -626,15 +626,32 @@ class IndicatorMixin:
             ("gyro_z", "Gyroscope Z", "rad/s"),
             ("gyro_magnitude", "Gyroscope Magnitude", "rad/s"),
         )
+        def _value_range_without_materializing(samples):
+            """Return IMU min/max directly from LazySampleList backing data."""
+            arr = getattr(samples, "_arr", None)
+            if arr is not None and getattr(arr, "ndim", 0) == 2 and arr.shape[1] >= 2:
+                try:
+                    import numpy as np
+                    values = arr[:, 1]
+                    finite = values[np.isfinite(values)]
+                    if len(finite):
+                        return float(np.min(finite)), float(np.max(finite))
+                except Exception:
+                    pass
+            values = [value for _, value in samples if value is not None]
+            return (min(values), max(values)) if values else (None, None)
+
         for field_name, display_name, unit in imu_streams:
             samples = getattr(tm, f"{field_name}_samples", [])
             if samples:
-                vals = [v for _, v in samples]
+                value_min, value_max = _value_range_without_materializing(samples)
+                if value_min is None or value_max is None:
+                    continue
                 streams.append(DataStream(
                     key=f"{field_name}_text", display_name=display_name,
                     source="gpmf", category="sensor", unit=unit,
                     suggested_form="chart", sample_count=len(samples),
-                    value_range=(min(vals), max(vals)),
+                    value_range=(value_min, value_max),
                 ))
 
         if tm.gpx_speed_samples:

@@ -221,24 +221,59 @@ def get_value_by_suffix_for_prefix(
 def find_gps_anchor(records: list[dict[str, Any]]) -> Optional[datetime]:
     """Find the absolute UTC start time from GPSDateTime anchors."""
     records = ensure_records_list(records)
+    base_stmp: Optional[float] = None
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        datetimes = get_all_values_by_suffix(rec, "GPSDateTime")
-        for prefix, dt_str in datetimes.items():
-            dt = parse_exif_datetime(dt_str)
+        flat = flatten_record(rec)
+        for k in (
+            "Doc1:TMPC_STMP", "Doc1:SHUT_STMP", "Doc1:ISO_STMP",
+            "Doc1:ACCL_STMP", "Doc1:GYRO_STMP", "Doc1:STMP",
+        ):
+            val = parse_float_maybe(flat.get(k))
+            if val is not None:
+                base_stmp = val
+                break
+        if base_stmp is not None:
+            break
+
+    candidates: list[datetime] = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        flat = flatten_record(rec)
+        for k, v in flat.items():
+            if not k.endswith(":GPSDateTime"):
+                continue
+            dt = parse_exif_datetime(v)
             if dt is None:
                 continue
-            st_val = get_value_by_suffix_for_prefix(rec, prefix, "SampleTime")
-            if st_val is not None:
-                st_sec = parse_float_maybe(str(st_val).replace(" s", ""))
-                if st_sec is not None:
-                    return dt - timedelta(seconds=st_sec)
-            ts_val = get_value_by_suffix_for_prefix(rec, prefix, "TimeStamp")
-            if ts_val is not None:
-                ts_sec = parse_float_maybe(ts_val)
-                if ts_sec is not None:
-                    return dt - timedelta(seconds=ts_sec)
+            prefix = k.split(":", 1)[0]
+            main_doc = prefix.split("-")[0]
+            stmp = (
+                parse_float_maybe(flat.get(f"{main_doc}:TMPC_STMP"))
+                or parse_float_maybe(flat.get(f"{main_doc}:SHUT_STMP"))
+                or parse_float_maybe(flat.get(f"{main_doc}:ISO_STMP"))
+                or parse_float_maybe(flat.get(f"{main_doc}:ACCL_STMP"))
+                or parse_float_maybe(flat.get(f"{main_doc}:GYRO_STMP"))
+                or parse_float_maybe(flat.get(f"{main_doc}:STMP"))
+            )
+            sub_st = parse_float_maybe(flat.get(f"{prefix}:SampleTime"))
+            sub_offset_us = (sub_st * 1_000_000) if (sub_st is not None and sub_st < 10.0) else 0.0
+            if stmp is not None and base_stmp is not None:
+                sample_stmp = stmp + sub_offset_us
+                v_start = dt - timedelta(microseconds=sample_stmp - base_stmp)
+                candidates.append(v_start)
+            else:
+                st_val = flat.get(f"{prefix}:SampleTime")
+                if st_val is not None:
+                    st_sec = parse_float_maybe(str(st_val).replace(" s", ""))
+                    if st_sec is not None:
+                        candidates.append(dt - timedelta(seconds=st_sec))
+                else:
+                    candidates.append(dt)
+    if candidates:
+        return min(candidates)
     return None
 
 
@@ -399,14 +434,14 @@ def _extract_gpmf_timed_samples(
     value_parser: Callable[[Any], list[int]],
     progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> Optional[list[tuple[datetime, int]]]:
-    """Extract ISOE/SHUT using the stream's STMP/TSMP block timing.
+    """Extract ISOE/SHUT/TMPC using the stream's STMP/TSMP block timing.
 
     STMP is the GPMF microsecond clock at the first sample of a block; TSMP
     supplies the corresponding sample counter.  The next block establishes
     the exact local sample interval, including the 30000/1001 cadence.
     """
     blocks: list[tuple[float, float, list[int]]] = []
-    absolute_times: list[datetime] = []
+    gps_anchors: list[tuple[datetime, Optional[float]]] = []
     value_suffix = {
         "ISO": "ISO",
         "SHUT": "ExposureTimes",
@@ -429,38 +464,61 @@ def _extract_gpmf_timed_samples(
         for key, raw in flat.items():
             if key.endswith(":GPSDateTime"):
                 dt = parse_exif_datetime(raw)
-                if dt is not None:
-                    absolute_times.append(dt)
+                if dt is None:
+                    continue
+                prefix = key.split(":", 1)[0]
+                main_doc = prefix.split("-")[0]
+                stmp = (
+                    parse_float_maybe(flat.get(f"{main_doc}:{marker}_STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:TMPC_STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:SHUT_STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:ISO_STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:ACCL_STMP"))
+                    or parse_float_maybe(flat.get(f"{main_doc}:GYRO_STMP"))
+                )
+                sub_st = parse_float_maybe(flat.get(f"{prefix}:SampleTime"))
+                sub_offset_us = (sub_st * 1_000_000) if (sub_st is not None and sub_st < 10.0) else 0.0
+                if stmp is not None:
+                    gps_anchors.append((dt, stmp + sub_offset_us))
+                else:
+                    gps_anchors.append((dt, None))
         reporter(record_index)
     reporter(len(records), force=True)
 
-    if not blocks or not absolute_times:
+    if not blocks or not gps_anchors:
         return None
     blocks.sort(key=lambda item: (item[0], item[1]))
     base_stmp = blocks[0][0]
     steps: list[float] = []
-    for index, (stmp, tsmp, _values) in enumerate(blocks):
+    for index, (stmp, tsmp, values) in enumerate(blocks):
         if index + 1 < len(blocks):
             next_stmp, next_tsmp, _ = blocks[index + 1]
-            if next_tsmp > tsmp:
-                steps.append((next_stmp - stmp) / (next_tsmp - tsmp))
+            if next_stmp > stmp and len(values) > 0:
+                steps.append((next_stmp - stmp) / len(values))
                 continue
         if steps:
             steps.append(steps[-1])
         else:
             return None
 
-    anchor = min(absolute_times)
+    start_dts: list[datetime] = []
+    for dt, a_stmp in gps_anchors:
+        if a_stmp is not None:
+            start_dts.append(dt - timedelta(microseconds=a_stmp - base_stmp))
+    if start_dts:
+        stream_start_dt = min(start_dts)
+    else:
+        stream_start_dt = min(dt for dt, _ in gps_anchors)
+
     samples: list[tuple[datetime, int]] = []
     for (stmp, _tsmp, values), step_us in zip(blocks, steps):
         for index, value in enumerate(values):
             offset_us = (stmp - base_stmp) + index * step_us
-            sample_dt = anchor + timedelta(microseconds=offset_us)
+            sample_dt = stream_start_dt + timedelta(microseconds=offset_us)
             samples.append((sample_dt, value))
     samples.sort(key=lambda item: item[0])
-    if any(b[0] <= a[0] for a, b in zip(samples, samples[1:])):
-        return None
-    return samples
+    return _dedupe_samples(samples)
 
 
 def _extract_gpmf_vector_samples(
@@ -469,7 +527,7 @@ def _extract_gpmf_vector_samples(
 ) -> list[tuple[datetime, tuple[float, float, float]]]:
     """Extract full-resolution 3-axis GPMF vectors with stream timing."""
     blocks: list[tuple[float, float, list[list[float]]]] = []
-    anchors: list[datetime] = []
+    gps_anchors: list[tuple[datetime, Optional[float]]] = []
     records = ensure_records_list(records)
     reporter = _ProgressReporter(progress_cb, len(records))
     for record_index, record in enumerate(records, 1):
@@ -490,9 +548,25 @@ def _extract_gpmf_vector_samples(
             if key.endswith(":GPSDateTime"):
                 dt = parse_exif_datetime(raw)
                 if dt is not None:
-                    anchors.append(dt)
+                    prefix = key.split(":", 1)[0]
+                    main_doc = prefix.split("-")[0]
+                    stmp = (
+                        parse_float_maybe(flat.get(f"{main_doc}:{marker}_STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:TMPC_STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:SHUT_STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:ISO_STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:ACCL_STMP"))
+                        or parse_float_maybe(flat.get(f"{main_doc}:GYRO_STMP"))
+                    )
+                    sub_st = parse_float_maybe(flat.get(f"{prefix}:SampleTime"))
+                    sub_offset_us = (sub_st * 1_000_000) if (sub_st is not None and sub_st < 10.0) else 0.0
+                    if stmp is not None:
+                        gps_anchors.append((dt, stmp + sub_offset_us))
+                    else:
+                        gps_anchors.append((dt, None))
         reporter(record_index)
-    if not blocks or not anchors:
+    if not blocks or not gps_anchors:
         return []
     blocks.sort(key=lambda item: (item[0], item[1]))
     steps: list[float] = []
@@ -508,13 +582,21 @@ def _extract_gpmf_vector_samples(
             steps.append(steps[-1])
         else:
             return []
-    anchor = min(anchors)
     base_stmp = blocks[0][0]
+    start_dts: list[datetime] = []
+    for dt, a_stmp in gps_anchors:
+        if a_stmp is not None:
+            start_dts.append(dt - timedelta(microseconds=a_stmp - base_stmp))
+    if start_dts:
+        stream_start_dt = min(start_dts)
+    else:
+        stream_start_dt = min(dt for dt, _ in gps_anchors)
+
     samples: list[tuple[datetime, tuple[float, float, float]]] = []
     reporter = _ProgressReporter(progress_cb, len(blocks))
     for block_index, ((stmp, _tsmp, vectors), step_us) in enumerate(zip(blocks, steps), 1):
         for index, vector in enumerate(vectors):
-            dt = anchor + timedelta(microseconds=(stmp - base_stmp) + index * step_us)
+            dt = stream_start_dt + timedelta(microseconds=(stmp - base_stmp) + index * step_us)
             # GPMF reports this camera's raw order as ZXY. Expose canonical XYZ.
             if len(vector) == 3:
                 vector = [vector[1], vector[2], vector[0]]
@@ -522,9 +604,7 @@ def _extract_gpmf_vector_samples(
         reporter(block_index)
     reporter(len(blocks), force=True)
     samples.sort(key=lambda item: item[0])
-    if any(b[0] <= a[0] for a, b in zip(samples, samples[1:])):
-        return []
-    return samples
+    return _dedupe_samples(samples)
 
 
 def extract_accelerometer_samples(
@@ -1075,7 +1155,10 @@ def interpolate_speed(
 def interpolate_distance(
     track_samples: list[tuple[datetime, float]], target_dt: datetime
 ) -> float:
-    """Linear interpolation of cumulative distance at a given timestamp."""
+    """Interpolate cumulative distance, holding across merged-FIT boundaries."""
+    segment_start_indices = frozenset(
+        getattr(track_samples, "segment_start_indices", ()) or ()
+    )
     target_dt = _normalise_dt(target_dt)
     track_samples = _normalise_samples(track_samples)
     if not track_samples:
@@ -1089,6 +1172,8 @@ def interpolate_distance(
         return track_samples[-1][1]
     t1, d1 = track_samples[idx - 1]
     t2, d2 = track_samples[idx]
+    if idx in segment_start_indices and target_dt < t2:
+        return d1
     dt_total = (t2 - t1).total_seconds()
     if dt_total <= 0:
         return d1
@@ -1120,9 +1205,15 @@ def interpolate_altitude(
 
 
 def _interpolate_step(
-    samples: list[tuple[datetime, Any]], target_dt: datetime
+    samples: list[tuple[datetime, Any]], target_dt: datetime,
+    *, allow_pre_first: bool = True,
 ) -> Any:
-    """Previous-or-equal lookup shared by all STEP telemetry fields."""
+    """Previous-or-equal lookup shared by STEP telemetry fields.
+
+    FIT historically allows a short pre-first hold.  Native GPMF camera
+    streams use the stricter availability contract exposed by
+    :func:`interpolate_gpmf_step` below.
+    """
     if not samples:
         return None
     target_dt = _normalise_dt(target_dt)
@@ -1130,7 +1221,7 @@ def _interpolate_step(
     times = [dt for dt, _ in samples]
     idx = bisect_right(times, target_dt) - 1
     if idx < 0:
-        if len(times) > 0 and (times[0] - target_dt).total_seconds() <= 120.0:
+        if allow_pre_first and len(times) > 0 and (times[0] - target_dt).total_seconds() <= 120.0:
             return samples[0][1]
         return None
     return samples[idx][1]
@@ -1140,21 +1231,32 @@ def interpolate_iso(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of ISO at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_exposure(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of exposure at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_temperature(
     samples: list[tuple[datetime, int]], target_dt: datetime
 ) -> Optional[int]:
     """Step interpolation of temperature at a given timestamp."""
-    return _interpolate_step(samples, target_dt)
+    return _interpolate_step(samples, target_dt, allow_pre_first=True)
+
+
+def interpolate_gpmf_step(
+    samples: list[tuple[datetime, Any]], target_dt: datetime
+) -> Any:
+    """Resolve a dynamic GPMF stream without backfilling future samples.
+
+    The first value becomes available exactly at its own timestamp.  Existing
+    last-value hold after the final sample is intentionally preserved.
+    """
+    return _interpolate_step(samples, target_dt, allow_pre_first=False)
 
 
 def interpolate_value(

@@ -673,8 +673,15 @@ def _build_stream_ffmpeg_cmd(
     overlay_h: int | None = None,
     use_gpu_compositor: bool = False,
     intel_gpu_resident: bool = False,
+    intel_gpu_compositor: bool = False,
     intel_cpu_download_format: str = "nv12",
     intel_cpu_software_decode: bool = False,
+    intel_codec: str = "hevc",
+    nvidia_codec: str = "HEVC",
+    nvidia_quality: str = "Fast",
+    enable_compression_analysis: bool = True,
+    is_10bit: bool = False,
+    max_frames: int | None = None,
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
@@ -726,6 +733,10 @@ def _build_stream_ffmpeg_cmd(
         return cmd, "direct_gpu_passthrough (zero hwdownload)"
 
     # ── Base filter (video scaling & format conversion) ───────────────────
+    if encoder == "intel" and intel_gpu_compositor and not intel_gpu_resident:
+        if "-init_hw_device" not in input_args:
+            input_args = ["-init_hw_device", "qsv=qsv:hw,child_device_type=d3d11va", "-filter_hw_device", "qsv", *input_args]
+
     if encoder == "nv" and not needs_cpu_rotation:
         if hwaccel == "cuda":
             if target_res:
@@ -753,6 +764,12 @@ def _build_stream_ffmpeg_cmd(
             base_filter = f"[0:v]scale_qsv={render_w}:{render_h}[base]"
         else:
             base_filter = "[0:v]null[base]"
+    elif encoder == "intel" and intel_gpu_compositor:
+        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        if target_res:
+            base_filter = f"[0:v]format={cpu_format},scale={render_w}:{render_h}:flags=lanczos,hwupload[base]"
+        else:
+            base_filter = f"[0:v]format={cpu_format},hwupload[base]"
     elif encoder == "intel" and intel_cpu_software_decode:
         # ETAP 5D rotation contract: autorotate ON at import -- the decoder
         # applies the source display matrix, so frames arrive already upright.
@@ -833,11 +850,15 @@ def _build_stream_ffmpeg_cmd(
                         f"[ov_raw_{i}]crop={rw}:{rh}:{atlas_x}:{atlas_y},format=yuva420p,hwupload_cuda[ov_{i}]"
                     )
 
-                next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+                is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+                next_base = f"[v_step_{i}]" if i < n_reg - 1 else ("[v_pre10]" if is_10bit_nv else "[vtemp]")
                 overlay_ops.append(
                     f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{next_base}"
                 )
                 curr_base = next_base
+
+            if is_10bit_nv:
+                overlay_ops.append("[v_pre10]scale_cuda=format=p010le[vtemp]")
 
             filter_complex = (
                 f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
@@ -862,7 +883,11 @@ def _build_stream_ffmpeg_cmd(
                 ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={scaled_stream_w}:{scaled_stream_h}:flags=bilinear,format=yuva420p,hwupload_cuda[ov]"
             else:
                 ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,format=yuva420p,hwupload_cuda[ov]"
-            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
+            is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+            if is_10bit_nv:
+                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y},scale_cuda=format=p010le"
+            else:
+                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
             filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
         if "-init_hw_device" not in input_args:
@@ -897,29 +922,94 @@ def _build_stream_ffmpeg_cmd(
             f"[base][ov]overlay_qsv=x={int(round(hud_x * scale_x))}:"
             f"y={int(round(hud_y * scale_y))}:shortest=1[vtemp]"
         )
+    elif encoder == "intel" and intel_gpu_compositor:
+        if hud_regions and len(hud_regions) > 1:
+            n_reg = len(hud_regions)
+            split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
+
+            crop_ops = []
+            overlay_ops = []
+            curr_base = "[base]"
+            for i, r in enumerate(hud_regions):
+                dest_x, dest_y, src_x, src_y, rw, rh = r
+                s_dest_x = int(round(dest_x * scale_x))
+                s_dest_y = int(round(dest_y * scale_y))
+                s_rw = int(round(rw * scale_x))
+                s_rh = int(round(rh * scale_y))
+                if s_rw % 2 != 0:
+                    s_rw += 1
+                if s_rh % 2 != 0:
+                    s_rh += 1
+
+                if scale_x != 1.0 or scale_y != 1.0:
+                    crop_ops.append(
+                        f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y},scale={s_rw}:{s_rh}:flags=bilinear,format=bgra,hwupload[ov_{i}]"
+                    )
+                else:
+                    crop_ops.append(
+                        f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y},format=bgra,hwupload[ov_{i}]"
+                    )
+
+                next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+                overlay_ops.append(
+                    f"{curr_base}[ov_{i}]overlay_qsv=x={s_dest_x}:y={s_dest_y}{':shortest=1' if i == n_reg - 1 else ''}{next_base}"
+                )
+                curr_base = next_base
+
+            filter_complex = (
+                f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
+            )
+        else:
+            s_hud_x = int(round(hud_x * scale_x))
+            s_hud_y = int(round(hud_y * scale_y))
+            s_stream_w = int(round(stream_w * scale_x))
+            s_stream_h = int(round(stream_h * scale_y))
+            if s_stream_w % 2 != 0:
+                s_stream_w += 1
+            if s_stream_h % 2 != 0:
+                s_stream_h += 1
+            use_cpu_scale_5b = os.environ.get("TELEM_INTEL_5B_LEGACY_CPU_SCALE") == "1"
+            if scale_x != 1.0 or scale_y != 1.0 or stream_w != render_w or stream_h != render_h:
+                if use_cpu_scale_5b:
+                    ov_input = (
+                        f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={s_stream_w}:{s_stream_h}:flags=bilinear,"
+                        f"format=bgra,hwupload[ov]"
+                    )
+                else:
+                    ov_input = (
+                        f"[1:v]setpts=PTS-STARTPTS,format=bgra,hwupload,"
+                        f"vpp_qsv=w={s_stream_w}:h={s_stream_h}[ov]"
+                    )
+            else:
+                ov_input = "[1:v]setpts=PTS-STARTPTS,format=bgra,hwupload[ov]"
+            ov_op = f"overlay_qsv=x={s_hud_x}:y={s_hud_y}:shortest=1"
+            filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif hud_regions and len(hud_regions) > 1:
         n_reg = len(hud_regions)
         split_labels = "".join([f"[ov_raw_{i}]" for i in range(n_reg)])
-        ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,split={n_reg}{split_labels}"
+        ov_input = f"[1:v]setpts=PTS-STARTPTS,split={n_reg}{split_labels}"
 
         crop_ops = []
         overlay_ops = []
         curr_base = "[base]"
         for i, r in enumerate(hud_regions):
             dest_x, dest_y, src_x, src_y, rw, rh = r
+            if stream_w == canvas_w and stream_h == canvas_h:
+                crop_x, crop_y = dest_x, dest_y
+            else:
+                crop_x, crop_y = src_x, src_y
             s_dest_x = int(round(dest_x * scale_x))
             s_dest_y = int(round(dest_y * scale_y))
-            s_src_x = src_x
-            s_src_y = src_y
             s_rw = int(round(rw * scale_x))
             s_rh = int(round(rh * scale_y))
             if s_rw % 2 != 0: s_rw += 1
             if s_rh % 2 != 0: s_rh += 1
 
             if scale_x != 1.0 or scale_y != 1.0:
-                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y},scale={s_rw}:{s_rh}:flags=bilinear[ov_{i}]")
+                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{crop_x}:{crop_y},scale={s_rw}:{s_rh}:flags=bilinear[ov_{i}]")
             else:
-                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{src_x}:{src_y}[ov_{i}]")
+                crop_ops.append(f"[ov_raw_{i}]crop={rw}:{rh}:{crop_x}:{crop_y}[ov_{i}]")
 
             next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
             overlay_ops.append(
@@ -938,9 +1028,9 @@ def _build_stream_ffmpeg_cmd(
             s_stream_h = int(round(stream_h * scale_y))
             if s_stream_w % 2 != 0: s_stream_w += 1
             if s_stream_h % 2 != 0: s_stream_h += 1
-            ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={s_stream_w}:{s_stream_h}:flags=bilinear[ov]"
+            ov_input = f"[1:v]setpts=PTS-STARTPTS,scale={s_stream_w}:{s_stream_h}:flags=bilinear[ov]"
         else:
-            ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba[ov]"
+            ov_input = "[1:v]setpts=PTS-STARTPTS[ov]"
         ov_op = f"overlay={s_hud_x}:{s_hud_y}:shortest=1"
         filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
 
@@ -953,7 +1043,7 @@ def _build_stream_ffmpeg_cmd(
             parts.append(f"between(t,{cs},{ce})")
         select_expr = "not(" + "+".join(parts) + ")"
         filter_complex += (
-            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vtemp2]"
+            f";[vtemp]select='{select_expr}',setpts=N/FRAME_RATE/TB[vout]"
         )
         # Audio: aselect – tnie ścieżkę audio tak samo jak wideo
         audio_idx = "2" if audio_input_args else "0"
@@ -961,12 +1051,9 @@ def _build_stream_ffmpeg_cmd(
             f";[{audio_idx}:a]aselect='{select_expr}',asetpts=N/SR/TB[aout]"
         )
         print(f"[CUT] select filter: {select_expr}", flush=True)
-        v_last = "[vtemp2]"
+        v_out_map = "[vout]"
     else:
-        filter_complex += ";[vtemp]null[vtemp2]"
-        v_last = "[vtemp2]"
-
-    filter_complex += f";{v_last}null[vout]"
+        v_out_map = "[vtemp]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
@@ -997,7 +1084,7 @@ def _build_stream_ffmpeg_cmd(
 
     cmd.extend([
         "-filter_complex", filter_complex,
-        "-map", "[vout]",
+        "-map", v_out_map,
     ])
 
     if has_cuts:
@@ -1020,12 +1107,31 @@ def _build_stream_ffmpeg_cmd(
     ])
 
     if encoder == "nv":
+        try:
+            from src.ffmpeg.nvidia_config import resolve_nvenc_ffmpeg_params
+            is_10bit_nv = bool(is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+            nv_params = resolve_nvenc_ffmpeg_params(
+                codec=nvidia_codec,
+                quality=nvidia_quality,
+                is_10bit=is_10bit_nv,
+            )
+            cmd.extend(nv_params["ffmpeg_args"])
+        except ImportError:
+            is_10bit_nv = bool(is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+            cmd.extend([
+                "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
+                "-cq", "24",
+            ])
         cmd.extend([
-            "-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr",
-            "-cq", "24",
-            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else "yuv420p",
+            "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else ("p010le" if is_10bit_nv else "yuv420p"),
             "-gpu", str(gpu),
         ])
+        if is_10bit_nv:
+            cmd.extend([
+                "-color_primaries", "bt2020",
+                "-color_trc", "arib-std-b67",
+                "-colorspace", "bt2020nc",
+            ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
@@ -1041,20 +1147,26 @@ def _build_stream_ffmpeg_cmd(
         else:
             cmd.extend(["-c:a", "copy"])
     elif encoder == "intel":
+        codec_name = "av1_qsv" if str(intel_codec).lower() in ("av1", "av1_qsv") else "hevc_qsv"
+        pix_fmt = (
+            "p010le"
+            if str(intel_cpu_download_format).lower() in ("p010", "p010le") and not intel_gpu_resident
+            else "nv12"
+        )
         cmd.extend([
-            # This FFmpeg build accepts a DirectX adapter index for qsv_device.
-            # The index is injected dynamically into input_args by streaming;
-            # do not hard-code a vendor/index here.
-            # ETAP 4K: -global_quality removed -- inert whenever -b:v is
-            # present (ETAP 4I/4J/4K proof: identical SHA-256 outputs for
-            # Q22/Q24/Q28 with -b:v 40M). Bitrate control comes solely from
-            # -b:v appended by append_bitrate_args() (GUI video_bitrate /
-            # TELEM_INTEL_QSV_BITRATE_MBPS env override).
-            "-c:v", "hevc_qsv", "-preset", "veryfast",
-            "-look_ahead", "0",
-            "-async_depth", "4", "-pix_fmt",
-            ("p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") and not intel_gpu_resident else "nv12"),
+            "-c:v", codec_name,
+            "-preset", "veryfast",
+            "-async_depth", "4",
         ])
+        if codec_name == "hevc_qsv":
+            cmd.extend(["-look_ahead", "0"])
+        cmd.extend(["-pix_fmt", pix_fmt])
+        if pix_fmt == "p010le":
+            cmd.extend([
+                "-color_primaries", "bt2020",
+                "-color_trc", "arib-std-b67",
+                "-colorspace", "bt2020nc",
+            ])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
@@ -1070,6 +1182,10 @@ def _build_stream_ffmpeg_cmd(
             cmd.extend(["-c:a", "copy"])
 
     cmd = append_bitrate_args(cmd, encoder, video_bitrate)
+    if max_frames is not None and int(max_frames) > 0:
+        cmd.extend(["-frames:v", str(int(max_frames))])
     cmd.append(str(output_file))
+    if encoder == "nv" and enable_compression_analysis:
+        cmd.extend(["-stats_period", "0.25"])
     cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "error"])
     return cmd, filter_complex

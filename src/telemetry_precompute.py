@@ -26,7 +26,7 @@ from typing import Any, Callable, Optional
 from src.indicators.registry import HARDCODED_KEYS
 from src.indicators.chart_builder import clip_chart_data_for_target
 from src.telemetry_heading import normalize_heading
-from src.telemetry_resolver import resolve_distance_samples
+from src.telemetry_resolver import resolve_distance_samples, resolve_current_presentation
 
 
 # Sensible default units for known FIT field names (identical to the reference
@@ -94,6 +94,7 @@ class _Static:
     slope_keys: tuple
     slope_units: dict[str, str]
     slope_labels: dict[str, str]
+    auto_ranges: Optional[dict[str, tuple[float, float]]] = None
 
 
 class TelemetryFrameCache:
@@ -176,6 +177,7 @@ class TelemetryFrameCache:
             "start_dt_utc": st.start_dt_utc,
             "elapsed_seconds": rec.elapsed_seconds,
             "avg_speed_kmh": rec.avg_speed_kmh,
+            "auto_ranges": st.auto_ranges,
         }
 
     def stats(self) -> dict[str, Any]:
@@ -296,22 +298,30 @@ def _vectorize_linear_speed(
 
 
 def _vectorize_linear_distance(
-    samples: list[tuple[datetime, float]],
+    samples: list,
     target_dts: list[datetime],
     target_ts_arr: np.ndarray,
     ref_dt: datetime,
 ) -> list[Optional[float]]:
-    """Vectorized linear distance interpolation matching interpolate_distance exactly."""
+    """Vectorized distance interpolation, including merged-FIT gap holds."""
     if not samples:
         return [None] * len(target_dts)
+    if isinstance(samples[0][1], (tuple, list)):
+        return [None] * len(target_dts)
     sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
-    sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    sample_vals = np.array([float(s[1]) for s in samples], dtype=np.float64)
     sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
     
     interp_vals = np.interp(
         target_ts_arr, sample_ts, sample_vals,
         left=0.0, right=float(sample_vals[-1])
     )
+    for boundary in getattr(samples, "segment_start_indices", ()) or ():
+        idx = int(boundary)
+        if idx <= 0 or idx >= len(sample_ts):
+            continue
+        gap_mask = (target_ts_arr >= sample_ts[idx - 1]) & (target_ts_arr < sample_ts[idx])
+        interp_vals[gap_mask] = sample_vals[idx - 1]
     return [float(v) for v in interp_vals]
 
 
@@ -328,6 +338,33 @@ def _vectorize_linear_altitude(
     sample_vals = np.array([s[1] for s in samples], dtype=np.float64)
     sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
     
+    interp_vals = np.interp(
+        target_ts_arr, sample_ts, sample_vals,
+        left=float(sample_vals[0]), right=float(sample_vals[-1])
+    )
+    return [float(v) for v in interp_vals]
+
+
+def _vectorize_linear_roll(
+    timeline: list[tuple[datetime, float]],
+    target_dts: list[datetime],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+) -> list[Optional[float]]:
+    """Vectorized linear roll interpolation using np.interp matching interpolate_roll."""
+    if not timeline:
+        return [None] * len(target_dts)
+    sample_ts = getattr(timeline, "_sample_ts", None)
+    sample_vals = getattr(timeline, "_sample_vals", None)
+    if sample_ts is None or sample_vals is None or len(sample_ts) != len(timeline):
+        sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in timeline]
+        sample_vals = np.array([float(s[1]) for s in timeline], dtype=np.float64)
+        sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+        try:
+            timeline._sample_ts = sample_ts
+            timeline._sample_vals = sample_vals
+        except Exception:
+            pass
     interp_vals = np.interp(
         target_ts_arr, sample_ts, sample_vals,
         left=float(sample_vals[0]), right=float(sample_vals[-1])
@@ -623,7 +660,9 @@ def build_telemetry_cache(
         return arr
 
     ind_arrs: dict[str, list] = {}
-    for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text", "alt_visual", "alt_text"):
+    eff_fit_mapper = video_timeline if (video_timeline is not None and getattr(video_timeline, "clip_count", 0)) else getattr(fit, 'active_time_mapper', None)
+    for ind_key in ("speed_visual", "dist_visual", "alt_visual",
+                    "speed_text", "dist_text", "alt_text"):
         if ind_key not in indicators:
             continue
         ind_cfg = indicators.get(ind_key, {})
@@ -631,7 +670,13 @@ def build_telemetry_cache(
             continue
         src = ind_cfg.get("source", "gpmf")
         ftype = "speed" if "speed" in ind_key else ("dist" if "dist" in ind_key else "alt")
-        ind_arrs[ind_key] = get_source_linear(src, ftype)
+        source = {'fit': (fit_spd, resolve_distance_samples('fit', fit_data=fit), fit_alt),
+                  'gpx': (gpx_spd, gpx_trk, gpx_alt)}.get(src, (speed_samples, track_samples, alt_samples))
+        samples = source[{'speed': 0, 'dist': 1, 'alt': 2}[ftype]]
+        ind_arrs[ind_key] = [resolve_current_presentation(samples, dt, ftype, ind_cfg,
+            active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+            timeline=video_timeline)
+            for dt in target_dts]
 
     speed_arr = ind_arrs.get(
         "speed_visual",
@@ -650,6 +695,18 @@ def build_telemetry_cache(
         "dist_visual",
         ind_arrs.get("dist_text", get_source_linear(distance_src, "dist")),
     )
+    # Canonical activity distance for average speed (independent of dist_visual source)
+    fit_canonical_s = resolve_distance_samples("fit", fit_data=fit)
+    if fit_canonical_s:
+        _act_d_raw_arr = _vectorize_linear_distance(fit_canonical_s, target_dts, target_ts_arr, ref_dt)
+        _act_d_start = float(fit_canonical_s[0][1]) if len(fit_canonical_s) > 0 and not isinstance(fit_canonical_s[0][1], (tuple, list)) else 0.0
+        act_dist_arr = [max(0.0, float(d) - _act_d_start) if d is not None else None for d in _act_d_raw_arr]
+    elif gpx_trk:
+        _act_d_raw_arr = _vectorize_linear_distance(gpx_trk, target_dts, target_ts_arr, ref_dt)
+        _act_d_start = float(gpx_trk[0][1]) if len(gpx_trk) > 0 and not isinstance(gpx_trk[0][1], (tuple, list)) else 0.0
+        act_dist_arr = [max(0.0, float(d) - _act_d_start) if d is not None else None for d in _act_d_raw_arr]
+    else:
+        act_dist_arr = dist_arr
     alt_arr = ind_arrs.get(
         "alt_visual",
         ind_arrs.get("alt_text", get_source_linear("gpmf", "alt"))
@@ -665,7 +722,10 @@ def build_telemetry_cache(
         samples = _resolve_cache_samples(field, src) if resolve_cache_value is not None else None
         if not samples:
             samples = fallback_samples if src == "gpmf" else []
-        return _vectorize_step(samples, target_dts, target_ts_arr, ref_dt)
+        return [resolve_current_presentation(samples, dt, field, cfg,
+                active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+                timeline=video_timeline)
+                for dt in target_dts]
 
     iso_arr = resolve_field_vectorized("iso", "iso_text", iso_s)
     exposure_arr = resolve_field_vectorized("exposure", "exposure_text", exposure_s)
@@ -686,14 +746,10 @@ def build_telemetry_cache(
             src = cfg.get("source", "gpx")
             samples = _resolve_cache_samples(f, src)
             if samples:
-                if f in ("speed", "enhanced_speed"):
-                    std_field_arrs.append(_vectorize_linear_speed(samples, target_dts, target_ts_arr, ref_dt))
-                elif f in ("distance", "dist", "track"):
-                    std_field_arrs.append(_vectorize_linear_distance(samples, target_dts, target_ts_arr, ref_dt))
-                elif f in ("alt", "enhanced_altitude", "altitude"):
-                    std_field_arrs.append(_vectorize_linear_altitude(samples, target_dts, target_ts_arr, ref_dt))
-                else:
-                    std_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+                std_field_arrs.append([resolve_current_presentation(samples, dt, f, cfg,
+                    active_time_mapper=eff_fit_mapper if src == 'fit' else None,
+                    timeline=video_timeline)
+                    for dt in target_dts])
             elif resolve_cache_value is not None:
                 std_field_arrs.append([resolve_cache_value(f, src, dt, std_keys_map[f]) for dt in target_dts])
             else:
@@ -737,6 +793,11 @@ def build_telemetry_cache(
             heading_src = heading_cfg.get("source", "gpmf")
             heading_samples = _resolve_cache_samples("heading", heading_src)
             if heading_samples:
+                if key == "track_map":
+                    smooth_s = float(heading_cfg.get("map_rotation_smoothing_s", 0.0) or 0.0)
+                    if smooth_s > 0.0:
+                        from src.telemetry_heading import smooth_heading_samples
+                        heading_samples = smooth_heading_samples(heading_samples, smooth_s)
                 return _vectorize_heading(
                     heading_samples, target_dts, target_ts_arr, ref_dt
                 )
@@ -782,14 +843,10 @@ def build_telemetry_cache(
     for name in active_fit:
         samples = fit.get(name) or _resolve_cache_samples(name, "fit")
         if samples:
-            if name in ("speed", "enhanced_speed"):
-                fit_field_arrs.append(_vectorize_linear_speed(samples, target_dts, target_ts_arr, ref_dt))
-            elif name in ("distance", "dist", "track"):
-                fit_field_arrs.append(_vectorize_linear_distance(samples, target_dts, target_ts_arr, ref_dt))
-            elif name in ("alt", "enhanced_altitude", "altitude"):
-                fit_field_arrs.append(_vectorize_linear_altitude(samples, target_dts, target_ts_arr, ref_dt))
-            else:
-                fit_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
+            cfg = indicators.get(f'fit_{name}_text', {})
+            fit_field_arrs.append([resolve_current_presentation(samples, dt, name, cfg,
+                active_time_mapper=eff_fit_mapper,
+                timeline=video_timeline) for dt in target_dts])
         elif resolve_cache_value is not None:
             fit_field_arrs.append([resolve_cache_value(name, "fit", dt, f"fit_{name}_text") for dt in target_dts])
         else:
@@ -825,6 +882,7 @@ def build_telemetry_cache(
     for key in lean_keys:
         lcfg = indicators.get(key, {})
         lsrc = str(lcfg.get("source", "gyro")).strip().lower()
+
         if lsrc == "grade":
             s_src = lcfg.get("slope_source", "gpmf")
             s_samples = _resolve_cache_samples("slope", s_src)
@@ -839,22 +897,20 @@ def build_telemetry_cache(
             else:
                 lean_field_arrs.append([None] * total_frames)
         else:
-            axis = str(lcfg.get("axis", "z")).strip().lower()
+            axis = str(lcfg.get("axis", "x")).strip().lower()
             if axis not in ("x", "y", "z"):
-                axis = "z"
+                axis = "x"
+            smooth_s = float(lcfg.get("lean_smoothing_s", 0.0) or 0.0)
             timeline: list = []
-            _interp_roll = None
             try:
                 from src.ffmpeg.worker_cache import _worker_lean_roll
-                from src.telemetry_imu import interpolate_roll as _interp_roll_fn
-                timeline = _worker_lean_roll(axis)
-                _interp_roll = _interp_roll_fn
+                timeline = _worker_lean_roll(axis, smooth_s)
             except Exception:
                 timeline = []
-            if timeline and _interp_roll is not None:
-                lean_field_arrs.append([
-                    _interp_roll(timeline, dt) for dt in target_dts
-                ])
+            if timeline:
+                lean_field_arrs.append(
+                    _vectorize_linear_roll(timeline, target_dts, target_ts_arr, ref_dt)
+                )
             elif resolve_cache_value is not None:
                 lean_field_arrs.append([
                     resolve_cache_value(f"lean_roll_{axis}", "gpmf", dt, key)
@@ -863,6 +919,8 @@ def build_telemetry_cache(
             else:
                 lean_field_arrs.append([None] * total_frames)
     t_lean_ms = (time.perf_counter() - t0_lean) * 1000.0
+    if lean_keys:
+        print(f"[HUD PREP LEAN] stage=lean_vectorize keys={lean_keys} frames={total_frames} elapsed_ms={t_lean_ms:.2f}", flush=True)
     _progress("lean fields")
 
     # 8. Record Assembly
@@ -883,6 +941,12 @@ def build_telemetry_cache(
     if activity_start_dt is None and gpx_track_samples:
         activity_start_dt = gpx_track_samples[0][0]
 
+    active_mapper = None
+    if isinstance(fit_data, dict):
+        active_mapper = fit_data.get("active_time_mapper")
+    if active_mapper is None and fit_data is not None:
+        active_mapper = getattr(fit_data, "active_time_mapper", None)
+
     records: list[_FrameRec] = []
     num_std = len(std_field_arrs)
     num_fit = len(fit_field_arrs)
@@ -896,13 +960,32 @@ def build_telemetry_cache(
         dist_m = dist_arr[i]
         el_s = elapsed_secs_arr[i]
         td = target_dts[i]
-        if activity_start_dt is not None and td is not None:
+        if active_mapper is not None and td is not None:
+            from src.telemetry_resolver import _map_wall_to_seconds
+            act_candidate = _map_wall_to_seconds(active_mapper, td)
+            if act_candidate is None:
+                act_el_s = el_s
+            else:
+                mapper_start = getattr(active_mapper, "start_dt", None)
+                if mapper_start is not None:
+                    _ms_sd = mapper_start.replace(tzinfo=None) if mapper_start.tzinfo is not None else mapper_start
+                    _ms_td = td.replace(tzinfo=None) if td.tzinfo is not None else td
+                    wall_el = max(0.0, (_ms_td - _ms_sd).total_seconds())
+                    if 0.0 <= act_candidate <= wall_el + 5.0 and wall_el < 2592000.0:
+                        act_el_s = act_candidate
+                    else:
+                        act_el_s = wall_el if wall_el < 2592000.0 else el_s
+                else:
+                    act_el_s = max(0.0, act_candidate)
+        elif activity_start_dt is not None and td is not None:
             _act_sd = activity_start_dt.replace(tzinfo=None) if activity_start_dt.tzinfo is not None else activity_start_dt
             _act_td = td.replace(tzinfo=None) if td.tzinfo is not None else td
-            act_el_s = max(0.0, (_act_td - _act_sd).total_seconds())
+            raw_diff = (_act_td - _act_sd).total_seconds()
+            act_el_s = raw_diff if 0.0 <= raw_diff < 2592000.0 else el_s
         else:
             act_el_s = el_s
-        avg_spd = (dist_m / act_el_s) * 3.6 if (act_el_s > 0 and dist_m is not None and dist_m > 0) else 0.0
+        act_d_m = act_dist_arr[i] if (act_dist_arr and i < len(act_dist_arr) and act_dist_arr[i] is not None) else dist_m
+        avg_spd = (act_d_m / act_el_s) * 3.6 if (act_el_s > 0 and act_d_m is not None and act_d_m > 0) else 0.0
         cur_pos = i / max(1, total_frames - 1) if total_frames > 1 else 0.0
 
         std_v = tuple(std_field_arrs[j][i] for j in range(num_std))
@@ -928,7 +1011,7 @@ def build_telemetry_cache(
             lean_vals=lean_v,
             std_vals=std_v,
             current_position=cur_pos,
-            elapsed_seconds=el_s,
+            elapsed_seconds=act_el_s,
             avg_speed_kmh=avg_spd,
             target_dt=target_dts[i],
         ))
@@ -961,6 +1044,24 @@ def build_telemetry_cache(
         + sum(sys.getsizeof(r) for r in records)
         + sys.getsizeof(_Static) + 512
     )
+    from src.indicators.frame_data import compute_indicator_auto_ranges
+    auto_ranges = compute_indicator_auto_ranges(
+        layout,
+        speed_samples=speed_samples,
+        track_samples=track_samples,
+        alt_samples=alt_samples,
+        iso_samples=iso_s,
+        exposure_samples=exposure_s,
+        temperature_samples=temp_s,
+        gpx_speed_samples=gpx_spd,
+        gpx_track_samples=gpx_trk,
+        gpx_alt_samples=gpx_alt,
+        gpx_power_samples=gpx_power_samples,
+        gpx_atemp_samples=gpx_atemp_samples,
+        gpx_hr_samples=gpx_hr_samples,
+        gpx_cad_samples=gpx_cad_samples,
+        fit_data=fit,
+    )
     static = _Static(
         max_distance_m=max_distance_m, max_speed_kmh=max_speed_kmh,
         min_alt=min_alt, max_alt=max_alt, chart_data=chart_data or {},
@@ -974,9 +1075,9 @@ def build_telemetry_cache(
         heading_labels=heading_labels,
         slope_keys=slope_keys, slope_units=slope_units,
         slope_labels=slope_labels,
+        auto_ranges=auto_ranges,
     )
     return TelemetryFrameCache(
         records, static, t_total_ms, memory_bytes,
         len(active_fit) * total_frames, 3 * total_frames, 3 * total_frames,
     )
-

@@ -72,10 +72,15 @@ class PipelineAuditRecorder:
             "writer_queue": [],
         }
         self.main_stats: dict[str, list[float]] = {}
+        self.render_stats: dict[str, list[float]] = {}
         self.counters: dict[str, int] = {}
         self._lock = threading.Lock()
         default_path = Path("scratch") / "etap5f_pipeline_audit.json"
         self.output_path = Path(output_path or os.environ.get("TELEM_PIPELINE_AUDIT_PATH", default_path))
+
+    def mark_render_stat(self, name: str, value_ms: float) -> None:
+        with self._lock:
+            self.render_stats.setdefault(name, []).append(float(value_ms))
 
     def start(self, started_ns: int) -> None:
         self.started_ns = started_ns
@@ -235,6 +240,7 @@ class PipelineAuditRecorder:
                 for name, values in occupancy.items()
             },
             "main_serial_ms": {name: _percentiles(values) for name, values in main_stats.items()},
+            "worker_render_breakdown": {name: _percentiles(values) for name, values in self.render_stats.items()},
             "counters": counters,
             "hol": {
                 "frames_with_ordered_wait_over_1ms": hol_over_1ms,

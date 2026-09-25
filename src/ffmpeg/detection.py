@@ -160,6 +160,12 @@ def detect_best_encoder(ffmpeg_exe: str = "ffmpeg") -> str:
             if "hevc_qsv" in encoders and _test_encoder("hevc_qsv", ffmpeg_exe):
                 _BEST_ENCODER_CACHE = "intel"
                 return "intel"
+            if "av1_qsv" in encoders and _test_encoder("av1_qsv", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "intel"
+                return "intel"
+            if "h264_qsv" in encoders and _test_encoder("h264_qsv", ffmpeg_exe):
+                _BEST_ENCODER_CACHE = "intel"
+                return "intel"
     except Exception:
         pass
 

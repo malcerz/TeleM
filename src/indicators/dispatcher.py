@@ -22,6 +22,7 @@ from src.indicators.moving_map import _render_moving_map_indicator
 from src.indicators.segment_bar import _render_segment_bar_indicator
 from src.indicators.static_map import _render_static_map_indicator
 from src.indicators.text import _render_text_indicator
+from src.indicators.widget_cache import compute_visual_signature, get_widget_cache
 
 
 def render_value_indicator(
@@ -100,8 +101,40 @@ def render_value_indicator(
     elif form in ("bar", "segment_bar"):
         if form == "segment_bar" and "bar_style" not in cfg:
             cfg["bar_style"] = "segments"
+        style = str(cfg.get("bar_style", "ruler")).strip().lower()
+        renderer_type = "segment_bar" if (form == "segment_bar" or style in {"segment", "segments", "segmented", "segment_bar"}) else "bar"
+        cache = get_widget_cache()
+        if cache.enabled and renderer_type in cache.supported_renderers:
+            def _sig_fn():
+                return compute_visual_signature(
+                    renderer_type=renderer_type,
+                    value=value,
+                    formatted_val=formatted_val,
+                    unit=unit,
+                    label=label,
+                    cfg=cfg,
+                    val_min=val_min,
+                    val_max=val_max,
+                    size_px=size_px,
+                    fs=fs,
+                    outline=outline,
+                    ss=ss,
+                    canvas_w=canvas_w,
+                    canvas_h=canvas_h,
+                    font_path=font_path,
+                    key=key,
+                )
+            return cache.get_or_render(
+                instance_key=key,
+                renderer_type=renderer_type,
+                compute_sig_fn=_sig_fn,
+                render_fn=lambda: _render_bar_indicator(**_kwargs, formatted_val=formatted_val),
+                raw_value=value,
+            )
         return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
-    elif form == "gauge":
+    elif form in ("gauge", "compass"):
+        if form == "compass" and "gauge_style" not in cfg:
+            cfg["gauge_style"] = "compass"
         return _render_gauge_indicator(**_kwargs, formatted_val=formatted_val)
     elif form == "lean":
         return _render_lean_indicator(**_kwargs, formatted_val=formatted_val)

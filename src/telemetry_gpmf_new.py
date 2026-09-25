@@ -161,23 +161,25 @@ def decode_gpmf(t: str, repeat: int, payload: bytes) -> Any:
 # ---------------------------------------------------------------------------
 # Flat parser (kept for backwards compatibility with existing GPS overlay code)
 # ---------------------------------------------------------------------------
-def parse_gpmf(data: bytes, offset: int = 0) -> list[tuple[str, Any]]:
+def parse_gpmf(data: bytes, offset: int = 0, progress_cb: Optional[Any] = None) -> list[tuple[str, Any]]:
     """Iteratively parse GPMF binary structure into a flat list of (key, value) tuples.
 
     Nested STRM/DEVC containers (TLV type 0x00) are expanded in-place using an
-    explicit stack instead of recursion. This flat view loses which nested
-    STRM a key belongs to -- use parse_gpmf_tree() / extract_all_streams()
-    below when you need full per-stream fidelity (required for correctly
-    scaling ACCL, GYRO, GRAV, CORI, IORI, MAGN, etc. which each carry their
-    own local SCAL/SIUN/TYPE metadata).
+    explicit stack instead of recursion.
     """
     results: list[tuple[str, Any]] = []
     stack: list[tuple[bytes, int]] = [(data, offset)]
+    total_bytes = len(data)
+    report_step = max(65536, total_bytes // 50)
+    last_reported = 0
 
     while stack:
         buf, off = stack.pop()
         n = len(buf)
         while off + 8 <= n:
+            if progress_cb and buf is data and (off - last_reported >= report_step):
+                progress_cb(off, total_bytes)
+                last_reported = off
             key = buf[off:off + 4].decode("ascii", errors="ignore")
             t = chr(buf[off + 4])
             size = buf[off + 5]
@@ -199,6 +201,8 @@ def parse_gpmf(data: bytes, offset: int = 0) -> list[tuple[str, Any]]:
                 break
             else:
                 results.append((key, decode_gpmf(t, repeat, payload)))
+    if progress_cb and total_bytes > 0:
+        progress_cb(total_bytes, total_bytes)
     return results
 
 
@@ -498,7 +502,8 @@ def _gps9_datetime(days: float, seconds: float) -> Optional[datetime]:
 
 
 def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
-                      start_dt: Optional[datetime] = None) -> list[dict[str, Any]]:
+                      start_dt: Optional[datetime] = None,
+                      progress_cb: Optional[Any] = None) -> list[dict[str, Any]]:
     """Convert a flat list of parsed GPMF (key, value) tuples into an
     ExifTool-style JSON document containing GPS, altitude, speed, and
     camera metadata fields. Kept for backwards compatibility with existing
@@ -530,7 +535,11 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
     def _fmt_dt(dt: datetime) -> str:
         return dt.astimezone(timezone.utc).strftime("%Y:%m:%d %H:%M:%S.%f")[:-3]
 
-    for key, val in parsed:
+    total_parsed = len(parsed)
+    report_interval = max(500, total_parsed // 40)
+    for p_idx, (key, val) in enumerate(parsed):
+        if progress_cb and (p_idx % report_interval == 0 or p_idx == total_parsed - 1):
+            progress_cb(p_idx + 1, total_parsed)
         if key == "SCAL":
             scal = val
 
@@ -787,7 +796,8 @@ def to_exiftool_json(parsed: list[tuple[str, Any]], source_file: str,
 
 
 def gpmf_to_exiftool_json(video_path: str | Path, ffmpeg_exe: str = "ffmpeg",
-                           ffprobe_exe: str = "ffprobe") -> list[dict[str, Any]]:
+                           ffprobe_exe: str = "ffprobe",
+                           progress_cb: Optional[Any] = None) -> list[dict[str, Any]]:
     """High-level entry point (backwards-compatible): extract GPMF from a video
     file and return ExifTool-style JSON telemetry (GPS, altitude, speed,
     camera metadata only).
@@ -795,8 +805,16 @@ def gpmf_to_exiftool_json(video_path: str | Path, ffmpeg_exe: str = "ffmpeg",
     If the GPMF stream lacks a GPSU block (absolute GPS time), the function
     falls back to the video's creation_time from its container metadata.
     """
+    if progress_cb:
+        progress_cb("extract", 0, 1)
     data = extract_gpmf(video_path, ffmpeg_exe=ffmpeg_exe, ffprobe_exe=ffprobe_exe)
-    parsed = parse_gpmf(data)
+    if progress_cb:
+        progress_cb("extract", 1, 1)
+
+    parsed = parse_gpmf(
+        data,
+        progress_cb=(lambda done, tot: progress_cb("parse", done, tot)) if progress_cb else None
+    )
 
     # Pobierz creation_time jako start_dt (fallback dla braku GPSU)
     start_dt = None
@@ -818,7 +836,10 @@ def gpmf_to_exiftool_json(video_path: str | Path, ffmpeg_exe: str = "ffmpeg",
     except Exception:
         pass
 
-    return to_exiftool_json(parsed, str(video_path), start_dt=start_dt)
+    return to_exiftool_json(
+        parsed, str(video_path), start_dt=start_dt,
+        progress_cb=(lambda done, tot: progress_cb("convert", done, tot)) if progress_cb else None
+    )
 
 
 def gpmf_to_full_json(video_path: str | Path, ffmpeg_exe: str = "ffmpeg", ffprobe_exe: str = "ffprobe") -> list[dict[str, Any]]:

@@ -630,8 +630,62 @@ class TelemetryDataManager:
             if self.alt_samples:
                 self.alt_samples = self._smooth_fn(self.alt_samples, "moving_average", self.smoothing_window)
 
-    def _set_vector_series(self, samples: list, prefix: str) -> None:
+    def _set_vector_series_from_array(self, arr: Any, prefix: str, tz_aware: bool = True) -> None:
+        """Vectorized NumPy processing of one 4D vector series [ts, x, y, z]."""
+        if arr is None or len(arr) == 0:
+            setattr(self, f"{prefix}_x_array", None)
+            setattr(self, f"{prefix}_y_array", None)
+            setattr(self, f"{prefix}_z_array", None)
+            setattr(self, f"{prefix}_magnitude_array", None)
+            setattr(self, f"{prefix}_x_samples", [])
+            setattr(self, f"{prefix}_y_samples", [])
+            setattr(self, f"{prefix}_z_samples", [])
+            setattr(self, f"{prefix}_magnitude_samples", [])
+            return
+
+        import numpy as np
+        ts = arr[:, 0]
+        x = arr[:, 1]
+        y = arr[:, 2]
+        z = arr[:, 3]
+        mag = np.sqrt(x * x + y * y + z * z)
+
+        setattr(self, f"{prefix}_x_array", np.column_stack([ts, x]))
+        setattr(self, f"{prefix}_y_array", np.column_stack([ts, y]))
+        setattr(self, f"{prefix}_z_array", np.column_stack([ts, z]))
+        setattr(self, f"{prefix}_magnitude_array", np.column_stack([ts, mag]))
+
+        from src.telemetry_processed_cache import LazySampleList
+        for suffix in ("x", "y", "z", "magnitude"):
+            setattr(
+                self, f"{prefix}_{suffix}_samples",
+                LazySampleList(
+                    getattr(self, f"{prefix}_{suffix}_array"),
+                    is_vector=False,
+                    tz_aware=tz_aware,
+                    audit_label=f"{prefix}_{suffix}_samples",
+                ),
+            )
+
+    def _set_vector_series(self, samples: Any, prefix: str) -> None:
         """Expose one timestamped vector series as scalar and magnitude series."""
+        if hasattr(samples, "_arr") and getattr(samples, "_arr", None) is not None:
+            tz_aware = getattr(samples, "_tz_aware", True)
+            self._set_vector_series_from_array(samples._arr, prefix, tz_aware=tz_aware)
+            return
+
+        import numpy as np
+        if isinstance(samples, np.ndarray):
+            self._set_vector_series_from_array(samples, prefix)
+            return
+
+        if not samples:
+            setattr(self, f"{prefix}_x_samples", [])
+            setattr(self, f"{prefix}_y_samples", [])
+            setattr(self, f"{prefix}_z_samples", [])
+            setattr(self, f"{prefix}_magnitude_samples", [])
+            return
+
         axes = [[], [], []]
         magnitude = []
         for dt, vector in samples:

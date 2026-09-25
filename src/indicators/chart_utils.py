@@ -291,6 +291,7 @@ def generate_nice_relative_time_ticks(
 
 def generate_nice_value_ticks(
     data_min: float, data_max: float, target_count: int = 5,
+    decimal_places: int = 0,
 ) -> tuple[float, float, list[str]]:
     """Return a padded numeric domain and human-friendly evenly spaced labels."""
     data_min = float(data_min)
@@ -316,8 +317,9 @@ def generate_nice_value_ticks(
     step = multiplier * magnitude
     nice_min = math.floor(data_min / step) * step
     nice_max = math.ceil(data_max / step) * step
+    decimals = max(0, min(2, int(decimal_places)))
     labels = [
-        f"{nice_min + i * step:.0f}"
+        f"{nice_min + i * step:.{decimals}f}"
         for i in range(int(round((nice_max - nice_min) / step)) + 1)
     ]
     return nice_min, nice_max, labels
@@ -329,7 +331,7 @@ def _history_chart_cache_key(
     custom_min_val, custom_max_val, label_count, label_units, unit,
     show_average, label_font_size, font_path,
     show_x_axis_values=True, show_y_axis_values=True,
-    axis_font_size=None, axis_outline=0,
+    axis_font_size=None, axis_outline=0, decimal_places=0,
 ) -> tuple:
     chart_start_dt = getattr(history_values, "chart_start_dt", None)
     chart_end_dt = getattr(history_values, "chart_end_dt", None)
@@ -349,7 +351,7 @@ def _history_chart_cache_key(
         supersample, custom_min_val, custom_max_val, label_count,
         label_units, unit, show_average, label_font_size, font_path,
         bool(show_x_axis_values), bool(show_y_axis_values),
-        axis_font_size, int(axis_outline),
+        axis_font_size, int(axis_outline), int(decimal_places),
     )
 
 
@@ -380,6 +382,7 @@ def generate_history_chart(
     show_y_axis_values: bool = True,
     axis_font_size: Optional[float] = None,
     axis_outline: int = 0,
+    decimal_places: int = 0,
 ) -> Image.Image:
     """Generate a universal line chart with transparent fill, axes, and optional cursor."""
     profiler = get_overlay_profiler()
@@ -391,6 +394,7 @@ def generate_history_chart(
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
         axis_font_size=axis_font_size, axis_outline=axis_outline,
+        decimal_places=decimal_places,
     )
 
     bg_data = _CHART_BG_CACHE.get(cache_key)
@@ -413,6 +417,7 @@ def generate_history_chart(
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
             axis_font_size=axis_font_size, axis_outline=axis_outline,
+            decimal_places=decimal_places,
         )
         if len(_CHART_BG_CACHE) > 50:
             _CHART_BG_CACHE.clear()
@@ -464,6 +469,7 @@ def get_history_chart_background(
     show_average=False, label_font_size=None, font_path=None,
     show_x_axis_values=True, show_y_axis_values=True,
     axis_font_size=None, axis_outline=0,
+    decimal_places=0,
 ):
     """Return immutable background geometry and its complete cache identity."""
     cache_key = _history_chart_cache_key(
@@ -473,6 +479,7 @@ def get_history_chart_background(
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
         axis_font_size=axis_font_size, axis_outline=axis_outline,
+        decimal_places=decimal_places,
     )
     if cache_key not in _CHART_BG_CACHE:
         generate_history_chart(
@@ -488,6 +495,7 @@ def get_history_chart_background(
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
             axis_font_size=axis_font_size, axis_outline=axis_outline,
+            decimal_places=decimal_places,
         )
     return (*_CHART_BG_CACHE[cache_key], cache_key)
 
@@ -501,6 +509,7 @@ def get_history_chart_prefix_background(
     show_average=False, label_font_size=None, font_path=None,
     show_x_axis_values=True, show_y_axis_values=True,
     axis_font_size=None, axis_outline=0,
+    decimal_places=0,
 ):
     """Render only the activity-history prefix ending at ``visible_end_dt``.
 
@@ -524,6 +533,7 @@ def get_history_chart_prefix_background(
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
             axis_font_size=axis_font_size, axis_outline=axis_outline,
+            decimal_places=decimal_places,
         )
 
     cache_key = _history_chart_cache_key(
@@ -533,6 +543,7 @@ def get_history_chart_prefix_background(
         unit, show_average, label_font_size, font_path,
         show_x_axis_values=show_x_axis_values, show_y_axis_values=show_y_axis_values,
         axis_font_size=axis_font_size, axis_outline=axis_outline,
+        decimal_places=decimal_places,
     )
     geometry = _CHART_PREFIX_GEOMETRY_CACHE.get(cache_key)
     if geometry is None:
@@ -550,6 +561,7 @@ def get_history_chart_prefix_background(
             show_x_axis_values=show_x_axis_values,
             show_y_axis_values=show_y_axis_values,
             axis_font_size=axis_font_size, axis_outline=axis_outline,
+            decimal_places=decimal_places,
         )
         if len(_CHART_PREFIX_GEOMETRY_CACHE) > 50:
             _CHART_PREFIX_GEOMETRY_CACHE.clear()
@@ -753,6 +765,7 @@ def _build_chart_bg(
     show_y_axis_values: bool = True,
     axis_font_size: Optional[float] = None,
     axis_outline: int = 0,
+    decimal_places: int = 0,
 ) -> tuple[Image.Image, list[tuple[float, float]], float, float, int]:
     """Build and return static chart background (image, points, plot_y1, plot_y2, thickness)."""
     ss = max(1, int(supersample))
@@ -772,7 +785,7 @@ def _build_chart_bg(
 
     if custom_min_val is None and custom_max_val is None:
         min_val, max_val, auto_value_labels = generate_nice_value_ticks(
-            data_min, data_max, label_count,
+            data_min, data_max, label_count, decimal_places=decimal_places,
         )
     else:
         min_val = custom_min_val if custom_min_val is not None else data_min
@@ -786,7 +799,7 @@ def _build_chart_bg(
 
     count = max(2, label_count)
     base_value_labels = value_labels or auto_value_labels or [
-        f"{min_val + (i / (count - 1)) * val_range:.0f}"
+        f"{min_val + (i / (count - 1)) * val_range:.{max(0, min(2, int(decimal_places)))}f}"
         for i in range(count)
     ]
     y_label_values = [

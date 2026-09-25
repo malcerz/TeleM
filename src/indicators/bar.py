@@ -68,10 +68,72 @@ def _fraction(value: float, lo: float, hi: float) -> float:
     return _clamp01((float(value) - lo) / (hi - lo))
 
 
+_BAR_LABEL_POSITIONS = {"auto", "top", "bottom", "left", "right", "inside"}
+
+
+def _resolve_label_position(cfg: dict[str, Any], default: str, orientation: str = "horizontal") -> str:
+    """Resolve the semantic BAR label side without changing legacy AUTO."""
+    position = str(cfg.get("label_position", "auto") or "auto").strip().lower()
+    if position not in _BAR_LABEL_POSITIONS:
+        position = "auto"
+    if position == "auto":
+        return default
+    # The compositor rotates the local raster after this function.  Convert an
+    # explicit screen-side request back to local coordinates so `top` remains
+    # top on 90/180/270 degree widgets.  AUTO deliberately bypasses this map
+    # to preserve every legacy preset pixel-for-pixel.
+    rotation = int(cfg.get("rotation", 0) or 0) % 360
+    if rotation == 0 or position == "inside":
+        return position
+    if rotation == 90:
+        return {"top": "right", "right": "bottom", "bottom": "left", "left": "top"}.get(position, position)
+    if rotation == 180:
+        return {"top": "bottom", "bottom": "top", "left": "right", "right": "left"}.get(position, position)
+    if rotation == 270:
+        return {"top": "left", "left": "bottom", "bottom": "right", "right": "top"}.get(position, position)
+    return position
+
+
+def _label_offset(cfg: dict[str, Any], ss: int, scale: float = 1.0) -> tuple[int, int]:
+    """New BAR offsets are final widget pixels (and supersample-safe)."""
+    try:
+        ox = float(cfg.get("label_offset_x", 0.0) or 0.0)
+        oy = float(cfg.get("label_offset_y", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        ox = oy = 0.0
+    # The layout preview canvas defaults to 540p (960x540, scale=0.5), while
+    # full-resolution renders are 1080p (scale=1.0) or 4K (scale=2.0).
+    # Scaling by scale * 2.0 (i.e. min_dim / 540.0) anchors 1.0x to the
+    # 540p GUI preview canvas and scales proportionally with canvas resolution.
+    return int(round(ox * max(1, ss) * scale * 2.0)), int(round(oy * max(1, ss) * scale * 2.0))
+
+
 def _fmt_number(value: float, decimals: int) -> str:
     if decimals <= 0:
         return f"{value:.0f}"
     return f"{value:.{decimals}f}"
+
+
+def _resolve_range_decimals(
+    cfg: dict[str, Any], value_decimals: int,
+    val_min: float, val_max: float,
+    *, percent_scale: bool = False,
+) -> int:
+    """Resolve range/tick-label precision independently from current value.
+
+    ``decimals`` belongs to the live value.  A 0..100 percentage scale has
+    integer endpoints by definition, while other bars retain their existing
+    value precision unless an explicit generic ``range_decimals`` is present.
+    """
+    raw = cfg.get("range_decimals")
+    if raw is not None:
+        try:
+            return max(0, min(6, int(raw)))
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if percent_scale and float(val_min) >= 0.0 and float(val_max) <= 100.0:
+        return 0
+    return max(0, int(value_decimals))
 
 
 def _gradient_colour(stops: Iterable[Any], position: float) -> tuple[int, int, int]:
@@ -372,16 +434,24 @@ def _render_ruler(
     show_title = bool(cfg.get("show_label", True))
     show_range = bool(cfg.get("show_range_labels", True))
     show_mid = bool(cfg.get("show_mid_label", True))
-    show_value = bool(cfg.get("show_value", False))
+    show_value = bool(cfg.get("show_value", True if (formatted_val is not None and formatted_val != "") else False))
     range_units = bool(cfg.get("range_units", True))
     title_with_unit = bool(cfg.get("title_with_unit", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
     decimals = int(cfg.get("decimals", 0))
+    is_percent_scale = (
+        unit == "%"
+        or "battery" in str(label or "").lower()
+        or "battery" in str(cfg.get("field", "")).lower()
+    )
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, val_min, val_max, percent_scale=is_percent_scale,
+    )
 
-    raw_title = str(cfg.get("title_text", label or "")).strip()
+    raw_title = str(cfg.get("title_text") or label or "").strip()
     title = raw_title.upper() if uppercase_title else raw_title
     unit_title = str(unit or "").upper() if uppercase_title else str(unit or "")
-    if show_title and title_with_unit and unit_title:
+    if show_title and title_with_unit and unit_title and unit_title.strip() != "%":
         title = f"{title} | {unit_title}" if title else unit_title
 
     val_num = float(value) if value is not None else 0.0
@@ -421,36 +491,53 @@ def _render_ruler(
     marker_radius = max(int(round(3 * ss * scale)), int(round(float(cfg.get("marker_size", 7)) * ss * scale)))
     marker_border_w = max(1 * ss, int(round(float(cfg.get("marker_border_width", 1.5)) * ss * scale)))
 
-    range_sample = f"{_fmt_number(max(abs(val_min), abs(val_max)), decimals)} {unit}".strip()
+    range_sample = f"{_fmt_number(max(abs(val_min), abs(val_max)), range_decimals)} {unit}".strip()
     title_h, range_h, value_h = _get_ruler_text_metrics(
         font_path, title, title_font, show_title,
         range_sample, range_font, show_range,
         value_text, value_font, show_value, text_stroke,
     )
 
+    dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dummy)
+    title_gap = int(round(5 * ss * scale)) if title_h else 0
+    label_position = _resolve_label_position(cfg, "top")
+    label_ox, label_oy = _label_offset(cfg, ss, scale)
+    title_width = _text_size(dd, title, title_font, text_stroke)[0] if title_h else 0
+    side_gap = int(round(6 * ss * scale)) if title_h else 0
+    side_left = title_width + side_gap if label_position == "left" else 0
+    side_right = title_width + side_gap if label_position == "right" else 0
+    top_label_extra = title_h + title_gap if label_position == "top" else 0
+    bottom_label_extra = title_h + title_gap if label_position == "bottom" else 0
+
     pad_x = max(marker_radius + int(round(4 * ss * scale)), int(round(8 * ss * scale)))
     pad_top = int(round(4 * ss * scale))
-    title_gap = int(round(5 * ss * scale)) if title_h else 0
     value_gap = int(round(4 * ss * scale)) if value_h else 0
-    track_y = pad_top + title_h + title_gap + value_h + value_gap + major_len + marker_radius
+    track_y = pad_top + top_label_extra + value_h + value_gap + major_len + marker_radius
     bottom_gap = int(round(6 * ss * scale))
-    height = int(track_y + marker_radius + bottom_gap + range_h + int(round(5 * ss * scale)))
-    raster_w = width + pad_x * 2
+    height = int(track_y + marker_radius + bottom_gap + range_h + int(round(5 * ss * scale)) + bottom_label_extra)
+    raster_w = width + pad_x * 2 + side_left + side_right
 
     static_key = _static_cache_key(
         "bar_ruler_v3",
         raster_w, height, width, track_y, pad_x, pad_top,
         title, font_path, title_fs, label_fs, value_fs, text_stroke,
         show_title, show_range, show_mid, show_value, range_units, decimals,
+        range_decimals,
         val_min, val_max, unit, major_divisions, minor_per_major, major_step,
         track_color, tick_color, text_color, dim_text, marker_color, marker_border,
         marker_radius, marker_border_w, line_w, tick_w, major_len, minor_len,
         pixel_profile, ss, title_h, title_gap, value_h, value_gap,
+        label_position, label_ox, label_oy,
     )
     frac_h = _fraction(val_num, val_min, val_max) if value is not None else 0.0
-    marker_x = int(round(pad_x + frac_h * width)) if value is not None else int(round(pad_x))
+    marker_x = int(round(side_left + pad_x + frac_h * width)) if value is not None else int(round(side_left + pad_x))
 
-    dynamic_key = _static_cache_key("ruler_h_dyn", static_key, value is None, marker_x, value_text)
+    raw_ox = float(cfg.get("text_offset_x", 0.0))
+    raw_oy = float(cfg.get("text_offset_y", 0.0))
+    value_offset_x = int(round(float(cfg.get("value_offset_x", 0.0)) * canvas_w / 100.0 * ss + raw_ox * (width if abs(raw_ox) <= 1.0 else canvas_w / 100.0 * ss)))
+    value_offset_y = int(round(float(cfg.get("value_offset_y", 0.0)) * canvas_h / 100.0 * ss + raw_oy * (height if abs(raw_oy) <= 1.0 else canvas_h / 100.0 * ss)))
+    dynamic_key = _static_cache_key("ruler_h_dyn", static_key, value is None, marker_x, value_text, value_offset_x, value_offset_y)
     cached_dyn = _STATIC_CACHE.get(dynamic_key)
     if cached_dyn is not None:
         return cached_dyn
@@ -459,15 +546,25 @@ def _render_ruler(
     if base_data is None:
         base = Image.new("RGBA", (raster_w, height), (0, 0, 0, 0))
         d = ImageDraw.Draw(base)
-        x1 = pad_x
-        x2 = pad_x + width
+        x1 = side_left + pad_x
+        x2 = side_left + pad_x + width
 
         if show_title and title:
+            if label_position == "bottom":
+                label_xy, label_anchor = (side_left + pad_x + width / 2 + label_ox, height - int(round(4 * ss * scale)) + label_oy), "ms"
+            elif label_position == "left":
+                label_xy, label_anchor = (side_left / 2 + label_ox, track_y + label_oy), "mm"
+            elif label_position == "right":
+                label_xy, label_anchor = (raster_w - side_right / 2 + label_ox, track_y + label_oy), "mm"
+            elif label_position == "inside":
+                label_xy, label_anchor = (side_left + pad_x + width / 2 + label_ox, track_y + label_oy), "mm"
+            else:
+                label_xy, label_anchor = (side_left + pad_x + width / 2 + label_ox, pad_top + label_oy), "ma"
             _draw_text_bounded(
-                d, (raster_w / 2, pad_top), title,
+                d, label_xy, title,
                 font=title_font, fill=text_color,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
-                bounds=(raster_w, height), anchor="ma",
+                bounds=(raster_w, height), anchor=label_anchor,
             )
 
         # Track + shadow.
@@ -509,7 +606,7 @@ def _render_ruler(
 
         if show_range:
             def range_text(v: float) -> str:
-                txt = _fmt_number(v, decimals)
+                txt = _fmt_number(v, range_decimals)
                 return f"{txt} {unit}".strip() if range_units else txt
 
             y = track_y + marker_radius + bottom_gap
@@ -517,7 +614,7 @@ def _render_ruler(
             mid = range_text((val_min + val_max) * 0.5)
             right = range_text(val_max)
             _draw_text_bounded(
-                d, (pad_x, y), left, font=range_font, fill=dim_text,
+                d, (side_left + pad_x, y), left, font=range_font, fill=dim_text,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, height), anchor="la",
             )
@@ -528,7 +625,7 @@ def _render_ruler(
                     bounds=(raster_w, height), anchor="ma",
                 )
             _draw_text_bounded(
-                d, (raster_w - pad_x, y), right, font=range_font, fill=dim_text,
+                d, (raster_w - side_right - pad_x, y), right, font=range_font, fill=dim_text,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
                 bounds=(raster_w, height), anchor="ra",
             )
@@ -550,7 +647,7 @@ def _render_ruler(
 
     if value is not None:
         frac = _fraction(val_num, val_min, val_max)
-        marker_x = int(round(pad_x + frac * width))
+        marker_x = int(round(side_left + pad_x + frac * width))
 
         # Marker shadow, border and fill.
         shadow_r = marker_radius + marker_border_w
@@ -577,8 +674,10 @@ def _render_ruler(
 
         if show_value and value_text:
             value_y = pad_top + title_h + (title_gap if title_h else 0)
-            value_offset_x = int(round(float(cfg.get("value_offset_x", 0.0)) * canvas_w / 100.0 * ss))
-            value_offset_y = int(round(float(cfg.get("value_offset_y", 0.0)) * canvas_h / 100.0 * ss))
+            raw_ox = float(cfg.get("text_offset_x", 0.0))
+            raw_oy = float(cfg.get("text_offset_y", 0.0))
+            value_offset_x = int(round(float(cfg.get("value_offset_x", 0.0)) * canvas_w / 100.0 * ss + raw_ox * (width if abs(raw_ox) <= 1.0 else canvas_w / 100.0 * ss)))
+            value_offset_y = int(round(float(cfg.get("value_offset_y", 0.0)) * canvas_h / 100.0 * ss + raw_oy * (height if abs(raw_oy) <= 1.0 else canvas_h / 100.0 * ss)))
             _draw_text_bounded(
                 d, (marker_x + value_offset_x, value_y + value_offset_y), value_text,
                 font=value_font, fill=text_color,
@@ -645,6 +744,14 @@ def _render_ruler_vertical(
     title_with_unit = bool(cfg.get("title_with_unit", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
     missing = bool(cfg.get("_slope_missing", False)) or value is None
+    is_percent_scale = (
+        unit == "%"
+        or "battery" in str(label or "").lower()
+        or "battery" in str(cfg.get("field", "")).lower()
+    )
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, lo, hi, percent_scale=is_percent_scale,
+    )
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     legacy_slope = bool(cfg.get("_legacy_slope", False))
     min_dim = min(canvas_w, canvas_h)
@@ -663,10 +770,10 @@ def _render_ruler_vertical(
     value_font = load_font(font_path, value_fs)
     text_stroke = max(0, int(round(max(1, outline) * ss * ruler_scale)))
 
-    raw_title = str(cfg.get("title_text", label or "")).strip()
+    raw_title = str(cfg.get("title_text") or label or "").strip()
     title = raw_title.upper() if uppercase_title else raw_title
     unit_title = str(unit or "").upper() if uppercase_title else str(unit or "")
-    if show_label and title_with_unit and unit_title:
+    if show_label and title_with_unit and unit_title and unit_title.strip() != "%":
         title = f"{title} | {unit_title}" if title else unit_title
 
     val_num = float(value) if value is not None else 0.0
@@ -744,7 +851,7 @@ def _render_ruler_vertical(
     range_label_texts: list[tuple[float, str]] = []
     if show_range:
         def _rt(v: float) -> str:
-            txt = _fmt_number(v, decimals)
+            txt = _fmt_number(v, range_decimals)
             return f"{txt} {unit}".strip() if range_units and unit else txt
         if not show_tick_labels:
             range_label_texts = [(hi, _rt(hi)), (lo, _rt(lo))]
@@ -757,17 +864,25 @@ def _render_ruler_vertical(
 
     title_h = _text_size(dd, title, title_font, text_stroke)[1] if show_label and title else 0
     title_gap = geom(5.0) if title_h else 0
+    label_position = _resolve_label_position(cfg, "top")
+    label_ox, label_oy = _label_offset(cfg, ss, scale)
+    title_width = _text_size(dd, title, title_font, text_stroke)[0] if title_h else 0
+    side_gap = geom(6.0) if title_h else 0
+    side_left = title_width + side_gap if label_position == "left" else 0
+    side_right = title_width + side_gap if label_position == "right" else 0
+    top_label_extra = title_h + title_gap if label_position == "top" else 0
+    bottom_label_extra = title_h + title_gap if label_position == "bottom" else 0
     pad_x = geom(8.0)
     pad_top = geom(5.0)
-    track_x = pad_x + label_width + major_len + geom(10.0)
-    top = pad_top + title_h + title_gap
+    track_x = side_left + pad_x + label_width + major_len + geom(10.0)
+    top = pad_top + top_label_extra
     bottom = top + track_height
     if marker_style == "line":
         value_x = track_x + marker_len + geom(12.0)
     else:
         value_x = track_x + marker_radius + geom(10.0)
-    raster_w = max(track_x + track_width + pad_x, value_x + value_width + pad_x)
-    raster_h = bottom + geom(8.0)
+    raster_w = max(track_x + track_width + pad_x + side_right, value_x + value_width + pad_x + side_right)
+    raster_h = bottom + geom(8.0) + bottom_label_extra
 
     static_key = _static_cache_key(
         "bar_ruler_v3_vertical", font_path,
@@ -777,7 +892,7 @@ def _render_ruler_vertical(
         track_color, tick_color, zero_color, text_color, dim_text,
         track_width, tick_w, major_len, minor_len, marker_len, marker_radius,
         marker_style, shadow_alpha, pixel_profile, ss, opacity, size_px, ruler_scale,
-        legacy_slope,
+        legacy_slope, label_position, label_ox, label_oy,
     )
     val_frac = _fraction(val_num, lo, hi) if not missing else 0.0
     marker_y = int(round(bottom - val_frac * track_height)) if not missing else int(round(top + track_height // 2))
@@ -793,10 +908,20 @@ def _render_ruler_vertical(
         d = ImageDraw.Draw(base)
 
         if show_label and title:
+            if label_position == "bottom":
+                label_xy, label_anchor = (track_x + label_ox, raster_h - geom(4.0) + label_oy), "ms"
+            elif label_position == "left":
+                label_xy, label_anchor = (side_left / 2 + label_ox, top + track_height / 2 + label_oy), "mm"
+            elif label_position == "right":
+                label_xy, label_anchor = (raster_w - side_right / 2 + label_ox, top + track_height / 2 + label_oy), "mm"
+            elif label_position == "inside":
+                label_xy, label_anchor = (track_x + label_ox, top + track_height / 2 + label_oy), "mm"
+            else:
+                label_xy, label_anchor = (side_left + pad_x, pad_top + label_oy), "la"
             _draw_text_bounded(
-                d, (pad_x, pad_top), title, font=title_font, fill=text_color,
+                d, label_xy, title, font=title_font, fill=text_color,
                 stroke_width=text_stroke, stroke_fill=(0, 0, 0, 230),
-                bounds=(raster_w, raster_h), anchor="la",
+                bounds=(raster_w, raster_h), anchor=label_anchor,
             )
 
         _line_with_shadow(
@@ -932,6 +1057,15 @@ _SEG_ACTIVE_CACHE = _BoundedStaticCache(max_entries=128)
 _SEG_ICON_CACHE = _BoundedStaticCache(max_entries=16)
 
 
+def clear_bar_cache() -> None:
+    """Clear all segment and ruler static/dynamic caches."""
+    _SEG_BASE_CACHE.clear()
+    _SEG_ACTIVE_CACHE.clear()
+    _SEG_ICON_CACHE.clear()
+    if _STATIC_CACHE is not None:
+        _STATIC_CACHE.clear()
+
+
 def _get_seg_icon(icon_name: str | None, icon_size: int) -> Optional[Image.Image]:
     if not icon_name or icon_name == "none":
         return None
@@ -1000,16 +1134,18 @@ def _segment_gradient_stops(cfg: dict) -> tuple[str, ...]:
 # must always take effect even when a v10 preset still carries the legacy key.
 
 def _resolve_segment_count(cfg: dict) -> int:
-    """``segment_count`` wins; legacy ``segments`` is the fallback (default 20)."""
+    """``segments`` wins; legacy ``segment_count`` is the fallback (default 20)."""
+    if "segments" in cfg:
+        try:
+            return max(2, int(cfg["segments"]))
+        except (TypeError, ValueError):
+            pass
     if "segment_count" in cfg:
         try:
             return max(2, int(cfg["segment_count"]))
         except (TypeError, ValueError):
             pass
-    try:
-        return max(2, int(cfg.get("segments", 20)))
-    except (TypeError, ValueError):
-        return 20
+    return 20
 
 
 def _resolve_segment_gradient(cfg: dict) -> tuple[str, ...]:
@@ -1187,15 +1323,22 @@ def _build_seg_base_layer(
     icon_name: str | None,
     uppercase_label: bool,
     label_align: str = "center",
+    label_position: str = "bottom",
+    label_offset_x: int = 0,
+    label_offset_y: int = 0,
     range_align_left: str = "la",
     range_align_right: str = "ra",
+    label_font_path: str = "",
+    label_color: Optional[tuple[int, int, int, int]] = None,
+    direction: str = "forward",
 ) -> Image.Image:
     base_img = Image.new("RGBA", (raster_w, raster_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(base_img)
 
+    reverse = str(direction).strip().lower() == "reverse"
     # 1. Inactive segments with shadow
     for i in range(segments):
-        p = i / max(1, segments - 1)
+        p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
         h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
         sh = max(2 * ss, int(round(seg_area_h * h_mult)))
         x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1210,7 +1353,8 @@ def _build_seg_base_layer(
         d.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=inactive)
 
     range_font = load_font(font_path, range_fs)
-    label_font = load_font(font_path, label_fs)
+    label_font = load_font(label_font_path or font_path, label_fs)
+    eff_label_color = label_color if label_color is not None else text_color
 
     # 2. Range min/max labels
     if show_min:
@@ -1237,32 +1381,44 @@ def _build_seg_base_layer(
 
     # 3. Label and icon
     if show_label and label:
-        icon = _get_seg_icon(icon_name, max(10 * ss, int(label_fs * 1.1)))
-        if icon and label_align == "center":
-            ix = max(0, int((raster_w - icon.width - int(label_font.getlength(str(label)))) / 2) - 3 * ss)
-            iy = max(0, int(bottom_y + (bottom_text_h - icon.height) / 2))
-            base_img.alpha_composite(icon, (ix, iy))
-        if label_align == "center":
-            _draw_text_bounded(
-                d, (raster_w / 2, bottom_y), str(label).upper() if uppercase_label else str(label),
-                font=label_font, fill=text_color,
-                stroke_width=text_stroke, stroke_fill=(0, 0, 0, 220),
-                bounds=(raster_w, raster_h), anchor="ma",
-            )
-        elif label_align == "left":
-            _draw_text_bounded(
-                d, (pad_x, bottom_y), str(label).upper() if uppercase_label else str(label),
-                font=label_font, fill=text_color,
-                stroke_width=text_stroke, stroke_fill=(0, 0, 0, 220),
-                bounds=(raster_w, raster_h), anchor="la",
-            )
+        label_text = str(label).upper() if uppercase_label else str(label)
+        content_width = seg_w * segments + gap * max(0, segments - 1)
+        content_center_x = pad_x + content_width / 2.0
+        side_left = max(0, pad_x - 4 * ss)
+        side_right = max(0, raster_w - (pad_x + content_width))
+        if label_position == "top":
+            label_xy, label_anchor = (content_center_x + label_offset_x, top_pad + label_offset_y), "ma"
+        elif label_position == "left":
+            label_xy, label_anchor = (side_left / 2 + label_offset_x, seg_top + seg_area_h / 2 + label_offset_y), "mm"
+        elif label_position == "right":
+            label_xy, label_anchor = (raster_w - side_right / 2 + label_offset_x, seg_top + seg_area_h / 2 + label_offset_y), "mm"
+        elif label_position == "inside":
+            label_xy, label_anchor = (content_center_x + label_offset_x, seg_top + seg_area_h / 2 + label_offset_y), "mm"
         else:
-            _draw_text_bounded(
-                d, (raster_w - pad_x, bottom_y), str(label).upper() if uppercase_label else str(label),
-                font=label_font, fill=text_color,
-                stroke_width=text_stroke, stroke_fill=(0, 0, 0, 220),
-                bounds=(raster_w, raster_h), anchor="ra",
-            )
+            label_xy, label_anchor = (content_center_x + label_offset_x, bottom_y + label_offset_y), "ma"
+        icon = _get_seg_icon(icon_name, max(10 * ss, int(label_fs * 1.1)))
+        if icon and label_align == "center" and label_position == "bottom":
+            ix = max(0, int((raster_w - icon.width - int(label_font.getlength(label_text))) / 2) - 3 * ss)
+            iy = max(0, int(bottom_y + (bottom_text_h - icon.height) / 2 + label_offset_y))
+            base_img.alpha_composite(icon, (ix, iy))
+        if label_position in ("top", "left", "right", "inside"):
+            _draw_text_bounded(d, label_xy, label_text, font=label_font,
+                               fill=eff_label_color, stroke_width=text_stroke,
+                               stroke_fill=(0, 0, 0, 220), bounds=(raster_w, raster_h),
+                               anchor=label_anchor)
+        elif label_align == "center":
+            _draw_text_bounded(d, label_xy, label_text, font=label_font,
+                               fill=eff_label_color, stroke_width=text_stroke,
+                               stroke_fill=(0, 0, 0, 220), bounds=(raster_w, raster_h),
+                               anchor=label_anchor)
+        elif label_align == "left":
+            _draw_text_bounded(d, (pad_x + label_offset_x, bottom_y + label_offset_y), label_text,
+                               font=label_font, fill=eff_label_color, stroke_width=text_stroke,
+                               stroke_fill=(0, 0, 0, 220), bounds=(raster_w, raster_h), anchor="la")
+        else:
+            _draw_text_bounded(d, (raster_w - pad_x + label_offset_x, bottom_y + label_offset_y), label_text,
+                               font=label_font, fill=eff_label_color, stroke_width=text_stroke,
+                               stroke_fill=(0, 0, 0, 220), bounds=(raster_w, raster_h), anchor="ra")
 
     return base_img
 
@@ -1312,7 +1468,7 @@ def _get_seg_active_layer(
     reverse = str(direction).strip().lower() == "reverse"
     for a in range(active):
         i = (segments - 1 - a) if reverse else a
-        p = i / max(1, segments - 1)
+        p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
         h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
         sh = max(2 * ss, int(round(seg_area_h * h_mult)))
         x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1351,7 +1507,7 @@ def _draw_seg_partial_segment(
     d = ImageDraw.Draw(img)
     reverse = str(direction).strip().lower() == "reverse"
     i = segment_index
-    p = i / max(1, segments - 1)
+    p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
     h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
     sh = max(2 * ss, int(round(seg_area_h * h_mult)))
     x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1471,7 +1627,17 @@ def _render_segments(
     width = max(80 * ss, int(size_px * ss))
     segments = _resolve_segment_count(cfg)
     gap = max(0, int(round(float(cfg.get("segment_gap", 3)) * ss)))
-    decimals = max(0, int(cfg.get("decimals", 1)))
+    is_pct_field = (
+        unit == "%"
+        or "solar" in str(label or "").lower()
+        or "battery" in str(label or "").lower()
+        or "solar" in str(cfg.get("field", "")).lower()
+        or "battery" in str(cfg.get("field", "")).lower()
+    )
+    decimals = max(0, int(cfg.get("decimals", 0 if is_pct_field else 1)))
+    range_decimals = _resolve_range_decimals(
+        cfg, decimals, val_min, val_max, percent_scale=is_pct_field,
+    )
 
     # ── Per-widget fonts (independent control) ──────────────────────────
     value_fs = max(10 * ss, int(round(float(cfg.get("value_font_size", cfg.get("value_font_scale", 1.70))) * fs * ss)))
@@ -1507,7 +1673,7 @@ def _render_segments(
     fill_mode = str(cfg.get("segment_fill_mode", "whole")).strip().lower()
     if fill_mode not in ("whole", "partial"):
         fill_mode = "whole"
-    direction = str(cfg.get("fill_direction", "forward")).strip().lower()
+    direction = str(cfg.get("fill_direction", cfg.get("direction", "forward"))).strip().lower()
     if direction not in ("forward", "reverse"):
         direction = "forward"
     value_align = str(cfg.get("value_align", "left")).strip().lower()
@@ -1516,9 +1682,13 @@ def _render_segments(
     label_align = str(cfg.get("label_align", "center")).strip().lower()
     if label_align not in ("left", "center", "right"):
         label_align = "center"
+    min_dim = min(canvas_w, canvas_h)
+    scale = min_dim / 1080.0
+    label_position = _resolve_label_position(cfg, "bottom")
+    label_offset_x, label_offset_y = _label_offset(cfg, ss, scale)
 
     marker_style = str(cfg.get("marker_style", "none")).strip().lower()
-    marker_enabled = marker_style != "none"
+    marker_enabled = (marker_style != "none") and bool(cfg.get("show_marker", True))
     marker_position = str(cfg.get("marker_position", "top")).strip().lower()
     marker_size = max(1, int(round(float(cfg.get("marker_size", 8)) * ss)))
     marker_offset = max(0, int(round(float(cfg.get("marker_offset", 0)) * ss)))
@@ -1531,7 +1701,22 @@ def _render_segments(
 
     unit_for_value = str(cfg.get("value_unit", unit or ""))
     if formatted_val is not None:
-        value_text = str(formatted_val)
+        if show_value and not bool(cfg.get("value_show_unit", True)):
+            val_stripped = str(formatted_val)
+            for u in (unit_for_value, str(unit or "")):
+                if u and val_stripped.endswith(u):
+                    val_stripped = val_stripped[:-len(u)].strip()
+            value_text = val_stripped
+        elif str(cfg.get("value_unit", "")) != "":
+            custom_u = str(cfg["value_unit"])
+            orig_u = str(unit or "")
+            val_str = str(formatted_val)
+            if orig_u and val_str.endswith(orig_u):
+                value_text = f"{val_str[:-len(orig_u)].strip()} {custom_u}"
+            else:
+                value_text = f"{val_str} {custom_u}"
+        else:
+            value_text = str(formatted_val)
     elif value is not None:
         value_text = _fmt_number(float(value), decimals)
         if show_value and bool(cfg.get("value_show_unit", True)) and unit_for_value:
@@ -1557,15 +1742,20 @@ def _render_segments(
     dd = ImageDraw.Draw(dummy)
     value_h = _text_size(dd, value_text, value_font, text_stroke)[1] if show_value else 0
     label_h = _text_size(dd, str(label), label_font, text_stroke)[1] if show_label and label else 0
-    sample_range = _fmt_number(max(abs(val_min), abs(val_max)), decimals)
+    sample_range = _fmt_number(max(abs(val_min), abs(val_max)), range_decimals)
     range_h = _text_size(dd, sample_range, range_font, text_stroke)[1] if (show_min or show_max) else 0
 
-    pad_x = 4 * ss
+    label_width = _text_size(dd, str(label), label_font, text_stroke)[0] if show_label and label else 0
+    label_side_gap = 6 * ss if label_width else 0
+    side_left = label_width + label_side_gap if label_position == "left" else 0
+    side_right = label_width + label_side_gap if label_position == "right" else 0
+    pad_x = 4 * ss + side_left
     top_pad = 3 * ss
     value_gap = (max(0, int(cfg.get("value_gap", 3))) * ss) if value_h else 0
     label_gap = max(0, int(cfg.get("label_gap", 0))) * ss
     range_gap = max(0, int(cfg.get("range_gap", 0))) * ss
-    bottom_text_h = max(label_h, range_h)
+    top_label_extra = label_h + label_gap if label_position == "top" else 0
+    bottom_text_h = max(range_h, label_h if label_position == "bottom" else 0)
     bottom_pad = 3 * ss
 
     if "segment_height" in cfg and float(cfg.get("segment_height", 0) or 0) > 0:
@@ -1573,13 +1763,13 @@ def _render_segments(
     else:
         seg_area_h = max(16 * ss, int(round(width * float(cfg.get("segment_height_ratio", 0.105)))))
 
-    raster_w = width + pad_x * 2
+    raster_w = width + pad_x * 2 + side_right
     raster_h = int(
-        top_pad + value_h + value_gap + marker_zone_top
+        top_pad + top_label_extra + value_h + value_gap + marker_zone_top
         + seg_area_h + 5 * ss + marker_zone_bottom
         + bottom_text_h + bottom_pad + label_gap + range_gap
     )
-    seg_top = top_pad + value_h + value_gap + marker_zone_top
+    seg_top = top_pad + top_label_extra + value_h + value_gap + marker_zone_top
     seg_bottom = seg_top + seg_area_h
     bottom_y = seg_bottom + 5 * ss + marker_zone_bottom + label_gap
 
@@ -1608,10 +1798,11 @@ def _render_segments(
         "seg_base_v2", font_path, value_font_path, label_font_path, range_font_path,
         raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap,
         seg_area_h, seg_top, seg_bottom, bottom_y, bottom_text_h, segments, gap, radius,
-        round(seg_w, 2), grow_height, round(grow_start, 2), inactive, show_min, show_max, show_label,
-        val_min, val_max, decimals, range_units, unit, label, range_fs, label_fs, text_stroke,
+        round(seg_w, 2), grow_height, round(grow_start, 2), direction, inactive, show_min, show_max, show_label,
+        val_min, val_max, decimals, range_decimals, range_units, unit, label, range_fs, label_fs, text_stroke,
         dim_color, text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
-        label_align, marker_zone_top, marker_zone_bottom, label_gap, range_gap
+        label_align, marker_zone_top, marker_zone_bottom, label_gap, range_gap,
+        label_position, label_offset_x, label_offset_y,
     )
     dynamic_key = _static_cache_key(
         "seg_dyn_v2", font_path, value_font_path, label_font_path, range_font_path,
@@ -1629,10 +1820,12 @@ def _render_segments(
             raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap, seg_area_h,
             seg_top, seg_bottom, bottom_y, bottom_text_h, segments, gap, radius, seg_w,
             grow_height, grow_start, inactive, show_min, show_max, show_label, val_min,
-            val_max, decimals, range_units, unit, label, range_font_path, range_fs, label_fs,
+            val_max, range_decimals, range_units, unit, label, range_font_path, range_fs, label_fs,
             text_stroke, range_text_color if "range_color" in cfg else dim_color,
             text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
-            label_align,
+            label_align, label_font_path=label_font_path, label_color=label_color,
+            label_position=label_position, label_offset_x=label_offset_x,
+            label_offset_y=label_offset_y, direction=direction,
         )
         _SEG_BASE_CACHE[base_key] = base_img
 
@@ -1812,10 +2005,18 @@ def get_bar_cache_stats() -> dict[str, Any]:
 
 
 def clear_bar_cache() -> None:
-    """Clear bar indicator cache."""
+    """Clear bar indicator cache and all sub-caches."""
     _BAR_INDICATOR_CACHE.clear()
     _BAR_INDICATOR_CACHE.hits = 0
     _BAR_INDICATOR_CACHE.misses = 0
+    _RULER_BASE_CACHE.clear()
+    _TEXT_TILE_CACHE.clear()
+    _SLOPE_BASE_CACHE.clear()
+    _SEG_BASE_CACHE.clear()
+    _SEG_ACTIVE_CACHE.clear()
+    _SEG_ICON_CACHE.clear()
+    if _STATIC_CACHE is not None:
+        _STATIC_CACHE.clear()
 
 
 def _render_bar_indicator(
@@ -1843,19 +2044,77 @@ def _render_bar_indicator(
     ``segments``, ``segment_gap``, ``segment_radius``, ``gradient`` (list of
     hex colours), ``inactive_color``, ``inactive_alpha``, ``grow_height``,
     ``grow_start``, ``show_min``, ``show_max``.
+    - style / bar_style: "ruler" (default) or "segments"
+    - orientation: "horizontal" (default) or "vertical"
+    - auto_scale: True/False
+    - min_val, max_val: value range
+    - color / track_color: base ruler/segment colour
+    - tick_color, marker_color, text_color: fine element colours
     """
-    if Image is None or ImageDraw is None:
-        return None, 0, 0, None
+    if Image is None:
+        raise ImportError("Pillow required")
 
-    v_rounded = round(float(value), 3) if value is not None else None
+    key_str = str(key or "").lower()
+    label_str = str(label or "").lower()
+    field_str = str(cfg.get("field", "")).lower()
+    is_solar = "solar" in key_str or "solar" in label_str or "solar" in field_str
+    is_pct = is_solar or unit == "%" or "battery" in key_str or "battery" in label_str or "battery" in field_str
+
+    val_min_f = float(val_min)
+    val_max_f = float(val_max)
+    range_span = val_max_f - val_min_f if val_max_f != val_min_f else 1.0
+
+    if value is not None:
+        raw_val = float(value)
+        normalized_fraction = max(0.0, min(1.0, (raw_val - val_min_f) / range_span))
+        if is_solar:
+            display_value = raw_val
+        elif is_pct:
+            display_value = normalized_fraction * 100.0
+        else:
+            display_value = raw_val
+    else:
+        raw_val = 0.0
+        normalized_fraction = 0.0
+        display_value = 0.0
+
+    if formatted_val is not None:
+        formatted_text = str(formatted_val)
+    elif value is not None:
+        decimals = int(cfg.get("decimals", 0 if is_pct else 1))
+        num_str = _fmt_number(display_value, decimals)
+        show_units = bool(cfg.get("show_units", True))
+        if show_units and unit:
+            formatted_text = f"{num_str} {unit}".strip()
+        elif is_pct and show_units:
+            formatted_text = f"{num_str}%"
+        else:
+            formatted_text = num_str
+    else:
+        formatted_text = "--"
+
+    if is_solar:
+        marker_info = f"{normalized_fraction * 100:.1f}%"
+        raw_disp = int(raw_val) if raw_val == int(raw_val) else raw_val
+        min_disp = int(val_min_f) if val_min_f == int(val_min_f) else val_min_f
+        max_disp = int(val_max_f) if val_max_f == int(val_max_f) else val_max_f
+        val_disp = int(display_value) if display_value == int(display_value) else display_value
+
+
+    v_rounded = display_value if value is not None else None
+    cfg_sig = tuple(sorted((str(k), str(v)) for k, v in cfg.items() if not str(k).startswith("_")))
     cache_key = _static_cache_key(
-        "bar_ind_v1", canvas_w, canvas_h, font_path, key, v_rounded, str(unit or ""), str(label or ""),
-        str(formatted_val or ""), float(val_min), float(val_max), int(ticks), float(thickness), int(size_px), int(fs), int(outline), int(ss),
-        cfg.get("orientation"), cfg.get("bar_style"), cfg.get("style"), cfg.get("color"), cfg.get("text_color")
+        "bar_ind_v2", canvas_w, canvas_h, font_path, key, v_rounded, str(unit or ""), str(label or ""),
+        formatted_text, float(val_min), float(val_max), int(ticks), float(thickness), int(size_px), int(fs), int(outline), int(ss),
+        cfg_sig,
     )
     px_x = s(cfg["x"], canvas_w)
     px_y = s(cfg["y"], canvas_h)
     cached = _BAR_INDICATOR_CACHE.get(cache_key)
+    from src.telemetry_resolver import presentation_debug
+    presentation_debug('bar', indicator=key, value=value, display_value=display_value,
+                       fraction=normalized_fraction, formatted_val=formatted_text,
+                       cache='HIT' if cached is not None else 'MISS')
     if cached is not None:
         return cached, px_x, px_y, None
 
@@ -1876,7 +2135,7 @@ def _render_bar_indicator(
             canvas_w=canvas_w,
             canvas_h=canvas_h,
             font_path=font_path,
-            value=float(value) if value is not None else None,
+            value=float(display_value) if value is not None else None,
             unit=str(unit or ""),
             label=str(label or ""),
             cfg=cfg,
@@ -1886,14 +2145,14 @@ def _render_bar_indicator(
             fs=int(fs),
             outline=int(outline),
             ss=max(1, int(ss)),
-            formatted_val=formatted_val,
+            formatted_val=formatted_text,
         )
     elif orientation == "vertical":
         img = _render_ruler_vertical(
             canvas_w=canvas_w,
             canvas_h=canvas_h,
             font_path=font_path,
-            value=float(value) if value is not None else None,
+            value=float(display_value) if value is not None else None,
             unit=str(unit or ""),
             label=str(label or ""),
             cfg=cfg,
@@ -1905,14 +2164,14 @@ def _render_bar_indicator(
             fs=int(fs),
             outline=int(outline),
             ss=max(1, int(ss)),
-            formatted_val=formatted_val,
+            formatted_val=formatted_text,
         )
     else:
         img = _render_ruler(
             canvas_w=canvas_w,
             canvas_h=canvas_h,
             font_path=font_path,
-            value=float(value) if value is not None else None,
+            value=float(display_value) if value is not None else None,
             unit=str(unit or ""),
             label=str(label or ""),
             cfg=cfg,
@@ -1924,7 +2183,7 @@ def _render_bar_indicator(
             fs=int(fs),
             outline=int(outline),
             ss=max(1, int(ss)),
-            formatted_val=formatted_val,
+            formatted_val=formatted_text,
         )
 
     ss = max(1, int(ss))
