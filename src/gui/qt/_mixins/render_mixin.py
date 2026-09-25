@@ -334,6 +334,12 @@ class RenderMixin:
                 global_pct = min(99.9, global_pct) if global_pct < 100.0 else 99.9
 
                 stage_label = str(hud_state.get("finalize_stage", hud_state.get("label", "Finalizacja..."))) if isinstance(hud_state, dict) else "Finalizacja..."
+                finalize_internal = hud_state.get("pct") if isinstance(hud_state, dict) else None
+                file_size_bytes = hud_state.get("file_size_bytes") if isinstance(hud_state, dict) else None
+                write_speed_mbps = hud_state.get("write_speed_mbps") if isinstance(hud_state, dict) else None
+                stall_warning = bool(hud_state.get("stall_warning", False)) if isinstance(hud_state, dict) else False
+                stall_seconds = hud_state.get("stall_seconds") if isinstance(hud_state, dict) else None
+
                 final_comp_txt = ""
                 if isinstance(hud_state, dict) and hud_state.get("compression_active"):
                     is_av1 = hud_state.get("is_av1", False)
@@ -351,6 +357,12 @@ class RenderMixin:
                     elapsed_s=now_elapsed,
                     global_percent=global_pct,
                     finalization_stage=stage_label,
+                    finalize_stage=stage_label,
+                    finalize_internal=finalize_internal,
+                    file_size_bytes=file_size_bytes,
+                    write_speed_mbps=write_speed_mbps,
+                    stall_warning=stall_warning,
+                    stall_seconds=stall_seconds,
                     cancel_requested=self.render_cancel_event.is_set(),
                     cancel_reason=getattr(self, "_render_cancel_reason", RenderCancelReason.NONE),
                     cancel_source=getattr(self, "_render_cancel_source", ""),

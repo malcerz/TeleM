@@ -2111,20 +2111,23 @@ class RenderTab(QWidget):
             status = snapshot.finalization_stage or "Finalizacja..."
         else:
             status = "Renderowanie..."
-        eta = None if snapshot.eta_s is None else self._fmt_time(snapshot.eta_s)
-        item_label = "HUD" if snapshot.state == "preparing" else "Frame"
-        completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
-        total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
-        qp_val = getattr(snapshot, "qp", None)
-        if qp_val is None:
-            qp_val = getattr(snapshot, "avg_qp", None)
-        self._set_stats(
-            completed_val, total_val, snapshot.elapsed_s,
-            snapshot.fps, status, final_eta=eta,
-            item_label=item_label,
-            is_indeterminate=is_indeterminate,
-            qp=qp_val,
-        )
+        if snapshot.state == "finalizing" or snapshot.phase == "finalize":
+            self.lbl_stats.setText(format_render_progress_status(snapshot))
+        else:
+            eta = None if snapshot.eta_s is None else self._fmt_time(snapshot.eta_s)
+            item_label = "HUD" if snapshot.state == "preparing" else "Frame"
+            completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
+            total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
+            qp_val = getattr(snapshot, "qp", None)
+            if qp_val is None:
+                qp_val = getattr(snapshot, "avg_qp", None)
+            self._set_stats(
+                completed_val, total_val, snapshot.elapsed_s,
+                snapshot.fps, status, final_eta=eta,
+                item_label=item_label,
+                is_indeterminate=is_indeterminate,
+                qp=qp_val,
+            )
         comp_txt = getattr(snapshot, "compression_text", "")
         if comp_txt:
             if snapshot.completed:
