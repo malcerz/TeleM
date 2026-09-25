@@ -17,10 +17,11 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
-from src.indicators.icons import ICON_NAMES, ICON_LABELS, _PNG_DIR
+from src.indicators.icons import ICON_NAMES, ICON_LABELS, _PNG_DIR, _SVG_DIR
 
 # Global in-memory cache for QPixmaps to ensure instant UI rendering
 _PIXMAP_CACHE: dict[str, QPixmap] = {}
+_LOGGED_PICKER_ERRORS: set[str] = set()
 
 
 def _get_icon_pixmap(name: str, size: int = 28) -> QPixmap:
@@ -29,6 +30,20 @@ def _get_icon_pixmap(name: str, size: int = 28) -> QPixmap:
     if cache_key in _PIXMAP_CACHE:
         return _PIXMAP_CACHE[cache_key]
 
+    # 1. Try native SVG vector asset (sharpest scaling)
+    svg_path = _SVG_DIR / f"{name}.svg"
+    if svg_path.is_file():
+        pm = QPixmap(str(svg_path))
+        if not pm.isNull():
+            scaled = pm.scaled(
+                size, size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            _PIXMAP_CACHE[cache_key] = scaled
+            return scaled
+
+    # 2. Try PNG raster master
     png_path = _PNG_DIR / f"{name}.png"
     if png_path.is_file():
         pm = QPixmap(str(png_path))
@@ -41,9 +56,29 @@ def _get_icon_pixmap(name: str, size: int = 28) -> QPixmap:
             _PIXMAP_CACHE[cache_key] = scaled
             return scaled
 
-    # Fallback blank/dot pixmap
+    if name not in ("none", "", "0", "false") and name not in _LOGGED_PICKER_ERRORS:
+        _LOGGED_PICKER_ERRORS.add(name)
+        print(
+            f"[ICON RESOURCE ERROR]\n"
+            f"name={name}\n"
+            f"svg_path={svg_path}\n"
+            f"png_path={png_path}\n"
+            f"reason=Neither SVG nor PNG could be loaded into QPixmap",
+            flush=True,
+        )
+
+    # Visible fallback placeholder rather than completely invisible cell
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
+    if name not in ("none", "", "0", "false"):
+        painter = QPainter(pm)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor("#38bdf8"))
+        painter.setBrush(QColor("#1e293b"))
+        pad = max(2, size // 8)
+        painter.drawRoundedRect(pad, pad, size - 2 * pad, size - 2 * pad, 3, 3)
+        painter.end()
+
     _PIXMAP_CACHE[cache_key] = pm
     return pm
 

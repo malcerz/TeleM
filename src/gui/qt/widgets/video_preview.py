@@ -457,10 +457,24 @@ class VideoPreview(QWidget):
         self._pixmap_offset = (vrect.x(), vrect.y())
 
 
+    def clear_editor_state(self) -> None:
+        """Wyczyść stan edytora: zaznaczenie, przeciąganie i bounding boxy."""
+        self._bboxes.clear()
+        self._dragging_key = None
+        self._drag_offset_norm = (0.0, 0.0)
+        if hasattr(self, "hud_overlay") and self.hud_overlay:
+            self.hud_overlay.hud_pixmap = None
+            self.hud_overlay.update()
+        if hasattr(self, "image_label") and self.image_label:
+            self.image_label.update()
+
     def set_bboxes(self, bboxes: dict[str, tuple[int, int, int, int]], orig_w: int, orig_h: int) -> None:
         """Odbiera bounding boxy wskaźników z kontrolera (w pikselach obrazu podglądu)."""
         self._bboxes = bboxes
         self._original_size = (orig_w, orig_h)
+        if not bboxes:
+            self._dragging_key = None
+            self._drag_offset_norm = (0.0, 0.0)
 
     def eventFilter(self, obj, event) -> bool:
         """Przechwytuje zdarzenia myszy i przemieszczania okna głównego."""

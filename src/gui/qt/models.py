@@ -72,6 +72,9 @@ class FieldSchema:
     # Placeholder / podpowiedź dla pól tekstowych (np. format progów):
     placeholder: str | None = None
 
+    # Opcjonalny nagłówek sekcji wewnątrz zakładki:
+    section: str | None = None
+
 
 def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
     """Zwraca mapę {nazwa pola: kanoniczna wartość} dla pól z ustawionym default.
@@ -162,6 +165,10 @@ def normalize_indicator_decimal_defaults(layout: dict[str, Any]) -> dict[str, An
                 default = indicator_default_decimals(key, cfg)
                 if default is not None:
                     cfg["decimals"] = default
+            if str(cfg.get("map_marker_style", "")).strip().lower() in ("directional", "arrow", "strzałka", "strzalka"):
+                cfg["map_marker_style"] = "dot"
+            if bool(cfg.get("arrow_marker", False)):
+                cfg["arrow_marker"] = False
     return layout
 
 
@@ -249,6 +256,14 @@ def _text_tab_fields(
                     min_val=repo_range[0], max_val=repo_range[1], step=0.01,
                     default=0.0),
         FieldSchema("text_offset_y", "float", "Pos Y",
+                    tab="Text",
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01,
+                    default=0.0),
+        FieldSchema("unit_offset_x", "float", "Unit X",
+                    tab="Text",
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01,
+                    default=0.0),
+        FieldSchema("unit_offset_y", "float", "Unit Y",
                     tab="Text",
                     min_val=repo_range[0], max_val=repo_range[1], step=0.01,
                     default=0.0),
@@ -496,79 +511,99 @@ def _bar_ruler_fields() -> list[FieldSchema]:
 
 
 def _bar_segments_fields() -> list[FieldSchema]:
-    """Pola specyficzne dla stylu 'segments' (Segment Bar, ETAP 10T)."""
+    """Pola specyficzne dla stylu 'segments' (Segment Bar, uporządkowany panel właściwości)."""
     return [
         # ── Tab Text (wartość / etykieta / zakres) ──────────────────────
-        FieldSchema("show_value", "bool", "Wartość", tab="Text", default=True),
-        FieldSchema("show_label", "bool", "Etykieta", tab="Text", default=True),
+        # Sekcja Wartość
+        FieldSchema("show_value", "bool", "Pokaż wartość", tab="Text", default=True),
+        FieldSchema("value_show_unit", "bool", "Jednostka przy wartości", tab="Text", default=True),
+        FieldSchema("value_unit", "text", "Własna jednostka", tab="Text", default=""),
+        FieldSchema("decimals", "int", "Miejsca dziesiętne", tab="Text", min_val=0, max_val=2, step=1, default=1),
+        FieldSchema("value_align", "choice", "Wyrównanie wartości", tab="Text",
+                    choices=[("left", "Lewo"), ("center", "Środek"), ("right", "Prawo")], default="left"),
+        FieldSchema("value_font", "font", "Font wartości", tab="Text", default=""),
+        FieldSchema("value_font_size", "float", "Rozmiar wartości", tab="Text", min_val=0.5, max_val=5.0, step=0.05, default=1.70),
+        FieldSchema("value_color", "color", "Kolor wartości", tab="Text", default="#FFFFFF"),
+
+        # Sekcja Etykieta
+        FieldSchema("show_label", "bool", "Pokaż etykietę", tab="Text", default=True),
+        FieldSchema("uppercase_label", "bool", "Etykieta WIELKIMI", tab="Text", default=False),
         FieldSchema("label_position", "choice", "Pozycja etykiety", tab="Text",
                     choices=[("auto", "Auto"), ("top", "Góra"), ("bottom", "Dół"),
                              ("left", "Lewo"), ("right", "Prawo"), ("inside", "Wewnątrz")],
                     default="auto"),
+        FieldSchema("label_align", "choice", "Wyrównanie etykiety", tab="Text",
+                    choices=[("left", "Lewo"), ("center", "Środek"), ("right", "Prawo")], default="center"),
         FieldSchema("label_offset_x", "float", "Przesunięcie etykiety X", tab="Text",
                     min_val=-500.0, max_val=500.0, step=1.0, default=0.0),
         FieldSchema("label_offset_y", "float", "Przesunięcie etykiety Y", tab="Text",
                     min_val=-500.0, max_val=500.0, step=1.0, default=0.0),
-        FieldSchema("uppercase_label", "bool", "Etykieta WIELKIMI", tab="Text", default=False),
-        FieldSchema("value_show_unit", "bool", "Jednostka przy wartości", tab="Text", default=True),
-        FieldSchema("value_unit", "text", "Własna jednostka", tab="Text", default=""),
-        FieldSchema("show_min", "bool", "Pokaż min.", tab="Text", default=True),
-        FieldSchema("show_max", "bool", "Pokaż max", tab="Text", default=True),
-        FieldSchema("show_marker", "bool", "Pokaż marker", tab="Text", default=True),
-        FieldSchema("range_units", "bool", "Jednostki", tab="Text", default=False),
-        FieldSchema("decimals", "int", "Decimals", tab="Text", min_val=0, max_val=2, step=1, default=1),
-        FieldSchema("value_font", "font", "Font wartości", tab="Text", default=""),
-        FieldSchema("value_font_size", "float", "Rozmiar wartości", tab="Text", min_val=0.5, max_val=5.0, step=0.05, default=1.70),
         FieldSchema("label_font", "font", "Font etykiety", tab="Text", default=""),
         FieldSchema("label_font_size", "float", "Rozmiar etykiety", tab="Text", min_val=0.3, max_val=3.0, step=0.05, default=0.72),
+        FieldSchema("label_color", "color", "Kolor etykiety", tab="Text", default="#FFFFFF"),
+
+        # Sekcja Zakres (Min/Max)
+        FieldSchema("show_min", "bool", "Pokaż min.", tab="Text", default=True),
+        FieldSchema("show_max", "bool", "Pokaż max", tab="Text", default=True),
+        FieldSchema("range_units", "bool", "Jednostka przy zakresie", tab="Text", default=False),
         FieldSchema("range_font", "font", "Font zakresu", tab="Text", default=""),
         FieldSchema("range_font_size", "float", "Rozmiar zakresu", tab="Text", min_val=0.3, max_val=3.0, step=0.05, default=0.82),
-        FieldSchema("value_color", "color", "Kolor wartości", tab="Text", default="#FFFFFF"),
-        FieldSchema("label_color", "color", "Kolor etykiety", tab="Text", default="#FFFFFF"),
-        FieldSchema("text_color", "color", "Kolor tekstu", tab="Text", default="#FFFFFF"),
         FieldSchema("range_color", "color", "Kolor zakresu", tab="Text", default="#E0E0E0"),
-        FieldSchema("value_align", "choice", "Wyrównanie wartości", tab="Text", choices=["left", "center", "right"], default="left"),
-        FieldSchema("label_align", "choice", "Wyrównanie etykiety", tab="Text", choices=["left", "center", "right"], default="center"),
-        FieldSchema("value_gap", "int", "Odstęp wartości", tab="Text", min_val=0, max_val=40, step=1, default=3),
-        FieldSchema("label_gap", "int", "Odstęp etykiety", tab="Text", min_val=0, max_val=40, step=1, default=0),
-        FieldSchema("range_gap", "int", "Odstęp zakresu", tab="Text", min_val=0, max_val=40, step=1, default=0),
-        # ── Tab Segments (geometria) ─────────────────────────────────────
+
+        # ── Tab Segments (geometria i skala danych) ──────────────────────
         FieldSchema("segments", "int", "Liczba segmentów", tab="Segments", min_val=2, max_val=100, step=1, default=20),
-        FieldSchema("segment_width", "float", "Szerokość segmentu", tab="Segments", min_val=0.0, max_val=200.0, step=1.0, default=0.0),
-        FieldSchema("segment_height", "float", "Wysokość segmentu", tab="Segments", min_val=0.0, max_val=200.0, step=1.0, default=0.0),
-        FieldSchema("segment_height_ratio", "float", "Proporcja wys. segmentu", tab="Segments", min_val=0.1, max_val=1.0, step=0.05, default=0.7),
         FieldSchema("segment_gap", "int", "Odstęp segmentów", tab="Segments", min_val=0, max_val=20, step=1, default=3),
-        FieldSchema("segment_shape", "choice", "Kształt segmentu", tab="Segments", choices=[("rectangle", "Prostokąt"), ("rounded", "Zaokrąglony"), ("pill", "Pigułka")], default="rounded"),
+        FieldSchema("segment_shape", "choice", "Kształt segmentu", tab="Segments",
+                    choices=[("rectangle", "Prostokąt"), ("rounded", "Zaokrąglony"), ("pill", "Pigułka")], default="rounded"),
         # 4.0 = spójne z legacy segment_radius=4 ustawianym przez _create_indicator
         FieldSchema("segment_corner_radius", "float", "Zaokrąglenie", tab="Segments", min_val=0.0, max_val=40.0, step=0.5, default=4.0),
-        FieldSchema("grow_height", "bool", "Rosnąca wys.", tab="Segments", default=True),
-        FieldSchema("grow_start", "float", "Start wzrostu", tab="Segments", min_val=0.0, max_val=1.0, step=0.05, default=0.55),
-        FieldSchema("segment_fill_mode", "choice", "Tryb wypełnienia", tab="Segments", choices=[("whole", "Cały"), ("partial", "Częściowy")], default="whole"),
-        FieldSchema("fill_direction", "choice", "Kierunek", tab="Segments", choices=[("forward", "Lewo → prawo"), ("reverse", "Prawo → lewo")], default="forward"),
+
+        # Wymiary segmentów
+        FieldSchema("segment_height_ratio", "float", "Proporcja wys. segmentu", tab="Segments", min_val=0.01, max_val=1.0, step=0.05, default=0.7),
+        FieldSchema("segment_width", "float", "Wymuszona szer. segmentu [px]", tab="Segments", min_val=0.0, max_val=1000.0, step=1.0, default=0.0),
+        FieldSchema("segment_height", "float", "Wymuszona wys. segmentu [px]", tab="Segments", min_val=0.0, max_val=1000.0, step=1.0, default=0.0),
+
+        # Zmiana wysokości segmentów
+        FieldSchema("grow_height", "bool", "Rosnąca wysokość segmentów", tab="Segments", default=True, section="ZMIANA WYSOKOŚCI SEGMENTÓW"),
+        FieldSchema("grow_start", "float", "Wysokość początku (skala)", tab="Segments", min_val=0.0, max_val=1.0, step=0.05, default=0.55),
+        FieldSchema("segment_fill_mode", "choice", "Tryb wypełnienia", tab="Segments",
+                    choices=[("whole", "Cały"), ("partial", "Częściowy")], default="whole"),
+        FieldSchema("fill_direction", "choice", "Kierunek", tab="Segments",
+                    choices=[("forward", "Lewo → prawo"), ("reverse", "Prawo → lewo")], default="forward"),
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Segments", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Segments", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Segments", min_val=-10000.0, max_val=100000.0, step=1.0, default=100.0),
-        # ── Tab Colors (kolory segmentów) ────────────────────────────────
+
+        # ── Tab Colors (kolory segmentów i progi) ────────────────────────
         FieldSchema("segment_color_mode", "choice", "Tryb kolorów", tab="Colors",
                     choices=[("solid", "Jednolity"), ("gradient", "Gradient"), ("threshold", "Progi")], default="gradient"),
         FieldSchema("segment_color", "color", "Kolor segmentu", tab="Colors", default="#16A7AF"),
         FieldSchema("segment_color_start", "color", "Kolor początku grad.", tab="Colors", default="#16A7AF"),
         FieldSchema("segment_color_end", "color", "Kolor końca grad.", tab="Colors", default="#FF9A2E"),
-        FieldSchema("gradient_space", "choice", "Przestrzeń gradientu", tab="Colors", choices=[("rgb", "RGB"), ("hsv", "HSV")], default="rgb"),
+        FieldSchema("gradient_space", "choice", "Przestrzeń gradientu", tab="Colors",
+                    choices=[("rgb", "RGB"), ("hsv", "HSV")], default="rgb"),
         FieldSchema("segment_thresholds", "text", "Progi (wartość:kolor)", tab="Colors",
                     placeholder="20:#ff0000;50:#ffaa00;80:#00cc66;100:#00ff00", default=""),
         FieldSchema("segment_inactive_color", "color", "Kolor nieaktywny", tab="Colors", default="#333333"),
         FieldSchema("segment_inactive_opacity", "float", "Przezroczystość nieakt.", tab="Colors", min_val=0.0, max_val=1.0, step=0.05, default=0.23529411764705882),
-        # ── Tab Marker ───────────────────────────────────────────────────
+
+        # ── Tab Marker (wskaźnik pozycji) ────────────────────────────────
+        FieldSchema("show_marker", "bool", "Pokaż marker", tab="Marker", default=True),
         FieldSchema("marker_style", "choice", "Styl markera", tab="Marker",
                     choices=[("none", "Brak"), ("triangle", "Trójkąt"), ("line", "Linia"), ("circle", "Koło")], default="none"),
+        FieldSchema("marker_position", "choice", "Pozycja markera", tab="Marker",
+                    choices=[("top", "Góra"), ("bottom", "Dół"), ("center", "Środek")], default="top"),
         FieldSchema("marker_size", "float", "Rozmiar markera", tab="Marker", min_val=1.0, max_val=40.0, step=0.5, default=8.0),
+        FieldSchema("marker_offset", "float", "Odstęp markera", tab="Marker", min_val=0.0, max_val=40.0, step=1.0, default=0.0),
         FieldSchema("marker_color", "color", "Kolor markera", tab="Marker", default="#FFFFFF"),
         FieldSchema("marker_border_color", "color", "Kolor obrysu", tab="Marker", default="#000000"),
         FieldSchema("marker_border_width", "float", "Grubość obrysu", tab="Marker", min_val=0.0, max_val=8.0, step=0.5, default=1.0),
-        FieldSchema("marker_position", "choice", "Pozycja markera", tab="Marker",
-                    choices=[("top", "Góra"), ("bottom", "Dół"), ("center", "Środek")], default="top"),
-        FieldSchema("marker_offset", "float", "Odstęp markera", tab="Marker", min_val=0.0, max_val=40.0, step=1.0, default=0.0),
+
+        # ── Tab Zaawansowane (fine-tuning) ───────────────────────────────
+        FieldSchema("text_color", "color", "Domyślny kolor tekstu", tab="Zaawansowane", default="#FFFFFF"),
+        FieldSchema("value_gap", "int", "Odstęp wartości", tab="Zaawansowane", min_val=0, max_val=40, step=1, default=3),
+        FieldSchema("label_gap", "int", "Odstęp etykiety", tab="Zaawansowane", min_val=0, max_val=40, step=1, default=0),
+        FieldSchema("range_gap", "int", "Odstęp zakresu", tab="Zaawansowane", min_val=0, max_val=40, step=1, default=0),
     ]
 
 
@@ -595,8 +630,8 @@ def _bar_slope_fields() -> list[FieldSchema]:
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=100.0),
-        FieldSchema("major_tick", "float", "Krok główny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
-        FieldSchema("minor_tick", "float", "Krok drobny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
+        FieldSchema("major_tick", "float", "Krok główny", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
+        FieldSchema("minor_tick", "float", "Krok drobny", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
         FieldSchema("track_color", "color", "Kolor osi", tab="Ticks", default="#8D9AA7"),
         FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks", default="#DDE7F2"),
         FieldSchema("zero_tick_color", "color", "Kolor zera", tab="Ticks", default="#FFFFFF"),
@@ -634,14 +669,17 @@ def lean_indicator_fields() -> list[FieldSchema]:
         + _form_field([("lean", "Przechył")])
         + [
             FieldSchema("source", "choice", "Źródło danych", tab="Data",
-                        choices=[("gyro", "IMU GoPro (żyroskop + akcelerometr)"),
-                                 ("grade", "FIT Grade / nachylenie terenu")],
+                        choices=[("gyro", "IMU GoPro (estymator kąta przechyłu [°])"),
+                                 ("raw_gyro_z", "GoPro Gyroscope Z (prędkość kątowa [deg/s])"),
+                                 ("grade", "FIT Grade / nachylenie terenu [%]")],
                         default="gyro"),
-            FieldSchema("axis", "choice", "Oś przechyłu", tab="Data",
-                        choices=[("x", "X (roll)"), ("y", "Y (pitch)"), ("z", "Z (yaw)")],
-                        default="x"),
-            FieldSchema("calibration", "float", "Kalibracja / Offset [°]", tab="Data",
-                        min_val=-90.0, max_val=90.0, step=0.5, default=6.0),
+            FieldSchema("axis", "choice", "Oś przechyłu (dla IMU)", tab="Data",
+                        choices=[("y", "Roll (Y) — przechył wzdłużny [domyślna]"),
+                                 ("x", "Pitch (X) — pochylenie poprzeczne"),
+                                 ("z", "Yaw (Z) — obrót pionowy / skręt")],
+                        default="y"),
+            FieldSchema("calibration", "float", "Kalibracja / Offset", tab="Data",
+                        min_val=-90.0, max_val=90.0, step=0.5, default=0.0),
             FieldSchema("invert_axis", "bool", "Odwróć kierunek", tab="Data", default=False),
             FieldSchema("pivot_x", "float", "Punkt obrotu X", tab="Data",
                         min_val=0.0, max_val=1.0, step=0.01, default=0.5),
@@ -649,9 +687,9 @@ def lean_indicator_fields() -> list[FieldSchema]:
                         min_val=0.0, max_val=1.0, step=0.01, default=1.0),
             FieldSchema("sensitivity", "float", "Mnożnik wychyłu", tab="Data",
                         min_val=0.0, max_val=20.0, step=0.05, default=1.0),
-            FieldSchema("max_angle", "float", "Maks. kąt wychyłu [°]", tab="Data",
+            FieldSchema("max_angle", "float", "Maks. kąt wychyłu / zakres", tab="Data",
                         min_val=1.0, max_val=90.0, step=1.0, default=30.0),
-            FieldSchema("lean_smoothing_s", "float", "Wygładzanie ruchu", tab="Data",
+            FieldSchema("lean_smoothing_s", "float", "Wygładzanie ruchu [s]", tab="Data",
                         min_val=0.0, max_val=5.0, step=0.1, default=0.0),
             FieldSchema("graphic", "choice", "Grafika", tab="Data",
                         choices=[("bike", "Rower (ikona)"), ("beam", "Belka"), ("none", "Brak")],
@@ -693,7 +731,7 @@ def _map_gauge_tab_fields() -> list[FieldSchema]:
     return [
         FieldSchema("hide_marker", "bool", "Ukryj znacznik", tab="Gauge", default=False),
         FieldSchema("map_marker_style", "choice", "Styl znacznika", tab="Gauge",
-                    choices=[("dot", "Kropka"), ("directional", "Strzałka kierunkowa"), ("none", "Brak")],
+                    choices=[("dot", "Kropka")],
                     default="dot"),
         FieldSchema("marker_size", "int", "Rozmiar (Size)", tab="Gauge",
                     min_val=1, max_val=20, step=1, default=7),
@@ -703,6 +741,8 @@ def _map_gauge_tab_fields() -> list[FieldSchema]:
 
 def _map_path_tab_fields() -> list[FieldSchema]:
     return [
+        FieldSchema("gps_source", "choice", "Źródło GPS", tab="Path",
+                    choices=[("auto", "Auto"), ("fit", "FIT"), ("gpmf", "GPMF")], default="auto"),
         FieldSchema("hide_track", "bool", "Ukryj (Hide)", tab="Path", default=False),
         FieldSchema("track_width", "int", "Grubość (Width)", tab="Path",
                     min_val=1, max_val=20, step=1, default=3),
@@ -727,7 +767,12 @@ def _map_shape_tab_fields() -> list[FieldSchema]:
                              "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"],
                     default="light_all"),
         FieldSchema("map_shape", "choice", "Kształt (Shape)", tab="Shape",
-                    choices=["square", "round"], default="square"),
+                    choices=[("square", "Kwadrat"), ("rectangle", "Prostokąt"), ("round", "Koło"), ("rounded", "Zaokrąglony")], default="square"),
+        FieldSchema("map_corner_radius", "float", "Promień zaokrąglenia", tab="Shape",
+                    min_val=1.0, max_val=100.0, step=1.0, default=16.0),
+        FieldSchema("map_border_width", "int", "Grubość obramowania", tab="Shape",
+                    min_val=0, max_val=20, step=1, default=0),
+        FieldSchema("map_border_color", "color", "Kolor obramowania", tab="Shape", default="#FFFFFF"),
         FieldSchema("opacity", "float", "Przezroczystość", tab="Shape",
                     min_val=0.0, max_val=1.0, step=0.05, default=1.0),
         FieldSchema("zoom", "int", "Zoom", tab="Shape",
