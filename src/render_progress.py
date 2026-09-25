@@ -71,6 +71,7 @@ class RenderProgressState:
     backend: str = ""
     role: str = ""
     phase: str = ""
+    progress_mode: str = "determinate"
     frame_done: int = 0
     frame_total: int = 0
     fps_instant: float = 0.0
@@ -90,6 +91,10 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
         fps = "--"
+    elif snapshot.progress_mode == "indeterminate":
+        frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
+        pct = "--"
+        fps = "--"
     else:
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
@@ -105,7 +110,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         eta_m, eta_s = divmod(eta, 60)
         eta_h, eta_m = divmod(eta_m, 60)
         eta_txt = f"{eta_h}:{eta_m:02d}:{eta_s:02d}" if eta_h else f"{eta_m:02d}:{eta_s:02d}"
-    if snapshot.completed:
+    if snapshot.completed or snapshot.phase == "complete":
         status = "Gotowe"
     elif snapshot.cancelled:
         status = "Anulowano"
@@ -113,10 +118,12 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         status = "Błąd"
     elif snapshot.cancel_requested:
         status = "Anulowanie..."
-    elif snapshot.state == "finalizing":
+    elif snapshot.state == "finalizing" or snapshot.phase == "finalize":
         status = snapshot.finalization_stage or "Finalizacja..."
     elif snapshot.state == "preparing":
         status = snapshot.prep_label or snapshot.finalization_stage or "Przygotowywanie HUD..."
+    elif snapshot.frame >= snapshot.total_frames and snapshot.total_frames > 0:
+        status = snapshot.finalization_stage or "Finalizacja..."
     else:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
@@ -381,6 +388,10 @@ class RenderProgressTracker:
             return max(0.001, (time.perf_counter() - self.hud_started) / (self.hud_done / self.hud_total))
         return self.hud_initial_estimate
 
+    RENDER_PROGRESS_END_PERCENT = 92.0
+    FINALIZATION_START_PERCENT = 92.0
+    FINALIZATION_MAX_PERCENT = 99.9
+
     def _emit(self, *, phase: str, internal: float, label: str, done: int = 0, total: int = 0,
               elapsed: Optional[float] = None, force: bool = False, **extra) -> None:
         now = time.perf_counter()
@@ -392,29 +403,33 @@ class RenderProgressTracker:
         elif phase == "prep":
             global_pct = 100.0 * hud_est * max(0.0, min(1.0, internal)) / total_est
         elif phase == "render":
-            # Render frames map to 0..95% of total bar
+            # Render frames map to 0..RENDER_PROGRESS_END_PERCENT (e.g. 0..92%)
             raw_render_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
-            global_pct = min(95.0, raw_render_pct)
+            global_pct = min(self.RENDER_PROGRESS_END_PERCENT, raw_render_pct)
         elif phase == "finalize":
             drain_pct = extra.get("drain_pct")
             if drain_pct is not None:
-                # Map drain to 95..98%
-                global_pct = 95.0 + (max(0.0, min(100.0, float(drain_pct))) / 100.0) * 3.0
+                # Map drain to 92..94%
+                global_pct = self.FINALIZATION_START_PERCENT + (max(0.0, min(100.0, float(drain_pct))) / 100.0) * 2.0
             else:
-                # Mux / postprocess holds at 98..99.9%
-                global_pct = max(98.0, min(99.9, self.last_global))
+                internal_pct = max(0.0, min(1.0, float(internal)))
+                global_pct = self.FINALIZATION_START_PERCENT + (self.FINALIZATION_MAX_PERCENT - self.FINALIZATION_START_PERCENT) * internal_pct
+            global_pct = max(self.last_global, min(self.FINALIZATION_MAX_PERCENT, global_pct))
         else:
             global_pct = 100.0 * (hud_est + render_est) / total_est
-        global_pct = max(self.last_global, min(99.9 if phase != "complete" else 100.0, global_pct))
-        if not force and phase != "finalize" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
+        global_pct = max(self.last_global, min(100.0 if phase == "complete" else self.FINALIZATION_MAX_PERCENT, global_pct))
+        if not force and phase != "finalize" and phase != "complete" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
             return
         self.last_global = global_pct
         self.last_emit = now
+        progress_mode = "determinate" if phase == "complete" else str(extra.pop("progress_mode", "determinate"))
         state = {
-            "phase": "prep" if phase == "prep" else ("finalize" if phase == "finalize" else "render"),
+            "phase": phase,
+            "progress_mode": progress_mode,
             "pct": max(0.0, min(1.0, internal)),
             "global_pct": global_pct,
             "label": label,
+            "finalize_stage": label if phase == "finalize" else "",
             "hud_internal": max(0.0, min(1.0, self.hud_done / max(1.0, self.hud_total))) if self.hud_total else 0.0,
             "hud_estimate_s": hud_est,
             "render_estimate_s": render_est,
@@ -445,7 +460,7 @@ class RenderProgressTracker:
         render_debug_print(f"[Progress] HUD global weight={weight * 100.0:.2f}%", flush=True)
         self._emit(phase="prep", internal=1.0, label="Renderowanie klatek...", force=True)
 
-    def frame(self, completed: int, elapsed: float, fps: float) -> None:
+    def frame(self, completed: int, elapsed: float, fps: float, **extra) -> None:
         self.render_done = max(self.render_done, int(completed))
         self.render_elapsed = max(self.render_elapsed, float(elapsed))
         if completed > 0 and elapsed > 0:
@@ -453,8 +468,12 @@ class RenderProgressTracker:
         self._emit(phase="render", internal=self.render_done / self.total_frames,
                    label="Renderowanie klatek...", done=self.render_done, total=self.total_frames,
                    elapsed=elapsed, fps=fps, ts=(self.render_done - 1) / self.target_fps,
-                   frame_idx=max(0, self.render_done - 1))
+                   frame_idx=max(0, self.render_done - 1), **extra)
+
+    def finalize(self, label: str = "Finalizacja...", internal: float = 0.0, *, progress_mode: str = "determinate", **extra) -> None:
+        self._emit(phase="finalize", internal=internal, label=label, done=self.total_frames,
+                   total=self.total_frames, force=True, progress_mode=progress_mode, **extra)
 
     def complete(self, elapsed: float) -> None:
-        self._emit(phase="complete", internal=1.0, label="Zakończono", done=self.total_frames,
-                   total=self.total_frames, elapsed=elapsed, force=True)
+        self._emit(phase="complete", internal=1.0, label="Gotowe", done=self.total_frames,
+                   total=self.total_frames, elapsed=elapsed, force=True, progress_mode="determinate")
