@@ -345,22 +345,23 @@ def _resolve_from_gpmf(
     return _first_absolute_time_from_parsed(parsed, duration_s=duration_s)
 
 
-# ── Disk cache (sidecar next to the video, following the existing GPMF
-#    JSON sidecar convention `<video>.json` / `<video>.json.meta.json`).
+# ── Central AppData cache for resolved clip timestamps ────────────────────────
 TELEM_TIME_CACHE_VERSION = 1
 
 
 def _telem_time_cache_paths(video_path: Path | str) -> tuple[Path, Path]:
-    p = Path(video_path)
-    cache_path = p.with_name(f"{p.name}.telem_time.json")
-    return cache_path, cache_path.with_name(f"{cache_path.name}.meta.json")
+    from src.telemetry_cache_manager import (
+        get_telem_time_json_path,
+        get_telem_time_metadata_path,
+    )
+    return get_telem_time_json_path(video_path), get_telem_time_metadata_path(video_path)
 
 
 def _write_telem_time_cache(
     video_path: Path | str, res: ClipTimestampResolution,
     duration_s: Optional[float] = None,
 ) -> None:
-    """Atomically persist a resolved clip timestamp (best-effort).
+    """Atomically persist a resolved clip timestamp in central AppData cache (best-effort).
 
     Only written when the resolution was computed with a known clip duration
     (so the STMP file-local decision is reproducible across processes).
@@ -397,6 +398,12 @@ def _write_telem_time_cache(
                 handle.flush()
             import os
             os.replace(tmp, path)
+        from src.telemetry_cache_manager import log_cache_event, update_source_metadata
+        try:
+            update_source_metadata(video_path, "telem_time", cache_path.stat().st_size)
+        except Exception:
+            pass
+        log_cache_event(video_path, "STORED", cache_path, extra="telem_time")
     except Exception as exc:  # cache is best-effort, never fatal
         print(f"[MultiFile] telem_time cache write skipped: {exc}", flush=True)
 
@@ -404,8 +411,10 @@ def _write_telem_time_cache(
 def _load_valid_telem_time_cache(
     video_path: Path | str, duration_s: Optional[float] = None
 ) -> Optional[ClipTimestampResolution]:
-    """Load a cached resolution only when its source fingerprint matches."""
+    """Load a cached resolution from central AppData only when its source fingerprint matches."""
     try:
+        source = Path(video_path)
+        stat = source.stat()
         cache_path, meta_path = _telem_time_cache_paths(video_path)
         if not cache_path.exists() or not meta_path.exists():
             return None
@@ -413,8 +422,6 @@ def _load_valid_telem_time_cache(
         contract = meta.get("_telem_time_cache", {})
         if contract.get("version") != TELEM_TIME_CACHE_VERSION:
             return None
-        source = Path(video_path)
-        stat = source.stat()
         if contract.get("source_size") != stat.st_size:
             return None
         if contract.get("source_mtime_ns") != stat.st_mtime_ns:
@@ -434,6 +441,8 @@ def _load_valid_telem_time_cache(
                     detail = detail.replace("(.telemetry.json.gz)", f"({PROCESSED_CACHE_SUFFIX})")
             except Exception:
                 pass
+        from src.telemetry_cache_manager import log_cache_event
+        log_cache_event(video_path, "HIT", cache_path, extra="telem_time")
         return ClipTimestampResolution(
             absolute_start_dt=_as_naive_utc(datetime.fromisoformat(start)),
             timestamp_source=data.get("timestamp_source", TIMESTAMP_SOURCE_UNKNOWN),

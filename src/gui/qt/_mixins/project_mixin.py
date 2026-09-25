@@ -318,24 +318,6 @@ def _load_valid_gpmf_cache(
         log_cache_event(source_path, "HIT", appdata_cache, extra="gpmf_json")
         return data, None
 
-    # 2. Legacy sidecar (read-only import into AppData, source files NEVER modified)
-    legacy_json = get_legacy_gpmf_json_path(source_path)
-    if legacy_json.exists() and legacy_json != appdata_cache:
-        for legacy_meta in get_legacy_gpmf_meta_paths(source_path):
-            if legacy_meta.exists():
-                data, reason = _verify_and_load(legacy_json, legacy_meta)
-                if data is not None:
-                    try:
-                        appdata_cache.parent.mkdir(parents=True, exist_ok=True)
-                        import shutil
-                        shutil.copy2(legacy_json, appdata_cache)
-                        shutil.copy2(legacy_meta, appdata_meta)
-                        update_source_metadata(source_path, "gpmf_json", appdata_cache.stat().st_size)
-                    except Exception as exc:
-                        print(f"[TelemetryCache] Legacy GPMF import copy failed: {exc}", flush=True)
-                    log_cache_event(source_path, "MIGRATED", appdata_cache, extra=f"from={legacy_json.name}")
-                    return data, None
-
     return None, reason or "cache_missing"
 
 
@@ -685,29 +667,17 @@ class ProjectMixin:
                 # if timeline build fails.
 
                 # Layout — priorytet:
-                # 1. Legacy import z istniejącego sidecara (video.layout.json) — tylko do pamięci RAM
-                # 2. Startowy preset użytkownika jeśli skonfigurowany
-                # 3. Szablon bazowy def_layout.json
-                proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
-                loaded_legacy = False
-                if proj_layout.exists():
-                    try:
-                        self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
-                        normalize_indicator_decimal_defaults(self.layout)
-                        loaded_legacy = True
-                        print(f"[ProjectLayout] Zaimportowano legacy layout z {proj_layout} (in-memory only)", flush=True)
-                    except Exception as e:
-                        print(f"[ProjectLayout] Błąd odczytu legacy {proj_layout}: {e}", flush=True)
-                if not loaded_legacy:
-                    preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
-                    if preset_path and Path(preset_path).exists():
-                        self.layout = json.loads(
-                            Path(preset_path).read_text(encoding="utf-8")
-                        )
-                        normalize_indicator_decimal_defaults(self.layout)
-                    else:
-                        def_layout = self.base_dir / "def_layout.json"
-                        self.layout = normalize_layout(def_layout, w, h)
+                # 1. Startowy preset użytkownika jeśli skonfigurowany
+                # 2. Szablon bazowy def_layout.json
+                preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
+                if preset_path and Path(preset_path).exists():
+                    self.layout = json.loads(
+                        Path(preset_path).read_text(encoding="utf-8")
+                    )
+                    normalize_indicator_decimal_defaults(self.layout)
+                else:
+                    def_layout = self.base_dir / "def_layout.json"
+                    self.layout = normalize_layout(def_layout, w, h)
                 self._selected_stream_key = ""
                 self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
 
