@@ -150,7 +150,8 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         qp_str = "--"
     else:
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
-        pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
+        pct_val = snapshot.global_percent if (snapshot.global_percent is not None and snapshot.global_percent > 0) else snapshot.percent
+        pct = f"{pct_val:.1f}%" if (snapshot.total_frames or pct_val > 0) else "--"
         fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
         qp_val = getattr(snapshot, "qp", None)
         if qp_val is None:
@@ -442,17 +443,16 @@ class RenderProgressTracker:
     def _emit(self, *, phase: str, internal: float, label: str, done: int = 0, total: int = 0,
               elapsed: Optional[float] = None, force: bool = False, **extra) -> None:
         now = time.perf_counter()
-        hud_est = self._hud_estimate()
-        render_est = max(self.render_estimate, self.render_elapsed)
-        total_est = hud_est + render_est + self.other_estimate
         if phase == "complete":
             global_pct = 100.0
         elif phase == "prep":
-            global_pct = 100.0 * hud_est * max(0.0, min(1.0, internal)) / total_est
+            hud_est = self._hud_estimate()
+            render_est = max(self.render_estimate, self.render_elapsed)
+            total_est = hud_est + render_est + self.other_estimate
+            global_pct = min(2.0, 100.0 * hud_est * max(0.0, min(1.0, internal)) / max(0.001, total_est))
         elif phase == "render":
-            # Render frames map to 0..RENDER_PROGRESS_END_PERCENT (e.g. 0..92%)
-            raw_render_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
-            global_pct = min(self.RENDER_PROGRESS_END_PERCENT, raw_render_pct)
+            # Direct exact linear mapping of frame progress to 0.0..92.0%
+            global_pct = max(0.0, min(1.0, internal)) * self.RENDER_PROGRESS_END_PERCENT
         elif phase == "finalize":
             if "global_pct" in extra and extra["global_pct"] is not None:
                 global_pct = float(extra.pop("global_pct"))
@@ -462,10 +462,11 @@ class RenderProgressTracker:
                 global_pct = self.FINALIZATION_START_PERCENT + (drain_pct_val / 100.0) * 2.0
             else:
                 internal_pct = max(0.0, min(1.0, float(internal)))
-                global_pct = self.FINALIZATION_START_PERCENT + (self.FINALIZATION_MAX_PERCENT - self.FINALIZATION_START_PERCENT) * internal_pct
+                global_pct = 94.0 + (98.0 - 94.0) * internal_pct
             global_pct = max(self.last_global, min(self.FINALIZATION_MAX_PERCENT, global_pct))
         else:
-            global_pct = 100.0 * (hud_est + render_est) / total_est
+            global_pct = max(0.0, min(1.0, internal)) * self.RENDER_PROGRESS_END_PERCENT
+
         global_pct = max(self.last_global, min(100.0 if phase == "complete" else self.FINALIZATION_MAX_PERCENT, global_pct))
         if not force and phase != "finalize" and phase != "complete" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
             return
@@ -480,9 +481,9 @@ class RenderProgressTracker:
             "label": label,
             "finalize_stage": label if phase == "finalize" else "",
             "hud_internal": max(0.0, min(1.0, self.hud_done / max(1.0, self.hud_total))) if self.hud_total else 0.0,
-            "hud_estimate_s": hud_est,
-            "render_estimate_s": render_est,
-            "hud_weight": hud_est / total_est,
+            "hud_estimate_s": self._hud_estimate(),
+            "render_estimate_s": max(self.render_estimate, self.render_elapsed),
+            "hud_weight": 0.0,
             "work_done": done,
             "work_total": total,
             **extra,

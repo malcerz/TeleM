@@ -251,14 +251,21 @@ class RenderMixin:
                 if is_first_render_msg:
                     frame = comp_val
                     total_frames = tot_val
-                    raw_pct = (100.0 * frame / total_frames) if total_frames > 0 else 0.0
-                    percent = raw_pct
                 else:
                     frame = max(int(getattr(latest, "frame", 0)), comp_val)
                     total_frames = max(int(getattr(latest, "total_frames", 0)), tot_val)
-                    raw_pct = (100.0 * frame / total_frames) if total_frames > 0 else 0.0
-                    percent = max(float(getattr(latest, "percent", 0.0)), raw_pct)
-                percent = min(99.9, percent) if total_frames > 0 else 0.0
+
+                raw_render_ratio = (frame / total_frames) if total_frames > 0 else 0.0
+                hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
+                if hud_global is not None:
+                    global_pct = float(hud_global)
+                else:
+                    global_pct = raw_render_ratio * 92.0
+
+                if not is_first_render_msg:
+                    global_pct = max(float(getattr(latest, "global_percent", 0.0)), global_pct)
+                global_pct = min(92.0, max(0.0, global_pct))
+                percent = global_pct
 
                 fps_from_hud = hud_state.get("fps") if isinstance(hud_state, dict) else None
                 cand_fps = fps_from_hud if fps_from_hud is not None else (fps if fps is not None else getattr(latest, "fps", 0.0))
@@ -268,10 +275,6 @@ class RenderMixin:
                     max(0.0, (total_frames - frame) / effective_fps)
                     if effective_fps > 0 and total_frames > frame else None
                 )
-                hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
-                global_pct = float(hud_global) if hud_global is not None else percent
-                global_pct = max(float(getattr(latest, "global_percent", 0.0)), global_pct)
-                global_pct = min(99.9, global_pct)
 
                 comp_txt = ""
                 qp_val = None
@@ -355,6 +358,7 @@ class RenderMixin:
                     latest,
                     state="cancelling" if self.render_cancel_event.is_set() else "finalizing",
                     elapsed_s=now_elapsed,
+                    percent=global_pct,
                     global_percent=global_pct,
                     finalization_stage=stage_label,
                     finalize_stage=stage_label,

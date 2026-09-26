@@ -6523,11 +6523,13 @@ def export_amd_native_d3d11(
         )
         drain_pct = (float(c_rec.value) / float(total_frames)) * 100.0 if total_frames > 0 else 100.0
         drain_pct = max(0.0, min(100.0, drain_pct))
+        drain_global = 92.0 + (drain_pct / 100.0) * 2.0
         progress_tracker.finalize(
             "Finalizacja: opróżnianie pipeline'u",
             drain_pct / 100.0,
             progress_mode="determinate",
             drain_pct=drain_pct,
+            global_pct=drain_global,
         )
 
         flush_start = time.perf_counter()
@@ -6545,9 +6547,9 @@ def export_amd_native_d3d11(
         drain_pct = max(0.0, min(100.0, drain_pct))
         progress_tracker.finalize(
             "Finalizacja: zamykanie enkodera",
-            0.94,
+            0.0,
             progress_mode="determinate",
-            drain_pct=drain_pct,
+            global_pct=94.0,
         )
 
         c_hud_updates = c_uint64(0)
@@ -6726,8 +6728,9 @@ def export_amd_native_d3d11(
         # Initial emission for live mux stage
         progress_tracker.finalize(
             "Finalizacja: zapis MP4",
-            0.96,
+            0.0,
             progress_mode="indeterminate",
+            global_pct=94.0,
             file_size_bytes=prev_size,
             write_speed_mbps=0.0,
             stall_warning=False,
@@ -6761,8 +6764,9 @@ def export_amd_native_d3d11(
 
                 progress_tracker.finalize(
                     "Finalizacja: zapis MP4",
-                    0.96,
+                    0.0,
                     progress_mode="indeterminate",
+                    global_pct=94.0,
                     file_size_bytes=cur_size,
                     write_speed_mbps=write_speed,
                     stall_warning=is_stalled,

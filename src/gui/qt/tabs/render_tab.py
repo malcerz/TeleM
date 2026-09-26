@@ -2127,6 +2127,7 @@ class RenderTab(QWidget):
                 item_label=item_label,
                 is_indeterminate=is_indeterminate,
                 qp=qp_val,
+                global_pct=snapshot.global_percent,
             )
         comp_txt = getattr(snapshot, "compression_text", "")
         if comp_txt:
@@ -2344,10 +2345,13 @@ class RenderTab(QWidget):
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
                    status: str, final_eta: str | None = None,
                    item_label: str = "Frame", is_indeterminate: bool = False,
-                   qp: float | None = None) -> None:
+                   qp: float | None = None, global_pct: float | None = None) -> None:
         total = max(total, 0)
         if not is_indeterminate and total and completed >= 0:
-            pct = (completed / total) * 100.0
+            if global_pct is not None and global_pct > 0:
+                pct = global_pct
+            else:
+                pct = (completed / total) * 100.0
             frame_txt = f"{completed} / {total}"
             pct_txt = f"{pct:.1f}%"
         elif is_indeterminate and total:

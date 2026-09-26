@@ -15,6 +15,71 @@ from src.gui.export_queue import ExportQueue, ExportJob
 
 
 class TestExportFinalizationLifecycle(unittest.TestCase):
+    def test_exact_percentage_values(self):
+        """Verify exact percentage mapping points specified by the progress contract:
+        - frame 50% -> global 46%
+        - frame 100% -> global 92%
+        - drain 50% -> global 93%
+        - remux 50% -> global 96%
+        - validation -> global 98.5%
+        - final save -> global 99.5%
+        - complete -> global 100%
+        """
+        emitted_states = []
+        def on_prog(done, total, elapsed, fps, state):
+            emitted_states.append(dict(state))
+
+        tracker = RenderProgressTracker(total_frames=100, target_fps=30.0, callback=on_prog)
+
+        # 1. frame 50% (50/100) -> 46.0%
+        tracker.frame(completed=50, elapsed=1.0, fps=50.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 46.0, places=2)
+
+        # 2. frame 100% (100/100) -> 92.0%
+        tracker.frame(completed=100, elapsed=2.0, fps=50.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 92.0, places=2)
+
+        # 3. drain 50% -> 93.0%
+        tracker.finalize(label="Finalizacja: opróżnianie pipeline'u", internal=0.5, drain_pct=50.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 93.0, places=2)
+
+        # 4. remux 50% -> 96.0%
+        tracker.finalize(label="Finalizacja: remux MP4", internal=0.5, progress_mode="determinate")
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 96.0, places=2)
+
+        # 5. validation -> 98.5%
+        tracker.finalize(label="Finalizacja: weryfikacja pliku", internal=0.985, global_pct=98.5, progress_mode="determinate")
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 98.5, places=2)
+
+        # 6. final save -> 99.5%
+        tracker.finalize(label="Finalizacja: zapis końcowy", internal=0.995, global_pct=99.5, progress_mode="determinate")
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 99.5, places=2)
+
+        # 7. complete -> 100%
+        tracker.complete(elapsed=2.5)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 100.0, places=2)
+
+    def test_60_frame_progress_percentages(self):
+        """Verify 60-frame workload percentage expectations:
+        - frame 30/60 -> ~46%
+        - frame 55/60 -> ~84.3%
+        - frame 60/60 -> 92.0%
+        """
+        emitted_states = []
+        def on_prog(done, total, elapsed, fps, state):
+            emitted_states.append(dict(state))
+
+        tracker = RenderProgressTracker(total_frames=60, target_fps=60.0, callback=on_prog)
+
+        tracker.frame(completed=30, elapsed=0.5, fps=60.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 46.0, places=2)
+
+        tracker.frame(completed=55, elapsed=0.916, fps=60.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 84.333, places=2)
+
+        tracker.frame(completed=60, elapsed=1.0, fps=60.0)
+        self.assertAlmostEqual(emitted_states[-1]["global_pct"], 92.0, places=2)
+
     def test_progress_monotonicity_and_terminal_100_gate(self):
         emitted_states = []
 
