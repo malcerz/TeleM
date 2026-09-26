@@ -173,17 +173,16 @@ _LIB_NATIVE_INTEL: Optional[ctypes.CDLL] = None
 def query_intel_capabilities() -> dict[str, Any]:
     """Query runtime oneVPL/QSV hardware encoder capabilities on Intel GPU."""
     try:
-        lib = _load_native_intel_dll()
-        caps = IntelCapabilityInfo()
-        lib.intel_native_query_capabilities(ctypes.byref(caps))
+        from src.ffmpeg.intel_backend import probe_qsv_codecs
+        qsv = probe_qsv_codecs()
         return {
-            "AV1_AVAILABLE": bool(caps.av1_available),
-            "AV1_10BIT": bool(caps.av1_10bit),
-            "H264_AVAILABLE": bool(caps.h264_available),
-            "H264_8BIT": bool(caps.h264_8bit),
-            "H264_10BIT": bool(caps.h264_10bit),
-            "HEVC_AVAILABLE": bool(caps.hevc_available),
-            "HEVC_10BIT": bool(caps.hevc_10bit),
+            "AV1_AVAILABLE": bool(qsv.get("av1_qsv", True)),
+            "AV1_10BIT": bool(qsv.get("av1_qsv", True)),
+            "H264_AVAILABLE": bool(qsv.get("h264_qsv", True)),
+            "H264_8BIT": bool(qsv.get("h264_qsv", True)),
+            "H264_10BIT": False,
+            "HEVC_AVAILABLE": bool(qsv.get("hevc_qsv", True)),
+            "HEVC_10BIT": bool(qsv.get("hevc_qsv", True)),
         }
     except Exception:
         return {
@@ -192,8 +191,8 @@ def query_intel_capabilities() -> dict[str, Any]:
             "H264_AVAILABLE": True,
             "H264_8BIT": True,
             "H264_10BIT": False,
-            "HEVC_AVAILABLE": False,
-            "HEVC_10BIT": False,
+            "HEVC_AVAILABLE": True,
+            "HEVC_10BIT": True,
         }
 
 
@@ -218,6 +217,20 @@ def _load_native_intel_dll() -> ctypes.CDLL:
         raise FileNotFoundError(
             f"telem_intel_native.dll not found in candidate paths: {[str(p) for p in dll_candidates]}"
         )
+
+    # Add third_party FFmpeg bin directory for dynamic library resolution
+    ff_bin = repo_root / "third_party" / "ffmpeg-9.0.1-full_build-shared" / "bin"
+    if ff_bin.exists() and hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(str(ff_bin.resolve()))
+        except Exception:
+            pass
+    main_ff_bin = Path(r"C:\_DEV\BikeRideHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
+    if main_ff_bin.exists() and hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(str(main_ff_bin.resolve()))
+        except Exception:
+            pass
 
     lib = ctypes.CDLL(str(dll_path))
 
@@ -287,7 +300,8 @@ def _compute_layout_widget_boxes(
     canvas_w: int = 2560,
     canvas_h: int = 1440,
     pad: int = 16,
-    align: int = 16
+    align: int = 16,
+    rot180: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Compute 16x16 aligned bounding boxes for each active layout indicator."""
     indicators = layout.get("indicators", {})
@@ -371,6 +385,16 @@ def _compute_layout_widget_boxes(
         x2 = min(canvas_w, (((px + int(canvas_w * 0.30) + pad) + align - 1) // align) * align)
         y2 = min(canvas_h, (((py + int(canvas_h * 0.10) + pad) + align - 1) // align) * align)
         boxes[f"custom_text_{i}"] = (x1, y1, x2, y2)
+
+    if rot180:
+        rot_boxes = {}
+        for k, (x1, y1, x2, y2) in boxes.items():
+            rx1 = max(0, ((canvas_w - x2) // align) * align)
+            ry1 = max(0, ((canvas_h - y2) // align) * align)
+            rx2 = min(canvas_w, (((canvas_w - x1) + align - 1) // align) * align)
+            ry2 = min(canvas_h, (((canvas_h - y1) + align - 1) // align) * align)
+            rot_boxes[k] = (rx1, ry1, rx2, ry2)
+        return rot_boxes
 
     return boxes
 
@@ -492,6 +516,9 @@ def export_intel_native_d3d11(
     generation_id: Optional[int] = None,
     active_process_holder: Optional[dict] = None,
     video_timeline: Optional[Any] = None,
+    rotation_degrees: int = 0,
+    container_rotation: int = 0,
+    **kwargs: Any,
 ) -> bool:
     """Execute production native Intel D3D11 Video Processor + AV1 QSV video export pipeline."""
     layout = copy.deepcopy(layout)
@@ -517,8 +544,22 @@ def export_intel_native_d3d11(
     input_file_str = str(Path(native_clip_paths[0]).resolve())
     output_file_str = str(Path(output_file).resolve())
 
+    # Canonical display rotation resolution (normalized to 0, 90, 180, 270)
+    effective_rotation = int(container_rotation or rotation_degrees or 0) % 360
+    if effective_rotation == 0 and native_clip_paths:
+        try:
+            from src.telemetry_extract import get_container_rotation
+            from src.video_helpers import find_executable
+            probe_exe = find_executable("ffprobe") or "ffprobe"
+            effective_rotation = get_container_rotation(probe_exe, native_clip_paths[0])
+        except Exception:
+            effective_rotation = 0
+    hud_rotate_180 = (effective_rotation == 180)
+
     t_export_start = time.perf_counter()
     render_print(f"[STREAM INTEL] Starting Native D3D11 In-Process Full Video Pipeline (7D)...", flush=True)
+    if effective_rotation != 0:
+        render_print(f"[STREAM INTEL] Container rotation active: {effective_rotation}° (HUD rot180={hud_rotate_180})", flush=True)
     render_print(f"[STREAM INTEL] Target Resolution: {video_width}x{video_height} @ {target_fps} fps (Total frames: {total_frames})", flush=True)
 
     # 1. Parse Bitrate (default 40 Mbps = 40000 kbps)
@@ -582,6 +623,155 @@ def export_intel_native_d3d11(
     from src.telemetry_resolver import resolve_distance_samples, distance_max_m
     from src.ffmpeg.worker_cache import _resolve_cache_value, _resolve_cache_samples
 
+    overlay_w, overlay_h = 2560, 1440
+    gpu_map_active = os.environ.get("TELEM_INTEL_GPU_MAP") == "1"
+    map_renderer_ctx = None
+    if gpu_map_active:
+        native_lib.intel_native_gpu_map_init()
+        map_cfg = layout.get("indicators", {}).get("track_map", {})
+        if map_cfg and map_cfg.get("enabled", True) and gps_track and len(gps_track) > 1:
+            from PIL import Image, ImageDraw
+            from src.indicators.helpers import s, _parse_marker_color
+            from src.indicators.moving_map import _map_render_plan, _sync_map_ts
+            from src.moving_map import (
+                MovingMapRenderer, TILE_SIZE,
+                track_up_working_size, track_up_rotation_degrees,
+                tile_range_for_center_tile, get_shared_tile_cache
+            )
+            raw_map_w = s(map_cfg.get("size", 0.18), overlay_w)
+            map_w = int(raw_map_w)
+            configured_zoom = int(map_cfg.get("zoom", 15))
+            render_plan = _map_render_plan(overlay_w, map_w, configured_zoom)
+            effective_zoom = render_plan["effective_zoom"]
+            working_size = render_plan["working_size"]
+            map_style = map_cfg.get("map_style", "satellite")
+            marker_style = str(map_cfg.get("map_marker_style", "dot")).strip().lower()
+            if bool(map_cfg.get("arrow_marker", False)) and marker_style == "dot":
+                marker_style = "directional"
+            track_color = _parse_marker_color(map_cfg.get("track_color", "#FF3C1E"))
+            if len(track_color) == 3: track_color = (*track_color, 220)
+            track_width = int(map_cfg.get("track_width", 3))
+            track_aa = max(1, min(8, int(map_cfg.get("track_antialiasing", 1) or 1)))
+            track_outline_w = max(0, int(map_cfg.get("track_outline_width", 0) or 0))
+            track_outline_color = _parse_marker_color(map_cfg.get("track_outline_color", "#000000"))
+
+            map_tile_cache = get_shared_tile_cache()
+            main_map_renderer = MovingMapRenderer(
+                gps_track, zoom=effective_zoom, style=map_style,
+                marker_color=_parse_marker_color(map_cfg.get("marker_color", "#FFFFFF")),
+                marker_radius=max(1, int(round(float(map_cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"])))),
+                track_color=track_color,
+                track_width=max(1, int(round(track_width * (2.0 ** render_plan["zoom_offset"])))),
+                marker_style=marker_style,
+                track_antialiasing=track_aa,
+                track_outline_width=track_outline_w,
+                track_outline_color=track_outline_color,
+            )
+            rx = s(map_cfg["x"], overlay_w)
+            ry = s(map_cfg["y"], overlay_h)
+            dst_x = int(rx - map_w // 2)
+            dst_y = int(ry - map_w // 2)
+            working_sz = track_up_working_size(working_size)
+            offset = (working_sz - working_size) // 2
+
+            mkr_img = Image.new("RGBA", (working_sz, working_sz), (0, 0, 0, 0))
+            d_mkr = ImageDraw.Draw(mkr_img)
+            c = working_sz / 2.0
+            r = main_map_renderer._mkr_radius
+            tip = (c, c - r * 1.8)
+            left = (c - r * 0.65, c + r * 0.75)
+            right = (c + r * 0.65, c + r * 0.75)
+            d_mkr.polygon((tip, left, right), fill=main_map_renderer._mkr_color, outline=(0, 0, 0, 220))
+            mkr_crop = mkr_img.crop((offset, offset, offset + working_size, offset + working_size))
+            mkr_bytes = mkr_crop.tobytes()
+            native_lib.intel_native_gpu_map_upload_marker(ctypes.cast(ctypes.c_char_p(mkr_bytes), ctypes.c_void_p), working_size, working_size)
+
+            map_renderer_ctx = {
+                "renderer": main_map_renderer,
+                "cache": map_tile_cache,
+                "map_w": map_w,
+                "working_size": working_size,
+                "working_sz": working_sz,
+                "dst_x": dst_x,
+                "dst_y": dst_y,
+                "effective_zoom": effective_zoom,
+                "map_style": map_style,
+                "track_color": track_color,
+                "track_aa": track_aa,
+                "track_outline_w": track_outline_w,
+                "track_outline_color": track_outline_color,
+                "opacity": float(map_cfg.get("opacity", 0.8)),
+            }
+
+            # Precompute all per-frame map parameters to remove consumer thread latency
+            render_print(f"[STREAM INTEL] Precomputing GPU Map frame parameters for {total_frames} frames...", flush=True)
+            map_frame_params_list = []
+            last_grid_key = None
+            grid_rebuild_frames = []
+
+            for f_i in range(total_frames):
+                target_sec = f_i / target_fps
+                curr_dt = start_dt_utc + timedelta(seconds=target_sec) if start_dt_utc else None
+                ts_val = _sync_map_ts(gps_track, curr_dt, None)
+                h_idx = min(f_i, len(track_samples) - 1) if track_samples else 0
+                map_heading = track_samples[h_idx][1] if track_samples and h_idx < len(track_samples) else 0.0
+
+                cpx, cpy = main_map_renderer._interp_pos(ts_val)
+                cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
+                angle = track_up_rotation_degrees(map_heading)
+                tx1, tx2, ty1, ty2 = tile_range_for_center_tile(cx, cy, working_sz, working_sz)
+                grid_key = (tx1, tx2, ty1, ty2, effective_zoom, map_style, True,
+                            track_color, main_map_renderer._trk_width, track_aa,
+                            track_outline_w, track_outline_color)
+                tw = (tx2 - tx1) * TILE_SIZE
+                th = (ty2 - ty1) * TILE_SIZE
+
+                rebuild_base = False
+                base_bytes_data = None
+                if grid_key != last_grid_key:
+                    rebuild_base = True
+                    last_grid_key = grid_key
+                    grid_rebuild_frames.append(f_i)
+                    tiles = {}
+                    for ty in range(ty1, ty2):
+                        for tx in range(tx1, tx2):
+                            t_img = map_tile_cache.get(effective_zoom, tx, ty, map_style)
+                            if t_img: tiles[(tx, ty)] = t_img
+                    base_grid = Image.new("RGBA", (tw, th), (30, 30, 30, 255))
+                    for (tx, ty), tile in tiles.items():
+                        dx, dy = (tx - tx1) * TILE_SIZE, (ty - ty1) * TILE_SIZE
+                        base_grid.paste(tile, (dx, dy))
+                    ox, oy = tx1 * TILE_SIZE, ty1 * TILE_SIZE
+                    pts = [(main_map_renderer._px_x[i] - ox, main_map_renderer._px_y[i] - oy) for i in range(len(gps_track))]
+                    d_grid = ImageDraw.Draw(base_grid)
+                    d_grid.line(pts, fill=track_color, width=main_map_renderer._trk_width, joint="round")
+                    base_bytes_data = base_grid.tobytes()
+
+                scx, scy = cpx - tx1 * TILE_SIZE, cpy - ty1 * TILE_SIZE
+                x1 = max(0, int(scx - working_sz / 2))
+                y1 = max(0, int(scy - working_sz / 2))
+
+                map_frame_params_list.append({
+                    "tw": tw, "th": th,
+                    "orig_x": float(x1 + 326.0), "orig_y": float(y1 + 326.0),
+                    "map_w": float(map_w),
+                    "dst_x": float(dst_x), "dst_y": float(dst_y),
+                    "angle": float(angle),
+                    "opacity": float(map_cfg.get("opacity", 0.8)),
+                    "rebuild_base": rebuild_base,
+                    "base_bytes": base_bytes_data
+                })
+
+            map_renderer_ctx["params"] = map_frame_params_list
+            # Pre-upload frame 0 base texture
+            if map_frame_params_list and map_frame_params_list[0]["base_bytes"]:
+                p0 = map_frame_params_list[0]
+                native_lib.intel_native_gpu_map_upload_base(
+                    ctypes.cast(ctypes.c_char_p(p0["base_bytes"]), ctypes.c_void_p),
+                    int(p0["tw"]), int(p0["th"])
+                )
+            render_print(f"[STREAM INTEL] GPU Map initialized: dst=({dst_x},{dst_y}), size={map_w}x{map_w}, sector rebuilds={len(grid_rebuild_frames)}", flush=True)
+
     direct_shm_enabled, direct_shm_source = get_intel_direct_shm_config()
     if direct_shm_enabled:
         render_print(f"[Intel][HUD] DirectSHM=ON source={direct_shm_source}", flush=True)
@@ -594,6 +784,13 @@ def export_intel_native_d3d11(
         render_print(f"[Intel][Charts] Fastpath=ON source={fastpath_source}", flush=True)
     else:
         render_print(f"[Intel][Charts] Fastpath=OFF source={fastpath_source}", flush=True)
+
+    from src.indicators.rotated_paste import get_intel_hud_compositor_fastpath_config
+    comp_fastpath_enabled, comp_fastpath_source = get_intel_hud_compositor_fastpath_config()
+    if comp_fastpath_enabled:
+        render_print(f"[Intel][Compositor] Fastpath=ON source={comp_fastpath_source}", flush=True)
+    else:
+        render_print(f"[Intel][Compositor] Fastpath=OFF source={comp_fastpath_source}", flush=True)
 
     overlay_w, overlay_h = 2560, 1440
     frame_size = overlay_w * overlay_h * 4  # 14,745,600 bytes
@@ -759,8 +956,8 @@ def export_intel_native_d3d11(
         start_dt_utc, tz_offset_hours,
         speed_samples, track_samples, alt_samples,
         target_fps, 1, total_frames,
-        None, 0, None, None,
-        False,
+        None, effective_rotation, None, None,
+        hud_rotate_180,
         telemetry_cache,
         video_timeline,
     )
@@ -776,7 +973,7 @@ def export_intel_native_d3d11(
     out_pts_sec = ctypes.c_double()
 
     pkg_mode = os.environ.get("TELEM_INTEL_PACKAGE_MODE", "FULL").upper()
-    widget_boxes = _compute_layout_widget_boxes(layout, overlay_w, overlay_h)
+    widget_boxes = _compute_layout_widget_boxes(layout, overlay_w, overlay_h, rot180=hud_rotate_180)
     damage_upload_cfg = os.environ.get("TELEM_INTEL_HUD_DAMAGE_UPLOAD", "0").strip() == "1"
     region_upload_cfg = os.environ.get("TELEM_INTEL_HUD_REGION_UPLOAD", "0").strip() == "1"
     if damage_upload_cfg:
@@ -858,6 +1055,25 @@ def export_intel_native_d3d11(
                         step_hud_bytes = shm_pool.get_ptr_addr(res_slot)
                     else:
                         step_hud_bytes = shm_pool.read(res_slot)
+
+                    # 3. GPU Map per-frame update (zero-latency precomputed params)
+                    if map_renderer_ctx is not None and "params" in map_renderer_ctx:
+                        if frames_rendered < len(map_renderer_ctx["params"]):
+                            mp = map_renderer_ctx["params"][frames_rendered]
+                            if mp["rebuild_base"] and frames_rendered > 0 and mp["base_bytes"]:
+                                native_lib.intel_native_gpu_map_upload_base(
+                                    ctypes.cast(ctypes.c_char_p(mp["base_bytes"]), ctypes.c_void_p),
+                                    int(mp["tw"]), int(mp["th"])
+                                )
+                            native_lib.intel_native_gpu_map_set_params(
+                                float(mp["tw"]), float(mp["th"]),
+                                float(mp["orig_x"]), float(mp["orig_y"]),
+                                float(mp["map_w"]), float(mp["map_w"]),
+                                float(mp["dst_x"]), float(mp["dst_y"]),
+                                float(mp["angle"]),
+                                float(mp["opacity"]),
+                                1
+                            )
 
                     # 3. Native Pipeline Step: Demux + HEVC Decode + P010 Pack + Upload + VP Blt + DMA Copy + oneVPL AV1 Encode
                     t_step_0 = time.perf_counter()
@@ -1028,6 +1244,7 @@ def export_intel_native_d3d11(
         if codec_id == 2:
             color_args.extend(["-tag:v", "hvc1"])
 
+    rotation_mux_args = ["-display_rotation:v:0", str(effective_rotation)] if effective_rotation != 0 else []
     concat_txt_path = None
     if len(native_clip_paths) > 1:
         concat_txt_path = str((temp_dir / f"temp_audio_concat_{os.getpid()}_{int(time.time())}.txt").resolve())
@@ -1038,6 +1255,7 @@ def export_intel_native_d3d11(
 
         cmd_mux = [
             ffmpeg_exe, "-y", "-v", "error",
+            *rotation_mux_args,
             "-r", fps_str,
             "-i", temp_encoded_path,
             "-f", "concat", "-safe", "0", "-i", concat_txt_path,
@@ -1053,6 +1271,7 @@ def export_intel_native_d3d11(
     else:
         cmd_mux = [
             ffmpeg_exe, "-y", "-v", "error",
+            *rotation_mux_args,
             "-r", fps_str,
             "-i", temp_encoded_path,
             "-ss", "0", "-t", f"{duration_s:.6f}",
@@ -1127,6 +1346,14 @@ def export_intel_native_d3d11(
     render_print(f"  VP->Encoder GPU Copies:   {stats.vp_to_encoder_gpu_copy_count}", flush=True)
     render_print(f"  Encode Submit Time:       {stats.total_submit_ms / max(1, stats.decoded_frames):.3f} ms / frame", flush=True)
     render_print(f"  Encode Sync Time:         {stats.total_sync_ms / max(1, stats.decoded_frames):.3f} ms / frame", flush=True)
+    if gpu_map_active:
+        c_uploads = ctypes.c_int()
+        c_bytes = ctypes.c_uint64()
+        c_cmd_ms = ctypes.c_double()
+        native_lib.intel_native_gpu_map_get_stats(ctypes.byref(c_uploads), ctypes.byref(c_bytes), ctypes.byref(c_cmd_ms))
+        render_print(f"  GPU Map Enabled:          YES", flush=True)
+        render_print(f"  GPU Map Base Uploads:     {c_uploads.value} ({c_bytes.value / (1024*1024):.2f} MB total)", flush=True)
+        render_print(f"  GPU Map Command Time:     {c_cmd_ms.value / max(1, frames_rendered):.3f} ms / frame", flush=True)
     render_print(f"Encoded {codec_name} Stream Size:    {stats.total_bytes_encoded / (1024*1024):.2f} MB ({stats.total_bytes_encoded:,} bytes)", flush=True)
     render_print(f"Average {codec_name} Bitrate:        {stats.avg_bitrate_mbps:.2f} Mbps", flush=True)
     render_print(f"Output File:                {output_file_str} ({os.path.getsize(output_file_str):,} bytes)", flush=True)

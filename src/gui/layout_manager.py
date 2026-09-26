@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from src.gui.qt.models import normalize_indicator_decimal_defaults
+
 
 class LayoutManager:
     """Manages HUD layout configurations (JSON-based indicator definitions).
@@ -70,9 +72,12 @@ class LayoutManager:
         Returns:
             The path the layout was saved to.
         """
+        from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
         path = Path(layout_path)
+        saved = normalize_layout_for_save(self.layout)
+        saved = sanitize_layout_for_json(saved)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.layout, f, indent=2, ensure_ascii=False)
+            json.dump(saved, f, indent=2, ensure_ascii=False)
         return path
 
     # ------------------------------------------------------------------
@@ -172,9 +177,10 @@ class LayoutManager:
 
 
 def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
-    return {
+    layout_dict = {
         "version": 6,
-        "global": {"text_outline": 3},
+        "global": {"text_outline": 3, "amd_decode_mode": "gpu"},
+        "charts_skip_pauses": False,
         "custom_texts": [],
         "indicators": {
             "time_display": {
@@ -266,12 +272,17 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
                 "enabled": False, "label": "Mapa", "x": 2.0, "y": 15.0, "rotation": 0, "form": "map",
                 "font_size": 1.2, "size": 18.0, "thickness": 1, "zoom": 16,
                 "source": "gpmf", "map_style": "light_all", "map_shape": "square",
+                "map_rotation_smoothing_s": 0.0,
                 "min_val": 0, "max_val": 1, "ticks": 0,
                 "marker_size": 7, "marker_color": "#FFFFFF",
             },
         },
         "smoothing": {"method": "moving_average", "strength": 3}
     }
+    for ind in layout_dict.get("indicators", {}).values():
+        if isinstance(ind, dict) and "font" not in ind:
+            ind["font"] = ""
+    return layout_dict
 
 
 def normalize_layout(layout_path: Path | str | None, video_width: int, video_height: int) -> dict[str, Any]:
@@ -292,9 +303,17 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
             layout["_startup_preset"] = user["_startup_preset"]
         if "cut_regions" in user:
             layout["cut_regions"] = user["cut_regions"]
+        if "charts_skip_pauses" in user:
+            layout["charts_skip_pauses"] = bool(user["charts_skip_pauses"])
 
         if "indicators" in user and isinstance(user["indicators"], dict):
             layout["indicators"] = user["indicators"]
+            for ind in layout["indicators"].values():
+                if isinstance(ind, dict):
+                    if "font" not in ind:
+                        ind["font"] = ""
+                    ind.pop("_presentation_video_start", None)
+                    ind.pop("_presentation_video_end", None)
         if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
 
@@ -353,7 +372,10 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
                                 ct[field] = round(float(ct[field]) * 100.0, 4)
             layout["version"] = 6
 
-    return layout
+    # Canonical numeric presentation defaults are applied after all legacy
+    # migrations and user-indicator replacement.  Explicit ``decimals`` is
+    # preserved; legacy ``decimal_places`` alone must not restore ISO `.0`.
+    return normalize_indicator_decimal_defaults(layout)
 
 
 def resolve_font_path(family_name: str) -> str:

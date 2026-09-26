@@ -23,6 +23,7 @@ from src.overlay_renderer import (
 )
 from src.video_helpers import extract_frame
 from src.benchmark import BenchmarkTracker
+from src.telemetry_resolver import distance_max_m, resolve_distance_samples
 
 try:
     from PySide6.QtMultimedia import QMediaPlayer
@@ -53,8 +54,8 @@ class PreviewMixin:
         if timeline is not None and timeline.clip_count:
             idx, local = timeline.global_to_clip(g)
             clip = timeline.clips[idx] if idx is not None else None
-            abs_dt = timeline.global_to_absolute(
-                g, base_dt=self.telemetry.start_dt_utc
+            abs_dt = timeline.clip_local_to_absolute(
+                idx, local, base_dt=self.telemetry.start_dt_utc
             )
             return {
                 "global_time": g,
@@ -78,16 +79,11 @@ class PreviewMixin:
         }
 
     def _local_to_global(self, local_time: float) -> float:
-        """Convert the player's LOCAL position to GLOBAL project time.
-
-        Uses the active preview clip's ``global_start_s``.  Falls back to the
-        identity mapping (single file) when no timeline / clip is known.
-        """
+        """Convert the player's LOCAL position to GLOBAL project time."""
         idx = getattr(self, "_active_preview_clip_index", None)
         timeline = getattr(self, "video_timeline", None)
-        if timeline is not None and timeline.clip_count and idx is not None:
-            if 0 <= idx < timeline.clip_count:
-                return timeline.clips[idx].global_start_s + float(local_time)
+        if timeline is not None and getattr(timeline, "clip_count", 0):
+            return timeline.clip_local_to_global(idx, local_time)
         return float(local_time)
 
     def _log_preview_clip_switch(
@@ -108,6 +104,30 @@ class PreviewMixin:
             f"absolute={abs_txt} source={source} quality={quality}",
             flush=True,
         )
+
+    def _is_nvidia_native_preview_active(self) -> bool:
+        """Return True if NVIDIA Native D3D11 backend is currently selected in RenderTab."""
+        try:
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            if render_tab is not None:
+                enc = render_tab.cmb_encoder.currentText().strip().lower()
+                if enc == "auto":
+                    from src.ffmpeg_pipeline import detect_best_encoder
+                    enc = detect_best_encoder().lower()
+                if enc in ("nv", "nvidia"):
+                    return render_tab.cmb_nvidia_backend.currentData() == "native_d3d11"
+        except Exception:
+            pass
+        return False
+
+    def _close_native_preview_renderer(self) -> None:
+        """Release native D3D11 preview renderer resources."""
+        if getattr(self, "_nv_native_preview_renderer", None) is not None:
+            try:
+                self._nv_native_preview_renderer.close()
+            except Exception:
+                pass
+            self._nv_native_preview_renderer = None
 
     def _preview_ensure_active_clip(
         self, clip_index, clip, local_time: float, global_time: float = 0.0
@@ -182,6 +202,8 @@ class PreviewMixin:
 
     def _on_video_frame(self, frame) -> None:
         """Szybki handler — tylko zapisz klatkę, compositing w workerze."""
+        if getattr(self, "_preview_telemetry_loading", False):
+            return
         if self._preview_mode == "gpu_video":
             return
 
@@ -405,12 +427,15 @@ class PreviewMixin:
         """Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render."""
         preview_widget = getattr(self, "video_preview_widget", None)
         if preview_widget is not None and hasattr(preview_widget, "get_physical_video_rect"):
-            if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
-                prect = preview_widget.get_physical_video_rect()
-                dpr = preview_widget.get_dpr()
-                if prect.width() > 10 and prect.height() > 10:
-                    self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
-                    return
+            try:
+                if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
+                    prect = preview_widget.get_physical_video_rect()
+                    dpr = preview_widget.get_dpr()
+                    if prect.width() > 10 and prect.height() > 10:
+                        self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
+                        return
+            except (RuntimeError, Exception):
+                pass
         if getattr(self, "video_path", None) and getattr(self, "_preview_target_w", None) and getattr(self, "_preview_target_h", None):
             self._render_preview()
 
@@ -485,13 +510,12 @@ class PreviewMixin:
         dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
         dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
         if dist_src == "gpx":
-            trk_for_range = gpx_trk or trk
+            trk_for_range = gpx_trk
         elif dist_src == "fit":
-            trk_for_range = fit_data.get("track", []) or trk
+            trk_for_range = resolve_distance_samples("fit", fit_data=fit_data)
         else:
             trk_for_range = trk
-        if trk_for_range:
-            max_dist = trk_for_range[-1][1]
+        max_dist = distance_max_m(trk_for_range)
 
         # max_speed_kmh — per source
         max_spd = None
@@ -524,11 +548,35 @@ class PreviewMixin:
                 min_a = min(alts)
                 max_a = max(alts)
 
+        auto_ranges = {}
+        try:
+            from src.indicators.frame_data import compute_indicator_auto_ranges
+            auto_ranges = compute_indicator_auto_ranges(
+                self.layout,
+                speed_samples=spd,
+                track_samples=trk,
+                alt_samples=alt,
+                iso_samples=getattr(self.telemetry, "iso_samples", None),
+                exposure_samples=getattr(self.telemetry, "exposure_samples", None),
+                temperature_samples=getattr(self.telemetry, "temperature_samples", None),
+                gpx_speed_samples=gpx_spd,
+                gpx_track_samples=gpx_trk,
+                gpx_alt_samples=gpx_alt,
+                gpx_power_samples=getattr(self.telemetry, "gpx_power_samples", None),
+                gpx_atemp_samples=getattr(self.telemetry, "gpx_atemp_samples", None),
+                gpx_hr_samples=getattr(self.telemetry, "gpx_hr_samples", None),
+                gpx_cad_samples=getattr(self.telemetry, "gpx_cad_samples", None),
+                fit_data=fit_data,
+            )
+        except Exception:
+            auto_ranges = {}
+
         self._prepare_cache = {
             "max_distance_m": max_dist,
             "max_speed_kmh": max_spd,
             "min_alt": min_a,
             "max_alt": max_a,
+            "auto_ranges": auto_ranges,
         }
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
@@ -546,6 +594,8 @@ class PreviewMixin:
         try:
             if not self.video_path:
                 return
+            if getattr(self, "_preview_telemetry_loading", False):
+                return
 
             # ── ETAP 4A: resolve GLOBAL preview time → clip/local/absolute ──
             # GLOBAL -> active clip -> LOCAL time (decoder) -> ABSOLUTE (telemetry).
@@ -558,6 +608,10 @@ class PreviewMixin:
             clip_index = res["clip_index"]
             clip = res["clip"]
             target_dt = res["absolute_dt"]
+            from src.telemetry_resolver import presentation_debug
+            self._presentation_generation = getattr(self, '_presentation_generation', 0) + 1
+            presentation_debug('preview_begin', generation=self._presentation_generation,
+                               global_time=global_time, local_time=local_time, target_dt=target_dt)
 
             target_w = getattr(self, "_preview_target_w", 960)
             target_h = getattr(self, "_preview_target_h", None)
@@ -670,6 +724,7 @@ class PreviewMixin:
                                     min(s[0][0] for s in all_fit_pts),
                                     max(s[-1][0] for s in all_fit_pts),
                                 )
+                        act_mapper = getattr(getattr(self.telemetry, "fit_data", None), "active_time_mapper", None)
                         self._chart_data_cache = build_chart_data(
                             self.layout,
                             self.telemetry.get_samples_for_source,
@@ -679,6 +734,7 @@ class PreviewMixin:
                             start_dt_utc=self.telemetry.start_dt_utc,
                             end_dt_utc=end_dt_utc,
                             source_activity_ranges=source_ranges,
+                            active_time_mapper=act_mapper,
                         )
                     chart_data = self._chart_data_cache
 
@@ -716,10 +772,15 @@ class PreviewMixin:
                                 current_index=int(global_time) if global_time else 0,
                                 chart_data=chart_data,
                                 extra_field_keys=getattr(self, "fit_ext_fields", None),
-                                resolve_cache_value=lambda k, src, dt, indicator_key=None: self.telemetry.resolve_value(
-                                    k, dt, source=src, indicator_key=indicator_key
+                                resolve_cache_value=lambda k, src, dt, indicator_key=None, **kwargs: self.telemetry.resolve_value(
+                                    k, dt, source=src, indicator_key=indicator_key, **kwargs
                                 ),
                                 _range_cache=self._prepare_cache,
+                                project_elapsed_s=(
+                                    self.video_timeline.global_to_activity_elapsed(global_time)
+                                    if getattr(self, "video_timeline", None) and getattr(self.video_timeline, "clip_count", 0)
+                                    else global_time
+                                ),
                             )
                         finally:
                             bt.stop_timer("telemetry_lookup")
@@ -761,38 +822,91 @@ class PreviewMixin:
                 bt.start_timer("overlay_rendering")
                 try:
                     if overlay_data is not None:
-                        preview = render_preview(
-                            self.src_img, self.layout, self.font_path,
-                            overlay_data["date_text"], overlay_data["time_text"],
-                            overlay_data["speed_value"],
-                            overlay_data["distance_m"],
-                            overlay_data["max_distance_m"],
-                            overlay_data["alt_value"],
-                            overlay_data["min_alt"],
-                            overlay_data["max_alt"],
-                            overlay_data["iso_value"],
-                            overlay_data["exposure_value"],
-                            overlay_data["temp_value"],
-                            indicator_values=overlay_data["indicator_values"],
-                            max_speed_kmh=overlay_data["max_speed_kmh"],
-                            power_value=overlay_data["power_value"],
-                            atemp_value=overlay_data["atemp_value"],
-                            hr_value=overlay_data["hr_value"],
-                            cad_value=overlay_data["cad_value"],
-                            battery_value=overlay_data["battery_value"],
-                            _bboxes=self.indicator_bboxes,
-                            extra_indicators=overlay_data["extra_indicators"],
-                            chart_data=overlay_data["chart_data"],
-                            current_position=current_position,
-                            gps_track=overlay_data["gps_track"],
-                            map_heading=overlay_data.get("map_heading"),
-                            target_dt=overlay_data["target_dt"],
-                            start_dt_utc=overlay_data["start_dt_utc"],
-                            elapsed_seconds=overlay_data["elapsed_seconds"],
-                            avg_speed_kmh=overlay_data["avg_speed_kmh"],
-                            inplace=self._playing,
-                            async_map=True,
-                        )
+                        native_rendered = False
+                        if self._is_nvidia_native_preview_active():
+                            try:
+                                if (
+                                    getattr(self, "_nv_native_preview_renderer", None) is None
+                                    or getattr(self, "_nv_native_preview_layout_id", None) != id(self.layout)
+                                ):
+                                    from src.ffmpeg.nvidia_native_preview import NvidiaNativePreviewRenderer
+                                    if getattr(self, "_nv_native_preview_renderer", None) is not None:
+                                        try:
+                                            self._nv_native_preview_renderer.close()
+                                        except Exception:
+                                            pass
+                                    self._nv_native_preview_renderer = NvidiaNativePreviewRenderer(
+                                        layout=self.layout, telemetry=self.telemetry
+                                    )
+                                    self._nv_native_preview_layout_id = id(self.layout)
+
+                                from src.ffmpeg.nvidia_config import TelemFrameState
+                                st = TelemFrameState(
+                                    speed_mps=float(overlay_data.get("speed_value") or 0.0),
+                                    heart_rate_bpm=float(overlay_data.get("hr_value") or 0.0),
+                                    cadence_rpm=float(overlay_data.get("cad_value") or 0.0),
+                                    power_watts=float(overlay_data.get("power_value") or 0.0),
+                                    altitude_m=float(overlay_data.get("alt_value") or 0.0),
+                                    grade_pct=float((overlay_data.get("indicator_values") or {}).get("slope", 0.0) or 0.0),
+                                    temperature_c=float(overlay_data.get("temp_value") or 0.0),
+                                    distance_m=float(overlay_data.get("distance_m") or 0.0),
+                                    heading_deg=float(overlay_data.get("map_heading") or 0.0),
+                                    time_str=str(overlay_data.get("time_text") or "").encode("utf-8"),
+                                    date_str=str(overlay_data.get("date_text") or "").encode("utf-8"),
+                                )
+                                track = overlay_data.get("gps_track") or []
+                                if track:
+                                    curr_pt = track[-1]
+                                    st.lat_deg = float(curr_pt[1])
+                                    st.lon_deg = float(curr_pt[2])
+                                self._nv_native_preview_renderer.set_telemetry_state(st)
+                                native_qimg = self._nv_native_preview_renderer.render_hud_qimage(0, target_w, target_h)
+                                if native_qimg is not None and not native_qimg.isNull():
+                                    hud_pil = Image.fromqimage(native_qimg)
+                                    if self.is_using_mpv():
+                                        preview = hud_pil
+                                    else:
+                                        preview = self.src_img.convert("RGBA").copy()
+                                        preview.alpha_composite(hud_pil)
+                                    native_rendered = True
+                            except Exception as ex:
+                                print(f"[NATIVE PREVIEW ERROR] {ex}", flush=True)
+                                native_rendered = False
+
+                        if not native_rendered:
+                            preview = render_preview(
+                                self.src_img, self.layout, self.font_path,
+                                overlay_data["date_text"], overlay_data["time_text"],
+                                overlay_data["speed_value"],
+                                overlay_data["distance_m"],
+                                overlay_data["max_distance_m"],
+                                overlay_data["alt_value"],
+                                overlay_data["min_alt"],
+                                overlay_data["max_alt"],
+                                overlay_data["iso_value"],
+                                overlay_data["exposure_value"],
+                                overlay_data["temp_value"],
+                                indicator_values=overlay_data["indicator_values"],
+                                max_speed_kmh=overlay_data["max_speed_kmh"],
+                                power_value=overlay_data["power_value"],
+                                atemp_value=overlay_data["atemp_value"],
+                                hr_value=overlay_data["hr_value"],
+                                cad_value=overlay_data["cad_value"],
+                                battery_value=overlay_data["battery_value"],
+                                _bboxes=self.indicator_bboxes,
+                                extra_indicators=overlay_data["extra_indicators"],
+                                chart_data=overlay_data["chart_data"],
+                                current_position=current_position,
+                                gps_track=overlay_data["gps_track"],
+                                map_heading=overlay_data.get("map_heading"),
+                                target_dt=overlay_data["target_dt"],
+                                start_dt_utc=overlay_data["start_dt_utc"],
+                                elapsed_seconds=overlay_data["elapsed_seconds"],
+                                avg_speed_kmh=overlay_data["avg_speed_kmh"],
+                                inplace=self._playing,
+                                async_map=True,
+                                auto_ranges=overlay_data.get("auto_ranges"),
+                            )
                     else:
                         # Check if preview already set (cut region or no telemetry)
                         try:
@@ -848,6 +962,8 @@ class PreviewMixin:
                     bt.stop_timer("frame_conversion")
 
                 self.signals.sig_preview_frame_ready.emit(qimg)
+                presentation_debug('preview_emitted', generation=self._presentation_generation,
+                                   target_dt=target_dt)
                 self.signals.sig_bboxes_ready.emit(
                     dict(self.indicator_bboxes),
                     self.src_img.width, self.src_img.height,

@@ -638,7 +638,12 @@ def _report_stream_progress(
     profile_name: str = "",
 ) -> None:
     """Report streaming progress and the latest export timestamp for preview."""
-    elapsed = time.time() - start_time
+    now_epoch = time.time()
+    now_mono = time.perf_counter()
+    if start_time > 1e9:
+        elapsed = max(0.0, now_epoch - start_time)
+    else:
+        elapsed = max(0.0, now_mono - start_time)
     m, s = divmod(int(elapsed), 60)
     h, m = divmod(m, 60)
     fps = done / elapsed if elapsed > 0 else 0
@@ -1228,6 +1233,8 @@ def stream_overlay_to_ffmpeg(
             generation_id=generation_id,
             active_process_holder=active_process_holder,
             video_timeline=video_timeline,
+            rotation_degrees=rotation_degrees,
+            container_rotation=container_rotation,
         )
         if success:
             return total_overlay_frames

@@ -36,9 +36,9 @@ def test_intel_native_8a_capability_truth():
     assert caps["H264_8BIT"] is True
     assert caps["H264_10BIT"] is False
     
-    # HEVC capabilities (unavailable on current driver/runtime)
-    assert caps["HEVC_AVAILABLE"] is False
-    assert caps["HEVC_10BIT"] is False
+    # HEVC capabilities (dynamically probed via runtime/driver)
+    assert isinstance(caps["HEVC_AVAILABLE"], bool)
+    assert isinstance(caps["HEVC_10BIT"], bool)
 
 
 def test_intel_native_8a_dll_multi_codec_exports():

@@ -43,10 +43,28 @@ class AppSignals(QObject):
 
     # Zakładka Rendering: anulowanie renderowania
     sig_render_cancelled = Signal()
+    # Generation-tagged cancellation request. The no-argument signal above
+    # remains as a compatibility notification for existing listeners.
+    sig_render_cancel_requested = Signal(object)
 
     # Zakładka Ustawienia: zmiana ustawień
     sig_settings_changed = Signal(str, object)
     # (setting_name: str, value: Any)
+
+    # Zakładka Ustawienia: jawny zapis ustawień globalnych do pliku
+    sig_save_global_settings = Signal()
+
+    # Kontroler → GUI: przywróć zapisany font w UI (po starcie / wczytaniu layoutu)
+    sig_global_font_restored = Signal(str)
+    # (family_name: str)
+
+    # Kontroler → GUI: przywróć zapisany tryb dekodowania AMD w UI (po starcie)
+    sig_amd_decode_mode_restored = Signal(str)
+    # (mode: str – 'gpu' lub 'cpu')
+
+    # Kontroler → GUI: wyliczona domyślna nazwa pliku eksportu
+    sig_default_export_name_ready = Signal(str)
+    # (filename: str)
 
     # Oś czasu: zmiana pozycji seek (GUI → Kontroler)
     sig_seek_changed = Signal(float)
@@ -66,6 +84,13 @@ class AppSignals(QObject):
     # Playback: start / stop
     sig_playback_start = Signal()
     sig_playback_stop = Signal()
+
+    # Krok klatkowy (+1 lub -1 klatka)
+    sig_frame_step = Signal(int)
+    # (delta: int — np. +1 lub -1)
+
+    # Przełączenie pełnego ekranu podglądu (Fullscreen Preview)
+    sig_toggle_fullscreen = Signal()
 
     # Trim / cut
     sig_cut_region_added = Signal(float, float)
@@ -118,6 +143,12 @@ class AppSignals(QObject):
     # (completed_frames, total_frames, elapsed_s, fps, hud_state_or_None)
     # hud_state = {"frame": int, "ts": float} — latest-state snapshot (1 Hz).
     sig_render_progress = Signal(int, int, float, float, object)
+
+    # Canonical export status snapshot.  Legacy sig_progress remains for
+    # non-render operations and compatibility, but Rendering UI consumes this
+    # generation-tagged state for all frame/status values.
+    sig_render_state = Signal(object)
+    # (RenderProgressState)
 
     # Błąd
     sig_error = Signal(str)

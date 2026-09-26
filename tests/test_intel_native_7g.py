@@ -122,7 +122,7 @@ def test_intel_native_7g_capacity_hierarchy():
     enc_res = EncoderCapacityResults()
     ret = dll.intel_native_measure_encoder_capacity(30, ctypes.byref(enc_res))
     assert ret == 0, f"Encoder capacity measurement failed with {ret}"
-    assert enc_res.encoder_fps > 30.0, f"Expected encoder capacity > 60 FPS, got {enc_res.encoder_fps:.2f}"
+    assert enc_res.encoder_fps > 30.0, f"Expected encoder capacity > 30 FPS, got {enc_res.encoder_fps:.2f}"
 
 def test_intel_native_7g_hud_zero_memcpy():
     """Verify HUD transfer path has copy_count == 0 (direct pointer handoff, zero memcpy)."""

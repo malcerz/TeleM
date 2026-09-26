@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
     QWidget,
@@ -13,9 +14,10 @@ from src.gui.qt.tabs.project_tab import ProjectTab
 from src.gui.qt.tabs.render_tab import RenderTab
 from src.gui.qt.tabs.settings_tab import SettingsTab
 from src.gui.qt.widgets.video_preview import VideoPreview
+from src.render_progress import RenderProgressState, format_render_progress_status
 
 
-APP_TITLE = "TeleMGP HUD Tuner"
+APP_TITLE = "BikeRideHUD"
 APP_VERSION = "0.7.9"
 
 
@@ -35,6 +37,8 @@ class MainWindow(QMainWindow):
         self.resize(1600, 1000)
 
         self.signals = get_signals()
+        self._render_state_active = False
+        self._render_generation_id = 0
 
         # ── Współdzielony podgląd wideo (Projekt ↔ Rendering) ───────────
         self.preview = VideoPreview()
@@ -42,6 +46,8 @@ class MainWindow(QMainWindow):
         # ── Centralny widget: QTabWidget ────────────────────────────────
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
+        self._preview_fullscreen: bool = False
+        self._fullscreen_saved_central = None
 
         # ── Zakładki ────────────────────────────────────────────────────
         self._load_tab = LoadTab()
@@ -123,6 +129,7 @@ class MainWindow(QMainWindow):
         s.sig_bboxes_ready.connect(self.preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.preview.on_duration_ready)
         s.sig_seek_position.connect(self.preview._on_seek_position)
+        s.sig_toggle_fullscreen.connect(self.toggle_fullscreen_preview)
 
     def _move_preview_to(self, slot: QWidget) -> None:
         """Przenieś współdzielony podgląd do kontenera aktywnej zakładki."""
@@ -150,20 +157,189 @@ class MainWindow(QMainWindow):
     def _connect_controller_signals(self) -> None:
         s = self.signals
         s.sig_progress.connect(self._on_progress)
+        s.sig_render_state.connect(self._on_render_state)
         s.sig_error.connect(self._on_error)
         s.sig_video_info_ready.connect(self._on_video_info)
 
     def _on_progress(self, percent: int, text: str) -> None:
+        # During export the generation-tagged render state is canonical.
+        # Legacy progress is still used by loading and other operations.
+        if self._render_state_active:
+            return
+        # After reaching 100%, don't let stale lower-percent updates
+        # (e.g. from the background map preload thread) re-show the bar.
+        if percent <= 0:
+            self._progress_completed = False  # New operation starting
+        if getattr(self, "_progress_completed", False) and percent < 100:
+            return
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(percent)
         self.status_label.setText(text)
         if percent >= 100:
             self.progress_bar.setVisible(False)
+            self._progress_completed = True
+
+    def _on_render_state(self, snapshot: RenderProgressState) -> None:
+        """Display the same generation-tagged snapshot as RenderTab."""
+        if not isinstance(snapshot, RenderProgressState):
+            return
+        if snapshot.generation_id < self._render_generation_id:
+            return
+        self._render_generation_id = snapshot.generation_id
+        self._render_state_active = not (
+            snapshot.completed or snapshot.cancelled or snapshot.failed
+        )
+        self.status_label.setText(format_render_progress_status(snapshot))
+        if snapshot.total_frames:
+            self.progress_bar.setValue(int(round(snapshot.global_percent)))
+        self.progress_bar.setVisible(not (snapshot.completed or snapshot.cancelled or snapshot.failed))
 
     def _on_error(self, msg: str) -> None:
+        if self._render_state_active:
+            return
         self.status_label.setText(f"Błąd: {msg}")
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "Błąd", msg)
 
     def _on_video_info(self, info: str) -> None:
         self.status_label.setText(f"Wideo: {info}")
+
+    @property
+    def _is_fullscreen_preview(self) -> bool:
+        return self._preview_fullscreen
+
+    def enter_fullscreen_preview(self) -> None:
+        """Wejdź w tryb True Fullscreen — zachowuje tabs bez niszczenia przez Qt."""
+        if getattr(self, "_preview_fullscreen", False):
+            return
+
+        self._was_maximized = self.isMaximized()
+        self._saved_preview_slot = self.preview.parentWidget()
+
+        # Bezpiecznie zdejmij centralny widget (tabs) przejmując ownership w Pythonie
+        normal_central = self.takeCentralWidget()
+        self._fullscreen_saved_central = normal_central
+        if normal_central is not None:
+            normal_central.hide()
+
+        # Wyjmij preview ze slotu w zakładce
+        if self._saved_preview_slot is not None and self._saved_preview_slot.layout() is not None:
+            self._saved_preview_slot.layout().removeWidget(self.preview)
+
+        self.status_bar.hide()
+        if self.menuBar() is not None:
+            self.menuBar().hide()
+
+        self.setCentralWidget(self.preview)
+        self.preview.show()
+        self.showFullScreen()
+        self._preview_fullscreen = True
+
+        self.preview._notify_controller_preview_size()
+        if hasattr(self.preview, "hud_overlay") and self.preview.hud_overlay:
+            self.preview.hud_overlay.sync_geometry()
+        if self._controller and hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+            self._controller.refresh_preview_geometry_and_hud()
+        if hasattr(self.preview, "print_preview_raster_diag"):
+            self.preview.print_preview_raster_diag()
+
+    def exit_fullscreen_preview(self) -> None:
+        """Wyjdź z trybu True Fullscreen — bezpiecznie przywróć tabs i wstaw preview na miejsce."""
+        if not getattr(self, "_preview_fullscreen", False):
+            return
+
+        # Zdejmij preview z central widgetu, by QMainWindow nie usunął go przy setCentralWidget
+        preview = self.takeCentralWidget()
+
+        # Przywróć oryginalny central widget (tabs)
+        if getattr(self, "_fullscreen_saved_central", None) is not None:
+            self.setCentralWidget(self._fullscreen_saved_central)
+            self._fullscreen_saved_central.show()
+            self._fullscreen_saved_central = None
+        else:
+            self.setCentralWidget(self.tabs)
+            self.tabs.show()
+
+        target_slot = getattr(self, "_saved_preview_slot", None) or self._project_tab.preview_slot
+        self._move_preview_to(target_slot)
+
+        if self.menuBar() is not None:
+            self.menuBar().show()
+        self.status_bar.show()
+
+        if getattr(self, "_was_maximized", False):
+            self.showMaximized()
+        else:
+            self.showNormal()
+        self._preview_fullscreen = False
+
+        self.preview._notify_controller_preview_size()
+        if hasattr(self.preview, "hud_overlay") and self.preview.hud_overlay:
+            self.preview.hud_overlay.sync_geometry()
+        if self._controller and hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+            self._controller.refresh_preview_geometry_and_hud()
+
+    def toggle_fullscreen_preview(self) -> None:
+        """Przełącz tryb True Fullscreen — cały ekran zajmuje tylko podgląd (wideo + HUD)."""
+        if getattr(self, "_preview_fullscreen", False):
+            self.exit_fullscreen_preview()
+        else:
+            self.enter_fullscreen_preview()
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key == Qt.Key_Escape:
+            if getattr(self, "_preview_fullscreen", False):
+                self.exit_fullscreen_preview()
+                event.accept()
+                return
+        elif key == Qt.Key_Space:
+            if hasattr(self, "preview") and hasattr(self.preview, "_toggle_playback"):
+                self.preview._toggle_playback()
+                event.accept()
+                return
+        elif key == Qt.Key_Left:
+            self.signals.sig_frame_step.emit(-1)
+            event.accept()
+            return
+        elif key == Qt.Key_Right:
+            self.signals.sig_frame_step.emit(1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event) -> None:
+        """Zamykanie okna z kontrolowanym sprzątaniem renderera i procesów potomnych."""
+        from src.process_lifecycle import RenderProcessRegistry
+
+        controller = getattr(self, "_controller", None)
+        worker = getattr(controller, "render_worker_thread", None) if controller else None
+        render_active = worker is not None and worker.is_alive()
+
+        if render_active:
+            print("[PROC] GUI close requested", flush=True)
+            event.ignore()
+            cleaned_up = False
+            if hasattr(controller, "cancel_render_and_wait"):
+                cleaned_up = controller.cancel_render_and_wait(timeout=3.0)
+
+            if not cleaned_up:
+                print("[PROC] GUI closeEvent: timeout waiting for render cleanup; force terminating registry...", flush=True)
+                RenderProcessRegistry.get_instance().terminate_all_render_children(timeout=1.5)
+
+            event.accept()
+        else:
+            event.accept()
+
+        # Clean up any remaining registered children
+        RenderProcessRegistry.get_instance().terminate_all_render_children(timeout=0.5)
+        super().closeEvent(event)
+        print("[PROC] GUI closeEvent complete", flush=True)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.WindowActivate, QEvent.WindowDeactivate, QEvent.WindowStateChange):
+            render_tab = getattr(self, "_render_tab", None)
+            notify = getattr(render_tab, "notify_window_state_changed", None)
+            if callable(notify):
+                notify()

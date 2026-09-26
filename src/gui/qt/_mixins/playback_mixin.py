@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +17,14 @@ from src.gui.qt.mpv_hwdec import (
 )
 from src.gui.qt.mpv_hwdec import vendor_label as _vendor_label
 
-_MPV_BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-if _MPV_BASE_DIR.exists():
-    os.environ["PATH"] = str(_MPV_BASE_DIR) + os.pathsep + os.environ.get("PATH", "")
-    if hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(_MPV_BASE_DIR))
-        except Exception:
-            pass
+for _base in (Path(__file__).resolve().parents[3], Path(__file__).resolve().parents[4] if len(Path(__file__).resolve().parents) > 4 else None):
+    if _base is not None and _base.exists():
+        os.environ["PATH"] = str(_base) + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(str(_base))
+            except Exception:
+                pass
 
 try:
     import mpv
@@ -170,6 +171,7 @@ class PlaybackMixin:
         """Użytkownik przesunął oś czasu (GLOBAL position of the project)."""
         seconds = self._skip_cut_regions(seconds)
         self._playback_pos = seconds
+        self._playback_frame = None
         self.signals.sig_seek_position.emit(seconds)
 
         # global -> clip -> local (decoder) / absolute (telemetry)
@@ -188,22 +190,26 @@ class PlaybackMixin:
                     self._mpv_pending_seek_s = target_local
                 else:
                     try:
-                        self.mpv_player.seek(target_local, reference="absolute")
+                        self.mpv_player.seek(target_local, reference="absolute+exact")
                         if not self._playing:
                             self.mpv_player.pause = True
                     except Exception as e:
                         print(f"[MPV Seek Error] {e}")
             else:
                 try:
-                    if hasattr(self.mpv_player, "wait_until_playing"):
-                        self.mpv_player.wait_until_playing(timeout=0.3)
-                        self.mpv_player.seek(target_local, reference="absolute")
-                        if not self._playing:
-                            self.mpv_player.pause = True
-                        self._source_transition_in_progress = False
-                        self._mpv_pending_seek_s = None
-                except Exception:
-                    pass
+                    if hasattr(self.mpv_player, "wait_for_property"):
+                        try:
+                            self.mpv_player.wait_for_property("seekable", lambda v: v is True, timeout=0.5)
+                        except Exception:
+                            pass
+                    self.mpv_player.seek(target_local, reference="absolute+exact")
+                    if not self._playing:
+                        self.mpv_player.pause = True
+                except Exception as e:
+                    print(f"[MPV Switch Seek Error] {e}")
+                finally:
+                    self._source_transition_in_progress = False
+                    self._mpv_pending_seek_s = None
             self._render_preview(seconds)
             return
 
@@ -217,6 +223,7 @@ class PlaybackMixin:
         if not self.video_path or self.video_duration_s <= 0:
             return
         self._playing = True
+        self._playback_frame = None
         self._frame_counter = 0
         self._composite_every_n = 3  # ograniczenie do ~10 FPS, aby zapobiec zamrożeniu CPU przy programowym QMediaPlayer
 
@@ -237,6 +244,10 @@ class PlaybackMixin:
     def _on_playback_stop(self) -> None:
         """Użytkownik kliknął Stop."""
         self._playing = False
+        fps = float(getattr(self, "fps", 30.0) or 30.0)
+        curr_s = float(getattr(self, "_playback_pos", 0.0) or 0.0)
+        self._playback_frame = int(round(curr_s * fps))
+
         if self.is_using_mpv():
             try:
                 self.mpv_player.pause = True
@@ -254,6 +265,115 @@ class PlaybackMixin:
             except Exception:
                 pass
             self._playback_timer = None
+
+    def _on_frame_step(self, delta: int) -> None:
+        """Krok klatkowy (+1 lub -1 klatka) z realnym sterowaniem silnikiem odtwarzania i obsługą multi-file."""
+        if self._playing:
+            self._on_playback_stop()
+
+        if self.is_using_mpv():
+            try:
+                self.mpv_player.pause = True
+            except Exception:
+                pass
+
+        fps = float(getattr(self, "fps", 0.0) or 30.0)
+        if fps <= 0:
+            fps = 30.0
+
+        timeline = getattr(self, "video_timeline", None)
+        if timeline and timeline.clip_count > 0:
+            total_frames = timeline.output_frame_count(fps)
+        else:
+            dur = float(getattr(self, "video_duration_s", 0.0) or getattr(self, "total_duration_seconds", 0.0) or 0.0)
+            total_frames = max(1, int(round(dur * fps)))
+
+        curr_s = float(getattr(self, "_playback_pos", 0.0) or getattr(self, "last_preview_ts", 0.0) or 0.0)
+        if getattr(self, "_playback_frame", None) is not None:
+            current_frame = int(self._playback_frame)
+        else:
+            current_frame = int(round(curr_s * fps))
+
+        target_frame = max(0, min(current_frame + int(delta), total_frames - 1))
+        self._playback_frame = target_frame
+
+        if timeline and timeline.clip_count > 0:
+            clip_idx, local_frame = timeline.frame_to_clip(target_frame, fps)
+            target_clip = timeline.clips[clip_idx]
+            local_time = local_frame / fps
+            project_time = target_clip.global_start_s + (local_time - target_clip.local_start_s)
+            clip_path = str(target_clip.path)
+            switched = self._preview_ensure_active_clip(clip_idx, target_clip, local_time, project_time)
+            same_clip = not switched
+        else:
+            clip_idx = 0
+            target_clip = None
+            local_time = target_frame / fps
+            project_time = local_time
+            clip_path = str(getattr(self, "video_path", "") or "")
+            switched = False
+            same_clip = True
+
+        mpv_time_before = None
+        is_paused = True
+        if self.is_using_mpv():
+            try:
+                mpv_time_before = self.mpv_player.time_pos
+                is_paused = bool(self.mpv_player.pause)
+            except Exception:
+                pass
+
+        command_used = "seek(absolute+exact)"
+        if self.is_using_mpv():
+            try:
+                self.mpv_player.seek(local_time, reference="absolute+exact")
+                self.mpv_player.pause = True
+            except Exception as e:
+                print(f"[MPV Frame Step Error] {e}", flush=True)
+        elif _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+            try:
+                self.media_player.setPosition(int(local_time * 1000))
+                self.media_player.pause()
+                command_used = "media_player.setPosition"
+            except Exception:
+                pass
+
+        mpv_time_after = None
+        if self.is_using_mpv():
+            try:
+                mpv_time_after = self.mpv_player.time_pos
+            except Exception:
+                pass
+
+        direction_label = "NEXT" if delta > 0 else "PREV"
+        print(
+            f"[FRAME STEP {direction_label}]\n"
+            f"paused={is_paused}\n"
+            f"mpv_time_before={mpv_time_before}\n"
+            f"project_time_before={curr_s:.4f}\n"
+            f"current_frame={current_frame}\n"
+            f"target_frame={target_frame}\n"
+            f"same_clip={same_clip}\n"
+            f"clip_index={clip_idx}\n"
+            f"local_target={local_time:.4f}\n"
+            f"command={command_used}\n"
+            f"mpv_time_after={mpv_time_after}\n"
+            f"project_time_after={project_time:.4f}\n"
+            f"actual_frame_after={target_frame}",
+            flush=True,
+        )
+
+        print(
+            f"[FRAME STEP] before_frame={current_frame} target_frame={target_frame} "
+            f"after_frame={target_frame} project_time={project_time:.4f} "
+            f"clip={clip_path} local_time={local_time:.4f}",
+            flush=True,
+        )
+
+        self._playback_pos = project_time
+        self.last_preview_ts = project_time
+        self.signals.sig_seek_position.emit(project_time)
+        self._render_preview(project_time)
 
     def _on_mpv_playback_tick(self) -> None:
         if not self._playing or not self.is_using_mpv():
@@ -359,10 +479,29 @@ class PlaybackMixin:
                     self.mpv_player.seek(res["local_time"], reference="absolute")
                 except Exception:
                     pass
-                global_pos = nxt
-
+            # ── 6. Critical UI & HUD updates (must never be blocked by diagnostics) ──
             self.signals.sig_seek_position.emit(global_pos)
             self._render_preview(global_pos)
+
+            # ── 7. Isolated rate-limited diagnostic log: PREVIEW_TIME max once per second ──
+            try:
+                now_mono = _time.monotonic()
+                if getattr(self, "_last_preview_time_diag", 0.0) == 0.0 or (now_mono - getattr(self, "_last_preview_time_diag", 0.0) >= 1.0):
+                    self._last_preview_time_diag = now_mono
+                    res_diag = self._resolve_preview_time(global_pos)
+                    abs_dt = res_diag.get("absolute_dt")
+                    abs_txt = abs_dt.isoformat(timespec="milliseconds") if abs_dt else "N/A"
+                    total_clips = timeline.clip_count if timeline else 1
+                    fps = getattr(self, "fps", 30.0) or 30.0
+                    print(
+                        f"[PREVIEW_TIME] clip={clip_idx + 1}/{total_clips} "
+                        f"local={local_pos:.3f} global={global_pos:.3f} "
+                        f"absolute={abs_txt} slider={global_pos:.3f} "
+                        f"telemetry_index={int(global_pos * fps)}",
+                        flush=True,
+                    )
+            except Exception:
+                pass
         except Exception as e:
             print(f"[MPV Tick Error] {e}", flush=True)
 

@@ -4,13 +4,18 @@ GPMF (ExifTool), GPX and FIT sources."""
 from __future__ import annotations
 
 from bisect import bisect_right
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from pathlib import Path
 import time as _time
 from typing import Any, Callable, Optional
 
-from src.telemetry_resolver import resolve_samples_from_sources
+from src.telemetry_resolver import (
+    distance_range_m_to_km,
+    resolve_distance_samples,
+    resolve_samples_from_sources,
+    battery_presentation_plan,
+)
 from src.telemetry_heading import derive_heading_samples, interpolate_heading
 from src.telemetry_slope import derive_slope_from_streams, interpolate_slope
 from src.render_logging import render_print
@@ -382,6 +387,22 @@ class TelemetryDataManager:
         self.accel_unit = "m/s"
         self.gyro_unit = "rad/s"
 
+        # Fast array-backed representations (NumPy float64)
+        self.accelerometer_array: Optional[Any] = None
+        self.gyroscope_array: Optional[Any] = None
+        self.accel_x_array: Optional[Any] = None
+        self.accel_y_array: Optional[Any] = None
+        self.accel_z_array: Optional[Any] = None
+        self.accel_magnitude_array: Optional[Any] = None
+        self.gyro_x_array: Optional[Any] = None
+        self.gyro_y_array: Optional[Any] = None
+        self.gyro_z_array: Optional[Any] = None
+        self.gyro_magnitude_array: Optional[Any] = None
+        self.speed_array: Optional[Any] = None
+        self.alt_array: Optional[Any] = None
+        self.track_array: Optional[Any] = None
+        self.gps_array: Optional[Any] = None
+
         # GPX samples (separate from GPMF for per-indicator source selection)
         self.gpx_speed_samples: SampleList = []
         self.gpx_alt_samples: SampleList = []
@@ -686,6 +707,24 @@ class TelemetryDataManager:
             setattr(self, f"{prefix}_magnitude_samples", [])
             return
 
+        # Vectorized path using NumPy if samples is list of (dt, (x, y, z))
+        try:
+            dts = [s[0] for s in samples]
+            v_arr = np.array([s[1] for s in samples], dtype=np.float64)
+            if v_arr.ndim == 2 and v_arr.shape[1] == 3:
+                x = v_arr[:, 0]
+                y = v_arr[:, 1]
+                z = v_arr[:, 2]
+                mag = np.sqrt(x * x + y * y + z * z)
+                setattr(self, f"{prefix}_x_samples", list(zip(dts, x.tolist())))
+                setattr(self, f"{prefix}_y_samples", list(zip(dts, y.tolist())))
+                setattr(self, f"{prefix}_z_samples", list(zip(dts, z.tolist())))
+                setattr(self, f"{prefix}_magnitude_samples", list(zip(dts, mag.tolist())))
+                return
+        except Exception:
+            pass
+
+        # Fallback loop
         axes = [[], [], []]
         magnitude = []
         for dt, vector in samples:
@@ -877,17 +916,66 @@ class TelemetryDataManager:
         )
         if fit_heading:
             processed_fit["heading"] = fit_heading
-        fit_distance = processed_fit.get("track") or processed_fit.get("distance", [])
+        fit_distance = resolve_distance_samples("fit", fit_data=processed_fit)
         processed_fit["slope"] = derive_slope_from_streams(
             fit_distance, processed_fit.get("alt", [])
         )
+        mapper = getattr(fit_result, "active_time_mapper", None) or getattr(records, "active_time_mapper", None)
         self.fit_data = FitDataset(
-            processed_fit, catalog=getattr(fit_result, "field_catalog", None)
+            processed_fit, catalog=getattr(fit_result, "field_catalog", None),
+            active_time_mapper=mapper,
+            timezone_offset_hours=getattr(fit_result, "timezone_offset_hours", None),
+            session_total_distance=getattr(fit_result, "session_total_distance", None),
+            lap_summaries=getattr(fit_result, "lap_summaries", None),
+            distance_normalization=getattr(fit_result, "distance_normalization", None),
+            source_start=getattr(fit_result, "source_start", None) or (records[0]["timestamp"] if records else None),
         )
         self.available_fit_fields = self.fit_data.available_fit_fields
 
-        if self.start_dt_utc is None and self.fit_data.get("speed"):
-            self.start_dt_utc = self.fit_data["speed"][0][0]
+        if self.start_dt_utc is None:
+            if getattr(self.fit_data, "source_start", None) is not None:
+                self.start_dt_utc = self.fit_data.source_start
+            elif records:
+                self.start_dt_utc = records[0]["timestamp"]
+            else:
+                for stream_key in ("distance", "alt", "speed", "heart_rate", "cadence", "power"):
+                    if self.fit_data.get(stream_key):
+                        self.start_dt_utc = self.fit_data[stream_key][0][0]
+                        break
+
+        fit_end_dt_utc = None
+        for stream_key in ("speed", "alt", "distance", "heart_rate", "cadence", "power", "garmin_battery_percent", "gopro_battery"):
+            stream = self.fit_data.get(stream_key)
+            if stream:
+                last_dt = stream[-1][0]
+                if fit_end_dt_utc is None or last_dt > fit_end_dt_utc:
+                    fit_end_dt_utc = last_dt
+
+        coverage_end = fit_end_dt_utc
+        if getattr(self, "video_duration", None) and self.start_dt_utc is not None:
+            try:
+                vid_end = self.start_dt_utc + timedelta(seconds=float(self.video_duration))
+                if coverage_end is None or vid_end > coverage_end:
+                    coverage_end = vid_end
+            except Exception:
+                pass
+
+        self._coverage_start = self.start_dt_utc
+        self._coverage_end = coverage_end
+
+        # Full-FIT Battery prepass: build the lightweight presentation plan at
+        # source load, before the first Preview frame requests a value.
+        # Warm both GoPro and Garmin quantized battery plans before the first
+        # Preview request.  They are independent streams and do not depend on
+        # GPS availability or on the first asynchronous paint.
+        for battery_field in ("garmin_battery_percent", "gopro_battery", "battery_pct", "battery_soc"):
+            battery_samples = self.fit_data.get(battery_field, [])
+            if battery_samples:
+                battery_presentation_plan(
+                    battery_samples,
+                    coverage_start=self.start_dt_utc,
+                    coverage_end=coverage_end,
+                )
 
         print(
             f"[TelemetryManager] FIT loaded: keys={list(self.fit_data.keys())}, "
@@ -895,6 +983,28 @@ class TelemetryDataManager:
             flush=True,
         )
         return True
+
+    def update_battery_coverage(
+        self, coverage_start: Optional[datetime], coverage_end: Optional[datetime],
+        timeline: Optional[Any] = None,
+    ) -> None:
+        """Warm global battery presentation plans for the full project timeline."""
+        self._coverage_start = coverage_start
+        self._coverage_end = coverage_end
+        if timeline is not None:
+            self.timeline = timeline
+        if not hasattr(self, "fit_data") or not isinstance(self.fit_data, dict):
+            return
+        eff_timeline = timeline or getattr(self, "timeline", None) or getattr(self, "video_timeline", None)
+        for battery_field in ("garmin_battery_percent", "gopro_battery", "battery_pct", "battery_soc"):
+            battery_samples = self.fit_data.get(battery_field, [])
+            if battery_samples:
+                battery_presentation_plan(
+                    battery_samples,
+                    coverage_start=coverage_start,
+                    coverage_end=coverage_end,
+                    timeline=eff_timeline,
+                )
 
     # ------------------------------------------------------------------
     # Clearing
@@ -1005,11 +1115,11 @@ class TelemetryDataManager:
         """Return (speed, track, alt) for exactly *source_type*."""
         return (
             resolve_samples_from_sources("speed", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
-            resolve_samples_from_sources("track", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
+            resolve_samples_from_sources("distance", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
             resolve_samples_from_sources("alt", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
         )
 
-    def _get_lean_roll_samples(self, axis: str) -> list:
+    def _get_lean_roll_samples(self, axis: str, smoothing_s: float = 0.0) -> list:
         """Precomputed roll timeline for the requested axis (ETAP 13).
 
         Computed ONCE per material from the full accel/gyro sample arrays with a
@@ -1018,22 +1128,43 @@ class TelemetryDataManager:
         """
         axis = str(axis).strip().lower()
         if axis not in ("x", "y", "z"):
-            axis = "z"
-        cached = self._lean_roll_cache.get(axis)
+            axis = "x"
+        smoothing_s = max(0.0, float(smoothing_s or 0.0))
+        cache_key = f"{axis}_{smoothing_s:.2f}"
+        cached = self._lean_roll_cache.get(cache_key)
         if cached is not None:
             return cached
-        from src.telemetry_imu import compute_roll_timeline
-        timeline = compute_roll_timeline(
-            accel=self.accelerometer_samples or [],
-            gyro=self.gyroscope_samples or [],
-            roll_axis=axis,
+        from src.telemetry_imu import (
+            compute_roll_timeline,
+            compute_roll_timeline_from_arrays,
+            smooth_roll_samples,
         )
-        self._lean_roll_cache[axis] = timeline
+        accel_array = getattr(self, "accelerometer_array", None)
+        gyro_array = getattr(self, "gyroscope_array", None)
+        accel_lazy = getattr(self, "accelerometer_samples", None)
+        gyro_lazy = getattr(self, "gyroscope_samples", None)
+        if accel_array is not None or gyro_array is not None:
+            timeline = compute_roll_timeline_from_arrays(
+                accel_array,
+                gyro_array,
+                roll_axis=axis,
+                tz_aware=bool(getattr(accel_lazy or gyro_lazy, "_tz_aware", True)),
+            )
+        else:
+            timeline = compute_roll_timeline(
+                accel=accel_lazy or [],
+                gyro=gyro_lazy or [],
+                roll_axis=axis,
+            )
+        if smoothing_s > 0.0:
+            timeline = smooth_roll_samples(timeline, smoothing_s)
+        self._lean_roll_cache[cache_key] = timeline
         return timeline
 
     def resolve_value(
         self, field_name: str, target_dt: datetime, prefer: str = "fit",
         source: Optional[str] = None, indicator_key: Optional[str] = None,
+        *, indicator_config: Optional[dict] = None,
     ) -> Optional[float]:
         """Resolve an interpolated value from one explicit source.
 
@@ -1041,50 +1172,102 @@ class TelemetryDataManager:
         callers; it is treated as the requested source and never as a
         priority chain.
         """
-        del indicator_key
+        from src.telemetry_resolver import canonical_telemetry_field
+        field_name = canonical_telemetry_field(field_name)
         if str(field_name).startswith("lean_roll_"):
             from src.telemetry_imu import interpolate_roll, lean_diagnostic
             axis = str(field_name).split("_")[-1]
+            # A derived roll value is unavailable until both physical IMU
+            # streams have contributed their first valid pair.  Do not let
+            # interpolate_roll backfill its first value into the pre-IMU
+            # portion of a clip.
+            def _naive_utc(value: datetime) -> datetime:
+                return value.replace(tzinfo=None) if value.tzinfo is not None else value
+
+            def _first_dt(samples: Any, array: Any) -> Optional[datetime]:
+                try:
+                    backing = getattr(samples, "_arr", None)
+                    if backing is None:
+                        backing = array
+                    if backing is not None and len(backing):
+                        return datetime.fromtimestamp(float(backing[0, 0]), tz=timezone.utc)
+                    if samples:
+                        return samples[0][0]
+                except Exception:
+                    return None
+                return None
+
+            accel = getattr(self, "accelerometer_samples", None) or []
+            gyro = getattr(self, "gyroscope_samples", None) or []
+            if accel and gyro:
+                accel_first = _first_dt(accel, getattr(self, "accelerometer_array", None))
+                gyro_first = _first_dt(gyro, getattr(self, "gyroscope_array", None))
+                if accel_first is None or gyro_first is None:
+                    return None
+                first_pair_dt = max(_naive_utc(accel_first), _naive_utc(gyro_first))
+                target_naive = _naive_utc(target_dt)
+                if target_naive < first_pair_dt:
+                    return None
             # ETAP 21: diagnostic log (no-op unless TELEM_LEAN_DEBUG=1)
             lean_diagnostic(
-                self.accelerometer_samples or [],
-                self.gyroscope_samples or [],
+                accel,
+                gyro,
                 target_dt, axis,
             )
-            return interpolate_roll(self._get_lean_roll_samples(axis), target_dt)
-        samples = self.resolve_samples(field_name, source or prefer)
+            smooth_s = 0.0
+            if indicator_key and hasattr(self, "layout") and isinstance(self.layout, dict):
+                ind_cfg = self.layout.get("indicators", {}).get(indicator_key, {})
+                smooth_s = float(ind_cfg.get("lean_smoothing_s", 0.0) or 0.0)
+            timeline = self._get_lean_roll_samples(axis, smooth_s)
+            if not timeline:
+                return None
+            if not accel or not gyro:
+                first_timeline_dt = _naive_utc(timeline[0][0])
+                if _naive_utc(target_dt) < first_timeline_dt:
+                    return None
+            return interpolate_roll(timeline, target_dt)
+        selected_source = source or prefer
+        cfg = dict(indicator_config) if indicator_config is not None else {}
+        if indicator_config is None and indicator_key and hasattr(self, "layout") and isinstance(self.layout, dict):
+            raw_cfg = self.layout.get("indicators", {}).get(indicator_key, {})
+            if isinstance(raw_cfg, dict):
+                cfg = dict(raw_cfg)
+        samples = self.resolve_samples(field_name, selected_source)
         if not samples:
             return None
-        return self._interpolate_field(samples, target_dt, field_name)
+        if field_name == 'heading':
+            return interpolate_heading(samples, target_dt)
+        if field_name == 'slope':
+            return interpolate_slope(samples, target_dt)
+        cov_start = getattr(self, "_coverage_start", None) or self.start_dt_utc
+        if cov_start is not None and "_presentation_video_start" not in cfg:
+            cfg["_presentation_video_start"] = cov_start
+        cov_end = getattr(self, "_coverage_end", None)
+        if cov_end is not None and "_presentation_video_end" not in cfg:
+            cfg["_presentation_video_end"] = cov_end
+        active_mapper = getattr(self, "timeline", None) or getattr(self, "video_timeline", None)
+        if active_mapper is None and selected_source == 'fit':
+            active_mapper = getattr(self.fit_data, 'active_time_mapper', None)
+        from src.telemetry_resolver import resolve_current_presentation
+        return resolve_current_presentation(
+            samples, target_dt, field_name, cfg,
+            active_time_mapper=active_mapper,
+        )
 
     def _interpolate_field(
-        self, samples: SampleList, target_dt: datetime, field_name: str
+        self, samples: SampleList, target_dt: datetime, field_name: str,
+        *, source: str = "fit",
+        precision: int | None = None,
+        policy: str | None = None,
     ) -> Optional[float]:
-        """Linear interpolation for speed/distance/altitude fields, step for the rest.
-
-        Only speed and distance (and altitude, consistent with the main alt
-        indicators) are interpolated linearly so they update smoothly on every
-        frame; the remaining FIT/GPX fields (HR, power, cadence, temperature,
-        battery, ...) keep step interpolation (~1 s for Garmin FIT).
-        """
-        try:
-            from src.telemetry_extract import (
-                interpolate_speed, interpolate_distance, interpolate_altitude,
-            )
-        except ImportError:
-            return self._interpolate(samples, target_dt)
-
-        if field_name in ("speed", "enhanced_speed"):
-            return interpolate_speed(samples, target_dt)
-        if field_name in ("distance", "dist", "track"):
-            return interpolate_distance(samples, target_dt)
-        if field_name in ("alt", "enhanced_altitude", "altitude"):
-            return interpolate_altitude(samples, target_dt)
+        """Compatibility adapter for callers without an indicator config."""
         if field_name == "heading":
             return interpolate_heading(samples, target_dt)
         if field_name == "slope":
             return interpolate_slope(samples, target_dt)
-        return self._interpolate(samples, target_dt)
+        from src.telemetry_resolver import resolve_current_presentation
+        return resolve_current_presentation(samples, target_dt, field_name,
+            {'decimals': precision or 0, 'interpolation_policy': policy})
 
     def resolve_samples(
         self, field_name: str, source: str = "fit",
@@ -1182,8 +1365,7 @@ class TelemetryDataManager:
                 # wymuś unit="km", inaczej 10129 m byłoby pokazywane jako 10129 km.
                 is_dist = "dist" in field_name.lower()
                 if is_dist:
-                    max_val = max_val / 1000.0
-                    min_val = min_val / 1000.0
+                    min_val, max_val = distance_range_m_to_km(min_val, max_val)
                     unit = "km"
 
                 # Bateria FIT / Garmin: semantyczny zakres baterii to 0..100%, a nie min/max z sesji.

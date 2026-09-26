@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import timedelta
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -31,6 +32,8 @@ class LoadTab(QWidget):
     sig_qp_progress = Signal(int, int)   # (percent, gen)
     sig_qp_done = Signal(dict, int)      # (info: dict, gen)
     sig_qp_error = Signal(str, int)      # (message, gen)
+    # Wynik asynchronicznego wyszukiwania AutoFIT (worker → GUI)
+    sig_autofit_matched = Signal(str, int)  # (fit_path, gen)
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,6 +41,8 @@ class LoadTab(QWidget):
         self._video_paths: list[str] = []
         self._gpx_path: str = ""
         self._fit_path: str = ""
+        self._user_selected_telemetry: bool = False
+        self._autofit_gen: int = 0
         # Generacja inspekcji — pozwala zignorować wyniki dla poprzedniego pliku
         self._inspection_gen: int = 0
         # Stan analizy QP (token generacji + anulowanie)
@@ -226,6 +231,9 @@ class LoadTab(QWidget):
             self.btn_mp4.setStyleSheet(self._selected_style)
             # Natychmiastowa (asynchroniczna) inspekcja — bez naciskania Wczytaj
             self._start_info_inspection()
+            self._autofit_gen += 1
+            if not self._user_selected_telemetry:
+                self._try_auto_fit_search(paths, gen=self._autofit_gen)
 
     def _select_telemetry(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -233,6 +241,7 @@ class LoadTab(QWidget):
             "Pliki telemetryczne (*.fit *.FIT *.gpx *.GPX);;FIT (*.fit *.FIT);;GPX (*.gpx *.GPX)",
         )
         if path:
+            self._user_selected_telemetry = True
             ext = path.lower()
             if ext.endswith(".fit"):
                 self._fit_path = path
@@ -242,6 +251,39 @@ class LoadTab(QWidget):
                 self._fit_path = ""
             self.btn_telemetry.setText(path)
             self.btn_telemetry.setStyleSheet(self._selected_style)
+
+    def _try_auto_fit_search(self, paths: list[str], gen: int | None = None) -> None:
+        """Asynchronously search folder for matching .fit file."""
+        if not paths:
+            return
+        if gen is None:
+            self._autofit_gen += 1
+            gen = self._autofit_gen
+        request_gen = gen
+
+        def worker() -> None:
+            try:
+                if request_gen != self._autofit_gen or self._user_selected_telemetry:
+                    return
+                from src.multifile import probe_clip_time_interval
+                from telemetry_fit import find_best_fit_match
+                intervals = []
+                for p_str in paths:
+                    p = Path(p_str)
+                    start_dt, end_dt, dur_s, conf = probe_clip_time_interval(p)
+                    if start_dt is not None and end_dt is not None:
+                        intervals.append((start_dt, end_dt, dur_s, conf))
+                if not intervals or request_gen != self._autofit_gen:
+                    return
+                parent_dir = Path(paths[0]).parent
+                best_fit, diag = find_best_fit_match(intervals, parent_dir)
+                if best_fit is not None and request_gen == self._autofit_gen and not self._user_selected_telemetry:
+                    self.sig_autofit_matched.emit(str(best_fit), request_gen)
+            except Exception as e:
+                print(f"[AutoFIT] Error scanning directory: {e}", flush=True)
+
+        threading.Thread(target=worker, daemon=True).start()
+
 
     def _on_load(self) -> None:
         if not self._video_paths:
@@ -343,9 +385,11 @@ class LoadTab(QWidget):
         self._video_paths = []
         self._gpx_path = ""
         self._fit_path = ""
+        self._user_selected_telemetry = False
         self.lbl_info.setText("Nie wczytano plików.")
         # Unieważnij oczekującą inspekcję i zresetuj panel informacji
         self._inspection_gen += 1
+        self._autofit_gen += 1
         self.lbl_file_info.setText("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
         self._reset_qp_state()
         self.btn_analyze_qp.setEnabled(False)
@@ -362,10 +406,20 @@ class LoadTab(QWidget):
         self.sig_qp_progress.connect(self._on_qp_progress)
         self.sig_qp_done.connect(self._on_qp_done)
         self.sig_qp_error.connect(self._on_qp_error)
+        self.sig_autofit_matched.connect(self._on_autofit_matched)
         # Globalne sygnały postępu/błędów — chronione flagą self._loading,
         # aby nie reagować na postęp renderingu ani błędy spoza wczytywania.
         self.signals.sig_progress.connect(self._on_load_progress)
         self.signals.sig_error.connect(self._on_load_error)
+
+    def _on_autofit_matched(self, fit_path: str, gen: int) -> None:
+        """Obsłuż dopasowany plik FIT z asynchronicznego AutoFIT (wątek główny GUI)."""
+        if gen == self._autofit_gen and not self._user_selected_telemetry:
+            self._fit_path = fit_path
+            self._gpx_path = ""
+            self.btn_telemetry.setText(fit_path)
+            self.btn_telemetry.setStyleSheet(self._selected_style)
+
 
     def _start_info_inspection(self) -> None:
         """Uruchom odczyt informacji o pierwszym wybranym pliku MP4."""

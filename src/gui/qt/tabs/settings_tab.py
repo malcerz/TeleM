@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
-    QStyleFactory,
+    QStyleFactory, QCheckBox,
 )
 from PySide6.QtGui import QFontDatabase
 
@@ -20,6 +20,8 @@ class SettingsTab(QWidget):
         super().__init__()
         self.signals = get_signals()
         self._build_ui()
+        # Przywróć font z kontrolera po jego inicjalizacji (emitowany przez sig_global_font_restored)
+        self.signals.sig_global_font_restored.connect(self._on_global_font_restored)
 
     def _build_ui(self) -> None:
         vbox = QVBoxLayout(self)
@@ -90,6 +92,23 @@ class SettingsTab(QWidget):
         )
         font_form.addRow("Obramowanie:", self.spin_outline)
 
+        # Przycisk jawnego zapisu ustawień globalnych
+        self.btn_save_settings = QPushButton("Zapisz ustawienia")
+        self.btn_save_settings.setMinimumHeight(32)
+        self.btn_save_settings.setToolTip(
+            "Persystuje wybrany font i obramowanie do def_layout.json "
+            "(będą przywrócone po ponownym uruchomieniu)"
+        )
+        self.btn_save_settings.setStyleSheet(
+            "QPushButton { background-color: #2a5a2a; color: #aaffaa; "
+            "font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton:hover { background-color: #3a7a3a; }"
+        )
+        self.btn_save_settings.clicked.connect(
+            lambda: self.signals.sig_save_global_settings.emit()
+        )
+        font_form.addRow(self.btn_save_settings)
+
         vbox.addWidget(font_group)
 
         # ── Wydajność ─────────────────────────────────────────────────
@@ -130,6 +149,21 @@ class SettingsTab(QWidget):
 
         vbox.addWidget(perf_group)
 
+        # ── Wykresy ───────────────────────────────────────────────────
+        charts_group = QGroupBox("Wykresy")
+        charts_group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
+        charts_form = QFormLayout(charts_group)
+        charts_form.setSpacing(10)
+
+        self.chk_skip_pauses = QCheckBox("Pomiń pauzy aktywności")
+        self.chk_skip_pauses.setChecked(False)
+        self.chk_skip_pauses.toggled.connect(
+            lambda v: self.signals.sig_settings_changed.emit("charts_skip_pauses", v)
+        )
+        charts_form.addRow(self.chk_skip_pauses)
+
+        vbox.addWidget(charts_group)
+
         vbox.addStretch()
 
     def _browse_dir(self, target: QLineEdit) -> None:
@@ -143,3 +177,22 @@ class SettingsTab(QWidget):
         )
         if path:
             target.setText(path)
+
+    def _on_global_font_restored(self, family_name: str) -> None:
+        """Przywraca zaznaczenie fontu w cmb_font bez emitowania sig_settings_changed."""
+        if not family_name:
+            return
+        # Blokuj sygnał currentTextChanged na czas programowej zmiany
+        self.cmb_font.blockSignals(True)
+        idx = self.cmb_font.findText(family_name)
+        if idx >= 0:
+            self.cmb_font.setCurrentIndex(idx)
+        else:
+            # Font nieznany systemowi — dodaj jako opcję (może być zainstalowany pod inną nazwą)
+            self.cmb_font.insertItem(0, family_name)
+            self.cmb_font.setCurrentIndex(0)
+        self.cmb_font.blockSignals(False)
+
+    def set_font(self, family_name: str) -> None:
+        """Publiczna metoda ustawiająca font (np. wywoływana z MainWindow)."""
+        self._on_global_font_restored(family_name)
