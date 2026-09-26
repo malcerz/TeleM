@@ -42,6 +42,28 @@ static int cmp_dbl_asc(const void* a, const void* b) {
 }
 
 #define MAX_CACHED_DECODE_VIEWS 128
+
+typedef struct {
+    int frame_id;
+    double t_demux_start_ms;
+    double t_demux_end_ms;
+    double t_decode_submit_start_ms;
+    double t_decode_submit_end_ms;
+    double t_decode_ready_ms;
+    double t_consumer_dequeue_ms;
+    double t_vp_submit_start_ms;
+    double t_vp_submit_end_ms;
+    double t_vp_ready_ms;
+    double t_enc_surf_acquire_ms;
+    double t_enc_async_start_ms;
+    double t_enc_async_end_ms;
+    double t_sync_req_start_ms;
+    double t_sync_req_end_ms;
+    double t_bitstream_avail_ms;
+} FrameTimelineEntry;
+
+#define MAX_TIMELINE_ENTRIES 1200
+
 typedef struct {
     ID3D11Texture2D* pTex;
     int slice_idx;
@@ -58,6 +80,11 @@ typedef struct {
 #define MAX_MULTI_CLIPS 64
 
 // Timing helper
+
+static inline double get_global_time_ms(LARGE_INTEGER t, LARGE_INTEGER t_zero, LARGE_INTEGER freq) {
+    return (double)(t.QuadPart - t_zero.QuadPart) * 1000.0 / (double)freq.QuadPart;
+}
+
 static double get_time_ms(LARGE_INTEGER start, LARGE_INTEGER end, LARGE_INTEGER freq) {
     return (double)(end.QuadPart - start.QuadPart) * 1000.0 / (double)freq.QuadPart;
 }
@@ -310,6 +337,11 @@ typedef struct {
     ID3D11Texture2D* pOpenedBaseTexB;
     ID3D11VideoProcessorInputView* pBaseInputViewB;
     IDXGIKeyedMutex* pKeyedMutexB;
+    double demux_start_ms;
+    double demux_end_ms;
+    double decode_submit_start_ms;
+    double decode_submit_end_ms;
+    double decode_ready_ms;
 } DecodeSlot;
 
 typedef struct {
@@ -318,6 +350,21 @@ typedef struct {
     uint8_t* pBsBuffer;
     int frame_idx;
     bool in_use;
+    double demux_start_ms;
+    double demux_end_ms;
+    double decode_submit_start_ms;
+    double decode_submit_end_ms;
+    double decode_ready_ms;
+    double consumer_dequeue_ms;
+    double vp_submit_start_ms;
+    double vp_submit_end_ms;
+    double vp_ready_ms;
+    double enc_surf_acquire_ms;
+    double enc_async_start_ms;
+    double enc_async_end_ms;
+    double sync_req_start_ms;
+    double sync_req_end_ms;
+    double bitstream_avail_ms;
 } EncodeSlot;
 
 #define MAX_CACHED_SURFACE_VIEWS 32
@@ -354,8 +401,20 @@ typedef struct {
     bool hud_staged_ring_enabled;
     int  hud_staged_ring_idx; // 0 or 1, rotates each frame
 
+    #define MAX_VP_RING_SIZE 8
+    ID3D11Texture2D* pVPOutTexRing[MAX_VP_RING_SIZE];
+    ID3D11VideoProcessorOutputView* pVPOutViewRing[MAX_VP_RING_SIZE];
+    int vp_ring_size;
+    int vp_ring_head;
     ID3D11Texture2D* pVPOutTex;
     ID3D11VideoProcessorOutputView* pVPOutView;
+    
+    // Asynchronous Encode Drain Thread
+    HANDLE hDrainThread;
+    bool bStopDrain;
+    CRITICAL_SECTION csEncode;
+    CONDITION_VARIABLE cvEncodeReady;
+    CONDITION_VARIABLE cvEncodeFree;
 
     // 8C Direct D3D11 Video Processor to oneVPL Surface Cache
     CachedVPOutView cached_out_views[MAX_CACHED_SURFACE_VIEWS];
@@ -429,6 +488,9 @@ typedef struct {
     double map_samples_buffer[4096];
     double sync_samples_buffer[4096];
     int num_sync_samples;
+    FrameTimelineEntry timeline[MAX_TIMELINE_ENTRIES];
+    int num_timeline_entries;
+    LARGE_INTEGER t_pipe_global_zero;
     int app_drain_watermark;
     bool late_drain_enabled;
 
@@ -567,6 +629,8 @@ static DWORD WINAPI decode_producer_thread_func(LPVOID lpParam) {
             int write_slot = ctx->decode_head_idx;
             LeaveCriticalSection(&ctx->csDecode);
 
+            double cur_dmx_start = 0, cur_dmx_end = 0, cur_dec_sub_start = 0, cur_dec_sub_end = 0;
+
             // Demux & Decode next frame from current clip
             bool got_frame = false;
             while (!got_frame && !ctx->bStopDecode) {
@@ -597,8 +661,10 @@ static DWORD WINAPI decode_producer_thread_func(LPVOID lpParam) {
                     break;
                 } else if (ret == AVERROR(EAGAIN)) {
                     QueryPerformanceCounter(&t0);
+                    cur_dmx_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, freq);
                     int read_ret = av_read_frame(ctx->fmt_ctx, ctx->pkt);
                     QueryPerformanceCounter(&t1);
+                    cur_dmx_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, freq);
                     ctx->stats.total_demux_ms += get_time_ms(t0, t1, freq);
 
                     if (read_ret < 0) {
@@ -619,6 +685,7 @@ static DWORD WINAPI decode_producer_thread_func(LPVOID lpParam) {
                     }
                     if (ctx->pkt->stream_index == ctx->video_stream_idx) {
                         QueryPerformanceCounter(&t0);
+                        cur_dec_sub_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, freq);
                         if (ctx->hw_decode_active && ctx->contention_instrumentation_enabled) {
                             QueryPerformanceCounter(&d3d_p0);
                             InterlockedExchange(&ctx->producer_in_d3d11, 1);
@@ -633,6 +700,7 @@ static DWORD WINAPI decode_producer_thread_func(LPVOID lpParam) {
                             ctx->total_producer_d3d11_ms += get_time_ms(d3d_p0, d3d_p1, freq);
                         }
                         QueryPerformanceCounter(&t1);
+                        cur_dec_sub_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, freq);
                         ctx->stats.total_decode_ms += get_time_ms(t0, t1, freq);
                     }
                     av_packet_unref(ctx->pkt);
@@ -800,6 +868,13 @@ static DWORD WINAPI decode_producer_thread_func(LPVOID lpParam) {
                 ctx->decode_ring[write_slot].frame_idx = current_frame_idx++;
                 ctx->decode_ring[write_slot].is_eof = false;
                 ctx->decode_ring[write_slot].is_ready = true;
+                ctx->decode_ring[write_slot].demux_start_ms = cur_dmx_start;
+                ctx->decode_ring[write_slot].demux_end_ms = cur_dmx_end;
+                ctx->decode_ring[write_slot].decode_submit_start_ms = cur_dec_sub_start;
+                ctx->decode_ring[write_slot].decode_submit_end_ms = cur_dec_sub_end;
+                LARGE_INTEGER t_rdy;
+                QueryPerformanceCounter(&t_rdy);
+                ctx->decode_ring[write_slot].decode_ready_ms = get_global_time_ms(t_rdy, ctx->t_pipe_global_zero, freq);
 
                 EnterCriticalSection(&ctx->csDecode);
                 ctx->decode_head_idx = (ctx->decode_head_idx + 1) % ring_limit;
@@ -977,11 +1052,22 @@ __declspec(dllexport) int intel_d3d11_vp_init_ex(int codec_id) {
     texDesc.Height = BASE_H;
     texDesc.Format = out_fmt;
     texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    ID3D11Device_CreateTexture2D(g_pipe.pDevice, &texDesc, NULL, &g_pipe.pVPOutTex);
+
+    const char* env_vp_ring = getenv("TELEM_INTEL_VP_RING_DEPTH");
+    int vp_depth = (env_vp_ring && atoi(env_vp_ring) > 0) ? atoi(env_vp_ring) : 4;
+    if (vp_depth > MAX_VP_RING_SIZE) vp_depth = MAX_VP_RING_SIZE;
+    g_pipe.vp_ring_size = vp_depth;
+    g_pipe.vp_ring_head = 0;
 
     D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC ovDesc = {0};
     ovDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    ID3D11VideoDevice_CreateVideoProcessorOutputView(g_pipe.pVideoDevice, (ID3D11Resource*)g_pipe.pVPOutTex, g_pipe.pEnum, &ovDesc, &g_pipe.pVPOutView);
+
+    for (int i = 0; i < g_pipe.vp_ring_size; i++) {
+        ID3D11Device_CreateTexture2D(g_pipe.pDevice, &texDesc, NULL, &g_pipe.pVPOutTexRing[i]);
+        ID3D11VideoDevice_CreateVideoProcessorOutputView(g_pipe.pVideoDevice, (ID3D11Resource*)g_pipe.pVPOutTexRing[i], g_pipe.pEnum, &ovDesc, &g_pipe.pVPOutViewRing[i]);
+    }
+    g_pipe.pVPOutTex = g_pipe.pVPOutTexRing[0];
+    g_pipe.pVPOutView = g_pipe.pVPOutViewRing[0];
 
     // Stream rects
     RECT srcBaseRect = { 0, 0, BASE_W, BASE_H };
@@ -1084,8 +1170,13 @@ __declspec(dllexport) void intel_d3d11_vp_cleanup(void) {
     for (int i = 0; i < 2; i++) {
         if (g_pipe.pHudStagingRing[i]) { ID3D11Texture2D_Release(g_pipe.pHudStagingRing[i]); g_pipe.pHudStagingRing[i] = NULL; }
     }
-    if (g_pipe.pVPOutView) { ID3D11VideoProcessorOutputView_Release(g_pipe.pVPOutView); g_pipe.pVPOutView = NULL; }
-    if (g_pipe.pVPOutTex) { ID3D11Texture2D_Release(g_pipe.pVPOutTex); g_pipe.pVPOutTex = NULL; }
+    for (int i = 0; i < g_pipe.vp_ring_size; i++) {
+        if (g_pipe.pVPOutViewRing[i]) { ID3D11VideoProcessorOutputView_Release(g_pipe.pVPOutViewRing[i]); g_pipe.pVPOutViewRing[i] = NULL; }
+        if (g_pipe.pVPOutTexRing[i]) { ID3D11Texture2D_Release(g_pipe.pVPOutTexRing[i]); g_pipe.pVPOutTexRing[i] = NULL; }
+    }
+    g_pipe.pVPOutView = NULL;
+    g_pipe.pVPOutTex = NULL;
+    DeleteCriticalSection(&g_pipe.csEncode);
     if (g_pipe.pHudInputView) { ID3D11VideoProcessorInputView_Release(g_pipe.pHudInputView); g_pipe.pHudInputView = NULL; }
     if (g_pipe.pHudTex) { ID3D11Texture2D_Release(g_pipe.pHudTex); g_pipe.pHudTex = NULL; }
     if (g_pipe.pBaseInputView) { ID3D11VideoProcessorInputView_Release(g_pipe.pBaseInputView); g_pipe.pBaseInputView = NULL; }
@@ -1164,6 +1255,84 @@ __declspec(dllexport) int intel_d3d11_vp_get_output_frame(char* out_p010_buffer,
     return 0;
 }
 
+
+static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
+    IntelNativeContext* ctx = (IntelNativeContext*)lpParam;
+    LARGE_INTEGER freq = ctx->freq;
+
+    while (true) {
+        EnterCriticalSection(&ctx->csEncode);
+        while (ctx->pending_encode_count == 0 && !ctx->bStopDrain && !ctx->cancelled) {
+            SleepConditionVariableCS(&ctx->cvEncodeReady, &ctx->csEncode, 50);
+        }
+        if ((ctx->pending_encode_count == 0 && ctx->bStopDrain) || ctx->cancelled) {
+            LeaveCriticalSection(&ctx->csEncode);
+            break;
+        }
+        int tail = ctx->enc_tail_idx;
+        LeaveCriticalSection(&ctx->csEncode);
+
+        if (ctx->encode_pool[tail].in_use && ctx->encode_pool[tail].syncp) {
+            LARGE_INTEGER t0, t1;
+            QueryPerformanceCounter(&t0);
+            double cur_sync_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, freq);
+
+            ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
+            ctx->encode_pool[tail].syncp = NULL;
+
+            QueryPerformanceCounter(&t1);
+            double cur_sync_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, freq);
+            double sync_ms = get_time_ms(t0, t1, freq);
+
+            ctx->stats.total_sync_ms += sync_ms;
+            ctx->stats.total_encode_ms += sync_ms;
+            if (ctx->num_sync_samples < 4096) {
+                ctx->sync_samples_buffer[ctx->num_sync_samples++] = sync_ms;
+            }
+
+            if (ctx->encode_pool[tail].bs.DataLength > 0) {
+                ctx->stats.encoded_frames++;
+                ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
+                if (ctx->fOutIVF) {
+                    if (ctx->codec_id == INTEL_CODEC_AV1) {
+                        uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
+                        fwrite(frame_hdr, 1, 12, ctx->fOutIVF);
+                    }
+                    fwrite(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset, 1, ctx->encode_pool[tail].bs.DataLength, ctx->fOutIVF);
+                }
+            }
+
+            if (ctx->num_timeline_entries < MAX_TIMELINE_ENTRIES) {
+                FrameTimelineEntry* e = &ctx->timeline[ctx->num_timeline_entries++];
+                e->frame_id = ctx->encode_pool[tail].frame_idx;
+                e->t_demux_start_ms = ctx->encode_pool[tail].demux_start_ms;
+                e->t_demux_end_ms = ctx->encode_pool[tail].demux_end_ms;
+                e->t_decode_submit_start_ms = ctx->encode_pool[tail].decode_submit_start_ms;
+                e->t_decode_submit_end_ms = ctx->encode_pool[tail].decode_submit_end_ms;
+                e->t_decode_ready_ms = ctx->encode_pool[tail].decode_ready_ms;
+                e->t_consumer_dequeue_ms = ctx->encode_pool[tail].consumer_dequeue_ms;
+                e->t_vp_submit_start_ms = ctx->encode_pool[tail].vp_submit_start_ms;
+                e->t_vp_submit_end_ms = ctx->encode_pool[tail].vp_submit_end_ms;
+                e->t_vp_ready_ms = ctx->encode_pool[tail].vp_ready_ms;
+                e->t_enc_surf_acquire_ms = ctx->encode_pool[tail].enc_surf_acquire_ms;
+                e->t_enc_async_start_ms = ctx->encode_pool[tail].enc_async_start_ms;
+                e->t_enc_async_end_ms = ctx->encode_pool[tail].enc_async_end_ms;
+                e->t_sync_req_start_ms = cur_sync_start;
+                e->t_sync_req_end_ms = cur_sync_end;
+                e->t_bitstream_avail_ms = cur_sync_end;
+            }
+        }
+
+        EnterCriticalSection(&ctx->csEncode);
+        ctx->encode_pool[tail].in_use = false;
+        ctx->enc_tail_idx = (ctx->enc_tail_idx + 1) % ctx->pool_size;
+        ctx->pending_encode_count--;
+        WakeConditionVariable(&ctx->cvEncodeFree);
+        LeaveCriticalSection(&ctx->csEncode);
+    }
+    return 0;
+}
+
 static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
     if (ctx->pending_encode_count == 0) return;
     int tail = ctx->enc_tail_idx;
@@ -1171,11 +1340,13 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
 
     LARGE_INTEGER t0, t1;
     QueryPerformanceCounter(&t0);
+    double cur_sync_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, ctx->freq);
     if (ctx->encode_pool[tail].syncp) {
         ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
         ctx->encode_pool[tail].syncp = NULL;
     }
     QueryPerformanceCounter(&t1);
+    double cur_sync_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, ctx->freq);
     double sync_ms = get_time_ms(t0, t1, ctx->freq);
     ctx->stats.total_sync_ms += sync_ms;
     ctx->stats.total_encode_ms += sync_ms;
@@ -1195,6 +1366,25 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
         }
     }
 
+    if (ctx->num_timeline_entries < MAX_TIMELINE_ENTRIES) {
+        FrameTimelineEntry* e = &ctx->timeline[ctx->num_timeline_entries++];
+        e->frame_id = ctx->encode_pool[tail].frame_idx;
+        e->t_demux_start_ms = ctx->encode_pool[tail].demux_start_ms;
+        e->t_demux_end_ms = ctx->encode_pool[tail].demux_end_ms;
+        e->t_decode_submit_start_ms = ctx->encode_pool[tail].decode_submit_start_ms;
+        e->t_decode_submit_end_ms = ctx->encode_pool[tail].decode_submit_end_ms;
+        e->t_decode_ready_ms = ctx->encode_pool[tail].decode_ready_ms;
+        e->t_consumer_dequeue_ms = ctx->encode_pool[tail].consumer_dequeue_ms;
+        e->t_vp_submit_start_ms = ctx->encode_pool[tail].vp_submit_start_ms;
+        e->t_vp_submit_end_ms = ctx->encode_pool[tail].vp_submit_end_ms;
+        e->t_vp_ready_ms = ctx->encode_pool[tail].vp_ready_ms;
+        e->t_enc_surf_acquire_ms = ctx->encode_pool[tail].enc_surf_acquire_ms;
+        e->t_enc_async_start_ms = ctx->encode_pool[tail].enc_async_start_ms;
+        e->t_enc_async_end_ms = ctx->encode_pool[tail].enc_async_end_ms;
+        e->t_sync_req_start_ms = cur_sync_start;
+        e->t_sync_req_end_ms = cur_sync_end;
+        e->t_bitstream_avail_ms = cur_sync_end;
+    }
     ctx->encode_pool[tail].in_use = false;
     ctx->enc_tail_idx = (ctx->enc_tail_idx + 1) % ctx->pool_size;
     ctx->pending_encode_count--;
@@ -1627,6 +1817,14 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     }
 
     // Start background decode producer thread
+    InitializeCriticalSection(&g_pipe.csEncode);
+    InitializeConditionVariable(&g_pipe.cvEncodeReady);
+    InitializeConditionVariable(&g_pipe.cvEncodeFree);
+    g_pipe.bStopDrain = false;
+
+    g_pipe.hDrainThread = CreateThread(NULL, 0, encode_drain_thread_func, &g_pipe, 0, NULL);
+    if (!g_pipe.hDrainThread) return -31;
+
     g_pipe.hDecodeThread = CreateThread(NULL, 0, decode_producer_thread_func, &g_pipe, 0, NULL);
     if (!g_pipe.hDecodeThread) return -30;
 
@@ -1695,8 +1893,15 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     }
     int read_slot = g_pipe.decode_tail_idx;
     bool is_eof = g_pipe.decode_ring[read_slot].is_eof;
+    int cur_frame_id = g_pipe.decode_ring[read_slot].frame_idx;
+    double cur_dmx_start = g_pipe.decode_ring[read_slot].demux_start_ms;
+    double cur_dmx_end = g_pipe.decode_ring[read_slot].demux_end_ms;
+    double cur_dec_sub_start = g_pipe.decode_ring[read_slot].decode_submit_start_ms;
+    double cur_dec_sub_end = g_pipe.decode_ring[read_slot].decode_submit_end_ms;
+    double cur_dec_ready = g_pipe.decode_ring[read_slot].decode_ready_ms;
     LeaveCriticalSection(&g_pipe.csDecode);
     QueryPerformanceCounter(&t1);
+    double cur_cons_dequeue = get_global_time_ms(t1, g_pipe.t_pipe_global_zero, freq);
     g_pipe.stats.total_queue_wait_ms += get_time_ms(t0, t1, freq);
 
     if (is_eof) {
@@ -1985,12 +2190,12 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
         }
     }
 
-    // 4. Early drain: If not late drain and pending encode queue reached watermark, sync oldest frame first
-    if (!g_pipe.late_drain_enabled) {
-        while (g_pipe.pending_encode_count >= g_pipe.app_drain_watermark) {
-            sync_oldest_encode_slot(&g_pipe);
-        }
+    // 4. Async queue throttle: wait on cvEncodeFree if watermark reached
+    EnterCriticalSection(&g_pipe.csEncode);
+    while (g_pipe.pending_encode_count >= g_pipe.app_drain_watermark && !g_pipe.cancelled) {
+        SleepConditionVariableCS(&g_pipe.cvEncodeFree, &g_pipe.csEncode, 50);
     }
+    LeaveCriticalSection(&g_pipe.csEncode);
 
     // Sample encoder pending occupancy
     int p_cnt = g_pipe.pending_encode_count;
@@ -2000,6 +2205,9 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     }
 
     // 5. Get oneVPL Surface FIRST
+    LARGE_INTEGER t_acq;
+    QueryPerformanceCounter(&t_acq);
+    double cur_enc_surf_acq = get_global_time_ms(t_acq, g_pipe.t_pipe_global_zero, freq);
     mfxFrameSurface1* pmfxSurface = NULL;
     mfxStatus sts = g_pipe.pMFXMemory_GetSurfaceForEncode(g_pipe.session, &pmfxSurface);
     if (sts != MFX_ERR_NONE || !pmfxSurface) {
@@ -2015,9 +2223,19 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     pmfxSurface->FrameInterface->GetNativeHandle(pmfxSurface, &hSurfRes, &rType);
     ID3D11Texture2D* pEncTex = (ID3D11Texture2D*)hSurfRes;
 
-    ID3D11VideoProcessorOutputView* pTargetOutView = g_pipe.pVPOutView;
+    int vp_slot = g_pipe.vp_ring_head;
+    g_pipe.vp_ring_head = (g_pipe.vp_ring_head + 1) % g_pipe.vp_ring_size;
+    ID3D11VideoProcessorOutputView* pTargetOutView = g_pipe.pVPOutViewRing[vp_slot];
+    ID3D11Texture2D* pCurVPOutTex = g_pipe.pVPOutTexRing[vp_slot];
 
     if (g_pipe.use_direct_vp_surface && pEncTex) {
+        if (!g_pipe.stats.direct_vp_first_fail_hr && g_pipe.stats.decoded_frames == 0) {
+            D3D11_TEXTURE2D_DESC edesc = {0};
+            ID3D11Texture2D_GetDesc(pEncTex, &edesc);
+            printf("[ENCODER TEX CONTRACT] W=%u H=%u Format=%d Bind=0x%X Misc=0x%X ArraySize=%u rType=%d MemId=%p\n",
+                   edesc.Width, edesc.Height, edesc.Format, edesc.BindFlags, edesc.MiscFlags, edesc.ArraySize,
+                   (int)rType, pmfxSurface->Data.MemId);
+        }
         ID3D11VideoProcessorOutputView* pDirectView = NULL;
         for (int i = 0; i < g_pipe.num_cached_out_views; i++) {
             if (g_pipe.cached_out_views[i].pTex == pEncTex) {
@@ -2056,6 +2274,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
 
     // 6. VideoProcessorBlt directly to target output view
     QueryPerformanceCounter(&t0);
+    double cur_vp_sub_start = get_global_time_ms(t0, g_pipe.t_pipe_global_zero, freq);
     D3D11_VIDEO_PROCESSOR_STREAM streams[2] = {0};
     streams[0].Enable = TRUE;
     if (g_pipe.hw_decode_active && g_pipe.current_dec_input_view) {
@@ -2069,6 +2288,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     streams[1].pInputSurface = g_pipe.pHudInputView;
     ID3D11VideoContext_VideoProcessorBlt(g_pipe.pVideoContext, g_pipe.pVP, pTargetOutView, 0, 2, streams);
     QueryPerformanceCounter(&t1);
+    double cur_vp_sub_end = get_global_time_ms(t1, g_pipe.t_pipe_global_zero, freq);
     g_pipe.stats.total_blt_ms += get_time_ms(t0, t1, freq);
 
     if (g_pipe.hw_decode_active) {
@@ -2088,9 +2308,9 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     LeaveCriticalSection(&g_pipe.csDecode);
 
     // Fallback CopyResource only if direct VP surface was not used
-    if (pTargetOutView == g_pipe.pVPOutView) {
+    if (pTargetOutView != pEncTex) {
         QueryPerformanceCounter(&t0);
-        ID3D11DeviceContext_CopyResource(g_pipe.pContext, (ID3D11Resource*)pEncTex, (ID3D11Resource*)g_pipe.pVPOutTex);
+        ID3D11DeviceContext_CopyResource(g_pipe.pContext, (ID3D11Resource*)pEncTex, (ID3D11Resource*)pCurVPOutTex);
         QueryPerformanceCounter(&t1);
         g_pipe.stats.total_dma_copy_ms += get_time_ms(t0, t1, freq);
         g_pipe.stats.vp_to_encoder_gpu_copy_count++;
@@ -2101,12 +2321,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
         InterlockedExchange(&g_pipe.consumer_in_d3d11, 0);
     }
 
-    // Late drain: If late drain enabled, sync oldest slot before submitting current frame to slot
-    if (g_pipe.late_drain_enabled) {
-        while (g_pipe.pending_encode_count >= g_pipe.app_drain_watermark) {
-            sync_oldest_encode_slot(&g_pipe);
-        }
-    }
+    // Late drain handled by drain thread
 
     // 7. Submit EncodeFrameAsync into slot
     int cur_slot = g_pipe.enc_head_idx;
@@ -2115,6 +2330,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     g_pipe.encode_pool[cur_slot].syncp = NULL;
 
     QueryPerformanceCounter(&t0);
+    double cur_enc_async_start = get_global_time_ms(t0, g_pipe.t_pipe_global_zero, freq);
     int retries = 0;
     while (true) {
         sts = g_pipe.pMFXVideoENCODE_EncodeFrameAsync(
@@ -2145,6 +2361,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     }
     pmfxSurface->FrameInterface->Release(pmfxSurface);
     QueryPerformanceCounter(&t1);
+    double cur_enc_async_end = get_global_time_ms(t1, g_pipe.t_pipe_global_zero, freq);
     double submit_ms = get_time_ms(t0, t1, freq);
     g_pipe.stats.total_submit_ms += submit_ms;
     g_pipe.stats.total_encode_ms += submit_ms;
@@ -2152,12 +2369,28 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     if (sts == MFX_ERR_NONE) {
         g_pipe.stats.submitted_frames++;
         if (g_pipe.encode_pool[cur_slot].syncp != NULL) {
+            EnterCriticalSection(&g_pipe.csEncode);
             g_pipe.encode_pool[cur_slot].in_use = true;
+            g_pipe.encode_pool[cur_slot].frame_idx = cur_frame_id;
+            g_pipe.encode_pool[cur_slot].demux_start_ms = cur_dmx_start;
+            g_pipe.encode_pool[cur_slot].demux_end_ms = cur_dmx_end;
+            g_pipe.encode_pool[cur_slot].decode_submit_start_ms = cur_dec_sub_start;
+            g_pipe.encode_pool[cur_slot].decode_submit_end_ms = cur_dec_sub_end;
+            g_pipe.encode_pool[cur_slot].decode_ready_ms = cur_dec_ready;
+            g_pipe.encode_pool[cur_slot].consumer_dequeue_ms = cur_cons_dequeue;
+            g_pipe.encode_pool[cur_slot].vp_submit_start_ms = cur_vp_sub_start;
+            g_pipe.encode_pool[cur_slot].vp_submit_end_ms = cur_vp_sub_end;
+            g_pipe.encode_pool[cur_slot].vp_ready_ms = cur_vp_sub_end;
+            g_pipe.encode_pool[cur_slot].enc_surf_acquire_ms = cur_enc_surf_acq;
+            g_pipe.encode_pool[cur_slot].enc_async_start_ms = cur_enc_async_start;
+            g_pipe.encode_pool[cur_slot].enc_async_end_ms = cur_enc_async_end;
             g_pipe.enc_head_idx = (g_pipe.enc_head_idx + 1) % g_pipe.pool_size;
             g_pipe.pending_encode_count++;
             if (g_pipe.pending_encode_count > g_pipe.stats.max_pending_frames) {
                 g_pipe.stats.max_pending_frames = g_pipe.pending_encode_count;
             }
+            WakeConditionVariable(&g_pipe.cvEncodeReady);
+            LeaveCriticalSection(&g_pipe.csEncode);
         }
     }
 
@@ -2193,10 +2426,13 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
 
     // 2. Drain oneVPL encoder
     while (true) {
-        while (g_pipe.pending_encode_count >= g_pipe.pool_size) {
-            sync_oldest_encode_slot(&g_pipe);
+        EnterCriticalSection(&g_pipe.csEncode);
+        while (g_pipe.pending_encode_count >= g_pipe.pool_size && !g_pipe.cancelled) {
+            SleepConditionVariableCS(&g_pipe.cvEncodeFree, &g_pipe.csEncode, 50);
         }
         int cur_slot = g_pipe.enc_head_idx;
+        LeaveCriticalSection(&g_pipe.csEncode);
+
         g_pipe.encode_pool[cur_slot].bs.DataLength = 0;
         g_pipe.encode_pool[cur_slot].bs.DataOffset = 0;
         g_pipe.encode_pool[cur_slot].syncp = NULL;
@@ -2210,20 +2446,30 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
         );
 
         if (sts == MFX_ERR_NONE && g_pipe.encode_pool[cur_slot].syncp) {
+            EnterCriticalSection(&g_pipe.csEncode);
             g_pipe.encode_pool[cur_slot].in_use = true;
             g_pipe.enc_head_idx = (g_pipe.enc_head_idx + 1) % g_pipe.pool_size;
             g_pipe.pending_encode_count++;
             if (g_pipe.pending_encode_count > g_pipe.stats.max_pending_frames) {
                 g_pipe.stats.max_pending_frames = g_pipe.pending_encode_count;
             }
+            WakeConditionVariable(&g_pipe.cvEncodeReady);
+            LeaveCriticalSection(&g_pipe.csEncode);
         } else {
             break;
         }
     }
 
-    // 3. Sync all remaining active slots
-    while (g_pipe.pending_encode_count > 0) {
-        sync_oldest_encode_slot(&g_pipe);
+    // 3. Signal Drain Thread to finish all pending frames and exit
+    EnterCriticalSection(&g_pipe.csEncode);
+    g_pipe.bStopDrain = true;
+    WakeConditionVariable(&g_pipe.cvEncodeReady);
+    LeaveCriticalSection(&g_pipe.csEncode);
+
+    if (g_pipe.hDrainThread) {
+        WaitForSingleObject(g_pipe.hDrainThread, 10000);
+        CloseHandle(g_pipe.hDrainThread);
+        g_pipe.hDrainThread = NULL;
     }
 
     QueryPerformanceCounter(&g_pipe.t_pipe_end);
@@ -3472,5 +3718,38 @@ __declspec(dllexport) int intel_d3d11_benchmark_staging_base_path(int n_frames, 
     ID3D11Texture2D_Release(pBaseTexC);
     ID3D11DeviceContext_Release(pContext);
     ID3D11Device_Release(pDevice);
+    return 0;
+}
+
+
+__declspec(dllexport) int intel_native_pipeline_dump_timeline(const char* filepath) {
+    if (!filepath) return -1;
+    FILE* fp = fopen(filepath, "w");
+    if (!fp) return -2;
+    fprintf(fp, "{\n  \"frames\": [\n");
+    for (int i = 0; i < g_pipe.num_timeline_entries; i++) {
+        FrameTimelineEntry* e = &g_pipe.timeline[i];
+        fprintf(fp, "    {\n");
+        fprintf(fp, "      \"frame_id\": %d,\n", e->frame_id);
+        fprintf(fp, "      \"demux_start_ms\": %.4f,\n", e->t_demux_start_ms);
+        fprintf(fp, "      \"demux_end_ms\": %.4f,\n", e->t_demux_end_ms);
+        fprintf(fp, "      \"decode_submit_start_ms\": %.4f,\n", e->t_decode_submit_start_ms);
+        fprintf(fp, "      \"decode_submit_end_ms\": %.4f,\n", e->t_decode_submit_end_ms);
+        fprintf(fp, "      \"decode_ready_ms\": %.4f,\n", e->t_decode_ready_ms);
+        fprintf(fp, "      \"consumer_dequeue_ms\": %.4f,\n", e->t_consumer_dequeue_ms);
+        fprintf(fp, "      \"vp_submit_start_ms\": %.4f,\n", e->t_vp_submit_start_ms);
+        fprintf(fp, "      \"vp_submit_end_ms\": %.4f,\n", e->t_vp_submit_end_ms);
+        fprintf(fp, "      \"vp_ready_ms\": %.4f,\n", e->t_vp_ready_ms);
+        fprintf(fp, "      \"enc_surf_acquire_ms\": %.4f,\n", e->t_enc_surf_acquire_ms);
+        fprintf(fp, "      \"enc_async_start_ms\": %.4f,\n", e->t_enc_async_start_ms);
+        fprintf(fp, "      \"enc_async_end_ms\": %.4f,\n", e->t_enc_async_end_ms);
+        fprintf(fp, "      \"sync_req_start_ms\": %.4f,\n", e->t_sync_req_start_ms);
+        fprintf(fp, "      \"sync_req_end_ms\": %.4f,\n", e->t_sync_req_end_ms);
+        fprintf(fp, "      \"bitstream_avail_ms\": %.4f\n", e->t_bitstream_avail_ms);
+        fprintf(fp, "    }%s\n", (i == g_pipe.num_timeline_entries - 1) ? "" : ",");
+    }
+    fprintf(fp, "  ]\n}\n");
+    fclose(fp);
+    printf("[STREAM INTEL] Timeline dumped: %d frames -> %s\n", g_pipe.num_timeline_entries, filepath);
     return 0;
 }
