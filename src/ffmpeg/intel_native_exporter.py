@@ -556,6 +556,28 @@ def export_intel_native_d3d11(
             effective_rotation = 0
     hud_rotate_180 = (effective_rotation == 180)
 
+    # Production Intel Configuration (One Source of Truth)
+    from src.ffmpeg.intel_config import (
+        resolve_intel_production_config,
+        DEFAULT_INTEL_HUD_MULTIRECT,
+        DEFAULT_INTEL_HUD_WORKERS,
+        DEFAULT_INTEL_HUD_PREFETCH,
+        DEFAULT_INTEL_HUD_TEXTURE_RING,
+        DEFAULT_INTEL_VP_RING,
+        DEFAULT_INTEL_ENCODE_ASYNC,
+    )
+    is_preview = bool((preview_session is not None) or (preview_state_provider is not None and preview_state_provider()))
+    prod_cfg = resolve_intel_production_config(preview=is_preview)
+    render_print(f"[STREAM INTEL] {prod_cfg.format_log()}", flush=True)
+
+    # Ensure C runtime environment variables are aligned if not already explicitly overridden
+    if "TELEM_INTEL_VP_RING_DEPTH" not in os.environ:
+        os.environ["TELEM_INTEL_VP_RING_DEPTH"] = str(prod_cfg.vp_ring)
+    if "TELEM_INTEL_MFX_ASYNC_DEPTH" not in os.environ:
+        os.environ["TELEM_INTEL_MFX_ASYNC_DEPTH"] = str(prod_cfg.encode_async)
+    if "TELEM_INTEL_HEVC_HW_DECODE" not in os.environ:
+        os.environ["TELEM_INTEL_HEVC_HW_DECODE"] = "1" if prod_cfg.hw_decode else "0"
+
     t_export_start = time.perf_counter()
     render_print(f"[STREAM INTEL] Starting Native D3D11 In-Process Full Video Pipeline (7D)...", flush=True)
     if effective_rotation != 0:
@@ -795,9 +817,9 @@ def export_intel_native_d3d11(
     overlay_w, overlay_h = 2560, 1440
     frame_size = overlay_w * overlay_h * 4  # 14,745,600 bytes
     env_w = os.environ.get("TELEM_INTEL_HUD_WORKERS")
-    n_workers = int(env_w) if env_w and env_w.isdigit() and int(env_w) > 0 else 2
     env_pf = os.environ.get("TELEM_INTEL_HUD_PREFETCH")
-    MAX_IN_FLIGHT = int(env_pf) if env_pf and env_pf.isdigit() and int(env_pf) > 0 else max(8, n_workers * 2)
+    n_workers = prod_cfg.hud_workers
+    MAX_IN_FLIGHT = prod_cfg.hud_prefetch
     shm_pool = SharedFramePool(MAX_IN_FLIGHT, frame_size)
     shm_names = shm_pool.shm_names()
 
@@ -974,7 +996,7 @@ def export_intel_native_d3d11(
 
     pkg_mode = os.environ.get("TELEM_INTEL_PACKAGE_MODE", "FULL").upper()
     widget_boxes = _compute_layout_widget_boxes(layout, overlay_w, overlay_h, rot180=hud_rotate_180)
-    multirect_upload_cfg = os.environ.get("TELEM_INTEL_HUD_MULTIRECT", "0").strip() == "1"
+    multirect_upload_cfg = prod_cfg.multirect
     multirect_policy = os.environ.get("TELEM_INTEL_MULTIRECT_POLICY", "COST").strip().upper()
     dirty_tracker = None
     if multirect_upload_cfg:

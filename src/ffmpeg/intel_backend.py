@@ -304,14 +304,22 @@ def ffmpeg_encoders_have_qsv(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
     return result
 
 
+_QSV_CODECS_CACHE: dict[str, dict[str, bool]] = {}
+
+
 def probe_qsv_codecs(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
     """Probe hardware usability for each QSV encoder via real test encode."""
+    global _QSV_CODECS_CACHE
+    if ffmpeg_exe in _QSV_CODECS_CACHE:
+        return dict(_QSV_CODECS_CACHE[ffmpeg_exe])
     from src.ffmpeg.detection import _test_encoder
-    return {
+    res = {
         "hevc_qsv": _test_encoder("hevc_qsv", ffmpeg_exe),
         "av1_qsv": _test_encoder("av1_qsv", ffmpeg_exe),
         "h264_qsv": _test_encoder("h264_qsv", ffmpeg_exe),
     }
+    _QSV_CODECS_CACHE[ffmpeg_exe] = res
+    return dict(res)
 
 
 def qsv_hardware_usable(ffmpeg_exe: str = "ffmpeg") -> bool:
