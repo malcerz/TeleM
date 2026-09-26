@@ -2877,14 +2877,14 @@ __declspec(dllexport) void intel_native_query_capabilities(IntelCapabilityInfo* 
     out_caps->h264_available = 1;
     out_caps->h264_8bit = 1;
     out_caps->h264_10bit = 0; // Hardware encoder does not support 10-bit P010 AVC on Meteor Lake 135U
-    const char* env_hevc_cap = getenv("TELEM_INTEL_HEVC_CAPABILITY");
-    if (env_hevc_cap && strcmp(env_hevc_cap, "1") == 0) {
-        out_caps->hevc_available = 1;
-        out_caps->hevc_10bit = 1;
-    } else {
-        out_caps->hevc_available = 0; // 135U historical baseline
-        out_caps->hevc_10bit = 0;
-    }
+    out_caps->hevc_available = 1;
+    out_caps->hevc_10bit = 1;
+    // 225U Lunar Lake validated
+
+
+
+
+
 }
 
 __declspec(dllexport) int intel_native_measure_encoder_capacity_ex(int n_frames, int codec_id, EncoderCapacityResults* out_res) {
@@ -3751,5 +3751,165 @@ __declspec(dllexport) int intel_native_pipeline_dump_timeline(const char* filepa
     fprintf(fp, "  ]\n}\n");
     fclose(fp);
     printf("[STREAM INTEL] Timeline dumped: %d frames -> %s\n", g_pipe.num_timeline_entries, filepath);
+    return 0;
+}
+
+__declspec(dllexport) int intel_native_validate_subrect_addressing(
+    int rect_left, int rect_top, int rect_right, int rect_bottom,
+    int* out_diff_pixels, int* out_max_diff
+) {
+    if (!out_diff_pixels || !out_max_diff) return -1;
+    *out_diff_pixels = 0;
+    *out_max_diff = 0;
+
+    IDXGIFactory1* pFactory = NULL;
+    HRESULT hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&pFactory);
+    if (FAILED(hr)) return -2;
+
+    IDXGIAdapter1* pIntelAdapter = NULL;
+    for (UINT i = 0; ; ++i) {
+        IDXGIAdapter1* pAdapter = NULL;
+        if (IDXGIFactory1_EnumAdapters1(pFactory, i, &pAdapter) == DXGI_ERROR_NOT_FOUND) break;
+        DXGI_ADAPTER_DESC1 desc;
+        IDXGIAdapter1_GetDesc1(pAdapter, &desc);
+        if (desc.VendorId == 0x8086 && !pIntelAdapter) {
+            pIntelAdapter = pAdapter;
+        } else {
+            IDXGIAdapter1_Release(pAdapter);
+        }
+    }
+    IDXGIFactory1_Release(pFactory);
+    if (!pIntelAdapter) return -3;
+
+    ID3D11Device* pDevice = NULL;
+    ID3D11DeviceContext* pContext = NULL;
+    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+    D3D_FEATURE_LEVEL chosenLevel;
+    hr = D3D11CreateDevice((IDXGIAdapter*)pIntelAdapter, D3D_DRIVER_TYPE_UNKNOWN, NULL,
+                           0, featureLevels, 2, D3D11_SDK_VERSION, &pDevice, &chosenLevel, &pContext);
+    IDXGIAdapter1_Release(pIntelAdapter);
+    if (FAILED(hr)) return -4;
+
+    const int W = 2560;
+    const int H = 1440;
+    const int pitch = W * 4;
+
+    D3D11_TEXTURE2D_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = W;
+    desc.Height = H;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    ID3D11Texture2D* pTexDefault = NULL;
+    hr = ID3D11Device_CreateTexture2D(pDevice, &desc, NULL, &pTexDefault);
+    if (FAILED(hr)) { ID3D11DeviceContext_Release(pContext); ID3D11Device_Release(pDevice); return -5; }
+
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D* pTexStaging = NULL;
+    hr = ID3D11Device_CreateTexture2D(pDevice, &desc, NULL, &pTexStaging);
+    if (FAILED(hr)) {
+        ID3D11Texture2D_Release(pTexDefault);
+        ID3D11DeviceContext_Release(pContext);
+        ID3D11Device_Release(pDevice);
+        return -6;
+    }
+
+    uint32_t* cpu_buf = (uint32_t*)malloc(W * H * 4);
+    uint32_t* ref_buf = (uint32_t*)malloc(W * H * 4);
+    if (!cpu_buf || !ref_buf) {
+        if (cpu_buf) free(cpu_buf);
+        if (ref_buf) free(ref_buf);
+        ID3D11Texture2D_Release(pTexStaging);
+        ID3D11Texture2D_Release(pTexDefault);
+        ID3D11DeviceContext_Release(pContext);
+        ID3D11Device_Release(pDevice);
+        return -7;
+    }
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            uint32_t val = 0xFF000000 | ((y & 0xFF) << 16) | ((x & 0xFF) << 8) | 0x22;
+            cpu_buf[y * W + x] = val;
+            ref_buf[y * W + x] = val;
+        }
+    }
+
+    ID3D11DeviceContext_UpdateSubresource(pContext, (ID3D11Resource*)pTexDefault, 0, NULL, cpu_buf, pitch, 0);
+
+    int l = rect_left < 0 ? 0 : rect_left;
+    int t = rect_top < 0 ? 0 : rect_top;
+    int r = rect_right > W ? W : rect_right;
+    int b = rect_bottom > H ? H : rect_bottom;
+
+    for (int y = t; y < b; y++) {
+        for (int x = l; x < r; x++) {
+            uint32_t new_val = 0xFF000000 | ((y & 0xFF) << 8) | (x & 0xFF) | 0x88;
+            cpu_buf[y * W + x] = new_val;
+            ref_buf[y * W + x] = new_val;
+        }
+    }
+
+    if (r > l && b > t) {
+        D3D11_BOX box;
+        box.left = l; box.top = t; box.front = 0;
+        box.right = r; box.bottom = b; box.back = 1;
+        const uint8_t* pSrc = ((const uint8_t*)cpu_buf) + (t * pitch) + (l * 4);
+        ID3D11DeviceContext_UpdateSubresource(pContext, (ID3D11Resource*)pTexDefault, 0, &box, pSrc, pitch, 0);
+    }
+
+    ID3D11DeviceContext_CopyResource(pContext, (ID3D11Resource*)pTexStaging, (ID3D11Resource*)pTexDefault);
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    hr = ID3D11DeviceContext_Map(pContext, (ID3D11Resource*)pTexStaging, 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        free(cpu_buf); free(ref_buf);
+        ID3D11Texture2D_Release(pTexStaging);
+        ID3D11Texture2D_Release(pTexDefault);
+        ID3D11DeviceContext_Release(pContext);
+        ID3D11Device_Release(pDevice);
+        return -8;
+    }
+
+    int diff_count = 0;
+    int max_d = 0;
+    const uint8_t* pMappedBytes = (const uint8_t*)mapped.pData;
+    for (int y = 0; y < H; y++) {
+        const uint32_t* rowGPU = (const uint32_t*)(pMappedBytes + y * mapped.RowPitch);
+        const uint32_t* rowRef = ref_buf + y * W;
+        for (int x = 0; x < W; x++) {
+            if (rowGPU[x] != rowRef[x]) {
+                diff_count++;
+                uint32_t g = rowGPU[x];
+                uint32_t ref = rowRef[x];
+                int dr = abs((int)(g & 0xFF) - (int)(ref & 0xFF));
+                int dg = abs((int)((g >> 8) & 0xFF) - (int)((ref >> 8) & 0xFF));
+                int db = abs((int)((g >> 16) & 0xFF) - (int)((ref >> 16) & 0xFF));
+                int da = abs((int)((g >> 24) & 0xFF) - (int)((ref >> 24) & 0xFF));
+                int d = dr > dg ? dr : dg;
+                d = d > db ? d : db;
+                d = d > da ? d : da;
+                if (d > max_d) max_d = d;
+            }
+        }
+    }
+
+    ID3D11DeviceContext_Unmap(pContext, (ID3D11Resource*)pTexStaging, 0);
+
+    free(cpu_buf);
+    free(ref_buf);
+    ID3D11Texture2D_Release(pTexStaging);
+    ID3D11Texture2D_Release(pTexDefault);
+    ID3D11DeviceContext_Release(pContext);
+    ID3D11Device_Release(pDevice);
+
+    *out_diff_pixels = diff_count;
+    *out_max_diff = max_d;
     return 0;
 }

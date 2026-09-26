@@ -559,7 +559,7 @@ def export_intel_native_d3d11(
     t_export_start = time.perf_counter()
     render_print(f"[STREAM INTEL] Starting Native D3D11 In-Process Full Video Pipeline (7D)...", flush=True)
     if effective_rotation != 0:
-        render_print(f"[STREAM INTEL] Container rotation active: {effective_rotation}° (HUD rot180={hud_rotate_180})", flush=True)
+        render_print(f"[STREAM INTEL] Container rotation active: {effective_rotation}Â° (HUD rot180={hud_rotate_180})", flush=True)
     render_print(f"[STREAM INTEL] Target Resolution: {video_width}x{video_height} @ {target_fps} fps (Total frames: {total_frames})", flush=True)
 
     # 1. Parse Bitrate (default 40 Mbps = 40000 kbps)
@@ -974,6 +974,13 @@ def export_intel_native_d3d11(
 
     pkg_mode = os.environ.get("TELEM_INTEL_PACKAGE_MODE", "FULL").upper()
     widget_boxes = _compute_layout_widget_boxes(layout, overlay_w, overlay_h, rot180=hud_rotate_180)
+    multirect_upload_cfg = os.environ.get("TELEM_INTEL_HUD_MULTIRECT", "0").strip() == "1"
+    multirect_policy = os.environ.get("TELEM_INTEL_MULTIRECT_POLICY", "COST").strip().upper()
+    dirty_tracker = None
+    if multirect_upload_cfg:
+        from src.ffmpeg.intel_multirect_planner import TelemetryDirtyTracker
+        dirty_tracker = TelemetryDirtyTracker(layout, widget_boxes)
+        render_print(f"[STREAM INTEL] Multi-Rect HUD Upload enabled (policy={multirect_policy}, {len(widget_boxes)} widgets)", flush=True)
     damage_upload_cfg = os.environ.get("TELEM_INTEL_HUD_DAMAGE_UPLOAD", "0").strip() == "1"
     region_upload_cfg = os.environ.get("TELEM_INTEL_HUD_REGION_UPLOAD", "0").strip() == "1"
     if damage_upload_cfg:
@@ -1077,7 +1084,46 @@ def export_intel_native_d3d11(
 
                     # 3. Native Pipeline Step: Demux + HEVC Decode + P010 Pack + Upload + VP Blt + DMA Copy + oneVPL AV1 Encode
                     t_step_0 = time.perf_counter()
-                    if damage_upload_cfg:
+                    if multirect_upload_cfg:
+                        if frames_rendered == 0 or step_hud_bytes is None:
+                            sts = native_lib.intel_native_pipeline_step_regions(
+                                step_hud_bytes,
+                                None,
+                                0,
+                                ctypes.byref(out_pts),
+                                ctypes.byref(out_pts_sec)
+                            )
+                        else:
+                            dirty_rects = dirty_tracker.get_dirty_rects(
+                                frames_rendered, target_fps,
+                                speed_samples, track_samples, alt_samples,
+                                field_samples, gps_track,
+                                policy=multirect_policy
+                            )
+                            if len(dirty_rects) == 0:
+                                dummy_box = (IntelHudBox * 0)()
+                                sts = native_lib.intel_native_pipeline_step_regions(
+                                    step_hud_bytes,
+                                    dummy_box,
+                                    0,
+                                    ctypes.byref(out_pts),
+                                    ctypes.byref(out_pts_sec)
+                                )
+                            else:
+                                box_arr = (IntelHudBox * len(dirty_rects))()
+                                for bi, b in enumerate(dirty_rects):
+                                    box_arr[bi].left = b[0]
+                                    box_arr[bi].top = b[1]
+                                    box_arr[bi].right = b[2]
+                                    box_arr[bi].bottom = b[3]
+                                sts = native_lib.intel_native_pipeline_step_regions(
+                                    step_hud_bytes,
+                                    box_arr,
+                                    len(dirty_rects),
+                                    ctypes.byref(out_pts),
+                                    ctypes.byref(out_pts_sec)
+                                )
+                    elif damage_upload_cfg:
                         if frames_rendered == 0 or step_hud_bytes is None:
                             sts = native_lib.intel_native_pipeline_step_regions(
                                 step_hud_bytes,
