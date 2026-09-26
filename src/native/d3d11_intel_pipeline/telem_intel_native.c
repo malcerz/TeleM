@@ -1032,7 +1032,7 @@ __declspec(dllexport) int intel_d3d11_vp_init_ex(int codec_id) {
 
     g_pipe.initialized = true;
 
-    // 1D.1 Staged HUD Upload Ring — allocate if requested
+    // 1D.1 Staged HUD Upload Ring â€” allocate if requested
     const char* env_staged_ring = getenv("TELEM_INTEL_HUD_STAGED_RING");
     g_pipe.hud_staged_ring_enabled = (env_staged_ring && strcmp(env_staged_ring, "1") == 0);
     g_pipe.hud_staged_ring_idx = 0;
@@ -1051,7 +1051,7 @@ __declspec(dllexport) int intel_d3d11_vp_init_ex(int codec_id) {
         HRESULT hr_s0 = ID3D11Device_CreateTexture2D(g_pipe.pDevice, &stDesc, NULL, &g_pipe.pHudStagingRing[0]);
         HRESULT hr_s1 = ID3D11Device_CreateTexture2D(g_pipe.pDevice, &stDesc, NULL, &g_pipe.pHudStagingRing[1]);
         if (FAILED(hr_s0) || FAILED(hr_s1)) {
-            printf("[STREAM INTEL] STAGED_RING2: STAGING texture creation FAILED hr0=0x%08lX hr1=0x%08lX — disabling\n",
+            printf("[STREAM INTEL] STAGED_RING2: STAGING texture creation FAILED hr0=0x%08lX hr1=0x%08lX â€” disabling\n",
                    (unsigned long)(DWORD)hr_s0, (unsigned long)(DWORD)hr_s1);
             if (g_pipe.pHudStagingRing[0]) { ID3D11Texture2D_Release(g_pipe.pHudStagingRing[0]); g_pipe.pHudStagingRing[0] = NULL; }
             if (g_pipe.pHudStagingRing[1]) { ID3D11Texture2D_Release(g_pipe.pHudStagingRing[1]); g_pipe.pHudStagingRing[1] = NULL; }
@@ -1404,7 +1404,7 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     avcodec_parameters_to_context(g_pipe.dec_ctx, st->codecpar);
 
     const char* env_hw_dec = getenv("TELEM_INTEL_HEVC_HW_DECODE");
-    bool allow_hw_decode = (env_hw_dec && strcmp(env_hw_dec, "1") == 0);
+    bool allow_hw_decode = (env_hw_dec == NULL || strcmp(env_hw_dec, "0") != 0);
     bool is_hevc = (st->codecpar->codec_id == AV_CODEC_ID_HEVC);
 
     g_pipe.hw_decode_active = false;
