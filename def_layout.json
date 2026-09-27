@@ -3,7 +3,9 @@
   "global": {
     "text_outline": 3,
     "amd_decode_mode": "gpu",
-    "font": "Digital-7 Mono"
+    "font": "Digital-7 Mono",
+    "amd_encoder_quality": "FAST",
+    "render_mode": "gpu"
   },
   "charts_skip_pauses": true,
   "custom_texts": [],
@@ -159,7 +161,6 @@
       "ticks": 0,
       "show_value": true,
       "source": "fit",
-      "decimals": 1,
       "text_offset_x": 0.0,
       "text_offset_y": 0.0,
       "start_angle": 180,
@@ -200,7 +201,6 @@
       "show_average": false,
       "major_step": 0.0,
       "chart_time_scope": "activity",
-      "decimal_places": 0,
       "auto_scale": true
     },
     "fit_cadence_text": {
@@ -218,7 +218,6 @@
       "ticks": 0,
       "show_value": true,
       "source": "fit",
-      "decimals": 1,
       "text_offset_x": 0.0,
       "text_offset_y": 0.0,
       "start_angle": 180,
@@ -259,7 +258,6 @@
       "show_average": false,
       "major_step": 0.0,
       "chart_time_scope": "activity",
-      "decimal_places": 0,
       "auto_scale": true
     },
     "fit_distance_text": {
@@ -399,7 +397,6 @@
       "ticks": 0,
       "show_value": true,
       "source": "gpmf",
-      "decimals": 1,
       "text_offset_x": 0.0,
       "text_offset_y": 0.0,
       "start_angle": 180,
@@ -554,8 +551,7 @@
       "unit": "W",
       "font": "",
       "text_offset_x": -0.04,
-      "show_label": false,
-      "decimals": 0
+      "show_label": false
     },
     "fit_enhanced_altitude_text": {
       "enabled": false,
@@ -821,7 +817,8 @@
       "ticks": 0,
       "source": "fit",
       "unit": "V",
-      "font": ""
+      "font": "",
+      "decimals": 2
     },
     "fit_garmin_temperature_text": {
       "enabled": false,
@@ -855,7 +852,6 @@
       "ticks": 0,
       "show_value": true,
       "source": "gpmf",
-      "decimals": 0,
       "text_offset_x": 0.0,
       "text_offset_y": 0.0,
       "start_angle": 180,
