@@ -44,6 +44,7 @@ import numpy as np
 from pathlib import Path
 from typing import Any, Callable, Optional
 from src.ffmpeg.amd_pipeline_watchdog import NonBlockingProgressDispatcher
+from src.telemetry_cache_manager import ensure_audio_cache, get_audio_cache_path
 
 try:
     from PIL import Image
@@ -183,18 +184,24 @@ def _audio_concat_entries(
     default_input_file: str | Path | None = None,
     duration_s: float = 0.0,
     local_start_s: float = 0.0,
+    audio_source_resolver: Callable[[str | Path], str | Path] | None = None,
 ) -> list[str]:
     """Build the canonical source-local audio plan for an effective timeline.
 
     ``video_timeline`` is already the GUI/cut-resolved timeline supplied to the
     AMD exporter.  Reusing its clip-local bounds keeps audio semantics identical
     to native video for single clips, cross-boundary ranges and multiple cuts.
+    When ``audio_source_resolver`` is provided (e.g. for central audio cache),
+    it translates each source clip into its cached audio stream path while
+    preserving exact inpoint/outpoint bounds.
     """
     entries: list[str] = []
     clips = list(getattr(video_timeline, "clips", ()) or ())
     if clips:
         for clip in clips:
-            entries.append("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+            clip_path = clip.path
+            resolved_audio = audio_source_resolver(clip_path) if audio_source_resolver else clip_path
+            entries.append("file '" + str(resolved_audio).replace("'", "'\\''") + "'\n")
             local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
             if local_start > 0.0:
                 entries.append(f"inpoint {local_start:.9f}\n")
@@ -203,7 +210,8 @@ def _audio_concat_entries(
             if source_duration <= 0.0 or local_end < source_duration - 1e-6:
                 entries.append(f"outpoint {local_end:.9f}\n")
     elif default_input_file:
-        entries.append("file '" + str(default_input_file).replace("'", "'\\''") + "'\n")
+        resolved_audio = audio_source_resolver(default_input_file) if audio_source_resolver else default_input_file
+        entries.append("file '" + str(resolved_audio).replace("'", "'\\''") + "'\n")
         if local_start_s > 0.0:
             entries.append(f"inpoint {local_start_s:.9f}\n")
         if duration_s > 0.0:
@@ -218,6 +226,7 @@ def _write_audio_concat_plan(
     default_input_file: str | Path | None = None,
     duration_s: float = 0.0,
     local_start_s: float = 0.0,
+    audio_source_resolver: Callable[[str | Path], str | Path] | None = None,
 ) -> Path:
     """Write a small concat demuxer plan before the live muxer starts."""
     plan = Path(path)
@@ -228,6 +237,7 @@ def _write_audio_concat_plan(
                 default_input_file=default_input_file,
                 duration_s=duration_s,
                 local_start_s=local_start_s,
+                audio_source_resolver=audio_source_resolver,
             )
         )
     return plan
@@ -3140,6 +3150,16 @@ def export_amd_native_d3d11(
     stage_c_growth_mbps = 0.0
     finalization_summary: dict[str, Any] = {}
 
+    def _resolve_cached_audio(src: str | Path) -> str | Path:
+        if _env_flag("AMD_AUDIO_CACHE", True):
+            try:
+                cached = ensure_audio_cache(src, ffmpeg_exe=ffmpeg_exe)
+                if cached is not None and cached.is_file():
+                    return cached
+            except Exception as e:
+                print(f"[AUDIO CACHE] fallback to source MP4 ({e})", flush=True)
+        return src
+
     if direct_mux_enabled:
         if os.path.exists(output_part_str):
             try:
@@ -3183,7 +3203,8 @@ def export_amd_native_d3d11(
                 ]
             else:
                 target_live_out = output_part_str
-                audio_args: list[str] = ["-i", input_file_str]
+                resolved_single_audio = _resolve_cached_audio(input_file_str)
+                audio_args: list[str] = ["-i", str(resolved_single_audio)]
                 if single_pass_av_mux:
                     audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
                     clip0_local_start = 0.0
@@ -3196,6 +3217,7 @@ def export_amd_native_d3d11(
                             default_input_file=input_file_str,
                             duration_s=duration_s,
                             local_start_s=clip0_local_start,
+                            audio_source_resolver=_resolve_cached_audio,
                         )
                     except OSError as exc:
                         # A storage failure while creating the tiny plan is a
@@ -3221,7 +3243,7 @@ def export_amd_native_d3d11(
                 elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
                     clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
                     if clip0_local_start > 0.0:
-                        audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", input_file_str]
+                        audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", str(resolved_single_audio)]
 
                 if os.getenv("AMD_DIRECT_MUX_NO_AUDIO", "0").strip() == "1":
                     cmd_live_mux = [
@@ -7025,16 +7047,11 @@ def export_amd_native_d3d11(
             print("[AMD MULTI-FILE MUX] Stage A complete (video-only container created).", flush=True)
             print("[AMD MULTI-FILE MUX] Stage B: Building audio concat script...", flush=True)
             audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
-            with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
-                for clip in video_timeline.clips:
-                    concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
-                    local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
-                    if local_start > 0.0:
-                        concat_file.write(f"inpoint {local_start:.9f}\n")
-                    local_end = float(getattr(clip, "local_end_s", clip.duration_s))
-                    source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
-                    if source_duration <= 0.0 or local_end < source_duration - 1e-6:
-                        concat_file.write(f"outpoint {local_end:.9f}\n")
+            _write_audio_concat_plan(
+                audio_concat_path,
+                video_timeline=video_timeline,
+                audio_source_resolver=_resolve_cached_audio,
+            )
 
             cmd_stage_c = [
                 ffmpeg_exe, "-y",
@@ -7268,21 +7285,26 @@ def export_amd_native_d3d11(
             print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
             return False
 
-        audio_input = input_file_str
+        def _resolve_cached_audio_fallback(src: str | Path) -> str | Path:
+            if _env_flag("AMD_AUDIO_CACHE", True):
+                try:
+                    cached = ensure_audio_cache(src, ffmpeg_exe=ffmpeg_exe)
+                    if cached is not None and cached.is_file():
+                        return cached
+                except Exception as e:
+                    print(f"[AUDIO CACHE] fallback to source MP4 ({e})", flush=True)
+            return src
+
+        audio_input = str(_resolve_cached_audio_fallback(input_file_str))
         audio_args: list[str] = ["-i", audio_input]
         audio_concat_path: Optional[Path] = None
         if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
             audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
-            with audio_concat_path.open("w", encoding="utf-8", newline="\n") as concat_file:
-                for clip in video_timeline.clips:
-                    concat_file.write("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
-                    local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
-                    if local_start > 0.0:
-                        concat_file.write(f"inpoint {local_start:.9f}\n")
-                    local_end = float(getattr(clip, "local_end_s", clip.duration_s))
-                    source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
-                    if source_duration <= 0.0 or local_end < source_duration - 1e-6:
-                        concat_file.write(f"outpoint {local_end:.9f}\n")
+            _write_audio_concat_plan(
+                audio_concat_path,
+                video_timeline=video_timeline,
+                audio_source_resolver=_resolve_cached_audio_fallback,
+            )
             audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
         elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) == 1:
             local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
