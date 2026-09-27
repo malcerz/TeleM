@@ -337,6 +337,9 @@ class ProjectMixin:
                     else:
                         def_layout = self.base_dir / "def_layout.json"
                         self.layout = normalize_layout(def_layout, w, h)
+                render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+                if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
+                    render_tab.apply_export_settings(self.layout.get("export_settings", {}))
                 self._selected_stream_key = ""
                 self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
 

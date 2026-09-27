@@ -635,6 +635,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
             enable_compression_analysis=bool(options.get("compression_analysis", True)),
 codec=options.get("intel_codec", "av1"),
+            encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
         )
 

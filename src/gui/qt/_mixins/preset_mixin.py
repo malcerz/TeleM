@@ -81,6 +81,9 @@ class PresetMixin:
             if hasattr(self, "_map_preload_provider_switch"):
                 from src.gui.qt._mixins.project_mixin import _map_provider_from_layout
                 self._map_preload_provider_switch(_map_provider_from_layout(self.layout))
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
+                render_tab.apply_export_settings(self.layout.get("export_settings", {}))
             self._render_preview()
             print(f"[Preset] Wczytano preset użytkownika z {path} (plik chroniony przed autosave)", flush=True)
         except Exception as e:
@@ -193,6 +196,8 @@ class PresetMixin:
                     exp["codec"] = render_tab.cmb_nvidia_codec.currentText()
                 if hasattr(render_tab, "cmb_intel_codec"):
                     exp["intel_codec"] = render_tab.cmb_intel_codec.currentData()
+                if hasattr(render_tab, "cmb_encoder_profile"):
+                    exp["encoder_profile"] = render_tab.cmb_encoder_profile.currentData()
                 if hasattr(render_tab, "cmb_nvidia_quality"):
                     exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentText()
                 if hasattr(render_tab, "edit_bitrate"):

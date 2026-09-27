@@ -38,6 +38,7 @@ from PIL import Image
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.video_preview import VideoPreview, preview_aspect_size
 from src.gui.export_preview import compose_export_preview
+from src.ffmpeg.encoder_profile import EncoderProfile, DEFAULT_ENCODER_PROFILE, LEGACY_DEFAULT_ENCODER_PROFILE
 from src.ffmpeg.amd_hevc_preview import (
     AMDContinuousHEVCPreview,
     AMDGPUNativeFrameTapPreview,
@@ -370,12 +371,9 @@ class RenderTab(QWidget):
                     item.setToolTip("Niedostępny na aktualnym sterowniku/runtime Intel")
 
         self.cmb_intel_codec.setToolTip(
-            "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).
-"
-            "AV1: 10-bit HDR (HLG BT.2020, produkcyjny default).
-"
-            "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).
-"
+            "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).\n"
+            "AV1: 10-bit HDR (HLG BT.2020, produkcyjny default).\n"
+            "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).\n"
             "H.265: 10-bit HDR (HLG BT.2020)."
         )
 
@@ -405,6 +403,23 @@ class RenderTab(QWidget):
         row_intel_codec.addWidget(self.cmb_intel_codec)
         row_intel_codec.addWidget(self.lbl_intel_codec_info)
         layout_intel.addRow("Koder wideo:", row_intel_codec)
+
+        # Intel Encoder Profile (Phase 3)
+        from src.ffmpeg.encoder_profile import EncoderProfile, DEFAULT_ENCODER_PROFILE, LEGACY_DEFAULT_ENCODER_PROFILE
+        self.cmb_intel_profile = QComboBox()
+        for val, label in EncoderProfile.choices():
+            self.cmb_intel_profile.addItem(label, val)
+        idx_bal = self.cmb_intel_profile.findData(DEFAULT_ENCODER_PROFILE.value)
+        if idx_bal >= 0:
+            self.cmb_intel_profile.setCurrentIndex(idx_bal)
+        self.cmb_intel_profile.setToolTip(
+            "Profil jakości/szybkości enkodera Intel Quick Sync (oneVPL):\n"
+            "Szybki: maksymalna wydajność kodowania.\n"
+            "Zbalansowany: domyślny profil produkcyjny.\n"
+            "Jakość: wyższa złożoność i jakość kodowania."
+        )
+        layout_intel.addRow("Profil enkodera:", self.cmb_intel_profile)
+        self.cmb_encoder_profile = self.cmb_intel_profile
         form.addRow(self.widget_intel_options)
         def _update_backend_visibility():
             enc = self.cmb_encoder.currentText().strip().lower()
@@ -1033,6 +1048,11 @@ class RenderTab(QWidget):
             "nvidia_codec": self.cmb_nvidia_codec.currentText(),
             "nvidia_quality": self.cmb_nvidia_quality.currentText(),
             "intel_codec": self.cmb_intel_codec.currentData() or "av1",
+            "encoder_profile": (
+                self.cmb_encoder_profile.currentData()
+                if hasattr(self, "cmb_encoder_profile")
+                else "balanced"
+            ) or "balanced",
             "compression_analysis": self.chk_compression_analysis.isChecked(),
             # Diagnostic provenance only.  The production NVIDIA dispatch has
             # historically not forwarded this checkbox as ``hud_preview``;
@@ -2459,3 +2479,33 @@ class RenderTab(QWidget):
     def set_amd_decode_mode(self, mode: str) -> None:
         """Publiczna metoda ustawiająca tryb dekodowania AMD w zakładce Renderowania."""
         self._on_amd_decode_mode_restored(mode)
+
+
+    def get_encoder_profile(self) -> EncoderProfile:
+        """Return the currently selected EncoderProfile."""
+        if hasattr(self, "cmb_encoder_profile") and self.cmb_encoder_profile:
+            val = self.cmb_encoder_profile.currentData()
+            if isinstance(val, EncoderProfile):
+                return val
+            if isinstance(val, str):
+                return EncoderProfile.from_str(val)
+            text = self.cmb_encoder_profile.currentText()
+            return EncoderProfile.from_display_name(text)
+        return EncoderProfile.BALANCED
+
+    def apply_export_settings(self, settings: dict[str, Any]) -> None:
+        """Apply export settings dict to UI widgets, honoring legacy defaults.
+        
+        If 'encoder_profile' is absent in settings (legacy project/preset),
+        it defaults to LEGACY_DEFAULT_ENCODER_PROFILE (FAST, TU=7) to preserve
+        exact historical Intel rendering behavior.
+        """
+        if "encoder_profile" in settings and hasattr(self, "cmb_encoder_profile"):
+            prof = EncoderProfile.from_str(settings["encoder_profile"], default=DEFAULT_ENCODER_PROFILE)
+            idx = self.cmb_encoder_profile.findData(prof.value)
+            if idx >= 0:
+                self.cmb_encoder_profile.setCurrentIndex(idx)
+        elif hasattr(self, "cmb_encoder_profile"):
+            idx = self.cmb_encoder_profile.findData(LEGACY_DEFAULT_ENCODER_PROFILE.value)
+            if idx >= 0:
+                self.cmb_encoder_profile.setCurrentIndex(idx)

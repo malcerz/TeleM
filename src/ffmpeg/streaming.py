@@ -953,7 +953,9 @@ def stream_overlay_to_ffmpeg(
     nvidia_quality: str = "Fast",
     enable_compression_analysis: bool = True,
     max_frames: Optional[int] = None,
-codec: str = "av1",
+    codec: str = "av1",
+    encoder_profile: str = "balanced",
+    **kwargs: Any,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
@@ -1216,6 +1218,8 @@ codec: str = "av1",
             target_fps=target_fps,
             video_bitrate=video_bitrate,
             codec=codec,
+            encoder_profile=encoder_profile,
+            quality=encoder_profile,
             max_distance_m=max_distance_m,
             iso_samples=iso_samples,
             exposure_samples=exposure_samples,

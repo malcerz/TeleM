@@ -259,7 +259,7 @@ class PropertyEditor(QWidget):
                     flayout.setSpacing(8)
                     flayout.setContentsMargins(8, 8, 8, 8)
                     for field in active_tabs[tab_name]:
-if field.section:
+                        if field.section:
                             sec_lbl = QLabel(f"<b>{field.section}</b>")
                             sec_lbl.setStyleSheet(
                                 "color: #79c0ff; font-size: 10px; font-weight: bold; "
@@ -271,7 +271,7 @@ if field.section:
                             field, values.get(field.name))
                         if w:
                             flayout.addRow(f"{field.label}:", w)
-lbl = flayout.labelForField(w)
+                            lbl = flayout.labelForField(w)
                             if lbl is not None:
                                 self._field_labels[field.name] = lbl
                     flayout.addItem(QSpacerItem(

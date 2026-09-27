@@ -1395,6 +1395,18 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
 // MULTI-CLIP PIPELINE INITIALIZATION
 // =========================================================================
 
+
+static mfxU16 resolve_target_usage(bool force_serial_7d) {
+    const char* env_tu = getenv("TELEM_INTEL_TARGET_USAGE");
+    if (env_tu) {
+        int tu = atoi(env_tu);
+        if (tu >= 1 && tu <= 7) {
+            return (mfxU16)tu;
+        }
+    }
+    return force_serial_7d ? MFX_TARGETUSAGE_BALANCED : MFX_TARGETUSAGE_BEST_SPEED;
+}
+
 __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     const char** video_paths,
     int num_clips,
@@ -1530,7 +1542,7 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
         initPar.mfx.FrameInfo.Shift = 1;
     }
 
-    initPar.mfx.TargetUsage = force_serial_7d ? MFX_TARGETUSAGE_BALANCED : MFX_TARGETUSAGE_BEST_SPEED;
+    initPar.mfx.TargetUsage = resolve_target_usage(force_serial_7d);
     initPar.mfx.TargetKbps = (target_kbps > 0) ? target_kbps : 40000;
     initPar.mfx.MaxKbps = (max_kbps > 0) ? max_kbps : 50000;
     initPar.mfx.BufferSizeInKB = 10000;
@@ -2947,7 +2959,7 @@ __declspec(dllexport) int intel_native_measure_encoder_capacity_ex(int n_frames,
         initPar.mfx.FrameInfo.BitDepthChroma = 10;
         initPar.mfx.FrameInfo.Shift = 1;
     }
-    initPar.mfx.TargetUsage = MFX_TARGETUSAGE_BEST_SPEED;
+    initPar.mfx.TargetUsage = resolve_target_usage(false);
     initPar.mfx.TargetKbps = 40000;
     initPar.mfx.MaxKbps = 50000;
     initPar.mfx.BufferSizeInKB = 10000;
@@ -3283,7 +3295,7 @@ __declspec(dllexport) int intel_native_measure_consumer_capacity(int n_frames, C
     mfxVideoParam initPar = {0};
     initPar.mfx.CodecId = MFX_CODEC_AV1;
     initPar.mfx.CodecProfile = MFX_PROFILE_AV1_MAIN;
-    initPar.mfx.TargetUsage = MFX_TARGETUSAGE_BEST_SPEED;
+    initPar.mfx.TargetUsage = resolve_target_usage(false);
     initPar.mfx.TargetKbps = 40000;
     initPar.mfx.MaxKbps = 50000;
     initPar.mfx.BufferSizeInKB = 10000;

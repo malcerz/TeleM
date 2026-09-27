@@ -616,7 +616,19 @@ def export_intel_native_d3d11(
         codec_name = "AV1"
         temp_ext = ".ivf"
 
-    # 3. Temporary encoded bitstream path for zero-raw-pipe handoff
+    # 3. Resolve and log Intel Encoder Profile configuration (Phase 6 single source of truth)
+    from src.ffmpeg.intel_config import resolve_intel_encoder_config
+    effective_profile_cfg = resolve_intel_encoder_config(
+        codec=codec_name,
+        profile=kwargs.get("encoder_profile") or quality,
+        bitrate=video_bitrate,
+        width=video_width,
+        height=video_height,
+    )
+    render_print(effective_profile_cfg.format_log(), flush=True)
+    os.environ["TELEM_INTEL_TARGET_USAGE"] = str(effective_profile_cfg.target_usage)
+
+    # 3b. Temporary encoded bitstream path for zero-raw-pipe handoff
     temp_dir = Path("scratch")
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_encoded_path = str((temp_dir / f"temp_native_{codec_name.lower()}_{os.getpid()}_{int(time.time())}{temp_ext}").resolve())
