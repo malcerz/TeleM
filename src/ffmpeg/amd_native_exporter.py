@@ -178,7 +178,12 @@ class AMDNativeFinalizationError(RuntimeError):
     """Final MP4 storage/mux failure; callers must not silently software-fallback."""
 
 
-def _audio_concat_entries(video_timeline: Any) -> list[str]:
+def _audio_concat_entries(
+    video_timeline: Any = None,
+    default_input_file: str | Path | None = None,
+    duration_s: float = 0.0,
+    local_start_s: float = 0.0,
+) -> list[str]:
     """Build the canonical source-local audio plan for an effective timeline.
 
     ``video_timeline`` is already the GUI/cut-resolved timeline supplied to the
@@ -186,23 +191,45 @@ def _audio_concat_entries(video_timeline: Any) -> list[str]:
     to native video for single clips, cross-boundary ranges and multiple cuts.
     """
     entries: list[str] = []
-    for clip in getattr(video_timeline, "clips", ()):
-        entries.append("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
-        local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
-        if local_start > 0.0:
-            entries.append(f"inpoint {local_start:.9f}\n")
-        local_end = float(getattr(clip, "local_end_s", clip.duration_s))
-        source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
-        if source_duration <= 0.0 or local_end < source_duration - 1e-6:
-            entries.append(f"outpoint {local_end:.9f}\n")
+    clips = list(getattr(video_timeline, "clips", ()) or ())
+    if clips:
+        for clip in clips:
+            entries.append("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+            local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+            if local_start > 0.0:
+                entries.append(f"inpoint {local_start:.9f}\n")
+            local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+            source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+            if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+                entries.append(f"outpoint {local_end:.9f}\n")
+    elif default_input_file:
+        entries.append("file '" + str(default_input_file).replace("'", "'\\''") + "'\n")
+        if local_start_s > 0.0:
+            entries.append(f"inpoint {local_start_s:.9f}\n")
+        if duration_s > 0.0:
+            outpoint = local_start_s + duration_s
+            entries.append(f"outpoint {outpoint:.9f}\n")
     return entries
 
 
-def _write_audio_concat_plan(path: str | Path, video_timeline: Any) -> Path:
+def _write_audio_concat_plan(
+    path: str | Path,
+    video_timeline: Any = None,
+    default_input_file: str | Path | None = None,
+    duration_s: float = 0.0,
+    local_start_s: float = 0.0,
+) -> Path:
     """Write a small concat demuxer plan before the live muxer starts."""
     plan = Path(path)
     with plan.open("w", encoding="utf-8", newline="\n") as concat_file:
-        concat_file.writelines(_audio_concat_entries(video_timeline))
+        concat_file.writelines(
+            _audio_concat_entries(
+                video_timeline=video_timeline,
+                default_input_file=default_input_file,
+                duration_s=duration_s,
+                local_start_s=local_start_s,
+            )
+        )
     return plan
 
 
@@ -3078,12 +3105,10 @@ def export_amd_native_d3d11(
     # Eliminates buffering the full temporary .h265 bitstream on disk.
     is_multi_file = video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1
     direct_mux_enabled = _env_flag("AMD_DIRECT_MUX", True) and (amf_mode not in ("SUBMIT_NO_MUX", "BYPASS"))
-    # Production multi-file success is a single live A/V mux.  The previous
-    # full-size Stage A -> Stage C copy remains available only as an explicit
-    # diagnostic/recovery mode.
-    single_pass_av_mux = bool(
-        is_multi_file and _env_flag("AMD_SINGLE_PASS_AV_MUX", True)
-    )
+    # Production multi-file and single-file success is a single live A/V mux.
+    # The previous full-size Stage A -> Stage C copy remains available only
+    # as an explicit diagnostic/recovery mode.
+    single_pass_av_mux = _env_flag("AMD_SINGLE_PASS_AV_MUX", True)
     direct_mux_completed = False
     audio_concat_path: Optional[Path] = None
 
@@ -3161,8 +3186,17 @@ def export_amd_native_d3d11(
                 audio_args: list[str] = ["-i", input_file_str]
                 if single_pass_av_mux:
                     audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
+                    clip0_local_start = 0.0
+                    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+                        clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
                     try:
-                        _write_audio_concat_plan(audio_concat_path, video_timeline)
+                        _write_audio_concat_plan(
+                            audio_concat_path,
+                            video_timeline=video_timeline,
+                            default_input_file=input_file_str,
+                            duration_s=duration_s,
+                            local_start_s=clip0_local_start,
+                        )
                     except OSError as exc:
                         # A storage failure while creating the tiny plan is a
                         # finalization failure too: do not silently switch to
@@ -3179,28 +3213,43 @@ def export_amd_native_d3d11(
                         "-copyts", "-avoid_negative_ts", "make_zero",
                         "-f", "concat", "-safe", "0", "-i", str(audio_concat_path)
                     ]
+                    clip_count_info = getattr(video_timeline, "clip_count", 1) if video_timeline else 1
                     print(
                         f"[AMD SINGLE-PASS A/V MUX] audio plan={audio_concat_path} "
-                        f"clips={video_timeline.clip_count}", flush=True,
+                        f"clips={clip_count_info}", flush=True,
                     )
                 elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
                     clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
                     if clip0_local_start > 0.0:
                         audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", input_file_str]
 
-                cmd_live_mux = [
-                    ffmpeg_exe, "-y",
-                    "-f", "hevc",
-                    "-r", f"{fps_num}/{fps_den}",
-                    "-i", "-",
-                    *audio_args,
-                    "-map", "0:v", "-map", "1:a?",
-                    "-t", f"{duration_s:.6f}",
-                    "-c:v", "copy",
-                    "-c:a", "copy",
-                    "-f", "mp4",
-                    target_live_out,
-                ]
+                if os.getenv("AMD_DIRECT_MUX_NO_AUDIO", "0").strip() == "1":
+                    cmd_live_mux = [
+                        ffmpeg_exe, "-y",
+                        "-f", "hevc",
+                        "-r", f"{fps_num}/{fps_den}",
+                        "-i", "-",
+                        "-map", "0:v",
+                        "-t", f"{duration_s:.6f}",
+                        "-c:v", "copy",
+                        "-an",
+                        "-f", "mp4",
+                        target_live_out,
+                    ]
+                else:
+                    cmd_live_mux = [
+                        ffmpeg_exe, "-y",
+                        "-f", "hevc",
+                        "-r", f"{fps_num}/{fps_den}",
+                        "-i", "-",
+                        *audio_args,
+                        "-map", "0:v", "-map", "1:a?",
+                        "-t", f"{duration_s:.6f}",
+                        "-c:v", "copy",
+                        "-c:a", "copy",
+                        "-f", "mp4",
+                        target_live_out,
+                    ]
             try:
                 proc_mux = subprocess.Popen(
                     cmd_live_mux,
@@ -6513,6 +6562,7 @@ def export_amd_native_d3d11(
             flush=True,
         )
 
+        print("\n[FINALIZATION BEGIN]", flush=True)
         # Drain remaining buffered frames from AMF hardware encoder to .h265 bitstream
         c_decoded = c_uint64(0)
         c_vp = c_uint64(0)
@@ -6520,6 +6570,26 @@ def export_amd_native_d3d11(
         c_rec = c_uint64(0)
         native_dll.telem_amd_get_stats(
             h_context, byref(c_decoded), byref(c_vp), byref(c_sub), byref(c_rec)
+        )
+        c_q_sub = c_uint64(0); c_q_rec = c_uint64(0); c_q_inflight = c_uint64(0); c_q_max = c_uint64(0)
+        c_q_calls = c_uint64(0); c_q_full = c_uint64(0); c_q_not_ready = c_uint64(0); c_q_ret = c_uint64(0)
+        c_q_wms = ctypes.c_double(0.0)
+        if hasattr(native_dll, "telem_amd_get_queue_stats"):
+            native_dll.telem_amd_get_queue_stats(
+                h_context, byref(c_q_sub), byref(c_q_rec), byref(c_q_inflight), byref(c_q_max),
+                byref(c_q_calls), byref(c_q_full), byref(c_q_not_ready), byref(c_q_ret), byref(c_q_wms)
+            )
+        print(
+            f"[AMD FINALIZATION DIAGNOSTICS: END OF FRAME LOOP] "
+            f"total_frames={total_frames} "
+            f"decoded={c_decoded.value} "
+            f"vp={c_vp.value} "
+            f"submitted={c_sub.value} "
+            f"received_packets={c_rec.value} "
+            f"pending_packets={c_sub.value - c_rec.value} "
+            f"queue_in_flight={c_q_inflight.value} "
+            f"max_in_flight={c_q_max.value}",
+            flush=True,
         )
         drain_pct = (float(c_rec.value) / float(total_frames)) * 100.0 if total_frames > 0 else 100.0
         drain_pct = max(0.0, min(100.0, drain_pct))
@@ -6532,9 +6602,12 @@ def export_amd_native_d3d11(
             global_pct=drain_global,
         )
 
+        print("[DRAIN BEGIN]", flush=True)
         flush_start = time.perf_counter()
         flush_ok = native_dll.telem_amd_flush(h_context)
         flush_ms = (time.perf_counter() - flush_start) * 1000.0
+        drain_ms = flush_ms
+        print(f"[DRAIN END] elapsed_ms={drain_ms:.2f} ok={flush_ok}", flush=True)
         if not flush_ok:
             print("[AMD NATIVE D3D11] ERROR: telem_amd_flush failed during drain!", flush=True)
             _cleanup_native_resources()
@@ -6672,7 +6745,11 @@ def export_amd_native_d3d11(
             )
 
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
+        print("[ENCODER CLOSE BEGIN]", flush=True)
+        t_enc_close_start = time.perf_counter()
         _cleanup_native_resources()
+        encoder_close_ms = (time.perf_counter() - t_enc_close_start) * 1000.0
+        print(f"[ENCODER CLOSE END] elapsed_ms={encoder_close_ms:.2f}", flush=True)
     except Exception:
         if direct_mux_enabled and not direct_mux_completed:
             _abort_direct_mux()
@@ -6703,8 +6780,12 @@ def export_amd_native_d3d11(
         # ── DIRECT MP4 LIVE MUX FINALIZATION ──
         t_mux_begin = time.perf_counter()
         print("[AMD NATIVE D3D11] Finalizing direct MP4 live mux...", flush=True)
+        print("[PUMP JOIN BEGIN]", flush=True)
+        t_pump_join_start = time.perf_counter()
         if pump_thread is not None:
             pump_thread.join(timeout=60.0)
+        pump_join_ms = (time.perf_counter() - t_pump_join_start) * 1000.0
+        print(f"[PUMP JOIN END] elapsed_ms={pump_join_ms:.2f}", flush=True)
         if preview_session is not None:
             try:
                 preview_session.finish_input(timeout=8.0)
@@ -6725,6 +6806,32 @@ def export_amd_native_d3d11(
         prev_time = t_wait_start
         last_growth_time = t_wait_start
 
+        pump_alive_entry = pump_thread.is_alive() if pump_thread is not None else False
+        mux_alive_entry = (proc_mux.poll() is None) if proc_mux is not None else False
+        stdin_open_entry = (not proc_mux.stdin.closed) if (proc_mux and proc_mux.stdin) else False
+        output_abs_path = str(Path(live_target).resolve())
+        output_drive_name = Path(output_abs_path).drive or output_abs_path[:2]
+        full_ffmpeg_cmd = " ".join(cmd_live_mux) if 'cmd_live_mux' in locals() else "N/A"
+
+        print(
+            f"[AMD FINALIZATION DIAGNOSTICS: ENTRY TO ZAPIS MP4]\n"
+            f"  timestamp={time.time():.6f}\n"
+            f"  total_frames={total_frames}\n"
+            f"  part_size_bytes={prev_size} ({prev_size / (1024.0 * 1024.0):.2f} MB)\n"
+            f"  pump_thread_alive={pump_alive_entry}\n"
+            f"  mux_process_alive={mux_alive_entry}\n"
+            f"  proc_mux_pid={proc_mux.pid if proc_mux else 'N/A'}\n"
+            f"  stdin_open={stdin_open_entry}\n"
+            f"  received_packets={c_rec.value}/{total_frames}\n"
+            f"  drain_ms={drain_ms:.2f}\n"
+            f"  encoder_close_ms={encoder_close_ms:.2f}\n"
+            f"  pump_join_ms={pump_join_ms:.2f}\n"
+            f"  output_drive={output_drive_name}\n"
+            f"  output_path={output_abs_path}\n"
+            f"  ffmpeg_cmd={full_ffmpeg_cmd}",
+            flush=True,
+        )
+
         # Initial emission for live mux stage
         progress_tracker.finalize(
             "Finalizacja: zapis MP4",
@@ -6736,6 +6843,45 @@ def export_amd_native_d3d11(
             stall_warning=False,
             stall_seconds=None,
         )
+
+        print("[MUX WAIT BEGIN]", flush=True)
+        t_last_diag = t_wait_start
+        entry_part_size = prev_size
+
+        # Win32 I/O & CPU structures via ctypes
+        class _WIN32_IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_uint64),
+                ("WriteOperationCount", ctypes.c_uint64),
+                ("OtherOperationCount", ctypes.c_uint64),
+                ("ReadTransferCount", ctypes.c_uint64),
+                ("WriteTransferCount", ctypes.c_uint64),
+                ("OtherTransferCount", ctypes.c_uint64),
+            ]
+        class _WIN32_FILETIME(ctypes.Structure):
+            _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
+            def to_100ns(self):
+                return (self.dwHighDateTime << 32) + self.dwLowDateTime
+
+        h_proc_diag = None
+        try:
+            if proc_mux is not None and proc_mux.pid:
+                h_proc_diag = kernel32.OpenProcess(0x0400 | 0x1000, False, proc_mux.pid)
+        except Exception:
+            h_proc_diag = None
+
+        entry_proc_read_b = 0
+        entry_proc_write_b = 0
+        prev_proc_cpu_time = 0
+        prev_proc_time_ts = t_wait_start
+        if h_proc_diag:
+            io_init = _WIN32_IO_COUNTERS()
+            if kernel32.GetProcessIoCounters(h_proc_diag, ctypes.byref(io_init)):
+                entry_proc_read_b = io_init.ReadTransferCount
+                entry_proc_write_b = io_init.WriteTransferCount
+            c_t, e_t, k_t, u_t = _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME()
+            if kernel32.GetProcessTimes(h_proc_diag, ctypes.byref(c_t), ctypes.byref(e_t), ctypes.byref(k_t), ctypes.byref(u_t)):
+                prev_proc_cpu_time = k_t.to_100ns() + u_t.to_100ns()
 
         while True:
             rc = proc_mux.poll()
@@ -6750,6 +6896,49 @@ def export_amd_native_d3d11(
                     cur_size = os.path.getsize(live_target)
             except OSError:
                 cur_size = 0
+
+            if now - t_last_diag >= 2.0:
+                dt_diag = now - t_last_diag
+                delta_mb_from_entry = (cur_size - entry_part_size) / (1024.0 * 1024.0)
+                p_alive = pump_thread.is_alive() if pump_thread else False
+                p_mux_alive = (proc_mux.poll() is None) if proc_mux else False
+                
+                cur_read_b = 0
+                cur_write_b = 0
+                delta_read_mb = 0.0
+                delta_write_mb = 0.0
+                cpu_pct = 0.0
+                if h_proc_diag and p_mux_alive:
+                    io_cur = _WIN32_IO_COUNTERS()
+                    if kernel32.GetProcessIoCounters(h_proc_diag, ctypes.byref(io_cur)):
+                        cur_read_b = io_cur.ReadTransferCount
+                        cur_write_b = io_cur.WriteTransferCount
+                        delta_read_mb = (cur_read_b - entry_proc_read_b) / (1024.0 * 1024.0)
+                        delta_write_mb = (cur_write_b - entry_proc_write_b) / (1024.0 * 1024.0)
+                    c_t, e_t, k_t, u_t = _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME()
+                    if kernel32.GetProcessTimes(h_proc_diag, ctypes.byref(c_t), ctypes.byref(e_t), ctypes.byref(k_t), ctypes.byref(u_t)):
+                        cur_cpu_ns = (k_t.to_100ns() + u_t.to_100ns()) * 100 # ns
+                        dt_wall_ns = (now - prev_proc_time_ts) * 1_000_000_000
+                        if dt_wall_ns > 0:
+                            cpu_pct = ((cur_cpu_ns - prev_proc_cpu_time * 100) / dt_wall_ns) * 100.0
+                            prev_proc_cpu_time = k_t.to_100ns() + u_t.to_100ns()
+                            prev_proc_time_ts = now
+
+                stdin_closed_now = proc_mux.stdin.closed if (proc_mux and proc_mux.stdin) else True
+                print(
+                    f"[AMD MUX WAIT 2S DIAG] elapsed={now - t_wait_start:.1f}s | "
+                    f"pid={proc_mux.pid if proc_mux else 'N/A'} | "
+                    f"poll={rc} | "
+                    f"cpu={cpu_pct:.1f}% | "
+                    f"read_total_mb={cur_read_b / (1024.0 * 1024.0):.2f} MB (delta={delta_read_mb:+.2f} MB) | "
+                    f"write_total_mb={cur_write_b / (1024.0 * 1024.0):.2f} MB (delta={delta_write_mb:+.2f} MB) | "
+                    f"part_size_mb={cur_size / (1024.0 * 1024.0):.2f} MB (delta={delta_mb_from_entry:+.2f} MB) | "
+                    f"stdin_closed={stdin_closed_now} | "
+                    f"pump_alive={p_alive} | "
+                    f"drive={output_drive_name}",
+                    flush=True,
+                )
+                t_last_diag = now
 
             dt = now - prev_time
             if dt >= 0.2:
@@ -6787,6 +6976,9 @@ def export_amd_native_d3d11(
 
             time.sleep(0.2)
 
+        mux_wait_ms = (time.perf_counter() - t_wait_start) * 1000.0
+        print(f"[MUX WAIT END] elapsed_ms={mux_wait_ms:.2f} rc={proc_mux.returncode if proc_mux else None}", flush=True)
+
         if stderr_thread is not None:
             stderr_thread.join(timeout=5.0)
         if active_process_holder is not None and active_process_holder.get("process") is proc_mux:
@@ -6809,7 +7001,7 @@ def export_amd_native_d3d11(
 
         if proc_mux.returncode != 0 or mux_pump_error:
             print(
-                f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})!\n"
+                f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode if proc_mux else 'N/A'}, pump={mux_pump_error})!\n"
                 f"[FFmpeg Command]: {' '.join(cmd_live_mux)}\n"
                 f"[FFmpeg Stderr (last logical lines)]:\n{logical_stderr}",
                 flush=True,
@@ -6817,19 +7009,11 @@ def export_amd_native_d3d11(
             if is_multi_file and stage_video_str and os.path.exists(stage_video_str) and os.path.getsize(stage_video_str) > 0:
                 print(f"[AMD MULTI-FILE] NOTICE: Preserved Stage A video at: {stage_video_str}", flush=True)
             _abort_direct_mux()
-            if single_pass_av_mux:
-                raise AMDNativeFinalizationError(
-                    f"AMD single-pass A/V mux failed (rc={proc_mux.returncode}, pump={mux_pump_error})"
-                )
             return False
 
         if not os.path.exists(live_target) or os.path.getsize(live_target) == 0:
             print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output {live_target} is missing or empty!\n[FFmpeg Stderr]:\n{logical_stderr}", flush=True)
             _abort_direct_mux()
-            if single_pass_av_mux:
-                raise AMDNativeFinalizationError(
-                    "AMD single-pass A/V mux output is missing or empty"
-                )
             return False
 
         if is_multi_file and stage_video_str and not single_pass_av_mux:
@@ -7007,7 +7191,12 @@ def export_amd_native_d3d11(
             progress_mode="determinate",
             global_pct=98.5,
         )
+        print("[FFPROBE BEGIN]", flush=True)
+        t_probe_start = time.perf_counter()
         final_probe = _probe_video_summary(ffmpeg_exe, output_part_str)
+        t_probe_end = time.perf_counter()
+        ffprobe_ms = (t_probe_end - t_probe_start) * 1000.0
+        print(f"[FFPROBE END] elapsed_ms={ffprobe_ms:.2f}", flush=True)
         muxed_frames = _stream_frame_count(final_probe, "video")
         audio_present = any(
             stream.get("codec_type") == "audio" for stream in final_probe.get("streams", [])
@@ -7029,10 +7218,35 @@ def export_amd_native_d3d11(
         )
 
         # Atomic rename .part -> final .mp4
+        print("[OS.REPLACE BEGIN]", flush=True)
+        t_replace_start = time.perf_counter()
         if os.path.exists(output_file_str):
             try: os.remove(output_file_str)
             except OSError: pass
         os.replace(output_part_str, output_file_str)
+        t_replace_end = time.perf_counter()
+        replace_ms = (t_replace_end - t_replace_start) * 1000.0
+        print(f"[OS.REPLACE END] elapsed_ms={replace_ms:.2f}", flush=True)
+
+        final_out_size = 0
+        try:
+            if os.path.exists(output_file_str):
+                final_out_size = os.path.getsize(output_file_str)
+        except OSError:
+            final_out_size = 0
+
+        print("[FINALIZATION END]", flush=True)
+        print(
+            f"[AMD FINALIZATION SUMMARY TIMINGS] "
+            f"drain_ms={drain_ms:.2f} "
+            f"encoder_close_ms={encoder_close_ms:.2f} "
+            f"pump_join_ms={pump_join_ms:.2f} "
+            f"mux_wait_ms={mux_wait_ms:.2f} "
+            f"ffprobe_ms={ffprobe_ms:.2f} "
+            f"replace_ms={replace_ms:.2f} "
+            f"final_size_mb={final_out_size / (1024.0 * 1024.0):.2f} MB ({final_out_size} bytes)",
+            flush=True,
+        )
 
         # Cleanup intermediate temporary files now that final output is confirmed
         if is_multi_file and stage_video_str and os.path.exists(stage_video_str):
