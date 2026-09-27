@@ -168,3 +168,29 @@ NEW_UNRELATED_FAILURES=0
 
 FINAL_DECISION=INTEL_PROFILES_READY
 ```
+
+
+---
+
+## 10. Promocja do Gałęzi Main (Podsumowanie)
+
+- **PROFILE_COMMIT**: `63f5b5a4a1bddcb9abe5d24acfd529e3cc5e7b84`
+- **REMOTE_MAIN_BEFORE_PUSH**: `bd88b3d84fafb18c1468ec36dbe66f157bc89e68`
+- **FINAL_REMOTE_MAIN_HEAD**: `63f5b5a4a1bddcb9abe5d24acfd529e3cc5e7b84`
+- **PUSH_MAIN_RESULT**: `PASS`
+- **PROFILE_COMMIT_REACHABLE_FROM_MAIN**: `YES`
+- **PROMOTION_GUI_SMOKE_PASS**: `YES`
+- **PROMOTION_OUTPUT_CONTRACT_PASS**: `YES`
+- **EFFECTIVE_TARGET_USAGE**: `4` (BALANCED HEVC 300f smoke)
+- **FINAL_PROMOTION_STATUS**: `PASS`
+- **FINAL_STATUS**: `INTEL_ENCODER_PROFILES_PROMOTED_TO_MAIN`
+
+### 10.1. Tabela Nadzoru Watchdog (Promocja & Testy)
+
+| WORKLOAD | PID | CHILD_PIDS | ELAPSED | CPU_TIME_DELTA | LAST_LOG_TIMESTAMP | FRAMES_OR_TESTS | OUTPUT_SIZE | EXIT_CODE | STALL_DETECTED | RETRY_USED | FINAL_STATUS |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **PROMOTION_SMOKE_HEVC** | 18560 | 17620, 18160, 6748, 5484 | 13.91s | 31.8s | 17:01:48 | 300/300 frames | 50.76 MB | 0 | NO | NO | **PASS** |
+| **PYTEST_INTEL_GATE** | 14224 | [] | 8.04s | 7.9s | 17:01:20 | 158/158 tests | N/A | 0 | NO | NO | **PASS** |
+| **PYTEST_PROFILES_GATE** | 8840 | [] | 3.52s | 3.4s | 17:01:01 | 7/7 tests | N/A | 0 | NO | NO | **PASS** |
+| **CONTRACT_PROBE_HEVC** | 7112 | [] | 0.85s | 0.6s | 17:01:58 | ffprobe parse | N/A | 0 | NO | NO | **PASS** |
+| **GIT_PUSH_MAIN** | 12904 | [] | 2.91s | 0.3s | 17:02:44 | 1 commit | N/A | 0 | NO | NO | **PASS** |
