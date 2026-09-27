@@ -41,6 +41,44 @@ def set_composite_mode(mode: str) -> None:
     global _COMPOSITE_MODE
     _COMPOSITE_MODE = mode.strip().upper()
 
+
+_WARNED_UNKNOWN_COMPOSITOR_FASTPATH = False
+
+
+def get_intel_hud_compositor_fastpath_config() -> tuple[bool, str]:
+    """Return (enabled, source_description) for Intel HUD Compositor Fastpath (ETAP 3D).
+
+    Default: OFF (Legacy) when TELEM_INTEL_HUD_COMPOSITOR_FASTPATH is absent or empty.
+    Explicit ON: 1, true, yes, on
+    Explicit OFF: 0, false, no, off
+    Unknown values: warn once and use default Fastpath (OFF/Legacy).
+    """
+    global _WARNED_UNKNOWN_COMPOSITOR_FASTPATH
+    raw = os.environ.get("TELEM_INTEL_HUD_COMPOSITOR_FASTPATH")
+    if raw is None or not raw.strip():
+        return False, "default"
+    cleaned = raw.strip().lower()
+    if cleaned in ("1", "true", "yes", "on"):
+        return True, "env"
+    if cleaned in ("0", "false", "no", "off"):
+        return False, "env legacy-fallback"
+    if not _WARNED_UNKNOWN_COMPOSITOR_FASTPATH:
+        _WARNED_UNKNOWN_COMPOSITOR_FASTPATH = True
+        import warnings
+        warnings.warn(
+            f"TELEM_INTEL_HUD_COMPOSITOR_FASTPATH has unrecognized value {raw!r}; using default Compositor Fastpath (OFF/Legacy).",
+            UserWarning,
+            stacklevel=2,
+        )
+    return False, "default"
+
+
+def is_intel_hud_compositor_fastpath_enabled() -> bool:
+    """Check whether Intel HUD Compositor Fastpath rendering is active."""
+    enabled, _ = get_intel_hud_compositor_fastpath_config()
+    return enabled
+
+
 # Per-widget minimum alpha, cached once (widget alpha structure is static per
 # indicator type+size). Used to decide the transparent-destination paste path.
 _WIDGET_ALPHA_MIN: dict[tuple, int] = {}
@@ -141,6 +179,20 @@ def _plain_paste_safe(overlay: Image.Image, cache_key) -> bool:
 
 
 _EMPTY_BUFFERS: dict[tuple[int, int], Image.Image] = {}
+_COMPOSITOR_SCRATCH_LOCAL = threading.local()
+
+
+def _get_worker_scratch_empty(k: tuple[int, int]) -> Image.Image:
+    """Per-worker thread-local scratch buffer for empty-destination blending (ETAP 3D Candidate 3)."""
+    bufs = getattr(_COMPOSITOR_SCRATCH_LOCAL, "bufs", None)
+    if bufs is None:
+        bufs = {}
+        _COMPOSITOR_SCRATCH_LOCAL.bufs = bufs
+    buf = bufs.get(k)
+    if buf is None:
+        buf = Image.new("RGBA", k, (0, 0, 0, 0))
+        bufs[k] = buf
+    return buf
 
 
 def _composite_over_empty(base_img: Image.Image, overlay: Image.Image, x: int, y: int) -> None:
@@ -154,11 +206,14 @@ def _composite_over_empty(base_img: Image.Image, overlay: Image.Image, x: int, y
         and y + overlay.height <= base_img.height
     ):
         k = (overlay.width, overlay.height)
-        empty = _EMPTY_BUFFERS.get(k)
-        if empty is None:
-            empty = Image.new("RGBA", k, (0, 0, 0, 0))
-            if len(_EMPTY_BUFFERS) < 32:
-                _EMPTY_BUFFERS[k] = empty
+        if is_intel_hud_compositor_fastpath_enabled():
+            empty = _get_worker_scratch_empty(k)
+        else:
+            empty = _EMPTY_BUFFERS.get(k)
+            if empty is None:
+                empty = Image.new("RGBA", k, (0, 0, 0, 0))
+                if len(_EMPTY_BUFFERS) < 32:
+                    _EMPTY_BUFFERS[k] = empty
         res = Image.alpha_composite(empty, overlay)
         base_img.paste(res, (x, y))
     else:

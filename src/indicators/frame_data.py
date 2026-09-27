@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 import inspect
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from src.indicators.profiling import get_overlay_profiler
@@ -295,10 +295,14 @@ def prepare_overlay_frame_data(
     # a GUI layout, and export callbacks may hold a different snapshot.
     if resolve_cache_value is not None:
         callback = resolve_cache_value
-        parameters = inspect.signature(callback).parameters
-        accepts_config = ('indicator_config' in parameters or any(
-            p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()))
-        legacy = len(parameters) == 2
+        try:
+            parameters = inspect.signature(callback).parameters
+            accepts_config = ('indicator_config' in parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()))
+            legacy = len(parameters) == 2
+        except (ValueError, TypeError):
+            accepts_config = False
+            legacy = False
         def resolve_cache_value(field, source, dt, indicator_key=None):
             if accepts_config:
                 return callback(field, source, dt, indicator_key,
@@ -369,10 +373,7 @@ def prepare_overlay_frame_data(
     if distance_m is None and fit_data and "distance" in fit_data:
         distance_m = interpolate_distance(fit_data["distance"], target_dt)
     if distance_m is None and resolve_cache_value:
-        try:
-            distance_m = resolve_cache_value("distance", "fit", target_dt, "fit_distance_text")
-        except TypeError:
-            distance_m = resolve_cache_value("distance", target_dt)
+        distance_m = resolve_cache_value("distance", "fit", target_dt, "fit_distance_text")
     if distance_m is None and gpx_track_samples:
         distance_m = interpolate_distance(gpx_track_samples, target_dt)
 
@@ -387,10 +388,7 @@ def prepare_overlay_frame_data(
             return None
         if not resolve_cache_value:
             return None
-        try:
-            return resolve_cache_value(field_name, source, target_dt, indicator_key)
-        except TypeError:
-            return resolve_cache_value(field_name, target_dt)
+        return resolve_cache_value(field_name, source, target_dt, indicator_key)
 
     iso_source = layout.get("indicators", {}).get("iso_text", {}).get("source", "gpmf")
     exposure_source = layout.get("indicators", {}).get("exposure_text", {}).get("source", "gpmf")
@@ -513,12 +511,7 @@ def prepare_overlay_frame_data(
             resolved_this_frame[cache_key] = None
             return None
         resolve_started = time.perf_counter()
-        try:
-            value = resolve_cache_value(field_name, source, target_dt, indicator_key)
-        except TypeError:
-            # Compatibility adapter for third-party callers using the old
-            # callback shape.  Production preview/final paths use the new one.
-            value = resolve_cache_value(field_name, target_dt)
+        value = resolve_cache_value(field_name, source, target_dt, indicator_key)
         profiler.record(
             "telemetry.resolve_cache_value",
             (time.perf_counter() - resolve_started) * 1000.0,
@@ -740,10 +733,20 @@ def prepare_overlay_frame_data(
 
     # ── Elapsed time & average speed (for time_display and avg_speed) ─
     # Normalise tz-awareness helper: both aware and naive UTC instants must subtract cleanly.
-    def _to_naive_dt(dt: Optional[datetime]) -> Optional[datetime]:
+    def _to_naive_dt(dt: Optional[Any]) -> Optional[datetime]:
         if dt is None:
             return None
-        return dt.replace(tzinfo=None) if getattr(dt, "tzinfo", None) is not None else dt
+        if isinstance(dt, datetime):
+            return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+        if isinstance(dt, (int, float)):
+            return datetime.fromtimestamp(float(dt), timezone.utc).replace(tzinfo=None)
+        if isinstance(dt, str):
+            s = dt.strip()
+            if not s:
+                return None
+            dt_obj = datetime.fromisoformat(s)
+            return dt_obj.astimezone(timezone.utc).replace(tzinfo=None) if dt_obj.tzinfo is not None else dt_obj
+        return getattr(dt, "replace", lambda **kw: dt)(tzinfo=None) if getattr(dt, "tzinfo", None) is not None else dt
 
     target_dt_naive = _to_naive_dt(target_dt)
     start_dt_naive = _to_naive_dt(start_dt_utc)

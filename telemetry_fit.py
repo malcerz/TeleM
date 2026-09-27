@@ -46,6 +46,14 @@ RecordDict = dict[str, Any]
 Sample = tuple[datetime, float]
 
 
+class FitSampleList(list):
+    """List of (datetime, value) samples with an optional source_start timestamp."""
+
+    def __init__(self, samples=(), *, source_start: datetime | None = None):
+        super().__init__(samples)
+        self.source_start = source_start
+
+
 class FitRecords(list[RecordDict]):
     """Parsed FIT records with an activity-wide, generic field catalog."""
 
@@ -118,6 +126,7 @@ class FitDataset(dict[str, list[Sample]]):
         session_total_distance: float | None = None,
         lap_summaries: list[dict[str, Any]] | None = None,
         distance_normalization: Any = None,
+        source_start: Any = None,
     ) -> None:
         super().__init__(fields or {})
         self.active_time_mapper = active_time_mapper
@@ -125,6 +134,7 @@ class FitDataset(dict[str, list[Sample]]):
         self.session_total_distance = session_total_distance
         self.lap_summaries = list(lap_summaries or [])
         self.distance_normalization = distance_normalization
+        self.source_start = source_start
         self.available_fit_fields: frozenset[str] = frozenset(
             name for name, samples in self.items() if samples
         )

@@ -21,10 +21,9 @@ from typing import Any
 import numpy as np
 
 
-# Version 4 records the native GPMF anchor correction: caches written by the
-# pre-lock-(0,0) implementation can contain 2021 timestamps for a 2026 clip.
-# Invalidate those archives once so the corrected native timeline is persisted.
-PROCESSED_CACHE_VERSION = 4
+# Version 5 records the GPMF GPS anchor timeline projection correction:
+# prevents shifting GPMF timed/vector streams forward by the initial GPS lock delay.
+PROCESSED_CACHE_VERSION = 5
 PROCESSED_CACHE_SUFFIX = ".telemetry.npz"
 
 _SCALAR_FIELDS = (

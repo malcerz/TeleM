@@ -253,9 +253,12 @@ def _render_compass_indicator(
                      width=max(1, ss))
 
     if cfg.get("compass_show_heading", cfg.get("show_value", True)):
-        fmt = str(cfg.get("compass_heading_format", "03d")).strip()
-        h_str = f"{int(round(heading)) % 360:03d}" if fmt != "d" else f"{int(round(heading)) % 360}"
-        heading_text = formatted_val if formatted_val is not None else ("--°" if heading is None else f"{h_str}°")
+        if heading is not None:
+            fmt = str(cfg.get("compass_heading_format", "03d")).strip()
+            h_str = f"{int(round(heading)) % 360:03d}" if fmt != "d" else f"{int(round(heading)) % 360}"
+            heading_text = formatted_val if formatted_val is not None else f"{h_str}°"
+        else:
+            heading_text = formatted_val if formatted_val is not None else "--°"
         heading_font = load_font(font_path, max(8, int(round(fs * 0.78 * ss))))
         draw.text((cx, cy + int(round(radius * 0.34))), heading_text,
                   font=heading_font, anchor="mm", fill=(*heading_rgb, 255),

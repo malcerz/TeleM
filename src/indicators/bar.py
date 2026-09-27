@@ -101,12 +101,11 @@ def _label_offset(cfg: dict[str, Any], ss: int, scale: float = 1.0) -> tuple[int
         oy = float(cfg.get("label_offset_y", 0.0) or 0.0)
     except (TypeError, ValueError):
         ox = oy = 0.0
-    # Geometry scale describes the canvas-relative size of the widget; it must
-    # not silently shrink a user-entered pixel offset on a small preview (or
-    # enlarge it on a 4K export).  Only supersampling is undone at the final
-    # raster resize, so apply that factor here.
-    del scale
-    return int(round(ox * max(1, ss))), int(round(oy * max(1, ss)))
+    # The layout preview canvas defaults to 540p (960x540, scale=0.5), while
+    # full-resolution renders are 1080p (scale=1.0) or 4K (scale=2.0).
+    # Scaling by scale * 2.0 (i.e. min_dim / 540.0) anchors 1.0x to the
+    # 540p GUI preview canvas and scales proportionally with canvas resolution.
+    return int(round(ox * max(1, ss) * scale * 2.0)), int(round(oy * max(1, ss) * scale * 2.0))
 
 
 def _fmt_number(value: float, decimals: int) -> str:
@@ -1331,13 +1330,15 @@ def _build_seg_base_layer(
     range_align_right: str = "ra",
     label_font_path: str = "",
     label_color: Optional[tuple[int, int, int, int]] = None,
+    direction: str = "forward",
 ) -> Image.Image:
     base_img = Image.new("RGBA", (raster_w, raster_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(base_img)
 
+    reverse = str(direction).strip().lower() == "reverse"
     # 1. Inactive segments with shadow
     for i in range(segments):
-        p = i / max(1, segments - 1)
+        p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
         h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
         sh = max(2 * ss, int(round(seg_area_h * h_mult)))
         x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1467,7 +1468,7 @@ def _get_seg_active_layer(
     reverse = str(direction).strip().lower() == "reverse"
     for a in range(active):
         i = (segments - 1 - a) if reverse else a
-        p = i / max(1, segments - 1)
+        p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
         h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
         sh = max(2 * ss, int(round(seg_area_h * h_mult)))
         x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1506,7 +1507,7 @@ def _draw_seg_partial_segment(
     d = ImageDraw.Draw(img)
     reverse = str(direction).strip().lower() == "reverse"
     i = segment_index
-    p = i / max(1, segments - 1)
+    p = (segments - 1 - i) / max(1, segments - 1) if reverse else i / max(1, segments - 1)
     h_mult = grow_start + (1.0 - grow_start) * p if grow_height else 1.0
     sh = max(2 * ss, int(round(seg_area_h * h_mult)))
     x1 = int(round(pad_x + i * (seg_w + gap)))
@@ -1672,7 +1673,7 @@ def _render_segments(
     fill_mode = str(cfg.get("segment_fill_mode", "whole")).strip().lower()
     if fill_mode not in ("whole", "partial"):
         fill_mode = "whole"
-    direction = str(cfg.get("fill_direction", "forward")).strip().lower()
+    direction = str(cfg.get("fill_direction", cfg.get("direction", "forward"))).strip().lower()
     if direction not in ("forward", "reverse"):
         direction = "forward"
     value_align = str(cfg.get("value_align", "left")).strip().lower()
@@ -1681,8 +1682,10 @@ def _render_segments(
     label_align = str(cfg.get("label_align", "center")).strip().lower()
     if label_align not in ("left", "center", "right"):
         label_align = "center"
+    min_dim = min(canvas_w, canvas_h)
+    scale = min_dim / 1080.0
     label_position = _resolve_label_position(cfg, "bottom")
-    label_offset_x, label_offset_y = _label_offset(cfg, ss)
+    label_offset_x, label_offset_y = _label_offset(cfg, ss, scale)
 
     marker_style = str(cfg.get("marker_style", "none")).strip().lower()
     marker_enabled = (marker_style != "none") and bool(cfg.get("show_marker", True))
@@ -1795,7 +1798,7 @@ def _render_segments(
         "seg_base_v2", font_path, value_font_path, label_font_path, range_font_path,
         raster_w, raster_h, ss, pad_x, top_pad, value_h, value_gap,
         seg_area_h, seg_top, seg_bottom, bottom_y, bottom_text_h, segments, gap, radius,
-        round(seg_w, 2), grow_height, round(grow_start, 2), inactive, show_min, show_max, show_label,
+        round(seg_w, 2), grow_height, round(grow_start, 2), direction, inactive, show_min, show_max, show_label,
         val_min, val_max, decimals, range_decimals, range_units, unit, label, range_fs, label_fs, text_stroke,
         dim_color, text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
         label_align, marker_zone_top, marker_zone_bottom, label_gap, range_gap,
@@ -1822,7 +1825,7 @@ def _render_segments(
             text_color, cfg.get("icon"), bool(cfg.get("uppercase_label", True)),
             label_align, label_font_path=label_font_path, label_color=label_color,
             label_position=label_position, label_offset_x=label_offset_x,
-            label_offset_y=label_offset_y,
+            label_offset_y=label_offset_y, direction=direction,
         )
         _SEG_BASE_CACHE[base_key] = base_img
 

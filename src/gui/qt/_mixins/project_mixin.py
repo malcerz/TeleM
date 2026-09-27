@@ -459,6 +459,11 @@ class ProjectMixin:
                     self.video_timeline = timeline
                     self.video_clips = list(timeline.clips)
                     self.video_duration_s = timeline.project_duration_s
+                    if timeline.clips and timeline.clips[0].absolute_start_dt is not None:
+                        proj_start = timeline.clips[0].absolute_start_dt
+                        if getattr(self, "telemetry", None) is not None:
+                            self.telemetry.start_dt_utc = proj_start
+                            self.telemetry._coverage_start = proj_start
                     # Warm global multi-file battery presentation plan
                     try:
                         self.telemetry.timeline = timeline
@@ -510,15 +515,13 @@ class ProjectMixin:
                 self._active_preview_clip_index = 0
                 self._pending_seek_ms = None
 
-                # Odczytaj cut_regions z layoutu
-                self._cut_regions = self.layout.get("cut_regions", [])
-                if isinstance(self._cut_regions, list):
-                    self._cut_regions = [
-                        (float(a), float(b)) for a, b in self._cut_regions
-                        if isinstance(a, (int, float)) and isinstance(b, (int, float))
-                    ]
-                else:
-                    self._cut_regions = []
+                # P0-FIX: cut_regions from the layout file are stale IN/OUT
+                # boundaries that were incorrectly persisted by a previous
+                # version of _save_project_layout.  Loading them would lock
+                # scrubbing to the previously-set range and cap the render
+                # duration.  Always start a fresh session with no cuts; the
+                # RenderTab manages IN/OUT per-session only.
+                self._cut_regions = []
 
                 # Zarejestruj pola FIT; clear dynamic availability when the
                 # newly selected file has no FIT data.

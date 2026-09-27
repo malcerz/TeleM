@@ -897,13 +897,16 @@ class MovingMapRenderer:
             download_missing=download_missing,
             heading=None,
         )
-        resampling = getattr(Image, "Resampling", Image)
-        rotated = north_up.rotate(
-            angle,
-            resample=resampling.BICUBIC,
-            expand=False,
-            fillcolor=(30, 30, 30, 255),
-        )
+        if os.environ.get("TELEM_MAP_BYPASS_ROTATE") == "1":
+            rotated = north_up.copy()
+        else:
+            resampling = getattr(Image, "Resampling", Image)
+            rotated = north_up.rotate(
+                angle,
+                resample=resampling.BICUBIC,
+                expand=False,
+                fillcolor=(30, 30, 30, 255),
+            )
         # Repaint the marker in output space so it remains directional-up.
         if draw_marker and self._mkr_style == "directional":
             d = ImageDraw.Draw(rotated)

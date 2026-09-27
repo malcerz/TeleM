@@ -306,6 +306,8 @@ def compose_overlay(
                     "above.regional_clear",
                     (time.perf_counter() - clear_started) * 1000.0,
                 )
+            if breakdown is not None:
+                breakdown["regional_clear_ms"] = (time.perf_counter() - clear_started) * 1000.0
         elif not canvas_state.get("is_clean", False):
             clear_started = time.perf_counter()
             img.paste((0, 0, 0, 0), (0, 0, canvas_w, canvas_h))
@@ -320,6 +322,8 @@ def compose_overlay(
                     "above.regional_clear",
                     (time.perf_counter() - clear_started) * 1000.0,
                 )
+            if breakdown is not None:
+                breakdown["regional_clear_ms"] = (time.perf_counter() - clear_started) * 1000.0
     else:
         t_alloc0 = time.perf_counter_ns() if breakdown is not None else 0
         img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
@@ -353,7 +357,9 @@ def compose_overlay(
                     date_text, time_text, elapsed_seconds, avg_speed_kmh,
                 )
             if breakdown is not None:
-                breakdown["time_display_render_ms"] = (time.perf_counter_ns() - t_td0) / 1_000_000.0
+                td_r_ms = (time.perf_counter_ns() - t_td0) / 1_000_000.0
+                breakdown["time_display_render_ms"] = td_r_ms
+                breakdown["time_display.render"] = td_r_ms
         if td:
             td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
             cx = tdx + td.width // 2
@@ -370,7 +376,10 @@ def compose_overlay(
                         canvas_size=(canvas_w, canvas_h),
                     )
                 if breakdown is not None:
-                    breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + (time.perf_counter_ns() - t_td_paste0) / 1_000_000.0
+                    td_p_ms = (time.perf_counter_ns() - t_td_paste0) / 1_000_000.0
+                    breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + td_p_ms
+                    breakdown["time_display.paste"] = td_p_ms
+                    breakdown["time_display.total"] = breakdown.get("time_display.render", 0.0) + td_p_ms
             if rot180:
                 _bboxes["time_display"] = box
             elif td_rotation in (90, 270):
@@ -459,7 +468,7 @@ def compose_overlay(
             continue
         if not ind_cfg or not ind_cfg.get("enabled", True):
             continue
-        indicator_started = time.perf_counter()
+        indicator_started_ns = time.perf_counter_ns()
 
         val_entry = known_vals.get(key)
         if val_entry is None or not isinstance(val_entry, (tuple, list)):
@@ -628,6 +637,7 @@ def compose_overlay(
                 form = current_cfg.get("form", "text")
                 breakdown[f"indicator_{form}_ms"] = breakdown.get(f"indicator_{form}_ms", 0.0) + dt
                 breakdown[f"widget_{key}_ms"] = dt
+                breakdown[f"{key}.render"] = dt
 
         if res:
             rotation = int(current_cfg.get("rotation", 0))
@@ -725,7 +735,10 @@ def compose_overlay(
                             canvas_size=(canvas_w, canvas_h),
                         )
                     if breakdown is not None:
-                        breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + (time.perf_counter_ns() - t_rp0) / 1_000_000.0
+                        p_dt = (time.perf_counter_ns() - t_rp0) / 1_000_000.0
+                        breakdown["rotated_paste_ms"] = breakdown.get("rotated_paste_ms", 0.0) + p_dt
+                        breakdown[f"widget_{key}_paste_ms"] = p_dt
+                        breakdown[f"{key}.paste"] = p_dt
 
                 _bboxes[key] = box if rot180 else widget_bbox
 
@@ -850,19 +863,23 @@ def compose_overlay(
                 )
         profiler.record(
             f"indicator.{key}.total",
-            (time.perf_counter() - indicator_started) * 1000.0,
+            (time.perf_counter_ns() - indicator_started_ns) / 1_000_000.0,
         )
-        _widget_ms = (time.perf_counter() - indicator_started) * 1000.0
+        _widget_ms = (time.perf_counter_ns() - indicator_started_ns) / 1_000_000.0
         if _production_accounting_role in {"above", "below"}:
             record_production_accounting(
                 f"{_production_accounting_role}.widget.{key}", _widget_ms
             )
+        if breakdown is not None:
+            breakdown[f"{key}.total"] = _widget_ms
+            if f"{key}.paste" not in breakdown:
+                breakdown[f"{key}.paste"] = 0.0
 
     # Custom texts – use resolution-scaled outline
     ct_outline = max(0, int(round(
         int(layout.get("global", {}).get("text_outline", 3)) * min(canvas_w, canvas_h) / 1000
     )))
-    custom_started = time.perf_counter()
+    custom_started_ns = time.perf_counter_ns()
     for custom_index, ct_cfg in enumerate(layout.get("custom_texts", [])):
         if render_keys is not None and f"custom_text:{custom_index}" not in render_keys:
             continue
@@ -897,10 +914,12 @@ def compose_overlay(
                     int(ct_w),
                     int(ct_h),
                 )
+    if breakdown is not None:
+        breakdown["custom_texts.total"] = (time.perf_counter_ns() - custom_started_ns) / 1_000_000.0
     if _production_accounting_role in {"above", "below"}:
         record_production_accounting(
             f"{_production_accounting_role}.custom_text_loop",
-            (time.perf_counter() - custom_started) * 1000.0,
+            (time.perf_counter_ns() - custom_started_ns) / 1_000_000.0,
         )
 
     if prev_bboxes is not None and _bboxes:

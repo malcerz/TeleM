@@ -168,7 +168,7 @@ def render_overlay_frame(
     hud_regions = WORKER_CACHE.get("hud_regions")
     hud_bbox = WORKER_CACHE.get("hud_bbox")
 
-    if hud_regions and len(hud_regions) > 1:
+    if hud_regions and len(hud_regions) > 1 and layout.get("_nvidia_direct_region"):
         planned_atlas = layout.get("_nvidia_atlas_size")
         if planned_atlas:
             atlas_w, atlas_h = planned_atlas
@@ -319,6 +319,7 @@ def render_overlay_frame(
             avg_speed_kmh=data["avg_speed_kmh"],
             breakdown=breakdown,
             rot180=rot180,
+target_image=target_image,
         )
         if hud_bbox:
             hx, hy, hw, hh = hud_bbox

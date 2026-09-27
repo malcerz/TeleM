@@ -178,10 +178,11 @@ class PresetMixin:
         try:
             from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
             saved = normalize_layout_for_save(self.layout)
-            if hasattr(self, "_cut_regions") and self._cut_regions:
-                saved["cut_regions"] = self._cut_regions
-            else:
-                saved.pop("cut_regions", None)
+            # P0-FIX: cut_regions are runtime IN/OUT state managed by RenderTab
+            # per-session and must NOT be persisted to the sidecar layout.
+            # Serializing them poisons subsequent sessions: scrubbing is locked
+            # to the previously-set range and render is capped at that duration.
+            saved.pop("cut_regions", None)
 
             render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
             if render_tab is not None:
@@ -190,6 +191,8 @@ class PresetMixin:
                     exp["nvidia_backend"] = render_tab.cmb_nvidia_backend.currentData()
                 if hasattr(render_tab, "cmb_nvidia_codec"):
                     exp["codec"] = render_tab.cmb_nvidia_codec.currentText()
+                if hasattr(render_tab, "cmb_intel_codec"):
+                    exp["intel_codec"] = render_tab.cmb_intel_codec.currentData()
                 if hasattr(render_tab, "cmb_nvidia_quality"):
                     exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentText()
                 if hasattr(render_tab, "edit_bitrate"):
@@ -218,10 +221,9 @@ class PresetMixin:
             self.layout["_startup_preset"] = ""
             saved = normalize_layout_for_save(self.layout)
             saved["_startup_preset"] = ""
-            if hasattr(self, "_cut_regions") and self._cut_regions:
-                saved["cut_regions"] = self._cut_regions
-            else:
-                saved.pop("cut_regions", None)
+            # P0-FIX: same as _save_project_layout — do not persist runtime
+            # IN/OUT cut_regions to the global default layout.
+            saved.pop("cut_regions", None)
 
             # Persystuj globalny font oraz outline
             font_family = getattr(self, "_global_font_family", "") or ""

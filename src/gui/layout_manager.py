@@ -309,8 +309,11 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
         if "indicators" in user and isinstance(user["indicators"], dict):
             layout["indicators"] = user["indicators"]
             for ind in layout["indicators"].values():
-                if isinstance(ind, dict) and "font" not in ind:
-                    ind["font"] = ""
+                if isinstance(ind, dict):
+                    if "font" not in ind:
+                        ind["font"] = ""
+                    ind.pop("_presentation_video_start", None)
+                    ind.pop("_presentation_video_end", None)
         if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
 

@@ -94,11 +94,14 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
         fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
-    elapsed = max(0, int(snapshot.elapsed_s))
-    mins, secs = divmod(elapsed, 60)
-    hours, mins = divmod(mins, 60)
-    elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
-    if snapshot.eta_s is None:
+    if snapshot.elapsed_s is None or not (0 <= snapshot.elapsed_s <= 3600000):
+        elapsed_txt = "--:--"
+    else:
+        elapsed = max(0, int(snapshot.elapsed_s))
+        mins, secs = divmod(elapsed, 60)
+        hours, mins = divmod(mins, 60)
+        elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
+    if snapshot.eta_s is None or not (0 <= snapshot.eta_s <= 3600000):
         eta_txt = "--:--"
     else:
         eta = max(0, int(snapshot.eta_s))

@@ -625,7 +625,7 @@ class RenderMixin:
             render_w=render_w,
             render_h=render_h,
             hud_resolution_scale=hud_resolution_scale,
-            active_process_holder=self.render_process_holder,
+active_process_holder=getattr(self, "render_process_holder", {}),
             amd_decode_mode=options.get("amd_decode_mode", getattr(self, "amd_decode_mode", "gpu")),
             preview_session=options.get("_amd_export_preview_session"),
             preview_state_provider=getattr(self, "preview_diagnostics_provider", None),
@@ -634,6 +634,7 @@ class RenderMixin:
             nvidia_codec=options.get("nvidia_codec", "HEVC"),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
             enable_compression_analysis=bool(options.get("compression_analysis", True)),
+codec=options.get("intel_codec", "av1"),
             max_frames=options.get("max_frames"),
         )
 

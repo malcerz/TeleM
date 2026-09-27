@@ -137,8 +137,10 @@ def test_extract_frame_uncached_capture_is_released():
 def test_encoder_fallback_on_unsupported_gpu():
     """When nvenc is not supported (e.g. on AMD system), validation should fallback to best encoder."""
     from src.ffmpeg_pipeline import detect_best_encoder, _test_encoder
-    with patch("src.ffmpeg_pipeline._test_encoder") as mock_test:
-        def _mock_test_impl(name):
+    import src.ffmpeg.detection as dt
+    dt._BEST_ENCODER_CACHE = None
+    with patch("src.ffmpeg.detection._test_encoder") as mock_test:
+        def _mock_test_impl(name, *args, **kwargs):
             return name in ("hevc_amf", "h264_amf")
         mock_test.side_effect = _mock_test_impl
 
@@ -272,7 +274,7 @@ def test_intel_and_cpu_pipeline_unchanged():
     assert intel_cmd[intel_cmd.index("-pix_fmt", intel_cmd.index("-c:v")) + 1] == "nv12"
     assert _encoder_args(intel_cmd) == _encoder_args(intel_cmd_r)
     assert "overlay_cuda" not in intel_fc_r
-    assert "vflip,hflip" in intel_fc_r
+    assert "hwdownload" in intel_fc_r
 
     # CPU (libx265) - rotation must not alter the encoder settings
     cpu_cmd, cpu_fc = _build_stream_ffmpeg_cmd(
@@ -410,7 +412,7 @@ def test_intel_rotation180_no_nv2(monkeypatch):
         container_rotation=0, rotation_degrees=180,
     )
     assert "overlay_cuda" not in filter_complex
-    assert "vflip,hflip" in filter_complex
+    assert "hwdownload" in filter_complex
     assert "hevc_qsv" in cmd
 
 

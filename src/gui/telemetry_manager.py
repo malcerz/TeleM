@@ -928,14 +928,20 @@ class TelemetryDataManager:
             session_total_distance=getattr(fit_result, "session_total_distance", None),
             lap_summaries=getattr(fit_result, "lap_summaries", None),
             distance_normalization=getattr(fit_result, "distance_normalization", None),
+            source_start=getattr(fit_result, "source_start", None) or (records[0]["timestamp"] if records else None),
         )
         self.available_fit_fields = self.fit_data.available_fit_fields
 
         if self.start_dt_utc is None:
-            for stream_key in ("speed", "alt", "distance", "heart_rate", "cadence", "power"):
-                if self.fit_data.get(stream_key):
-                    self.start_dt_utc = self.fit_data[stream_key][0][0]
-                    break
+            if getattr(self.fit_data, "source_start", None) is not None:
+                self.start_dt_utc = self.fit_data.source_start
+            elif records:
+                self.start_dt_utc = records[0]["timestamp"]
+            else:
+                for stream_key in ("distance", "alt", "speed", "heart_rate", "cadence", "power"):
+                    if self.fit_data.get(stream_key):
+                        self.start_dt_utc = self.fit_data[stream_key][0][0]
+                        break
 
         fit_end_dt_utc = None
         for stream_key in ("speed", "alt", "distance", "heart_rate", "cadence", "power", "garmin_battery_percent", "gopro_battery"):
@@ -1221,11 +1227,11 @@ class TelemetryDataManager:
                     return None
             return interpolate_roll(timeline, target_dt)
         selected_source = source or prefer
-        cfg = indicator_config if indicator_config is not None else {}
+        cfg = dict(indicator_config) if indicator_config is not None else {}
         if indicator_config is None and indicator_key and hasattr(self, "layout") and isinstance(self.layout, dict):
             raw_cfg = self.layout.get("indicators", {}).get(indicator_key, {})
             if isinstance(raw_cfg, dict):
-                cfg = raw_cfg
+                cfg = dict(raw_cfg)
         samples = self.resolve_samples(field_name, selected_source)
         if not samples:
             return None
@@ -1233,12 +1239,12 @@ class TelemetryDataManager:
             return interpolate_heading(samples, target_dt)
         if field_name == 'slope':
             return interpolate_slope(samples, target_dt)
-        if hasattr(self, "_coverage_start") and self._coverage_start is not None:
-            cfg.setdefault("_presentation_video_start", self._coverage_start)
-        elif self.start_dt_utc is not None:
-            cfg.setdefault("_presentation_video_start", self.start_dt_utc)
-        if hasattr(self, "_coverage_end") and self._coverage_end is not None:
-            cfg.setdefault("_presentation_video_end", self._coverage_end)
+        cov_start = getattr(self, "_coverage_start", None) or self.start_dt_utc
+        if cov_start is not None and "_presentation_video_start" not in cfg:
+            cfg["_presentation_video_start"] = cov_start
+        cov_end = getattr(self, "_coverage_end", None)
+        if cov_end is not None and "_presentation_video_end" not in cfg:
+            cfg["_presentation_video_end"] = cov_end
         active_mapper = getattr(self, "timeline", None) or getattr(self, "video_timeline", None)
         if active_mapper is None and selected_source == 'fit':
             active_mapper = getattr(self.fit_data, 'active_time_mapper', None)

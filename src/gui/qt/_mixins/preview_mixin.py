@@ -427,12 +427,15 @@ class PreviewMixin:
         """Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render."""
         preview_widget = getattr(self, "video_preview_widget", None)
         if preview_widget is not None and hasattr(preview_widget, "get_physical_video_rect"):
-            if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
-                prect = preview_widget.get_physical_video_rect()
-                dpr = preview_widget.get_dpr()
-                if prect.width() > 10 and prect.height() > 10:
-                    self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
-                    return
+            try:
+                if (hasattr(preview_widget, "is_geometry_ready") and preview_widget.is_geometry_ready()) or force:
+                    prect = preview_widget.get_physical_video_rect()
+                    dpr = preview_widget.get_dpr()
+                    if prect.width() > 10 and prect.height() > 10:
+                        self.set_preview_target_size(prect.width(), prect.height(), dpr=dpr)
+                        return
+            except (RuntimeError, Exception):
+                pass
         if getattr(self, "video_path", None) and getattr(self, "_preview_target_w", None) and getattr(self, "_preview_target_h", None):
             self._render_preview()
 

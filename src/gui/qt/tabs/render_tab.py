@@ -342,6 +342,70 @@ class RenderTab(QWidget):
 
         self.cmb_nvidia_codec.currentIndexChanged.connect(lambda _: _update_nvidia_quality_options())
 
+# ── Intel Options (Etap 8B) ──────────────────────────────────
+        self.widget_intel_options = QWidget()
+        layout_intel = QFormLayout(self.widget_intel_options)
+        layout_intel.setContentsMargins(0, 0, 0, 0)
+        layout_intel.setSpacing(6)
+
+        self.cmb_intel_codec = QComboBox()
+        self.cmb_intel_codec.addItem("AV1 — 10-bit HDR (Zalecany)", "av1")
+        self.cmb_intel_codec.addItem("H.264 — 8-bit SDR", "h264")
+        self.cmb_intel_codec.addItem("H.265 — 10-bit HDR", "hevc")
+
+        try:
+            from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+            intel_caps = query_intel_capabilities()
+        except Exception:
+            intel_caps = {"AV1_AVAILABLE": True, "H264_AVAILABLE": True, "HEVC_AVAILABLE": True}
+
+        idx_hevc = self.cmb_intel_codec.findData("hevc")
+        if not intel_caps.get("HEVC_AVAILABLE", False) and idx_hevc >= 0:
+            model = self.cmb_intel_codec.model()
+            if model is not None:
+                item = model.item(idx_hevc) if hasattr(model, "item") else None
+                if item is not None:
+                    item.setEnabled(False)
+                    item.setText("H.265 (Niedostępny na aktualnym sterowniku/runtime Intel)")
+                    item.setToolTip("Niedostępny na aktualnym sterowniku/runtime Intel")
+
+        self.cmb_intel_codec.setToolTip(
+            "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).
+"
+            "AV1: 10-bit HDR (HLG BT.2020, produkcyjny default).
+"
+            "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).
+"
+            "H.265: 10-bit HDR (HLG BT.2020)."
+        )
+
+        self.lbl_intel_codec_info = QLabel("Format: HDR 10-bit (HLG / BT.2020)")
+        self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
+
+        def _on_intel_codec_changed(_idx: int) -> None:
+            c = self.cmb_intel_codec.currentData()
+            if c == "h264":
+                self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
+                self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
+            elif c == "hevc":
+                if intel_caps.get("HEVC_AVAILABLE", False):
+                    self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
+                    self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
+                else:
+                    self.lbl_intel_codec_info.setText("Niedostępny na aktualnym sterowniku/runtime Intel")
+                    self.lbl_intel_codec_info.setStyleSheet("color: #ff7777; font-size: 11px; font-weight: normal;")
+            else:
+                self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
+                self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
+
+        self.cmb_intel_codec.currentIndexChanged.connect(_on_intel_codec_changed)
+
+        row_intel_codec = QVBoxLayout()
+        row_intel_codec.setSpacing(2)
+        row_intel_codec.addWidget(self.cmb_intel_codec)
+        row_intel_codec.addWidget(self.lbl_intel_codec_info)
+        layout_intel.addRow("Koder wideo:", row_intel_codec)
+        form.addRow(self.widget_intel_options)
         def _update_backend_visibility():
             enc = self.cmb_encoder.currentText().strip().lower()
             if enc == "auto":
@@ -352,8 +416,10 @@ class RenderTab(QWidget):
                     enc = ""
             is_amd = enc == "amd"
             is_nv = enc in ("nv", "nvidia")
+            is_intel = enc in ("intel", "qsv")
             self.widget_amd_options.setVisible(is_amd)
             self.widget_nvidia_options.setVisible(is_nv)
+            self.widget_intel_options.setVisible(is_intel)
             if is_nv:
                 self.cmb_nvidia_codec.setEnabled(True)
                 self.cmb_nvidia_quality.setEnabled(True)
@@ -585,6 +651,8 @@ class RenderTab(QWidget):
     # ═════════════════════════════════════════════════════════════════════
 
     def _fmt_time(self, secs: float) -> str:
+        if secs is None or not (0 <= secs <= 3600000):
+            return "--:--"
         secs = max(0, int(secs))
         h = secs // 3600
         m = (secs % 3600) // 60
@@ -964,6 +1032,7 @@ class RenderTab(QWidget):
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
             "nvidia_codec": self.cmb_nvidia_codec.currentText(),
             "nvidia_quality": self.cmb_nvidia_quality.currentText(),
+            "intel_codec": self.cmb_intel_codec.currentData() or "av1",
             "compression_analysis": self.chk_compression_analysis.isChecked(),
             # Diagnostic provenance only.  The production NVIDIA dispatch has
             # historically not forwarded this checkbox as ``hud_preview``;
@@ -1470,13 +1539,13 @@ class RenderTab(QWidget):
             pct_txt = "--"
         if final_eta is not None:
             eta_txt = final_eta
-        elif fps > 0 and total and completed < total:
+        elif fps > 0.05 and total and 0 <= completed < total:
             eta = (total - completed) / fps
-            eta_txt = self._fmt_time(eta)
+            eta_txt = self._fmt_time(eta) if eta <= 360000 else "--:--"
         else:
             eta_txt = "--:--"
-        elapsed_txt = self._fmt_time(elapsed) if elapsed > 0 else "--:--"
-        fps_txt = f"{fps:.1f}" if fps > 0 else "--"
+        elapsed_txt = self._fmt_time(elapsed) if (elapsed is not None and 0 <= elapsed <= 3600000) else "--:--"
+        fps_txt = f"{fps:.1f}" if fps > 0.05 else "--"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(

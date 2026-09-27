@@ -20,7 +20,19 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from src.ffmpeg.detection import detect_gpu_decoder
-from src.ffmpeg.intel_backend import intel_device_selection, intel_ffmpeg_device_args, resolve_intel_force
+from src.ffmpeg.intel_backend import (
+    IntelRenderCapabilities,
+    classify_intel_capability,
+    emit_intel_proof,
+    intel_device_selection,
+    intel_ffmpeg_device_args,
+    intel_proof_enabled,
+    intel_proof_snapshot,
+    probe_intel_input,
+    resolve_intel_force,
+    validate_intel_graph_contract,
+    write_intel_proof_json,
+)
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
@@ -626,7 +638,12 @@ def _report_stream_progress(
     profile_name: str = "",
 ) -> None:
     """Report streaming progress and the latest export timestamp for preview."""
-    elapsed = time.time() - start_time
+    now_epoch = time.time()
+    now_mono = time.perf_counter()
+    if start_time > 1e9:
+        elapsed = max(0.0, now_epoch - start_time)
+    else:
+        elapsed = max(0.0, now_mono - start_time)
     m, s = divmod(int(elapsed), 60)
     h, m = divmod(m, 60)
     fps = done / elapsed if elapsed > 0 else 0
@@ -936,6 +953,7 @@ def stream_overlay_to_ffmpeg(
     nvidia_quality: str = "Fast",
     enable_compression_analysis: bool = True,
     max_frames: Optional[int] = None,
+codec: str = "av1",
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
@@ -1104,7 +1122,17 @@ def stream_overlay_to_ffmpeg(
         and not bool(cut_regions)
         and not is_no_hud
         and resolution_name in ("source", "720p", "1080p")
-        and os.environ.get("TELEM_INTEL_GPU_RESIDENT", "1").strip().lower() not in ("0", "false", "off")
+        and os.environ.get("TELEM_INTEL_GPU_RESIDENT", "0").strip().lower() not in ("0", "false", "off")
+    )
+    intel_force_gpu_compositor = (
+        os.environ.get("TELEM_INTEL_FORCE_GPU_COMPOSITOR", "").strip().lower() in ("1", "true", "yes", "on")
+        or os.environ.get("TELEM_INTEL_FORCE_CPU_COMPOSITOR", "").strip().lower() in ("0", "false", "no", "off")
+    )
+    intel_gpu_compositor = (
+        encoder == "intel"
+        and not intel_gpu_resident
+        and intel_force_gpu_compositor
+        and not is_no_hud
     )
     intel_source_file = (
         input_files if isinstance(input_files, (str, Path))
@@ -1125,15 +1153,21 @@ def stream_overlay_to_ffmpeg(
     )
     if encoder == "intel":
         print(
-            f"[INTEL] Render path: {'D3D11_NATIVE' if intel_gpu_resident else 'CPU_REFERENCE'}",
+            f"[INTEL] Render path: {'D3D11_NATIVE' if (intel_gpu_resident or intel_gpu_compositor) else 'CPU_REFERENCE'}",
             flush=True,
         )
         print(
-            f"[INTEL] Video frame residency: {'GPU' if intel_gpu_resident else 'CPU_REFERENCE'}",
+            f"[INTEL] Compositor path: {'GPU_D3D11' if intel_gpu_compositor else ('QSV_GPU' if intel_gpu_resident else 'CPU_REFERENCE')}",
+            flush=True,
+        )
+        print(
+            f"[INTEL] Video frame residency: {'GPU' if intel_gpu_resident else 'CPU'}",
             flush=True,
         )
         if intel_gpu_resident:
             print("[INTEL] Overlay source: CPU_RGBA_UPLOAD", flush=True)
+        elif intel_gpu_compositor:
+            print("[INTEL] Overlay source: CPU_RGBA_UPLOAD_GPU_COMPOSIT", flush=True)
         if not intel_gpu_resident and intel_cpu_software_decode:
             print("[INTEL] Fallback reason: unsupported native vertical-slice configuration", flush=True)
             print("[INTEL] Decode path: SOFTWARE", flush=True)
@@ -1156,6 +1190,63 @@ def stream_overlay_to_ffmpeg(
               flush=True)
         print(f"[INTEL] QSV target bitrate: {video_bitrate}", flush=True)
         print("[INTEL] QSV look_ahead: 0 | async_depth: 4", flush=True)
+
+    # ── ETAP 7D: INTEL_NATIVE_D3D11 In-Process production dispatch ──
+    if encoder == "intel" and os.environ.get("TELEM_INTEL_NATIVE_D3D11", "1").strip().lower() not in ("0", "false", "no", "off"):
+        from src.ffmpeg.intel_native_exporter import export_intel_native_d3d11
+        from src.ffmpeg.command_builder import RESOLUTION_MAP
+        target_res = RESOLUTION_MAP.get(resolution_name)
+        out_w, out_h = target_res if target_res is not None else (render_w, render_h)
+        print("[STREAM INTEL] Dispatching to production INTEL_NATIVE_D3D11 Video Processor GPU pipeline...", flush=True)
+        success = export_intel_native_d3d11(
+            ffmpeg_exe=ffmpeg_exe,
+            input_files=input_files,
+            output_file=str(output_file),
+            duration_s=duration_s,
+            video_width=out_w,
+            video_height=out_h,
+            start_dt_utc=start_dt_utc,
+            tz_offset_hours=tz_offset_hours,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            font_path=font_path,
+            layout=layout,
+            field_samples=field_samples,
+            target_fps=target_fps,
+            video_bitrate=video_bitrate,
+            codec=codec,
+            max_distance_m=max_distance_m,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+            gps_track=gps_track,
+            progress_cb=progress_cb,
+            on_render_progress=on_render_progress,
+            cancel_event=cancel_event,
+            cancel_reason_provider=cancel_reason_provider,
+            preview_state_provider=preview_state_provider,
+            preview_session=preview_session,
+            generation_id=generation_id,
+            active_process_holder=active_process_holder,
+            video_timeline=video_timeline,
+            rotation_degrees=rotation_degrees,
+            container_rotation=container_rotation,
+        )
+        if success:
+            return total_overlay_frames
+        if cancel_event is not None and cancel_event.is_set():
+            return 0
+        print("[STREAM INTEL] Native INTEL_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
+
 
     # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────
     # amd_native_exporter uses only input_files[0]; do NOT silently render a
@@ -1274,14 +1365,71 @@ def stream_overlay_to_ffmpeg(
             "TELEM_INTEL_CPU_REF_HUD_REGION_MAX_RATIO", "0.85")
         if mode == "region":
             hud_bbox = (hud_x, hud_y, stream_w, stream_h)
+            hud_regions = None
             print("[INTEL] HUD upload path: REGION", flush=True)
         elif mode == "full_threshold":
-            stream_w, stream_h = overlay_w, overlay_h
-            print(f"[INTEL] HUD upload path: FULL_CANVAS "
-                  f"reason=ratio_above_threshold({ratio:.3f}>={threshold_txt})",
-                  flush=True)
+            text_bbox_context = build_text_bbox_context(
+                layout,
+                fit_data=fit_data,
+                speed_samples=speed_samples,
+                track_samples=track_samples,
+                alt_samples=alt_samples,
+                iso_samples=iso_samples,
+                exposure_samples=exposure_samples,
+                temperature_samples=temperature_samples,
+                gpx_speed_samples=gpx_speed_samples,
+                gpx_track_samples=gpx_track_samples,
+                gpx_alt_samples=gpx_alt_samples,
+                gpx_power_samples=gpx_power_samples,
+                gpx_atemp_samples=gpx_atemp_samples,
+                gpx_hr_samples=gpx_hr_samples,
+                gpx_cad_samples=gpx_cad_samples,
+            )
+            phantom_keys = text_bbox_context["phantom_keys"]
+            atlas_w, atlas_h, candidate_regions = get_layout_hud_regions(
+                layout, overlay_w, overlay_h, max_regions=4,
+                text_candidates=text_bbox_context["text_candidates"],
+                phantom_keys=phantom_keys,
+                font_path=font_path,
+            )
+            atlas_area = atlas_w * atlas_h
+            atlas_area_pct = (atlas_area / full_area) * 100.0 if full_area else 100.0
+            roi_pixel_sum = sum(int(r[4]) * int(r[5]) for r in candidate_regions) if candidate_regions else 0
+            roi_pixel_ratio = (roi_pixel_sum / full_area) if full_area else 1.0
+            threshold_val = float(threshold_txt) if threshold_txt else 0.85
+
+            if len(candidate_regions) > 1 and intel_gpu_compositor:
+                hud_bbox = None
+                hud_regions = candidate_regions
+                layout["_nvidia_direct_region"] = True
+                layout["_nvidia_phantom_keys"] = tuple(sorted(phantom_keys))
+                layout["_nvidia_atlas_size"] = (atlas_w, atlas_h)
+                hud_x, hud_y = 0, 0
+                stream_w, stream_h = atlas_w, atlas_h
+                print(f"[INTEL] HUD upload path: MULTI_REGION ({len(hud_regions)} regions)", flush=True)
+                for i, r in enumerate(hud_regions):
+                    print(f"[INTEL] Region {i}: dest=({r[0]},{r[1]},{r[4]}x{r[5]}) atlas=({r[2]},{r[3]})", flush=True)
+                print(f"[INTEL] HUD atlas: {stream_w}x{stream_h}", flush=True)
+            elif len(candidate_regions) > 1 and roi_pixel_ratio <= threshold_val:
+                hud_bbox = None
+                hud_regions = candidate_regions
+                hud_x, hud_y = 0, 0
+                stream_w, stream_h = overlay_w, overlay_h
+                print(f"[INTEL] HUD upload path: MULTI_REGION_CPU ({len(hud_regions)} regions)", flush=True)
+                for i, r in enumerate(hud_regions):
+                    print(f"[INTEL] Region {i}: dest=({r[0]},{r[1]},{r[4]}x{r[5]}) canvas=({r[0]},{r[1]})", flush=True)
+                print(f"[INTEL] HUD full canvas pipe: {stream_w}x{stream_h} (ROI active pixels: {roi_pixel_sum:,})", flush=True)
+            else:
+                stream_w, stream_h = overlay_w, overlay_h
+                hud_bbox = None
+                hud_regions = None
+                print(f"[INTEL] HUD upload path: FULL_CANVAS "
+                      f"reason=ratio_above_threshold({roi_pixel_ratio:.3f}>={threshold_txt})",
+                      flush=True)
         else:
             stream_w, stream_h = overlay_w, overlay_h
+            hud_bbox = None
+            hud_regions = None
             print("[INTEL] HUD upload path: FULL_CANVAS "
                   "reason=empty_bbox_geometry", flush=True)
         print(f"[INTEL] HUD bbox ratio: {max(0.0, min(1.0, ratio)):.3f}", flush=True)
@@ -1486,7 +1634,6 @@ def stream_overlay_to_ffmpeg(
                 escaped_p = str(Path(p).resolve()).replace("'", "'\\''")
                 f.write(f"file '{escaped_p}'\n")
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
-        audio_input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
         if container_rotation != 0 and encoder != "intel":
@@ -1499,7 +1646,6 @@ def stream_overlay_to_ffmpeg(
             input_args.extend(["-noautorotate", "-i", str(input_file)])
         else:
             input_args.extend(["-i", str(input_file)])
-        audio_input_args.extend(["-i", str(input_file)])
 
     use_gpu_compositor = bool(layout.get("_use_gpu_compositor", False))
 
@@ -1532,8 +1678,10 @@ def stream_overlay_to_ffmpeg(
         hud_regions=hud_regions,
         use_gpu_compositor=use_gpu_compositor,
         intel_gpu_resident=intel_gpu_resident,
+        intel_gpu_compositor=intel_gpu_compositor,
         intel_cpu_download_format=intel_cpu_download_format,
         intel_cpu_software_decode=intel_cpu_software_decode,
+intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         nvidia_codec=nvidia_codec,
         nvidia_quality=nvidia_quality,
         enable_compression_analysis=enable_compression_analysis,
@@ -1551,6 +1699,154 @@ def stream_overlay_to_ffmpeg(
         hud_bytes_per_frame = int(stream_w) * int(stream_h) * 4
         print(f"[INTEL] HUD upload bytes/frame: {hud_bytes_per_frame}", flush=True)
     print(f"[STREAM] filter: {filter_complex}", flush=True)
+
+    intel_proof_data = None
+    if encoder == "intel" or intel_proof_enabled():
+        first_input = input_files[0] if isinstance(input_files, list) else input_files
+        input_info = probe_intel_input(str(first_input), ffmpeg_exe)
+        input_info["paths"] = [str(path) for path in input_files] if isinstance(input_files, list) else [str(input_files)]
+        selected_adapter = next(
+            (item for item in intel_resolution.adapters
+             if int(item.get("index", -1)) == intel_selection.adapter_index),
+            {},
+        )
+        encode_pix_fmt = None
+        if "-pix_fmt" in cmd:
+            pix_index = cmd.index("-pix_fmt") + 1
+            if pix_index < len(cmd):
+                encode_pix_fmt = str(cmd[pix_index])
+        resolved_intel_codec = getattr(intel_resolution, "selected_codec", "hevc") if encoder == "intel" else "hevc"
+        is_cpu_roi = bool(hud_regions and not intel_gpu_compositor and not intel_gpu_resident)
+        contract = validate_intel_graph_contract(
+            cmd, filter_complex,
+            gpu_resident=intel_gpu_resident,
+            gpu_compositor=intel_gpu_compositor,
+            software_decode=intel_cpu_software_decode,
+            cpu_roi=is_cpu_roi,
+            expected_codec=resolved_intel_codec,
+        )
+        proof_hud_w = int(stream_w) if not is_no_hud else 0
+        proof_hud_h = int(stream_h) if not is_no_hud else 0
+        proof_hud_bytes = (proof_hud_w * proof_hud_h * 4) if not is_no_hud else 0
+        proof_full_bytes = int(overlay_w * overlay_h * 4) if not is_no_hud else 0
+        scale_x = render_w / overlay_w if overlay_w else 1.0
+        scale_y = render_h / overlay_h if overlay_h else 1.0
+
+        if is_no_hud:
+            proof_hud_transport = "NONE"
+            proof_hud_mode = "NONE"
+            proof_hud_bbox = None
+            proof_bbox_source = None
+            proof_bbox_output = None
+            proof_reduction_pct = 0.0
+            proof_region_count = 0
+            proof_total_region_bytes = 0
+        elif hud_regions:
+            if intel_gpu_compositor:
+                proof_hud_transport = "BOUNDED_MULTI_REGION"
+                proof_hud_mode = "MULTI_REGION"
+            else:
+                proof_hud_transport = "FULL_FRAME"
+                proof_hud_mode = "MULTI_REGION_CPU"
+            proof_hud_bbox = tuple(map(int, hud_bbox)) if hud_bbox else None
+            proof_bbox_source = proof_hud_bbox
+            proof_bbox_output = proof_hud_bbox
+            proof_total_region_bytes = sum(int(r[4]) * int(r[5]) * 4 for r in hud_regions)
+            proof_reduction_pct = (1.0 - (proof_total_region_bytes / proof_full_bytes)) * 100.0 if proof_full_bytes else 0.0
+            proof_region_count = len(hud_regions)
+        elif hud_bbox:
+            proof_hud_transport = "BOUNDED_REGION"
+            proof_hud_mode = "SINGLE_BBOX"
+            proof_hud_bbox = tuple(map(int, hud_bbox))
+            proof_bbox_source = proof_hud_bbox
+            s_bx = int(round(hud_bbox[0] * scale_x))
+            s_by = int(round(hud_bbox[1] * scale_y))
+            s_bw = int(round(hud_bbox[2] * scale_x))
+            s_bh = int(round(hud_bbox[3] * scale_y))
+            proof_bbox_output = (s_bx, s_by, s_bw, s_bh)
+            proof_reduction_pct = (1.0 - (proof_hud_bytes / proof_full_bytes)) * 100.0 if proof_full_bytes else 0.0
+            proof_region_count = 1
+            proof_total_region_bytes = proof_hud_bytes
+        else:
+            proof_hud_transport = "FULL_FRAME"
+            proof_hud_mode = "FULL_CANVAS"
+            proof_hud_bbox = (0, 0, int(overlay_w), int(overlay_h))
+            proof_bbox_source = (0, 0, int(overlay_w), int(overlay_h))
+            proof_bbox_output = (0, 0, int(render_w), int(render_h))
+            proof_reduction_pct = 0.0
+            proof_region_count = 1
+            proof_total_region_bytes = proof_hud_bytes
+
+        encode_path_label = "QSV_AV1" if resolved_intel_codec == "av1" else "QSV_HEVC"
+        proof_caps = IntelRenderCapabilities(
+            adapter_name=intel_selection.adapter_name,
+            adapter_vendor_id=intel_selection.vendor_id,
+            adapter_device_id=int(selected_adapter.get("device_id", 0)),
+            adapter_dxgi_index=intel_selection.adapter_index,
+            driver_version=selected_adapter.get("driver_version"),
+            qsv_available=bool(intel_resolution.qsv_available),
+            qsv_h264_encode=bool(getattr(intel_resolution, "h264_qsv_usable", intel_resolution.h264_qsv)),
+            qsv_hevc_encode=bool(getattr(intel_resolution, "hevc_qsv_usable", intel_resolution.hevc_qsv)),
+            qsv_av1_encode=bool(getattr(intel_resolution, "av1_qsv_usable", getattr(intel_resolution, "av1_qsv", False))),
+            encode_codec=resolved_intel_codec.upper(),
+            d3d11_device_available=bool(intel_resolution.d3d11_device_ok),
+            input_codec=input_info.get("codec"),
+            input_width=input_info.get("width"),
+            input_height=input_info.get("height"),
+            input_bit_depth=input_info.get("bit_depth"),
+            input_pixel_format=input_info.get("pixel_format"),
+            input_hdr=input_info.get("hdr"),
+            input_rotation=int(effective_rotation),
+            multi_file=is_multi_file,
+            cut_active=bool(cut_regions),
+            decode_path=("QSV/D3D11" if not intel_cpu_software_decode else "SOFTWARE"),
+            decode_residency=(
+                "GPU" if intel_gpu_resident else "CPU"
+            ),
+            hud_transport=proof_hud_transport,
+            hud_canvas_width=int(overlay_w) if not is_no_hud else 0,
+            hud_canvas_height=int(overlay_h) if not is_no_hud else 0,
+            hud_width=proof_hud_w,
+            hud_height=proof_hud_h,
+            hud_bytes_per_frame=proof_hud_bytes,
+            hud_full_frame_bytes=proof_full_bytes,
+            hud_transfer_reduction_percent=proof_reduction_pct,
+            hud_uploads_per_frame=len(hud_regions) if (intel_gpu_compositor and hud_regions) else (1 if not is_no_hud else 0),
+            hud_region_mode=proof_hud_mode,
+            hud_region_bbox=proof_hud_bbox,
+            hud_bbox_source=proof_bbox_source,
+            hud_bbox_output=proof_bbox_output,
+            hud_region_count=proof_region_count,
+            hud_regions=hud_regions,
+            total_region_bytes_frame=proof_total_region_bytes,
+            compositor_path=(
+                "GPU_D3D11" if intel_gpu_compositor
+                else ("QSV_GPU" if intel_gpu_resident
+                      else ("CPU_ROI" if hud_regions else "CPU_REFERENCE"))
+            ),
+            gpu_texture_format=("P010 / BGRA" if encode_pix_fmt == "p010le" else "NV12 / BGRA"),
+            compositor_output_format=("QSV/P010" if encode_pix_fmt == "p010le" else "QSV/NV12"),
+            encode_path=encode_path_label,
+            encode_pixel_format=encode_pix_fmt,
+            hwdownload_count_expected=(
+                0 if (intel_gpu_resident or intel_gpu_compositor or intel_cpu_software_decode) else 1
+            ),
+            hwupload_count_expected=(1 + len(hud_regions)) if (intel_gpu_compositor and hud_regions) else (2 if intel_gpu_compositor else (0 if is_no_hud else 1)),
+            capability_class=classify_intel_capability(
+                qsv_available=bool(intel_resolution.qsv_available),
+                gpu_resident=intel_gpu_resident,
+                input_hdr=input_info.get("hdr"),
+            ),
+        )
+        intel_proof_data = intel_proof_snapshot(
+            proof_caps,
+            input_info=input_info,
+            timeline=video_timeline,
+            contract_validation=contract,
+            ffmpeg_exe=ffmpeg_exe,
+        )
+        intel_proof_data["_timeline_object"] = video_timeline
+        emit_intel_proof(intel_proof_data)
 
     if filter_complex.startswith("direct_gpu_passthrough"):
         print(f"[STREAM AMD] Direct GPU-resident passthrough (NO HUD mode, zero hwdownload, zero pipe write)", flush=True)
@@ -2259,6 +2555,31 @@ def stream_overlay_to_ffmpeg(
     real_export_fps = (total_overlay_frames / t_prod_total) if t_prod_total > 0 else 0.0
     total_overhead = max(0.0, t_prod_total - frame_pipeline_time)
     overhead_pct = (total_overhead / t_prod_total * 100.0) if t_prod_total > 0 else 0.0
+
+    if intel_proof_data is not None:
+        benchmark_summary = BenchmarkTracker.get_instance().get_summary()
+
+        def _avg(name: str) -> float | None:
+            item = benchmark_summary.get(name)
+            return float(item["avg"]) if isinstance(item, dict) and "avg" in item else None
+
+        intel_proof_data["timings"] = {
+            "export_wall_ms": t_prod_total * 1000.0,
+            "precompute_ms": t_prep_time * 1000.0,
+            "first_frame_latency_ms": first_frame_lat * 1000.0,
+            "video_render_wall_ms": frame_pipeline_time * 1000.0,
+            "mux_ms": None,
+            "render_fps": real_export_fps,
+            "hud_prepare_ms": _avg("compose_overlay"),
+            "hud_render_ms": None,
+            "hud_copy_ms": None,
+            "ffmpeg_write_ms": _avg("ffmpeg_write"),
+            "writer_wait_ms": None,
+            "ffmpeg_drain_finalize_ms": t_drain_time * 1000.0,
+        }
+        proof_path = write_intel_proof_json(intel_proof_data, str(output_file))
+        if proof_path is not None:
+            print(f"[INTEL PROOF] JSON={proof_path}", flush=True)
 
     # Wydrukuj podsumowanie wydajności renderowania
     BenchmarkTracker.get_instance().print_summary()

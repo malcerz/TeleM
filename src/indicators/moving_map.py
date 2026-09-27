@@ -556,6 +556,24 @@ def _render_moving_map_indicator(
         track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
         track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
 
+        # ETAP 3A Diagnostic: Frozen Map
+        if os.environ.get("TELEM_MAP_FROZEN") == "1":
+            if not hasattr(_render_moving_map_indicator, "_frozen_map_cache"):
+                _render_moving_map_indicator._frozen_map_cache = {}
+            if cache_key in _render_moving_map_indicator._frozen_map_cache:
+                c_img, cx, cy, cextra = _render_moving_map_indicator._frozen_map_cache[cache_key]
+                return c_img, cx, cy, cextra
+
+        # ETAP 3B GPU Map Prototype Bypass: CPU leaves map area transparent
+        if os.environ.get("TELEM_INTEL_GPU_MAP") == "1":
+            pos_x = s(cfg["x"], canvas_w)
+            pos_y = s(cfg["y"], canvas_h)
+            blank_map = Image.new("RGBA", (map_w, map_h), (0, 0, 0, 0))
+            return blank_map, pos_x, pos_y, None
+
+        if os.environ.get("TELEM_MAP_FROZEN_ROTATION") == "1":
+            map_heading = 0.0
+
         if async_map:
             # ── Async path (GUI preview) — never blocks ───────────────────
             ts = _sync_map_ts(gps_track, target_dt, current_position)
@@ -688,7 +706,8 @@ def _render_moving_map_indicator(
             )
             _cache[cache_key] = renderer
             renderer._is_first_render = True
-            
+
+
             # Precache common zoom levels only in interactive preview (async_map=True).
             # In synchronous worker export (async_map=False), do NOT launch multi-zoom
             # background precache across the entire track (avoids multi-GiB memory surge).
@@ -697,7 +716,8 @@ def _render_moving_map_indicator(
                 if effective_zoom not in zooms_to_cache:
                     zooms_to_cache.append(effective_zoom)
                 zooms_to_cache.sort(key=lambda z: abs(z - effective_zoom))
-                
+
+
                 renderer.background_precache(margin=2, zooms=zooms_to_cache)
         else:
             renderer = _cache[cache_key]
@@ -762,6 +782,11 @@ def _render_moving_map_indicator(
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         map_img = apply_map_pitch(map_img, cfg.get("pitch"))
-        return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+        map_tuple = (map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None)
+        if os.environ.get("TELEM_MAP_FROZEN") == "1":
+            if not hasattr(_render_moving_map_indicator, "_frozen_map_cache"):
+                _render_moving_map_indicator._frozen_map_cache = {}
+            _render_moving_map_indicator._frozen_map_cache[cache_key] = map_tuple
+        return map_tuple
     except Exception:
         return None, 0, 0, None
