@@ -291,6 +291,14 @@ class RenderMixin:
                                 pass
                     if "compression_text" in hud_state and hud_state["compression_text"]:
                         comp_txt = str(hud_state["compression_text"])
+                    elif hud_state.get("compression_active"):
+                        is_av1 = hud_state.get("is_av1", False)
+                        cur_qp = hud_state.get("current_qp", 0)
+                        mean_qp = hud_state.get("mean_qp", 0.0)
+                        p90_qp = hud_state.get("p90_qp", 0.0)
+                        mbps = hud_state.get("bitrate_mbps", 0.0)
+                        prefix = "QIndex śr" if is_av1 else "QP śr"
+                        comp_txt = f"{prefix}: {mean_qp:.1f} | P90: {p90_qp:.0f} | q teraz: {int(cur_qp)} | {mbps:.1f} Mbps"
                     elif "qp_avg" in hud_state and hud_state["qp_avg"] is not None:
                         try:
                             comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
@@ -838,8 +846,10 @@ codec=options.get("intel_codec", "av1"),
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
         )
-        _accepted_stream_params = set(inspect.signature(stream_overlay_to_ffmpeg).parameters.keys())
-        stream_kwargs = {k: v for k, v in stream_kwargs.items() if k in _accepted_stream_params}
+        _sig = inspect.signature(stream_overlay_to_ffmpeg)
+        if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _sig.parameters.values()):
+            _accepted_stream_params = set(_sig.parameters.keys())
+            stream_kwargs = {k: v for k, v in stream_kwargs.items() if k in _accepted_stream_params}
 
         # ── NVIDIA Native D3D11 Dispatch (Stage 8L) ───────────────────
         is_nv = encoder in ("nv", "nvidia")

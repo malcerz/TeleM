@@ -242,7 +242,16 @@ def test_output_dialog_prefill_logic(qapp, monkeypatch):
     assert rt._last_output_dir == r"C:\Videos"
 
 
-def test_amd_encoder_resolution_gate(qapp):
+def test_amd_encoder_resolution_gate(qapp, monkeypatch):
+    from src.ffmpeg.amd_capabilities import GpuCapabilities
+    mock_caps = GpuCapabilities(
+        status="OK",
+        vendor="AMD",
+        max_encode_width=4096,
+        max_encode_height=2160,
+        hevc_encode_available=True,
+    )
+    monkeypatch.setattr("src.ffmpeg.amd_capabilities.get_gpu_capabilities", lambda: mock_caps)
     rt = RenderTab()
 
     # Switch to CPU: 5.3k and 8k should be enabled

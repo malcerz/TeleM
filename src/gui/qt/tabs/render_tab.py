@@ -261,7 +261,7 @@ class RenderTab(QWidget):
         # auto = wykryty najlepszy backend, amd = AMD AMF, nv = NVIDIA NVENC,
         # intel = Intel QuickSync (INTEL_FORCE — bez cross-GPU fallback),
         # cpu = software
-        self.cmb_encoder.addItems(["auto", "amd", "cpu_x265", "nv", "intel", "cpu"])
+        self.cmb_encoder.addItems(["auto", "amd", "nv", "intel", "cpu"])
         self.cmb_encoder.setToolTip(
             "auto = wykryty najlepszy backend, amd = AMD AMF (GPU), "
             "cpu_x265 = CPU HEVC x265 (10-bit, GPU decode/compositor, brak limitu rozdzielczości AMF), "
@@ -572,7 +572,7 @@ class RenderTab(QWidget):
         self.cmb_update_rate.setCurrentText("Full")
         form.addRow("Częstotliwość HUD:", self.cmb_update_rate)
 
-        self.cmb_hud_resolution = DiscreteSlider(["50%", "75%", "100%", "Auto"])
+        self.cmb_hud_resolution = DiscreteSlider(["Auto", "100%", "75%", "50%"])
         self.cmb_hud_resolution.setCurrentText("Auto")
         self.cmb_hud_resolution.setToolTip(
             "Rozmiar rastra HUD względem rozdzielczości eksportu; "

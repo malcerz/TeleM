@@ -281,7 +281,7 @@ class TestResetAndLegacy:
         ctrl._render_preview = lambda: None
         ctrl._on_reset_layout()
         assert "time_block" not in ctrl.layout["indicators"]
-        assert "time_display" in ctrl.layout["indicators"]
+        assert ctrl.layout["indicators"] == {}
 
     def test_12_legacy_not_in_registry_or_default(self):
         from src.indicators.registry import HARDCODED_KEYS

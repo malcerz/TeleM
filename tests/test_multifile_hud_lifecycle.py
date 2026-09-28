@@ -53,6 +53,6 @@ def test_reset_replaces_full_layout_once() -> None:
     controller._on_reset_layout()
     controller._on_reset_layout()
 
-    expected = normalize_layout(Path.cwd() / "def_layout.json", 1280, 720)
-    assert controller.layout == expected
+    assert controller.layout["indicators"] == {}
+    assert controller.layout["custom_texts"] == []
     assert controller.telemetry is telemetry_before

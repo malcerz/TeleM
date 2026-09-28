@@ -82,7 +82,7 @@ class PresetMixin:
             if hasattr(self, "_map_preload_provider_switch"):
                 from src.gui.qt._mixins.project_mixin import _map_provider_from_layout
                 self._map_preload_provider_switch(_map_provider_from_layout(self.layout))
-            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None) or getattr(getattr(self, "ui", None), "_render_tab", None) or getattr(self, "render_tab", None) or getattr(self, "_render_tab", None)
             if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
                 render_tab.apply_export_settings(self.layout.get("export_settings", {}))
             self._render_preview()
@@ -194,7 +194,7 @@ class PresetMixin:
             # to the previously-set range and render is capped at that duration.
             saved.pop("cut_regions", None)
 
-            render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+            render_tab = getattr(getattr(self, "ui", None), "render_tab", None) or getattr(getattr(self, "ui", None), "_render_tab", None) or getattr(self, "render_tab", None) or getattr(self, "_render_tab", None)
             if render_tab is not None:
                 exp = saved.setdefault("export_settings", {})
                 if hasattr(render_tab, "cmb_nvidia_backend"):

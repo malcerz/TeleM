@@ -103,6 +103,8 @@ class MainWindow(QMainWindow):
         Wywoływane z application.py po utworzeniu MainWindow.
         """
         self._controller = controller
+        setattr(controller, "ui", self)
+        setattr(controller, "render_tab", self._render_tab)
         self.preview.set_controller(controller)
         self._project_tab.set_controller(controller)
         self._render_tab.set_controller(controller)

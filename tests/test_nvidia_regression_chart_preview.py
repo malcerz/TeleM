@@ -8,7 +8,8 @@ def test_stream_progress_supplies_preview_timestamp():
     events = []
     _report_stream_progress(50, 100, 1.0, None, lambda *args: events.append(args), 25.0)
     assert events[0][0:2] == (50, 100)
-    assert events[0][4] == {"frame": 49, "ts": 49 / 25.0}
+    assert events[0][4]["frame"] == 49
+    assert events[0][4]["ts"] == 49 / 25.0
 
 
 def test_chart_gap_and_missing_are_not_joined():

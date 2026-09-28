@@ -179,6 +179,8 @@ def test_options_pipeline_passes_amd_decode_mode():
     with patch("src.gui.qt._mixins.render_mixin.stream_overlay_to_ffmpeg") as mock_stream, \
          patch("src.gui.qt._mixins.render_mixin.ffprobe_stream_info", return_value={"streams": [{"width": 1920, "height": 1080, "avg_frame_rate": "30/1"}]}), \
          patch("src.gui.qt._mixins.render_mixin.load_json_with_fallback", return_value=[]), \
+         patch("src.gui.qt._mixins.render_mixin._test_encoder", return_value=True), \
+         patch("src.ffmpeg.detection.is_resolution_supported_by_encoder", return_value=(True, "", None)), \
          patch("pathlib.Path.exists", return_value=True):
         ctrl_cpu._render_pipeline({"encoder": "amd"})
         assert mock_stream.call_count == 1
@@ -189,6 +191,8 @@ def test_options_pipeline_passes_amd_decode_mode():
     with patch("src.gui.qt._mixins.render_mixin.stream_overlay_to_ffmpeg") as mock_stream, \
          patch("src.gui.qt._mixins.render_mixin.ffprobe_stream_info", return_value={"streams": [{"width": 1920, "height": 1080, "avg_frame_rate": "30/1"}]}), \
          patch("src.gui.qt._mixins.render_mixin.load_json_with_fallback", return_value=[]), \
+         patch("src.gui.qt._mixins.render_mixin._test_encoder", return_value=True), \
+         patch("src.ffmpeg.detection.is_resolution_supported_by_encoder", return_value=(True, "", None)), \
          patch("pathlib.Path.exists", return_value=True):
         ctrl_gpu._render_pipeline({"encoder": "amd"})
         assert mock_stream.call_count == 1
