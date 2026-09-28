@@ -453,11 +453,13 @@ class RenderTab(QWidget):
         row_intel_codec.addWidget(self.lbl_intel_codec_info)
         layout_intel.addRow("Koder wideo:", row_intel_codec)
 
-        # Intel Encoder Profile (Phase 3)
+        # Intel Encoder Profile
         from src.ffmpeg.encoder_profile import EncoderProfile, DEFAULT_ENCODER_PROFILE, LEGACY_DEFAULT_ENCODER_PROFILE
-        self.cmb_intel_profile = QComboBox()
-        for val, label in EncoderProfile.choices():
-            self.cmb_intel_profile.addItem(label, val)
+        self.cmb_intel_profile = DiscreteSlider([
+            ("Szybki", "fast"),
+            ("Zbalansowany", "balanced"),
+            ("Jakość", "quality"),
+        ])
         idx_bal = self.cmb_intel_profile.findData(DEFAULT_ENCODER_PROFILE.value)
         if idx_bal >= 0:
             self.cmb_intel_profile.setCurrentIndex(idx_bal)
@@ -3520,7 +3522,7 @@ class RenderTab(QWidget):
             if isinstance(val, str):
                 return EncoderProfile.from_str(val)
             text = self.cmb_encoder_profile.currentText()
-            return EncoderProfile.from_display_name(text)
+            return EncoderProfile.from_str(text)
         return EncoderProfile.BALANCED
 
     def apply_export_settings(self, settings: dict[str, Any]) -> None:
