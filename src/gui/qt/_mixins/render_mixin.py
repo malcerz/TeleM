@@ -335,6 +335,8 @@ class RenderMixin:
                     fps_average=effective_fps,
                     compression_text=comp_txt or getattr(latest, "compression_text", ""),
                     qp=qp_val,
+                    is_av1=bool(hud_state.get("is_av1", getattr(latest, "is_av1", False))) if isinstance(hud_state, dict) else getattr(latest, "is_av1", False),
+                    quant_metric=str(hud_state.get("quant_metric", getattr(latest, "quant_metric", ""))) if isinstance(hud_state, dict) else getattr(latest, "quant_metric", ""),
                 )
             elif phase == "finalize":
                 prev_global = float(getattr(latest, "global_percent", 0.0))
@@ -498,6 +500,12 @@ class RenderMixin:
                             qp = stats["encoder_stats"].get("qp_avg")
                         if qp is None and "amf_stats" in stats:
                             qp = stats["amf_stats"].get("avg_qp")
+                    codec = stats.get("codec", options.get("codec", "")) if stats else options.get("codec", "")
+                    quant_metric = stats.get("quant_metric", "") if stats else ""
+                    quant_avg = stats.get("quant_avg") if stats else None
+                    quant_min = stats.get("quant_min") if stats else None
+                    quant_max = stats.get("quant_max") if stats else None
+                    quant_samples = stats.get("quant_samples") if stats else None
                     queue.notify_render_done(
                         job_id,
                         success=success,
@@ -506,6 +514,12 @@ class RenderMixin:
                         elapsed_s=elapsed,
                         average_fps=fps,
                         average_qp=qp,
+                        codec=codec,
+                        quant_metric=quant_metric,
+                        quant_avg=quant_avg,
+                        quant_min=quant_min,
+                        quant_max=quant_max,
+                        quant_samples=quant_samples,
                     )
                 except Exception as _qe:
                     print(f"[Queue] notify_render_done error: {_qe}", flush=True)
@@ -1232,7 +1246,16 @@ codec=options.get("intel_codec", "av1"),
         else:
             stream_overlay_to_ffmpeg(**stream_kwargs)
 
-        return {"total_overlay_frames": 0, "png_duration": 0}
+        ret_stats = {"total_overlay_frames": 0, "png_duration": 0}
+        if encoder == "intel":
+            try:
+                from src.ffmpeg.intel_native_exporter import get_last_intel_export_stats
+                intel_stats = get_last_intel_export_stats()
+                if intel_stats:
+                    ret_stats.update(intel_stats)
+            except Exception:
+                pass
+        return ret_stats
 
     def _on_render_cancel_requested(self, request: RenderCancelRequest) -> None:
         """Handle a generation-tagged GUI cancellation request."""

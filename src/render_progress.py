@@ -91,6 +91,11 @@ class RenderProgressState:
     prep_label: str = ""
     qp: float | None = None
     avg_qp: float | None = None
+    is_av1: bool = False
+    quant_metric: str = ""
+    quant_min: int | None = None
+    quant_max: int | None = None
+    quant_samples: int | None = None
 
 
 def format_render_progress_status(snapshot: RenderProgressState) -> str:

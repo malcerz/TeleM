@@ -170,6 +170,12 @@ class ExportJob:
     render_elapsed_s: float = 0.0
     average_fps: float = 0.0
     average_qp: Optional[float] = None
+    codec: str = ""
+    quant_metric: str = ""
+    quant_avg: Optional[float] = None
+    quant_min: Optional[int] = None
+    quant_max: Optional[int] = None
+    quant_samples: Optional[int] = None
     is_expanded: bool = False
 
     def __post_init__(self) -> None:
@@ -474,6 +480,12 @@ class ExportQueue:
         elapsed_s: float = 0.0,
         average_fps: float = 0.0,
         average_qp: float | None = None,
+        codec: str = "",
+        quant_metric: str = "",
+        quant_avg: float | None = None,
+        quant_min: int | None = None,
+        quant_max: int | None = None,
+        quant_samples: int | None = None,
     ) -> None:
         """Wywołaj po zakończeniu renderu (z wątku renderu lub GUI)."""
         job = self._find_job(job_id)
@@ -493,10 +505,22 @@ class ExportQueue:
             job.average_fps = average_fps
         if average_qp is not None:
             job.average_qp = average_qp
+        if codec:
+            job.codec = codec
+        if quant_metric:
+            job.quant_metric = quant_metric
+        if quant_avg is not None:
+            job.quant_avg = quant_avg
+        if quant_min is not None:
+            job.quant_min = quant_min
+        if quant_max is not None:
+            job.quant_max = quant_max
+        if quant_samples is not None:
+            job.quant_samples = quant_samples
 
         if already_done:
             # Already finalized state machine, but persist updated stats if any
-            if elapsed_s > 0 or average_fps > 0 or average_qp is not None:
+            if elapsed_s > 0 or average_fps > 0 or average_qp is not None or quant_avg is not None:
                 self._persist()
                 self._notify_updated(job)
             return
@@ -523,7 +547,7 @@ class ExportQueue:
             job_id=job.job_id,
             output_path=job.output_path,
             input_videos=job.video_paths,
-            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} qp={job.average_qp} elapsed={job.render_elapsed_s:.1f}s",
+            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} qp={job.average_qp} quant_avg={job.quant_avg} elapsed={job.render_elapsed_s:.1f}s",
         )
         self._persist()
         self._notify_updated(job)

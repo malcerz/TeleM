@@ -143,6 +143,13 @@ class IntelNativePipelineStats(ctypes.Structure):
         ("pad_2a", ctypes.c_int),
         ("total_producer_d3d11_window_ms", ctypes.c_double),
         ("total_consumer_d3d11_window_ms", ctypes.c_double),
+        # Intel Compression / Quantizer Observability
+        ("quant_current", ctypes.c_int),
+        ("quant_min", ctypes.c_int),
+        ("quant_max", ctypes.c_int),
+        ("quant_samples", ctypes.c_uint32),
+        ("quant_sum", ctypes.c_uint64),
+        ("quant_avg", ctypes.c_double),
     ]
 
 
@@ -474,6 +481,60 @@ def _compute_frame_damage_boxes(
     return _merge_hud_boxes(list(widget_boxes.values()), max_boxes=max_boxes, align=align, canvas_w=canvas_w, canvas_h=canvas_h)
 
 
+
+_last_intel_export_stats: dict[str, Any] = {}
+
+def get_last_intel_export_stats() -> dict[str, Any]:
+    global _last_intel_export_stats
+    return dict(_last_intel_export_stats)
+
+class IntelCompressionTracker:
+    """Live compression / quantizer tracker for Intel exports."""
+    def __init__(self, native_lib: Any, is_av1: bool):
+        self.native_lib = native_lib
+        self.is_av1 = is_av1
+        self._stats = IntelNativePipelineStats()
+        self._last_poll = 0.0
+        self._cached_dict: dict[str, Any] = {}
+
+    def get_hud_state_dict(self) -> dict[str, Any]:
+        now = time.monotonic()
+        if now - self._last_poll >= 0.5 or not self._cached_dict:
+            self._last_poll = now
+            if self.native_lib.intel_native_pipeline_get_stats(ctypes.byref(self._stats)) == 0:
+                if self._stats.quant_samples > 0:
+                    cur = self._stats.quant_current
+                    avg = self._stats.quant_avg
+                    qmin = self._stats.quant_min
+                    qmax = self._stats.quant_max
+                    samples = self._stats.quant_samples
+                    txt = (
+                        f"AV1 Q: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax}"
+                        if self.is_av1
+                        else f"QP: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax}"
+                    )
+                    self._cached_dict = {
+                        "compression_active": True,
+                        "is_av1": self.is_av1,
+                        "quant_metric": "base_q_idx" if self.is_av1 else "QP",
+                        "quant_current": cur,
+                        "quant_avg": avg,
+                        "quant_min": qmin,
+                        "quant_max": qmax,
+                        "quant_samples": samples,
+                        "current_qp": cur,
+                        "mean_qp": avg,
+                        "avg_qp": avg,
+                        "qp_avg": avg,
+                        "compression_text": txt,
+                    }
+                else:
+                    self._cached_dict = {
+                        "compression_active": False,
+                        "is_av1": self.is_av1,
+                    }
+        return dict(self._cached_dict)
+
 def export_intel_native_d3d11(
     ffmpeg_exe: str,
     input_files: list,
@@ -648,6 +709,11 @@ def export_intel_native_d3d11(
     if init_res != 0:
         render_print(f"[STREAM INTEL] ERROR: intel_native_pipeline_init_multi_ex failed with code {init_res} for codec {codec_name}", flush=True)
         return False
+
+    global _last_intel_export_stats
+    _last_intel_export_stats = {}
+    is_av1_export = (codec_id == 0)
+    comp_tracker = IntelCompressionTracker(native_lib, is_av1=is_av1_export)
 
     # 4. Setup HUD Parameters (2560x1440 RGBA)
     from src.ffmpeg.shared_memory import SharedFramePool, _init_worker_with_shm, render_frame_shm_job, get_intel_direct_shm_config
@@ -1054,6 +1120,7 @@ def export_intel_native_d3d11(
                 _report_stream_progress(
                     frames_rendered, total_frames, t_render_start,
                     progress_cb, on_render_progress, target_fps,
+                    compression_tracker=comp_tracker,
                     profile_name="INTEL_NATIVE_7E_ASYNC"
                 )
         else:
@@ -1268,6 +1335,7 @@ def export_intel_native_d3d11(
                     _report_stream_progress(
                         frames_rendered, total_frames, t_render_start,
                         progress_cb, on_render_progress, target_fps,
+                        compression_tracker=comp_tracker,
                         profile_name="INTEL_NATIVE_7E_ASYNC"
                     )
 
@@ -1294,6 +1362,17 @@ def export_intel_native_d3d11(
     native_lib.intel_native_pipeline_get_stats(ctypes.byref(stats))
 
     if (cancel_event is not None and cancel_event.is_set()) or frames_rendered == 0:
+        _last_intel_export_stats = {
+            "codec": "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc"),
+            "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+            "quant_current": stats.quant_current,
+            "quant_avg": stats.quant_avg,
+            "quant_min": stats.quant_min,
+            "quant_max": stats.quant_max,
+            "quant_samples": stats.quant_samples,
+            "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
+            "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
+        }
         render_print(f"[STREAM INTEL] Export cancelled or incomplete ({frames_rendered}/{total_frames} frames), skipping container remux.", flush=True)
         if os.path.exists(temp_encoded_path):
             try:
@@ -1387,6 +1466,20 @@ def export_intel_native_d3d11(
     mux_wall_s = t_export_end - t_mux_start
     render_fps = frames_rendered / render_wall_s if render_wall_s > 0 else 0.0
     user_effective_fps = frames_rendered / total_wall_s if total_wall_s > 0 else 0.0
+
+    _last_intel_export_stats = {
+        "codec": "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc"),
+        "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+        "quant_current": stats.quant_current,
+        "quant_avg": stats.quant_avg,
+        "quant_min": stats.quant_min,
+        "quant_max": stats.quant_max,
+        "quant_samples": stats.quant_samples,
+        "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
+        "real_export_fps": render_fps,
+        "render_fps": render_fps,
+        "user_effective_fps": user_effective_fps,
+    }
 
     render_print("\n============================================================", flush=True)
     render_print(f"   INTEL NATIVE 8A ASYNC PIPELINE EXPORT COMPLETE ({codec_name})", flush=True)

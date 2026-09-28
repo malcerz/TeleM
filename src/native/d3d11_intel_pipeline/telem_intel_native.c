@@ -312,6 +312,13 @@ typedef struct {
     int pad_2a;
     double total_producer_d3d11_window_ms;
     double total_consumer_d3d11_window_ms;
+    // Intel Compression / Quantizer Observability
+    int quant_current;
+    int quant_min;
+    int quant_max;
+    uint32_t quant_samples;
+    uint64_t quant_sum;
+    double quant_avg;
 } IntelNativePipelineStats;
 
 typedef struct {
@@ -511,6 +518,7 @@ typedef struct {
     bool use_staging_ring;
     int topology_mode; // 0 = Topology A (legacy), 1 = Topology C (Pack in Consumer)
     int codec_id; // INTEL_CODEC_AV1 = 0, INTEL_CODEC_H264 = 1, INTEL_CODEC_HEVC = 2
+    bool quant_telemetry_disabled;
     volatile LONG producer_in_d3d11;
     volatile LONG consumer_in_d3d11;
     bool logged_thread_ids;
@@ -1256,6 +1264,65 @@ __declspec(dllexport) int intel_d3d11_vp_get_output_frame(char* out_p010_buffer,
 }
 
 
+static int av1_extract_base_q_idx(const uint8_t* data, size_t length) {
+    if (!data || length < 4) return -1;
+    size_t offset = 0;
+    while (offset < length) {
+        uint8_t b0 = data[offset++];
+        int obu_type = (b0 >> 3) & 0x0F;
+        int has_ext = (b0 >> 2) & 1;
+        int has_size = (b0 >> 1) & 1;
+        if (has_ext) {
+            if (offset >= length) return -1;
+            offset++;
+        }
+        size_t obu_size = 0;
+        if (has_size) {
+            int shift = 0;
+            while (offset < length) {
+                uint8_t s = data[offset++];
+                obu_size |= ((size_t)(s & 0x7F)) << shift;
+                shift += 7;
+                if (!(s & 0x80)) break;
+            }
+        } else {
+            obu_size = length - offset;
+        }
+        if ((obu_type == 6 || obu_type == 3) && offset + obu_size <= length) {
+            const uint8_t* payload = data + offset;
+            if (obu_size >= 9) {
+                int show_existing = (payload[0] >> 7) & 1;
+                if (!show_existing) {
+                    int frame_type = (payload[0] >> 5) & 3;
+                    if (frame_type == 0) { // KEY_FRAME
+                        return ((payload[2] & 0x0F) << 4) | ((payload[3] >> 4) & 0x0F);
+                    } else if (frame_type == 1) { // INTER_FRAME
+                        return ((payload[7] & 0x1F) << 3) | ((payload[8] >> 5) & 0x07);
+                    }
+                }
+            }
+            return -1;
+        }
+        offset += obu_size;
+    }
+    return -1;
+}
+
+static void record_quant_sample(IntelNativeContext* ctx, int q) {
+    if (q < 0 || !ctx || ctx->quant_telemetry_disabled) return;
+    if (ctx->stats.quant_samples == 0) {
+        ctx->stats.quant_min = q;
+        ctx->stats.quant_max = q;
+    } else {
+        if (q < ctx->stats.quant_min) ctx->stats.quant_min = q;
+        if (q > ctx->stats.quant_max) ctx->stats.quant_max = q;
+    }
+    ctx->stats.quant_current = q;
+    ctx->stats.quant_sum += (uint64_t)q;
+    ctx->stats.quant_samples++;
+    ctx->stats.quant_avg = (double)ctx->stats.quant_sum / (double)ctx->stats.quant_samples;
+}
+
 static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
     IntelNativeContext* ctx = (IntelNativeContext*)lpParam;
     LARGE_INTEGER freq = ctx->freq;
@@ -1293,6 +1360,11 @@ static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
             if (ctx->encode_pool[tail].bs.DataLength > 0) {
                 ctx->stats.encoded_frames++;
                 ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
+                if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1) {
+                    int q = av1_extract_base_q_idx(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset,
+                                                   ctx->encode_pool[tail].bs.DataLength);
+                    record_quant_sample(ctx, q);
+                }
                 if (ctx->fOutIVF) {
                     if (ctx->codec_id == INTEL_CODEC_AV1) {
                         uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
@@ -1357,6 +1429,11 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
     if (ctx->encode_pool[tail].bs.DataLength > 0) {
         ctx->stats.encoded_frames++;
         ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
+        if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1) {
+            int q = av1_extract_base_q_idx(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset,
+                                           ctx->encode_pool[tail].bs.DataLength);
+            record_quant_sample(ctx, q);
+        }
         if (ctx->fOutIVF) {
             if (ctx->codec_id == INTEL_CODEC_AV1) {
                 uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
@@ -1431,6 +1508,9 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     g_pipe.stats.d3d11_mt_protection_active = saved_mt_active;
     g_pipe.stats.d3d11_mt_qi_hresult = saved_mt_qi_hr;
     g_pipe.cancelled = false;
+    char env_quant_buf[32] = {0};
+    DWORD env_len = GetEnvironmentVariableA("TELEM_INTEL_QUANT_TELEMETRY", env_quant_buf, sizeof(env_quant_buf));
+    g_pipe.quant_telemetry_disabled = (env_len > 0 && (strcmp(env_quant_buf, "0") == 0 || _stricmp(env_quant_buf, "off") == 0 || _stricmp(env_quant_buf, "false") == 0));
     const char* env_depth = getenv("TELEM_INTEL_MFX_ASYNC_DEPTH");
     int mfx_depth = (env_depth && atoi(env_depth) > 0) ? atoi(env_depth) : (force_serial_7d ? 1 : 8);
     if (mfx_depth > ENCODE_POOL_SIZE) mfx_depth = ENCODE_POOL_SIZE;
