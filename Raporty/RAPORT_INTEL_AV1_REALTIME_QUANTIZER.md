@@ -13,7 +13,7 @@ Zero second-pass decodes, zero ffprobe scans, zero full-file re-reading, and zer
 ## REQUIRED PHASE ATTRIBUTES
 
 - BASE_MAIN_HEAD=f30b5991d8bf58c184713983bb95f0bda41716ae
-- FINAL_HEAD=a5719795d7ac2eafd5cf21eff73707a5520bf0d3
+- FINAL_HEAD=6280bf861ff8bd17625fd477576eebba2ba44aa8
 - INTEL_AV1_METRIC_NAME=base_q_idx
 - INTEL_AV1_METRIC_SOURCE=AV1 OBU Frame Header (uncompressed_header)
 - INTEL_AV1_METRIC_RANGE=0-255
@@ -44,7 +44,7 @@ Zero second-pass decodes, zero ffprobe scans, zero full-file re-reading, and zer
 - TESTS_PASSED=40
 - TESTS_FAILED=0
 - REAL_INTEL_AV1_PASS=YES
-- COMMIT=a5719795d7ac2eafd5cf21eff73707a5520bf0d3
+- COMMIT=6280bf861ff8bd17625fd477576eebba2ba44aa8
 - PUSH_RESULT=SUCCESS
 - FINAL_STATUS=INTEL_AV1_REALTIME_QUANTIZER_READY
 
