@@ -209,3 +209,32 @@ def test_job1_done_starts_job2(tmp_path):
     assert job2.render_status in ("preparing", "running")
 
     q.stop()
+
+
+def test_queue_stop_and_cancelled_status_lifecycle(tmp_path):
+    from src.gui.export_queue import ExportQueue, ExportJob
+    db_file = tmp_path / 'queue_cancel.json'
+    q = make_queue(tmp_path)
+    job = ExportJob(video_paths=['a.mp4'], output_path=str(tmp_path / 'out.mp4'))
+    q.add_job(job)
+    q.start()
+    q.notify_render_started(job.job_id)
+    assert job.render_status in ('preparing', 'running')
+    q.notify_render_done(job.job_id, success=False, cancelled=True, error_message='Anulowano przez uzytkownika')
+    assert job.render_status == 'cancelled'
+    assert job.render_error == 'Anulowano przez uzytkownika'
+    q.stop()
+
+
+def test_queue_progress_recovers_from_early_watchdog_error(tmp_path):
+    from src.gui.export_queue import ExportQueue, ExportJob
+    db_file = tmp_path / 'queue_rec.json'
+    q = make_queue(tmp_path)
+    job = ExportJob(video_paths=['a.mp4'], output_path=str(tmp_path / 'out.mp4'))
+    q.add_job(job)
+    job.render_status = 'error'
+    job.render_error = 'Render worker did not start'
+    q.notify_render_progress(job.job_id, 0.05, phase='render')
+    assert job.render_status == 'running'
+    assert job.render_error == ''
+    q.stop()

@@ -468,6 +468,7 @@ class ExportQueue:
         job_id: str,
         *,
         success: bool,
+        cancelled: bool = False,
         output_path: str = "",
         error_message: str = "",
         elapsed_s: float = 0.0,
@@ -510,6 +511,9 @@ class ExportQueue:
                 job.output_path = output_path
             if job.yt_enabled:
                 job.upload_status = "waiting"
+        elif cancelled:
+            job.render_status = "cancelled"
+            job.render_error = error_message or "Anulowano"
         else:
             job.render_status = "error"
             if error_message:
@@ -536,8 +540,14 @@ class ExportQueue:
         job.render_progress = clamped
         if phase in ("finalize", "finalizing"):
             job.render_status = "finalizing"
-        elif phase in ("render", "running") and job.render_status == "preparing":
+        elif phase in ("render", "running") and job.render_status in ("preparing", "error"):
             job.render_status = "running"
+            if job.render_error == "Render worker did not start":
+                job.render_error = ""
+        elif clamped > 0.0 and job.render_status in ("preparing", "error"):
+            job.render_status = "running"
+            if job.render_error == "Render worker did not start":
+                job.render_error = ""
         if curr_pct != prev_pct or (clamped > 0.0 and prev_pct == 0):
             log_queue_trace(
                 "QUEUE PROGRESS",
@@ -572,10 +582,7 @@ class ExportQueue:
                 if job and job.render_started_at:
                     elapsed = time.time() - job.render_started_at
                     watchdog_timeout = float(os.environ.get("TELEM_QUEUE_WATCHDOG_TIMEOUT", "10.0"))
-                    if elapsed > watchdog_timeout and (
-                        job.render_status == "preparing"
-                        or (job.render_status == "running" and job.render_progress == 0.0 and getattr(job, "_watchdog_disabled", False) is False)
-                    ):
+                    if elapsed > watchdog_timeout and job.render_status == "preparing":
                         log.error("[Queue Watchdog] Render timed out after %.1fs: %s", elapsed, job.job_id)
                         log_queue_trace(
                             "QUEUE WATCHDOG TIMEOUT",

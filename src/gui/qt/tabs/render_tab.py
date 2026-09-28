@@ -1005,14 +1005,27 @@ class RenderTab(QWidget):
                     )
                 except Exception as e:
                     print(f"[RenderTab] Failed to rebuild timeline: {e}", flush=True)
-            if job.fit_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
-                try:
+        if job.fit_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
+            try:
+                curr_fit = getattr(ctrl.telemetry, "fit_path", None)
+                has_fit_track = bool(getattr(ctrl.telemetry, "fit_gps_track", None))
+                if str(curr_fit) != str(job.fit_path) or not has_fit_track:
                     ctrl.telemetry.load_fit(
                         ctrl.video_path, getattr(ctrl.telemetry, "start_dt_utc", None),
                         manual_path=Path(job.fit_path),
                     )
-                except Exception as exc:
-                    print(f"[RenderTab] FIT load for job failed: {exc}", flush=True)
+            except Exception as exc:
+                print(f"[RenderTab] FIT load for job failed: {exc}", flush=True)
+        if hasattr(ctrl, "_ensure_map_context"):
+            try:
+                ctrl._ensure_map_context()
+            except Exception:
+                pass
+        if hasattr(ctrl, "_trigger_map_background_prefetch"):
+            try:
+                ctrl._trigger_map_background_prefetch(reason="queue_job_restore")
+            except Exception:
+                pass
             if job.gpx_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
                 try:
                     ctrl.telemetry.load_gpx(
@@ -1344,21 +1357,8 @@ class RenderTab(QWidget):
         ctrl = self._controller
         import copy
         # Snapshot opcji renderowania
-        options = {
-            "encoder": self.cmb_encoder.currentText(),
-            "render_mode": self.cmb_render_mode.currentData() or "gpu",
-            "resolution": self.cmb_resolution.currentText(),
-            "rotation": self.cmb_rotation.currentText(),
-            "update_rate": self.cmb_update_rate.currentText(),
-            "hud_resolution_scale": self.cmb_hud_resolution.currentText(),
-            "amd_decode_mode": self.cmb_amd_decode.currentData() or "gpu",
-            "amd_encoder_quality": self.cmb_amd_quality.currentData() or "FAST",
-            "bitrate": self.edit_bitrate.text().strip(),
-            "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
-            "nvidia_codec": self.cmb_nvidia_codec.currentText(),
-            "nvidia_quality": self.cmb_nvidia_quality.currentText(),
-            "compression_analysis": self.chk_compression_analysis.isChecked(),
-        }
+        options = self._build_options_from_gui()
+        options.pop("output", None)
         # Snapshot ścieżek
         video_paths = [str(p) for p in (getattr(ctrl, "video_paths", None) or [])]
         if not video_paths:
@@ -1370,7 +1370,7 @@ class RenderTab(QWidget):
             QMessageBox.warning(self, "Kolejka", "Nie wybrano pliku wideo.")
             return
 
-        fit_path = str(getattr(ctrl, "fit_path", "") or "")
+        fit_path = str(getattr(ctrl, "fit_path", "") or getattr(getattr(ctrl, "telemetry", None), "fit_path", "") or "")
         gpx_path = str(getattr(ctrl, "gpx_path", "") or "")
 
         # Snapshot layoutu
@@ -1442,13 +1442,7 @@ class RenderTab(QWidget):
         if self._export_queue:
             self._export_queue.pause()
         if self._rendering or self._cancelling:
-            self._on_cancel_clicked()
-        if self._export_queue:
-            active_id = self._export_queue.get_active_render_id()
-            if active_id:
-                self._export_queue.notify_render_done(
-                    active_id, success=False, error_message="Anulowano przez użytkownika (STOP)"
-                )
+            self._on_cancel()
         self._set_queue_btn_state(running=False)
         self._refresh_queue_ui()
 
@@ -2597,6 +2591,7 @@ class RenderTab(QWidget):
             self._export_queue.notify_render_done(
                 active_q_job,
                 success=is_success,
+                cancelled=bool(self._render_state and self._render_state.cancelled) or self._cancelling,
                 output_path=str(getattr(self._render_state, "output", "") or ""),
                 elapsed_s=elapsed,
                 average_fps=fps,

@@ -501,6 +501,7 @@ class RenderMixin:
                     queue.notify_render_done(
                         job_id,
                         success=success,
+                        cancelled=bool(self.render_cancel_event.is_set()),
                         output_path=output,
                         elapsed_s=elapsed,
                         average_fps=fps,
