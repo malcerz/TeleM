@@ -168,6 +168,9 @@ class ExportJob:
 
     # Statystyki po ukończeniu eksportu (izolowane per-job)
     render_elapsed_s: float = 0.0
+    frame_render_elapsed_s: float = 0.0
+    finalization_elapsed_s: float = 0.0
+    effective_fps: float = 0.0
     average_fps: float = 0.0
     average_qp: Optional[float] = None
     codec: str = ""
@@ -486,6 +489,9 @@ class ExportQueue:
         quant_min: int | None = None,
         quant_max: int | None = None,
         quant_samples: int | None = None,
+        frame_render_elapsed_s: float = 0.0,
+        finalization_elapsed_s: float = 0.0,
+        effective_fps: float = 0.0,
     ) -> None:
         """Wywołaj po zakończeniu renderu (z wątku renderu lub GUI)."""
         job = self._find_job(job_id)
@@ -517,6 +523,12 @@ class ExportQueue:
             job.quant_max = quant_max
         if quant_samples is not None:
             job.quant_samples = quant_samples
+        if frame_render_elapsed_s > 0:
+            job.frame_render_elapsed_s = frame_render_elapsed_s
+        if finalization_elapsed_s > 0:
+            job.finalization_elapsed_s = finalization_elapsed_s
+        if effective_fps > 0:
+            job.effective_fps = effective_fps
 
         if already_done:
             # Already finalized state machine, but persist updated stats if any

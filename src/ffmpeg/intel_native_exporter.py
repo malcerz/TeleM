@@ -535,6 +535,25 @@ class IntelCompressionTracker:
                     }
         return dict(self._cached_dict)
 
+
+def _probe_video_summary(ffmpeg_exe: str, media_path: str) -> dict[str, Any]:
+    ffprobe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+    ffprobe_path = str(Path(ffmpeg_exe).with_name(ffprobe_name))
+    if not os.path.exists(ffprobe_path):
+        ffprobe_path = ffprobe_name
+    cmd = [
+        ffprobe_path, "-v", "error", "-show_entries",
+        "format=duration,size:stream=index,codec_type,codec_name,width,height,avg_frame_rate,duration,nb_frames",
+        "-of", "json", str(media_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    return {}
+
 def export_intel_native_d3d11(
     ffmpeg_exe: str,
     input_files: list,
@@ -1066,6 +1085,8 @@ def export_intel_native_d3d11(
     hud_starvation_count = 0
     t_render_start = time.perf_counter()
     first_frame_latency = 0.0
+    t_first_frame = None
+    t_last_frame = None
     total_hud_wait_s = 0.0
     total_native_step_s = 0.0
 
@@ -1331,6 +1352,10 @@ def export_intel_native_d3d11(
                         render_print(f"[STREAM INTEL] Rendered frame {frames_rendered}/{total_frames}", flush=True)
                     if frames_rendered == 1:
                         first_frame_latency = time.perf_counter() - t_render_start
+                        if t_first_frame is None:
+                            t_first_frame = time.perf_counter()
+                        if t_first_frame is None:
+                            t_first_frame = time.perf_counter()
 
                     _report_stream_progress(
                         frames_rendered, total_frames, t_render_start,
@@ -1353,9 +1378,25 @@ def export_intel_native_d3d11(
         render_print(f"[STREAM INTEL] EXCEPTION in render loop: {exc}\n{traceback.format_exc()}", flush=True)
         raise
     finally:
-        # Finish native pipeline and collect stats
+        t_last_frame = time.perf_counter() if frames_rendered > 0 else t_render_start
+        frame_render_s = max(0.001, t_last_frame - t_render_start)
+        render_fps = frames_rendered / frame_render_s if frame_render_s > 0 else 0.0
+
+        # Instantiate progress tracker for real finalization phases
+        from src.render_progress import RenderProgressTracker
+        progress_tracker = RenderProgressTracker(total_frames, on_render_progress, target_fps=target_fps) if on_render_progress is not None else None
+
+        # Stage 1: Encoder Drain
+        t_drain_start = time.perf_counter()
+        if progress_tracker:
+            progress_tracker.finalize("Finalizacja: opróżnianie enkodera", 0.0, global_pct=92.5)
+        if progress_cb:
+            progress_cb(frames_rendered, "Finalizacja: opróżnianie enkodera...")
+
         native_lib.intel_native_pipeline_finish()
         shm_pool.close()
+        t_drain_end = time.perf_counter()
+        drain_s = max(0.0, t_drain_end - t_drain_start)
 
     # Collect C stats
     stats = IntelNativePipelineStats()
@@ -1372,6 +1413,15 @@ def export_intel_native_d3d11(
             "quant_samples": stats.quant_samples,
             "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
             "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
+            "frame_render_seconds": frame_render_s,
+            "render_fps": render_fps,
+            "real_export_fps": render_fps,
+            "encoder_drain_seconds": drain_s,
+            "mux_seconds": 0.0,
+            "verify_seconds": 0.0,
+            "finalization_seconds": drain_s,
+            "total_wall_seconds": time.perf_counter() - t_export_start,
+            "user_effective_fps": 0.0,
         }
         render_print(f"[STREAM INTEL] Export cancelled or incomplete ({frames_rendered}/{total_frames} frames), skipping container remux.", flush=True)
         if os.path.exists(temp_encoded_path):
@@ -1381,7 +1431,7 @@ def export_intel_native_d3d11(
                 pass
         return False
 
-    # 5. Final Audio Remux into Destination MP4
+    # Stage 2: Supervised Non-Blocking Container Mux into .part.mp4
     render_print(f"[STREAM INTEL] Finalizing container mux with original audio ({codec_name})...", flush=True)
     t_mux_start = time.perf_counter()
     fps_str = "30000/1001" if abs(target_fps - 29.97) < 0.01 or abs(target_fps - 29.97003) < 0.01 else f"{target_fps}"
@@ -1404,6 +1454,13 @@ def export_intel_native_d3d11(
             color_args.extend(["-tag:v", "hvc1"])
 
     rotation_mux_args = ["-display_rotation:v:0", str(effective_rotation)] if effective_rotation != 0 else []
+    output_part_str = output_file_str + ".part.mp4"
+    if os.path.exists(output_part_str):
+        try:
+            os.remove(output_part_str)
+        except Exception:
+            pass
+
     concat_txt_path = None
     if len(native_clip_paths) > 1:
         concat_txt_path = str((temp_dir / f"temp_audio_concat_{os.getpid()}_{int(time.time())}.txt").resolve())
@@ -1413,7 +1470,8 @@ def export_intel_native_d3d11(
                 f_concat.write(f"file '{escaped_p}'\n")
 
         cmd_mux = [
-            ffmpeg_exe, "-y", "-v", "error",
+            ffmpeg_exe, "-y", "-nostats", "-v", "warning",
+            "-progress", "pipe:1",
             *rotation_mux_args,
             "-r", fps_str,
             "-i", temp_encoded_path,
@@ -1422,14 +1480,16 @@ def export_intel_native_d3d11(
             "-map", "1:a:0?",
             "-c:v", "copy",
             "-c:a", "copy",
+            "-shortest",
             "-t", f"{duration_s:.6f}",
             *color_args,
             "-movflags", "+faststart",
-            output_file_str,
+            output_part_str,
         ]
     else:
         cmd_mux = [
-            ffmpeg_exe, "-y", "-v", "error",
+            ffmpeg_exe, "-y", "-nostats", "-v", "warning",
+            "-progress", "pipe:1",
             *rotation_mux_args,
             "-r", fps_str,
             "-i", temp_encoded_path,
@@ -1439,15 +1499,258 @@ def export_intel_native_d3d11(
             "-map", "1:a:0?",
             "-c:v", "copy",
             "-c:a", "copy",
+            "-shortest",
             *color_args,
             "-movflags", "+faststart",
-            output_file_str,
+            output_part_str,
         ]
+
+    render_print(f"[STREAM INTEL MUX CMD] {' '.join(cmd_mux)}", flush=True)
+
+    p_mux = subprocess.Popen(
+        cmd_mux,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    mux_progress = {
+        "out_time_us": 0,
+        "total_size": 0,
+        "speed": "N/A",
+        "progress": "continue",
+        "lines": 0,
+    }
+    mux_lock = threading.Lock()
+    t_mux_first_progress = None
+    t_mux_last_progress = None
+
+    def _mux_stdout_reader():
+        nonlocal t_mux_first_progress, t_mux_last_progress
+        try:
+            for line in p_mux.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                now_p = time.perf_counter()
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    with mux_lock:
+                        mux_progress["lines"] += 1
+                        if t_mux_first_progress is None:
+                            t_mux_first_progress = now_p
+                        t_mux_last_progress = now_p
+                        if k in ("out_time_us", "out_time_ms"):
+                            try:
+                                mux_progress["out_time_us"] = int(v)
+                            except ValueError:
+                                pass
+                        elif k == "total_size":
+                            try:
+                                mux_progress["total_size"] = int(v)
+                            except ValueError:
+                                pass
+                        elif k == "speed":
+                            mux_progress["speed"] = v
+                        elif k == "progress":
+                            mux_progress["progress"] = v
+        except Exception:
+            pass
+
+    mux_stderr_lines = []
+    def _mux_stderr_reader():
+        try:
+            for line in p_mux.stderr:
+                if line:
+                    mux_stderr_lines.append(line.strip())
+                    if len(mux_stderr_lines) > 200:
+                        mux_stderr_lines.pop(0)
+        except Exception:
+            pass
+
+    t_mux_out = threading.Thread(target=_mux_stdout_reader, daemon=True, name="IntelMuxStdoutReader")
+    t_mux_err = threading.Thread(target=_mux_stderr_reader, daemon=True, name="IntelMuxStderrReader")
+    t_mux_out.start()
+    t_mux_err.start()
+
+    prev_emitted_size = 0
+    prev_emit_time = t_mux_start
+    last_meaningful_progress_time = t_mux_start
+    last_warn_time = t_mux_start
+    last_tracked_out_time_us = 0
+    last_tracked_size = 0
+
     try:
-        subprocess.run(cmd_mux, check=True)
-    except Exception as exc:
-        render_print(f"[STREAM INTEL] Final container remux failed: {exc}", flush=True)
-        return False
+        while True:
+            rc = p_mux.poll()
+            now_m = time.perf_counter()
+
+            # Active cancellation check (Phase 10)
+            if cancel_event is not None and cancel_event.is_set():
+                render_print("[STREAM INTEL] Final mux cancelled by user/queue, terminating FFmpeg...", flush=True)
+                p_mux.terminate()
+                try:
+                    p_mux.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    p_mux.kill()
+                    p_mux.wait(timeout=1.0)
+                if os.path.exists(output_part_str):
+                    try:
+                        os.remove(output_part_str)
+                    except Exception:
+                        pass
+                return False
+
+            with mux_lock:
+                c_out_time_us = mux_progress["out_time_us"]
+                c_total_size = mux_progress["total_size"]
+                c_speed = mux_progress["speed"]
+
+            cur_disk_sz = 0
+            if os.path.exists(output_part_str):
+                try:
+                    cur_disk_sz = os.path.getsize(output_part_str)
+                except OSError:
+                    cur_disk_sz = 0
+
+            eff_sz = max(c_total_size, cur_disk_sz)
+
+            if c_out_time_us > last_tracked_out_time_us or eff_sz > last_tracked_size:
+                last_meaningful_progress_time = now_m
+                last_tracked_out_time_us = c_out_time_us
+                last_tracked_size = eff_sz
+
+            stall_sec = now_m - last_meaningful_progress_time
+
+            # Active Stall Watchdog (Phase 9)
+            if rc is None:
+                if stall_sec >= 60.0:
+                    render_print(f"[STREAM INTEL WATCHDOG] 60s TRUE STALL DETECTED in FFmpeg mux! Terminating process...", flush=True)
+                    p_mux.terminate()
+                    try:
+                        p_mux.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        p_mux.kill()
+                    if os.path.exists(output_part_str):
+                        try:
+                            os.remove(output_part_str)
+                        except Exception:
+                            pass
+                    return False
+                elif stall_sec >= 30.0 and (now_m - last_warn_time >= 5.0):
+                    render_print(f"[STREAM INTEL WATCHDOG] 30s stall diagnosis: out_time_us={c_out_time_us} eff_size={eff_sz} (state=ACTIVE_BUT_SLOW / moov relocation)", flush=True)
+                    last_warn_time = now_m
+                elif stall_sec >= 15.0 and (now_m - last_warn_time >= 5.0):
+                    render_print(f"[STREAM INTEL WATCHDOG] 15s without progress: out_time_us={c_out_time_us} eff_size={eff_sz}", flush=True)
+                    last_warn_time = now_m
+
+            # Progress emission (every ~0.2s)
+            dt_emit = now_m - prev_emit_time
+            if dt_emit >= 0.2:
+                write_spd = ((eff_sz - prev_emitted_size) / (1024.0 * 1024.0)) / dt_emit if (dt_emit > 0 and eff_sz >= prev_emitted_size) else 0.0
+                prev_emitted_size = eff_sz
+                prev_emit_time = now_m
+
+                out_sec = c_out_time_us / 1_000_000.0
+                ratio = (out_sec / duration_s) if duration_s > 0 else 0.0
+                clamped_ratio = max(0.0, min(0.99, ratio))
+                mux_global = 94.0 + clamped_ratio * (98.0 - 94.0)
+
+                is_stalled = (rc is None) and (stall_sec > 10.0)
+                stage_label = f"Finalizacja: mux audio/wideo ({c_speed})" if c_speed != "N/A" else "Finalizacja: mux audio/wideo"
+
+                if progress_tracker:
+                    progress_tracker.finalize(
+                        stage_label,
+                        clamped_ratio,
+                        progress_mode="determinate",
+                        global_pct=mux_global,
+                        file_size_bytes=eff_sz,
+                        write_speed_mbps=write_spd,
+                        stall_warning=is_stalled,
+                        stall_seconds=stall_sec if is_stalled else None,
+                    )
+                if progress_cb:
+                    progress_cb(frames_rendered, f"{stage_label} ({eff_sz / (1024*1024):.1f} MB, {clamped_ratio*100:.1f}%)")
+
+            if rc is not None:
+                break
+
+            time.sleep(0.05)
+
+        t_mux_out.join(timeout=2.0)
+        t_mux_err.join(timeout=2.0)
+        t_mux_end = time.perf_counter()
+        mux_wall_s = max(0.0, t_mux_end - t_mux_start)
+
+        if p_mux.returncode != 0:
+            err_details = "\n".join(mux_stderr_lines[-20:])
+            render_print(f"[STREAM INTEL] Final container remux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
+            if os.path.exists(output_part_str):
+                try:
+                    os.remove(output_part_str)
+                except Exception:
+                    pass
+            return False
+
+        # Stage 3: Verification (Phase 11)
+        t_verify_start = time.perf_counter()
+        if progress_tracker:
+            progress_tracker.finalize("Finalizacja: weryfikacja pliku", 1.0, global_pct=98.5)
+        if progress_cb:
+            progress_cb(frames_rendered, "Finalizacja: weryfikacja pliku...")
+
+        probe_res = _probe_video_summary(ffmpeg_exe, output_part_str)
+        probe_v_codec = None
+        probe_duration = 0.0
+        for stream in probe_res.get("streams", []):
+            if stream.get("codec_type") == "video":
+                probe_v_codec = str(stream.get("codec_name", "")).lower()
+        try:
+            probe_duration = float(probe_res.get("format", {}).get("duration", 0.0))
+        except (TypeError, ValueError):
+            probe_duration = 0.0
+
+        expected_c = "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc")
+        if probe_v_codec != expected_c:
+            render_print(f"[STREAM INTEL VERIFY ERROR] Output codec {probe_v_codec} != expected {expected_c}", flush=True)
+            if os.path.exists(output_part_str):
+                try:
+                    os.remove(output_part_str)
+                except Exception:
+                    pass
+            return False
+
+        if probe_duration <= 0.0:
+            render_print(f"[STREAM INTEL VERIFY ERROR] Invalid duration {probe_duration}", flush=True)
+            if os.path.exists(output_part_str):
+                try:
+                    os.remove(output_part_str)
+                except Exception:
+                    pass
+            return False
+
+        t_verify_end = time.perf_counter()
+        verify_s = max(0.0, t_verify_end - t_verify_start)
+
+        # Stage 4: Atomic Output Finalization (Phase 11)
+        if progress_tracker:
+            progress_tracker.finalize("Finalizacja: zapis końcowy", 1.0, global_pct=99.5)
+        if progress_cb:
+            progress_cb(frames_rendered, "Finalizacja: zapis końcowy...")
+
+        os.replace(output_part_str, output_file_str)
+        t_final_output_ready = time.perf_counter()
+        finalization_s = max(0.0, t_final_output_ready - t_last_frame)
+        total_wall_s = max(0.0, t_final_output_ready - t_export_start)
+        user_effective_fps = frames_rendered / total_wall_s if total_wall_s > 0 else 0.0
+
+        if progress_tracker:
+            progress_tracker.complete(total_wall_s)
+
     finally:
         if os.path.exists(temp_encoded_path):
             try:
@@ -1459,13 +1762,6 @@ def export_intel_native_d3d11(
                 os.remove(concat_txt_path)
             except Exception:
                 pass
-
-    t_export_end = time.perf_counter()
-    total_wall_s = t_export_end - t_export_start
-    render_wall_s = t_export_end - t_render_start
-    mux_wall_s = t_export_end - t_mux_start
-    render_fps = frames_rendered / render_wall_s if render_wall_s > 0 else 0.0
-    user_effective_fps = frames_rendered / total_wall_s if total_wall_s > 0 else 0.0
 
     _last_intel_export_stats = {
         "codec": "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc"),
@@ -1479,6 +1775,13 @@ def export_intel_native_d3d11(
         "real_export_fps": render_fps,
         "render_fps": render_fps,
         "user_effective_fps": user_effective_fps,
+        "frame_render_seconds": frame_render_s,
+        "encoder_drain_seconds": drain_s,
+        "mux_seconds": mux_wall_s,
+        "verify_seconds": verify_s,
+        "finalization_seconds": finalization_s,
+        "total_wall_seconds": total_wall_s,
+        "cancelled": False,
     }
 
     render_print("\n============================================================", flush=True)
@@ -1487,7 +1790,8 @@ def export_intel_native_d3d11(
     render_print(f"Codec Selected:             {codec_name}", flush=True)
     render_print(f"Frames Rendered:            {frames_rendered} / {total_frames}", flush=True)
     render_print(f"Total Wall Time:            {total_wall_s:.3f} s", flush=True)
-    render_print(f"Video Render Wall Time:     {render_wall_s:.3f} s", flush=True)
+    render_print(f"Frame Render Wall Time:     {frame_render_s:.3f} s", flush=True)
+    render_print(f"Finalization Wall Time:     {finalization_s:.3f} s", flush=True)
     render_print(f"Mux Wall Time:              {mux_wall_s:.3f} s", flush=True)
     render_print(f"RENDER FPS:                 {render_fps:.3f} FPS", flush=True)
     render_print(f"USER EFFECTIVE FPS:         {user_effective_fps:.3f} FPS", flush=True)

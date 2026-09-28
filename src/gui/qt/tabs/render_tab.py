@@ -1353,9 +1353,20 @@ class RenderTab(QWidget):
 
             if getattr(job, "is_expanded", False):
                 prefix = "▼ "
+                timing_extra = ""
+                frame_s = getattr(job, "frame_render_elapsed_s", 0.0)
+                fin_s = getattr(job, "finalization_elapsed_s", 0.0)
+                eff_fps = getattr(job, "effective_fps", 0.0)
+                if frame_s > 0 and fin_s > 0:
+                    timing_extra += f"\n   |_ Czas renderu: {self._fmt_time(frame_s)}"
+                    timing_extra += f"\n   |_ Czas finalizacji: {self._fmt_time(fin_s)}"
+                if eff_fps > 0 and abs(eff_fps - avg_fps) > 0.1:
+                    timing_extra += f"\n   |_ Efektywne FPS: {eff_fps:.1f} FPS"
+
                 details = (
                     f"\n   |_ Lokalizacja: {job.output_path}"
                     f"\n   |_ Czas: {time_str}"
+                    f"{timing_extra}"
                     f"\n   |_ Średnia wydajność: {fps_str}"
                     f"{quality_details}"
                 )
@@ -2532,6 +2543,9 @@ class RenderTab(QWidget):
         if is_queue_job:
             # QUEUE JOB: ZERO POPUPS! Record isolated stats directly to the queue job.
             if q_job_id and self._export_queue:
+                frame_render_s = _stats.get("frame_render_seconds", 0.0) if _stats else 0.0
+                fin_s = _stats.get("finalization_seconds", 0.0) if _stats else 0.0
+                eff_fps = _stats.get("user_effective_fps", 0.0) if _stats else 0.0
                 self._export_queue.notify_render_done(
                     q_job_id,
                     success=True,
@@ -2545,6 +2559,9 @@ class RenderTab(QWidget):
                     quant_min=_stats.get("quant_min") if _stats else None,
                     quant_max=_stats.get("quant_max") if _stats else None,
                     quant_samples=_stats.get("quant_samples") if _stats else None,
+                    frame_render_elapsed_s=frame_render_s,
+                    finalization_elapsed_s=fin_s,
+                    effective_fps=eff_fps,
                 )
             self._current_render_queue_job_id = None
             if not self._rendering:

@@ -506,6 +506,9 @@ class RenderMixin:
                     quant_min = stats.get("quant_min") if stats else None
                     quant_max = stats.get("quant_max") if stats else None
                     quant_samples = stats.get("quant_samples") if stats else None
+                    frame_render_s = stats.get("frame_render_seconds", 0.0) if stats else 0.0
+                    fin_s = stats.get("finalization_seconds", 0.0) if stats else 0.0
+                    eff_fps = stats.get("user_effective_fps", 0.0) if stats else 0.0
                     queue.notify_render_done(
                         job_id,
                         success=success,
@@ -520,6 +523,9 @@ class RenderMixin:
                         quant_min=quant_min,
                         quant_max=quant_max,
                         quant_samples=quant_samples,
+                        frame_render_elapsed_s=frame_render_s,
+                        finalization_elapsed_s=fin_s,
+                        effective_fps=eff_fps,
                     )
                 except Exception as _qe:
                     print(f"[Queue] notify_render_done error: {_qe}", flush=True)
