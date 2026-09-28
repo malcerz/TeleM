@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "date": "2026-09-25T12:47:57Z",
+  "reference_sha": "2f918d07864f840b44430450eca75d087737cac4",
+  "video": "Video/GX020079.MP4",
+  "telemetry": "Video/GX020079.fit",
+  "layout": "def_layout.json",
+  "frames": 300,
+  "resolution": "3840x2160",
+  "quality": "fast",
+  "backend": "AMD_NATIVE_D3D11",
+  "decode": "gpu",
+  "render_fps": 41.883,
+  "effective_fps": 34.741,
+  "system_cpu_percent": 18.1,
+  "system_gpu_percent": 2.3,
+  "frame_time_ms": 23.876,
+  "producer_prepare_ms": 16.972,
+  "map_cpu_upload_ms": 2.716,
+  "cpu_model": "AMD Ryzen 7 7730U with Radeon Graphics (8 cores / 16 threads)",
+  "gpu_model": "AMD Radeon Graphics (Barcelo-R / VCN 3.x)"
+}

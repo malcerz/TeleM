@@ -39,6 +39,16 @@ class LayoutManager:
             self.layout = {}
         return self.layout
 
+    def reset_to_empty(self, video_width: int = 1280, video_height: int = 720) -> dict[str, Any]:
+        """Reset layout to an empty HUD configuration (no indicators)."""
+        self.layout = {
+            "width": video_width,
+            "height": video_height,
+            "indicators": {},
+            "custom_texts": [],
+        }
+        return self.layout
+
     def load(
         self,
         layout_path: Path | str | None,
@@ -271,7 +281,7 @@ def default_layout(video_width: int, video_height: int) -> dict[str, Any]:
             "track_map": {
                 "enabled": False, "label": "Mapa", "x": 2.0, "y": 15.0, "rotation": 0, "form": "map",
                 "font_size": 1.2, "size": 18.0, "thickness": 1, "zoom": 16,
-                "source": "gpmf", "map_style": "light_all", "map_shape": "square",
+                "gps_source": "auto", "source": "fit", "map_style": "light_all", "map_shape": "square",
                 "map_rotation_smoothing_s": 0.0,
                 "min_val": 0, "max_val": 1, "ticks": 0,
                 "marker_size": 7, "marker_color": "#FFFFFF",
@@ -314,6 +324,10 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
                         ind["font"] = ""
                     ind.pop("_presentation_video_start", None)
                     ind.pop("_presentation_video_end", None)
+                    if str(ind.get("map_marker_style", "")).strip().lower() in ("directional", "arrow", "strzałka", "strzalka"):
+                        ind["map_marker_style"] = "dot"
+                    if bool(ind.get("arrow_marker", False)):
+                        ind["arrow_marker"] = False
         if "custom_texts" in user and isinstance(user["custom_texts"], list):
             layout["custom_texts"] = user["custom_texts"]
 

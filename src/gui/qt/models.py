@@ -165,6 +165,10 @@ def normalize_indicator_decimal_defaults(layout: dict[str, Any]) -> dict[str, An
                 default = indicator_default_decimals(key, cfg)
                 if default is not None:
                     cfg["decimals"] = default
+            if str(cfg.get("map_marker_style", "")).strip().lower() in ("directional", "arrow", "strzałka", "strzalka"):
+                cfg["map_marker_style"] = "dot"
+            if bool(cfg.get("arrow_marker", False)):
+                cfg["arrow_marker"] = False
     return layout
 
 
@@ -252,6 +256,14 @@ def _text_tab_fields(
                     min_val=repo_range[0], max_val=repo_range[1], step=0.01,
                     default=0.0),
         FieldSchema("text_offset_y", "float", "Pos Y",
+                    tab="Text",
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01,
+                    default=0.0),
+        FieldSchema("unit_offset_x", "float", "Unit X",
+                    tab="Text",
+                    min_val=repo_range[0], max_val=repo_range[1], step=0.01,
+                    default=0.0),
+        FieldSchema("unit_offset_y", "float", "Unit Y",
                     tab="Text",
                     min_val=repo_range[0], max_val=repo_range[1], step=0.01,
                     default=0.0),
@@ -618,8 +630,8 @@ def _bar_slope_fields() -> list[FieldSchema]:
         FieldSchema("auto_scale", "bool", "Auto skala (zakres z danych)", tab="Gauge", default=False),
         FieldSchema("min_val", "float", "Minimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=0.0),
         FieldSchema("max_val", "float", "Maksimum", tab="Gauge", min_val=-10000.0, max_val=10000.0, step=1.0, default=100.0),
-        FieldSchema("major_tick", "float", "Krok główny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
-        FieldSchema("minor_tick", "float", "Krok drobny (legacy)", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
+        FieldSchema("major_tick", "float", "Krok główny", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=5.0),
+        FieldSchema("minor_tick", "float", "Krok drobny", tab="Ticks", min_val=0.1, max_val=100.0, step=0.5, default=1.0),
         FieldSchema("track_color", "color", "Kolor osi", tab="Ticks", default="#8D9AA7"),
         FieldSchema("tick_color", "color", "Kolor kresek", tab="Ticks", default="#DDE7F2"),
         FieldSchema("zero_tick_color", "color", "Kolor zera", tab="Ticks", default="#FFFFFF"),
@@ -657,14 +669,17 @@ def lean_indicator_fields() -> list[FieldSchema]:
         + _form_field([("lean", "Przechył")])
         + [
             FieldSchema("source", "choice", "Źródło danych", tab="Data",
-                        choices=[("gyro", "IMU GoPro (żyroskop + akcelerometr)"),
-                                 ("grade", "FIT Grade / nachylenie terenu")],
+                        choices=[("gyro", "IMU GoPro (estymator kąta przechyłu [°])"),
+                                 ("raw_gyro_z", "GoPro Gyroscope Z (prędkość kątowa [deg/s])"),
+                                 ("grade", "FIT Grade / nachylenie terenu [%]")],
                         default="gyro"),
-            FieldSchema("axis", "choice", "Oś przechyłu", tab="Data",
-                        choices=[("x", "X (roll)"), ("y", "Y (pitch)"), ("z", "Z (yaw)")],
-                        default="x"),
-            FieldSchema("calibration", "float", "Kalibracja / Offset [°]", tab="Data",
-                        min_val=-90.0, max_val=90.0, step=0.5, default=6.0),
+            FieldSchema("axis", "choice", "Oś przechyłu (dla IMU)", tab="Data",
+                        choices=[("y", "Roll (Y) — przechył wzdłużny [domyślna]"),
+                                 ("x", "Pitch (X) — pochylenie poprzeczne"),
+                                 ("z", "Yaw (Z) — obrót pionowy / skręt")],
+                        default="y"),
+            FieldSchema("calibration", "float", "Kalibracja / Offset", tab="Data",
+                        min_val=-90.0, max_val=90.0, step=0.5, default=0.0),
             FieldSchema("invert_axis", "bool", "Odwróć kierunek", tab="Data", default=False),
             FieldSchema("pivot_x", "float", "Punkt obrotu X", tab="Data",
                         min_val=0.0, max_val=1.0, step=0.01, default=0.5),
@@ -672,9 +687,9 @@ def lean_indicator_fields() -> list[FieldSchema]:
                         min_val=0.0, max_val=1.0, step=0.01, default=1.0),
             FieldSchema("sensitivity", "float", "Mnożnik wychyłu", tab="Data",
                         min_val=0.0, max_val=20.0, step=0.05, default=1.0),
-            FieldSchema("max_angle", "float", "Maks. kąt wychyłu [°]", tab="Data",
+            FieldSchema("max_angle", "float", "Maks. kąt wychyłu / zakres", tab="Data",
                         min_val=1.0, max_val=90.0, step=1.0, default=30.0),
-            FieldSchema("lean_smoothing_s", "float", "Wygładzanie ruchu", tab="Data",
+            FieldSchema("lean_smoothing_s", "float", "Wygładzanie ruchu [s]", tab="Data",
                         min_val=0.0, max_val=5.0, step=0.1, default=0.0),
             FieldSchema("graphic", "choice", "Grafika", tab="Data",
                         choices=[("bike", "Rower (ikona)"), ("beam", "Belka"), ("none", "Brak")],
@@ -716,7 +731,7 @@ def _map_gauge_tab_fields() -> list[FieldSchema]:
     return [
         FieldSchema("hide_marker", "bool", "Ukryj znacznik", tab="Gauge", default=False),
         FieldSchema("map_marker_style", "choice", "Styl znacznika", tab="Gauge",
-                    choices=[("dot", "Kropka"), ("directional", "Strzałka kierunkowa"), ("none", "Brak")],
+                    choices=[("dot", "Kropka")],
                     default="dot"),
         FieldSchema("marker_size", "int", "Rozmiar (Size)", tab="Gauge",
                     min_val=1, max_val=20, step=1, default=7),
@@ -726,6 +741,8 @@ def _map_gauge_tab_fields() -> list[FieldSchema]:
 
 def _map_path_tab_fields() -> list[FieldSchema]:
     return [
+        FieldSchema("gps_source", "choice", "Źródło GPS", tab="Path",
+                    choices=[("auto", "Auto"), ("fit", "FIT"), ("gpmf", "GPMF")], default="auto"),
         FieldSchema("hide_track", "bool", "Ukryj (Hide)", tab="Path", default=False),
         FieldSchema("track_width", "int", "Grubość (Width)", tab="Path",
                     min_val=1, max_val=20, step=1, default=3),
@@ -750,7 +767,12 @@ def _map_shape_tab_fields() -> list[FieldSchema]:
                              "dark_nolabels", "voyager_all", "voyager_nolabels", "satellite"],
                     default="light_all"),
         FieldSchema("map_shape", "choice", "Kształt (Shape)", tab="Shape",
-                    choices=["square", "round"], default="square"),
+                    choices=[("square", "Kwadrat"), ("rectangle", "Prostokąt"), ("round", "Koło"), ("rounded", "Zaokrąglony")], default="square"),
+        FieldSchema("map_corner_radius", "float", "Promień zaokrąglenia", tab="Shape",
+                    min_val=1.0, max_val=100.0, step=1.0, default=16.0),
+        FieldSchema("map_border_width", "int", "Grubość obramowania", tab="Shape",
+                    min_val=0, max_val=20, step=1, default=0),
+        FieldSchema("map_border_color", "color", "Kolor obramowania", tab="Shape", default="#FFFFFF"),
         FieldSchema("opacity", "float", "Przezroczystość", tab="Shape",
                     min_val=0.0, max_val=1.0, step=0.05, default=1.0),
         FieldSchema("zoom", "int", "Zoom", tab="Shape",

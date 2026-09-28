@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -151,33 +152,39 @@ class PresetMixin:
             except Exception:
                 pass
 
+        if stream_key == "track_map" and field_name in ("map_style", "zoom", "source", "gps_source", "map_orientation", "enabled"):
+            try:
+                if hasattr(self, "_trigger_map_background_prefetch"):
+                    self._trigger_map_background_prefetch(reason=f"prop_{field_name}")
+            except Exception:
+                pass
+
         # Oznacz układ w RAM jako zmodyfikowany
         self._layout_dirty = True
 
-        # Jeśli aktualnie załadowany jest film, aktualizuj stan roboczy projektu (.layout.json).
-        # NIGDY nie modyfikuj wczytanego presetu użytkownika (_user_preset_path) ani def_layout.json!
-        if getattr(self, "video_path", None):
-            self._save_project_layout()
+        # Zapisz bieżący stan sesji do AppData (nigdy obok materiału wideo)
+        self._save_session_layout()
 
         # Odśwież podgląd
         self._render_preview()
 
+    def get_session_layout_path(self) -> Path:
+        """Zwraca ścieżkę do roboczego layoutu sesji w AppData."""
+        import os
+        base = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or (Path.home() / ".bikeridehud"))
+        d = base / "BikeRideHUD" / "session"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / "active_layout.json"
+
     def get_project_layout_path(self) -> Optional[Path]:
-        """Zwraca ścieżkę do roboczego layoutu projektu powiązanego z aktualnym filmem (np. Video/GX010115.layout.json)."""
-        video = getattr(self, "video_path", None)
-        if not video:
-            return None
-        return Path(video).with_suffix(".layout.json")
+        """Zwraca ścieżkę do roboczego layoutu sesji w AppData (zastąpiło zaśmiecające sidecary)."""
+        return self.get_session_layout_path()
 
-    def _save_project_layout(self) -> Optional[Path]:
-        """Zapisuje bieżący stan roboczy layoutu dla konkretnego filmu (sidecar .layout.json).
+    def _save_session_layout(self) -> Optional[Path]:
+        """Zapisuje stan roboczy layoutu w katalogu aplikacji (%LOCALAPPDATA%\\BikeRideHUD\\session\\).
 
-        Przechowuje aktualny stan pracy nad filmem. NIGDY nie modyfikuje wczytanego
-        presetu użytkownika (self._user_preset_path) ani pliku szablonu def_layout.json.
+        NIGDY nie tworzy ani nie modyfikuje plików w katalogu z materiałami wideo!
         """
-        proj_path = self.get_project_layout_path()
-        if not proj_path:
-            return None
         try:
             from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
             saved = normalize_layout_for_save(self.layout)
@@ -206,13 +213,18 @@ class PresetMixin:
                     exp["compression_analysis"] = render_tab.chk_compression_analysis.isChecked()
 
             saved = sanitize_layout_for_json(saved)
-            with open(proj_path, "w", encoding="utf-8") as f:
-                json.dump(saved, f, indent=2, ensure_ascii=False)
-            print(f"[ProjectLayout] Zapisano roboczy layout filmu do {proj_path}", flush=True)
-            return proj_path
+            sess_path = self.get_session_layout_path()
+            tmp = sess_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(saved, indent=2, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, sess_path)
+            return sess_path
         except Exception as e:
-            print(f"[ProjectLayout] Błąd zapisu layoutu projektu: {e}", flush=True)
+            print(f"[SessionLayout] Błąd zapisu layoutu sesji: {e}", flush=True)
             return None
+
+    def _save_project_layout(self) -> Optional[Path]:
+        """Kompatybilność wsteczna: przekierowuje do bezpiecznego zapisu sesji w AppData."""
+        return self._save_session_layout()
 
     def _save_current_layout_to_default(self) -> None:
         """Trwały zapis całego stanu układu (wszystkie wskaźniki, per-indicator font, icon, pozycje) do def_layout.json."""
@@ -248,6 +260,8 @@ class PresetMixin:
 
             amd_mode = getattr(self, "amd_decode_mode", "gpu") or "gpu"
             saved.setdefault("global", {})["amd_decode_mode"] = amd_mode
+            amd_quality = getattr(self, "amd_encoder_quality", "FAST") or "FAST"
+            saved.setdefault("global", {})["amd_encoder_quality"] = amd_quality
             saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
 
             saved = sanitize_layout_for_json(saved)
@@ -272,6 +286,8 @@ class PresetMixin:
             self.render_threads = int(value)
         elif name == "amd_decode_mode":
             self.amd_decode_mode = str(value).lower()
+        elif name == "amd_encoder_quality":
+            self.amd_encoder_quality = str(value).upper()
         elif name == "render_mode":
             self.render_mode = str(value).lower()
         elif name == "font":

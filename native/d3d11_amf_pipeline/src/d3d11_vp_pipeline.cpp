@@ -5,6 +5,19 @@
 #include <cmath>
 #include <string>
 #include <algorithm>
+#include <thread>
+
+static bool Trace8KResourcesEnabled() {
+    const char* value = std::getenv("AMD_8K_RESOURCE_TRACE");
+    return value && (value[0] == '1' || value[0] == 'y' || value[0] == 'Y');
+}
+
+static ULONG TraceComRefEstimate(IUnknown* resource) {
+    if (!resource) return 0;
+    const ULONG afterAddRef = resource->AddRef();
+    resource->Release();
+    return afterAddRef > 0 ? afterAddRef - 1 : 0;
+}
 
 static std::vector<uint8_t> ConvertNV12ToRGBA_VP(const uint8_t* yData, const uint8_t* uvData, UINT w, UINT h, UINT yPitch, UINT uvPitch) {
     std::vector<uint8_t> rgba(w * h * 4, 255);
@@ -236,6 +249,24 @@ void D3D11VideoProcessorPipeline::ReleaseResources() {
     if (m_nv12FusedQuad32x8Shader) m_nv12FusedQuad32x8Shader->Release();
     if (m_nv12FusedQuad8x8OptShader) m_nv12FusedQuad8x8OptShader->Release();
     if (m_baseConvertShader) m_baseConvertShader->Release();
+    if (m_p010PlaneShader) { m_p010PlaneShader->Release(); m_p010PlaneShader = nullptr; }
+    for (auto* view : m_p010YUAVPool) if (view) view->Release();
+    for (auto* view : m_p010UVUAVPool) if (view) view->Release();
+    for (auto* tex : m_p010YPool) if (tex) tex->Release();
+    for (auto* tex : m_p010UVPool) if (tex) tex->Release();
+    m_p010YUAVPool.clear();
+    m_p010UVUAVPool.clear();
+    m_p010YPool.clear();
+    m_p010UVPool.clear();
+    m_lastP010YTexture = nullptr;
+    m_lastP010UVTexture = nullptr;
+    m_p010PlaneOutputEnabled = false;
+    if (m_computeCompletionQuery) {
+        m_computeCompletionQuery->Release();
+        m_computeCompletionQuery = nullptr;
+    }
+    m_computeCompletionPending = false;
+    ReleaseShaderScaler();
     if (m_device3) m_device3->Release();
     ReleaseMapResources();
     ReleaseChartResources();
@@ -499,6 +530,16 @@ bool D3D11VideoProcessorPipeline::Initialize(ID3D11Device* pDevice, ID3D11Device
 }
 
 bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, DXGI_FORMAT outputFormat) {
+    const bool computeOnly8K = m_cpuX265Path && (m_width > 4096u || m_height > 4096u);
+    HRESULT hr = S_OK;
+
+    if (computeOnly8K) {
+        std::cout << "[VP 8K X265] compute-only path: output="
+                  << m_width << "x" << m_height
+                  << ", VideoProcessorBlt=OFF, outputViewPool=OFF" << std::endl;
+    }
+
+    if (!computeOnly8K) {
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC contentDesc = {};
     contentDesc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     contentDesc.InputFrameRate.Numerator = 30000;
@@ -507,11 +548,12 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     contentDesc.InputHeight = (m_height > 2160u) ? m_height : 2160u;
     contentDesc.OutputFrameRate.Numerator = 30000;
     contentDesc.OutputFrameRate.Denominator = 1001;
-    contentDesc.OutputWidth = m_width;
-    contentDesc.OutputHeight = m_height;
+    contentDesc.OutputWidth = (m_width > 4096) ? 3840 : m_width;
+    contentDesc.OutputHeight = (m_height > 4096) ? 2160 : m_height;
     contentDesc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
 
-    HRESULT hr = m_videoDevice->CreateVideoProcessorEnumerator(&contentDesc, &m_videoEnumerator);
+    hr = m_videoDevice->CreateVideoProcessorEnumerator(&contentDesc, &m_videoEnumerator);
+    if (SUCCEEDED(hr)) m_vpConfiguredInputWidth = contentDesc.InputWidth;
     if (FAILED(hr)) {
         std::cerr << "[VP] CreateVideoProcessorEnumerator failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
@@ -635,6 +677,7 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     m_processorRingSize = static_cast<UINT>(m_videoProcessorRing.size());
     m_activeVideoProcessor = m_videoProcessorRing[0];
     std::cout << "[VP RING] effective processor count = " << m_processorRingSize << std::endl;
+    }
 
     // Create Persistent Output Texture Pool (DXGI_FORMAT_NV12)
     D3D11_TEXTURE2D_DESC texDesc = {};
@@ -699,10 +742,12 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
             hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_outputPool[i]);
             if (FAILED(hr)) { attemptOk = false; break; }
             m_poolTexturesCreated++;
-            hr = m_videoDevice->CreateVideoProcessorOutputView(
-                m_outputPool[i], m_videoEnumerator, &outViewDesc, &m_outputViewPool[i]);
-            if (FAILED(hr)) { attemptOk = false; break; }
-            m_poolViewsCreated++;
+            if (!computeOnly8K && m_width <= 4096 && m_height <= 4096) {
+                hr = m_videoDevice->CreateVideoProcessorOutputView(
+                    m_outputPool[i], m_videoEnumerator, &outViewDesc, &m_outputViewPool[i]);
+                if (FAILED(hr)) { attemptOk = false; break; }
+                m_poolViewsCreated++;
+            }
         }
         if (attemptOk) { poolCreated = true; break; }
         std::cerr << "[VP] Failed to create output NV12 texture pool size " << cand
@@ -718,8 +763,36 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
                   << " (requested " << requestedPool << ")" << std::endl;
     }
 
+    // Compute-only 8K ownership fence.  The copy texture is intentionally a
+    // single reusable resource, so the next frame must not overwrite it while
+    // the previous dispatch can still sample it.  This is an event-query
+    // ownership handoff, not a per-frame Flush workaround.
+    if (computeOnly8K) {
+        D3D11_QUERY_DESC computeQueryDesc = {};
+        computeQueryDesc.Query = D3D11_QUERY_EVENT;
+        hr = m_device->CreateQuery(&computeQueryDesc, &m_computeCompletionQuery);
+        if (FAILED(hr) || !m_computeCompletionQuery) {
+            std::cerr << "[VP 8K X265] compute completion query creation failed: 0x"
+                      << std::hex << hr << std::dec << std::endl;
+            return false;
+        }
+        m_computeCompletionPending = false;
+    }
+
+    if (computeOnly8K && std::getenv("AMD_8K_PLANE_READBACK") &&
+        _stricmp(std::getenv("AMD_8K_PLANE_READBACK"), "1") == 0) {
+        if (!InitializeP010PlaneOutput()) {
+            std::cerr << "[VP 8K P010] plane-separated output initialization failed" << std::endl;
+            return false;
+        }
+    }
+
     if (!InitializeNV12ComputeCompositor()) {
         std::cerr << "[VP] Direct NV12 compute HUD compositor initialization failed." << std::endl;
+        return false;
+    }
+    if (!InitializeShaderScaler()) {
+        std::cerr << "[VP] Shader scaler initialization failed." << std::endl;
         return false;
     }
     if (m_baseConvertCompute && !InitializeBaseConvertCompute()) {
@@ -727,6 +800,146 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
         return false;
     }
 
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::InitializeP010PlaneOutput() {
+    if (!m_device || !m_cpuX265Path || m_width != 7680u || m_height != 4320u) return false;
+
+    D3D11_TEXTURE2D_DESC yDesc = {};
+    yDesc.Width = m_width;
+    yDesc.Height = m_height;
+    yDesc.MipLevels = 1;
+    yDesc.ArraySize = 1;
+    yDesc.Format = DXGI_FORMAT_R16_UNORM;
+    yDesc.SampleDesc.Count = 1;
+    yDesc.Usage = D3D11_USAGE_DEFAULT;
+    yDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_TEXTURE2D_DESC uvDesc = yDesc;
+    uvDesc.Width = m_width / 2u;
+    uvDesc.Height = m_height / 2u;
+    uvDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+
+    m_p010YPool.assign(m_poolSize, nullptr);
+    m_p010UVPool.assign(m_poolSize, nullptr);
+    m_p010YUAVPool.assign(m_poolSize, nullptr);
+    m_p010UVUAVPool.assign(m_poolSize, nullptr);
+    for (UINT i = 0; i < m_poolSize; ++i) {
+        HRESULT hr = m_device->CreateTexture2D(&yDesc, nullptr, &m_p010YPool[i]);
+        if (FAILED(hr)) return false;
+        hr = m_device->CreateTexture2D(&uvDesc, nullptr, &m_p010UVPool[i]);
+        if (FAILED(hr)) return false;
+
+        D3D11_UNORDERED_ACCESS_VIEW_DESC yView = {};
+        yView.Format = DXGI_FORMAT_R16_UNORM;
+        yView.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+        hr = m_device->CreateUnorderedAccessView(m_p010YPool[i], &yView, &m_p010YUAVPool[i]);
+        if (FAILED(hr)) return false;
+        D3D11_UNORDERED_ACCESS_VIEW_DESC uvView = {};
+        uvView.Format = DXGI_FORMAT_R16G16_UNORM;
+        uvView.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+        hr = m_device->CreateUnorderedAccessView(m_p010UVPool[i], &uvView, &m_p010UVUAVPool[i]);
+        if (FAILED(hr)) return false;
+    }
+
+    const char* source = R"(
+        Texture2DArray<float> InputY : register(t0);
+        Texture2DArray<float2> InputUV : register(t1);
+        RWTexture2D<float> OutputY : register(u0);
+        RWTexture2D<float2> OutputUV : register(u1);
+        cbuffer CopyCB : register(b0) { uint yWidth; uint yHeight; uint uvWidth; uint uvHeight; };
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 id : SV_DispatchThreadID) {
+            if (id.x < yWidth && id.y < yHeight)
+                OutputY[id.xy] = InputY.Load(int4(id.xy, 0, 0));
+            if (id.x < uvWidth && id.y < uvHeight)
+                OutputUV[id.xy] = InputUV.Load(int4(id.xy, 0, 0));
+        }
+    )";
+    ID3DBlob* blob = nullptr;
+    ID3DBlob* errors = nullptr;
+    HRESULT hr = D3DCompile(source, strlen(source), "amd_8k_p010_planes", nullptr, nullptr,
+                            "CSMain", "cs_5_0", 0, 0, &blob, &errors);
+    if (FAILED(hr)) {
+        if (errors) {
+            std::cerr << "[VP 8K P010] shader compile failed: "
+                      << static_cast<const char*>(errors->GetBufferPointer()) << std::endl;
+            errors->Release();
+        }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(),
+                                       nullptr, &m_p010PlaneShader);
+    blob->Release();
+    if (FAILED(hr)) return false;
+    m_p010PlaneOutputEnabled = true;
+    std::cout << "[VP 8K P010] plane output enabled: Y=R16_UNORM 7680x4320, UV=R16G16_UNORM 3840x2160, bit_depth=10" << std::endl;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::ProcessP010PlaneOutput(
+    ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs) {
+    if (!input || !m_p010PlaneShader || !m_device3 || poolIndex >= m_poolSize ||
+        !m_p010YUAVPool[poolIndex] || !m_p010UVUAVPool[poolIndex]) return false;
+    D3D11_TEXTURE2D_DESC inDesc = {};
+    input->GetDesc(&inDesc);
+    const bool trace = std::getenv("AMD_8K_PLANE_TRACE") != nullptr;
+    if (trace) std::cerr << "P010_PLANE_BEGIN input_format=" << inDesc.Format
+                         << " input=" << inDesc.Width << "x" << inDesc.Height
+                         << " pool=" << poolIndex << std::endl;
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 yDesc = {};
+    yDesc.Format = DXGI_FORMAT_R16_UNORM;
+    yDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    yDesc.Texture2DArray.MostDetailedMip = 0;
+    yDesc.Texture2DArray.MipLevels = 1;
+    yDesc.Texture2DArray.FirstArraySlice = arrayIndex;
+    yDesc.Texture2DArray.ArraySize = 1;
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 uvDesc = yDesc;
+    uvDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+    uvDesc.Texture2DArray.PlaneSlice = 1;
+    ID3D11ShaderResourceView1* yView = nullptr;
+    ID3D11ShaderResourceView1* uvView = nullptr;
+    HRESULT hr = m_device3->CreateShaderResourceView1(input, &yDesc, &yView);
+    if (SUCCEEDED(hr)) hr = m_device3->CreateShaderResourceView1(input, &uvDesc, &uvView);
+    if (trace) std::cerr << "P010_PLANE_SRV_HR=0x" << std::hex << hr << std::dec << std::endl;
+    if (FAILED(hr) || !yView || !uvView) {
+        if (yView) yView->Release();
+        if (uvView) uvView->Release();
+        std::cerr << "[VP 8K P010] input plane SRV creation failed: 0x"
+                  << std::hex << hr << std::dec << std::endl;
+        return false;
+    }
+    struct PlaneCB { UINT yWidth, yHeight, uvWidth, uvHeight; } cb = {
+        m_width, m_height, m_width / 2u, m_height / 2u
+    };
+    if (!m_shaderScalerCB) { yView->Release(); uvView->Release(); return false; }
+    m_context->UpdateSubresource(m_shaderScalerCB, 0, nullptr, &cb, 0, 0);
+    const auto start = std::chrono::steady_clock::now();
+    ID3D11ShaderResourceView* srvs[2] = { yView, uvView };
+    ID3D11UnorderedAccessView* uavs[2] = { m_p010YUAVPool[poolIndex], m_p010UVUAVPool[poolIndex] };
+    UINT counts[2] = { 0, 0 };
+    m_context->CSSetShader(m_p010PlaneShader, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, &m_shaderScalerCB);
+    m_context->CSSetShaderResources(0, 2, srvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, uavs, counts);
+    m_context->Dispatch((m_width + 15u) / 16u, (m_height + 15u) / 16u, 1);
+    if (trace) std::cerr << "P010_PLANE_DISPATCH_SUBMITTED DEVICE_REASON=0x"
+                         << std::hex << m_device->GetDeviceRemovedReason() << std::dec << std::endl;
+    ID3D11ShaderResourceView* nullSrvs[2] = { nullptr, nullptr };
+    ID3D11UnorderedAccessView* nullUavs[2] = { nullptr, nullptr };
+    ID3D11Buffer* nullCB = nullptr;
+    m_context->CSSetShaderResources(0, 2, nullSrvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, nullUavs, counts);
+    m_context->CSSetConstantBuffers(0, 1, &nullCB);
+    m_context->CSSetShader(nullptr, nullptr, 0);
+    yView->Release();
+    uvView->Release();
+    m_lastP010YTexture = m_p010YPool[poolIndex];
+    m_lastP010UVTexture = m_p010UVPool[poolIndex];
+    m_lastP010PlanePoolIndex = poolIndex;
+    if (outMs) *outMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
     return true;
 }
 
@@ -822,12 +1035,217 @@ bool D3D11VideoProcessorPipeline::ConvertP010ToNV12Compute(
     std::cout << "[VP COMPUTE] SRV release complete" << std::endl;
     if (outMs) *outMs = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - start).count();
-    // The AMD driver accepts the plane views and records the dispatch, but
-    // the first downstream consumer currently raises an access violation.
-    // Do not expose this incomplete prototype to the compositor/encoder.
-    std::cerr << "[VP COMPUTE] runtime safety gate: dispatch rejected before downstream use" << std::endl;
-    return false;
+    return true;
 }
+
+bool D3D11VideoProcessorPipeline::InitializeShaderScaler() {
+    if (m_shaderScalerShader) return true;
+    if (!m_device) return false;
+
+    const char* source = R"(
+        Texture2DArray<float> InputY : register(t0);
+        Texture2DArray<float2> InputUV : register(t1);
+        SamplerState SamLinear : register(s0);
+        RWTexture2D<float> OutputY : register(u0);
+        RWTexture2D<float2> OutputUV : register(u1);
+
+        cbuffer ScaleCB : register(b0) {
+            uint inW;
+            uint inH;
+            uint outW;
+            uint outH;
+            uint arraySlice;
+            uint pad0;
+            uint pad1;
+            uint pad2;
+        };
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 id : SV_DispatchThreadID) {
+            if (id.x >= outW || id.y >= outH) return;
+
+            float2 uvY = (float2(id.xy) + 0.5f) / float2(outW, outH);
+            float y = InputY.SampleLevel(SamLinear, float3(uvY, 0.0f), 0);
+            OutputY[id.xy] = y;
+
+            if (((id.x | id.y) & 1u) == 0u) {
+                uint2 uvOut = id.xy / 2u;
+                float2 uvCoord = (float2(uvOut) + 0.5f) / float2(outW / 2u, outH / 2u);
+                float2 uv = InputUV.SampleLevel(SamLinear, float3(uvCoord, 0.0f), 0);
+                OutputUV[uvOut] = uv;
+            }
+        }
+    )";
+
+    ID3DBlob* blob = nullptr;
+    ID3DBlob* errors = nullptr;
+    HRESULT hr = D3DCompile(source, strlen(source), "amd_shader_scale", nullptr,
+                            nullptr, "CSMain", "cs_5_0", 0, 0, &blob, &errors);
+    if (FAILED(hr)) {
+        if (errors) {
+            std::cerr << "[VP SHADER SCALE] shader compile failed: "
+                      << static_cast<const char*>(errors->GetBufferPointer()) << std::endl;
+            errors->Release();
+        }
+        return false;
+    }
+    hr = m_device->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(),
+                                       nullptr, &m_shaderScalerShader);
+    blob->Release();
+    if (FAILED(hr)) return false;
+
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 32;
+    cbDesc.Usage = D3D11_USAGE_DEFAULT;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = m_device->CreateBuffer(&cbDesc, nullptr, &m_shaderScalerCB);
+    if (FAILED(hr)) return false;
+
+    D3D11_SAMPLER_DESC sampDesc = {};
+    sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    hr = m_device->CreateSamplerState(&sampDesc, &m_shaderScalerSampler);
+    return SUCCEEDED(hr);
+}
+
+void D3D11VideoProcessorPipeline::ReleaseShaderScaler() {
+    if (m_shaderScalerShader) { m_shaderScalerShader->Release(); m_shaderScalerShader = nullptr; }
+    if (m_shaderScalerCB) { m_shaderScalerCB->Release(); m_shaderScalerCB = nullptr; }
+    if (m_shaderScalerSampler) { m_shaderScalerSampler->Release(); m_shaderScalerSampler = nullptr; }
+}
+
+bool D3D11VideoProcessorPipeline::DownscaleCompute(
+    ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs) {
+    if (!input || !m_shaderScalerShader || !m_shaderScalerCB || !m_shaderScalerSampler ||
+        !m_device3 || poolIndex >= m_poolSize ||
+        !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) return false;
+
+    D3D11_TEXTURE2D_DESC inDesc = {};
+    input->GetDesc(&inDesc);
+    const bool trace = Trace8KResourcesEnabled() && m_traceFrameIndex < 10;
+    if (trace) {
+        std::cerr << "[8K TRACE] DownscaleCompute begin frame=" << m_traceFrameIndex
+                  << " input_copy_ptr=" << input
+                  << " input_ref=" << TraceComRefEstimate(input)
+                  << " array_index=" << arrayIndex
+                  << " output_pool_index=" << poolIndex
+                  << " output_pool_size=" << m_outputPool.size()
+                  << " output_texture_ptr=" << m_outputPool[poolIndex]
+                  << " shader_cb_ptr=" << m_shaderScalerCB
+                  << " device_ptr=" << m_device
+                  << " context_ptr=" << m_context << std::endl;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 yDesc = {};
+    yDesc.Format = (inDesc.Format == DXGI_FORMAT_P010) ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+    yDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    yDesc.Texture2DArray.MostDetailedMip = 0;
+    yDesc.Texture2DArray.MipLevels = 1;
+    yDesc.Texture2DArray.FirstArraySlice = arrayIndex;
+    yDesc.Texture2DArray.ArraySize = 1;
+    yDesc.Texture2DArray.PlaneSlice = 0;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 uvDesc = yDesc;
+    uvDesc.Format = (inDesc.Format == DXGI_FORMAT_P010) ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
+    uvDesc.Texture2DArray.PlaneSlice = 1;
+
+    ID3D11ShaderResourceView1* yView = nullptr;
+    ID3D11ShaderResourceView1* uvView = nullptr;
+    HRESULT hr = m_device3->CreateShaderResourceView1(input, &yDesc, &yView);
+    if (SUCCEEDED(hr)) hr = m_device3->CreateShaderResourceView1(input, &uvDesc, &uvView);
+    if (FAILED(hr) || !yView || !uvView) {
+        if (yView) yView->Release();
+        if (uvView) uvView->Release();
+        std::cerr << "[VP SHADER SCALE] CreateShaderResourceView1 failed: 0x" << std::hex << hr << std::dec << std::endl;
+        // Diagnose root cause on DEVICE_REMOVED.
+        if (hr == DXGI_ERROR_DEVICE_REMOVED && m_device) {
+            const HRESULT reason = m_device->GetDeviceRemovedReason();
+            std::cerr << "[VP SHADER SCALE] DeviceRemovedReason: 0x" << std::hex << reason << std::dec << std::endl;
+        }
+        // Log input texture BindFlags to see if BIND_SHADER_RESOURCE was present.
+        D3D11_TEXTURE2D_DESC dbgDesc = {};
+        input->GetDesc(&dbgDesc);
+        std::cerr << "[VP SHADER SCALE] Input BindFlags=0x" << std::hex << dbgDesc.BindFlags
+                  << " Format=" << dbgDesc.Format << " W=" << std::dec << dbgDesc.Width
+                  << " H=" << dbgDesc.Height << " ArraySize=" << dbgDesc.ArraySize << std::endl;
+        return false;
+    }
+
+    if (trace) {
+        std::cerr << "[8K TRACE] CreateShaderResourceView after frame="
+                  << m_traceFrameIndex << " srv_y_ptr=" << yView
+                  << " srv_uv_ptr=" << uvView
+                  << " y_ref=" << TraceComRefEstimate(yView)
+                  << " uv_ref=" << TraceComRefEstimate(uvView) << std::endl;
+    }
+
+    if (m_cpuX265Path && inDesc.Width == 7680u && inDesc.Height == 4320u) {
+        const char* gate = std::getenv("AMD_8K_GATE");
+        const bool diagnosticSync = trace || gate;
+        if (diagnosticSync) m_context->Flush();
+        const HRESULT deviceReason = m_device->GetDeviceRemovedReason();
+        if (diagnosticSync) {
+            std::cout << "SRV_ON_COPIED_8K_TEXTURE=PASS" << std::endl;
+            std::cout << "DEVICE_REASON_AFTER_SRV=0x" << std::hex
+                      << deviceReason << std::dec << std::endl;
+        }
+        if (FAILED(deviceReason)) {
+            yView->Release();
+            uvView->Release();
+            return false;
+        }
+    }
+
+    struct ScaleCBData {
+        UINT inW, inH, outW, outH;
+        UINT arraySlice, pad0, pad1, pad2;
+    } cbData = { inDesc.Width, inDesc.Height, m_width, m_height, 0, 0, 0, 0 };
+    m_context->UpdateSubresource(m_shaderScalerCB, 0, nullptr, &cbData, 0, 0);
+
+    const auto start = std::chrono::steady_clock::now();
+    ID3D11ShaderResourceView* srvs[2] = { yView, uvView };
+    ID3D11UnorderedAccessView* uavs[2] = { m_outputYViews[poolIndex], m_outputUVViews[poolIndex] };
+    UINT counts[2] = { 0, 0 };
+
+    m_context->CSSetShader(m_shaderScalerShader, nullptr, 0);
+    m_context->CSSetSamplers(0, 1, &m_shaderScalerSampler);
+    m_context->CSSetConstantBuffers(0, 1, &m_shaderScalerCB);
+    m_context->CSSetShaderResources(0, 2, srvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, uavs, counts);
+
+    m_context->Dispatch((m_width + 15) / 16, (m_height + 15) / 16, 1);
+    if (trace) {
+        std::cerr << "[8K TRACE] DownscaleCompute dispatch submitted frame="
+                  << m_traceFrameIndex << " output_pool_index=" << poolIndex
+                  << " output_texture_ptr=" << m_outputPool[poolIndex] << std::endl;
+    }
+
+    ID3D11ShaderResourceView* nullSrvs[2] = { nullptr, nullptr };
+    ID3D11UnorderedAccessView* nullUavs[2] = { nullptr, nullptr };
+    ID3D11SamplerState* nullSampler = nullptr;
+    ID3D11Buffer* nullCB = nullptr;
+
+    m_context->CSSetShaderResources(0, 2, nullSrvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, nullUavs, counts);
+    m_context->CSSetSamplers(0, 1, &nullSampler);
+    m_context->CSSetConstantBuffers(0, 1, &nullCB);
+    m_context->CSSetShader(nullptr, nullptr, 0);
+
+    yView->Release();
+    uvView->Release();
+    if (trace) {
+        std::cerr << "[8K TRACE] resource Release SRV frame=" << m_traceFrameIndex
+                  << " srv_y_ptr=" << yView << " srv_uv_ptr=" << uvView << std::endl;
+    }
+
+    if (outMs) *outMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
+
+    return true;
+}
+
 
 bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
     HRESULT hr = m_device->QueryInterface(__uuidof(ID3D11Device3), (void**)&m_device3);
@@ -864,12 +1282,16 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
 
         [numthreads(16, 16, 1)]
         void CSMain(uint3 threadId : SV_DispatchThreadID) {
-            uint width, height;
-            HUDTexture.GetDimensions(width, height);
+            uint outW, outH;
+            OutputY.GetDimensions(outW, outH);
             uint2 pos = threadId.xy;
-            if (pos.x >= width || pos.y >= height) return;
+            if (pos.x >= outW || pos.y >= outH) return;
 
-            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(pos, 0))) * 255.0f);
+            uint hudW, hudH;
+            HUDTexture.GetDimensions(hudW, hudH);
+            uint2 hudPos = (hudW == outW && hudH == outH) ? pos : (pos * uint2(hudW, hudH) / uint2(outW, outH));
+
+            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(hudPos, 0))) * 255.0f);
             uint alpha = hud.a;
             if (alpha == 0) return;
 
@@ -967,17 +1389,21 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
 
         [numthreads(16, 16, 1)]
         void CSMain(uint3 threadId : SV_DispatchThreadID) {
-            uint width, height;
-            HUDTexture.GetDimensions(width, height);
+            uint outW, outH;
+            OutputY.GetDimensions(outW, outH);
             uint2 pos = threadId.xy;
-            if (pos.x >= width || pos.y >= height) return;
+            if (pos.x >= outW || pos.y >= outH) return;
+
+            uint hudW, hudH;
+            HUDTexture.GetDimensions(hudW, hudH);
+            uint2 hudPos = (hudW == outW && hudH == outH) ? pos : (pos * uint2(hudW, hudH) / uint2(outW, outH));
 
             // 1. Normalize Base Y (Full 0..255 -> Studio 16..235)
             uint yBaseFull = (uint)round(saturate(OutputY[pos]) * 255.0f);
             uint yBaseLimited = min(235u, ((219u * yBaseFull + 127u) / 255u) + 16u);
 
             // 2. Read HUD RGBA
-            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(pos, 0))) * 255.0f);
+            uint4 hud = (uint4)round(saturate(HUDTexture.Load(int3(hudPos, 0))) * 255.0f);
             uint alpha = hud.a;
 
             if (alpha == 0u) {
@@ -1223,7 +1649,7 @@ bool D3D11VideoProcessorPipeline::ComposeHUDDirectNV12(
         return true;
     }
 
-    const int variant = GetFusedCompositorVariant();
+    const int variant = (m_width > 3840 || m_height > 2160) ? 0 : GetFusedCompositorVariant();
     ID3D11ComputeShader* targetShader = m_nv12FusedComputeShader;
     UINT groupX = (m_width + 15) / 16;
     UINT groupY = (m_height + 15) / 16;
@@ -3472,10 +3898,99 @@ bool D3D11VideoProcessorPipeline::CanUseInputSurface(
     return SUCCEEDED(hr);
 }
 
+bool D3D11VideoProcessorPipeline::WaitForComputeCompletion(UINT frameIndex) {
+    if (!m_cpuX265Path || !m_computeCompletionQuery || !m_computeCompletionPending) {
+        return true;
+    }
+    const auto waitStart = std::chrono::steady_clock::now();
+    for (;;) {
+        const HRESULT reason = m_device ? m_device->GetDeviceRemovedReason() : E_FAIL;
+        if (FAILED(reason)) {
+            std::cerr << "[VP 8K X265] compute ownership wait device reason=0x"
+                      << std::hex << reason << std::dec
+                      << " before frame=" << frameIndex << std::endl;
+            return false;
+        }
+        const HRESULT ready = m_context->GetData(
+            m_computeCompletionQuery, nullptr, 0, 0);
+        if (ready == S_OK) {
+            m_computeCompletionPending = false;
+            if (Trace8KResourcesEnabled() && frameIndex < 10) {
+                std::cerr << "[8K TRACE] compute ownership acquired frame="
+                          << frameIndex << std::endl;
+            }
+            return true;
+        }
+        if (ready != S_FALSE) {
+            std::cerr << "[VP 8K X265] compute ownership query failed: 0x"
+                      << std::hex << ready << std::dec << std::endl;
+            return false;
+        }
+        if (std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - waitStart).count() >= 10) {
+            std::cerr << "[VP 8K X265] compute ownership wait timeout before frame="
+                      << frameIndex << std::endl;
+            return false;
+        }
+        std::this_thread::yield();
+    }
+}
+
+bool D3D11VideoProcessorPipeline::ProbeCopied8KSRV(ID3D11Texture2D* texture) {
+    if (!texture || !m_device || !m_context) return false;
+    ID3D11Device3* device3 = m_device3;
+    if (!device3) {
+        if (FAILED(m_device->QueryInterface(__uuidof(ID3D11Device3),
+                                            reinterpret_cast<void**>(&device3))) || !device3) {
+            std::cout << "SRV_ON_COPIED_8K_TEXTURE=FAIL device3" << std::endl;
+            return false;
+        }
+    }
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    texture->GetDesc(&desc);
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 yDesc = {};
+    yDesc.Format = desc.Format == DXGI_FORMAT_P010
+        ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+    yDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    yDesc.Texture2DArray.MostDetailedMip = 0;
+    yDesc.Texture2DArray.MipLevels = 1;
+    yDesc.Texture2DArray.FirstArraySlice = 0;
+    yDesc.Texture2DArray.ArraySize = 1;
+    yDesc.Texture2DArray.PlaneSlice = 0;
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 uvDesc = yDesc;
+    uvDesc.Format = desc.Format == DXGI_FORMAT_P010
+        ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
+    uvDesc.Texture2DArray.PlaneSlice = 1;
+
+    ID3D11ShaderResourceView1* yView = nullptr;
+    ID3D11ShaderResourceView1* uvView = nullptr;
+    HRESULT hrY = device3->CreateShaderResourceView1(texture, &yDesc, &yView);
+    HRESULT hrUV = SUCCEEDED(hrY)
+        ? device3->CreateShaderResourceView1(texture, &uvDesc, &uvView) : hrY;
+    m_context->Flush();
+    const HRESULT deviceReason = m_device->GetDeviceRemovedReason();
+    std::cout << "SRV_ON_COPIED_8K_TEXTURE="
+              << (SUCCEEDED(hrY) && SUCCEEDED(hrUV) ? "PASS" : "FAIL")
+              << " HR_Y=0x" << std::hex << hrY
+              << " HR_UV=0x" << hrUV << std::dec << std::endl;
+    std::cout << "DEVICE_REASON_AFTER_SRV=0x" << std::hex
+              << deviceReason << std::dec << std::endl;
+    if (yView) yView->Release();
+    if (uvView) uvView->Release();
+    if (device3 != m_device3) device3->Release();
+    return SUCCEEDED(hrY) && SUCCEEDED(hrUV) && SUCCEEDED(deviceReason);
+}
+
 bool D3D11VideoProcessorPipeline::SetStreamRotation(UINT degrees) {
-    if (!m_videoContext || !m_videoProcessor) return false;
     degrees %= 360;
     if (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270) return false;
+
+    // The 8K CPU-x265 path has no VideoProcessor object by design.  The
+    // compute-only diagnostic path is currently defined for the native 1:1
+    // orientation; do not pretend that VP rotation was applied.
+    if (m_cpuX265Path) return degrees == 0;
+    if (!m_videoContext || !m_videoProcessor) return false;
 
     m_streamRotation = degrees;  // ETAP 5S: cache for the state signature.
 
@@ -3764,6 +4279,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     }
     m_lastPoolIndex = currentIdx;
     m_poolIndex = (m_poolIndex + 1) % m_poolSize;
+    m_traceFrameIndex = frameIndex;
 
     const UINT64 previousSlotFrame =
         (m_slotLastFrame.size() == m_poolSize) ? m_slotLastFrame[currentIdx] : UINT64_MAX;
@@ -3784,19 +4300,86 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
 
     ID3D11Texture2D* outTex = m_outputPool[currentIdx];
     ID3D11VideoProcessorOutputView* outView = m_outputViewPool[currentIdx];
+    if (Trace8KResourcesEnabled() && frameIndex < 10) {
+        std::cerr << "[8K TRACE] ProcessFrame pool frame=" << frameIndex
+                  << " output_pool_index=" << currentIdx
+                  << " output_pool_size=" << m_outputPool.size()
+                  << " copy_pool_size=1"
+                  << " staging_pool_size=3"
+                  << " output_texture_ptr=" << outTex
+                  << " output_view_ptr=" << outView
+                  << " device_ptr=" << m_device
+                  << " context_ptr=" << m_context << std::endl;
+    }
     if (fa && outStats) outStats->pool_index = currentIdx;
 
-    // ETAP 5W: compute mode replaces only the VP base conversion.
     D3D11_TEXTURE2D_DESC inDesc = {};
     pP010Texture->GetDesc(&inDesc);
 
-    if (m_baseConvertCompute) {
+    // Use the actual VP enumerator input width as the threshold for the
+    // shader-scaler path.  If VP was configured with InputWidth>=inDesc.Width
+    // (e.g. 7680 for 8K), VP can handle the decode surface directly via
+    // CreateVideoProcessorInputView — no compute-shader copy needed.
+    // Fall back to the shader-scaler only when explicitly requested or when
+    // the input genuinely exceeds the configured VP capability.
+    const UINT vpInputLimit = (m_vpConfiguredInputWidth > 0) ? m_vpConfiguredInputWidth : 4096u;
+    const bool useShaderScaler = m_cpuX265Path || m_baseConvertCompute ||
+        (inDesc.Width  > vpInputLimit) ||
+        (inDesc.Height > vpInputLimit) ||
+        (m_width       > vpInputLimit) ||
+        (m_height      > vpInputLimit);
+    if (useShaderScaler || inDesc.Width > vpInputLimit) {
+        std::cout << "[VP 8K] inW=" << inDesc.Width << " inH=" << inDesc.Height
+                  << " vpLimit=" << vpInputLimit
+                  << " useShaderScaler=" << useShaderScaler << std::endl;
+    }
+
+    if (m_p010PlaneOutputEnabled) {
+        double planeMs = 0.0;
+        if (!ProcessP010PlaneOutput(pP010Texture, arrayIndex, currentIdx, &planeMs)) {
+            std::cerr << "[VP 8K P010] plane output dispatch failed" << std::endl;
+            return false;
+        }
+        if (m_computeCompletionQuery) {
+            m_context->End(m_computeCompletionQuery);
+            m_computeCompletionPending = true;
+        }
+        const char* gate = std::getenv("AMD_8K_GATE");
+        if (gate && _stricmp(gate, "SHADER_1TO1") == 0) {
+            m_context->Flush();
+            const HRESULT reason = m_device->GetDeviceRemovedReason();
+            std::cout << "8K_SHADER_1TO1=" << (SUCCEEDED(reason) ? "PASS" : "FAIL") << std::endl;
+            std::cout << "DEVICE_REASON_AFTER_DISPATCH=0x" << std::hex << reason << std::dec << std::endl;
+            if (FAILED(reason)) return false;
+        }
+        if (outStats) {
+            outStats->pool_index = currentIdx;
+            outStats->base_convert_compute_ms = planeMs;
+            outStats->vp_sequence_total_ms = planeMs;
+        }
+        *ppOutNV12Texture = nullptr;
+        return true;
+    }
+
+    if (useShaderScaler) {
         double computeMs = 0.0;
-        const bool converted = ConvertP010ToNV12Compute(
+        const bool converted = DownscaleCompute(
             pP010Texture, arrayIndex, currentIdx, &computeMs);
         if (!converted) {
-            std::cerr << "[VP COMPUTE] P010->NV12 conversion failed" << std::endl;
+            std::cerr << "[VP SHADER SCALE] 8K/Compute->NV12 downscale failed" << std::endl;
             return false;
+        }
+        if (m_cpuX265Path && m_width == 7680u && m_height == 4320u) {
+            const char* gate = getenv("AMD_8K_GATE");
+            if (gate && _stricmp(gate, "SHADER_1TO1") == 0) {
+                m_context->Flush();
+                const HRESULT deviceReason = m_device->GetDeviceRemovedReason();
+                std::cout << "8K_SHADER_1TO1="
+                          << (SUCCEEDED(deviceReason) ? "PASS" : "FAIL") << std::endl;
+                std::cout << "DEVICE_REASON_AFTER_DISPATCH=0x" << std::hex
+                          << deviceReason << std::dec << std::endl;
+                if (FAILED(deviceReason)) return false;
+            }
         }
         BeginVPCompletionMarker(frameIndex);
         if (fa && outStats) {
@@ -3811,24 +4394,6 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
             outStats->first_vp_api_ms = 0.0;
             outStats->vp_sequence_total_ms = computeMs;
         }
-        // The common downstream path below starts with range normalization and
-        // then performs the unchanged map/HUD/chart/gauge/AMF preparation.
-        HRESULT hr = S_OK;
-        const auto tRange = std::chrono::steady_clock::now();
-        const bool skipNormalize = (GetFusedCompositorMode() == 1);
-        if (normalizeD3D11VARange && !skipNormalize &&
-            !NormalizeD3D11VARangeNV12(currentIdx)) {
-            hr = E_FAIL;
-            std::cerr << "[VP COMPUTE] normalize FAILED" << std::endl;
-        }
-        if (fa && outStats) {
-            outStats->range_pass_ms = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - tRange).count();
-        }
-        if (FAILED(hr)) return false;
-        // Continue through the existing downstream compositor code.  The
-        // reference VP block below is bypassed by this diagnostic return path
-        // only after all shared post-conversion work has run.
     }
 
     // Create Input View for Base Video Texture
@@ -3849,8 +4414,8 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     double firstVpApiMs = 0.0;
     const bool composeHUD = enableHUD && m_hudShaderView && !m_gpuHudOff;
     const auto cpuSubmitStart = std::chrono::high_resolution_clock::now();
-    if (m_baseConvertCompute) {
-        // The compute branch above already produced the base surface.
+    if (useShaderScaler) {
+        // The shader scaler above already produced the base surface.
     } else {
     hr = m_videoDevice->CreateVideoProcessorInputView(pP010Texture, m_videoEnumerator, &inViewDesc, &pP010InputView);
     if (fa && outStats) {
@@ -4146,7 +4711,10 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     }
     const auto cpuSubmitEnd = std::chrono::high_resolution_clock::now();
     const auto tRelease = std::chrono::steady_clock::now();
-    pP010InputView->Release();
+    if (pP010InputView) {
+        pP010InputView->Release();
+        pP010InputView = nullptr;
+    }
     if (fa && outStats) {
         outStats->release_view_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tRelease).count();
@@ -4171,6 +4739,13 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     if (FAILED(hr)) {
         std::cerr << "[VP] GPU compositor failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
+    }
+
+    if (m_cpuX265Path && m_computeCompletionQuery) {
+        // Ownership of the reusable 8K copy texture and output surfaces ends
+        // only after every command submitted by this frame is complete.
+        m_context->End(m_computeCompletionQuery);
+        m_computeCompletionPending = true;
     }
 
     EndLocalCompletionMarker(frameIndex);

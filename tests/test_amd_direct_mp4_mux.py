@@ -295,7 +295,114 @@ def test_direct_mp4_mux_with_range_start_offset(tmp_path, monkeypatch):
     mux_cmds = [c for c in captured_cmds if "-f" in c and "hevc" in c]
     assert len(mux_cmds) == 1
     cmd = mux_cmds[0]
-    # Check that -ss 120.000000 was placed before -i input_test.mp4
+    # Single-pass default: uses concat demuxer plan with timestamp anchoring
+    assert "-copyts" in cmd
+    assert "-avoid_negative_ts" in cmd
+    assert "make_zero" in cmd
+    assert "-f" in cmd
+    concat_idx = cmd.index("concat")
+    assert cmd[concat_idx - 1] == "-f"
+    assert "-safe" in cmd
+    # Full source MP4 is NOT passed directly as -i input #1
+    assert str(in_mp4) not in cmd
+
+
+# ---------------------------------------------------------------------------
+# Test: Single-file legacy fallback (AMD_SINGLE_PASS_AV_MUX=0) uses direct -ss -i
+# ---------------------------------------------------------------------------
+def test_direct_mp4_mux_single_file_legacy_fallback_ss_offset(tmp_path, monkeypatch):
+    monkeypatch.setenv("AMD_SINGLE_PASS_AV_MUX", "0")
+    out_mp4 = tmp_path / "output_range_legacy.mp4"
+    in_mp4 = tmp_path / "input_test.mp4"
+    in_mp4.write_bytes(b"dummy mp4 source")
+
+    mock_dll = MagicMock()
+    mock_dll.telem_amd_get_abi_version.return_value = AMD_NATIVE_ABI_VERSION
+    mock_dll.telem_amd_get_build_info.return_value = b"ABI 9"
+    mock_dll.telem_amd_create.return_value = 12345
+    mock_dll.telem_amd_set_diagnostics.return_value = 1
+    mock_dll.telem_amd_set_profiling.return_value = 1
+    mock_dll.telem_amd_set_hud_enabled.return_value = 1
+    mock_dll.telem_amd_set_hud_mode.return_value = 1
+    mock_dll.telem_amd_set_map_mode.return_value = 1
+    mock_dll.telem_amd_set_above_map_mode.return_value = 1
+    mock_dll.telem_amd_set_chart_mode.return_value = 1
+    mock_dll.telem_amd_set_after_map_chart_mode.return_value = 1
+    mock_dll.telem_amd_set_gauge_mode.return_value = 1
+    mock_dll.telem_amd_set_gauge_after_map.return_value = 1
+    mock_dll.telem_amd_set_lean_gpu_mode.return_value = 1
+    mock_dll.telem_amd_set_decode_mode.return_value = 1
+    mock_dll.telem_amd_seek_source.return_value = 1
+    mock_dll.telem_amd_discard_video_sample.return_value = 1
+    mock_dll.telem_amd_read_video_sample.return_value = 0
+    mock_dll.telem_amd_process_frame.return_value = 0
+    mock_dll.telem_amd_flush.return_value = 1
+    mock_dll.telem_amd_close.return_value = 1
+
+    def fake_create(in_p, out_p, w, h, fn, fd):
+        if out_p.startswith(r"\\.\pipe"):
+            with open(out_p + ".h265", "wb") as f:
+                f.write(b"fake hevc packets")
+        return 12345
+    mock_dll.telem_amd_create.side_effect = fake_create
+
+    monkeypatch.setattr("ctypes.CDLL", lambda *a, **kw: mock_dll)
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.poll.return_value = 0
+    mock_proc.wait.return_value = 0
+    mock_proc.stderr = []
+
+    captured_cmds = []
+    def fake_popen(cmd, *a, **kw):
+        captured_cmds.append(cmd)
+        part_file = str(out_mp4) + ".part"
+        Path(part_file).write_bytes(b"dummy valid mp4")
+        return mock_proc
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda exe, path: {
+        "streams": [{"codec_type": "video", "nb_frames": "60"}, {"codec_type": "audio"}]
+    })
+
+    mock_clip = MagicMock()
+    mock_clip.path = in_mp4
+    mock_clip.local_start_s = 120.0
+    mock_clip.local_end_s = 180.0
+    mock_clip.duration_s = 60.0
+    mock_clip.source_duration_s = 600.0
+
+    mock_timeline = MagicMock()
+    mock_timeline.clip_count = 1
+    mock_timeline.clips = [mock_clip]
+    mock_timeline.output_frame_counts.return_value = [1800]
+    mock_timeline.frame_to_activity_elapsed.return_value = 0.0
+    mock_timeline.frame_to_clip.return_value = (0, 0.0)
+
+    res = export_amd_native_d3d11(
+        ffmpeg_exe="ffmpeg",
+        input_files=[str(in_mp4)],
+        output_file=str(out_mp4),
+        duration_s=60.0,
+        video_width=1920,
+        video_height=1080,
+        start_dt_utc=None,
+        tz_offset_hours=0.0,
+        speed_samples=[],
+        track_samples=[],
+        alt_samples=[],
+        font_path="",
+        layout={},
+        field_samples={},
+        video_timeline=mock_timeline,
+    )
+
+    assert res is True
+    mux_cmds = [c for c in captured_cmds if "-f" in c and "hevc" in c]
+    assert len(mux_cmds) == 1
+    cmd = mux_cmds[0]
+    # In legacy fallback mode: -ss 120.000000 -i input_test.mp4
     assert "-ss" in cmd
     ss_idx = cmd.index("-ss")
     assert cmd[ss_idx + 1] == "120.000000"

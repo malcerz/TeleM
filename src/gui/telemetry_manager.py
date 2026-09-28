@@ -452,6 +452,8 @@ class TelemetryDataManager:
         # Precomputed IMU roll timelines (axis -> [(dt, roll_deg)]) — ETAP 13.
         # Built once per material so seek/preview/final share the same result.
         self._lean_roll_cache: dict[str, list] = {}
+        # Precomputed raw gyroscope angular rate timelines [deg/s] (axis -> [(dt, deg_s)]).
+        self._raw_gyro_cache: dict[str, list] = {}
 
         # Smoothing window
         self.smoothing_window: int = 5
@@ -690,17 +692,22 @@ class TelemetryDataManager:
 
     def _set_vector_series(self, samples: Any, prefix: str) -> None:
         """Expose one timestamped vector series as scalar and magnitude series."""
+        arr_attr = "accelerometer_array" if prefix == "accel" else "gyroscope_array"
         if hasattr(samples, "_arr") and getattr(samples, "_arr", None) is not None:
-            tz_aware = getattr(samples, "_tz_aware", True)
-            self._set_vector_series_from_array(samples._arr, prefix, tz_aware=tz_aware)
-            return
+            if not getattr(samples, "_materialized", False):
+                tz_aware = getattr(samples, "_tz_aware", True)
+                setattr(self, arr_attr, samples._arr)
+                self._set_vector_series_from_array(samples._arr, prefix, tz_aware=tz_aware)
+                return
 
         import numpy as np
         if isinstance(samples, np.ndarray):
+            setattr(self, arr_attr, samples)
             self._set_vector_series_from_array(samples, prefix)
             return
 
         if not samples:
+            setattr(self, arr_attr, None)
             setattr(self, f"{prefix}_x_samples", [])
             setattr(self, f"{prefix}_y_samples", [])
             setattr(self, f"{prefix}_z_samples", [])
@@ -716,6 +723,8 @@ class TelemetryDataManager:
                 y = v_arr[:, 1]
                 z = v_arr[:, 2]
                 mag = np.sqrt(x * x + y * y + z * z)
+                ts_col = np.array([s.timestamp() for s in dts], dtype=np.float64)
+                setattr(self, arr_attr, np.column_stack([ts_col, v_arr]))
                 setattr(self, f"{prefix}_x_samples", list(zip(dts, x.tolist())))
                 setattr(self, f"{prefix}_y_samples", list(zip(dts, y.tolist())))
                 setattr(self, f"{prefix}_z_samples", list(zip(dts, z.tolist())))
@@ -798,7 +807,7 @@ class TelemetryDataManager:
 
         # Extract GPS track (timestamp, lat, lon) for map rendering
         # GpxPoint = tuple[datetime, float, float, float, dict]
-        self.gpx_gps_track = [
+        gpx_gps_track = [
             (dt, lat, lon) for dt, lat, lon, _, _ in points
             if lat is not None and lon is not None
         ]
@@ -810,26 +819,37 @@ class TelemetryDataManager:
 
         gpx_speed, gpx_track, gpx_alt, gpx_power, gpx_atemp, gpx_hr, gpx_cad = gpx_result
 
-        self.gpx_speed_samples = self._smooth(gpx_speed) if gpx_speed else []
-        self.gpx_track_samples = gpx_track or []
-        self.gpx_alt_samples = self._smooth(gpx_alt) if gpx_alt else []
-        self.gpx_power_samples = gpx_power or []
-        self.gpx_atemp_samples = gpx_atemp or []
-        self.gpx_hr_samples = gpx_hr or []
-        self.gpx_cad_samples = gpx_cad or []
-        self.gpx_heading_samples = derive_heading_samples(
-            self.gpx_gps_track, self.gpx_speed_samples
+        gpx_speed_samples = self._smooth(gpx_speed) if gpx_speed else []
+        gpx_track_samples = gpx_track or []
+        gpx_alt_samples = self._smooth(gpx_alt) if gpx_alt else []
+        gpx_power_samples = gpx_power or []
+        gpx_atemp_samples = gpx_atemp or []
+        gpx_hr_samples = gpx_hr or []
+        gpx_cad_samples = gpx_cad or []
+        gpx_heading_samples = derive_heading_samples(
+            gpx_gps_track, gpx_speed_samples
         )
-        self.gpx_slope_samples = derive_slope_from_streams(
-            self.gpx_track_samples, self.gpx_alt_samples
+        gpx_slope_samples = derive_slope_from_streams(
+            gpx_track_samples, gpx_alt_samples
         )
+
+        self.gpx_gps_track = gpx_gps_track
+        self.gpx_speed_samples = gpx_speed_samples
+        self.gpx_track_samples = gpx_track_samples
+        self.gpx_alt_samples = gpx_alt_samples
+        self.gpx_power_samples = gpx_power_samples
+        self.gpx_atemp_samples = gpx_atemp_samples
+        self.gpx_hr_samples = gpx_hr_samples
+        self.gpx_cad_samples = gpx_cad_samples
+        self.gpx_heading_samples = gpx_heading_samples
+        self.gpx_slope_samples = gpx_slope_samples
 
         if self.start_dt_utc is None and gpx_speed:
             self.start_dt_utc = gpx_speed[0][0]
 
         print(
-            f"[TelemetryManager] GPX loaded: speed={len(self.gpx_speed_samples)}, "
-            f"gps_track={len(self.gpx_gps_track)} pts",
+            f"[TelemetryManager] GPX loaded: speed={len(gpx_speed_samples)}, "
+            f"gps_track={len(gpx_gps_track)} pts",
             flush=True,
         )
         return True
@@ -856,14 +876,6 @@ class TelemetryDataManager:
         """
         if not _FIT_AVAILABLE:
             return False
-
-        # A new FIT load starts a new source state. Do not retain samples or
-        # dynamic availability from the previously opened file if parsing or
-        # alignment fails.
-        self.fit_data.clear()
-        self.available_fit_fields = frozenset()
-        self.fit_ext_fields.clear()
-        self.fit_gps_track.clear()
 
         # Resolve FIT file path
         fit_path: Optional[Path] = manual_path
@@ -894,7 +906,7 @@ class TelemetryDataManager:
                 r["timestamp"] = r["timestamp"] + offset
 
         # Extract GPS track (timestamp, lat, lon) for map rendering
-        self.fit_gps_track = [
+        fit_gps_track = [
             (r["timestamp"], r["lat"], r["lon"])
             for r in records
             if r.get("lat") is not None and r.get("lon") is not None
@@ -912,7 +924,7 @@ class TelemetryDataManager:
             else:
                 processed_fit[key] = samples
         fit_heading = derive_heading_samples(
-            self.fit_gps_track, processed_fit.get("speed", [])
+            fit_gps_track, processed_fit.get("speed", [])
         )
         if fit_heading:
             processed_fit["heading"] = fit_heading
@@ -930,6 +942,7 @@ class TelemetryDataManager:
             distance_normalization=getattr(fit_result, "distance_normalization", None),
             source_start=getattr(fit_result, "source_start", None) or (records[0]["timestamp"] if records else None),
         )
+        self.fit_gps_track = fit_gps_track
         self.available_fit_fields = self.fit_data.available_fit_fields
 
         if self.start_dt_utc is None:
@@ -1058,6 +1071,7 @@ class TelemetryDataManager:
         self.video_duration_s = 0.0
         self._alt_cache.clear()
         self._lean_roll_cache.clear()
+        self._raw_gyro_cache.clear()
 
     # ------------------------------------------------------------------
     # Smoothing helper
@@ -1097,15 +1111,68 @@ class TelemetryDataManager:
             self.gps_track = []
             self.heading_samples = []
 
+    def resolve_gps_track(
+        self, requested_source: str = "auto"
+    ) -> tuple[list[tuple[datetime, float, float]], str]:
+        """Resolve GPS track based on requested source ('auto', 'fit', 'gpmf', 'gpx').
+
+        Auto priority:
+        1. FIT if loaded and valid (>= 2 points)
+        2. GPMF if available and valid (>= 2 points)
+        3. GPX if available and valid (>= 2 points)
+        4. Empty list if none
+
+        Logs once at map initialization/switch:
+        [MAP GPS SOURCE]
+        requested=...
+        selected=...
+        points=...
+        """
+        req = (requested_source or "auto").strip().lower()
+        if req == "fit":
+            selected = "fit"
+            pts = self.fit_gps_track or []
+        elif req == "gpmf":
+            selected = "gpmf"
+            pts = self.gps_track or []
+        elif req == "gpx":
+            selected = "gpx"
+            pts = self.gpx_gps_track or []
+        elif req == "auto":
+            if self.fit_gps_track and len(self.fit_gps_track) >= 2:
+                selected = "fit"
+                pts = self.fit_gps_track
+            elif self.gps_track and len(self.gps_track) >= 2:
+                selected = "gpmf"
+                pts = self.gps_track
+            elif self.gpx_gps_track and len(self.gpx_gps_track) >= 2:
+                selected = "gpx"
+                pts = self.gpx_gps_track
+            else:
+                selected = "none"
+                pts = []
+        else:
+            selected = "none"
+            pts = []
+
+        last_diag = getattr(self, "_last_map_gps_diag", None)
+        curr_diag = (req, selected, len(pts))
+        if curr_diag != last_diag:
+            self._last_map_gps_diag = curr_diag
+            print(
+                f"[MAP GPS SOURCE]\n"
+                f"requested={req}\n"
+                f"selected={selected}\n"
+                f"points={len(pts)}",
+                flush=True,
+            )
+
+        return pts, selected
+
     def get_gps_track_for_source(self, source_type: str) -> list[tuple[datetime, float, float]]:
-        """Return GPS track (lat/lon) for exactly the requested source."""
-        if source_type == "gpx":
-            return self.gpx_gps_track
-        if source_type == "fit":
-            return self.fit_gps_track
-        if source_type == "gpmf":
-            return self.gps_track
-        return []
+        """Return GPS track (lat/lon) for requested source ('auto', 'fit', 'gpmf', 'gpx')."""
+        pts, _ = self.resolve_gps_track(source_type)
+        return pts
 
     # ------------------------------------------------------------------
     # Source resolution (per-indicator source selection)
@@ -1119,7 +1186,7 @@ class TelemetryDataManager:
             resolve_samples_from_sources("alt", source_type, gpmf=self, fit_data=self.fit_data, gpx=self),
         )
 
-    def _get_lean_roll_samples(self, axis: str, smoothing_s: float = 0.0) -> list:
+    def _get_lean_roll_samples(self, axis: str = "y", smoothing_s: float = 0.0) -> list:
         """Precomputed roll timeline for the requested axis (ETAP 13).
 
         Computed ONCE per material from the full accel/gyro sample arrays with a
@@ -1128,7 +1195,7 @@ class TelemetryDataManager:
         """
         axis = str(axis).strip().lower()
         if axis not in ("x", "y", "z"):
-            axis = "x"
+            axis = "y"
         smoothing_s = max(0.0, float(smoothing_s or 0.0))
         cache_key = f"{axis}_{smoothing_s:.2f}"
         cached = self._lean_roll_cache.get(cache_key)
@@ -1161,6 +1228,52 @@ class TelemetryDataManager:
         self._lean_roll_cache[cache_key] = timeline
         return timeline
 
+    def _get_raw_gyro_samples(self, axis: str = "z", smoothing_s: float = 0.0) -> list:
+        """Precomputed raw gyroscope angular rate timeline [deg/s] (GPMF).
+
+        Extracts angular velocity (rad/s -> deg/s) without complementary filtering
+        or gravity integration. Cached per axis and smoothing.
+        """
+        axis = str(axis).strip().lower()
+        if axis not in ("x", "y", "z"):
+            axis = "z"
+        smoothing_s = max(0.0, float(smoothing_s or 0.0))
+        cache_key = f"{axis}_{smoothing_s:.2f}"
+        cached = self._raw_gyro_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        import math
+        gyro_array = getattr(self, "gyroscope_array", None)
+        gyro_lazy = getattr(self, "gyroscope_samples", None)
+        axis_idx = {"x": 0, "y": 1, "z": 2}.get(axis, 2)
+        timeline: list[tuple[datetime, float]] = []
+
+        if gyro_array is not None and len(gyro_array) > 0:
+            import numpy as np
+            arr = np.asarray(gyro_array, dtype=np.float64)
+            arr = arr[np.argsort(arr[:, 0], kind="stable")]
+            tz_aware = bool(getattr(gyro_lazy, "_tz_aware", True))
+            for row in arr:
+                ts = float(row[0])
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                if not tz_aware:
+                    dt = dt.replace(tzinfo=None)
+                val_deg_s = float(row[axis_idx + 1]) * 180.0 / math.pi
+                timeline.append((dt, val_deg_s))
+        elif gyro_lazy:
+            gyro_sorted = sorted(gyro_lazy, key=lambda s: s[0])
+            for dt, g in gyro_sorted:
+                val_deg_s = float(g[axis_idx]) * 180.0 / math.pi
+                timeline.append((dt, val_deg_s))
+
+        if smoothing_s > 0.0 and timeline:
+            from src.telemetry_imu import smooth_roll_samples
+            timeline = smooth_roll_samples(timeline, smoothing_s)
+
+        self._raw_gyro_cache[cache_key] = timeline
+        return timeline
+
     def resolve_value(
         self, field_name: str, target_dt: datetime, prefer: str = "fit",
         source: Optional[str] = None, indicator_key: Optional[str] = None,
@@ -1174,6 +1287,19 @@ class TelemetryDataManager:
         """
         from src.telemetry_resolver import canonical_telemetry_field
         field_name = canonical_telemetry_field(field_name)
+        if str(field_name).startswith("raw_gyro_") or str(field_name) == "raw_gyro_z":
+            from src.telemetry_imu import interpolate_roll
+            axis = str(field_name).split("_")[-1]
+            if axis not in ("x", "y", "z"):
+                axis = "z"
+            smooth_s = 0.0
+            if indicator_key and hasattr(self, "layout") and isinstance(self.layout, dict):
+                ind_cfg = self.layout.get("indicators", {}).get(indicator_key, {})
+                smooth_s = float(ind_cfg.get("lean_smoothing_s", 0.0) or 0.0)
+            timeline = self._get_raw_gyro_samples(axis, smooth_s)
+            if not timeline:
+                return None
+            return interpolate_roll(timeline, target_dt)
         if str(field_name).startswith("lean_roll_"):
             from src.telemetry_imu import interpolate_roll, lean_diagnostic
             axis = str(field_name).split("_")[-1]
@@ -1236,6 +1362,18 @@ class TelemetryDataManager:
         if not samples:
             return None
         if field_name == 'heading':
+            if indicator_key == "track_map":
+                smooth_s = float(cfg.get("map_rotation_smoothing_s", 0.0) or 0.0)
+                if smooth_s > 0.0:
+                    cache_attr = "_smoothed_heading_cache"
+                    if not hasattr(self, cache_attr):
+                        setattr(self, cache_attr, {})
+                    c_dict = getattr(self, cache_attr)
+                    ckey = (id(samples), smooth_s)
+                    if ckey not in c_dict:
+                        from src.telemetry_heading import smooth_heading_samples
+                        c_dict[ckey] = smooth_heading_samples(samples, smooth_s)
+                    samples = c_dict[ckey]
             return interpolate_heading(samples, target_dt)
         if field_name == 'slope':
             return interpolate_slope(samples, target_dt)

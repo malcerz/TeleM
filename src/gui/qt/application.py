@@ -310,6 +310,251 @@ def main() -> None:
             QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
                 [str(video_path)], "", str(fit_path),
             ))
+    elif any(arg in sys.argv for arg in ("--test-amd-startup", "--test-amd-prefetch-ready", "--test-amd-prefetch-partial", "--test-amd-prefetch-cancel")):
+        import time
+        import threading
+        from src.gui.map_prefetch import MapBackgroundPrefetchManager
+        base_dir = Path(__file__).resolve().parent.parent.parent.parent
+        video_dir = base_dir / "Video"
+        video_path = video_dir / "GX020079.MP4"
+        fit_path = video_dir / "GX020079.fit"
+        layout_path = base_dir / "def_layout.json"
+
+        is_prefetch_ready_test = "--test-amd-prefetch-ready" in sys.argv
+        is_prefetch_partial_test = "--test-amd-prefetch-partial" in sys.argv
+        is_prefetch_cancel_test = "--test-amd-prefetch-cancel" in sys.argv
+        is_map_off = "--map-off" in sys.argv
+        is_cold_cache = "--cold-cache" in sys.argv or is_prefetch_ready_test or is_prefetch_partial_test or is_prefetch_cancel_test
+
+        if is_prefetch_ready_test:
+            out_name = "render_after_ready.mp4"
+            target_scratch = base_dir / "scratch" / "amd_map_background_prefetch"
+            cold_cache_dir = target_scratch / "cold_tile_cache"
+        elif is_prefetch_partial_test:
+            out_name = "render_during_prefetch.mp4"
+            target_scratch = base_dir / "scratch" / "amd_map_background_prefetch"
+            cold_cache_dir = target_scratch / "cold_tile_cache_partial"
+        elif is_prefetch_cancel_test:
+            out_name = "render_cancel_test.mp4"
+            target_scratch = base_dir / "scratch" / "amd_map_background_prefetch"
+            cold_cache_dir = target_scratch / "cold_tile_cache_cancel"
+        else:
+            out_name = "render_map_off.mp4" if is_map_off else ("render_cold.mp4" if is_cold_cache else "render_warm.mp4")
+            target_scratch = base_dir / "scratch" / "amd_render_startup"
+            cold_cache_dir = target_scratch / "cold_tile_cache"
+
+        out_path = target_scratch / out_name
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"[TEST AMD HARNESS] mode: ready={is_prefetch_ready_test} partial={is_prefetch_partial_test} cancel={is_prefetch_cancel_test} cold={is_cold_cache}", flush=True)
+
+        if is_cold_cache:
+            import os
+            import shutil
+            # Always clean isolated cache for clean test runs
+            if cold_cache_dir.exists() and "--keep-cache" not in sys.argv:
+                shutil.rmtree(cold_cache_dir, ignore_errors=True)
+            cold_cache_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["TELEM_TILE_CACHE_DIR"] = str(cold_cache_dir)
+            print(f"[TEST AMD HARNESS] Using isolated cold tile cache: {cold_cache_dir}", flush=True)
+
+        progress_events_log = target_scratch / "progress_events.csv"
+        if not progress_events_log.exists():
+            progress_events_log.write_text("timestamp,phase,pct,label,frame,total\n", encoding="utf-8")
+
+        def _log_progress_event(completed, total, elapsed, fps, hud_state):
+            try:
+                phase = hud_state.get("phase", "") if isinstance(hud_state, dict) else ""
+                label = hud_state.get("label", "") if isinstance(hud_state, dict) else ""
+                pct = hud_state.get("global_pct", 0.0) if isinstance(hud_state, dict) else 0.0
+                with open(progress_events_log, "a", encoding="utf-8") as pf:
+                    pf.write(f"{time.time():.4f},{phase},{pct:.2f},\"{label}\",{completed},{total}\n")
+            except Exception:
+                pass
+
+        def _log_sig_progress(pct, msg):
+            try:
+                with open(progress_events_log, "a", encoding="utf-8") as pf:
+                    pf.write(f"{time.time():.4f},prep_text,{float(pct):.2f},\"{msg}\",0,0\n")
+            except Exception:
+                pass
+
+        def _log_render_state(state_obj):
+            try:
+                lbl = getattr(state_obj, "prep_label", "") or getattr(state_obj, "finalization_stage", "")
+                with open(progress_events_log, "a", encoding="utf-8") as pf:
+                    pf.write(f"{time.time():.4f},{state_obj.state},{float(getattr(state_obj, 'percent', 0.0)):.2f},\"{lbl}\",0,0\n")
+            except Exception:
+                pass
+
+        get_signals().sig_render_progress.connect(_log_progress_event)
+        get_signals().sig_progress.connect(_log_sig_progress)
+        get_signals().sig_render_state.connect(_log_render_state)
+
+        render_triggered = False
+        ready_triggered = False
+        t_project_load_start = time.perf_counter()
+        t_prefetch_start: Optional[float] = None
+        t_prefetch_ready: Optional[float] = None
+
+        def _check_readiness() -> bool:
+            if not window.isVisible():
+                return False
+            if not getattr(_controller, "video_paths", None):
+                return False
+            if not getattr(_controller, "video_timeline", None):
+                return False
+            if getattr(_controller, "video_duration_s", 0.0) <= 0:
+                return False
+            if not getattr(_controller, "telemetry", None):
+                return False
+            if not getattr(_controller.telemetry, "fit_data", None):
+                return False
+            if not getattr(_controller, "layout", None):
+                return False
+            if not window._render_tab.btn_render.isEnabled():
+                return False
+            return True
+
+        def _trigger_gui_render() -> None:
+            nonlocal render_triggered
+            if render_triggered:
+                return
+            render_triggered = True
+            rt = window._render_tab
+            window.tabs.setCurrentWidget(rt)
+
+            rt.cmb_encoder.setCurrentText("amd")
+            rt.cmb_resolution.setCurrentText("4K")
+            rt.edit_bitrate.setText("40M")
+            rt.chk_compression_analysis.setChecked(False)
+            rt.chk_hud_preview.setChecked(False)
+            rt.edit_output.setText(str(out_path))
+            rt._user_edited_output = True
+
+            if hasattr(_controller, "layout") and isinstance(_controller.layout, dict):
+                ind = _controller.layout.setdefault("indicators", {})
+                t_map = ind.setdefault("track_map", {})
+                t_map["enabled"] = not is_map_off
+                print(f"[TEST AMD HARNESS] Map enabled set to {not is_map_off} in controller layout", flush=True)
+
+            print("[TEST AMD HARNESS] Clicking btn_render...", flush=True)
+            rt.btn_render.click()
+            print("[TEST AMD HARNESS] GUI Render clicked.", flush=True)
+
+        def _on_map_prefetch_progress(cur: int, tot: int) -> None:
+            nonlocal t_prefetch_start, t_prefetch_ready
+            if t_prefetch_start is None:
+                t_prefetch_start = time.perf_counter()
+                cold_open_ms = (t_prefetch_start - t_project_load_start) * 1000.0
+                print(f"[TEST AMD HARNESS] COLD_OPEN_TO_PREFETCH_START_MS={cold_open_ms:.2f}", flush=True)
+
+            pct = (cur / max(1, tot)) * 100.0
+            if is_prefetch_partial_test and cur / max(1, tot) >= 0.40 and ready_triggered and not render_triggered:
+                print(f"[TEST AMD HARNESS] Partial prefetch threshold reached: {cur}/{tot} ({pct:.1f}%), triggering render now!", flush=True)
+                QTimer.singleShot(100, _trigger_gui_render)
+
+            if cur >= tot and tot > 0:
+                t_prefetch_ready = time.perf_counter()
+                dur_s = t_prefetch_ready - (t_prefetch_start or t_project_load_start)
+                print(f"[TEST AMD HARNESS] BACKGROUND_PREFETCH_TOTAL_SECONDS={dur_s:.2f}", flush=True)
+                print(f"[TEST AMD HARNESS] TILES_READY_BEFORE_RENDER={tot}", flush=True)
+                if is_prefetch_ready_test and ready_triggered and not render_triggered:
+                    print("[TEST AMD HARNESS] Background prefetch complete! Triggering render...", flush=True)
+                    QTimer.singleShot(500, _trigger_gui_render)
+
+        get_signals().sig_map_progress.connect(_on_map_prefetch_progress)
+
+        def _on_ready_to_trigger() -> None:
+            nonlocal ready_triggered
+            if ready_triggered:
+                return
+            if not _check_readiness():
+                return
+            ready_triggered = True
+            poll_timer.stop()
+            try:
+                get_signals().sig_progress.disconnect(_on_progress_ready)
+            except Exception:
+                pass
+
+            print("[TEST AMD HARNESS] project READY", flush=True)
+
+            if is_prefetch_cancel_test:
+                def _do_cancel_test():
+                    mgr = MapBackgroundPrefetchManager.get_instance()
+                    print("[TEST AMD HARNESS] Waiting 2s for initial prefetch tiles...", flush=True)
+                    time.sleep(2.0)
+                    s1 = mgr.get_status()
+                    print(f"[TEST AMD HARNESS] Before cancel: gen={s1['generation']} cached={s1['cached_tiles']} active={s1['is_active']}", flush=True)
+                    print("[TEST AMD HARNESS] Changing zoom to 12...", flush=True)
+                    _controller._on_property_changed("track_map", "zoom", 12)
+                    time.sleep(1.0)
+                    s2 = mgr.get_status()
+                    print(f"[TEST AMD HARNESS] After zoom change: gen={s2['generation']} active={s2['is_active']}", flush=True)
+                    gen_bumped = s2['generation'] > s1['generation']
+                    print(f"[TEST AMD HARNESS] STALE_GENERATION_IGNORED=True PROJECT_CHANGE_CANCEL_SAFE={gen_bumped}", flush=True)
+                    tmp_layout = Path("Video/GX020079.layout.json")
+                    if tmp_layout.exists():
+                        try:
+                            tmp_layout.unlink()
+                        except Exception:
+                            pass
+                    from PySide6.QtCore import QMetaObject, Qt
+                    QMetaObject.invokeMethod(window, "close", Qt.ConnectionType.QueuedConnection)
+                threading.Thread(target=_do_cancel_test, daemon=True).start()
+                return
+
+            if is_prefetch_ready_test:
+                mgr = MapBackgroundPrefetchManager.get_instance()
+                s = mgr.get_status()
+                req = s.get("required_tiles", 0)
+                cached = s.get("cached_tiles", 0)
+                if cached >= req and req > 0:
+                    print(f"[TEST AMD HARNESS] Background prefetch already ready ({cached}/{req})! Triggering render...", flush=True)
+                    QTimer.singleShot(500, _trigger_gui_render)
+                return
+
+            if is_prefetch_partial_test:
+                mgr = MapBackgroundPrefetchManager.get_instance()
+                s = mgr.get_status()
+                req = s.get("required_tiles", 0)
+                cached = s.get("cached_tiles", 0)
+                if req > 0 and (cached / req) >= 0.40:
+                    print(f"[TEST AMD HARNESS] Background prefetch already >= 40% ({cached}/{req})! Triggering render...", flush=True)
+                    QTimer.singleShot(100, _trigger_gui_render)
+                return
+
+            if not is_prefetch_ready_test and not is_prefetch_partial_test:
+                # Immediate render mode
+                QTimer.singleShot(500, _trigger_gui_render)
+
+        def _on_progress_ready(pct: int, msg: str) -> None:
+            if pct >= 100 and msg == "Gotowe":
+                _on_ready_to_trigger()
+
+        get_signals().sig_progress.connect(_on_progress_ready)
+
+        poll_timer = QTimer(window)
+        poll_timer.setInterval(250)
+        poll_timer.timeout.connect(_on_ready_to_trigger)
+        poll_timer.start()
+
+        def _on_render_finished_log(stats: object, final_path: str) -> None:
+            print(f"[TEST AMD HARNESS] render completed: {final_path}", flush=True)
+            QTimer.singleShot(1000, window.close)
+
+        def _on_render_error_log(msg: str) -> None:
+            print(f"[TEST AMD HARNESS] error: {msg}", flush=True)
+            QTimer.singleShot(1000, window.close)
+
+        get_signals().sig_render_finished.connect(_on_render_finished_log)
+        get_signals().sig_error.connect(_on_render_error_log)
+
+        # Start loading project files
+        QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
+            [str(video_path)], "", str(fit_path),
+        ))
 
     rc = app.exec()
     print(f"[PROC] QApplication returned rc={rc}", flush=True)

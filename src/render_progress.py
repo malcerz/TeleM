@@ -60,6 +60,12 @@ class RenderProgressState:
     fps: float = 0.0
     eta_s: float | None = None
     finalization_stage: str = ""
+    finalize_stage: str = ""
+    finalize_internal: float | None = None
+    file_size_bytes: int | None = None
+    write_speed_mbps: float | None = None
+    stall_warning: bool = False
+    stall_seconds: float | None = None
     cancel_requested: bool = False
     cancelled: bool = False
     failed: bool = False
@@ -71,6 +77,7 @@ class RenderProgressState:
     backend: str = ""
     role: str = ""
     phase: str = ""
+    progress_mode: str = "determinate"
     frame_done: int = 0
     frame_total: int = 0
     fps_instant: float = 0.0
@@ -82,18 +89,12 @@ class RenderProgressState:
     prep_total: int = 0
     prep_pct: float = 0.0
     prep_label: str = ""
+    qp: float | None = None
+    avg_qp: float | None = None
 
 
 def format_render_progress_status(snapshot: RenderProgressState) -> str:
     """Format the canonical snapshot for the application status bar."""
-    if snapshot.state == "preparing":
-        frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
-        pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
-        fps = "--"
-    else:
-        frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
-        pct = f"{snapshot.percent:.1f}%" if snapshot.total_frames else "--"
-        fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
     if snapshot.elapsed_s is None or not (0 <= snapshot.elapsed_s <= 3600000):
         elapsed_txt = "--:--"
     else:
@@ -101,6 +102,63 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         mins, secs = divmod(elapsed, 60)
         hours, mins = divmod(mins, 60)
         elapsed_txt = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
+
+    if snapshot.completed or snapshot.phase == "complete":
+        return "Gotowe"
+    if snapshot.cancelled:
+        return "Anulowano"
+    if snapshot.failed:
+        return "Błąd"
+
+    # Faza finalizacji (opróżnianie pipeline'u, zamykanie enkodera, zapis/remux MP4, weryfikacja)
+    if snapshot.state == "finalizing" or snapshot.phase == "finalize":
+        stage_title = snapshot.finalize_stage or snapshot.finalization_stage or "Finalizacja..."
+        if getattr(snapshot, "stall_warning", False) and getattr(snapshot, "stall_seconds", None) is not None:
+            stall_s = int(snapshot.stall_seconds)
+            stage_title = f"{stage_title} — brak zapisu na dysk od {stall_s} s"
+
+        parts = [stage_title]
+
+        # Procent dla etapów determinate
+        is_indeterminate = getattr(snapshot, "progress_mode", "determinate") == "indeterminate"
+        if not is_indeterminate and snapshot.global_percent > 0:
+            parts.append(f"{snapshot.global_percent:.1f}%")
+
+        # Rozmiar pliku
+        file_sz = getattr(snapshot, "file_size_bytes", None)
+        if file_sz is not None and file_sz > 0:
+            sz_mb = file_sz / (1024.0 * 1024.0)
+            if sz_mb >= 2048.0:
+                parts.append(f"Rozmiar: {sz_mb / 1024.0:.1f} GB")
+            else:
+                parts.append(f"Rozmiar: {sz_mb:.1f} MB")
+
+        # Prędkość zapisu
+        speed_mbps = getattr(snapshot, "write_speed_mbps", None)
+        if speed_mbps is not None and speed_mbps > 0:
+            parts.append(f"Zapis: {speed_mbps:.1f} MB/s")
+
+        parts.append(f"Czas: {elapsed_txt}")
+        return "   |   ".join(parts)
+    if snapshot.state == "preparing":
+        frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
+        pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
+        fps = "--"
+    elif snapshot.progress_mode == "indeterminate":
+        frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
+        pct = "--"
+        fps = "--"
+        qp_str = "--"
+    else:
+        frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
+        pct_val = snapshot.global_percent if (snapshot.global_percent is not None and snapshot.global_percent > 0) else snapshot.percent
+        pct = f"{pct_val:.1f}%" if (snapshot.total_frames or pct_val > 0) else "--"
+        fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
+        qp_val = getattr(snapshot, "qp", None)
+        if qp_val is None:
+            qp_val = getattr(snapshot, "avg_qp", None)
+        qp_str = f"{qp_val:.1f}" if (qp_val is not None and qp_val > 0) else "--"
+
     if snapshot.eta_s is None or not (0 <= snapshot.eta_s <= 3600000):
         eta_txt = "--:--"
     else:
@@ -108,24 +166,19 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         eta_m, eta_s = divmod(eta, 60)
         eta_h, eta_m = divmod(eta_m, 60)
         eta_txt = f"{eta_h}:{eta_m:02d}:{eta_s:02d}" if eta_h else f"{eta_m:02d}:{eta_s:02d}"
-    if snapshot.completed:
-        status = "Gotowe"
-    elif snapshot.cancelled:
-        status = "Anulowano"
-    elif snapshot.failed:
-        status = "Błąd"
-    elif snapshot.cancel_requested:
+
+    if snapshot.cancel_requested:
         status = "Anulowanie..."
-    elif snapshot.state == "finalizing":
-        status = snapshot.finalization_stage or "Finalizacja..."
     elif snapshot.state == "preparing":
         status = snapshot.prep_label or snapshot.finalization_stage or "Przygotowywanie HUD..."
+    elif snapshot.frame >= snapshot.total_frames and snapshot.total_frames > 0:
+        status = snapshot.finalization_stage or "Finalizacja..."
     else:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
     return (
-        f"{item_label}: {frame} | {pct} | FPS: {fps} | Czas: {elapsed_txt} "
-        f"| ETA: {eta_txt} | {status}"
+        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   QP: {qp_str}   |   Czas: {elapsed_txt} "
+        f"  |   ETA: {eta_txt}   |   {status}"
     )
 
 
@@ -384,44 +437,54 @@ class RenderProgressTracker:
             return max(0.001, (time.perf_counter() - self.hud_started) / (self.hud_done / self.hud_total))
         return self.hud_initial_estimate
 
+    RENDER_PROGRESS_END_PERCENT = 92.0
+    FINALIZATION_START_PERCENT = 92.0
+    FINALIZATION_MAX_PERCENT = 99.9
+
     def _emit(self, *, phase: str, internal: float, label: str, done: int = 0, total: int = 0,
               elapsed: Optional[float] = None, force: bool = False, **extra) -> None:
         now = time.perf_counter()
-        hud_est = self._hud_estimate()
-        render_est = max(self.render_estimate, self.render_elapsed)
-        total_est = hud_est + render_est + self.other_estimate
         if phase == "complete":
             global_pct = 100.0
         elif phase == "prep":
-            global_pct = 100.0 * hud_est * max(0.0, min(1.0, internal)) / total_est
+            hud_est = self._hud_estimate()
+            render_est = max(self.render_estimate, self.render_elapsed)
+            total_est = hud_est + render_est + self.other_estimate
+            global_pct = min(2.0, 100.0 * hud_est * max(0.0, min(1.0, internal)) / max(0.001, total_est))
         elif phase == "render":
-            # Render frames map to 0..95% of total bar
-            raw_render_pct = 100.0 * (hud_est + render_est * max(0.0, min(1.0, internal))) / total_est
-            global_pct = min(95.0, raw_render_pct)
+            # Direct exact linear mapping of frame progress to 0.0..92.0%
+            global_pct = max(0.0, min(1.0, internal)) * self.RENDER_PROGRESS_END_PERCENT
         elif phase == "finalize":
-            drain_pct = extra.get("drain_pct")
-            if drain_pct is not None:
-                # Map drain to 95..98%
-                global_pct = 95.0 + (max(0.0, min(100.0, float(drain_pct))) / 100.0) * 3.0
+            if "global_pct" in extra and extra["global_pct"] is not None:
+                global_pct = float(extra.pop("global_pct"))
+            elif "drain_pct" in extra and extra["drain_pct"] is not None:
+                drain_pct_val = max(0.0, min(100.0, float(extra["drain_pct"])))
+                # Map drain to 92.0..94.0%
+                global_pct = self.FINALIZATION_START_PERCENT + (drain_pct_val / 100.0) * 2.0
             else:
-                # Mux / postprocess holds at 98..99.9%
-                global_pct = max(98.0, min(99.9, self.last_global))
+                internal_pct = max(0.0, min(1.0, float(internal)))
+                global_pct = 94.0 + (98.0 - 94.0) * internal_pct
+            global_pct = max(self.last_global, min(self.FINALIZATION_MAX_PERCENT, global_pct))
         else:
-            global_pct = 100.0 * (hud_est + render_est) / total_est
-        global_pct = max(self.last_global, min(99.9 if phase != "complete" else 100.0, global_pct))
-        if not force and phase != "finalize" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
+            global_pct = max(0.0, min(1.0, internal)) * self.RENDER_PROGRESS_END_PERCENT
+
+        global_pct = max(self.last_global, min(100.0 if phase == "complete" else self.FINALIZATION_MAX_PERCENT, global_pct))
+        if not force and phase != "finalize" and phase != "complete" and now - self.last_emit < 0.10 and global_pct - self.last_global < 0.25:
             return
         self.last_global = global_pct
         self.last_emit = now
+        progress_mode = "determinate" if phase == "complete" else str(extra.pop("progress_mode", "determinate"))
         state = {
-            "phase": "prep" if phase == "prep" else ("finalize" if phase == "finalize" else "render"),
+            "phase": phase,
+            "progress_mode": progress_mode,
             "pct": max(0.0, min(1.0, internal)),
             "global_pct": global_pct,
             "label": label,
+            "finalize_stage": label if phase == "finalize" else "",
             "hud_internal": max(0.0, min(1.0, self.hud_done / max(1.0, self.hud_total))) if self.hud_total else 0.0,
-            "hud_estimate_s": hud_est,
-            "render_estimate_s": render_est,
-            "hud_weight": hud_est / total_est,
+            "hud_estimate_s": self._hud_estimate(),
+            "render_estimate_s": max(self.render_estimate, self.render_elapsed),
+            "hud_weight": 0.0,
             "work_done": done,
             "work_total": total,
             **extra,
@@ -448,7 +511,7 @@ class RenderProgressTracker:
         render_debug_print(f"[Progress] HUD global weight={weight * 100.0:.2f}%", flush=True)
         self._emit(phase="prep", internal=1.0, label="Renderowanie klatek...", force=True)
 
-    def frame(self, completed: int, elapsed: float, fps: float) -> None:
+    def frame(self, completed: int, elapsed: float, fps: float, **extra) -> None:
         self.render_done = max(self.render_done, int(completed))
         self.render_elapsed = max(self.render_elapsed, float(elapsed))
         if completed > 0 and elapsed > 0:
@@ -456,8 +519,12 @@ class RenderProgressTracker:
         self._emit(phase="render", internal=self.render_done / self.total_frames,
                    label="Renderowanie klatek...", done=self.render_done, total=self.total_frames,
                    elapsed=elapsed, fps=fps, ts=(self.render_done - 1) / self.target_fps,
-                   frame_idx=max(0, self.render_done - 1))
+                   frame_idx=max(0, self.render_done - 1), **extra)
+
+    def finalize(self, label: str = "Finalizacja...", internal: float = 0.0, *, progress_mode: str = "determinate", **extra) -> None:
+        self._emit(phase="finalize", internal=internal, label=label, done=self.total_frames,
+                   total=self.total_frames, force=True, progress_mode=progress_mode, **extra)
 
     def complete(self, elapsed: float) -> None:
-        self._emit(phase="complete", internal=1.0, label="Zakończono", done=self.total_frames,
-                   total=self.total_frames, elapsed=elapsed, force=True)
+        self._emit(phase="complete", internal=1.0, label="Gotowe", done=self.total_frames,
+                   total=self.total_frames, elapsed=elapsed, force=True, progress_mode="determinate")

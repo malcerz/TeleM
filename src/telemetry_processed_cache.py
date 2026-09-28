@@ -21,6 +21,9 @@ from typing import Any
 import numpy as np
 
 
+# Version 4 records the native GPMF anchor correction: caches written by the
+# pre-lock-(0,0) implementation can contain 2021 timestamps for a 2026 clip.
+# Invalidate those archives once so the corrected native timeline is persisted.
 # Version 5 records the GPMF GPS anchor timeline projection correction:
 # prevents shifting GPMF timed/vector streams forward by the initial GPS lock delay.
 PROCESSED_CACHE_VERSION = 5
@@ -254,7 +257,8 @@ def _rebuild_lazy_sample_list(
 
 
 def processed_cache_path(source_path: Path) -> Path:
-    return source_path.with_name(source_path.stem + PROCESSED_CACHE_SUFFIX)
+    from src.telemetry_cache_manager import get_telemetry_npz_path
+    return get_telemetry_npz_path(source_path)
 
 
 def _dt_to_ts(dt: datetime) -> float:
@@ -391,6 +395,13 @@ def write_processed_cache(source_path: Path, telemetry: Any) -> Path:
             except OSError:
                 pass
 
+    from src.telemetry_cache_manager import update_source_metadata, log_cache_event
+    try:
+        update_source_metadata(source_path, "telemetry_npz", path.stat().st_size)
+    except Exception:
+        pass
+    log_cache_event(source_path, "STORED", path)
+
     arr_t = arrays.get("temperature_samples")
     if arr_t is not None and len(arr_t) > 0:
         print(f"[TMPC Cache] write_count={len(arr_t)}", flush=True)
@@ -426,6 +437,8 @@ def read_processed_cache_arrays(
             arr_t = arrays.get("temperature_samples")
             if arr_t is not None and len(arr_t) > 0:
                 print(f"[TMPC Cache] read_count={len(arr_t)}", flush=True)
+            from src.telemetry_cache_manager import log_cache_event
+            log_cache_event(source_path, "HIT", path)
             return arrays, meta
     except Exception:
         return None, None

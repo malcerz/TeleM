@@ -320,8 +320,22 @@ def load_telemetry_exiftool(video_path: str | Path) -> dict[str, Any]:
 
 
 def find_metadata_json(video_path: str | Path) -> Path:
-    """Return the default JSON path alongside the video file."""
-    return Path(video_path).with_suffix(".json")
+    """Return the default JSON path (central AppData cache preferred, legacy fallback)."""
+    try:
+        from src.telemetry_cache_manager import get_gpmf_json_path
+        appdata_path = get_gpmf_json_path(video_path, create_dir=False)
+        if appdata_path.exists():
+            return appdata_path
+    except Exception:
+        pass
+    legacy = Path(video_path).with_suffix(".json")
+    if legacy.exists():
+        return legacy
+    try:
+        from src.telemetry_cache_manager import get_gpmf_json_path
+        return get_gpmf_json_path(video_path, create_dir=False)
+    except Exception:
+        return legacy
 
 
 def _set_hidden(path: Path) -> None:
@@ -341,31 +355,18 @@ def _set_hidden(path: Path) -> None:
 
 
 def find_metadata_json_for_write(video_path: str | Path) -> Path:
-    """Find or create a writable path for metadata JSON."""
-    video_path = Path(video_path)
-    same_dir = video_path.with_suffix(".json")
-    hidden_dir = Path(tempfile.gettempdir()) / "TeleM" / "telemetry_hidden"
-    hidden = hidden_dir / f"{video_path.stem}.json"
-    fallback_dir = Path(tempfile.gettempdir()) / "TeleM" / "telemetry_hidden"
-    fallback = fallback_dir / f"{video_path.stem}.json"
-    for candidate in (same_dir, hidden, fallback):
-        try:
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            with open(candidate, "a", encoding="utf-8"):
-                pass
-            return candidate
-        except Exception:
-            continue
+    """Find or create a writable path for metadata JSON in central AppData cache."""
     try:
-        tmp = tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=f"_{video_path.stem}.json",
-            dir=tempfile.gettempdir(),
-        )
-        tmp.close()
-        return Path(tmp.name)
+        from src.telemetry_cache_manager import get_gpmf_json_path
+        return get_gpmf_json_path(video_path, create_dir=True)
     except Exception:
-        return hidden
+        pass
+    hidden_dir = Path(tempfile.gettempdir()) / "TeleM" / "telemetry_hidden"
+    try:
+        hidden_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return hidden_dir / f"{Path(video_path).stem}.json"
 
 
 def write_records_to_json(

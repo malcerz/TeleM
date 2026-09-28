@@ -7,6 +7,8 @@
 #include <mfreadwrite.h>
 #include <mftransform.h>
 #include <mferror.h>
+#include <psapi.h>
+#include <dxgi1_4.h>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -15,6 +17,7 @@
 #include <thread>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <map>
 #include <unordered_set>
 
@@ -274,10 +277,103 @@ struct TelemAMDContext {
 
     // Persistent CPU HUD RGBA buffer
     std::vector<uint8_t> currentHUDRGBA;
+
+    // x265 GPU->CPU asynchronous staging readback
+    bool isX265 = false;
+    static const int X265_RING_SIZE = 3;
+    ID3D11Texture2D* pX265Staging[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
+    ID3D11Query* pX265Query[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
+    bool p010PlaneReadback = false;
+    ID3D11Texture2D* pP010YStaging[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
+    ID3D11Texture2D* pP010UVStaging[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
+    ID3D11Query* pP010PlaneQuery[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
+    UINT64 p010FramesSubmitted = 0;
+    UINT64 p010FramesRead = 0;
+    UINT64 p010LastYRowBytes = 0;
+    UINT64 p010LastYRowPitch = 0;
+    UINT64 p010LastUVRowBytes = 0;
+    UINT64 p010LastUVRowPitch = 0;
+    double p010GpuCopyYMs = 0.0;
+    double p010GpuCopyUVMs = 0.0;
+    double p010QueryWaitMs = 0.0;
+    double p010MapYMs = 0.0;
+    double p010MapUVMs = 0.0;
+    double p010CpuPackMs = 0.0;
+    double p010TotalReadbackMs = 0.0;
+    UINT64 x265FramesSubmitted = 0;
+    UINT64 x265FramesRead = 0;
+    double lastReadbackMs = 0.0;
 };
+
+static void LogMemoryAndSurfaces(TelemAMDContext* ctx, const char* stage_name) {
+    PROCESS_MEMORY_COUNTERS_EX pmc = {};
+    pmc.cb = sizeof(pmc);
+    GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
+
+    PERFORMANCE_INFORMATION pi = {};
+    pi.cb = sizeof(pi);
+    GetPerformanceInfo(&pi, sizeof(pi));
+
+    double privMb = pmc.PrivateUsage / (1024.0 * 1024.0);
+    double commitMb = (static_cast<double>(pi.CommitTotal) * pi.PageSize) / (1024.0 * 1024.0);
+
+    IDXGIDevice* pDXGIDevice = nullptr;
+    double dedicatedMb = 0.0;
+    double sharedMb = 0.0;
+    if (ctx && ctx->pDevice && SUCCEEDED(ctx->pDevice->QueryInterface(__uuidof(IDXGIDevice), (void**)&pDXGIDevice))) {
+        IDXGIAdapter* pAdapter = nullptr;
+        if (SUCCEEDED(pDXGIDevice->GetAdapter(&pAdapter))) {
+            IDXGIAdapter3* pAdapter3 = nullptr;
+            if (SUCCEEDED(pAdapter->QueryInterface(__uuidof(IDXGIAdapter3), (void**)&pAdapter3))) {
+                DXGI_QUERY_VIDEO_MEMORY_INFO localInfo = {};
+                DXGI_QUERY_VIDEO_MEMORY_INFO nonLocalInfo = {};
+                if (SUCCEEDED(pAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &localInfo))) {
+                    dedicatedMb = localInfo.CurrentUsage / (1024.0 * 1024.0);
+                }
+                if (SUCCEEDED(pAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonLocalInfo))) {
+                    sharedMb = nonLocalInfo.CurrentUsage / (1024.0 * 1024.0);
+                }
+                pAdapter3->Release();
+            }
+            pAdapter->Release();
+        }
+        pDXGIDevice->Release();
+    }
+
+    UINT postscaleCount = ctx ? ctx->vpPipeline.GetPoolSize() : 0;
+    UINT64 postscaleBytes = (UINT64)postscaleCount * (ctx ? ctx->width : 0) * (ctx ? ctx->height : 0) * 3 / 2;
+
+    UINT decodeCount = 0;
+    UINT64 decodeBytes = 0;
+    if (ctx && ctx->pPendingDecodedTex) {
+        D3D11_TEXTURE2D_DESC dDesc = {};
+        ctx->pPendingDecodedTex->GetDesc(&dDesc);
+        decodeCount = dDesc.ArraySize;
+        decodeBytes = (UINT64)decodeCount * dDesc.Width * dDesc.Height * 3;
+    } else if (ctx && ctx->decoderWidth > 0 && ctx->decoderHeight > 0) {
+        decodeCount = 1;
+        decodeBytes = (UINT64)ctx->decoderWidth * ctx->decoderHeight * 3;
+    }
+
+    UINT encoderCount = 4;
+    UINT64 encoderBytes = (UINT64)encoderCount * (ctx ? ctx->width : 0) * (ctx ? ctx->height : 0) * 3 / 2;
+
+    std::cerr << "[MEMORY " << stage_name << "]" << std::endl;
+    std::cerr << "  process_private_mb=" << std::fixed << std::setprecision(2) << privMb << std::endl;
+    std::cerr << "  system_commit_mb=" << commitMb << std::endl;
+    std::cerr << "  GPU_dedicated_used_mb=" << dedicatedMb << std::endl;
+    std::cerr << "  GPU_shared_used_mb=" << sharedMb << std::endl;
+    std::cerr << "  decode_surface_count=" << decodeCount << std::endl;
+    std::cerr << "  decode_surface_bytes_total=" << decodeBytes << std::endl;
+    std::cerr << "  postscale_surface_count=" << postscaleCount << std::endl;
+    std::cerr << "  postscale_surface_bytes_total=" << postscaleBytes << std::endl;
+    std::cerr << "  encoder_surface_count=" << encoderCount << std::endl;
+    std::cerr << "  encoder_surface_bytes_total=" << encoderBytes << std::endl;
+}
 
 static UINT64 g_resourceGeneration = 0;
 static void CloseEncodedOutput(TelemAMDContext* ctx);
+static bool Trace8KResourcesEnabled();
 
 static void DestroyPartialContext(TelemAMDContext* ctx) {
     if (!ctx) return;
@@ -313,6 +409,13 @@ static void DestroyPartialContext(TelemAMDContext* ctx) {
     if (ctx->pPendingDecodedTex) {
         ctx->pPendingDecodedTex->Release();
         ctx->pPendingDecodedTex = nullptr;
+    }
+    for (int i = 0; i < ctx->X265_RING_SIZE; i++) {
+        if (ctx->pX265Query[i]) { ctx->pX265Query[i]->Release(); ctx->pX265Query[i] = nullptr; }
+        if (ctx->pX265Staging[i]) { ctx->pX265Staging[i]->Release(); ctx->pX265Staging[i] = nullptr; }
+        if (ctx->pP010PlaneQuery[i]) { ctx->pP010PlaneQuery[i]->Release(); ctx->pP010PlaneQuery[i] = nullptr; }
+        if (ctx->pP010YStaging[i]) { ctx->pP010YStaging[i]->Release(); ctx->pP010YStaging[i] = nullptr; }
+        if (ctx->pP010UVStaging[i]) { ctx->pP010UVStaging[i]->Release(); ctx->pP010UVStaging[i] = nullptr; }
     }
     // Explicitly tear down member owners before dropping the raw device
     // references.  Both operations are idempotent, so delete remains safe.
@@ -394,6 +497,98 @@ static bool WriteEncodedPacket(TelemAMDContext* ctx, const uint8_t* data, size_t
 
 static void CloseEncodedOutput(TelemAMDContext* ctx) {
     if (ctx && ctx->h265Out.is_open()) ctx->h265Out.close();
+}
+
+static bool ReadP010PlaneSlot(TelemAMDContext* ctx, int slot, std::vector<uint8_t>* packed,
+                              bool readY = true, bool readUV = true, UINT timeoutMs = 10000) {
+    if (!ctx || slot < 0 || slot >= ctx->X265_RING_SIZE || !packed) return false;
+    const auto waitStart = std::chrono::steady_clock::now();
+    HRESULT reason = S_OK;
+    while (true) {
+        reason = ctx->pDevice->GetDeviceRemovedReason();
+        if (FAILED(reason)) {
+            std::cerr << "P010_READBACK_DEVICE_REASON=0x" << std::hex << reason << std::dec << std::endl;
+            return false;
+        }
+        HRESULT q = ctx->pContext->GetData(ctx->pP010PlaneQuery[slot], nullptr, 0, 0);
+        if (q == S_OK) break;
+        if (q != S_FALSE) {
+            std::cerr << "P010_READBACK_QUERY_HR=0x" << std::hex << q << std::dec << std::endl;
+            return false;
+        }
+        const double elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - waitStart).count();
+        if (elapsed >= timeoutMs) {
+            std::cerr << "P010_READBACK_QUERY_TIMEOUT_MS=" << elapsed << std::endl;
+            return false;
+        }
+        std::this_thread::yield();
+    }
+    ctx->p010QueryWaitMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - waitStart).count();
+
+    D3D11_MAPPED_SUBRESOURCE yMap = {};
+    D3D11_MAPPED_SUBRESOURCE uvMap = {};
+    const auto yMapStart = std::chrono::steady_clock::now();
+    HRESULT yHr = readY ? ctx->pContext->Map(ctx->pP010YStaging[slot], 0, D3D11_MAP_READ, 0, &yMap) : S_OK;
+    ctx->p010MapYMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - yMapStart).count();
+    if (FAILED(yHr)) {
+        std::cerr << "P010_Y_MAP_HR=0x" << std::hex << yHr << std::dec
+                  << " DEVICE_REASON=0x" << std::hex << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+        return false;
+    }
+    const auto uvMapStart = std::chrono::steady_clock::now();
+    HRESULT uvHr = readUV ? ctx->pContext->Map(ctx->pP010UVStaging[slot], 0, D3D11_MAP_READ, 0, &uvMap) : S_OK;
+    ctx->p010MapUVMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - uvMapStart).count();
+    if (FAILED(uvHr)) {
+        if (readY) ctx->pContext->Unmap(ctx->pP010YStaging[slot], 0);
+        std::cerr << "P010_UV_MAP_HR=0x" << std::hex << uvHr << std::dec
+                  << " DEVICE_REASON=0x" << std::hex << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+        return false;
+    }
+
+    const size_t yRowBytes = static_cast<size_t>(ctx->width) * 2u;
+    const size_t uvRowBytes = static_cast<size_t>(ctx->width / 2u) * 4u;
+    const size_t yBytes = yRowBytes * ctx->height;
+    const size_t uvBytes = uvRowBytes * (ctx->height / 2u);
+    packed->assign((readY ? yBytes : 0) + (readUV ? uvBytes : 0), 0);
+    const auto packStart = std::chrono::steady_clock::now();
+    uint8_t* dst = packed->data();
+    if (readY) for (UINT y = 0; y < ctx->height; ++y) {
+        std::memcpy(dst + static_cast<size_t>(y) * yRowBytes,
+                    static_cast<const uint8_t*>(yMap.pData) + static_cast<size_t>(y) * yMap.RowPitch,
+                    yRowBytes);
+    }
+    dst += readY ? yBytes : 0;
+    if (readUV) for (UINT y = 0; y < ctx->height / 2u; ++y) {
+        std::memcpy(dst + static_cast<size_t>(y) * uvRowBytes,
+                    static_cast<const uint8_t*>(uvMap.pData) + static_cast<size_t>(y) * uvMap.RowPitch,
+                    uvRowBytes);
+    }
+    if (readY) ctx->pContext->Unmap(ctx->pP010YStaging[slot], 0);
+    if (readUV) ctx->pContext->Unmap(ctx->pP010UVStaging[slot], 0);
+    ctx->p010CpuPackMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - packStart).count();
+    ctx->p010LastYRowBytes = yRowBytes;
+    ctx->p010LastYRowPitch = yMap.RowPitch;
+    ctx->p010LastUVRowBytes = uvRowBytes;
+    ctx->p010LastUVRowPitch = uvMap.RowPitch;
+    ctx->p010TotalReadbackMs = ctx->p010QueryWaitMs + ctx->p010MapYMs +
+        ctx->p010MapUVMs + ctx->p010CpuPackMs;
+    std::cout << "P010_READBACK_FRAME=" << ctx->p010FramesRead
+              << " Y_ROW_BYTES=" << yRowBytes << " Y_ROW_PITCH=" << yMap.RowPitch
+              << " Y_DEPTH_PITCH=" << yMap.DepthPitch
+              << " UV_ROW_BYTES=" << uvRowBytes << " UV_ROW_PITCH=" << uvMap.RowPitch
+              << " UV_DEPTH_PITCH=" << uvMap.DepthPitch
+              << " QUERY_WAIT_MS=" << ctx->p010QueryWaitMs
+              << " MAP_Y_MS=" << ctx->p010MapYMs << " MAP_UV_MS=" << ctx->p010MapUVMs
+              << " CPU_PACK_MS=" << ctx->p010CpuPackMs
+              << " TOTAL_READBACK_MS=" << ctx->p010TotalReadbackMs
+              << " DEVICE_REASON=0x" << std::hex << ctx->pDevice->GetDeviceRemovedReason() << std::dec
+              << std::endl;
+    return true;
 }
 
 static bool RefreshDecoderMediaType(TelemAMDContext* ctx);
@@ -1435,6 +1630,23 @@ TELEM_EXPORT void* telem_amd_create(
     ctx->fpsNum = fps_num;
     ctx->fpsDen = fps_den;
 
+    // Resolve encoder mode before pipeline setup.  The 8K CPU-x265 path has
+    // its own compute-only resource topology and must never inherit the 4K VP
+    // output-view assumptions.
+    const char* encMode = getenv("AMD_NATIVE_ENCODER_MODE");
+    ctx->isX265 = encMode && _stricmp(encMode, "x265") == 0;
+    const bool x2658K = ctx->isX265 && (width > 4096u || height > 4096u);
+    ctx->p010PlaneReadback = x2658K && getenv("AMD_8K_PLANE_READBACK") &&
+        _stricmp(getenv("AMD_8K_PLANE_READBACK"), "1") == 0;
+    std::cout << "[TELEM AMD DLL] AMD_8K_PLANE_READBACK="
+              << (ctx->p010PlaneReadback ? "1" : "0") << std::endl;
+    ctx->vpPipeline.SetCpuX265Path(x2658K);
+    if (x2658K) {
+        std::cout << "[TELEM AMD DLL] TRUE_8K_REQUIRED=True"
+                  << " FINAL_OUTPUT=" << width << "x" << height
+                  << " 4K_DOWNSCALE_AS_8K_SOLUTION=False" << std::endl;
+    }
+
     char mbsOut[512] = {};
     wcstombs(mbsOut, output_path, 512);
     ctx->outputPath = std::string(mbsOut);
@@ -1571,7 +1783,10 @@ TELEM_EXPORT void* telem_amd_create(
     if (gpuHudOff) std::cout << "[TELEM AMD DLL] AMD_GPU_HUD_OFF=1 (diagnostic)" << std::endl;
 
     // 1. Initialize D3D11 Device
-    UINT createDeviceFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+    const char* debugLayerEnv = std::getenv("AMD_8K_D3D11_DEBUG");
+    const bool d3d11DebugRequested = x2658K && debugLayerEnv && debugLayerEnv[0] == '1';
+    UINT createDeviceFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT |
+        (d3d11DebugRequested ? D3D11_CREATE_DEVICE_DEBUG : 0);
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
     D3D_FEATURE_LEVEL featureLevel;
 
@@ -1580,6 +1795,17 @@ TELEM_EXPORT void* telem_amd_create(
         createDeviceFlags, featureLevels, 2,
         D3D11_SDK_VERSION, &ctx->pDevice, &featureLevel, &ctx->pContext
     );
+    if (FAILED(hr) && d3d11DebugRequested) {
+        std::cerr << "[D3D11 DEBUG] debug layer device creation failed: 0x"
+                  << std::hex << hr << std::dec
+                  << "; retrying without debug layer" << std::endl;
+        createDeviceFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+        hr = D3D11CreateDevice(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+            createDeviceFlags, featureLevels, 2,
+            D3D11_SDK_VERSION, &ctx->pDevice, &featureLevel, &ctx->pContext
+        );
+    }
     if (FAILED(hr)) {
         std::cerr << "[TELEM AMD DLL] D3D11CreateDevice failed: 0x" << std::hex << hr << std::dec << std::endl;
         DestroyPartialContext(ctx);
@@ -1588,6 +1814,20 @@ TELEM_EXPORT void* telem_amd_create(
     }
     AuditNativeResource(ctx, "D3D11_DEVICE", ctx->pDevice, true);
     AuditNativeResource(ctx, "D3D11_CONTEXT", ctx->pContext, true);
+    if (d3d11DebugRequested) {
+        ID3D11InfoQueue* infoQueue = nullptr;
+        const HRESULT infoHr = ctx->pDevice->QueryInterface(
+            __uuidof(ID3D11InfoQueue), reinterpret_cast<void**>(&infoQueue));
+        std::cerr << "[D3D11 DEBUG] info_queue="
+                  << (SUCCEEDED(infoHr) && infoQueue ? "AVAILABLE" : "UNAVAILABLE")
+                  << std::endl;
+        if (infoQueue) {
+            infoQueue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, FALSE);
+            infoQueue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, FALSE);
+            infoQueue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, FALSE);
+            infoQueue->Release();
+        }
+    }
 
     // 2. Initialize VideoProcessor Pipeline
     // ETAP 5W debug: AMD_DEBUG_NO_VP=1 skips the VP pipeline (device-ref leak
@@ -1620,9 +1860,58 @@ TELEM_EXPORT void* telem_amd_create(
         ctx->vpPipeline.SetVpCompletionProbe(completionProbe);
     }
 
+    if (ctx->isX265) {
+        D3D11_TEXTURE2D_DESC sDesc = {};
+        sDesc.Width = width;
+        sDesc.Height = height;
+        sDesc.MipLevels = 1;
+        sDesc.ArraySize = 1;
+        sDesc.Format = ctx->p010PlaneReadback ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_NV12;
+        sDesc.SampleDesc.Count = 1;
+        sDesc.Usage = D3D11_USAGE_STAGING;
+        sDesc.BindFlags = 0;
+        sDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        D3D11_QUERY_DESC qDesc = { D3D11_QUERY_EVENT, 0 };
+        for (int i = 0; i < ctx->X265_RING_SIZE; i++) {
+            ID3D11Texture2D** yTarget = ctx->p010PlaneReadback ? &ctx->pP010YStaging[i] : &ctx->pX265Staging[i];
+            hr = ctx->pDevice->CreateTexture2D(&sDesc, nullptr, yTarget);
+            if (FAILED(hr)) {
+                std::cerr << "[TELEM AMD DLL] Failed to create x265 staging texture: 0x" << std::hex << hr << std::dec << std::endl;
+                DestroyPartialContext(ctx);
+                MFShutdown();
+                return nullptr;
+            }
+            if (ctx->p010PlaneReadback) {
+                D3D11_TEXTURE2D_DESC uvDesc = sDesc;
+                uvDesc.Width = width / 2u;
+                uvDesc.Height = height / 2u;
+                uvDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+                hr = ctx->pDevice->CreateTexture2D(&uvDesc, nullptr, &ctx->pP010UVStaging[i]);
+                if (FAILED(hr)) {
+                    std::cerr << "[TELEM AMD DLL] Failed to create P010 UV staging texture: 0x" << std::hex << hr << std::dec << std::endl;
+                    DestroyPartialContext(ctx);
+                    MFShutdown();
+                    return nullptr;
+                }
+                hr = ctx->pDevice->CreateQuery(&qDesc, &ctx->pP010PlaneQuery[i]);
+            } else {
+                hr = ctx->pDevice->CreateQuery(&qDesc, &ctx->pX265Query[i]);
+            }
+            if (FAILED(hr)) {
+                std::cerr << "[TELEM AMD DLL] Failed to create x265 staging query: 0x" << std::hex << hr << std::dec << std::endl;
+                DestroyPartialContext(ctx);
+                MFShutdown();
+                return nullptr;
+            }
+        }
+        std::cout << "[TELEM AMD DLL] ENCODER MODE: CPU_X265 (GPU pipeline -> "
+                  << (ctx->p010PlaneReadback ? "P010 plane staging readback" : "NV12 staging readback")
+                  << " -> libx265)" << std::endl;
+    }
+
     // 3. Initialize AMF HEVC Encoder on shared D3D11 device
     // ETAP 5W debug: AMD_DEBUG_NO_AMF=1 skips AMF init (device-ref leak isolation).
-    const bool skipAmf = (getenv("AMD_DEBUG_NO_AMF") != nullptr);
+    const bool skipAmf = ctx->isX265 || (getenv("AMD_DEBUG_NO_AMF") != nullptr);
     if (!skipAmf) {
         if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
             std::cerr << "[TELEM AMD DLL] AMF Encoder Initialize failed!" << std::endl;
@@ -1896,17 +2185,114 @@ TELEM_EXPORT int telem_amd_update_video_frame_p010(
     return 1;
 }
 
+// forShaderScaler=true: create a plain SHADER_RESOURCE-only staging texture.
+// forShaderScaler=false: create a DECODER+SHADER_RESOURCE compatible copy (VP path).
+static bool Trace8KResourcesEnabled() {
+    const char* value = std::getenv("AMD_8K_RESOURCE_TRACE");
+    return value && (value[0] == '1' || value[0] == 'y' || value[0] == 'Y');
+}
+
+static void DumpD3D11InfoQueue(TelemAMDContext* ctx, const char* stage, UINT frame) {
+    if (!ctx || !ctx->pDevice || !Trace8KResourcesEnabled() || frame >= 10) return;
+    ID3D11InfoQueue* infoQueue = nullptr;
+    if (FAILED(ctx->pDevice->QueryInterface(__uuidof(ID3D11InfoQueue),
+                                            reinterpret_cast<void**>(&infoQueue))) || !infoQueue) {
+        return;
+    }
+    const UINT64 count = infoQueue->GetNumStoredMessages();
+    UINT errors = 0;
+    UINT warnings = 0;
+    for (UINT64 i = 0; i < count; ++i) {
+        SIZE_T length = 0;
+        if (FAILED(infoQueue->GetMessage(i, nullptr, &length)) || length == 0) continue;
+        std::vector<uint8_t> storage(length);
+        auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+        if (FAILED(infoQueue->GetMessage(i, message, &length))) continue;
+        if (message->Severity == D3D11_MESSAGE_SEVERITY_ERROR ||
+            message->Severity == D3D11_MESSAGE_SEVERITY_CORRUPTION) {
+            ++errors;
+        } else if (message->Severity == D3D11_MESSAGE_SEVERITY_WARNING) {
+            ++warnings;
+        }
+        std::cerr << "[D3D11 DEBUG] frame=" << frame << " stage=" << stage
+                  << " severity=" << static_cast<int>(message->Severity)
+                  << " id=" << static_cast<int>(message->ID)
+                  << " " << message->pDescription << std::endl;
+    }
+    if (count > 0) infoQueue->ClearStoredMessages();
+    std::cerr << "[D3D11 DEBUG SUMMARY] frame=" << frame << " stage=" << stage
+              << " messages=" << count << " errors=" << errors
+              << " warnings=" << warnings << std::endl;
+    infoQueue->Release();
+}
+
+static ULONG TraceComRefEstimate(IUnknown* resource) {
+    if (!resource) return 0;
+    const ULONG afterAddRef = resource->AddRef();
+    resource->Release();
+    return afterAddRef > 0 ? afterAddRef - 1 : 0;
+}
+
+static void Trace8KResource(
+    const char* stage,
+    UINT frame,
+    ID3D11Texture2D* decoderTexture,
+    UINT decoderArrayIndex,
+    ID3D11Texture2D* copyTexture,
+    ID3D11ShaderResourceView* ySrv,
+    ID3D11ShaderResourceView* uvSrv,
+    UINT outputPoolIndex,
+    ID3D11Texture2D* outputTexture,
+    ID3D11Buffer* shaderCb,
+    ID3D11Device* device,
+    ID3D11DeviceContext* context
+) {
+    if (!Trace8KResourcesEnabled() || frame >= 10) return;
+    std::cerr << "[8K TRACE] stage=" << stage
+              << " frame=" << frame
+              << " decoder_texture_ptr=" << decoderTexture
+              << " decoder_array_index=" << decoderArrayIndex
+              << " copy_texture_ptr=" << copyTexture
+              << " copy_texture_ref_state=" << TraceComRefEstimate(copyTexture)
+              << " srv_y_ptr=" << ySrv
+              << " srv_uv_ptr=" << uvSrv
+              << " output_pool_index=" << outputPoolIndex
+              << " output_texture_ptr=" << outputTexture
+              << " shader_cb_ptr=" << shaderCb
+              << " device_ptr=" << device
+              << " context_ptr=" << context
+              << std::endl;
+}
+
 static bool EnsureDecoderCopyTexture(
     TelemAMDContext* ctx,
-    const D3D11_TEXTURE2D_DESC& sourceDesc
+    const D3D11_TEXTURE2D_DESC& sourceDesc,
+    bool forShaderScaler
 ) {
     if (!ctx || !ctx->pDevice) return false;
+    const bool trace = Trace8KResourcesEnabled();
+    if (trace) {
+        std::cerr << "[8K TRACE] EnsureDecoderCopyTexture begin frame="
+                  << ctx->mfVideoSamples << " source=" << sourceDesc.Width << "x"
+                  << sourceDesc.Height << " format=" << sourceDesc.Format
+                  << " shader_only=" << (forShaderScaler ? 1 : 0) << std::endl;
+    }
     if (ctx->pDecodedCopyTex) {
         D3D11_TEXTURE2D_DESC existing = {};
         ctx->pDecodedCopyTex->GetDesc(&existing);
         if (existing.Width == sourceDesc.Width && existing.Height == sourceDesc.Height &&
             existing.Format == sourceDesc.Format) {
+            if (trace) {
+                std::cerr << "[8K TRACE] EnsureDecoderCopyTexture reuse ptr="
+                          << ctx->pDecodedCopyTex << " ref="
+                          << TraceComRefEstimate(ctx->pDecodedCopyTex) << std::endl;
+            }
             return true;
+        }
+        if (trace) {
+            std::cerr << "[8K TRACE] EnsureDecoderCopyTexture release old ptr="
+                      << ctx->pDecodedCopyTex << " ref="
+                      << TraceComRefEstimate(ctx->pDecodedCopyTex) << std::endl;
         }
         ctx->pDecodedCopyTex->Release();
         ctx->pDecodedCopyTex = nullptr;
@@ -1920,13 +2306,25 @@ static bool EnsureDecoderCopyTexture(
     copyDesc.Format = sourceDesc.Format;
     copyDesc.SampleDesc.Count = 1;
     copyDesc.Usage = D3D11_USAGE_DEFAULT;
-    copyDesc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+    // For the shader-scaler path (8K+) we must NOT use D3D11_BIND_DECODER —
+    // asking AMD/Cezanne VCN for a DECODER-bound 8K texture causes
+    // DEVICE_REMOVED (TDR).  A plain SHADER_RESOURCE texture is enough for
+    // DownscaleCompute to create its SRV.
+    copyDesc.BindFlags = forShaderScaler
+        ? D3D11_BIND_SHADER_RESOURCE
+        : (D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE);
     const HRESULT hr = ctx->pDevice->CreateTexture2D(
         &copyDesc, nullptr, &ctx->pDecodedCopyTex);
     if (FAILED(hr)) {
-        std::cerr << "[MF DECODER] Compatible GPU copy texture creation failed: 0x"
+        std::cerr << "[MF DECODER] GPU copy texture creation failed (shaderScaler="
+                  << forShaderScaler << "): 0x"
                   << std::hex << hr << std::dec << std::endl;
         return false;
+    }
+    if (trace) {
+        std::cerr << "[8K TRACE] EnsureDecoderCopyTexture created ptr="
+                  << ctx->pDecodedCopyTex << " ref="
+                  << TraceComRefEstimate(ctx->pDecodedCopyTex) << std::endl;
     }
     return true;
 }
@@ -1942,6 +2340,11 @@ TELEM_EXPORT int telem_amd_process_frame(
     ID3D11Texture2D* pDecodedTex = ctx->pBaseP010Tex;
     UINT sampleSlice = 0;
     const bool d3d11Decode = ctx->decodeMode == 1;
+    const bool x2658K = ctx->isX265 && (ctx->width > 4096u || ctx->height > 4096u);
+    const char* gateEnv = getenv("AMD_8K_GATE");
+    const bool gateCopyOnly = gateEnv && _stricmp(gateEnv, "COPY_ONLY") == 0;
+    const bool gateSrvOnly = gateEnv && _stricmp(gateEnv, "SRV_ONLY") == 0;
+    const bool gateShaderOnly = gateEnv && _stricmp(gateEnv, "SHADER_1TO1") == 0;
     // ETAP 5R — opt-in per-frame native accounting.
     const bool fa = ctx->frameAccountEnabled;
     const auto pfStart = std::chrono::steady_clock::now();
@@ -1957,13 +2360,44 @@ TELEM_EXPORT int telem_amd_process_frame(
         pDecodedTex = ctx->pPendingDecodedTex;
         sampleSlice = ctx->pendingSubresource;
 
+        if (x2658K && !ctx->vpPipeline.WaitForComputeCompletion(frame_index)) {
+            std::cerr << "[TELEM AMD DLL] 8K compute ownership wait failed on frame "
+                      << frame_index << std::endl;
+            ctx->pPendingDecodedTex->Release();
+            ctx->pPendingDecodedTex = nullptr;
+            return 0;
+        }
+
+        D3D11_TEXTURE2D_DESC sourceDesc = {};
+        pDecodedTex->GetDesc(&sourceDesc);
+
+        Trace8KResource("before EnsureDecoderCopyTexture", frame_index,
+                        pDecodedTex, sampleSlice, ctx->pDecodedCopyTex,
+                        nullptr, nullptr, UINT_MAX, nullptr, nullptr,
+                        ctx->pDevice, ctx->pContext);
+
         if (ctx->vpPipeline.CanUseInputSurface(pDecodedTex, sampleSlice)) {
+            // VP can read the decoder surface directly (including 8K when VP
+            // was configured with matching InputWidth).
             ctx->directDecoderSurfaceFrames++;
         } else {
-            D3D11_TEXTURE2D_DESC sourceDesc = {};
-            pDecodedTex->GetDesc(&sourceDesc);
-            if (!EnsureDecoderCopyTexture(ctx, sourceDesc)) return 0;
+            // VP cannot read the decoder surface directly — copy to a
+            // compatible staging texture first.
+            // For shader-scaler dimensions (>4096) use SHADER_RESOURCE only.
+            // For VP dimensions use DECODER|SHADER_RESOURCE.
+            const bool needShaderScalerCopy =
+                sourceDesc.Width  > 4096u ||
+                sourceDesc.Height > 4096u ||
+                ctx->width  > 4096u ||
+                ctx->height > 4096u ||
+                x2658K;
+            if (!EnsureDecoderCopyTexture(ctx, sourceDesc,
+                    /*forShaderScaler=*/needShaderScalerCopy)) return 0;
             const auto copyStart = std::chrono::high_resolution_clock::now();
+            Trace8KResource("before CopySubresourceRegion", frame_index,
+                            pDecodedTex, sampleSlice, ctx->pDecodedCopyTex,
+                            nullptr, nullptr, UINT_MAX, nullptr, nullptr,
+                            ctx->pDevice, ctx->pContext);
             ctx->pContext->CopySubresourceRegion(
                 ctx->pDecodedCopyTex, 0, 0, 0, 0,
                 pDecodedTex, sampleSlice, nullptr);
@@ -1971,9 +2405,53 @@ TELEM_EXPORT int telem_amd_process_frame(
             decoderCopyHappened = true;
             ctx->lastTimings.baseGpuCopyMs = std::chrono::duration<double, std::milli>(
                 copyEnd - copyStart).count();
+            Trace8KResource("after CopySubresourceRegion", frame_index,
+                            pDecodedTex, sampleSlice, ctx->pDecodedCopyTex,
+                            nullptr, nullptr, UINT_MAX, nullptr, nullptr,
+                            ctx->pDevice, ctx->pContext);
             pDecodedTex = ctx->pDecodedCopyTex;
             sampleSlice = 0;
             ctx->decoderGpuCopyFrames++;
+
+            if (x2658K) {
+                // Gate A: submit only the decoder-array -> ordinary 8K
+                // SHADER_RESOURCE copy, then verify the device before any
+                // SRV creation or shader dispatch.
+                const bool diagnosticSync = Trace8KResourcesEnabled() || gateEnv;
+                if (diagnosticSync) ctx->pContext->Flush();
+                const HRESULT deviceReason = ctx->pDevice->GetDeviceRemovedReason();
+                D3D11_TEXTURE2D_DESC copiedDesc = {};
+                ctx->pDecodedCopyTex->GetDesc(&copiedDesc);
+                const bool copyPass = copiedDesc.Width == 7680u &&
+                    copiedDesc.Height == 4320u &&
+                    copiedDesc.ArraySize == 1 &&
+                    (copiedDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE) != 0 &&
+                    SUCCEEDED(deviceReason);
+                if (diagnosticSync) {
+                    std::cout << "COPY_8K_TO_SRV_TEXTURE="
+                              << (copyPass ? "PASS" : "FAIL")
+                              << " HR=0x" << std::hex << deviceReason << std::dec << std::endl;
+                    std::cout << "DEVICE_REASON_AFTER_COPY=0x" << std::hex
+                              << deviceReason << std::dec << std::endl;
+                    DumpD3D11InfoQueue(ctx, "after CopySubresourceRegion", frame_index);
+                }
+                if (!copyPass) {
+                    ctx->pPendingDecodedTex->Release();
+                    ctx->pPendingDecodedTex = nullptr;
+                    return 0;
+                }
+                if (gateCopyOnly) {
+                    ctx->pPendingDecodedTex->Release();
+                    ctx->pPendingDecodedTex = nullptr;
+                    return 1;
+                }
+                if (gateSrvOnly) {
+                    const bool srvPass = ctx->vpPipeline.ProbeCopied8KSRV(ctx->pDecodedCopyTex);
+                    ctx->pPendingDecodedTex->Release();
+                    ctx->pPendingDecodedTex = nullptr;
+                    return srvPass ? 1 : 0;
+                }
+            }
         }
     } else {
         if (!ctx->hasUpdatedVideoFrame) {
@@ -1992,6 +2470,7 @@ TELEM_EXPORT int telem_amd_process_frame(
     ID3D11Texture2D* pOutNV12Tex = nullptr;
     VPPipelineStats vpStats = {};
     bool doHUD = ctx->hudEnabled && ctx->hudMode == 1 && (enable_hud != 0);
+    if (frame_index == 0) LogMemoryAndSurfaces(ctx, "FRAME 0 BEFORE VP BLT");
     const auto tVpStart = std::chrono::steady_clock::now();
     if (!ctx->vpPipeline.ProcessFrame(
             pDecodedTex, sampleSlice, &pOutNV12Tex, doHUD, d3d11Decode, &vpStats,
@@ -2047,19 +2526,42 @@ TELEM_EXPORT int telem_amd_process_frame(
         rec.sameSlotQueryReady = vpStats.same_slot_query_ready;
     }
     if (d3d11Decode && ctx->pPendingDecodedTex) {
+        Trace8KResource("before decoder texture Release", frame_index,
+                        ctx->pPendingDecodedTex, ctx->pendingSubresource,
+                        ctx->pDecodedCopyTex, nullptr, nullptr, UINT_MAX,
+                        nullptr, nullptr, ctx->pDevice, ctx->pContext);
         ctx->pPendingDecodedTex->Release();
         ctx->pPendingDecodedTex = nullptr;
+        if (Trace8KResourcesEnabled() && frame_index < 10) {
+            std::cerr << "[8K TRACE] resource Release decoder texture frame="
+                      << frame_index << std::endl;
+        }
     }
     ctx->framesDecoded++;
     ctx->framesVPProcessed++;
     if (doHUD) ctx->gpuHUDFrames++;
     if (ctx->mapCompositeMode == 1) ctx->mapResampleFrames++;
     ctx->pLastOutNV12Tex = pOutNV12Tex;
+    Trace8KResource("after ProcessFrame", frame_index,
+                    pDecodedTex, sampleSlice, ctx->pDecodedCopyTex,
+                    nullptr, nullptr, ctx->vpPipeline.GetLastPoolIndex(),
+                    pOutNV12Tex, nullptr, ctx->pDevice, ctx->pContext);
     ctx->lastTimings.vpCpuSubmitMs = vpStats.cpu_submit_ms;
     ctx->lastTimings.vpGpuCompletionMs = vpStats.gpu_completion_ms;
     ctx->lastTimings.gpuWaitMs = vpStats.gpu_wait_ms;
+    if (x2658K && Trace8KResourcesEnabled() && frame_index < 10) {
+        const HRESULT deviceReason = ctx->pDevice->GetDeviceRemovedReason();
+        std::cerr << "[8K TRACE] after DownscaleCompute frame=" << frame_index
+                  << " DEVICE_REMOVED_AT_STAGE=" << std::hex << deviceReason
+                  << std::dec << std::endl;
+        DumpD3D11InfoQueue(ctx, "after DownscaleCompute", frame_index);
+    }
     if (ctx->profilingEnabled) {
         ctx->gpuProfiledFrames++;
+    }
+
+    if (x2658K && gateShaderOnly) {
+        return 1;
     }
 
     // Submit at most one asynchronous GPU-scaled preview capture.  The
@@ -2078,6 +2580,128 @@ TELEM_EXPORT int telem_amd_process_frame(
         std::cout << "  VP_OUTPUT_POINTER == AMF_INPUT_POINTER: YES" << std::endl;
         std::cout << "  Output pool index:            " << ctx->vpPipeline.GetLastPoolIndex() << std::endl;
         std::cout << "  Frame number:                 " << frame_index << std::endl;
+    }
+
+    if (x2658K && ctx->p010PlaneReadback) {
+        const int slot = static_cast<int>(ctx->p010FramesSubmitted % ctx->X265_RING_SIZE);
+        ID3D11Texture2D* yTex = ctx->vpPipeline.GetLastP010YTexture();
+        ID3D11Texture2D* uvTex = ctx->vpPipeline.GetLastP010UVTexture();
+        if (!yTex || !uvTex) {
+            std::cerr << "P010_READBACK_OUTPUT_MISSING frame=" << frame_index << std::endl;
+            return 0;
+        }
+        const char* gate = std::getenv("AMD_8K_PLANE_GATE");
+        const bool yOnly = gate && _stricmp(gate, "Y_ONLY") == 0;
+        const bool uvOnly = gate && _stricmp(gate, "UV_ONLY") == 0;
+        const auto copyYStart = std::chrono::high_resolution_clock::now();
+        if (!uvOnly) ctx->pContext->CopyResource(ctx->pP010YStaging[slot], yTex);
+        ctx->p010GpuCopyYMs = std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - copyYStart).count();
+        const auto copyUVStart = std::chrono::high_resolution_clock::now();
+        if (!yOnly) ctx->pContext->CopyResource(ctx->pP010UVStaging[slot], uvTex);
+        ctx->p010GpuCopyUVMs = std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - copyUVStart).count();
+        ctx->pContext->End(ctx->pP010PlaneQuery[slot]);
+        const HRESULT copyReason = ctx->pDevice->GetDeviceRemovedReason();
+        std::cerr << "P010_PLANE_COPY frame=" << frame_index
+                  << " Y_FORMAT=R16_UNORM UV_FORMAT=R16G16_UNORM"
+                  << " GPU_COPY_Y_MS=" << ctx->p010GpuCopyYMs
+                  << " GPU_COPY_UV_MS=" << ctx->p010GpuCopyUVMs
+                  << " COPY_Y_HR=0 COPY_UV_HR=0 DEVICE_REASON=0x"
+                  << std::hex << copyReason << std::dec << std::endl;
+        if (FAILED(copyReason)) return 0;
+        ctx->p010FramesSubmitted++;
+        if (ctx->p010FramesSubmitted >= 2) {
+            const int readSlot = static_cast<int>(ctx->p010FramesRead % ctx->X265_RING_SIZE);
+            std::vector<uint8_t> packed;
+            if (!ReadP010PlaneSlot(ctx, readSlot, &packed, !uvOnly, !yOnly, 10000)) return 0;
+            if (!yOnly && !uvOnly) {
+                const char* dump = std::getenv("AMD_8K_P010_DUMP");
+                if (dump && ctx->p010FramesRead == 0) {
+                    std::ofstream raw(dump, std::ios::binary);
+                    raw.write(reinterpret_cast<const char*>(packed.data()),
+                              static_cast<std::streamsize>(packed.size()));
+                }
+                const bool readbackOnly = std::getenv("AMD_8K_PLANE_READBACK_ONLY") != nullptr;
+                if (!readbackOnly && !WriteEncodedPacket(ctx, packed.data(), packed.size())) return 0;
+            }
+            ctx->p010FramesRead++;
+            ctx->framesReceived++;
+        }
+        ctx->lastReadbackMs = ctx->p010TotalReadbackMs;
+        return 1;
+    }
+
+    if (ctx->isX265) {
+        const auto tRbStart = std::chrono::high_resolution_clock::now();
+        int slot = (int)(ctx->x265FramesSubmitted % ctx->X265_RING_SIZE);
+        const bool stagingTrace = std::getenv("AMD_8K_STAGING_TRACE") != nullptr;
+        D3D11_TEXTURE2D_DESC outputDesc = {}, stagingDesc = {};
+        if (pOutNV12Tex) pOutNV12Tex->GetDesc(&outputDesc);
+        if (ctx->pX265Staging[slot]) ctx->pX265Staging[slot]->GetDesc(&stagingDesc);
+        if (stagingTrace) {
+            std::cout << "CURRENT_STAGING frame=" << frame_index
+                      << " output_texture_format=" << outputDesc.Format
+                      << " staging_texture_format=" << stagingDesc.Format
+                      << " output=" << outputDesc.Width << "x" << outputDesc.Height
+                      << " staging=" << stagingDesc.Width << "x" << stagingDesc.Height
+                      << std::endl;
+        }
+        ctx->pContext->CopyResource(ctx->pX265Staging[slot], pOutNV12Tex);
+        ctx->pContext->End(ctx->pX265Query[slot]);
+        if (stagingTrace) {
+            std::cout << "CURRENT_STAGING_COPY frame=" << frame_index
+                      << " COPYRESOURCE_HR=VOID DEVICE_REASON=0x" << std::hex
+                      << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+        }
+        ctx->x265FramesSubmitted++;
+        ctx->framesSubmitted++;
+
+        // Pipeline: when we have >= 2 frames in flight, read back the oldest ready frame
+        if (ctx->x265FramesSubmitted >= 2) {
+            int readSlot = (int)(ctx->x265FramesRead % ctx->X265_RING_SIZE);
+            const auto waitStart = std::chrono::steady_clock::now();
+            while (ctx->pContext->GetData(ctx->pX265Query[readSlot], nullptr, 0, 0) == S_FALSE) {
+                if (std::chrono::duration<double>(std::chrono::steady_clock::now() - waitStart).count() >= 10.0) {
+                    std::cerr << "CURRENT_STAGING_FIRST_FAIL=QUERY_WAIT frame=" << frame_index << " timeout_ms=10000" << std::endl;
+                    return 0;
+                }
+                std::this_thread::yield();
+            }
+            if (stagingTrace) std::cout << "CURRENT_STAGING_QUERY frame=" << frame_index
+                                        << " completion=PASS DEVICE_REASON=0x" << std::hex
+                                        << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+            D3D11_MAPPED_SUBRESOURCE mapped = {};
+            const HRESULT mapHr = ctx->pContext->Map(ctx->pX265Staging[readSlot], 0, D3D11_MAP_READ, 0, &mapped);
+            if (stagingTrace) std::cout << "CURRENT_STAGING_MAP frame=" << frame_index
+                                        << " Map_HR=0x" << std::hex << mapHr << std::dec
+                                        << " RowPitch=" << mapped.RowPitch << " DepthPitch=" << mapped.DepthPitch
+                                        << " DEVICE_REASON=0x" << std::hex << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+            if (SUCCEEDED(mapHr)) {
+                if (mapped.RowPitch == ctx->width) {
+                    WriteEncodedPacket(ctx, (const uint8_t*)mapped.pData, (size_t)ctx->width * ctx->height * 3 / 2);
+                } else {
+                    const uint8_t* pSrc = (const uint8_t*)mapped.pData;
+                    for (UINT r = 0; r < ctx->height * 3 / 2; r++) {
+                        WriteEncodedPacket(ctx, pSrc + r * mapped.RowPitch, ctx->width);
+                    }
+                }
+                ctx->pContext->Unmap(ctx->pX265Staging[readSlot], 0);
+                ctx->x265FramesRead++;
+                ctx->framesReceived++;
+            }
+        }
+        const auto tRbEnd = std::chrono::high_resolution_clock::now();
+        ctx->lastReadbackMs = std::chrono::duration<double, std::milli>(tRbEnd - tRbStart).count();
+        if (x2658K && ctx->x265FramesRead == 1) {
+            std::cout << "8K_READBACK=PASS" << std::endl;
+            std::cout << "READBACK_FORMAT=NV12" << std::endl;
+            std::cout << "READBACK_BYTES="
+                      << (static_cast<UINT64>(ctx->width) * ctx->height * 3 / 2)
+                      << std::endl;
+            std::cout << "READBACK_MS=" << ctx->lastReadbackMs << std::endl;
+        }
+        return 1;
     }
 
     // Step 2: Direct GPU handoff to AMD AMF HEVC Hardware Encoder
@@ -2411,9 +3035,108 @@ TELEM_EXPORT int telem_amd_dump_checkpoint(
     return 0;
 }
 
+TELEM_EXPORT void telem_amd_get_readback_stats(void* handle, double* outLastMs, UINT64* outTotalFrames, UINT64* outBytesPerFrame) {
+    if (!handle) return;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    if (outLastMs) *outLastMs = ctx->lastReadbackMs;
+    if (outTotalFrames) *outTotalFrames = ctx->x265FramesRead;
+    if (outBytesPerFrame) *outBytesPerFrame = (UINT64)ctx->width * ctx->height * 3 / 2;
+}
+
 TELEM_EXPORT int telem_amd_flush(void* handle) {
     if (!handle) return 0;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
+
+    if (ctx->isX265) {
+        if (ctx->p010PlaneReadback) {
+            ctx->pContext->Flush();
+            const HRESULT reason = ctx->pDevice->GetDeviceRemovedReason();
+            if (FAILED(reason)) {
+                std::cerr << "P010_READBACK_EOS_DEVICE_REASON=0x" << std::hex << reason << std::dec << std::endl;
+                return 0;
+            }
+            const char* gate = std::getenv("AMD_8K_PLANE_GATE");
+            const bool yOnly = gate && _stricmp(gate, "Y_ONLY") == 0;
+            const bool uvOnly = gate && _stricmp(gate, "UV_ONLY") == 0;
+            while (ctx->p010FramesRead < ctx->p010FramesSubmitted) {
+                const int readSlot = static_cast<int>(ctx->p010FramesRead % ctx->X265_RING_SIZE);
+                std::vector<uint8_t> packed;
+                if (!ReadP010PlaneSlot(ctx, readSlot, &packed, !uvOnly, !yOnly, 10000)) return 0;
+                if (!yOnly && !uvOnly) {
+                    const char* dump = std::getenv("AMD_8K_P010_DUMP");
+                    if (dump && ctx->p010FramesRead == 0) {
+                        std::ofstream raw(dump, std::ios::binary);
+                        raw.write(reinterpret_cast<const char*>(packed.data()),
+                                  static_cast<std::streamsize>(packed.size()));
+                    }
+                    const bool readbackOnly = std::getenv("AMD_8K_PLANE_READBACK_ONLY") != nullptr;
+                    if (!readbackOnly && !WriteEncodedPacket(ctx, packed.data(), packed.size())) return 0;
+                }
+                ctx->p010FramesRead++;
+                ctx->framesReceived++;
+            }
+            std::cerr << "P010_READBACK_COMPLETE frames=" << ctx->p010FramesRead
+                      << " packed_bytes=" << (static_cast<UINT64>(ctx->width) * ctx->height * 3u)
+                      << " source_bit_depth=10 gpu_bit_depth=10 cpu_bit_depth=10 x265_input_bit_depth=10"
+                      << std::endl;
+            CloseEncodedOutput(ctx);
+            return 1;
+        }
+        const bool x2658K = ctx->width > 4096u || ctx->height > 4096u;
+        // Submit the queued copy/query work once before draining the readback
+        // ring.  This is an end-of-stream drain barrier, not a per-frame
+        // synchronization point; the normal frame path remains asynchronous.
+        ctx->pContext->Flush();
+        const HRESULT drainDeviceReason = ctx->pDevice->GetDeviceRemovedReason();
+        if (FAILED(drainDeviceReason)) {
+            std::cerr << "[TELEM AMD DLL] x265 readback drain Flush caused device removal: 0x"
+                      << std::hex << drainDeviceReason << std::dec << std::endl;
+            return 0;
+        }
+        while (ctx->x265FramesRead < ctx->x265FramesSubmitted) {
+            int readSlot = (int)(ctx->x265FramesRead % ctx->X265_RING_SIZE);
+            const auto waitStart = std::chrono::steady_clock::now();
+            while (ctx->pContext->GetData(ctx->pX265Query[readSlot], nullptr, 0, 0) == S_FALSE) {
+                if (std::chrono::duration<double>(std::chrono::steady_clock::now() - waitStart).count() >= 10.0) {
+                    std::cerr << "CURRENT_STAGING_FIRST_FAIL=EOS_QUERY_WAIT timeout_ms=10000" << std::endl;
+                    return 0;
+                }
+                std::this_thread::yield();
+            }
+            const auto readbackStart = std::chrono::high_resolution_clock::now();
+            D3D11_MAPPED_SUBRESOURCE mapped = {};
+            const HRESULT mapHr = ctx->pContext->Map(ctx->pX265Staging[readSlot], 0, D3D11_MAP_READ, 0, &mapped);
+            std::cout << "CURRENT_STAGING_EOS_MAP Map_HR=0x" << std::hex << mapHr << std::dec
+                      << " RowPitch=" << mapped.RowPitch << " DepthPitch=" << mapped.DepthPitch
+                      << " DEVICE_REASON=0x" << std::hex << ctx->pDevice->GetDeviceRemovedReason() << std::dec << std::endl;
+            if (SUCCEEDED(mapHr)) {
+                if (mapped.RowPitch == ctx->width) {
+                    WriteEncodedPacket(ctx, (const uint8_t*)mapped.pData, (size_t)ctx->width * ctx->height * 3 / 2);
+                } else {
+                    const uint8_t* pSrc = (const uint8_t*)mapped.pData;
+                    for (UINT r = 0; r < ctx->height * 3 / 2; r++) {
+                        WriteEncodedPacket(ctx, pSrc + r * mapped.RowPitch, ctx->width);
+                    }
+                }
+                ctx->pContext->Unmap(ctx->pX265Staging[readSlot], 0);
+                ctx->x265FramesRead++;
+                ctx->framesReceived++;
+                if (x2658K && ctx->x265FramesRead == 1) {
+                    const double readbackMs = std::chrono::duration<double, std::milli>(
+                        std::chrono::high_resolution_clock::now() - readbackStart).count();
+                    std::cout << "8K_READBACK=PASS" << std::endl;
+                    std::cout << "READBACK_FORMAT=NV12" << std::endl;
+                    std::cout << "READBACK_BYTES="
+                              << (static_cast<UINT64>(ctx->width) * ctx->height * 3 / 2)
+                              << std::endl;
+                    std::cout << "READBACK_MS=" << readbackMs << std::endl;
+                }
+            }
+        }
+        CloseEncodedOutput(ctx);
+        std::cout << "[TELEM AMD DLL] x265 flush completed. Total frames sent: " << ctx->framesReceived << std::endl;
+        return 1;
+    }
 
     if (ctx->amfMode == 1) {
         // ETAP 5O BYPASS: no encoder, nothing to drain.

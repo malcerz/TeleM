@@ -561,7 +561,7 @@ class PropertyEditor(QWidget):
 
         # 3. Wartość
         show_value = self._get_field_bool("show_value", default=True)
-        for vf in ("value_show_unit", "value_unit", "decimals", "value_align", "value_font", "value_font_size", "value_color", "value_gap"):
+        for vf in ("value_show_unit", "value_unit", "decimals", "value_align", "value_font", "value_font_size", "value_color", "value_gap", "unit_offset_x", "unit_offset_y"):
             if vf in self._field_widgets:
                 self._set_field_enabled(vf, show_value)
 

@@ -14,6 +14,120 @@ from typing import Any, Optional
 _native_module = None
 _native_checked = False
 
+NATIVE_CHANNEL_KEYS = (
+    "speed_samples", "alt_samples", "track_samples", "gps_track",
+    "accelerometer_samples", "gyroscope_samples", "iso_samples",
+    "exposure_samples", "temperature_samples",
+)
+
+
+def native_channel_counts(native_data: dict[str, Any] | None) -> dict[str, int]:
+    """Return channel counts without making acceptance depend on GPS."""
+    data = native_data or {}
+    return {key: len(data.get(key) or []) for key in NATIVE_CHANNEL_KEYS}
+
+
+def native_channels_used(native_data: dict[str, Any] | None) -> tuple[str, ...]:
+    return tuple(key for key, count in native_channel_counts(native_data).items() if count > 0)
+
+
+def missing_native_channels(native_data: dict[str, Any] | None) -> tuple[str, ...]:
+    return tuple(key for key, count in native_channel_counts(native_data).items() if count == 0)
+
+
+def native_result_usable(native_data: dict[str, Any] | None) -> bool:
+    """A valid IMU-only result is usable even when the GPS channel is empty."""
+    return bool(native_data and native_data.get("success") and native_channels_used(native_data))
+
+
+def merge_native_channel_data(
+    native_data: dict[str, Any], fallback_data: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Fill only empty native channels from a single legacy-parser pass."""
+    merged = dict(native_data)
+    for key in NATIVE_CHANNEL_KEYS + ("heading_samples", "slope_samples", "start_dt_utc"):
+        if not merged.get(key) and (fallback_data or {}).get(key):
+            merged[key] = fallback_data[key]
+    return merged
+
+
+def extract_missing_gpmf_channels(
+    records: list[dict], missing: tuple[str, ...],
+) -> dict[str, Any]:
+    """Extract only missing families from already parsed GPMF records.
+
+    The source is parsed once by the caller. This function deliberately does
+    not call the aggregate TelemetryDataManager loader, which would repeat
+    ACC/GYRO work for channels already supplied by native code.
+    """
+    from src.telemetry_extract import (
+        extract_accelerometer_samples, extract_altitude_samples,
+        extract_exposure_samples, extract_gps_track, extract_gyroscope_samples,
+        extract_iso_samples, extract_speed_samples, extract_temperature_samples,
+        extract_track_samples,
+    )
+
+    extractors = {
+        "speed_samples": extract_speed_samples,
+        "alt_samples": extract_altitude_samples,
+        "track_samples": extract_track_samples,
+        "gps_track": extract_gps_track,
+        "accelerometer_samples": extract_accelerometer_samples,
+        "gyroscope_samples": extract_gyroscope_samples,
+        "iso_samples": extract_iso_samples,
+        "exposure_samples": extract_exposure_samples,
+        "temperature_samples": extract_temperature_samples,
+    }
+    fallback: dict[str, Any] = {}
+    for key in missing:
+        fn = extractors.get(key)
+        if fn is None:
+            continue
+        try:
+            fallback[key] = fn(records)
+        except Exception as exc:
+            print(f"[GPMF partial fallback] channel={key} error={exc}", flush=True)
+
+    if "heading_samples" in missing:
+        try:
+            from src.telemetry_heading import derive_heading_samples
+            fallback["heading_samples"] = derive_heading_samples(
+                fallback.get("gps_track", []), fallback.get("speed_samples", [])
+            )
+        except Exception:
+            pass
+    if "slope_samples" in missing:
+        try:
+            from src.telemetry_slope import derive_slope_from_streams
+            fallback["slope_samples"] = derive_slope_from_streams(
+                fallback.get("track_samples", []), fallback.get("alt_samples", [])
+            )
+        except Exception:
+            pass
+    return _datetime_samples_to_native(fallback)
+
+
+def _datetime_samples_to_native(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert legacy datetime tuples to the native float-timestamp contract."""
+    def ts(value: Any) -> float:
+        return value.timestamp() if hasattr(value, "timestamp") else float(value)
+
+    converted = dict(data)
+    scalar_keys = {
+        "speed_samples", "alt_samples", "track_samples", "iso_samples",
+        "exposure_samples", "temperature_samples", "heading_samples", "slope_samples",
+    }
+    for key in scalar_keys:
+        converted[key] = [(ts(item[0]), item[1]) for item in data.get(key, [])]
+    converted["gps_track"] = [
+        (ts(item[0]), item[1], item[2]) for item in data.get("gps_track", [])
+    ]
+    for key in ("accelerometer_samples", "gyroscope_samples"):
+        converted[key] = [
+            (ts(item[0]), tuple(item[1])) for item in data.get(key, [])
+        ]
+    return converted
+
 def _get_native_module():
     global _native_module, _native_checked
     if _native_checked:
@@ -77,8 +191,29 @@ def populate_telemetry_from_native(
     manager.alt_samples = to_dt_list(native_data.get("alt_samples", []))
     manager.track_samples = to_dt_list(native_data.get("track_samples", []))
     manager.gps_track = to_dt_track(native_data.get("gps_track", []))
-    manager.accelerometer_samples = to_dt_list(native_data.get("accelerometer_samples", []))
-    manager.gyroscope_samples = to_dt_list(native_data.get("gyroscope_samples", []))
+    # Keep high-rate IMU in contiguous NumPy/LazySampleList form.  This avoids
+    # datetime/tuple materialization for every ACC/GYRO sample on the native path.
+    import numpy as np
+    from src.telemetry_processed_cache import LazySampleList
+
+    def vector_array(samples: list) -> np.ndarray:
+        if not samples:
+            return np.zeros((0, 4), dtype=np.float64)
+        return np.asarray(
+            [[float(ts), float(vec[0]), float(vec[1]), float(vec[2])] for ts, vec in samples],
+            dtype=np.float64,
+        )
+
+    manager.accelerometer_array = vector_array(native_data.get("accelerometer_samples", []))
+    manager.gyroscope_array = vector_array(native_data.get("gyroscope_samples", []))
+    manager.accelerometer_samples = LazySampleList(
+        manager.accelerometer_array, is_vector=True, tz_aware=True,
+        audit_label="native_accelerometer_samples",
+    )
+    manager.gyroscope_samples = LazySampleList(
+        manager.gyroscope_array, is_vector=True, tz_aware=True,
+        audit_label="native_gyroscope_samples",
+    )
     manager.iso_samples = to_dt_list(native_data.get("iso_samples", []))
     manager.exposure_samples = to_dt_list(native_data.get("exposure_samples", []))
     manager.temperature_samples = to_dt_list(native_data.get("temperature_samples", []))
@@ -98,8 +233,8 @@ def populate_telemetry_from_native(
 
     # Standard post-processing (smoothing, vector components, derived heading/slope)
     manager.smooth_all_gpmf()
-    manager._set_vector_series(manager.accelerometer_samples, "accel")
-    manager._set_vector_series(manager.gyroscope_samples, "gyro")
+    manager._set_vector_series_from_array(manager.accelerometer_array, "accel")
+    manager._set_vector_series_from_array(manager.gyroscope_array, "gyro")
     manager.heading_samples = derive_heading_samples(manager.gps_track, manager.speed_samples)
     manager.slope_samples = derive_slope_from_streams(manager.track_samples, manager.alt_samples)
     if manager.temperature_samples:

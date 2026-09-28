@@ -102,14 +102,30 @@ class RenderMixin:
 
     def _on_render_requested(self, options: dict) -> None:
         """Użytkownik kliknął 'Renderuj'."""
+        try:
+            from src.startup_timeline import StartupTimelineTracker
+            _tracker = StartupTimelineTracker.get_instance()
+            _tracker.end_stage("GUI dispatch")
+            _tracker.start_stage("snapshot")
+        except Exception:
+            pass
+        if options.get("video_paths") and (not getattr(self, "video_paths", None) or not getattr(self, "video_path", None)):
+            self.video_paths = [Path(p) for p in options["video_paths"]]
+            self.video_path = self.video_paths[0] if self.video_paths else None
+        if options.get("layout"):
+            import copy
+            self.layout = copy.deepcopy(options["layout"])
         if not self.video_path:
             self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_done(job_id, success=False, error_message="Najpierw wybierz plik wideo.")
             return
 
-        # Zapisz stan roboczy layoutu dla konkretnego filmu (sidecar .layout.json).
-        # NIGDY nie nadpisuj wczytanego presetu użytkownika ani def_layout.json!
-        if hasattr(self, "_save_project_layout"):
-            self._save_project_layout()
+        # Zapisz stan roboczy layoutu w sesji AppData (nigdy obok filmu).
+        if hasattr(self, "_save_session_layout"):
+            self._save_session_layout()
 
         encoder = str(options.get("encoder", "auto")).strip().lower()
         if encoder == "auto":
@@ -165,10 +181,25 @@ class RenderMixin:
 
         emit_initial_state()
 
+        self._first_frame_emitted = False
+
         def emit_render_progress(completed, total, elapsed, fps, hud_state) -> None:
             hud_state = dict(hud_state or {})
             if completed and total:
                 hud_state.setdefault("phase", "render")
+            if completed and completed >= 1 and not getattr(self, "_first_frame_emitted", False):
+                self._first_frame_emitted = True
+                try:
+                    from src.gui.export_queue import log_queue_trace
+                    log_queue_trace(
+                        "FIRST FRAME",
+                        job_id=str(options.get("_queue_job_id", "")),
+                        output_path=str(options.get("output", "")),
+                        input_videos=[str(p) for p in (options.get("video_paths") or getattr(self, "video_paths", []))],
+                        extra=f"frame={completed}/{total}",
+                    )
+                except Exception:
+                    pass
             requested_mode = normalize_render_mode(options.get("render_mode", "gpu"))
             hud_state.setdefault("role", "cpu" if requested_mode is RenderMode.CPU else "gpu")
             hud_state.setdefault("backend", str(options.get("encoder", "auto")))
@@ -183,6 +214,7 @@ class RenderMixin:
                 hud_state,
             )
             phase = hud_state.get("phase") if isinstance(hud_state, dict) else "render"
+            prog_mode = str(hud_state.get("progress_mode", "determinate")) if isinstance(hud_state, dict) else "determinate"
             now_elapsed = max(
                 float(elapsed or 0.0),
                 time.monotonic() - self._render_session_start,
@@ -209,16 +241,31 @@ class RenderMixin:
                     global_percent=0.0,
                     elapsed_s=now_elapsed,
                     fps=float(fps or 0.0) if fps is not None else 0.0,
+                    progress_mode="determinate",
                 )
 
             if phase == "render":
                 comp_val = int(completed) if completed is not None else 0
                 tot_val = int(total) if total is not None else 0
-                frame = max(int(getattr(latest, "frame", 0)), comp_val)
-                total_frames = max(int(getattr(latest, "total_frames", 0)), tot_val)
-                raw_pct = (100.0 * frame / total_frames) if total_frames > 0 else 0.0
-                percent = max(float(getattr(latest, "percent", 0.0)), raw_pct)
-                percent = min(99.9, percent) if total_frames > 0 else 0.0
+                is_first_render_msg = getattr(latest, "phase", "") != "render"
+                if is_first_render_msg:
+                    frame = comp_val
+                    total_frames = tot_val
+                else:
+                    frame = max(int(getattr(latest, "frame", 0)), comp_val)
+                    total_frames = max(int(getattr(latest, "total_frames", 0)), tot_val)
+
+                raw_render_ratio = (frame / total_frames) if total_frames > 0 else 0.0
+                hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
+                if hud_global is not None:
+                    global_pct = float(hud_global)
+                else:
+                    global_pct = raw_render_ratio * 92.0
+
+                if not is_first_render_msg:
+                    global_pct = max(float(getattr(latest, "global_percent", 0.0)), global_pct)
+                global_pct = min(92.0, max(0.0, global_pct))
+                percent = global_pct
 
                 fps_from_hud = hud_state.get("fps") if isinstance(hud_state, dict) else None
                 cand_fps = fps_from_hud if fps_from_hud is not None else (fps if fps is not None else getattr(latest, "fps", 0.0))
@@ -228,14 +275,37 @@ class RenderMixin:
                     max(0.0, (total_frames - frame) / effective_fps)
                     if effective_fps > 0 and total_frames > frame else None
                 )
-                hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
-                global_pct = float(hud_global) if hud_global is not None else percent
-                global_pct = max(float(getattr(latest, "global_percent", 0.0)), global_pct)
-                global_pct = min(99.9, global_pct)
 
+                comp_txt = ""
+                qp_val = None
+                if isinstance(hud_state, dict):
+                    for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
+                        v = hud_state.get(k)
+                        if v is not None:
+                            try:
+                                fv = float(v)
+                                if fv > 0:
+                                    qp_val = fv
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                    if "compression_text" in hud_state and hud_state["compression_text"]:
+                        comp_txt = str(hud_state["compression_text"])
+                    elif "qp_avg" in hud_state and hud_state["qp_avg"] is not None:
+                        try:
+                            comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
+                        except (ValueError, TypeError):
+                            comp_txt = f"QP avg: {hud_state['qp_avg']}"
+                if qp_val is None and getattr(latest, "qp", None) is not None:
+                    qp_val = latest.qp
+
+                is_done_frames = (total_frames > 0 and frame >= total_frames)
+                st_val = "cancelling" if self.render_cancel_event.is_set() else ("finalizing" if is_done_frames else "rendering")
+                ph_val = "finalize" if is_done_frames else "render"
+                fin_stage = "Finalizacja..." if is_done_frames else ""
                 snapshot = RenderProgressState(
                     generation_id=generation_id,
-                    state="cancelling" if self.render_cancel_event.is_set() else "rendering",
+                    state=st_val,
                     frame=frame,
                     total_frames=total_frames,
                     percent=percent,
@@ -248,22 +318,31 @@ class RenderMixin:
                     cancel_source=getattr(self, "_render_cancel_source", ""),
                     backend=str(hud_state.get("backend", getattr(latest, "backend", ""))) if isinstance(hud_state, dict) else getattr(latest, "backend", ""),
                     role=str(hud_state.get("role", getattr(latest, "role", ""))) if isinstance(hud_state, dict) else getattr(latest, "role", ""),
-                    phase="render",
+                    phase=ph_val,
+                    progress_mode=prog_mode,
+                    finalization_stage=fin_stage,
                     frame_done=frame,
                     frame_total=total_frames,
                     fps_instant=effective_fps,
                     fps_average=effective_fps,
                     compression_text=comp_txt or getattr(latest, "compression_text", ""),
+                    qp=qp_val,
                 )
             elif phase == "finalize":
                 prev_global = float(getattr(latest, "global_percent", 0.0))
                 hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
-                global_pct = float(hud_global) if hud_global is not None else max(prev_global, 99.0)
+                global_pct = float(hud_global) if hud_global is not None else max(prev_global, 92.0)
                 global_pct = max(prev_global, global_pct)
                 # 100% rezerwowane dla completed po zamknięciu kontenera i atomic rename
                 global_pct = min(99.9, global_pct) if global_pct < 100.0 else 99.9
 
                 stage_label = str(hud_state.get("finalize_stage", hud_state.get("label", "Finalizacja..."))) if isinstance(hud_state, dict) else "Finalizacja..."
+                finalize_internal = hud_state.get("pct") if isinstance(hud_state, dict) else None
+                file_size_bytes = hud_state.get("file_size_bytes") if isinstance(hud_state, dict) else None
+                write_speed_mbps = hud_state.get("write_speed_mbps") if isinstance(hud_state, dict) else None
+                stall_warning = bool(hud_state.get("stall_warning", False)) if isinstance(hud_state, dict) else False
+                stall_seconds = hud_state.get("stall_seconds") if isinstance(hud_state, dict) else None
+
                 final_comp_txt = ""
                 if isinstance(hud_state, dict) and hud_state.get("compression_active"):
                     is_av1 = hud_state.get("is_av1", False)
@@ -279,14 +358,22 @@ class RenderMixin:
                     latest,
                     state="cancelling" if self.render_cancel_event.is_set() else "finalizing",
                     elapsed_s=now_elapsed,
+                    percent=global_pct,
                     global_percent=global_pct,
                     finalization_stage=stage_label,
+                    finalize_stage=stage_label,
+                    finalize_internal=finalize_internal,
+                    file_size_bytes=file_size_bytes,
+                    write_speed_mbps=write_speed_mbps,
+                    stall_warning=stall_warning,
+                    stall_seconds=stall_seconds,
                     cancel_requested=self.render_cancel_event.is_set(),
                     cancel_reason=getattr(self, "_render_cancel_reason", RenderCancelReason.NONE),
                     cancel_source=getattr(self, "_render_cancel_source", ""),
                     backend=str(hud_state.get("backend", getattr(latest, "backend", ""))) if isinstance(hud_state, dict) else getattr(latest, "backend", ""),
                     role=str(hud_state.get("role", getattr(latest, "role", ""))) if isinstance(hud_state, dict) else getattr(latest, "role", ""),
                     phase="finalize",
+                    progress_mode=prog_mode,
                     compression_text=final_comp_txt or getattr(latest, "compression_text", ""),
                 )
 
@@ -328,6 +415,7 @@ class RenderMixin:
                     backend=str(hud_state.get("backend", getattr(latest, "backend", ""))) if isinstance(hud_state, dict) else getattr(latest, "backend", ""),
                     role=str(hud_state.get("role", getattr(latest, "role", ""))) if isinstance(hud_state, dict) else getattr(latest, "role", ""),
                     phase="prep",
+                    progress_mode=prog_mode,
                     prep_phase=prep_phase,
                     prep_done=work_done,
                     prep_total=work_total,
@@ -357,6 +445,7 @@ class RenderMixin:
                 completed=kind == "completed",
                 percent=100.0 if kind == "completed" else latest.percent,
                 global_percent=100.0 if kind == "completed" else latest.global_percent,
+                progress_mode="determinate",
                 compression_text=final_comp_txt,
                 cancel_reason=(
                     getattr(self, "_render_cancel_reason", RenderCancelReason.NONE)
@@ -375,16 +464,71 @@ class RenderMixin:
         self._emit_render_progress_callback = emit_render_progress
         self._emit_render_terminal_state = emit_terminal_state
 
+        def _notify_queue(success: bool, stats: dict | None = None) -> None:
+            """Powiadom ExportQueue o zakończeniu renderu tego jobu."""
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                try:
+                    output = options.get("output", "")
+                    elapsed = (
+                        time.monotonic() - self._render_session_start
+                        if hasattr(self, "_render_session_start") and self._render_session_start
+                        else 0.0
+                    )
+                    fps = 0.0
+                    qp = None
+                    if stats:
+                        fps = (
+                            stats.get("real_export_fps")
+                            or stats.get("true_fps")
+                            or stats.get("render_fps")
+                            or 0.0
+                        )
+                        qp = stats.get("avg_qp")
+                        if qp is None and "encoder_stats" in stats:
+                            qp = stats["encoder_stats"].get("qp_avg")
+                        if qp is None and "amf_stats" in stats:
+                            qp = stats["amf_stats"].get("avg_qp")
+                    queue.notify_render_done(
+                        job_id,
+                        success=success,
+                        output_path=output,
+                        elapsed_s=elapsed,
+                        average_fps=fps,
+                        average_qp=qp,
+                    )
+                except Exception as _qe:
+                    print(f"[Queue] notify_render_done error: {_qe}", flush=True)
+
         def worker() -> None:
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                try:
+                    queue.notify_render_started(job_id)
+                except Exception as _qe:
+                    print(f"[Queue] notify_render_started error: {_qe}", flush=True)
             try:
                 stats = self._render_pipeline(options)
                 if not self.render_cancel_event.is_set():
-                    emit_terminal_state("completed")
                     output = options.get("output", "output.mp4")
+                    # Zero additional QP analysis after export. Use strictly in-render statistics.
+                    qp = stats.get("avg_qp", None)
+                    if qp is None and "encoder_stats" in stats:
+                        qp = stats.get("encoder_stats", {}).get("qp_avg")
+                    if qp is None and "amf_stats" in stats:
+                        qp = stats.get("amf_stats", {}).get("avg_qp")
+                    stats["avg_qp"] = qp
+                    stats["_queue_job_id"] = options.get("_queue_job_id")
+
+                    emit_terminal_state("completed")
                     self.signals.sig_render_finished.emit(stats, output)
+                    _notify_queue(success=True, stats=stats)
                 else:
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
+                    _notify_queue(success=False)
             except Exception as e:
                 primary_error = f"{type(e).__name__}: {e}".strip()
                 if primary_error.endswith(":"):
@@ -399,6 +543,7 @@ class RenderMixin:
                 else:
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
+                _notify_queue(success=False)
             finally:
                 print("[PROC] render thread exit", flush=True)
 
@@ -409,6 +554,26 @@ class RenderMixin:
 
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
+        # Capture candidate-specific metadata before encoder capability probes
+        # or downstream export setup can touch temporary/legacy sidecars.
+        metadata_candidates = []
+        if self.video_path:
+            try:
+                from src.telemetry_cache_manager import get_gpmf_json_path
+                cand = get_gpmf_json_path(self.video_path, create_dir=False)
+                if cand.exists():
+                    metadata_candidates.append(cand)
+            except Exception:
+                pass
+            metadata_candidates.append(self.video_path.with_suffix(".json"))
+        records = []
+        for metadata_path in metadata_candidates:
+            try:
+                records = ensure_records_list(load_json_with_fallback(metadata_path))
+                break
+            except Exception:
+                continue
+
         encoder = options.get("encoder", detect_best_encoder())
         if encoder == "auto":
             encoder = detect_best_encoder()
@@ -435,7 +600,9 @@ class RenderMixin:
         if encoder == "nv" and not _test_encoder("hevc_nvenc"):
             encoder = detect_best_encoder()
         elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
-            encoder = detect_best_encoder()
+            raise RuntimeError(
+                "AMD hardware encoder is unavailable; automatic CPU x265 fallback is disabled"
+            )
         elif encoder == "intel":
             # INTEL_FORCE: no silent cross-GPU fallback.  If the user explicitly
             # requested Intel, the full controlled resolution (adapter + QSV) is
@@ -447,8 +614,6 @@ class RenderMixin:
         output = options.get("output", "output.mp4")
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
-
-        meta = self.video_path.with_suffix(".json") if self.video_path else None
 
         ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
         ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
@@ -471,13 +636,26 @@ class RenderMixin:
         else:
             render_w, render_h = src_w, src_h
 
-        layout = dict(self.layout, cut_regions=list(self._cut_regions))
-        records = []
-        if meta and meta.exists():
-            try:
-                records = ensure_records_list(load_json_with_fallback(meta))
-            except Exception:
-                records = []
+        from src.ffmpeg.detection import is_resolution_supported_by_encoder
+        is_supported, err_msg, _ = is_resolution_supported_by_encoder(
+            resolution_name=resolution,
+            encoder=encoder,
+            source_dimensions=(src_w, src_h),
+            ffmpeg_exe=ffmpeg_exe,
+        )
+        if not is_supported:
+            print(f"[RenderCapabilityGate] BLOCKED: {err_msg}", flush=True)
+            self.signals.sig_error.emit(err_msg)
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_done(job_id, success=False, error_message=err_msg)
+            return
+
+        import copy
+        effective_layout = options.get("layout") if options.get("layout") else self.layout
+        layout = dict(copy.deepcopy(effective_layout), cut_regions=list(self._cut_regions))
+
 
         # Odczytaj rotację z metadanych lub kontenera
         if records:
@@ -566,6 +744,22 @@ class RenderMixin:
         if ov_h % 2:
             ov_h += 1
 
+        # ── Map Render Contract (Section 8) ───────────────────────────
+        try:
+            from src.gui.map_prefetch import MapBackgroundPrefetchManager
+            _prefetch_mgr = MapBackgroundPrefetchManager.get_instance()
+            _prefetch_status = _prefetch_mgr.pause_or_cancel_for_render()
+            print(
+                f"[AMD RENDER MAP CONTRACT]\n"
+                f"REQUIRED_TILES={_prefetch_status.get('required')}\n"
+                f"CACHED_TILES={_prefetch_status.get('cached')}\n"
+                f"MISSING_TILES={_prefetch_status.get('missing')}\n"
+                f"BACKGROUND_PREFETCH_ACTIVE={_prefetch_status.get('active_before')}",
+                flush=True,
+            )
+        except Exception as _e:
+            print(f"[RenderMixin] Map contract check warning: {_e}", flush=True)
+
         stream_kwargs = dict(
             ffmpeg_exe=ffmpeg_exe,
             input_files=self.video_paths,
@@ -599,9 +793,14 @@ class RenderMixin:
             gpx_cad_samples=getattr(self.telemetry, "gpx_cad_samples", None),
             fit_data=getattr(self.telemetry, "fit_data", {}),
             gps_track=(
-                self.telemetry.get_gps_track_for_source(
-                    self.layout.get("indicators", {})
-                    .get("track_map", {}).get("source", "fit")
+                self.telemetry.resolve_gps_track(
+                    layout.get("indicators", {})
+                    .get("track_map", {}).get("gps_source", "auto")
+                )[0]
+                if hasattr(self.telemetry, "resolve_gps_track")
+                else self.telemetry.get_gps_track_for_source(
+                    layout.get("indicators", {})
+                    .get("track_map", {}).get("gps_source", "auto")
                 )
                 if hasattr(self.telemetry, "get_gps_track_for_source")
                 else getattr(self.telemetry, "gps_track", None)
@@ -627,6 +826,7 @@ class RenderMixin:
             hud_resolution_scale=hud_resolution_scale,
 active_process_holder=getattr(self, "render_process_holder", {}),
             amd_decode_mode=options.get("amd_decode_mode", getattr(self, "amd_decode_mode", "gpu")),
+            amd_encoder_quality=options.get("amd_encoder_quality", getattr(self, "amd_encoder_quality", "FAST")),
             preview_session=options.get("_amd_export_preview_session"),
             preview_state_provider=getattr(self, "preview_diagnostics_provider", None),
             generation_id=int(options.get("_render_generation_id", 0) or 0),
@@ -638,6 +838,8 @@ codec=options.get("intel_codec", "av1"),
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
         )
+        _accepted_stream_params = set(inspect.signature(stream_overlay_to_ffmpeg).parameters.keys())
+        stream_kwargs = {k: v for k, v in stream_kwargs.items() if k in _accepted_stream_params}
 
         # ── NVIDIA Native D3D11 Dispatch (Stage 8L) ───────────────────
         is_nv = encoder in ("nv", "nvidia")
@@ -927,6 +1129,18 @@ codec=options.get("intel_codec", "av1"),
             # clips are regular files and therefore enter containment.
             and all(Path(path).is_file() for path in self.video_paths)
         )
+        try:
+            from src.gui.export_queue import log_queue_trace
+            log_queue_trace(
+                "FFMPEG START",
+                job_id=str(options.get("_queue_job_id", "")),
+                output_path=str(output_path),
+                input_videos=[str(p) for p in (options.get("video_paths") or self.video_paths)],
+                extra=f"encoder={encoder} mode={'child' if amd_child_enabled else 'direct'}",
+            )
+        except Exception:
+            pass
+
         if amd_child_enabled:
             from src.ffmpeg.amd_child_process import run_amd_render_child
 
@@ -942,7 +1156,12 @@ codec=options.get("intel_codec", "av1"),
             ):
                 child_kwargs.pop(key, None)
             preview_session = options.get("_amd_export_preview_session")
-            run_amd_render_child(
+            try:
+                from src.startup_timeline import StartupTimelineTracker
+                StartupTimelineTracker.get_instance().end_stage("snapshot")
+            except Exception:
+                pass
+            child_res = run_amd_render_child(
                 render_kwargs=child_kwargs,
                 preview_config=options.get("_amd_export_preview_config"),
                 progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
@@ -960,6 +1179,45 @@ codec=options.get("intel_codec", "av1"),
                 active_process_holder=self.render_process_holder,
                 generation_id=int(options.get("_render_generation_id", 0) or 0),
             )
+            out_file = options.get("output", "output.mp4")
+            prof_data = child_res.get("profile") if isinstance(child_res, dict) else None
+            if prof_data is None:
+                try:
+                    prof_path = Path(str(out_file) + ".amd_profile.json")
+                    if prof_path.exists():
+                        import json
+                        with open(prof_path, "r", encoding="utf-8") as f_prof:
+                            prof_data = json.load(f_prof)
+                except Exception:
+                    pass
+
+            stats = {}
+            if isinstance(child_res, dict):
+                if isinstance(child_res.get("result"), dict):
+                    stats.update(child_res["result"])
+                stats["child_pid"] = child_res.get("child_pid")
+                stats["child_exitcode"] = child_res.get("child_exitcode")
+                stats["output"] = child_res.get("output", str(out_file))
+
+            generation_id = int(options.get("_render_generation_id", 0) or 0)
+            stats["generation_id"] = generation_id
+
+            if prof_data and isinstance(prof_data, dict):
+                true_fps = prof_data.get("true_fps")
+                eff_fps = prof_data.get("etap8p_a", {}).get("effective_fps")
+                rend_fps = prof_data.get("etap8p_a", {}).get("render_fps")
+                real_fps = true_fps or eff_fps or rend_fps or 0.0
+                stats["true_fps"] = true_fps
+                stats["real_export_fps"] = real_fps
+                stats["render_fps"] = real_fps
+                stats["effective_fps"] = eff_fps
+
+                enc_info = prof_data.get("encoder", {})
+                stats["avg_qp"] = enc_info.get("qp_avg")
+                stats["encoder_stats"] = enc_info
+                stats["profile"] = prof_data
+
+            return stats
         else:
             stream_overlay_to_ffmpeg(**stream_kwargs)
 
