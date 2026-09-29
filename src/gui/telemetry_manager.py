@@ -376,6 +376,8 @@ class TelemetryDataManager:
         self.slope_samples: list[tuple[datetime, float | None]] = []
         self.accelerometer_samples: list[tuple[datetime, tuple[float, float, float]]] = []
         self.gyroscope_samples: list[tuple[datetime, tuple[float, float, float]]] = []
+        self.quaternion_samples: list[tuple[datetime, tuple[float, float, float, float]]] = []
+        self.camera_metadata: dict = {}
         self.accel_x_samples: SampleList = []
         self.accel_y_samples: SampleList = []
         self.accel_z_samples: SampleList = []
@@ -551,6 +553,15 @@ class TelemetryDataManager:
                 ]
             else:
                 self.alt_samples = raw_alt or []
+
+    def load_dji_telemetry(self, camera_data: dict) -> None:
+        """Apply camera-only canonical data; never clear FIT/GPX or GPS fields."""
+        self.gyroscope_samples = camera_data.get("gyroscope_samples") or []
+        self.accelerometer_samples = camera_data.get("accelerometer_samples") or []
+        self.quaternion_samples = camera_data.get("quaternion_samples") or []
+        self.camera_metadata = camera_data.get("camera_metadata") or {}
+        self._set_vector_series(self.gyroscope_samples, "gyro")
+        self._set_vector_series(self.accelerometer_samples, "accel")
 
     def load_gpmf_records(self, records: list[dict], profile_cb=None, progress_cb=None) -> None:
         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
@@ -1058,6 +1069,8 @@ class TelemetryDataManager:
         self.slope_samples.clear()
         self.accelerometer_samples.clear()
         self.gyroscope_samples.clear()
+        self.quaternion_samples.clear()
+        self.camera_metadata.clear()
         for name in (
             "accel_x_samples", "accel_y_samples", "accel_z_samples",
             "accel_magnitude_samples", "gyro_x_samples", "gyro_y_samples",
