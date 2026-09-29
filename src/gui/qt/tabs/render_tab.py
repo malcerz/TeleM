@@ -142,6 +142,8 @@ class RenderTab(QWidget):
         self._preview_snapshot_labels: set[str] = set()
         self._pending_hud_switch_log = False
         self._render_generation_id = 0
+        self._last_export_qp = None
+        self._last_export_qp_generation_id = 0
         self._render_state_enabled = False
         self._render_state: RenderProgressState | None = None
         self._export_preview_native = False
@@ -596,6 +598,13 @@ class RenderTab(QWidget):
         btn_out.clicked.connect(self._select_output)
         row_out.addWidget(btn_out)
         form.addRow("Plik wyjściowy:", row_out)
+
+        self.chk_original_gpmf = QCheckBox("Dołącz oryginalny GPMF")
+        self.chk_original_gpmf.setChecked(False)
+        self.chk_original_gpmf.setToolTip(
+            "Zachowuje oryginalny strumień telemetrii GPMF z pliku GoPro w wyeksportowanym MP4."
+        )
+        form.addRow(self.chk_original_gpmf)
 
         # HUD Preview podczas renderowania (default ON; odświeżanie 1 Hz)
         self.chk_hud_preview = QCheckBox("Podgląd HUD podczas renderowania")
@@ -1057,7 +1066,7 @@ class RenderTab(QWidget):
         self._render_generation_id = next_render_generation_id()
         options["_render_generation_id"] = self._render_generation_id
         self._last_export_fps = None
-        self._last_export_qp = None
+        self._reset_export_qp_state(self._render_generation_id)
 
         if job is not None:
             self._active_queue_job_id = job.job_id
@@ -1195,6 +1204,11 @@ class RenderTab(QWidget):
         )
         self.signals.sig_render_requested.emit(options)
         return True
+
+    def _reset_export_qp_state(self, generation_id: int) -> None:
+        """Clear QP state before a new export and bind it to that generation."""
+        self._last_export_qp = None
+        self._last_export_qp_generation_id = int(generation_id or 0)
 
     def _start_render_from_options(self, options: dict, job: ExportJob | None = None) -> bool:
         """Alias dla _start_render (wsteczna kompatybilność)."""
@@ -2042,6 +2056,7 @@ class RenderTab(QWidget):
                 else "balanced"
             ) or "balanced",
             "compression_analysis": self.chk_compression_analysis.isChecked(),
+            "preserve_original_gpmf": self.chk_original_gpmf.isChecked(),
             "_gui_hud_preview_checkbox": self.chk_hud_preview.isChecked(),
         }
 
@@ -2513,6 +2528,15 @@ class RenderTab(QWidget):
         if self._render_state_enabled:
             return
 
+        _stats = dict(_stats or {})
+        render_generation = int(
+            _stats.get("generation_id", _stats.get("_render_generation_id", self._render_generation_id)) or 0
+        )
+        is_av1_stats = (
+            _stats.get("codec") == "av1"
+            or _stats.get("quant_metric") == "base_q_idx"
+        )
+
         is_queue_job = bool(
             getattr(self, "_active_queue_job_id", None)
             or getattr(self, "_current_render_queue_job_id", None)
@@ -2532,13 +2556,15 @@ class RenderTab(QWidget):
             or (self._render_total / elapsed if elapsed > 0 and self._render_total else 0.0)
         ) if _stats else (self._render_total / elapsed if elapsed > 0 and self._render_total else 0.0)
 
-        qp = None
-        if _stats:
-            qp = _stats.get("avg_qp", None)
-            if qp is None and "encoder_stats" in _stats:
-                qp = _stats.get("encoder_stats", {}).get("qp_avg")
-            if qp is None and "amf_stats" in _stats:
-                qp = _stats.get("amf_stats", {}).get("avg_qp")
+        from src.ffmpeg.export_stats import resolve_render_avg_qp
+        qp = resolve_render_avg_qp(
+            _stats,
+            generation_id=render_generation,
+            live_qp=getattr(self, "_last_export_qp", None),
+            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+        )
+        if qp is not None and not is_av1_stats:
+            _stats["avg_qp"] = qp
 
         if is_queue_job:
             # QUEUE JOB: ZERO POPUPS! Record isolated stats directly to the queue job.
@@ -2600,11 +2626,13 @@ class RenderTab(QWidget):
         )
         fps_str = f"{avg_fps:.1f} FPS" if (avg_fps and avg_fps > 0) else "brak danych"
         
-        qp = stats.get("avg_qp", None)
-        if qp is None and "encoder_stats" in stats:
-            qp = stats.get("encoder_stats", {}).get("qp_avg")
-        if qp is None and "amf_stats" in stats:
-            qp = stats.get("amf_stats", {}).get("avg_qp")
+        from src.ffmpeg.export_stats import resolve_render_avg_qp
+        qp = resolve_render_avg_qp(
+            stats,
+            generation_id=int(stats.get("generation_id", 0) or 0),
+            live_qp=getattr(self, "_last_export_qp", None),
+            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+        )
             
         qp_str = f"{qp:.1f}" if qp is not None else "brak danych"
         self._last_export_fps = avg_fps
@@ -3597,6 +3625,8 @@ class RenderTab(QWidget):
         it defaults to LEGACY_DEFAULT_ENCODER_PROFILE (FAST, TU=7) to preserve
         exact historical Intel rendering behavior.
         """
+        if hasattr(self, "chk_original_gpmf"):
+            self.chk_original_gpmf.setChecked(bool(settings.get("preserve_original_gpmf", False)))
         if "encoder_profile" in settings and hasattr(self, "cmb_encoder_profile"):
             prof = EncoderProfile.from_str(settings["encoder_profile"], default=DEFAULT_ENCODER_PROFILE)
             idx = self.cmb_encoder_profile.findData(prof.value)

@@ -42,6 +42,29 @@ from src.ffmpeg.hybrid_render import GpuTopology, RenderMode, choose_hybrid_mode
 
 
 class RenderMixin:
+    def _finalize_requested_gpmf(self, options: dict, stats: dict) -> dict:
+        """Run the optional metadata attach in the common render finalization."""
+        if not options.get("preserve_original_gpmf"):
+            return stats
+        from src.ffmpeg.gpmf_export import attach_original_gpmf
+
+        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
+        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        if not ffmpeg_exe or not ffprobe_exe:
+            raise RuntimeError("ffmpeg/ffprobe nie znalezione do dołączenia GPMF")
+        input_paths = options.get("video_paths") or getattr(self, "video_paths", [])
+        stats.update(attach_original_gpmf(
+            ffmpeg_exe=ffmpeg_exe,
+            ffprobe_exe=ffprobe_exe,
+            source_paths=list(input_paths or []),
+            output_path=options.get("output", "output.mp4"),
+            trimmed=bool(options.get("_gpmf_trimmed") or getattr(self, "_cut_regions", [])),
+            cancel_event=self.render_cancel_event,
+            active_process_holder=self.render_process_holder,
+            progress_cb=getattr(self, "_emit_render_progress_callback", None),
+        ))
+        return stats
+
     def _begin_render_cancel_session(self, generation_id: int) -> None:
         """Install isolated cancellation state for a new export session."""
         self.render_cancel_event = threading.Event()
@@ -167,6 +190,8 @@ class RenderMixin:
             int(getattr(self, "_render_generation_counter", 0)), generation_id
         )
         self._active_render_generation_id = generation_id
+        self._last_export_qp = None
+        self._last_export_qp_generation_id = generation_id
         self._render_session_start = time.monotonic()
         self._render_primary_error = ""
         self._render_cleanup_errors = []
@@ -306,6 +331,16 @@ class RenderMixin:
                             comp_txt = f"QP avg: {hud_state['qp_avg']}"
                 if qp_val is None and getattr(latest, "qp", None) is not None:
                     qp_val = latest.qp
+
+                # Remember only an encoder average from this render generation.
+                # The completed stats dictionary should remain canonical, but a
+                # backend can omit its terminal summary after publishing it live.
+                if isinstance(hud_state, dict):
+                    from src.ffmpeg.export_stats import live_render_avg_qp
+                    live_avg_qp = live_render_avg_qp(hud_state)
+                    if live_avg_qp is not None:
+                        self._last_export_qp = live_avg_qp
+                        self._last_export_qp_generation_id = generation_id
 
                 is_done_frames = (total_frames > 0 and frame >= total_frames)
                 st_val = "cancelling" if self.render_cancel_event.is_set() else ("finalizing" if is_done_frames else "rendering")
@@ -540,14 +575,21 @@ class RenderMixin:
                     print(f"[Queue] notify_render_started error: {_qe}", flush=True)
             try:
                 stats = self._render_pipeline(options)
+                if not isinstance(stats, dict):
+                    stats = {}
+                stats.setdefault("generation_id", generation_id)
+                if not self.render_cancel_event.is_set():
+                    self._finalize_requested_gpmf(options, stats)
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
                     # Zero additional QP analysis after export. Use strictly in-render statistics.
-                    qp = stats.get("avg_qp", None)
-                    if qp is None and "encoder_stats" in stats:
-                        qp = stats.get("encoder_stats", {}).get("qp_avg")
-                    if qp is None and "amf_stats" in stats:
-                        qp = stats.get("amf_stats", {}).get("avg_qp")
+                    from src.ffmpeg.export_stats import resolve_render_avg_qp
+                    qp = resolve_render_avg_qp(
+                        stats,
+                        generation_id=generation_id,
+                        live_qp=getattr(self, "_last_export_qp", None),
+                        live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+                    )
                     stats["avg_qp"] = qp
                     stats["_queue_job_id"] = options.get("_queue_job_id")
 
