@@ -42,6 +42,52 @@ from src.ffmpeg.hybrid_render import GpuTopology, RenderMode, choose_hybrid_mode
 
 
 class RenderMixin:
+    def _resolve_render_output_path(self, output: str | Path) -> Path:
+        """Resolve a GUI/queue output name to the canonical render location."""
+        output_path = sanitize_output_path(Path(output))
+        if not output_path.is_absolute():
+            video_path = getattr(self, "video_path", None)
+            if video_path is None:
+                raise RuntimeError("Cannot resolve render output without a source video path")
+            output_path = Path(video_path).parent / output_path
+        return output_path
+
+    def _finalize_requested_gpmf(self, options: dict, stats: dict) -> dict:
+        """Run the optional metadata attach in the common render finalization."""
+        if not options.get("preserve_original_gpmf"):
+            return stats
+        from src.ffmpeg.gpmf_export import attach_original_gpmf
+
+        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
+        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        if not ffmpeg_exe or not ffprobe_exe:
+            raise RuntimeError("ffmpeg/ffprobe nie znalezione do dołączenia GPMF")
+        input_paths = options.get("video_paths") or getattr(self, "video_paths", [])
+        raw_output = options.get("_render_output_raw", options.get("output", "output.mp4"))
+        output_path = Path(options.get("_resolved_output_path") or self._resolve_render_output_path(raw_output))
+        output_exists = output_path.is_file()
+        output_size = output_path.stat().st_size if output_exists else 0
+        print(
+            f"GPMF_RENDER_OUTPUT_RAW={raw_output} "
+            f"GPMF_RENDER_OUTPUT_RESOLVED={output_path} "
+            f"GPMF_RENDER_OUTPUT_EXISTS={'YES' if output_exists else 'NO'} "
+            f"GPMF_RENDER_OUTPUT_SIZE={output_size}",
+            flush=True,
+        )
+        if not output_exists:
+            raise FileNotFoundError(f"GPMF render output does not exist: {output_path}")
+        stats.update(attach_original_gpmf(
+            ffmpeg_exe=ffmpeg_exe,
+            ffprobe_exe=ffprobe_exe,
+            source_paths=list(input_paths or []),
+            output_path=output_path,
+            trimmed=bool(options.get("_gpmf_trimmed") or getattr(self, "_cut_regions", [])),
+            cancel_event=self.render_cancel_event,
+            active_process_holder=self.render_process_holder,
+            progress_cb=getattr(self, "_emit_render_progress_callback", None),
+        ))
+        return stats
+
     def _begin_render_cancel_session(self, generation_id: int) -> None:
         """Install isolated cancellation state for a new export session."""
         self.render_cancel_event = threading.Event()
@@ -167,6 +213,8 @@ class RenderMixin:
             int(getattr(self, "_render_generation_counter", 0)), generation_id
         )
         self._active_render_generation_id = generation_id
+        self._last_export_qp = None
+        self._last_export_qp_generation_id = generation_id
         self._render_session_start = time.monotonic()
         self._render_primary_error = ""
         self._render_cleanup_errors = []
@@ -306,6 +354,16 @@ class RenderMixin:
                             comp_txt = f"QP avg: {hud_state['qp_avg']}"
                 if qp_val is None and getattr(latest, "qp", None) is not None:
                     qp_val = latest.qp
+
+                # Remember only an encoder average from this render generation.
+                # The completed stats dictionary should remain canonical, but a
+                # backend can omit its terminal summary after publishing it live.
+                if isinstance(hud_state, dict):
+                    from src.ffmpeg.export_stats import live_render_avg_qp
+                    live_avg_qp = live_render_avg_qp(hud_state)
+                    if live_avg_qp is not None:
+                        self._last_export_qp = live_avg_qp
+                        self._last_export_qp_generation_id = generation_id
 
                 is_done_frames = (total_frames > 0 and frame >= total_frames)
                 st_val = "cancelling" if self.render_cancel_event.is_set() else ("finalizing" if is_done_frames else "rendering")
@@ -540,14 +598,42 @@ class RenderMixin:
                     print(f"[Queue] notify_render_started error: {_qe}", flush=True)
             try:
                 stats = self._render_pipeline(options)
+                if not isinstance(stats, dict):
+                    stats = {}
+                stats.setdefault("generation_id", generation_id)
+                if not self.render_cancel_event.is_set():
+                    plan = options.get("_inline_gpmf_plan")
+                    if plan is not None:
+                        stats["gpmf_status"] = plan.status
+                        stats["gpmf_attach_seconds"] = 0.0
+                        if plan.enabled:
+                            from src.ffmpeg.gpmf_export import detect_gpmf_stream
+
+                            output_path = Path(options["_resolved_output_path"])
+                            probe_exe = self.ffprobe_exe or find_executable("ffprobe")
+                            if not probe_exe:
+                                raise RuntimeError("ffprobe not found for inline GPMF validation")
+                            output_stream = detect_gpmf_stream(probe_exe, output_path)
+                            if output_stream is None:
+                                raise RuntimeError(f"Inline GPMF missing from final output: {output_path}")
+                            stats["gpmf_status"] = "inline_attached"
+                            stats["gpmf_attached"] = True
+                            stats["gpmf_output_stream_index"] = int(output_stream["index"])
+                            print(
+                                f"GPMF_OUTPUT_DETECTED=YES GPMF_OUTPUT_STREAM_INDEX={output_stream['index']} "
+                                "GPMF_POST_ATTACH_SECONDS=0",
+                                flush=True,
+                            )
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
                     # Zero additional QP analysis after export. Use strictly in-render statistics.
-                    qp = stats.get("avg_qp", None)
-                    if qp is None and "encoder_stats" in stats:
-                        qp = stats.get("encoder_stats", {}).get("qp_avg")
-                    if qp is None and "amf_stats" in stats:
-                        qp = stats.get("amf_stats", {}).get("avg_qp")
+                    from src.ffmpeg.export_stats import resolve_render_avg_qp
+                    qp = resolve_render_avg_qp(
+                        stats,
+                        generation_id=generation_id,
+                        live_qp=getattr(self, "_last_export_qp", None),
+                        live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+                    )
                     stats["avg_qp"] = qp
                     stats["_queue_job_id"] = options.get("_queue_job_id")
 
@@ -574,6 +660,9 @@ class RenderMixin:
                     self.signals.sig_render_stopped.emit()
                 _notify_queue(success=False)
             finally:
+                plan = options.pop("_inline_gpmf_plan", None)
+                if plan is not None:
+                    plan.cleanup()
                 print("[PROC] render thread exit", flush=True)
 
         self.render_worker_thread = threading.Thread(
@@ -640,7 +729,13 @@ class RenderMixin:
             pass
 
         resolution = options.get("resolution", "source")
-        output = options.get("output", "output.mp4")
+        raw_output = options.get("output", "output.mp4")
+        output_path = self._resolve_render_output_path(raw_output)
+        options["_render_output_raw"] = str(raw_output)
+        options["_resolved_output_path"] = str(output_path)
+        # Completion signals, queue updates, and finalization use this same path.
+        options["output"] = str(output_path)
+        output = str(output_path)
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
 
@@ -712,10 +807,6 @@ class RenderMixin:
             alt = extract_altitude_samples(records)
             if alt:
                 alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
-
-        output_path = sanitize_output_path(Path(output))
-        if not output_path.is_absolute():
-            output_path = self.video_path.parent / output_path
 
         self.signals.sig_progress.emit(5, "Renderowanie HUD...")
         # Faza "Przygotowywanie HUD" na wspólnym pasku postępu eksportu
@@ -789,6 +880,28 @@ class RenderMixin:
         except Exception as _e:
             print(f"[RenderMixin] Map contract check warning: {_e}", flush=True)
 
+        inline_gpmf_plan = None
+        if options.get("preserve_original_gpmf"):
+            from src.ffmpeg.gpmf_export import prepare_inline_gpmf
+
+            gpmf_timeline = getattr(self, "video_timeline", None)
+            if gpmf_timeline is not None and getattr(self, "_cut_regions", None):
+                gpmf_timeline = gpmf_timeline.subset_excluding(self._cut_regions)
+            inline_gpmf_plan = prepare_inline_gpmf(
+                ffmpeg_exe=ffmpeg_exe,
+                ffprobe_exe=ffprobe_exe,
+                source_paths=list(options.get("video_paths") or self.video_paths),
+                output_path=output_path,
+                video_timeline=gpmf_timeline,
+                duration_s=self.video_duration_s,
+                cut_regions=list(self._cut_regions) if gpmf_timeline is None else None,
+                max_frames=options.get("max_frames"),
+                target_fps=fps_stream,
+                start_frame=(int(options.get("start_frame", 0) or 0) if encoder in ("nv", "nvidia") else 0),
+                cancel_event=self.render_cancel_event,
+            )
+            options["_inline_gpmf_plan"] = inline_gpmf_plan
+
         stream_kwargs = dict(
             ffmpeg_exe=ffmpeg_exe,
             input_files=self.video_paths,
@@ -796,6 +909,7 @@ class RenderMixin:
             duration_s=self.video_duration_s,
             start_dt_utc=self.telemetry.start_dt_utc,
             video_timeline=getattr(self, "video_timeline", None),
+            inline_gpmf_plan=inline_gpmf_plan,
             tz_offset_hours=2,
             speed_samples=speed,
             track_samples=track,
@@ -1106,6 +1220,7 @@ codec=options.get("intel_codec", "av1"),
                     layout=effective_layout,
                     telemetry=effective_telemetry,
                     video_timeline=effective_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
@@ -1127,6 +1242,7 @@ codec=options.get("intel_codec", "av1"),
                     layout=effective_layout,
                     telemetry=effective_telemetry,
                     video_timeline=effective_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,

@@ -41,6 +41,15 @@ def find_local_tool(base_dir, names):
         p = base_dir / name
         if p.exists():
             return p
+    try:
+        from src.runtime_paths import get_common_runtime_dir
+        common_ffmpeg = get_common_runtime_dir() / "ffmpeg"
+        for name in names:
+            p = common_ffmpeg / name
+            if p.exists():
+                return p
+    except Exception:
+        pass
     return None
 
 

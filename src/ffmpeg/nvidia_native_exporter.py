@@ -929,6 +929,7 @@ def export_nvidia_native_d3d11(
     layout: dict,
     telemetry: Any,
     video_timeline: Optional[Any] = None,
+    inline_gpmf_plan: Optional[Any] = None,
     codec: str = "HEVC",
     quality_profile: str = "Quality",
     video_bitrate: str | float = "40M",
@@ -1185,9 +1186,17 @@ def export_nvidia_native_d3d11(
         "-f", v_fmt, "-r", "30000/1001", "-i", "-",
     ]
     if has_audio and pipe_audio_name:
-        cmd_mux.extend(["-f", "aac", "-i", pipe_audio_name, "-map", "0:v", "-map", "1:a", "-c:a", "copy"])
-    else:
-        cmd_mux.extend(["-map", "0:v"])
+        cmd_mux.extend(["-f", "aac", "-i", pipe_audio_name])
+
+    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(
+        inline_gpmf_plan, 2 if has_audio and pipe_audio_name else 1,
+    )
+    cmd_mux.extend(gpmf_inputs)
+    cmd_mux.extend(["-map", "0:v"])
+    if has_audio and pipe_audio_name:
+        cmd_mux.extend(["-map", "1:a", "-c:a", "copy"])
+    cmd_mux.extend(gpmf_maps)
 
     cmd_mux.extend([
         "-c:v", "copy",

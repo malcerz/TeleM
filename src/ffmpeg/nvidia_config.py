@@ -236,20 +236,9 @@ def resolve_nvenc_ffmpeg_params(
 
 
 def get_native_dll_path() -> Path:
-    """Locate the telem_nvenc_native.dll binary, supporting test override."""
-    override = os.environ.get("TELEM_NVENC_DLL_OVERRIDE")
-    if override:
-        p_over = Path(override).resolve()
-        if p_over.exists():
-            return p_over
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    candidate = base_dir / "native" / "d3d11_nvenc_pipeline" / "bin" / "telem_nvenc_native.dll"
-    if candidate.exists():
-        return candidate
-    candidate2 = base_dir / "native" / "d3d11_nvenc_pipeline" / "build" / "bin" / "Release" / "telem_nvenc_native.dll"
-    if candidate2.exists():
-        return candidate2
-    return candidate
+    """Locate the telem_nvenc_native.dll binary in runtime/nvidia/bin, supporting test override."""
+    from src.runtime_paths import get_nvidia_native_dll
+    return get_nvidia_native_dll()
 
 
 def is_nvidia_native_available() -> Tuple[bool, str]:
@@ -262,18 +251,8 @@ def is_nvidia_native_available() -> Tuple[bool, str]:
         return False, f"Brak biblioteki telem_nvenc_native.dll ({dll_path})"
 
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        bin_dir = base_dir / "native" / "d3d11_nvenc_pipeline" / "bin"
-        if bin_dir.exists() and hasattr(os, "add_dll_directory"):
-            try:
-                os.add_dll_directory(str(bin_dir.resolve()))
-            except Exception:
-                pass
-        if dll_path.parent.exists() and hasattr(os, "add_dll_directory"):
-            try:
-                os.add_dll_directory(str(dll_path.parent.resolve()))
-            except Exception:
-                pass
+        from src.runtime_paths import activate_vendor_dll_directory
+        activate_vendor_dll_directory("nvidia")
         dll = ctypes.CDLL(str(dll_path))
         if not hasattr(dll, "telem_nvenc_create"):
             return False, "Biblioteka DLL nie posiada wymaganego eksportu telem_nvenc_create."
@@ -724,18 +703,9 @@ def load_native_pipeline(dll_path: Optional[Path] = None) -> ctypes.CDLL:
         if getattr(_LOADED_DLL, "_target_path", None) == target_resolved:
             return _LOADED_DLL
 
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    bin_dir = base_dir / "native" / "d3d11_nvenc_pipeline" / "bin"
-    if bin_dir.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(bin_dir.resolve()))
-        except Exception:
-            pass
-    if target.parent.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(target.parent.resolve()))
-        except Exception:
-            pass
+    from src.runtime_paths import activate_vendor_dll_directory, log_runtime_diagnostic
+    activate_vendor_dll_directory("nvidia")
+    log_runtime_diagnostic("nvidia", target)
 
     dll = ctypes.CDLL(target_resolved)
     dll._target_path = target_resolved

@@ -134,10 +134,16 @@ def _get_native_module():
         return _native_module
     _native_checked = True
 
-    # Check native directory
-    native_dir = Path(__file__).resolve().parent / "native" / "gpmf"
-    if str(native_dir) not in sys.path:
-        sys.path.insert(0, str(native_dir))
+    # Check common runtime and native common directories
+    app_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        app_root / "runtime" / "common" / "telemetry" / "gpmf",
+        app_root / "src" / "native" / "common" / "gpmf",
+        Path(__file__).resolve().parent / "native" / "gpmf",
+    ]
+    for c in candidates:
+        if c.exists() and str(c) not in sys.path:
+            sys.path.insert(0, str(c))
 
     try:
         import telem_gpmf_native

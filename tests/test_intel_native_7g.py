@@ -11,6 +11,12 @@ import pytest
 
 workspace_root = Path(__file__).resolve().parent.parent
 
+from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
+activate_vendor_dll_directory("intel")
+
+def _get_intel_dll():
+    return ctypes.CDLL(str(get_intel_native_dll()))
+
 class ProductionBasePathResults(ctypes.Structure):
     _fields_ = [
         ("p010_pack_ms", ctypes.c_double),
@@ -69,10 +75,10 @@ class ConsumerCapacityResults(ctypes.Structure):
 
 def test_intel_native_7g_dll_symbols():
     """Verify telem_intel_native.dll exports all required 7G symbols."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
+    dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"Missing DLL at {dll_path}"
     
-    dll = ctypes.CDLL(str(dll_path))
+    dll = _get_intel_dll()
     # Core pipeline & multi-clip symbols
     assert hasattr(dll, "intel_native_pipeline_init")
     assert hasattr(dll, "intel_native_pipeline_init_multi")
@@ -113,8 +119,7 @@ def test_intel_native_7g_rational_global_timeline_continuity():
 
 def test_intel_native_7g_capacity_hierarchy():
     """Verify the 7G capacity hierarchy: Producer < Consumer << Encoder."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
-    dll = ctypes.CDLL(str(dll_path))
+    dll = _get_intel_dll()
     
     dll.intel_native_measure_encoder_capacity.argtypes = [ctypes.c_int, ctypes.POINTER(EncoderCapacityResults)]
     dll.intel_native_measure_encoder_capacity.restype = ctypes.c_int
@@ -130,8 +135,7 @@ def test_intel_native_7g_capacity_hierarchy():
 
 def test_intel_native_7g_hud_zero_memcpy():
     """Verify HUD transfer path has copy_count == 0 (direct pointer handoff, zero memcpy)."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
-    dll = ctypes.CDLL(str(dll_path))
+    dll = _get_intel_dll()
     
     dll.intel_native_measure_hud_path.argtypes = [ctypes.c_int, ctypes.POINTER(HudPathResults)]
     dll.intel_native_measure_hud_path.restype = ctypes.c_int
@@ -143,8 +147,7 @@ def test_intel_native_7g_hud_zero_memcpy():
 
 def test_intel_native_7g_vp_gpu_timing_contract():
     """Verify VideoProcessor GPU execution time is measured via D3D11 queries and is sub-millisecond."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
-    dll = ctypes.CDLL(str(dll_path))
+    dll = _get_intel_dll()
     
     dll.intel_native_measure_vp_timing.argtypes = [ctypes.c_int, ctypes.POINTER(VPTimingResults)]
     dll.intel_native_measure_vp_timing.restype = ctypes.c_int

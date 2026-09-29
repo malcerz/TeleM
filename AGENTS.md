@@ -524,3 +524,41 @@ During NVIDIA work:
 
 Stable milestones may receive annotated tags, but not separate backend
 branches. The AMD checkpoint tag is `amd-final-2026-09-09`.
+
+---
+
+# 20. BikeRideHUD Runtime Separation Contract
+
+============================================================
+BIKERIDEHUD RUNTIME SEPARATION CONTRACT
+============================================================
+
+Production runtime layout:
+
+```text
+runtime/common
+runtime/amd
+runtime/intel
+runtime/nvidia
+```
+
+AMD vendor files may exist only in `runtime/amd`.
+
+Intel vendor files may exist only in `runtime/intel`.
+
+NVIDIA vendor files may exist only in `runtime/nvidia`.
+
+Cross-vendor runtime loading is forbidden.
+
+Common camera telemetry and common FFmpeg components belong to `runtime/common`.
+
+`src/native` contains SOURCE ONLY and follows:
+
+```text
+src/native/common
+src/native/amd
+src/native/intel
+src/native/nvidia
+```
+
+No production loader may depend on historical vendor worktrees or scratch folders.

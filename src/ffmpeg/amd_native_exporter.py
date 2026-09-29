@@ -2008,6 +2008,7 @@ def export_amd_native_d3d11(
     cancel_event: Optional[Any] = None,
     active_process_holder: Optional[dict] = None,
     video_timeline: Optional[Any] = None,
+    inline_gpmf_plan: Optional[Any] = None,
     amd_decode_mode: Optional[str] = None,
     cancel_reason_provider: Optional[Callable[[], Any]] = None,
     preview_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
@@ -2603,26 +2604,21 @@ def export_amd_native_d3d11(
     source_rotation = _probe_rotation_degrees(input_probe)
 
     # 1. Locate and Load telem_amd_native.dll
-    repo_root = Path(__file__).resolve().parents[2]
-    dll_override = os.environ.get("TELEM_AMD_NATIVE_DLL", "").strip()
-    dll_path = str(
-        Path(dll_override).resolve() if dll_override else
-        (repo_root / "native" / "d3d11_amf_pipeline" / "bin" / "telem_amd_native.dll").resolve()
-    )
-    if not os.path.exists(dll_path):
-        print(f"[AMD NATIVE D3D11] ERROR: DLL not found at {dll_path}", flush=True)
+    from src.runtime_paths import activate_vendor_dll_directory, get_amd_native_dll, log_runtime_diagnostic
+
+    dll_path_obj = get_amd_native_dll()
+    if not dll_path_obj.exists():
+        print(f"[AMD NATIVE D3D11] ERROR: DLL not found at {dll_path_obj}", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
-    if hasattr(os, "add_dll_directory"):
-        mingw_bin = r"c:\tools\mingw64\bin"
-        if os.path.exists(mingw_bin):
-            os.add_dll_directory(mingw_bin)
+    activate_vendor_dll_directory("amd")
+    log_runtime_diagnostic("amd", dll_path_obj)
 
     try:
-        native_dll = ctypes.CDLL(dll_path)
+        native_dll = ctypes.CDLL(str(dll_path_obj))
     except Exception as e:
-        print(f"[AMD NATIVE D3D11] Failed to load DLL {dll_path}: {e}", flush=True)
+        print(f"[AMD NATIVE D3D11] Failed to load DLL {dll_path_obj}: {e}", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
@@ -3119,6 +3115,8 @@ def export_amd_native_d3d11(
     # The previous full-size Stage A -> Stage C copy remains available only
     # as an explicit diagnostic/recovery mode.
     single_pass_av_mux = _env_flag("AMD_SINGLE_PASS_AV_MUX", True)
+    if inline_gpmf_plan is not None and inline_gpmf_plan.enabled and is_multi_file and not single_pass_av_mux:
+        raise AMDNativeFinalizationError("Inline GPMF requires the single-pass AMD A/V mux")
     direct_mux_completed = False
     audio_concat_path: Optional[Path] = None
 
@@ -3246,12 +3244,16 @@ def export_amd_native_d3d11(
                         audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", str(resolved_single_audio)]
 
                 if os.getenv("AMD_DIRECT_MUX_NO_AUDIO", "0").strip() == "1":
+                    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+                    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1)
                     cmd_live_mux = [
                         ffmpeg_exe, "-y",
                         "-f", "hevc",
                         "-r", f"{fps_num}/{fps_den}",
                         "-i", "-",
+                        *gpmf_inputs,
                         "-map", "0:v",
+                        *gpmf_maps,
                         "-t", f"{duration_s:.6f}",
                         "-c:v", "copy",
                         "-an",
@@ -3259,13 +3261,17 @@ def export_amd_native_d3d11(
                         target_live_out,
                     ]
                 else:
+                    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+                    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
                     cmd_live_mux = [
                         ffmpeg_exe, "-y",
                         "-f", "hevc",
                         "-r", f"{fps_num}/{fps_den}",
                         "-i", "-",
                         *audio_args,
+                        *gpmf_inputs,
                         "-map", "0:v", "-map", "1:a?",
+                        *gpmf_maps,
                         "-t", f"{duration_s:.6f}",
                         "-c:v", "copy",
                         "-c:a", "copy",
@@ -7311,9 +7317,12 @@ def export_amd_native_d3d11(
             if local_start > 0.0:
                 audio_args = ["-ss", f"{local_start:.6f}", "-i", audio_input]
 
+        from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
         cmd_mux = [
-            ffmpeg_exe, "-y", "-i", temp_h265, *audio_args,
-            "-map", "0:v", "-map", "1:a?", "-t", f"{duration_s:.6f}",
+            ffmpeg_exe, "-y", "-i", temp_h265, *audio_args, *gpmf_inputs,
+            "-map", "0:v", "-map", "1:a?", *gpmf_maps,
+            "-t", f"{duration_s:.6f}",
             "-c:v", "copy", "-c:a", "copy", output_file_str,
         ]
 

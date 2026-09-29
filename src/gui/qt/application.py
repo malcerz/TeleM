@@ -157,9 +157,11 @@ def main() -> None:
         sys.stdout = _TeeStream(sys.stdout, log_file)
         sys.stderr = _TeeStream(sys.stderr, log_file)
 
-        # Set up test-only GOOD DLL override
-        good_dll_path = base_dir / "scratch" / "checkpoints" / "codex_frame01_before" / "native" / "d3d11_nvenc_pipeline" / "bin" / "telem_nvenc_native.dll"
-        os.environ["TELEM_NVENC_DLL_OVERRIDE"] = str(good_dll_path.resolve())
+        # Set up test-only GOOD DLL override if present in runtime
+        from src.runtime_paths import get_nvidia_native_dll
+        good_dll_path = get_nvidia_native_dll()
+        if good_dll_path.exists():
+            os.environ["TELEM_NVENC_DLL_OVERRIDE"] = str(good_dll_path.resolve())
 
         from src.ffmpeg.nvidia_config import get_native_dll_path
         active_dll_path = get_native_dll_path()

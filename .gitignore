@@ -25,3 +25,5 @@ __pycache__/
 native/d3d11_amf_pipeline/build*/
 .telem_map_tiles/
 *.layout.json
+*.zip
+*.pyd

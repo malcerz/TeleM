@@ -542,13 +542,14 @@ class ProjectMixin:
                 candidate_video_path = candidate_video_paths[0]
 
                 # Wykryj narzędzia
+                from src.runtime_paths import get_ffmpeg_exe, get_ffprobe_exe
                 ffprobe_exe = find_executable(
                     str(self.ffprobe_path),
-                    [str(self.base_dir / "ffprobe.exe"), "ffprobe.exe"],
+                    [str(get_ffprobe_exe()), str(self.base_dir / "ffprobe.exe"), "ffprobe.exe"],
                 )
                 ffmpeg_exe = find_executable(
                     "ffmpeg",
-                    [str(self.base_dir / "ffmpeg.exe"), "ffmpeg.exe"],
+                    [str(get_ffmpeg_exe()), str(self.base_dir / "ffmpeg.exe"), "ffmpeg.exe"],
                 )
                 if not ffprobe_exe or not ffmpeg_exe:
                     self.signals.sig_error.emit(
@@ -1142,6 +1143,34 @@ class ProjectMixin:
     def _load_single_clip_telemetry(self, video_path: Path, clip_idx: int = 0, total_clips: int = 1) -> tuple[dict, list]:
         """Wczytaj cache procesowany (.telemetry.npz) lub wygeneruj metadane dla jednego klipu."""
         t0 = _time.perf_counter()
+        ffprobe_exe = getattr(self, "ffprobe_exe", None)
+        if ffprobe_exe:
+            from src.telemetry_dji import detect_camera_telemetry, load_dji_telemetry
+
+            source = detect_camera_telemetry(video_path, ffprobe_exe)
+            if source == "dji_djmd":
+                probe = subprocess.run(
+                    [ffprobe_exe, "-v", "error", "-show_entries",
+                     "format_tags=creation_time:stream_tags=creation_time", "-of", "json", str(video_path)],
+                    capture_output=True, text=True, check=True,
+                )
+                metadata = json.loads(probe.stdout or "{}")
+                dates = [
+                    (stream.get("tags") or {}).get("creation_time")
+                    for stream in metadata.get("streams", [])
+                ]
+                dates.append((metadata.get("format", {}).get("tags") or {}).get("creation_time"))
+                creation = next((date for date in dates if date), None)
+                if creation is None:
+                    raise RuntimeError(f"DJI clip has no absolute creation time: {video_path}")
+                anchor = datetime.fromisoformat(creation.replace("Z", "+00:00"))
+                fields = load_dji_telemetry(video_path, anchor)
+                fields["_dji"] = True
+                fields["start_dt_utc"] = anchor.astimezone(timezone.utc).replace(tzinfo=None)
+                _profile_load_stage("dji_decode_ms", t0, video_path, len(fields["gyroscope_samples"]))
+                return fields, []
+            if source == "gopro_gpmf":
+                print(f"[Telemetry] camera source: GoPro GPMF file={video_path.name}", flush=True)
         from src.telemetry_cache_manager import get_gpmf_json_path
         meta = get_gpmf_json_path(video_path)
         processed = read_processed_cache(video_path)
@@ -1444,7 +1473,7 @@ class ProjectMixin:
         sample_attrs = (
             "speed_samples", "alt_samples", "iso_samples", "exposure_samples",
             "temperature_samples", "slope_samples", "accelerometer_samples",
-            "gyroscope_samples", "heading_samples", "gps_track",
+            "gyroscope_samples", "quaternion_samples", "heading_samples", "gps_track",
         )
         for attr in sample_attrs:
             incoming = fields.get(attr) or []
@@ -1509,7 +1538,11 @@ class ProjectMixin:
 
             if idx == 0:
                 if fields:
-                    apply_processed_cache(self.telemetry, fields)
+                    if fields.get("_dji"):
+                        self.telemetry.load_dji_telemetry(fields)
+                        self.telemetry.start_dt_utc = fields["start_dt_utc"]
+                    else:
+                        apply_processed_cache(self.telemetry, fields)
                 self.telemetry.records = records or []
                 from src.telemetry_cache_manager import get_gpmf_json_path
                 self.meta_path = get_gpmf_json_path(p)

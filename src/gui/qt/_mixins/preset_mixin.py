@@ -211,6 +211,8 @@ class PresetMixin:
                     exp["bitrate"] = render_tab.edit_bitrate.text().strip()
                 if hasattr(render_tab, "chk_compression_analysis"):
                     exp["compression_analysis"] = render_tab.chk_compression_analysis.isChecked()
+                if hasattr(render_tab, "chk_original_gpmf"):
+                    exp["preserve_original_gpmf"] = render_tab.chk_original_gpmf.isChecked()
 
             saved = sanitize_layout_for_json(saved)
             sess_path = self.get_session_layout_path()

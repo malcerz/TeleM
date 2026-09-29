@@ -208,37 +208,16 @@ def _load_native_intel_dll() -> ctypes.CDLL:
     if _LIB_NATIVE_INTEL is not None:
         return _LIB_NATIVE_INTEL
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    dll_candidates = [
-        repo_root / "src" / "native" / "bin" / "telem_intel_native.dll",
-        repo_root / "scratch" / "telem_intel_native.dll",
-    ]
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll, log_runtime_diagnostic
 
-    dll_path = None
-    for cand in dll_candidates:
-        if cand.exists():
-            dll_path = cand
-            break
+    dll_path = get_intel_native_dll()
+    if not dll_path.exists():
+        raise FileNotFoundError(f"telem_intel_native.dll not found in Intel runtime: {dll_path}")
 
-    if dll_path is None:
-        raise FileNotFoundError(
-            f"telem_intel_native.dll not found in candidate paths: {[str(p) for p in dll_candidates]}"
-        )
+    # Isolated Intel DLL search path
+    activate_vendor_dll_directory("intel")
 
-    # Add third_party FFmpeg bin directory for dynamic library resolution
-    ff_bin = repo_root / "third_party" / "ffmpeg-9.0.1-full_build-shared" / "bin"
-    if ff_bin.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(ff_bin.resolve()))
-        except Exception:
-            pass
-    main_ff_bin = Path(r"C:\_DEV\BikeRideHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
-    if main_ff_bin.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(main_ff_bin.resolve()))
-        except Exception:
-            pass
-
+    log_runtime_diagnostic("intel", dll_path)
     lib = ctypes.CDLL(str(dll_path))
 
     # 7C Legacy API
@@ -596,6 +575,7 @@ def export_intel_native_d3d11(
     generation_id: Optional[int] = None,
     active_process_holder: Optional[dict] = None,
     video_timeline: Optional[Any] = None,
+    inline_gpmf_plan: Optional[Any] = None,
     rotation_degrees: int = 0,
     container_rotation: int = 0,
     **kwargs: Any,
@@ -1462,6 +1442,10 @@ def export_intel_native_d3d11(
             pass
 
     concat_txt_path = None
+    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
+    # A shorter metadata stream must not make -shortest truncate encoded video.
+    shortest_args = [] if gpmf_maps else ["-shortest"]
     if len(native_clip_paths) > 1:
         concat_txt_path = str((temp_dir / f"temp_audio_concat_{os.getpid()}_{int(time.time())}.txt").resolve())
         with open(concat_txt_path, "w", encoding="utf-8") as f_concat:
@@ -1476,11 +1460,13 @@ def export_intel_native_d3d11(
             "-r", fps_str,
             "-i", temp_encoded_path,
             "-f", "concat", "-safe", "0", "-i", concat_txt_path,
+            *gpmf_inputs,
             "-map", "0:v:0",
             "-map", "1:a:0?",
+            *gpmf_maps,
             "-c:v", "copy",
             "-c:a", "copy",
-            "-shortest",
+            *shortest_args,
             "-t", f"{duration_s:.6f}",
             *color_args,
             "-movflags", "+faststart",
@@ -1495,11 +1481,14 @@ def export_intel_native_d3d11(
             "-i", temp_encoded_path,
             "-ss", "0", "-t", f"{duration_s:.6f}",
             "-i", input_file_str,
+            *gpmf_inputs,
             "-map", "0:v:0",
             "-map", "1:a:0?",
+            *gpmf_maps,
             "-c:v", "copy",
             "-c:a", "copy",
-            "-shortest",
+            *shortest_args,
+            *(["-t", f"{duration_s:.6f}"] if gpmf_maps else []),
             *color_args,
             "-movflags", "+faststart",
             output_part_str,

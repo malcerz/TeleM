@@ -86,17 +86,13 @@ def test_lean_skip_dynamic_graphic_rendering():
 
 
 def test_native_dll_lean_exports():
-    dll_path = os.path.abspath("native/d3d11_amf_pipeline/bin/telem_amd_native.dll")
-    if not os.path.exists(dll_path):
+    from src.runtime_paths import activate_vendor_dll_directory, get_amd_native_dll
+    dll_path = get_amd_native_dll()
+    if not dll_path.exists():
         pytest.skip("Native DLL not found at expected path")
 
-    if os.path.isdir(r"C:\tools\mingw64\bin"):
-        try:
-            os.add_dll_directory(r"C:\tools\mingw64\bin")
-        except Exception:
-            pass
-
-    dll = ctypes.CDLL(dll_path)
+    activate_vendor_dll_directory("amd")
+    dll = ctypes.CDLL(str(dll_path))
     assert hasattr(dll, "telem_amd_set_lean_gpu_mode")
     assert hasattr(dll, "telem_amd_update_lean_static_texture")
     assert hasattr(dll, "telem_amd_set_lean_transform")

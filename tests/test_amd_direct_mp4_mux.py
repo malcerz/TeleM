@@ -25,6 +25,7 @@ from src.ffmpeg.amd_native_exporter import (
     _create_amd_local_scratch_dir,
     _wait_for_process_exit,
 )
+from src.ffmpeg.gpmf_export import InlineGpmfPlan
 
 
 def test_canonical_audio_plan_uses_effective_source_local_ranges(tmp_path):
@@ -117,7 +118,8 @@ def test_live_mux_wait_has_no_elapsed_timeout(monkeypatch):
 # Test A & G & H: Single-file direct live mux creates .part, streams without temp .h265,
 # and atomically renames to .mp4 on success.
 # ---------------------------------------------------------------------------
-def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_gpmf", [False, True])
+def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch, with_gpmf):
     out_mp4 = tmp_path / "output_test.mp4"
     in_mp4 = tmp_path / "input_test.mp4"
     in_mp4.write_bytes(b"dummy mp4 source")
@@ -161,7 +163,9 @@ def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch):
     mock_proc.wait.return_value = 0
     mock_proc.stderr = []
 
+    mux_commands = []
     def fake_popen(cmd, *a, **kw):
+        mux_commands.append(cmd)
         # When FFmpeg is called, create the .part file
         part_file = str(out_mp4) + ".part"
         Path(part_file).write_bytes(b"dummy valid mp4 container content")
@@ -187,6 +191,7 @@ def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch):
         font_path="",
         layout={},
         field_samples={},
+        inline_gpmf_plan=(InlineGpmfPlan("ready_full", in_mp4, 3) if with_gpmf else None),
     )
 
     assert res is True
@@ -198,6 +203,16 @@ def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch):
     # 3. .part was renamed to final .mp4
     assert out_mp4.exists()
     assert not (tmp_path / "output_test.mp4.part").exists()
+    final_mux_commands = [cmd for cmd in mux_commands if str(out_mp4) + ".part" in cmd]
+    assert len(final_mux_commands) == 1
+    mux_command = final_mux_commands[0]
+    if with_gpmf:
+        assert mux_command.count("-i") == 3
+        assert "2:3" in mux_command
+        assert "-c:d" in mux_command
+        assert "gpmd" in mux_command
+    else:
+        assert "-c:d" not in mux_command
 
 
 # ---------------------------------------------------------------------------
