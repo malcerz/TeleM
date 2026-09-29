@@ -42,6 +42,16 @@ from src.ffmpeg.hybrid_render import GpuTopology, RenderMode, choose_hybrid_mode
 
 
 class RenderMixin:
+    def _resolve_render_output_path(self, output: str | Path) -> Path:
+        """Resolve a GUI/queue output name to the canonical render location."""
+        output_path = sanitize_output_path(Path(output))
+        if not output_path.is_absolute():
+            video_path = getattr(self, "video_path", None)
+            if video_path is None:
+                raise RuntimeError("Cannot resolve render output without a source video path")
+            output_path = Path(video_path).parent / output_path
+        return output_path
+
     def _finalize_requested_gpmf(self, options: dict, stats: dict) -> dict:
         """Run the optional metadata attach in the common render finalization."""
         if not options.get("preserve_original_gpmf"):
@@ -53,11 +63,24 @@ class RenderMixin:
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione do dołączenia GPMF")
         input_paths = options.get("video_paths") or getattr(self, "video_paths", [])
+        raw_output = options.get("_render_output_raw", options.get("output", "output.mp4"))
+        output_path = Path(options.get("_resolved_output_path") or self._resolve_render_output_path(raw_output))
+        output_exists = output_path.is_file()
+        output_size = output_path.stat().st_size if output_exists else 0
+        print(
+            f"GPMF_RENDER_OUTPUT_RAW={raw_output} "
+            f"GPMF_RENDER_OUTPUT_RESOLVED={output_path} "
+            f"GPMF_RENDER_OUTPUT_EXISTS={'YES' if output_exists else 'NO'} "
+            f"GPMF_RENDER_OUTPUT_SIZE={output_size}",
+            flush=True,
+        )
+        if not output_exists:
+            raise FileNotFoundError(f"GPMF render output does not exist: {output_path}")
         stats.update(attach_original_gpmf(
             ffmpeg_exe=ffmpeg_exe,
             ffprobe_exe=ffprobe_exe,
             source_paths=list(input_paths or []),
-            output_path=options.get("output", "output.mp4"),
+            output_path=output_path,
             trimmed=bool(options.get("_gpmf_trimmed") or getattr(self, "_cut_regions", [])),
             cancel_event=self.render_cancel_event,
             active_process_holder=self.render_process_holder,
@@ -682,7 +705,13 @@ class RenderMixin:
             pass
 
         resolution = options.get("resolution", "source")
-        output = options.get("output", "output.mp4")
+        raw_output = options.get("output", "output.mp4")
+        output_path = self._resolve_render_output_path(raw_output)
+        options["_render_output_raw"] = str(raw_output)
+        options["_resolved_output_path"] = str(output_path)
+        # Completion signals, queue updates, and finalization use this same path.
+        options["output"] = str(output_path)
+        output = str(output_path)
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
 
@@ -754,10 +783,6 @@ class RenderMixin:
             alt = extract_altitude_samples(records)
             if alt:
                 alt = smooth_speed_samples(alt, "moving_average", SMOOTHING_WINDOW)
-
-        output_path = sanitize_output_path(Path(output))
-        if not output_path.is_absolute():
-            output_path = self.video_path.parent / output_path
 
         self.signals.sig_progress.emit(5, "Renderowanie HUD...")
         # Faza "Przygotowywanie HUD" na wspólnym pasku postępu eksportu

@@ -181,6 +181,7 @@ def test_direct_finalization_off_keeps_output_and_on_reaches_mux(monkeypatch, tm
         render_process_holder = {}
 
     harness = Harness()
+    harness.video_path = tmp_path / "source.mp4"
     off_stats = {"marker": True}
     assert harness._finalize_requested_gpmf(
         {"preserve_original_gpmf": False}, off_stats,
@@ -188,12 +189,112 @@ def test_direct_finalization_off_keeps_output_and_on_reaches_mux(monkeypatch, tm
 
     calls = []
     monkeypatch.setattr(gpmf_export, "attach_original_gpmf", lambda **kwargs: calls.append(kwargs) or {"gpmf_status": "attached"})
+    output_path = tmp_path / "out.mp4"
+    output_path.write_bytes(b"render")
+    raw_output = "out.mp4"
+    resolved_output = harness._resolve_render_output_path(raw_output)
     stats = harness._finalize_requested_gpmf(
-        {"preserve_original_gpmf": True, "output": str(tmp_path / "out.mp4")}, {},
+        {
+            "preserve_original_gpmf": True,
+            "output": raw_output,
+            "_render_output_raw": raw_output,
+            "_resolved_output_path": str(resolved_output),
+        },
+        {},
     )
     assert stats["gpmf_status"] == "attached"
     assert calls[0]["source_paths"] == ["source.mp4"]
-    assert calls[0]["output_path"] == str(tmp_path / "out.mp4")
+    assert calls[0]["output_path"] == resolved_output
+    assert calls[0]["output_path"] == harness._resolve_render_output_path(raw_output)
+
+
+def test_render_output_path_resolves_relative_direct_export_to_source_directory():
+    class Harness(RenderMixin):
+        video_path = Path(r"D:\Video\GX010298.MP4")
+
+    assert Harness()._resolve_render_output_path("test.mp4") == Path(r"D:\Video\test.mp4")
+
+
+def test_render_output_path_preserves_absolute_export_path():
+    class Harness(RenderMixin):
+        video_path = Path(r"D:\Video\GX010298.MP4")
+
+    absolute = Path(r"E:\Exports\test.mp4")
+    assert Harness()._resolve_render_output_path(str(absolute)) == absolute
+
+
+def test_queue_relative_output_uses_same_resolved_path_for_render_and_gpmf(monkeypatch, tmp_path):
+    import src.ffmpeg.gpmf_export as gpmf_export
+
+    class Harness(RenderMixin):
+        ffmpeg_exe = "ffmpeg"
+        ffprobe_exe = "ffprobe"
+        video_paths = ["source.mp4"]
+        _cut_regions = []
+        render_cancel_event = threading.Event()
+        render_process_holder = {}
+
+    harness = Harness()
+    harness.video_path = tmp_path / "source folder" / "source.mp4"
+    raw_output = "queue result.mp4"
+    resolved_by_render = harness._resolve_render_output_path(raw_output)
+    resolved_by_render.parent.mkdir(parents=True, exist_ok=True)
+    resolved_by_render.write_bytes(b"render")
+    calls = []
+    monkeypatch.setattr(
+        gpmf_export, "attach_original_gpmf",
+        lambda **kwargs: calls.append(kwargs) or {"gpmf_status": "attached"},
+    )
+
+    harness._finalize_requested_gpmf(
+        {
+            "preserve_original_gpmf": True,
+            "_queue_job_id": "queue-relative-path",
+            "output": str(resolved_by_render),
+            "_render_output_raw": raw_output,
+            "_resolved_output_path": str(resolved_by_render),
+        },
+        {},
+    )
+    resolved_by_finalizer = Path(calls[0]["output_path"])
+    assert resolved_by_finalizer == resolved_by_render
+    assert resolved_by_finalizer == harness._resolve_render_output_path(raw_output)
+
+
+@pytest.mark.parametrize("directory", ["path with spaces", "Zażółć gęślą jaźń"])
+def test_render_output_path_supports_spaces_and_unicode(directory, tmp_path):
+    class Harness(RenderMixin):
+        pass
+
+    source = tmp_path / directory / "GX010298.MP4"
+    harness = Harness()
+    harness.video_path = source
+    assert harness._resolve_render_output_path("test output.mp4") == source.parent / "test output.mp4"
+
+
+def test_gpmf_finalizer_refuses_missing_resolved_output_with_full_path(monkeypatch, tmp_path):
+    import src.ffmpeg.gpmf_export as gpmf_export
+
+    class Harness(RenderMixin):
+        ffmpeg_exe = "ffmpeg"
+        ffprobe_exe = "ffprobe"
+        video_paths = ["source.mp4"]
+        _cut_regions = []
+        render_cancel_event = threading.Event()
+        render_process_holder = {}
+
+    harness = Harness()
+    harness.video_path = tmp_path / "source.mp4"
+    called = []
+    monkeypatch.setattr(gpmf_export, "attach_original_gpmf", lambda **kwargs: called.append(kwargs))
+    resolved = harness._resolve_render_output_path("missing.mp4")
+    with pytest.raises(FileNotFoundError) as exc_info:
+        harness._finalize_requested_gpmf(
+            {"preserve_original_gpmf": True, "output": "missing.mp4"},
+            {},
+        )
+    assert str(resolved) in str(exc_info.value)
+    assert called == []
 
 
 def test_gpmd_selection_uses_actual_stream_properties(monkeypatch, tmp_path):
