@@ -913,6 +913,7 @@ def stream_overlay_to_ffmpeg(
     field_samples: dict[str, Any],
     max_distance_m: float | None = None,
     video_timeline: Optional[Any] = None,
+    inline_gpmf_plan: Optional[Any] = None,
     target_fps: float = 30.0,
     update_rate_step: int = 1,
     workers: Optional[int] = None,
@@ -1242,6 +1243,7 @@ def stream_overlay_to_ffmpeg(
             generation_id=generation_id,
             active_process_holder=active_process_holder,
             video_timeline=video_timeline,
+            inline_gpmf_plan=inline_gpmf_plan,
             rotation_degrees=rotation_degrees,
             container_rotation=container_rotation,
         )
@@ -1323,6 +1325,7 @@ def stream_overlay_to_ffmpeg(
                     generation_id=generation_id,
                     active_process_holder=active_process_holder,
                     video_timeline=amd_video_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
                     amd_decode_mode=amd_decode_mode,
                 )
             except AMDNativeFinalizationError as exc:
@@ -1676,6 +1679,7 @@ def stream_overlay_to_ffmpeg(
         hwaccel=hwaccel,
         cut_regions=cut_regions,
         audio_input_args=audio_input_args,
+        inline_gpmf_plan=inline_gpmf_plan,
         hud_x=hud_x,
         hud_y=hud_y,
         is_no_hud=is_no_hud,

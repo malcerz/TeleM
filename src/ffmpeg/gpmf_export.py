@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,202 @@ def _probe_duration(ffprobe_exe: str, path: Path) -> float:
         check=True,
     )
     return float(json.loads(result.stdout or "{}").get("format", {}).get("duration") or 0.0)
+
+
+@dataclass
+class InlineGpmfPlan:
+    """The one GPMF input shared by all final mux implementations."""
+
+    status: str
+    input_path: Path | None = None
+    stream_index: int | None = None
+    temporary_dir: Path | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self.input_path is not None and self.stream_index is not None
+
+    def cleanup(self) -> None:
+        if self.temporary_dir is None or not self.temporary_dir.is_dir():
+            return
+        for path in self.temporary_dir.iterdir():
+            if path.is_file():
+                path.unlink(missing_ok=True)
+        self.temporary_dir.rmdir()
+        self.temporary_dir = None
+
+
+def inline_gpmf_mux_args(plan: InlineGpmfPlan | None, input_index: int) -> tuple[list[str], list[str]]:
+    """Return an input and its exact gpmd mapping for an existing final mux."""
+    if plan is None or not plan.enabled:
+        return [], []
+    return ["-i", str(plan.input_path)], [
+        "-map", f"{input_index}:{plan.stream_index}",
+        "-c:d", "copy", "-copy_unknown", "-tag:d:0", "gpmd",
+    ]
+
+
+def _run_metadata_copy(command: list[str], cancel_event: Any = None) -> None:
+    """Supervise a small data-only preparation; never touch rendered video."""
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    started = time.monotonic()
+    last_log = started
+    try:
+        while process.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                process.kill()
+                process.wait()
+                raise RuntimeError("GPMF metadata preparation cancelled")
+            now = time.monotonic()
+            if now - last_log >= 5.0:
+                print(
+                    f"[GPMF PREP WATCHDOG] pid={process.pid} elapsed_s={now-started:.1f} "
+                    f"alive=YES action=observe",
+                    flush=True,
+                )
+                last_log = now
+            time.sleep(0.1)
+        stderr = process.stderr.read().decode(errors="replace") if process.stderr else ""
+        if process.returncode != 0:
+            raise RuntimeError(f"GPMF metadata preparation failed ({process.returncode}): {stderr[-2000:]}")
+    finally:
+        if process.stderr:
+            process.stderr.close()
+
+
+def prepare_inline_gpmf(
+    *,
+    ffmpeg_exe: str,
+    ffprobe_exe: str,
+    source_paths: list[str | Path],
+    output_path: str | Path,
+    video_timeline: Any = None,
+    duration_s: float = 0.0,
+    cut_regions: list[tuple[float, float]] | None = None,
+    max_frames: int | None = None,
+    target_fps: float = 30.0,
+    start_frame: int = 0,
+    cancel_event: Any = None,
+) -> InlineGpmfPlan:
+    """Select gpmd before rendering; prepare only metadata for trims/concat.
+
+    Full single-file exports use the original source directly.  Every other
+    retained segment is copied into a tiny data-only MP4.  The concat demuxer
+    then shifts segments by their video timeline durations before the one final
+    video/audio/GPMF mux starts.
+    """
+    clips = list(getattr(video_timeline, "clips", ()) or ())
+    if clips:
+        segments = [
+            (Path(clip.path), float(clip.local_start_s), float(clip.duration_s),
+             float(getattr(clip, "source_duration_s", 0.0) or 0.0))
+            for clip in clips
+        ]
+    elif len(source_paths) == 1:
+        source = Path(source_paths[0])
+        source_duration = _probe_duration(ffprobe_exe, source)
+        segments = [(source, 0.0, float(duration_s or source_duration), source_duration)]
+    else:
+        print("GPMF: niepełne dane w zestawie wieloplikowym (brak osi czasu)", flush=True)
+        return InlineGpmfPlan("missing_timeline")
+
+    if cut_regions and not clips and segments:
+        source, _start, duration, source_duration = segments[0]
+        retained = [(0.0, duration)]
+        for cut_start, cut_end in sorted(cut_regions):
+            retained = [
+                piece
+                for left, right in retained
+                for piece in ((left, min(right, cut_start)), (max(left, cut_end), right))
+                if piece[1] - piece[0] > 1e-6
+            ]
+        segments = [(source, left, right-left, source_duration) for left, right in retained]
+
+    if start_frame > 0 and target_fps > 0:
+        skip_s = start_frame / target_fps
+        shifted = []
+        for source, start, duration, source_duration in segments:
+            if skip_s >= duration:
+                skip_s -= duration
+                continue
+            shifted.append((source, start + skip_s, duration - skip_s, source_duration))
+            skip_s = 0.0
+        segments = shifted
+    if max_frames is not None and max_frames > 0 and target_fps > 0:
+        remaining_s = max_frames / target_fps
+        limited = []
+        for source, start, duration, source_duration in segments:
+            keep_s = min(duration, remaining_s)
+            if keep_s <= 0:
+                break
+            limited.append((source, start, keep_s, source_duration))
+            remaining_s -= keep_s
+        segments = limited
+
+    if not segments or any(segment[2] <= 0 for segment in segments):
+        return InlineGpmfPlan("empty_timeline")
+
+    streams: dict[Path, dict[str, Any] | None] = {}
+    for source, _start, _duration, _source_duration in segments:
+        if source not in streams:
+            streams[source] = detect_gpmf_stream(ffprobe_exe, source)
+    if any(stream is None for stream in streams.values()):
+        if len(segments) > 1:
+            print("GPMF: niepełne dane w zestawie wieloplikowym", flush=True)
+            return InlineGpmfPlan("partial_multifile_missing")
+        print(GPMF_MISSING_MESSAGE, flush=True)
+        return InlineGpmfPlan("source_missing")
+
+    if len(segments) == 1:
+        source, start, duration, source_duration = segments[0]
+        source_duration = source_duration or _probe_duration(ffprobe_exe, source)
+        if start <= 1e-6 and abs(source_duration - duration) <= 0.1:
+            index = int(streams[source]["index"])
+            print(f"GPMF_SOURCE_STREAM_INDEX={index} GPMF_MUX_MODE=inline_source", flush=True)
+            return InlineGpmfPlan("ready_full", source, index)
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="telem_gpmd_"))
+    plan = InlineGpmfPlan("preparing", temporary_dir=temp_dir)
+    try:
+        entries: list[str] = []
+        for ordinal, (source, start, duration, _source_duration) in enumerate(segments):
+            index = int(streams[source]["index"])
+            segment_path = temp_dir / f"segment_{ordinal:04d}.mp4"
+            _run_metadata_copy([
+                ffmpeg_exe, "-hide_banner", "-nostdin", "-v", "error", "-y",
+                "-ss", f"{start:.9f}", "-i", str(source),
+                "-ss", "0", "-t", f"{duration:.9f}",
+                "-map", f"0:{index}", "-c:d", "copy", "-copy_unknown",
+                "-tag:d:0", "gpmd", str(segment_path),
+            ], cancel_event)
+            if detect_gpmf_stream(ffprobe_exe, segment_path) is None:
+                raise RuntimeError(f"GPMF segment contains no gpmd: {source} [{start}, {start+duration}]")
+            escaped = str(segment_path).replace("\\", "/").replace("'", "'\\''")
+            entries.extend([f"file '{escaped}'\n", f"duration {duration:.9f}\n"])
+        concat_path = temp_dir / "segments.ffconcat"
+        concat_path.write_text("ffconcat version 1.0\n" + "".join(entries), encoding="utf-8")
+        combined_path = temp_dir / "gpmd_timeline.mp4"
+        _run_metadata_copy([
+            ffmpeg_exe, "-hide_banner", "-nostdin", "-v", "error", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(concat_path),
+            "-map", "0:0", "-c:d", "copy", "-copy_unknown",
+            "-tag:d:0", "gpmd", str(combined_path),
+        ], cancel_event)
+        stream = detect_gpmf_stream(ffprobe_exe, combined_path)
+        if stream is None:
+            raise RuntimeError("GPMF metadata timeline has no gpmd stream")
+        plan.status = "ready_metadata_timeline"
+        plan.input_path = combined_path
+        plan.stream_index = int(stream["index"])
+        print(
+            f"GPMF_MUX_MODE=inline_metadata GPMF_SOURCE_SEGMENTS={len(segments)} "
+            f"GPMF_METADATA_BYTES={combined_path.stat().st_size}",
+            flush=True,
+        )
+        return plan
+    except BaseException:
+        plan.cleanup()
+        raise
 
 
 def attach_original_gpmf(

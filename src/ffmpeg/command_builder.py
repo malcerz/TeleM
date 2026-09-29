@@ -665,6 +665,7 @@ def _build_stream_ffmpeg_cmd(
     hwaccel: str | None = None,
     cut_regions: list[tuple[float, float]] | None = None,
     audio_input_args: list[str] | None = None,
+    inline_gpmf_plan: Any = None,
     hud_x: int = 0,
     hud_y: int = 0,
     is_no_hud: bool = False,
@@ -712,14 +713,20 @@ intel_codec: str = "hevc",
 
     no_res_change = not target_res or (render_w == canvas_w and render_h == canvas_h)
     if is_no_hud and encoder == "amd" and not needs_cpu_rotation and no_res_change and not has_cuts:
+        from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(
+            inline_gpmf_plan, 1 + bool(audio_input_args),
+        )
         amf_encoder = "hevc_amf" if _test_encoder("hevc_amf") else "h264_amf"
         cmd = [ffmpeg_exe, "-y", *input_args]
         if audio_input_args:
             cmd.extend(audio_input_args)
+        cmd.extend(gpmf_inputs)
         audio_idx = "2" if audio_input_args else "0"
         cmd.extend([
             "-map", "0:v",
             "-map", f"{audio_idx}:a?",
+            *gpmf_maps,
             "-map_metadata", "-1",
             "-metadata:s:v:0", f"rotate={effective_rotation}",
             "-c:v", amf_encoder,
@@ -1065,6 +1072,11 @@ intel_codec: str = "hevc",
     ]
     if audio_input_args:
         cmd.extend(audio_input_args)
+    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(
+        inline_gpmf_plan, 2 + bool(audio_input_args),
+    )
+    cmd.extend(gpmf_inputs)
     # NV1: NVIDIA-only filter_complex_threads override.
     # Set TELEM_NV_FILTER_COMPLEX_THREADS=2 or =4 to A/B test.
     # Has NO effect for encoder != "nv".
@@ -1094,6 +1106,7 @@ intel_codec: str = "hevc",
         # Bez cięć – audio kopiowane wprost z pliku
         audio_idx = "2" if audio_input_args else "0"
         cmd.extend(["-map", f"{audio_idx}:a?"])
+    cmd.extend(gpmf_maps)
 
     # Metadane obrotu: normalnie obrót jest fizycznie zaaplikowany w base_filter,
     # więc w metadanych piszemy rotate=0. W CUDA ROT180 (NVIDIA rotation=180)

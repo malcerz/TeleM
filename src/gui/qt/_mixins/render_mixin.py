@@ -602,7 +602,28 @@ class RenderMixin:
                     stats = {}
                 stats.setdefault("generation_id", generation_id)
                 if not self.render_cancel_event.is_set():
-                    self._finalize_requested_gpmf(options, stats)
+                    plan = options.get("_inline_gpmf_plan")
+                    if plan is not None:
+                        stats["gpmf_status"] = plan.status
+                        stats["gpmf_attach_seconds"] = 0.0
+                        if plan.enabled:
+                            from src.ffmpeg.gpmf_export import detect_gpmf_stream
+
+                            output_path = Path(options["_resolved_output_path"])
+                            probe_exe = self.ffprobe_exe or find_executable("ffprobe")
+                            if not probe_exe:
+                                raise RuntimeError("ffprobe not found for inline GPMF validation")
+                            output_stream = detect_gpmf_stream(probe_exe, output_path)
+                            if output_stream is None:
+                                raise RuntimeError(f"Inline GPMF missing from final output: {output_path}")
+                            stats["gpmf_status"] = "inline_attached"
+                            stats["gpmf_attached"] = True
+                            stats["gpmf_output_stream_index"] = int(output_stream["index"])
+                            print(
+                                f"GPMF_OUTPUT_DETECTED=YES GPMF_OUTPUT_STREAM_INDEX={output_stream['index']} "
+                                "GPMF_POST_ATTACH_SECONDS=0",
+                                flush=True,
+                            )
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
                     # Zero additional QP analysis after export. Use strictly in-render statistics.
@@ -639,6 +660,9 @@ class RenderMixin:
                     self.signals.sig_render_stopped.emit()
                 _notify_queue(success=False)
             finally:
+                plan = options.pop("_inline_gpmf_plan", None)
+                if plan is not None:
+                    plan.cleanup()
                 print("[PROC] render thread exit", flush=True)
 
         self.render_worker_thread = threading.Thread(
@@ -856,6 +880,28 @@ class RenderMixin:
         except Exception as _e:
             print(f"[RenderMixin] Map contract check warning: {_e}", flush=True)
 
+        inline_gpmf_plan = None
+        if options.get("preserve_original_gpmf"):
+            from src.ffmpeg.gpmf_export import prepare_inline_gpmf
+
+            gpmf_timeline = getattr(self, "video_timeline", None)
+            if gpmf_timeline is not None and getattr(self, "_cut_regions", None):
+                gpmf_timeline = gpmf_timeline.subset_excluding(self._cut_regions)
+            inline_gpmf_plan = prepare_inline_gpmf(
+                ffmpeg_exe=ffmpeg_exe,
+                ffprobe_exe=ffprobe_exe,
+                source_paths=list(options.get("video_paths") or self.video_paths),
+                output_path=output_path,
+                video_timeline=gpmf_timeline,
+                duration_s=self.video_duration_s,
+                cut_regions=list(self._cut_regions) if gpmf_timeline is None else None,
+                max_frames=options.get("max_frames"),
+                target_fps=fps_stream,
+                start_frame=(int(options.get("start_frame", 0) or 0) if encoder in ("nv", "nvidia") else 0),
+                cancel_event=self.render_cancel_event,
+            )
+            options["_inline_gpmf_plan"] = inline_gpmf_plan
+
         stream_kwargs = dict(
             ffmpeg_exe=ffmpeg_exe,
             input_files=self.video_paths,
@@ -863,6 +909,7 @@ class RenderMixin:
             duration_s=self.video_duration_s,
             start_dt_utc=self.telemetry.start_dt_utc,
             video_timeline=getattr(self, "video_timeline", None),
+            inline_gpmf_plan=inline_gpmf_plan,
             tz_offset_hours=2,
             speed_samples=speed,
             track_samples=track,
@@ -1173,6 +1220,7 @@ codec=options.get("intel_codec", "av1"),
                     layout=effective_layout,
                     telemetry=effective_telemetry,
                     video_timeline=effective_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
@@ -1194,6 +1242,7 @@ codec=options.get("intel_codec", "av1"),
                     layout=effective_layout,
                     telemetry=effective_telemetry,
                     video_timeline=effective_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
