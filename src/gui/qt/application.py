@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
@@ -15,6 +16,7 @@ from src.gui.qt.signals import get_signals
 
 def main() -> None:
     """Główny entry point aplikacji BikeRideHUD (PySide6)."""
+    import os
     app = QApplication(sys.argv)
     app.setApplicationName("BikeRideHUD")
 
@@ -555,6 +557,161 @@ def main() -> None:
         QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
             [str(video_path)], "", str(fit_path),
         ))
+    elif "--test-intel-export" in sys.argv:
+        import argparse
+        import json
+        import psutil
+        import time
+
+        parser = argparse.ArgumentParser(description="BikeRideHUD Intel Export Benchmark")
+        parser.add_argument("--test-intel-export", action="store_true")
+        parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
+        parser.add_argument("--video", default=r"C:\GoPro\2026-09-30\GX010331.MP4")
+        parser.add_argument("--fit", default=r"C:\GoPro\2026-09-30\Poranna_jazda_na_rowerze.fit")
+        parser.add_argument("--bitrate", default="40M")
+        parser.add_argument("--frames", type=int, default=0)
+        parser.add_argument("--output", default=r"C:\GoPro\TO\test_intel_out.mp4")
+        parser.add_argument("--result-json", default="")
+        parser.add_argument("--gpmf", action="store_true", help="Preserve original GPMF stream")
+        test_args, _ = parser.parse_known_args(sys.argv[1:])
+
+        video_path = Path(test_args.video).resolve()
+        fit_path = Path(test_args.fit).resolve()
+        out_path = Path(test_args.output).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.exists():
+            try:
+                out_path.unlink()
+            except Exception:
+                pass
+
+        if test_args.frames > 0:
+            os.environ["TELEM_MAX_FRAMES"] = str(test_args.frames)
+        else:
+            os.environ.pop("TELEM_MAX_FRAMES", None)
+
+        os.environ["TELEM_INTEL_CODEC"] = "av1"
+        os.environ["TELEM_INTEL_HEVC_HW_DECODE"] = "1"
+
+        t_start = [0.0]
+        t_finish = [0.0]
+        bench_result = {
+            "mode": test_args.mode,
+            "video": str(video_path),
+            "fit": str(fit_path),
+            "output": str(out_path),
+            "bitrate": test_args.bitrate,
+            "max_frames": test_args.frames,
+            "success": False,
+            "error": "",
+            "elapsed_s": 0.0,
+            "total_frames": 0,
+            "effective_fps": 0.0,
+            "ram_used_gb": 0.0,
+        }
+
+        def _on_render_finished_bench(stats, final_path):
+            t_finish[0] = time.perf_counter()
+            elapsed = max(0.001, t_finish[0] - t_start[0])
+            frames_done = int(stats.get("frames_rendered", stats.get("total_frames", test_args.frames or 0)) if isinstance(stats, dict) else (test_args.frames or 0))
+            if frames_done <= 0:
+                frames_done = getattr(_controller, "video_frames", 0) or 51213
+            eff_fps = frames_done / elapsed if elapsed > 0 else 0.0
+            vm = psutil.virtual_memory()
+
+            bench_result["success"] = True
+            bench_result["elapsed_s"] = round(elapsed, 2)
+            bench_result["total_frames"] = frames_done
+            bench_result["effective_fps"] = round(eff_fps, 2)
+            bench_result["ram_used_gb"] = round(vm.used / (1024**3), 2)
+            bench_result["output_size_bytes"] = os.path.getsize(out_path) if out_path.exists() else 0
+            if isinstance(stats, dict):
+                bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
+                bench_result["sampled_q"] = sampled_q_values
+                print(f"[BENCH STATS] quant_current={stats.get('quant_current')} quant_min={stats.get('quant_min')} quant_max={stats.get('quant_max')} quant_samples={stats.get('quant_samples')} quant_sum={stats.get('quant_sum')} quant_avg={stats.get('quant_avg')}", flush=True)
+
+            print(f"\n[BENCH RESULT] mode={test_args.mode} success=True frames={frames_done} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            QTimer.singleShot(500, window.close)
+
+        def _on_render_error_bench(msg):
+            t_finish[0] = time.perf_counter()
+            elapsed = max(0.001, t_finish[0] - t_start[0])
+            vm = psutil.virtual_memory()
+            bench_result["success"] = False
+            bench_result["error"] = str(msg)
+            bench_result["elapsed_s"] = round(elapsed, 2)
+            bench_result["ram_used_gb"] = round(vm.used / (1024**3), 2)
+            print(f"\n[BENCH RESULT] mode={test_args.mode} success=False error={msg}", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            QTimer.singleShot(500, window.close)
+
+        get_signals().sig_render_finished.connect(_on_render_finished_bench)
+        get_signals().sig_error.connect(_on_render_error_bench)
+
+        sampled_q_values = {}
+
+        def _progress_bench(done, total, elapsed, fps, hud_state):
+            q_str = ""
+            if isinstance(hud_state, dict):
+                cur = hud_state.get("quant_current")
+                avg = hud_state.get("quant_avg")
+                samples = hud_state.get("quant_samples")
+                if cur is not None or samples is not None:
+                    q_str = f" Q_cur={cur} Q_avg={avg} Q_samples={samples}"
+                    if done in (100, 300, 500, 1000) or done not in sampled_q_values:
+                        sampled_q_values[done] = {"q_cur": cur, "q_avg": avg, "q_samples": samples}
+            if done in (100, 300, 500, 1000) or done == 0 or done % 500 == 0 or (total and done >= total):
+                print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s{q_str}", flush=True)
+
+        get_signals().sig_render_progress.connect(_progress_bench)
+
+        def _trigger_test_export():
+            rt = window._render_tab
+            window.tabs.setCurrentWidget(rt)
+
+            rt.cmb_render_mode.setCurrentIndex(rt.cmb_render_mode.findData("gpu"))
+            rt.cmb_encoder.setCurrentText("intel")
+            idx_codec = rt.cmb_intel_codec.findData("av1")
+            if idx_codec >= 0:
+                rt.cmb_intel_codec.setCurrentIndex(idx_codec)
+            rt.cmb_resolution.setCurrentText("source")
+            rt.cmb_update_rate.setCurrentText("Full")
+            rt.cmb_hud_resolution.setCurrentText("Auto")
+            rt.edit_bitrate.setText(test_args.bitrate)
+            rt.chk_hud_preview.setChecked(True)
+            rt.chk_original_gpmf.setChecked(bool(test_args.gpmf))
+            rt.edit_output.setText(str(out_path))
+            rt._user_edited_output = True
+
+            t_start[0] = time.perf_counter()
+
+            if test_args.mode == "queue":
+                # Clear any leftover jobs so only this benchmark job executes
+                if hasattr(rt, "_export_queue") and rt._export_queue is not None:
+                    for old_j in list(rt._export_queue.get_jobs()):
+                        rt._export_queue.remove_job(old_j.job_id)
+                print("[BENCH] Adding job to clean queue and starting...", flush=True)
+                rt._on_add_to_queue()
+                rt._on_queue_start()
+            else:
+                print("[BENCH] Triggering direct render...", flush=True)
+                rt._on_render()
+
+        def _poll_ready_bench():
+            btn = window._render_tab.btn_render
+            if getattr(_controller, "telemetry", None) and getattr(_controller.telemetry, "fit_data", None) and btn.isEnabled():
+                _trigger_test_export()
+            else:
+                QTimer.singleShot(100, _poll_ready_bench)
+
+        print(f"[BENCH] Loading project: {video_path.name} + {fit_path.name} (mode={test_args.mode})", flush=True)
+        QTimer.singleShot(200, lambda: get_signals().sig_files_selected.emit(
+            [str(video_path)], "", str(fit_path),
+        ))
+        QTimer.singleShot(400, _poll_ready_bench)
 
     rc = app.exec()
     print(f"[PROC] QApplication returned rc={rc}", flush=True)

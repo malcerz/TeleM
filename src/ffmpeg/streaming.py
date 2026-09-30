@@ -1251,7 +1251,7 @@ def stream_overlay_to_ffmpeg(
             return total_overlay_frames
         if cancel_event is not None and cancel_event.is_set():
             return 0
-        print("[STREAM INTEL] Native INTEL_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
+        raise RuntimeError("Native INTEL_NATIVE_D3D11 export failed.")
 
 
     # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────

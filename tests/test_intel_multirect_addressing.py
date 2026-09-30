@@ -4,12 +4,9 @@ import pytest
 from pathlib import Path
 
 def _load_native():
-    try:
-        os.add_dll_directory(r"C:\_Dev\BikeRideHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
-        os.add_dll_directory(r"C:\_Dev\BikeRideHUD-intel")
-    except Exception:
-        pass
-    dll_path = Path(r"C:\_DEV\BikeRideHUD-intel-multirect\src\native\bin\telem_intel_native.dll")
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"DLL not found: {dll_path}"
     lib = ctypes.CDLL(str(dll_path))
     lib.intel_native_validate_subrect_addressing.argtypes = [

@@ -5,17 +5,10 @@ import pytest
 from pathlib import Path
 
 def test_intel_hw_decode_default_state_and_exports():
-    repo_root = Path(__file__).resolve().parent.parent
-    dll_candidates = [
-        repo_root / "src" / "native" / "bin" / "telem_intel_native.dll",
-        repo_root / "scratch" / "telem_intel_native.dll",
-    ]
-    dll_path = next((p for p in dll_candidates if p.exists()), None)
-    assert dll_path is not None, "telem_intel_native.dll must exist"
-
-    ff_bin = repo_root / "third_party" / "ffmpeg-9.0.1-full_build-shared" / "bin"
-    if ff_bin.exists():
-        os.environ["PATH"] = str(ff_bin) + os.pathsep + os.environ.get("PATH", "")
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
+    assert dll_path.exists(), "telem_intel_native.dll must exist"
 
     lib = ctypes.CDLL(str(dll_path))
     assert hasattr(lib, "intel_native_pipeline_init_multi_ex")

@@ -605,7 +605,7 @@ class VideoClip:
             and (self.source_duration_s <= 0.0
                  or abs(self.source_duration_s - self.duration_s) < 1e-6)
         )
-        if full_source and self.frame_count > 0 and abs(self.fps - target_fps) < 1e-6:
+        if full_source and self.frame_count > 0 and abs(self.fps - target_fps) < 0.01:
             return self.frame_count
         return max(0, int(round(self.duration_s * target_fps)))
 

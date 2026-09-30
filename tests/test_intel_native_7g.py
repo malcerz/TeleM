@@ -69,7 +69,9 @@ class ConsumerCapacityResults(ctypes.Structure):
 
 def test_intel_native_7g_dll_symbols():
     """Verify telem_intel_native.dll exports all required 7G symbols."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"Missing DLL at {dll_path}"
     
     dll = ctypes.CDLL(str(dll_path))
@@ -113,7 +115,9 @@ def test_intel_native_7g_rational_global_timeline_continuity():
 
 def test_intel_native_7g_capacity_hierarchy():
     """Verify the 7G capacity hierarchy: Producer < Consumer << Encoder."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
     dll = ctypes.CDLL(str(dll_path))
     
     dll.intel_native_measure_encoder_capacity.argtypes = [ctypes.c_int, ctypes.POINTER(EncoderCapacityResults)]
@@ -130,7 +134,9 @@ def test_intel_native_7g_capacity_hierarchy():
 
 def test_intel_native_7g_hud_zero_memcpy():
     """Verify HUD transfer path has copy_count == 0 (direct pointer handoff, zero memcpy)."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
     dll = ctypes.CDLL(str(dll_path))
     
     dll.intel_native_measure_hud_path.argtypes = [ctypes.c_int, ctypes.POINTER(HudPathResults)]
@@ -143,7 +149,9 @@ def test_intel_native_7g_hud_zero_memcpy():
 
 def test_intel_native_7g_vp_gpu_timing_contract():
     """Verify VideoProcessor GPU execution time is measured via D3D11 queries and is sub-millisecond."""
-    dll_path = workspace_root / "src" / "native" / "bin" / "telem_intel_native.dll"
+    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    activate_vendor_dll_directory("intel")
+    dll_path = get_intel_native_dll()
     dll = ctypes.CDLL(str(dll_path))
     
     dll.intel_native_measure_vp_timing.argtypes = [ctypes.c_int, ctypes.POINTER(VPTimingResults)]

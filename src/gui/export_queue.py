@@ -447,6 +447,49 @@ class ExportQueue:
             self._persist()
         return removed
 
+    def requeue_job(self, job_id: str) -> bool:
+        """Resetuj zadanie ze statusem innym niż 'queued' do stanu 'queued' (Oczekuje)."""
+        with self._lock:
+            if job_id == self._active_render_id:
+                log.warning("[Queue] requeue_job: nie można zresetować aktywnego renderu %s", job_id)
+                return False
+            job = None
+            for j in self._jobs:
+                if j.job_id == job_id:
+                    job = j
+                    break
+            if job is None or job.render_status == "queued":
+                return False
+            job.render_status = "queued"
+            job.render_progress = 0.0
+            job.render_error = ""
+            job.render_started_at = None
+            job.render_finished_at = None
+            job.render_elapsed_s = 0.0
+            job.frame_render_elapsed_s = 0.0
+            job.finalization_elapsed_s = 0.0
+            job.effective_fps = 0.0
+            job.average_fps = 0.0
+            job.average_qp = None
+            job.codec = ""
+            job.quant_metric = ""
+            job.quant_avg = None
+            job.quant_min = None
+            job.quant_max = None
+            job.quant_samples = None
+            job.is_expanded = False
+            if job.yt_enabled:
+                job.upload_status = "idle"
+                job.upload_progress = 0.0
+                job.upload_error = ""
+                job.upload_started_at = None
+                job.upload_finished_at = None
+        self._persist()
+        self._notify_updated(job)
+        self._wake_scheduler()
+        log.info("[Queue] requeue_job id=%s reset to queued", job_id)
+        return True
+
     def get_jobs(self) -> list[ExportJob]:
         """Zwraca płytką kopię listy jobów (thread-safe)."""
         with self._lock:
@@ -576,7 +619,7 @@ class ExportQueue:
         job.render_progress = clamped
         if phase in ("finalize", "finalizing"):
             job.render_status = "finalizing"
-        elif phase in ("render", "running") and job.render_status in ("preparing", "error"):
+        elif phase in ("render", "running"):
             job.render_status = "running"
             if job.render_error == "Render worker did not start":
                 job.render_error = ""
@@ -821,12 +864,25 @@ class ExportQueue:
                 "created_at": time.time(),
                 "jobs": jobs_data,
             }
-            tmp = self._queue_path.with_suffix(".tmp")
+            tmp = self._queue_path.with_suffix(f".tmp.{os.getpid()}.{threading.get_ident()}")
             tmp.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-            os.replace(tmp, self._queue_path)
+            for attempt in range(5):
+                try:
+                    os.replace(tmp, self._queue_path)
+                    break
+                except OSError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.02)
         except Exception as exc:
             log.warning("[Queue] persist error: %s", exc)
+        finally:
+            try:
+                if 'tmp' in locals() and tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
 
     def _load_persisted(self) -> None:
         """Wczytaj kolejkę z pliku JSON (przy starcie aplikacji)."""

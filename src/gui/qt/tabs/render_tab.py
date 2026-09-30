@@ -712,10 +712,11 @@ class RenderTab(QWidget):
         self.queue_list.setToolTip("Lista zaplanowanych zadań renderowania")
         self.queue_list.itemClicked.connect(self._on_queue_item_clicked)
         self.queue_list.itemDoubleClicked.connect(self._on_queue_item_double_clicked)
+        self.queue_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.queue_list.customContextMenuRequested.connect(self._on_queue_context_menu)
         vbox.addWidget(self.queue_list)
         
         from PySide6.QtGui import QShortcut, QKeySequence
-        from PySide6.QtCore import Qt
         shortcut_del = QShortcut(QKeySequence("Delete"), self.queue_list)
         shortcut_del.setContext(Qt.ShortcutContext.WidgetShortcut)
         shortcut_del.activated.connect(self._on_queue_remove)
@@ -1250,6 +1251,77 @@ class RenderTab(QWidget):
         if not job_id or not self._export_queue:
             return
         self._toggle_job_expansion(job_id)
+
+    def _on_queue_context_menu(self, pos) -> None:
+        """Menu kontekstowe pod PPM na zadaniu w kolejce."""
+        if not self._export_queue:
+            return
+        item = self.queue_list.itemAt(pos)
+        if not item:
+            return
+        clicked_job_id = item.data(Qt.UserRole)
+        if not clicked_job_id:
+            return
+        clicked_job = self._export_queue.get_job(clicked_job_id)
+        if not clicked_job:
+            return
+
+        # Jeśli kliknięty element nie jest zaznaczony, zaznacz go
+        if not item.isSelected():
+            self.queue_list.clearSelection()
+            item.setSelected(True)
+
+        selected_items = self.queue_list.selectedItems()
+        selected_job_ids = [it.data(Qt.UserRole) for it in selected_items if it.data(Qt.UserRole)]
+        if clicked_job_id not in selected_job_ids:
+            selected_job_ids = [clicked_job_id]
+
+        requeueable_ids = []
+        for jid in selected_job_ids:
+            j = self._export_queue.get_job(jid)
+            if j and j.render_status != "queued" and not j.is_active():
+                requeueable_ids.append(jid)
+
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self.queue_list)
+
+        label_requeue = (
+            f"Zmień na Oczekuje ({len(requeueable_ids)})"
+            if len(requeueable_ids) > 1
+            else "Zmień na Oczekuje"
+        )
+        act_requeue = menu.addAction(label_requeue)
+        if requeueable_ids:
+            def _requeue_action() -> None:
+                for jid in requeueable_ids:
+                    self._export_queue.requeue_job(jid)
+                self._refresh_queue_ui()
+            act_requeue.triggered.connect(_requeue_action)
+        else:
+            act_requeue.setEnabled(False)
+
+        menu.addSeparator()
+
+        removable_ids = []
+        for jid in selected_job_ids:
+            j = self._export_queue.get_job(jid)
+            if j and not j.is_active():
+                removable_ids.append(jid)
+
+        if removable_ids:
+            label_remove = (
+                f"Usuń z kolejki ({len(removable_ids)})"
+                if len(removable_ids) > 1
+                else "Usuń z kolejki"
+            )
+            act_remove = menu.addAction(label_remove)
+            def _remove_action() -> None:
+                for jid in removable_ids:
+                    self._export_queue.remove_job(jid)
+                self._refresh_queue_ui()
+            act_remove.triggered.connect(_remove_action)
+
+        menu.exec(self.queue_list.mapToGlobal(pos))
 
     def _refresh_queue_ui(self) -> None:
         """Pełne odświeżenie listy jobów w kolejce (GUI thread)."""
@@ -2338,16 +2410,26 @@ class RenderTab(QWidget):
 
         qp_val = None
         if isinstance(hud_state, dict):
-            for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
-                v = hud_state.get(k)
-                if v is not None:
-                    try:
-                        fv = float(v)
-                        if fv > 0:
-                            qp_val = fv
+            if hud_state.get("quant_samples", 0) > 0:
+                for k in ("quant_avg", "quant_current", "mean_qp", "avg_qp", "current_qp"):
+                    v = hud_state.get(k)
+                    if v is not None:
+                        try:
+                            qp_val = float(v)
                             break
-                    except (ValueError, TypeError):
-                        pass
+                        except (ValueError, TypeError):
+                            pass
+            if qp_val is None:
+                for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
+                    v = hud_state.get(k)
+                    if v is not None:
+                        try:
+                            fv = float(v)
+                            if fv >= 0:
+                                qp_val = fv
+                                break
+                        except (ValueError, TypeError):
+                            pass
 
         if hud_state is not None and isinstance(hud_state, dict) and "global_pct" in hud_state:
             overall = max(self._render_target, float(hud_state.get("global_pct", 0.0)))
@@ -2514,7 +2596,7 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if (elapsed is not None and 0 < elapsed <= 3600000) else "--:--"
         fps_txt = f"{fps:.1f}" if (fps > 0.05 and not is_indeterminate) else "--"
-        qp_str = f"{qp:.1f}" if (qp is not None and qp > 0 and not is_indeterminate) else "--"
+        qp_str = f"{qp:.1f}" if (qp is not None and qp >= 0 and not is_indeterminate) else "--"
         q_label = "Q" if (is_av1 or quant_metric == "base_q_idx") else "QP"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
@@ -2640,11 +2722,11 @@ class RenderTab(QWidget):
 
         is_av1 = (stats.get("codec") == "av1") or (stats.get("quant_metric") == "base_q_idx")
         if is_av1:
-            q_val = stats.get("quant_avg") or stats.get("avg_qp")
+            q_val = stats.get("quant_avg") if stats.get("quant_samples", 0) > 0 else stats.get("avg_qp")
             q_str = f"{q_val:.1f}" if q_val is not None else "brak danych"
             q_min = stats.get("quant_min")
             q_max = stats.get("quant_max")
-            range_info = f"\nZakres Quantizer: {q_min}–{q_max}" if (q_min is not None and q_max is not None) else ""
+            range_info = f"\nZakres Quantizer: {q_min}–{q_max}" if (q_min is not None and q_max is not None and stats.get("quant_samples", 0) > 0) else ""
             quality_line = f"Średni Quantizer: {q_str}{range_info}"
         else:
             quality_line = f"Średnie QP: {qp_str}"

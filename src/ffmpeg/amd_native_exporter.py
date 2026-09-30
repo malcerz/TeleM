@@ -2604,21 +2604,20 @@ def export_amd_native_d3d11(
     source_rotation = _probe_rotation_degrees(input_probe)
 
     # 1. Locate and Load telem_amd_native.dll
-    repo_root = Path(__file__).resolve().parents[2]
-    dll_override = os.environ.get("TELEM_AMD_NATIVE_DLL", "").strip()
-    dll_path = str(
-        Path(dll_override).resolve() if dll_override else
-        (repo_root / "native" / "d3d11_amf_pipeline" / "bin" / "telem_amd_native.dll").resolve()
+    from src.runtime_paths import (
+        get_amd_native_dll,
+        activate_vendor_dll_directory,
+        log_runtime_diagnostic,
     )
+    dll_path_obj = get_amd_native_dll()
+    dll_path = str(dll_path_obj)
     if not os.path.exists(dll_path):
         print(f"[AMD NATIVE D3D11] ERROR: DLL not found at {dll_path}", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
-    if hasattr(os, "add_dll_directory"):
-        mingw_bin = r"c:\tools\mingw64\bin"
-        if os.path.exists(mingw_bin):
-            os.add_dll_directory(mingw_bin)
+    activate_vendor_dll_directory("amd")
+    log_runtime_diagnostic("amd", dll_path_obj)
 
     try:
         native_dll = ctypes.CDLL(dll_path)

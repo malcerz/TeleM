@@ -45,6 +45,19 @@ def find_local_tool(base_dir, names):
 
 
 def find_executable(name, extra_candidates=None):
+    try:
+        from src.runtime_paths import get_ffmpeg_exe, get_ffprobe_exe
+        name_lower = str(name).lower()
+        if "ffprobe" in name_lower:
+            probe = get_ffprobe_exe()
+            if probe.exists():
+                return str(probe)
+        elif "ffmpeg" in name_lower:
+            ff = get_ffmpeg_exe()
+            if ff.exists():
+                return str(ff)
+    except Exception:
+        pass
     p = shutil.which(name)
     if p:
         return p

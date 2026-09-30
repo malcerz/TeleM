@@ -1291,6 +1291,8 @@ def export_intel_native_d3d11(
     elif region_upload_cfg:
         render_print(f"[STREAM INTEL] 1B Region HUD Upload enabled: {len(widget_boxes)} active widget boxes precomputed.", flush=True)
 
+    eof_reached = False
+    error_occurred = False
     try:
         if pkg_mode == "VIDEO_ONLY":
             render_print("[STREAM INTEL] Running VIDEO_ONLY package contention mode (no HUD workers).", flush=True)
@@ -1310,9 +1312,11 @@ def export_intel_native_d3d11(
                 total_native_step_s += (t_step_1 - t_step_0)
 
                 if sts == 1:
+                    eof_reached = True
                     render_print(f"[STREAM INTEL] Video Demux/Decode EOF reached at frame {frames_rendered}.", flush=True)
                     break
                 elif sts != 0:
+                    error_occurred = True
                     render_print(f"[STREAM INTEL] Native pipeline step failed with code {sts}.", flush=True)
                     break
 
@@ -1523,9 +1527,11 @@ def export_intel_native_d3d11(
                     shm_pool.release(res_slot)
 
                     if sts == 1:
+                        eof_reached = True
                         render_print(f"[STREAM INTEL] Video Demux/Decode EOF reached at frame {frames_rendered}.", flush=True)
                         break
                     elif sts < 0:
+                        error_occurred = True
                         render_print(f"[STREAM INTEL] ERROR in intel_native_pipeline_step: {sts} at frame {frames_rendered}", flush=True)
                         break
 
@@ -1610,6 +1616,7 @@ def export_intel_native_d3d11(
             "quant_min": stats.quant_min,
             "quant_max": stats.quant_max,
             "quant_samples": stats.quant_samples,
+            "quant_sum": stats.quant_sum,
             "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
             "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
             "frame_render_seconds": frame_render_s,
@@ -1991,6 +1998,7 @@ def export_intel_native_d3d11(
         "quant_min": stats.quant_min,
         "quant_max": stats.quant_max,
         "quant_samples": stats.quant_samples,
+        "quant_sum": stats.quant_sum,
         "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
         "real_export_fps": render_fps,
         "render_fps": render_fps,
@@ -2354,4 +2362,11 @@ def export_intel_native_d3d11(
         emit_intel_proof(proof_dict)
         write_intel_proof_json(proof_dict, output_file_str)
 
-    return frames_rendered >= total_frames
+    export_succeeded = (
+        not (cancel_event is not None and cancel_event.is_set())
+        and not error_occurred
+        and os.path.exists(output_file_str)
+        and os.path.getsize(output_file_str) > 0
+        and (frames_rendered >= total_frames - 1 or eof_reached or frames_rendered >= total_frames)
+    )
+    return export_succeeded

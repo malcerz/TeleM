@@ -445,6 +445,19 @@ class RenderMixin:
                     compression_text=final_comp_txt or getattr(latest, "compression_text", ""),
                 )
 
+            elif phase in ("complete", "completed"):
+                snapshot = replace(
+                    latest,
+                    state="completed",
+                    elapsed_s=now_elapsed,
+                    percent=100.0,
+                    global_percent=100.0,
+                    completed=True,
+                    phase="complete",
+                    progress_mode="determinate",
+                    finalization_stage="Gotowe",
+                )
+
             else:
                 prev_global = float(getattr(latest, "global_percent", 0.0))
                 hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None

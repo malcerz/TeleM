@@ -25,7 +25,11 @@ from src.telemetry_cache_manager import get_media_cache_dir
 
 UPSTREAM_COMMIT = "d45ebf2afce85fa691838fd32b3da8ae2fcac773"
 DJI_CACHE_SCHEMA = 1
-DJI_RUNTIME = Path(__file__).resolve().parents[1] / "runtime" / "telemetry_parser"
+try:
+    from src.runtime_paths import get_telemetry_parser_dir
+    DJI_RUNTIME = get_telemetry_parser_dir()
+except Exception:
+    DJI_RUNTIME = Path(__file__).resolve().parents[1] / "runtime" / "telemetry_parser"
 
 
 def detect_camera_telemetry(path: Path | str, ffprobe_exe: str) -> str | None:

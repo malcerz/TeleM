@@ -378,3 +378,43 @@ def test_safe_output_path_multiple_collisions(tmp_path):
     result = _safe_output_path(str(tmp_path / "out.mp4"))
     # out.mp4, out_001.mp4, out_002.mp4 zajęte → out_003.mp4
     assert result == str(tmp_path / "out_003.mp4")
+
+
+def test_requeue_job(tmp_path):
+    q = make_queue(tmp_path)
+    try:
+        job = make_job()
+        q.add_job(job)
+        assert job.render_status == "queued"
+
+        # Nie można zrequeue'ować zadania, które już ma status "queued"
+        assert q.requeue_job(job.job_id) is False
+
+        # Symuluj ukończenie renderu
+        job.render_status = "done"
+        job.render_progress = 1.0
+        job.render_elapsed_s = 120.0
+        job.average_fps = 55.0
+        q._persist()
+
+        # Requeue zadania "done"
+        assert q.requeue_job(job.job_id) is True
+        assert job.render_status == "queued"
+        assert job.render_progress == 0.0
+        assert job.render_error == ""
+        assert job.render_elapsed_s == 0.0
+        assert job.average_fps == 0.0
+
+        # Sprawdź stan persystencji na dysku
+        reloaded = q.get_job(job.job_id)
+        assert reloaded.render_status == "queued"
+
+        # Nie można zrequeue'ować aktywnego renderu
+        job.render_status = "running"
+        q._active_render_id = job.job_id
+        assert q.requeue_job(job.job_id) is False
+
+        # Nieistniejący job_id
+        assert q.requeue_job("non-existent-id") is False
+    finally:
+        q.stop()
