@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import copy
 import ctypes
+from ctypes import wintypes
+import io
 import json
 import math
 import os
@@ -208,36 +210,21 @@ def _load_native_intel_dll() -> ctypes.CDLL:
     if _LIB_NATIVE_INTEL is not None:
         return _LIB_NATIVE_INTEL
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    dll_candidates = [
-        repo_root / "src" / "native" / "bin" / "telem_intel_native.dll",
-        repo_root / "scratch" / "telem_intel_native.dll",
-    ]
+    from src.runtime_paths import (
+        get_intel_native_dll,
+        activate_vendor_dll_directory,
+        log_runtime_diagnostic,
+    )
 
-    dll_path = None
-    for cand in dll_candidates:
-        if cand.exists():
-            dll_path = cand
-            break
-
-    if dll_path is None:
+    dll_path = get_intel_native_dll()
+    if not dll_path.exists():
         raise FileNotFoundError(
-            f"telem_intel_native.dll not found in candidate paths: {[str(p) for p in dll_candidates]}"
+            f"telem_intel_native.dll not found at: {dll_path}"
         )
 
-    # Add third_party FFmpeg bin directory for dynamic library resolution
-    ff_bin = repo_root / "third_party" / "ffmpeg-9.0.1-full_build-shared" / "bin"
-    if ff_bin.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(ff_bin.resolve()))
-        except Exception:
-            pass
-    main_ff_bin = Path(r"C:\_DEV\BikeRideHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
-    if main_ff_bin.exists() and hasattr(os, "add_dll_directory"):
-        try:
-            os.add_dll_directory(str(main_ff_bin.resolve()))
-        except Exception:
-            pass
+    # Isolated DLL search path: only common + intel
+    activate_vendor_dll_directory("intel")
+    log_runtime_diagnostic("intel", dll_path)
 
     lib = ctypes.CDLL(str(dll_path))
 
@@ -679,7 +666,13 @@ def export_intel_native_d3d11(
                 target_kbps = int(b_str[:-1])
             except Exception:
                 target_kbps = 40000
-    max_kbps = int(target_kbps * 1.25)
+    # Guard against uint16 overflow in telem_intel_native.dll C ABI:
+    # oneVPL mfxU16 TargetKbps & MaxKbps are 16-bit unsigned integers (1..65535).
+    # Unclamped target * 1.25 > 65535 causes uint16 wrap (e.g. 75000 -> 9464),
+    # resulting in TargetKbps > MaxKbps and MFX_ERR_INVALID_VIDEO_PARAM (-11),
+    # which silently falls back to CPU software exporter (~20 FPS).
+    target_kbps = min(65535, max(1000, target_kbps))
+    max_kbps = min(65535, max(target_kbps, int(target_kbps * 1.25)))
 
     # 2. Resolve Codec (0 = AV1, 1 = H.264, 2 = HEVC)
     env_codec = os.environ.get("TELEM_INTEL_CODEC", "").strip().lower()
@@ -709,10 +702,198 @@ def export_intel_native_d3d11(
     render_print(effective_profile_cfg.format_log(), flush=True)
     os.environ["TELEM_INTEL_TARGET_USAGE"] = str(effective_profile_cfg.target_usage)
 
-    # 3b. Temporary encoded bitstream path for zero-raw-pipe handoff
+    # 3b. Mux architecture selection (Live Mux vs Legacy Post-Mux fallback)
+    use_legacy_post_mux = (os.environ.get("TELEM_INTEL_LEGACY_POST_MUX") == "1")
     temp_dir = Path("scratch")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_encoded_path = str((temp_dir / f"temp_native_{codec_name.lower()}_{os.getpid()}_{int(time.time())}{temp_ext}").resolve())
+
+    fps_str = "30000/1001" if abs(target_fps - 29.97) < 0.01 or abs(target_fps - 29.97003) < 0.01 else f"{target_fps}"
+    if codec_id == 1:
+        color_args = [
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-colorspace", "bt709",
+            "-color_range", "tv",
+        ]
+    else:
+        color_args = [
+            "-color_primaries", "bt2020",
+            "-color_trc", "arib-std-b67",
+            "-colorspace", "bt2020nc",
+            "-color_range", "pc",
+        ]
+        if codec_id == 2:
+            color_args.extend(["-tag:v", "hvc1"])
+
+    rotation_mux_args = ["-display_rotation:v:0", str(effective_rotation)] if effective_rotation != 0 else []
+    output_part_str = output_file_str + ".part.mp4"
+    if os.path.exists(output_part_str):
+        try:
+            os.remove(output_part_str)
+        except Exception:
+            pass
+
+    concat_txt_path = None
+    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
+    shortest_args = [] if gpmf_maps else ["-shortest"]
+
+    faststart_enabled = (os.environ.get("TELEM_INTEL_FASTSTART") == "1") or bool(kwargs.get("faststart", False))
+    faststart_args = ["-movflags", "+faststart"] if faststart_enabled else []
+
+    if len(native_clip_paths) > 1:
+        concat_txt_path = str((temp_dir / f"temp_audio_concat_{os.getpid()}_{int(time.time())}.txt").resolve())
+        with open(concat_txt_path, "w", encoding="utf-8") as f_concat:
+            for p in native_clip_paths:
+                escaped_p = str(Path(p).resolve()).replace("\\", "/")
+                f_concat.write(f"file '{escaped_p}'\n")
+        audio_mux_inputs = ["-f", "concat", "-safe", "0", "-i", concat_txt_path]
+    else:
+        audio_mux_inputs = ["-ss", "0", "-t", f"{duration_s:.6f}", "-i", input_file_str]
+
+    temp_encoded_path = None
+    p_mux = None
+    hPipe = None
+    t_fwd = None
+    t_mux_out = None
+    t_mux_err = None
+    mux_progress = {"out_time_us": 0, "total_size": 0, "speed": "N/A", "progress": "continue", "lines": 0}
+    mux_lock = threading.Lock()
+    mux_stderr_lines = []
+    t_mux_start = time.perf_counter()
+
+    if use_legacy_post_mux:
+        render_print(f"[STREAM INTEL] DIAGNOSTIC: TELEM_INTEL_LEGACY_POST_MUX=1 active - using legacy 2-pass IVF post-mux path", flush=True)
+        temp_encoded_path = str((temp_dir / f"temp_native_{codec_name.lower()}_{os.getpid()}_{int(time.time())}{temp_ext}").resolve())
+        bitstream_target = temp_encoded_path
+    else:
+        # Live Mux Pipeline: Named Pipe -> FFmpeg stdin live mux
+        video_in_fmt = ["-f", "ivf"] if codec_id == 0 else (["-f", "h264"] if codec_id == 1 else ["-f", "hevc"])
+        cmd_mux = [
+            ffmpeg_exe, "-y", "-nostats", "-v", "warning",
+            "-progress", "pipe:1",
+            *rotation_mux_args,
+            "-r", fps_str,
+            *video_in_fmt,
+            "-i", "pipe:0",
+            *audio_mux_inputs,
+            *gpmf_inputs,
+            "-map", "0:v:0",
+            "-map", "1:a:0?",
+            *gpmf_maps,
+            "-c:v", "copy",
+            "-c:a", "copy",
+            *shortest_args,
+            *(["-t", f"{duration_s:.6f}"] if (gpmf_maps and len(native_clip_paths) <= 1) else []),
+            *color_args,
+            *faststart_args,
+            output_part_str,
+        ]
+        render_print(f"[STREAM INTEL LIVE MUX CMD] {' '.join(cmd_mux)}", flush=True)
+
+        k32 = ctypes.windll.kernel32
+        pipe_name = rf"\\.\pipe\telem_intel_live_{os.getpid()}_{int(time.time()*1000)}"
+        hPipe = k32.CreateNamedPipeW(
+            pipe_name,
+            0x00000001,  # PIPE_ACCESS_INBOUND
+            0x00000000,  # PIPE_TYPE_BYTE | PIPE_WAIT
+            1,
+            1048576,
+            1048576,
+            0,
+            None
+        )
+        if not hPipe or hPipe == -1:
+            raise RuntimeError(f"Failed to create named pipe {pipe_name} (error={ctypes.GetLastError()})")
+
+        p_mux = subprocess.Popen(
+            cmd_mux,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=65536,
+        )
+        if active_process_holder is not None:
+            active_process_holder["process"] = p_mux
+
+        pipe_connected_evt = threading.Event()
+        pipe_stream_error = [None]
+        total_streamed_bytes = [0]
+
+        def _pipe_pump_worker():
+            try:
+                k32.ConnectNamedPipe(hPipe, None)
+                pipe_connected_evt.set()
+                buf = (ctypes.c_byte * 65536)()
+                bytes_read = wintypes.DWORD()
+                while True:
+                    ok = k32.ReadFile(hPipe, buf, 65536, ctypes.byref(bytes_read), None)
+                    if not ok or bytes_read.value == 0:
+                        break
+                    raw_bytes = bytes(buf)[:bytes_read.value]
+                    total_streamed_bytes[0] += len(raw_bytes)
+                    try:
+                        p_mux.stdin.write(raw_bytes)
+                    except (BrokenPipeError, OSError) as e:
+                        pipe_stream_error[0] = e
+                        break
+            except Exception as exc:
+                pipe_stream_error[0] = exc
+            finally:
+                pipe_connected_evt.set()
+                try:
+                    p_mux.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    k32.CloseHandle(hPipe)
+                except Exception:
+                    pass
+
+        t_fwd = threading.Thread(target=_pipe_pump_worker, daemon=True, name="IntelPipeForwarder")
+        t_fwd.start()
+
+        def _live_mux_stdout_reader():
+            try:
+                reader = io.TextIOWrapper(p_mux.stdout, encoding="utf-8", errors="replace")
+                for line in reader:
+                    line = line.strip()
+                    if not line or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip()
+                    with mux_lock:
+                        mux_progress["lines"] += 1
+                        if k in ("out_time_us", "out_time_ms"):
+                            try: mux_progress["out_time_us"] = int(v)
+                            except ValueError: pass
+                        elif k == "total_size":
+                            try: mux_progress["total_size"] = int(v)
+                            except ValueError: pass
+                        elif k == "speed":
+                            mux_progress["speed"] = v
+                        elif k == "progress":
+                            mux_progress["progress"] = v
+            except Exception:
+                pass
+
+        def _live_mux_stderr_reader():
+            try:
+                reader = io.TextIOWrapper(p_mux.stderr, encoding="utf-8", errors="replace")
+                for line in reader:
+                    if line:
+                        mux_stderr_lines.append(line.strip())
+                        if len(mux_stderr_lines) > 200:
+                            mux_stderr_lines.pop(0)
+            except Exception:
+                pass
+
+        t_mux_out = threading.Thread(target=_live_mux_stdout_reader, daemon=True, name="IntelLiveMuxStdoutReader")
+        t_mux_err = threading.Thread(target=_live_mux_stderr_reader, daemon=True, name="IntelLiveMuxStderrReader")
+        t_mux_out.start()
+        t_mux_err.start()
+
+        bitstream_target = pipe_name
 
     # 4. Initialize Native In-Process Pipeline (D3D11 + Demuxer + HEVC Decoder + oneVPL Encoder)
     native_lib = _load_native_intel_dll()
@@ -720,7 +901,7 @@ def export_intel_native_d3d11(
     init_res = native_lib.intel_native_pipeline_init_multi_ex(
         c_clip_paths,
         len(native_clip_paths),
-        temp_encoded_path.encode("utf-8"),
+        bitstream_target.encode("utf-8"),
         target_kbps,
         max_kbps,
         total_frames,
@@ -1387,18 +1568,35 @@ def export_intel_native_d3d11(
         from src.render_progress import RenderProgressTracker
         progress_tracker = RenderProgressTracker(total_frames, on_render_progress, target_fps=target_fps) if on_render_progress is not None else None
 
-        # Stage 1: Encoder Drain
+        # Stage 1: Encoder Drain (+ Live Mux Container Close in production path)
         t_drain_start = time.perf_counter()
         if progress_tracker:
-            progress_tracker.finalize("Finalizacja: opróżnianie enkodera", 0.0, global_pct=92.5)
+            drain_label = "Finalizacja: opróżnianie enkodera" if use_legacy_post_mux else "Finalizacja: domykanie strumienia i kontenera"
+            progress_tracker.finalize(drain_label, 0.0, global_pct=97.5)
         if progress_cb:
-            progress_cb(frames_rendered, "Finalizacja: opróżnianie enkodera...")
+            progress_cb(frames_rendered, "Finalizacja: domykanie strumienia i kontenera...")
 
         native_lib.intel_native_pipeline_finish()
         shm_pool.close()
+
+        if not use_legacy_post_mux and p_mux is not None:
+            if cancel_event is not None and cancel_event.is_set():
+                try:
+                    p_mux.terminate()
+                except Exception:
+                    pass
+            if t_fwd is not None:
+                t_fwd.join(timeout=2.0 if (cancel_event is not None and cancel_event.is_set()) else 30.0)
+            try:
+                p_mux.wait(timeout=2.0 if (cancel_event is not None and cancel_event.is_set()) else 30.0)
+            except Exception:
+                try:
+                    p_mux.kill()
+                except Exception:
+                    pass
+
         t_drain_end = time.perf_counter()
         drain_s = max(0.0, t_drain_end - t_drain_start)
-
     # Collect C stats
     stats = IntelNativePipelineStats()
     native_lib.intel_native_pipeline_get_stats(ctypes.byref(stats))
@@ -1423,190 +1621,289 @@ def export_intel_native_d3d11(
             "finalization_seconds": drain_s,
             "total_wall_seconds": time.perf_counter() - t_export_start,
             "user_effective_fps": 0.0,
+            "video_encode_pass_count": 1,
+            "final_mp4_full_remux_count": 0,
+            "mux_process_count": 1,
+            "temp_ivf_bytes": 0,
+            "temp_ivf_path": None,
+            "audio_live_mux": not use_legacy_post_mux,
+            "gpmf_live_mux": bool(inline_gpmf_plan and inline_gpmf_plan.enabled) if not use_legacy_post_mux else False,
+            "post_render_full_mux_seconds": 0.0,
         }
         render_print(f"[STREAM INTEL] Export cancelled or incomplete ({frames_rendered}/{total_frames} frames), skipping container remux.", flush=True)
-        if os.path.exists(temp_encoded_path):
+        if p_mux is not None:
+            try:
+                p_mux.terminate()
+                p_mux.wait(timeout=2.0)
+            except Exception:
+                try: p_mux.kill()
+                except Exception: pass
+        if temp_encoded_path and not temp_encoded_path.startswith(r"\\.\pipe") and os.path.exists(temp_encoded_path):
             try:
                 os.remove(temp_encoded_path)
             except Exception:
                 pass
+        if output_part_str and os.path.exists(output_part_str):
+            try:
+                os.remove(output_part_str)
+            except Exception:
+                pass
+        if concat_txt_path and os.path.exists(concat_txt_path):
+            try:
+                os.remove(concat_txt_path)
+            except Exception:
+                pass
+        if active_process_holder is not None and active_process_holder.get("process") is p_mux:
+            active_process_holder["process"] = None
         return False
 
-    # Stage 2: Supervised Non-Blocking Container Mux into .part.mp4
-    render_print(f"[STREAM INTEL] Finalizing container mux with original audio ({codec_name})...", flush=True)
-    t_mux_start = time.perf_counter()
-    fps_str = "30000/1001" if abs(target_fps - 29.97) < 0.01 or abs(target_fps - 29.97003) < 0.01 else f"{target_fps}"
-
-    if codec_id == 1:
-        color_args = [
-            "-color_primaries", "bt709",
-            "-color_trc", "bt709",
-            "-colorspace", "bt709",
-            "-color_range", "tv",
-        ]
-    else:
-        color_args = [
-            "-color_primaries", "bt2020",
-            "-color_trc", "arib-std-b67",
-            "-colorspace", "bt2020nc",
-            "-color_range", "pc",
-        ]
-        if codec_id == 2:
-            color_args.extend(["-tag:v", "hvc1"])
-
-    rotation_mux_args = ["-display_rotation:v:0", str(effective_rotation)] if effective_rotation != 0 else []
-    output_part_str = output_file_str + ".part.mp4"
-    if os.path.exists(output_part_str):
-        try:
-            os.remove(output_part_str)
-        except Exception:
-            pass
-
-    concat_txt_path = None
-    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
-    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
-    # A shorter metadata stream must not make -shortest truncate encoded video.
-    shortest_args = [] if gpmf_maps else ["-shortest"]
-    if len(native_clip_paths) > 1:
-        concat_txt_path = str((temp_dir / f"temp_audio_concat_{os.getpid()}_{int(time.time())}.txt").resolve())
-        with open(concat_txt_path, "w", encoding="utf-8") as f_concat:
-            for p in native_clip_paths:
-                escaped_p = str(Path(p).resolve()).replace("\\", "/")
-                f_concat.write(f"file '{escaped_p}'\n")
-
-        cmd_mux = [
-            ffmpeg_exe, "-y", "-nostats", "-v", "warning",
-            "-progress", "pipe:1",
-            *rotation_mux_args,
-            "-r", fps_str,
-            "-i", temp_encoded_path,
-            "-f", "concat", "-safe", "0", "-i", concat_txt_path,
-            *gpmf_inputs,
-            "-map", "0:v:0",
-            "-map", "1:a:0?",
-            *gpmf_maps,
-            "-c:v", "copy",
-            "-c:a", "copy",
-            *shortest_args,
-            "-t", f"{duration_s:.6f}",
-            *color_args,
-            "-movflags", "+faststart",
-            output_part_str,
-        ]
-    else:
-        cmd_mux = [
-            ffmpeg_exe, "-y", "-nostats", "-v", "warning",
-            "-progress", "pipe:1",
-            *rotation_mux_args,
-            "-r", fps_str,
-            "-i", temp_encoded_path,
-            "-ss", "0", "-t", f"{duration_s:.6f}",
-            "-i", input_file_str,
-            *gpmf_inputs,
-            "-map", "0:v:0",
-            "-map", "1:a:0?",
-            *gpmf_maps,
-            "-c:v", "copy",
-            "-c:a", "copy",
-            *shortest_args,
-            *(["-t", f"{duration_s:.6f}"] if gpmf_maps else []),
-            *color_args,
-            "-movflags", "+faststart",
-            output_part_str,
-        ]
-
-    render_print(f"[STREAM INTEL MUX CMD] {' '.join(cmd_mux)}", flush=True)
-
-    p_mux = subprocess.Popen(
-        cmd_mux,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-    )
-
-    mux_progress = {
-        "out_time_us": 0,
-        "total_size": 0,
-        "speed": "N/A",
-        "progress": "continue",
-        "lines": 0,
-    }
-    mux_lock = threading.Lock()
-    t_mux_first_progress = None
-    t_mux_last_progress = None
-
-    def _mux_stdout_reader():
-        nonlocal t_mux_first_progress, t_mux_last_progress
-        try:
-            for line in p_mux.stdout:
-                line = line.strip()
-                if not line:
-                    continue
-                now_p = time.perf_counter()
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip()
-                    with mux_lock:
-                        mux_progress["lines"] += 1
-                        if t_mux_first_progress is None:
-                            t_mux_first_progress = now_p
-                        t_mux_last_progress = now_p
-                        if k in ("out_time_us", "out_time_ms"):
-                            try:
-                                mux_progress["out_time_us"] = int(v)
-                            except ValueError:
-                                pass
-                        elif k == "total_size":
-                            try:
-                                mux_progress["total_size"] = int(v)
-                            except ValueError:
-                                pass
-                        elif k == "speed":
-                            mux_progress["speed"] = v
-                        elif k == "progress":
-                            mux_progress["progress"] = v
-        except Exception:
-            pass
-
-    mux_stderr_lines = []
-    def _mux_stderr_reader():
-        try:
-            for line in p_mux.stderr:
-                if line:
-                    mux_stderr_lines.append(line.strip())
-                    if len(mux_stderr_lines) > 200:
-                        mux_stderr_lines.pop(0)
-        except Exception:
-            pass
-
-    t_mux_out = threading.Thread(target=_mux_stdout_reader, daemon=True, name="IntelMuxStdoutReader")
-    t_mux_err = threading.Thread(target=_mux_stderr_reader, daemon=True, name="IntelMuxStderrReader")
-    t_mux_out.start()
-    t_mux_err.start()
-
-    prev_emitted_size = 0
-    prev_emit_time = t_mux_start
-    last_meaningful_progress_time = t_mux_start
-    last_warn_time = t_mux_start
-    last_tracked_out_time_us = 0
-    last_tracked_size = 0
+    temp_ivf_bytes = os.path.getsize(temp_encoded_path) if (temp_encoded_path and not temp_encoded_path.startswith(r"\\.\pipe") and os.path.exists(temp_encoded_path)) else 0
 
     try:
-        while True:
-            rc = p_mux.poll()
-            now_m = time.perf_counter()
+        if use_legacy_post_mux:
+            # Stage 2: Supervised Non-Blocking Container Mux into .part.mp4 (Legacy Fallback)
+            render_print(f"[STREAM INTEL] Finalizing container mux with original audio ({codec_name}, temp_ivf={temp_ivf_bytes / (1024*1024):.2f} MB)...", flush=True)
+            t_mux_start = time.perf_counter()
 
-            # Active cancellation check (Phase 10)
-            if cancel_event is not None and cancel_event.is_set():
-                render_print("[STREAM INTEL] Final mux cancelled by user/queue, terminating FFmpeg...", flush=True)
-                p_mux.terminate()
+            if len(native_clip_paths) > 1:
+                cmd_mux = [
+                    ffmpeg_exe, "-y", "-nostats", "-v", "warning",
+                    "-progress", "pipe:1",
+                    *rotation_mux_args,
+                    "-r", fps_str,
+                    "-i", temp_encoded_path,
+                    "-f", "concat", "-safe", "0", "-i", concat_txt_path,
+                    *gpmf_inputs,
+                    "-map", "0:v:0",
+                    "-map", "1:a:0?",
+                    *gpmf_maps,
+                    "-c:v", "copy",
+                    "-c:a", "copy",
+                    *shortest_args,
+                    "-t", f"{duration_s:.6f}",
+                    *color_args,
+                    *faststart_args,
+                    output_part_str,
+                ]
+            else:
+                cmd_mux = [
+                    ffmpeg_exe, "-y", "-nostats", "-v", "warning",
+                    "-progress", "pipe:1",
+                    *rotation_mux_args,
+                    "-r", fps_str,
+                    "-i", temp_encoded_path,
+                    "-ss", "0", "-t", f"{duration_s:.6f}",
+                    "-i", input_file_str,
+                    *gpmf_inputs,
+                    "-map", "0:v:0",
+                    "-map", "1:a:0?",
+                    *gpmf_maps,
+                    "-c:v", "copy",
+                    "-c:a", "copy",
+                    *shortest_args,
+                    *(["-t", f"{duration_s:.6f}"] if gpmf_maps else []),
+                    *color_args,
+                    *faststart_args,
+                    output_part_str,
+                ]
+
+            render_print(f"[STREAM INTEL MUX CMD] {' '.join(cmd_mux)}", flush=True)
+
+            p_mux = subprocess.Popen(
+                cmd_mux,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            if active_process_holder is not None:
+                active_process_holder["process"] = p_mux
+
+            mux_progress = {
+                "out_time_us": 0,
+                "total_size": 0,
+                "speed": "N/A",
+                "progress": "continue",
+                "lines": 0,
+            }
+            mux_lock = threading.Lock()
+            t_mux_first_progress = None
+            t_mux_last_progress = None
+
+            def _mux_stdout_reader():
+                nonlocal t_mux_first_progress, t_mux_last_progress
                 try:
-                    p_mux.wait(timeout=3.0)
-                except subprocess.TimeoutExpired:
-                    p_mux.kill()
-                    p_mux.wait(timeout=1.0)
+                    for line in p_mux.stdout:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        now_p = time.perf_counter()
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip()
+                            with mux_lock:
+                                mux_progress["lines"] += 1
+                                if t_mux_first_progress is None:
+                                    t_mux_first_progress = now_p
+                                t_mux_last_progress = now_p
+                                if k in ("out_time_us", "out_time_ms"):
+                                    try:
+                                        mux_progress["out_time_us"] = int(v)
+                                    except ValueError:
+                                        pass
+                                elif k == "total_size":
+                                    try:
+                                        mux_progress["total_size"] = int(v)
+                                    except ValueError:
+                                        pass
+                                elif k == "speed":
+                                    mux_progress["speed"] = v
+                                elif k == "progress":
+                                    mux_progress["progress"] = v
+                except Exception:
+                    pass
+
+            mux_stderr_lines = []
+            def _mux_stderr_reader():
+                try:
+                    for line in p_mux.stderr:
+                        if line:
+                            mux_stderr_lines.append(line.strip())
+                            if len(mux_stderr_lines) > 200:
+                                mux_stderr_lines.pop(0)
+                except Exception:
+                    pass
+
+            t_mux_out = threading.Thread(target=_mux_stdout_reader, daemon=True, name="IntelMuxStdoutReader")
+            t_mux_err = threading.Thread(target=_mux_stderr_reader, daemon=True, name="IntelMuxStderrReader")
+            t_mux_out.start()
+            t_mux_err.start()
+
+            prev_emitted_size = 0
+            prev_emit_time = t_mux_start
+            last_meaningful_progress_time = t_mux_start
+            last_warn_time = t_mux_start
+            last_tracked_out_time_us = 0
+            last_tracked_size = 0
+
+            while True:
+                rc = p_mux.poll()
+                now_m = time.perf_counter()
+
+                # Active cancellation check (Phase 10)
+                if cancel_event is not None and cancel_event.is_set():
+                    render_print("[STREAM INTEL] Final mux cancelled by user/queue, terminating FFmpeg...", flush=True)
+                    p_mux.terminate()
+                    try:
+                        p_mux.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        p_mux.kill()
+                        p_mux.wait(timeout=1.0)
+                    if os.path.exists(output_part_str):
+                        try:
+                            os.remove(output_part_str)
+                        except Exception:
+                            pass
+                    return False
+
+                with mux_lock:
+                    c_out_time_us = mux_progress["out_time_us"]
+                    c_total_size = mux_progress["total_size"]
+                    c_speed = mux_progress["speed"]
+
+                cur_disk_sz = 0
+                if os.path.exists(output_part_str):
+                    try:
+                        cur_disk_sz = os.path.getsize(output_part_str)
+                    except OSError:
+                        cur_disk_sz = 0
+
+                eff_sz = max(c_total_size, cur_disk_sz)
+
+                if c_out_time_us > last_tracked_out_time_us or eff_sz > last_tracked_size:
+                    last_meaningful_progress_time = now_m
+                    last_tracked_out_time_us = c_out_time_us
+                    last_tracked_size = eff_sz
+
+                stall_sec = now_m - last_meaningful_progress_time
+
+                # Active Stall Watchdog (Phase 9)
+                if rc is None:
+                    if stall_sec >= 60.0:
+                        render_print(f"[STREAM INTEL WATCHDOG] 60s TRUE STALL DETECTED in FFmpeg mux! Terminating process...", flush=True)
+                        p_mux.terminate()
+                        try:
+                            p_mux.wait(timeout=3.0)
+                        except subprocess.TimeoutExpired:
+                            p_mux.kill()
+                        if os.path.exists(output_part_str):
+                            try:
+                                os.remove(output_part_str)
+                            except Exception:
+                                pass
+                        return False
+                    elif stall_sec >= 30.0 and (now_m - last_warn_time >= 5.0):
+                        render_print(f"[STREAM INTEL WATCHDOG] 30s stall diagnosis: out_time_us={c_out_time_us} eff_size={eff_sz} (state=ACTIVE_BUT_SLOW / moov relocation)", flush=True)
+                        last_warn_time = now_m
+                    elif stall_sec >= 15.0 and (now_m - last_warn_time >= 5.0):
+                        render_print(f"[STREAM INTEL WATCHDOG] 15s without progress: out_time_us={c_out_time_us} eff_size={eff_sz}", flush=True)
+                        last_warn_time = now_m
+
+                # Progress emission (every ~0.2s)
+                dt_emit = now_m - prev_emit_time
+                if dt_emit >= 0.2:
+                    write_spd = ((eff_sz - prev_emitted_size) / (1024.0 * 1024.0)) / dt_emit if (dt_emit > 0 and eff_sz >= prev_emitted_size) else 0.0
+                    prev_emitted_size = eff_sz
+                    prev_emit_time = now_m
+
+                    out_sec = c_out_time_us / 1_000_000.0
+                    ratio = (out_sec / duration_s) if duration_s > 0 else 0.0
+                    clamped_ratio = max(0.0, min(0.99, ratio))
+                    mux_global = 94.0 + clamped_ratio * (98.0 - 94.0)
+
+                    is_stalled = (rc is None) and (stall_sec > 10.0)
+                    stage_label = f"Finalizacja: mux audio/wideo ({c_speed})" if c_speed != "N/A" else "Finalizacja: mux audio/wideo"
+
+                    if progress_tracker:
+                        progress_tracker.finalize(
+                            stage_label,
+                            clamped_ratio,
+                            progress_mode="determinate",
+                            global_pct=mux_global,
+                            file_size_bytes=eff_sz,
+                            write_speed_mbps=write_spd,
+                            stall_warning=is_stalled,
+                            stall_seconds=stall_sec if is_stalled else None,
+                        )
+                    if progress_cb:
+                        progress_cb(frames_rendered, f"{stage_label} ({eff_sz / (1024*1024):.1f} MB, {clamped_ratio*100:.1f}%)")
+
+                if rc is not None:
+                    break
+
+                time.sleep(0.05)
+
+            t_mux_out.join(timeout=2.0)
+            t_mux_err.join(timeout=2.0)
+            t_mux_end = time.perf_counter()
+            mux_wall_s = max(0.0, t_mux_end - t_mux_start)
+
+            if p_mux.returncode != 0:
+                err_details = "\n".join(mux_stderr_lines[-20:])
+                render_print(f"[STREAM INTEL] Final container remux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
+                if os.path.exists(output_part_str):
+                    try:
+                        os.remove(output_part_str)
+                    except Exception:
+                        pass
+                return False
+        else:
+            # Live Mux Pipeline: container mux completed concurrently during render & drain!
+            mux_wall_s = 0.0
+            if p_mux is not None and p_mux.returncode != 0:
+                err_details = "\n".join(mux_stderr_lines[-20:])
+                render_print(f"[STREAM INTEL] Live container mux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
                 if os.path.exists(output_part_str):
                     try:
                         os.remove(output_part_str)
@@ -1614,99 +1911,7 @@ def export_intel_native_d3d11(
                         pass
                 return False
 
-            with mux_lock:
-                c_out_time_us = mux_progress["out_time_us"]
-                c_total_size = mux_progress["total_size"]
-                c_speed = mux_progress["speed"]
-
-            cur_disk_sz = 0
-            if os.path.exists(output_part_str):
-                try:
-                    cur_disk_sz = os.path.getsize(output_part_str)
-                except OSError:
-                    cur_disk_sz = 0
-
-            eff_sz = max(c_total_size, cur_disk_sz)
-
-            if c_out_time_us > last_tracked_out_time_us or eff_sz > last_tracked_size:
-                last_meaningful_progress_time = now_m
-                last_tracked_out_time_us = c_out_time_us
-                last_tracked_size = eff_sz
-
-            stall_sec = now_m - last_meaningful_progress_time
-
-            # Active Stall Watchdog (Phase 9)
-            if rc is None:
-                if stall_sec >= 60.0:
-                    render_print(f"[STREAM INTEL WATCHDOG] 60s TRUE STALL DETECTED in FFmpeg mux! Terminating process...", flush=True)
-                    p_mux.terminate()
-                    try:
-                        p_mux.wait(timeout=3.0)
-                    except subprocess.TimeoutExpired:
-                        p_mux.kill()
-                    if os.path.exists(output_part_str):
-                        try:
-                            os.remove(output_part_str)
-                        except Exception:
-                            pass
-                    return False
-                elif stall_sec >= 30.0 and (now_m - last_warn_time >= 5.0):
-                    render_print(f"[STREAM INTEL WATCHDOG] 30s stall diagnosis: out_time_us={c_out_time_us} eff_size={eff_sz} (state=ACTIVE_BUT_SLOW / moov relocation)", flush=True)
-                    last_warn_time = now_m
-                elif stall_sec >= 15.0 and (now_m - last_warn_time >= 5.0):
-                    render_print(f"[STREAM INTEL WATCHDOG] 15s without progress: out_time_us={c_out_time_us} eff_size={eff_sz}", flush=True)
-                    last_warn_time = now_m
-
-            # Progress emission (every ~0.2s)
-            dt_emit = now_m - prev_emit_time
-            if dt_emit >= 0.2:
-                write_spd = ((eff_sz - prev_emitted_size) / (1024.0 * 1024.0)) / dt_emit if (dt_emit > 0 and eff_sz >= prev_emitted_size) else 0.0
-                prev_emitted_size = eff_sz
-                prev_emit_time = now_m
-
-                out_sec = c_out_time_us / 1_000_000.0
-                ratio = (out_sec / duration_s) if duration_s > 0 else 0.0
-                clamped_ratio = max(0.0, min(0.99, ratio))
-                mux_global = 94.0 + clamped_ratio * (98.0 - 94.0)
-
-                is_stalled = (rc is None) and (stall_sec > 10.0)
-                stage_label = f"Finalizacja: mux audio/wideo ({c_speed})" if c_speed != "N/A" else "Finalizacja: mux audio/wideo"
-
-                if progress_tracker:
-                    progress_tracker.finalize(
-                        stage_label,
-                        clamped_ratio,
-                        progress_mode="determinate",
-                        global_pct=mux_global,
-                        file_size_bytes=eff_sz,
-                        write_speed_mbps=write_spd,
-                        stall_warning=is_stalled,
-                        stall_seconds=stall_sec if is_stalled else None,
-                    )
-                if progress_cb:
-                    progress_cb(frames_rendered, f"{stage_label} ({eff_sz / (1024*1024):.1f} MB, {clamped_ratio*100:.1f}%)")
-
-            if rc is not None:
-                break
-
-            time.sleep(0.05)
-
-        t_mux_out.join(timeout=2.0)
-        t_mux_err.join(timeout=2.0)
-        t_mux_end = time.perf_counter()
-        mux_wall_s = max(0.0, t_mux_end - t_mux_start)
-
-        if p_mux.returncode != 0:
-            err_details = "\n".join(mux_stderr_lines[-20:])
-            render_print(f"[STREAM INTEL] Final container remux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
-            if os.path.exists(output_part_str):
-                try:
-                    os.remove(output_part_str)
-                except Exception:
-                    pass
-            return False
-
-        # Stage 3: Verification (Phase 11)
+        # Stage 3: Verification (Phase 11) - Common to both paths
         t_verify_start = time.perf_counter()
         if progress_tracker:
             progress_tracker.finalize("Finalizacja: weryfikacja pliku", 1.0, global_pct=98.5)
@@ -1762,11 +1967,16 @@ def export_intel_native_d3d11(
             progress_tracker.complete(total_wall_s)
 
     finally:
-        if os.path.exists(temp_encoded_path):
-            try:
-                os.remove(temp_encoded_path)
-            except Exception:
-                pass
+        if active_process_holder is not None:
+            active_process_holder["process"] = None
+        if temp_encoded_path and not temp_encoded_path.startswith(r"\\.\pipe") and os.path.exists(temp_encoded_path):
+            if os.environ.get("TELEM_PRESERVE_TEMP_IVF") != "1":
+                try:
+                    os.remove(temp_encoded_path)
+                except Exception:
+                    pass
+            else:
+                render_print(f"[STREAM INTEL] Preserving temp bitstream at: {temp_encoded_path}", flush=True)
         if concat_txt_path and os.path.exists(concat_txt_path):
             try:
                 os.remove(concat_txt_path)
@@ -1791,6 +2001,14 @@ def export_intel_native_d3d11(
         "verify_seconds": verify_s,
         "finalization_seconds": finalization_s,
         "total_wall_seconds": total_wall_s,
+        "video_encode_pass_count": 1,
+        "final_mp4_full_remux_count": 1 if use_legacy_post_mux else 0,
+        "mux_process_count": 1,
+        "temp_ivf_bytes": temp_ivf_bytes if use_legacy_post_mux else 0,
+        "temp_ivf_path": temp_encoded_path if use_legacy_post_mux else None,
+        "audio_live_mux": not use_legacy_post_mux,
+        "gpmf_live_mux": bool(inline_gpmf_plan and inline_gpmf_plan.enabled) if not use_legacy_post_mux else False,
+        "post_render_full_mux_seconds": mux_wall_s if use_legacy_post_mux else 0.0,
         "cancelled": False,
     }
 
@@ -1905,7 +2123,7 @@ def export_intel_native_d3d11(
         proof_dict["timings"].update({
             "export_wall_ms": total_wall_s * 1000.0,
             "first_frame_latency_ms": first_frame_latency * 1000.0,
-            "video_render_wall_ms": render_wall_s * 1000.0,
+            "video_render_wall_ms": frame_render_s * 1000.0,
             "mux_ms": mux_wall_s * 1000.0,
             "render_fps": render_fps,
             "user_effective_fps": user_effective_fps,

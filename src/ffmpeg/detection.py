@@ -114,7 +114,7 @@ def _test_encoder(encoder_name: str, ffmpeg_exe: str = "ffmpeg") -> bool:
                 "-c:v", encoder_name,
                 "-f", "null", "-",
             ],
-            capture_output=True, timeout=10,
+            capture_output=True, timeout=35,
             **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}),
         )
         return r.returncode == 0

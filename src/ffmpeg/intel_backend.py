@@ -307,18 +307,55 @@ def ffmpeg_encoders_have_qsv(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
 _QSV_CODECS_CACHE: dict[str, dict[str, bool]] = {}
 
 
+def _get_qsv_cache_file() -> Path | None:
+    try:
+        p = Path(os.environ.get("LOCALAPPDATA", ".")) / "BikeRideHUD" / "cache" / "qsv_codecs.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    except Exception:
+        return None
+
+
 def probe_qsv_codecs(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
     """Probe hardware usability for each QSV encoder via real test encode."""
     global _QSV_CODECS_CACHE
     if ffmpeg_exe in _QSV_CODECS_CACHE:
         return dict(_QSV_CODECS_CACHE[ffmpeg_exe])
+
+    cache_file = _get_qsv_cache_file()
+    if cache_file and cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                disk_cache = json.load(f)
+            if ffmpeg_exe in disk_cache and any(disk_cache[ffmpeg_exe].values()):
+                mtime_ok = True
+                if os.path.exists(ffmpeg_exe):
+                    mtime_ok = os.path.getmtime(ffmpeg_exe) <= cache_file.stat().st_mtime
+                if mtime_ok:
+                    _QSV_CODECS_CACHE[ffmpeg_exe] = disk_cache[ffmpeg_exe]
+                    return dict(_QSV_CODECS_CACHE[ffmpeg_exe])
+        except Exception:
+            pass
+
     from src.ffmpeg.detection import _test_encoder
+    print(f"[INTEL] Probing hardware QSV encoders with {ffmpeg_exe}...", flush=True)
     res = {
         "hevc_qsv": _test_encoder("hevc_qsv", ffmpeg_exe),
         "av1_qsv": _test_encoder("av1_qsv", ffmpeg_exe),
         "h264_qsv": _test_encoder("h264_qsv", ffmpeg_exe),
     }
     _QSV_CODECS_CACHE[ffmpeg_exe] = res
+    if cache_file:
+        try:
+            disk_cache = {}
+            if cache_file.exists():
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    disk_cache = json.load(f)
+            disk_cache[ffmpeg_exe] = res
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(disk_cache, f, indent=2)
+        except Exception:
+            pass
     return dict(res)
 
 
