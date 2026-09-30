@@ -1,0 +1,124 @@
+{
+  "$schema": "runtime_manifest_schema_v1",
+  "description": "BikeRideHUD Vendor Isolated Runtime Manifest",
+  "common": [
+    {
+      "path": "runtime/common/ffmpeg/ffmpeg.exe",
+      "sha256": "d95d1567c9865eb935df2da1cc0315004c3ef37e0b983b47af66ab8cf3e1e133",
+      "size": 223938560,
+      "purpose": "Standard static ffmpeg.exe binary for media processing",
+      "required": true,
+      "origin": "Z:\\BikeRideHUD-main\\ffmpeg.exe"
+    },
+    {
+      "path": "runtime/common/ffmpeg/ffprobe.exe",
+      "sha256": "68fdc500201dc0c2635938e7e995a70f75d0070eed402761fdf4559fbebdd8c3",
+      "size": 223724544,
+      "purpose": "Standard static ffprobe.exe binary for media processing",
+      "required": true,
+      "origin": "Z:\\BikeRideHUD-main\\ffprobe.exe"
+    },
+    {
+      "path": "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd",
+      "sha256": "32e8a0a21489bf325284469c46a8bba1561ad1ff98058ae18bf18b6639f2cbf2",
+      "size": 5854720,
+      "purpose": "DJI Action telemetry parsing native extension for Python 3.14",
+      "required": true,
+      "origin": "Z:\\BikeRideHUD-main\\runtime\\telemetry_parser\\telemetry_parser\\telemetry_parser.cp314-win_amd64.pyd"
+    }
+  ],
+  "amd": [
+    {
+      "path": "runtime/amd/bin/telem_amd_native.dll",
+      "sha256": "90be5af56bb56a73cdc161a0508b0d6a2c71987be44a565712c37aa5b5d66647",
+      "size": 5612208,
+      "purpose": "AMD Native D3D11 VideoProcessor + AMF HEVC/AV1 encoding pipeline",
+      "required": true,
+      "origin": "Z:\\BikeRideHUD-main\\native\\d3d11_amf_pipeline\\bin\\telem_amd_native.dll"
+    },
+    {
+      "path": "runtime/amd/bin/libwinpthread-1.dll",
+      "sha256": "1bbd639c9be4bc7517beb0fac9ac13502d270e9bf07fcd223de8cc40d9c15408",
+      "size": 66467,
+      "purpose": "MinGW POSIX thread support library required by telem_amd_native.dll",
+      "required": true,
+      "origin": "C:\\Program Files\\Git\\mingw64\\bin\\libwinpthread-1.dll"
+    }
+  ],
+  "intel": [
+    {
+      "path": "runtime/intel/bin/telem_intel_native.dll",
+      "sha256": "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b",
+      "size": 216064,
+      "purpose": "Intel Native D3D11 VideoProcessor + oneVPL AV1 encoding pipeline",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\telem_intel_native.dll"
+    },
+    {
+      "path": "runtime/intel/bin/avcodec-63.dll",
+      "sha256": "f958e8ae31ce50b58e228c354411e406cd46c0021a6d250e90cf007fe65740d3",
+      "size": 97830912,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\avcodec-63.dll"
+    },
+    {
+      "path": "runtime/intel/bin/avdevice-63.dll",
+      "sha256": "cc2de2187efd18aed52d3021d90934337bfe0e8ec60d988797b87ae7664f5ee0",
+      "size": 6547456,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\avdevice-63.dll"
+    },
+    {
+      "path": "runtime/intel/bin/avfilter-12.dll",
+      "sha256": "8f8e2d63f6658450169d7fe2f5696fa9b01df3c1d3820cf706e142ba80758924",
+      "size": 103180800,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\avfilter-12.dll"
+    },
+    {
+      "path": "runtime/intel/bin/avformat-63.dll",
+      "sha256": "8c0615789d41737051cf082351d4b9c869dd2f0abac4b792ff838041638752e5",
+      "size": 20256256,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\avformat-63.dll"
+    },
+    {
+      "path": "runtime/intel/bin/avutil-61.dll",
+      "sha256": "e289456490e190e0d74aa34980aeaa68903a6656248e2e7ef830e17acd80eb49",
+      "size": 3160576,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\avutil-61.dll"
+    },
+    {
+      "path": "runtime/intel/bin/swresample-7.dll",
+      "sha256": "d240955beb927ff2fb46cc4f80f83db20a10a9b9032f4092a10f492836fb0213",
+      "size": 486912,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\swresample-7.dll"
+    },
+    {
+      "path": "runtime/intel/bin/swscale-10.dll",
+      "sha256": "89df1925fc718639cb13e849bc940dca114a10e97d93f8fdfd6c14369941a964",
+      "size": 2421760,
+      "purpose": "Shared FFmpeg 9.0.1 runtime library required by telem_intel_native.dll",
+      "required": true,
+      "origin": "C:\\_DEV\\BikeRideHUD-intel\\third_party\\ffmpeg-9.0.1-full_build-shared\\bin\\swscale-10.dll"
+    }
+  ],
+  "nvidia": [
+    {
+      "path": "runtime/nvidia/bin/telem_nvenc_native.dll",
+      "sha256": null,
+      "size": null,
+      "purpose": "NVIDIA Native D3D11 + NVENC pipeline (optional/on-demand). Fallback uses standard FFmpeg NVENC.",
+      "required": false,
+      "origin": "Z:\\BikeRideHUD-main (contract placeholder)"
+    }
+  ]
+}
