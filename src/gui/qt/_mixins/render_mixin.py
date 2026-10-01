@@ -692,17 +692,29 @@ class RenderMixin:
             except Exception:
                 continue
 
-        encoder = options.get("encoder", detect_best_encoder())
-        if encoder == "auto":
-            encoder = detect_best_encoder()
+        from src.ffmpeg.backend_capabilities import (
+            query_backend_capabilities,
+            resolve_auto_backend,
+            validate_backend_available,
+        )
+        caps = query_backend_capabilities()
+
+        requested_encoder = str(options.get("encoder", "auto")).strip().lower()
+        if requested_encoder == "nvidia":
+            requested_encoder = "nv"
+
+        if requested_encoder == "auto":
+            encoder = resolve_auto_backend(caps)
+            options["encoder"] = encoder
+        else:
+            encoder = requested_encoder
+
         requested_render_mode = normalize_render_mode(options.get("render_mode", "gpu"))
         if requested_render_mode is RenderMode.CPU:
-            # Existing software renderer remains the canonical CPU-only path.
+            # Explicit software renderer mode forces CPU
             encoder = "cpu"
+            options["encoder"] = "cpu"
         elif requested_render_mode is RenderMode.HYBRID:
-            # A CPU producer must never create independently encoded chunks.
-            # Until a backend advertises its verified handoff to the one final
-            # native encoder, Hybrid safely continues as GPU-only.
             decision = choose_hybrid_mode(
                 requested=requested_render_mode,
                 backend=str(encoder),
@@ -714,19 +726,15 @@ class RenderMixin:
                 f"cpu_workers={decision.cpu_workers} reason={decision.reason}",
                 flush=True,
             )
-        # Validate that the requested hardware encoder actually works on this GPU
-        if encoder == "nv" and not _test_encoder("hevc_nvenc"):
-            encoder = detect_best_encoder()
-        elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
+
+        # Explicit Selection Contract & Export Safety Gate:
+        # REQUESTED_BACKEND == EFFECTIVE_BACKEND (or BLOCKED)
+        # SILENT_CROSS_VENDOR_FALLBACK=NO
+        is_avail, reason = validate_backend_available(encoder, caps)
+        if not is_avail:
             raise RuntimeError(
-                "AMD hardware encoder is unavailable; automatic CPU x265 fallback is disabled"
+                f"UNSUPPORTED_BACKEND_RENDER_START=BLOCKED: Backend '{encoder}' is not available on this machine ({reason}). SILENT_CROSS_VENDOR_FALLBACK=NO."
             )
-        elif encoder == "intel":
-            # INTEL_FORCE: no silent cross-GPU fallback.  If the user explicitly
-            # requested Intel, the full controlled resolution (adapter + QSV) is
-            # performed by stream_overlay_to_ffmpeg, which raises a controlled
-            # error (IntelBackendError) when no usable Intel GPU/QSV exists.
-            pass
 
         resolution = options.get("resolution", "source")
         raw_output = options.get("output", "output.mp4")

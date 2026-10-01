@@ -170,35 +170,19 @@ def get_hardware_info(force_refresh: bool = False) -> HardwareCapabilitiesInfo:
     except Exception:
         info.active_preview = "Auto (d3d11va)"
 
-    # Enkodery
+    # Enkodery (Canonical BackendCapabilities Source of Truth)
     try:
-        from src.ffmpeg.detection import _test_encoder
-        has_amf = _test_encoder("hevc_amf") or _test_encoder("h264_amf")
-        has_nv = _test_encoder("hevc_nvenc")
-        has_qsv = _test_encoder("hevc_qsv")
-
-        info.enc_amd = "Dostępne (AMF HEVC / H.264)" if has_amf else "Niedostępne"
-        info.enc_nvidia = "Dostępne (NVENC)" if has_nv else "Niedostępne"
-        try:
-            from src.ffmpeg.intel_native_exporter import query_intel_capabilities
-            intel_caps = query_intel_capabilities()
-            intel_codecs = []
-            if intel_caps.get("AV1_AVAILABLE") and intel_caps.get("AV1_10BIT"):
-                intel_codecs.append("AV1")
-            if intel_caps.get("HEVC_AVAILABLE") and intel_caps.get("HEVC_10BIT"):
-                intel_codecs.append("HEVC")
-            if intel_caps.get("H264_AVAILABLE") and intel_caps.get("H264_8BIT"):
-                intel_codecs.append("H.264")
-            if intel_codecs:
-                info.enc_intel = f"Dostępne (QSV: {' / '.join(intel_codecs)})"
-            else:
-                info.enc_intel = "Niedostępne"
-        except Exception:
-            has_qsv = _test_encoder("hevc_qsv")
-            info.enc_intel = "Dostępne (QSV)" if has_qsv else "Niedostępne"
-        info.enc_cpu = "Dostępne (libx265 / libx264)"
+        from src.ffmpeg.backend_capabilities import query_backend_capabilities
+        backend_caps = query_backend_capabilities(force_refresh=force_refresh)
+        info.enc_amd = "Dostępne (AMF HEVC / H.264)" if backend_caps.amd_available else "Niedostępne"
+        if backend_caps.nvidia_available:
+            info.enc_nvidia = f"Dostępne (NVENC: {' / '.join(backend_caps.nvidia_codecs)})"
+        else:
+            info.enc_nvidia = "Niedostępne"
+        info.enc_intel = backend_caps.intel_reason if backend_caps.intel_available else "Niedostępne"
+        info.enc_cpu = backend_caps.cpu_reason if backend_caps.cpu_available else "Dostępne (libx265 / libx264)"
     except Exception:
-        info.enc_amd = "Wg sterownika (AMF)"
+        info.enc_amd = "Niedostępne"
         info.enc_nvidia = "Niedostępne"
         info.enc_intel = "Niedostępne"
         info.enc_cpu = "Dostępne (CPU)"

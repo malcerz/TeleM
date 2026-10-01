@@ -127,8 +127,14 @@ def detect_best_encoder(ffmpeg_exe: str = "ffmpeg") -> str:
 
     Returns one of ``'nv'`` (NVIDIA NVENC), ``'amd'`` (AMD AMF),
     ``'intel'`` (Intel QSV) or ``'cpu'`` (libx265 software).
-    Result is cached for subsequent calls.
+    Delegates to canonical resolve_auto_backend.
     """
+    try:
+        from src.ffmpeg.backend_capabilities import resolve_auto_backend
+        return resolve_auto_backend()
+    except Exception:
+        pass
+
     global _BEST_ENCODER_CACHE
     if _BEST_ENCODER_CACHE is not None:
         return _BEST_ENCODER_CACHE
