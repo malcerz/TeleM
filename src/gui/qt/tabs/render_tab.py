@@ -3733,22 +3733,27 @@ class RenderTab(QWidget):
         available_backends = get_available_backends(caps)
 
         # Resolve selection
-        if current_val and current_val not in available_backends:
-            effective_val = resolve_supported_backend(current_val, caps)
-        elif current_val:
-            effective_val = current_val
+        if not available_backends:
+            display_backends = ["none"]
+            effective_val = "none"
         else:
-            effective_val = "auto"
+            display_backends = available_backends
+            if current_val and current_val not in available_backends:
+                effective_val = resolve_supported_backend(current_val, caps)
+            elif current_val:
+                effective_val = current_val
+            else:
+                effective_val = "auto"
 
         self.cmb_encoder.blockSignals(True)
         self.cmb_encoder.clear()
-        for b in available_backends:
+        for b in display_backends:
             self.cmb_encoder.addItem(b, b)
 
         idx = self.cmb_encoder.findText(effective_val)
         if idx >= 0:
             self.cmb_encoder.setCurrentIndex(idx)
-        else:
+        elif self.cmb_encoder.count() > 0:
             self.cmb_encoder.setCurrentIndex(0)
         self.cmb_encoder.blockSignals(False)
 

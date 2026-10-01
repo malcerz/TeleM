@@ -4,12 +4,13 @@
 
 - **DATA:** 2026-10-01
 - **TEST_MACHINE:** Intel Core i5-12400 (6C/12T) / Intel(R) UHD Graphics 730 / NVIDIA Quadro P400
-- **SYSTEM:** Windows 10 Pro (kompilacja 19045)
+- **ACTUAL_OS:** Windows 11 Pro (25H2)
+- **ACTUAL_BUILD:** 26200.9550
+- **REPORT_METADATA_CORRECTED:** YES
+- **OS_DISCREPANCY_NOTE:** Poprzednia wersja raportu zawierała szablon z Windows 10 (kompilacja 19045). Bezpośrednia kwerenda rejestru (`CurrentBuildNumber=26200`, `UBR=9550`, `DisplayVersion=25H2`) oraz panelu GUI Hardware Capabilities potwierdziła rzeczywisty system: Windows 11 Pro 25H2 build 26200.9550.
 - **WORKSPACE / GIT WORKTREE:** `C:\_DEV\BikeRideHUD-main-new`
 - **PORTABLE RUNTIME UNDER TEST:** `C:\_DEV\BikeRideHUD-portable`
 - **PYTHON:** `C:\Users\adminik\AppData\Local\Python\pythoncore-3.14-64\python.exe` (Python 3.14.7)
-- **COMMIT:** `ef350bb5`
-- **PUSH_RESULT:** `To https://github.com/malcerz/TeleM.git ce1167e5..ef350bb5 main -> main`
 - **FINAL_STATUS:** `DYNAMIC_EXPORT_BACKENDS_PASS`
 
 ---
@@ -128,6 +129,12 @@ Zbadano bezpośrednio interakcję między sterownikiem NVIDIA a runtime FFmpeg:
 - Kontrolka jakości NVIDIA (`cmb_nvidia_quality`) została przekształcona w `DiscreteSlider` z zachowaniem wartości: `Fast`, `Quality`, `Max Quality`.
 - Wybór backendu NVIDIA (`cmb_nvidia_backend`) udostępnia wyłącznie przetestowane, działające ścieżki (ukrywa niedostępny moduł eksperymentalny Native D3D11).
 
+### G. Obsługa przypadków brzegowych (Edge Cases)
+- **Brak jakiegokolwiek enkodera (NO_BACKEND_FALSE_CPU_FALLBACK=NO):**
+  W sytuacji, gdy żaden enkoder sprzętowy ani programowy nie jest dostępny (`cpu_available=False`), `resolve_auto_backend()` zwraca `"none"` (zamiast fałszywego `"cpu"`). `get_available_backends()` zwraca pustą listę `[]` (w GUI pojawia się etykieta `"none"`). Próba uruchomienia renderu jest natychmiast blokowana na bramce bezpieczeństwa z wyjątkiem `RuntimeError("UNSUPPORTED_BACKEND_RENDER_START=BLOCKED: Backend 'none' is not available on this machine (...)")`.
+- **Kontrakt produkcyjny AMD (AMD_AVAILABLE_IMPLIES_PRODUCTION_PATH_USABLE=YES):**
+  Audyt rzeczywistej produkcyjnej ścieżki eksportu w `src/ffmpeg/amd_native_exporter.py` potwierdził, że wykonanie eksportu wymaga załadowania biblioteki `runtime\amd\bin\telem_amd_native.dll`. Zgodnie z kontraktem, `_probe_amd_environment` wymaga teraz **zarówno** wsparcia AMF w sterowniku/FFmpeg, **jak i** fizycznej obecności oraz pomyślnego załadowania `telem_amd_native.dll` wraz ze wszystkimi zależnościami. Sama obecność enkodera FFmpeg `hevc_amf` bez biblioteki DLL nie powoduje już udostępnienia backendu AMD.
+
 ---
 
 ## 5. Aktywny Watchdog i Pomiary
@@ -150,33 +157,31 @@ Porównanie sum kontrolnych SHA-256 potwierdziło 100% zgodności binarnej:
 
 | Plik | SHA-256 | Status |
 | :--- | :--- | :--- |
-| `src/ffmpeg/backend_capabilities.py` | `035E6378E08BEE8E66103BCCE7F7DCBD35F3036CA39D52A0A9AB48445B02102A` | **MATCH** |
+| `src/ffmpeg/backend_capabilities.py` | `07404ED41A2C8583A8E893F998DBC293844CC37BD9AB1E1FCC7E552264733055` | **MATCH** |
 | `src/ffmpeg/detection.py` | `1DC921CC115ED5C65FCF0961D73CE80CED84A61E05E9C34651F56846396CA1CA` | **MATCH** |
 | `src/gui/qt/_mixins/render_mixin.py` | `83A88E2697FB36C56D5EC6948442B582FDDB842496556F084CF236162030CCF5` | **MATCH** |
 | `src/gui/qt/hardware_info.py` | `FE7551A63A1176D88394B099D3D5CB96CB062A5505B90515C53D3E8E0F677410` | **MATCH** |
-| `src/gui/qt/tabs/render_tab.py` | `5DD66B79ED6C14851DB8DB0357D0930889F3B61E97D3907959A523D94E3AA915` | **MATCH** |
+| `src/gui/qt/tabs/render_tab.py` | `1C1314DE2C88D1EEBEB7832510C6993FEF9B5C69C7AC85A244EDC9861023DBA8` | **MATCH** |
 
 Wykonanie testu walidacyjnego bezpośrednio z katalogu roboczego `C:\_DEV\BikeRideHUD-portable` potwierdziło:
 ```text
 Running from: C:\_DEV\BikeRideHUD-portable
-AMD_AVAILABLE: False
-NVIDIA_AVAILABLE: False
-INTEL_AVAILABLE: True
-CPU_AVAILABLE: True
-RENDERING_BACKENDS: ['auto', 'intel', 'cpu']
-DEFAULT_BACKEND: auto
-HW_PANEL_AMD: Niedostępne
-HW_PANEL_NVIDIA: Niedostępne
-HW_PANEL_INTEL: Dostępne (QSV: HEVC / H.264)
-HW_PANEL_CPU: Dostępne (libx265 / libx264)
-PORTABLE_VALIDATION_PASS=YES
+=== PORTABLE VERIFICATION ===
+CAPS AMD_AVAILABLE: False
+CAPS NVIDIA_AVAILABLE: False
+CAPS INTEL_AVAILABLE: True
+CAPS CPU_AVAILABLE: True
+GET_AVAILABLE_BACKENDS: ['auto', 'intel', 'cpu']
+DROPDOWN_ITEMS: ['auto', 'intel', 'cpu']
+AUTO_SELECTED: intel
+PORTABLE_FINAL_CHECK_PASS=YES
 ```
 
 ---
 
-## 7. Wyniki Testów Regresyjnych (58 passed, 1 skipped)
+## 7. Wyniki Testów Regresyjnych (35 passed)
 
-Zestaw testów deterministycznych w `tests/test_dynamic_export_backends.py`:
+Zestaw testów deterministycznych w `tests/test_dynamic_export_backends.py` (15/15 passed):
 - **CASE A (Intel + CPU):** `['auto', 'intel', 'cpu']` -> **PASSED**
 - **CASE B (AMD + CPU):** `['auto', 'amd', 'cpu']` -> **PASSED**
 - **CASE C (NVIDIA + Intel + CPU):** `['auto', 'nv', 'intel', 'cpu']` -> **PASSED**
@@ -189,18 +194,28 @@ Zestaw testów deterministycznych w `tests/test_dynamic_export_backends.py`:
 - **Kolejka (Queue Safety):** `QUEUE_CROSS_VENDOR_SILENT_FALLBACK=NO` -> **PASSED**
 - **Parytet panelu i listy:** `HARDWARE_PANEL_RENDER_GUI_PARITY=YES` -> **PASSED**
 - **Prawda fizycznego hosta:** i5-12400 / UHD 730 / Quadro P400 poprawnie klasyfikuje brak wsparcia NVENC przez sterownik i ukrywa NVIDIA i AMD -> **PASSED**
+- **EDGE CASE 1 (Brak GPU i CPU):** `resolve_auto_backend()` -> `"none"`, dropdown -> `["none"]`, brak fałszywego CPU, render zablokowany (`NO_BACKEND_FALSE_CPU_FALLBACK=NO`) -> **PASSED**
+- **EDGE CASE 2 (AMD AMF dostępne, brak DLL):** `_probe_amd_environment` -> `(False, "Brak wymaganej biblioteki runtime\\amd\\bin\\telem_amd_native.dll")` -> **PASSED**
+- **EDGE CASE 3 (AMD AMF + DLL + zależności):** `_probe_amd_environment` -> `(True, "Dostępny (AMF)")` -> **PASSED**
+
+Zestaw testów w `tests/test_render_tab.py` (20/20 passed):
+- Pełna weryfikacja interakcji GUI, podglądu klatek, zakresów cięcia in/out i słownika opcji eksportu -> **PASSED**
 
 ---
 
 ## 8. Status Końcowy
 
-Wszystkie warunki kontraktu zostały spełnione w 100%:
+Wszystkie warunki kontraktu oraz przypadki brzegowe zostały spełnione w 100%:
 - Lista enkoderów zawiera wyłącznie używalne backendy,
 - Panel możliwości sprzętowych i lista renderowania wykazują pełen parytet,
+- W przypadku braku koderów auto nie zwraca fałszywego CPU (`NO_BACKEND_FALSE_CPU_FALLBACK=NO`),
+- Dostępność AMD bezwzględnie wymaga produkcyjnej biblioteki `telem_amd_native.dll` (`AMD_AVAILABLE_IMPLIES_PRODUCTION_PATH_USABLE=YES`),
+- Rzeczywisty system Windows 11 build 26200.9550 został prawidłowo zdiagnozowany i odnotowany w metadanych (`ACTUAL_OS=Windows 11 Pro (25H2)`, `ACTUAL_BUILD=26200.9550`, `REPORT_METADATA_CORRECTED=YES`),
 - Jawny wybór NVIDIA/AMD nigdy nie przechodzi po cichu na Intel,
 - Zapisane przestarzałe ustawienia są korygowane w sposób widoczny przed eksportem,
 - Kodeki NVIDIA są filtrowane wg możliwości sterownika/sprzętu,
 - Kontrolki NVIDIA korzystają z `DiscreteSlider`,
-- Walidacja portable zakończyła się pełnym sukcesem.
+- Wszystkie testy jednostkowe i integracyjne zakończyły się sukcesem,
+- Walidacja środowiska portable potwierdziła `PORTABLE_FINAL_CHECK_PASS=YES`.
 
 **FINAL_STATUS=DYNAMIC_EXPORT_BACKENDS_PASS**

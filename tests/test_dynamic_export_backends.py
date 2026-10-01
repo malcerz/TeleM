@@ -407,3 +407,102 @@ def test_real_host_probe_truth() -> None:
     visible_codecs = [tab.cmb_encoder.itemText(i) for i in range(tab.cmb_encoder.count())]
     assert visible_codecs == ["auto", "intel", "cpu"]
     assert tab.cmb_encoder.currentText() == "auto"
+
+
+# =========================================================================
+# EDGE CASE 1: No GPU + No CPU encoder => No fake backend (none)
+# =========================================================================
+def test_no_gpu_no_cpu_encoder_no_fake_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    _get_app()
+    mock_caps = BackendCapabilities(
+        amd_available=False,
+        amd_reason="No AMD GPU",
+        nvidia_available=False,
+        nvidia_reason="No NVIDIA GPU",
+        intel_available=False,
+        intel_reason="No Intel GPU",
+        cpu_available=False,
+        cpu_reason="No software encoders found",
+    )
+    monkeypatch.setattr("src.ffmpeg.backend_capabilities.query_backend_capabilities", lambda *a, **k: mock_caps)
+
+    # 1. resolve_auto_backend must return "none" - NO_BACKEND_FALSE_CPU_FALLBACK=NO
+    resolved_auto = resolve_auto_backend(mock_caps)
+    assert resolved_auto == "none"
+    assert resolved_auto != "cpu"
+
+    # 2. get_available_backends must be empty
+    backends = get_available_backends(mock_caps)
+    assert backends == []
+    assert "cpu" not in backends
+    assert "auto" not in backends
+
+    # 3. GUI shows 'none' and never a fake CPU backend
+    tab = RenderTab()
+    tab._populate_encoders(preserve_selection=False)
+    visible = [tab.cmb_encoder.itemText(i) for i in range(tab.cmb_encoder.count())]
+    assert visible == ["none"]
+    assert "cpu" not in visible
+
+    # 4. Export safety gate blocks render start cleanly
+    class MockRenderer(RenderMixin):
+        def __init__(self):
+            self.video_path = None
+
+    renderer = MockRenderer()
+    with pytest.raises(RuntimeError) as exc_info:
+        renderer._render_pipeline({"encoder": "auto"})
+
+    err = str(exc_info.value)
+    assert "UNSUPPORTED_BACKEND_RENDER_START=BLOCKED" in err
+    assert "NO_BACKEND_FALSE_CPU_FALLBACK=NO" in err or "none" in err
+
+
+# =========================================================================
+# EDGE CASE 2: AMD AMF present + native DLL missing => AMD unavailable
+# =========================================================================
+def test_amd_amf_present_native_dll_missing_unavailable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from src.ffmpeg.backend_capabilities import _probe_amd_environment
+
+    # Simulate AMD GPU present in system
+    monkeypatch.setattr("src.gui.qt.hardware_info._get_gpus", lambda: ["AMD Radeon RX 6700 XT"])
+
+    # Simulate AMF available in FFmpeg
+    monkeypatch.setattr("src.ffmpeg.detection._test_encoder", lambda enc, ffmpeg: True)
+
+    # Simulate telem_amd_native.dll MISSING
+    missing_dll = tmp_path / "nonexistent" / "telem_amd_native.dll"
+    monkeypatch.setattr("src.runtime_paths.get_amd_native_dll", lambda: missing_dll)
+
+    amd_ok, reason = _probe_amd_environment("dummy_ffmpeg")
+    assert amd_ok is False
+    assert "telem_amd_native.dll" in reason
+
+
+# =========================================================================
+# EDGE CASE 3: AMD AMF + native DLL + deps present => AMD available
+# =========================================================================
+def test_amd_amf_present_native_dll_and_deps_present_available(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from src.ffmpeg.backend_capabilities import _probe_amd_environment
+
+    # Simulate AMD GPU present
+    monkeypatch.setattr("src.gui.qt.hardware_info._get_gpus", lambda: ["AMD Radeon RX 6700 XT"])
+
+    # Simulate AMF available in FFmpeg
+    monkeypatch.setattr("src.ffmpeg.detection._test_encoder", lambda enc, ffmpeg: True)
+
+    # Create dummy DLL file
+    dummy_dll = tmp_path / "telem_amd_native.dll"
+    dummy_dll.write_bytes(b"dummy_dll_binary")
+    monkeypatch.setattr("src.runtime_paths.get_amd_native_dll", lambda: dummy_dll)
+
+    # Mock successful DLL loading and ABI check
+    class MockAmdDll:
+        def __init__(self):
+            self.telem_amd_get_abi_version = lambda: 1
+
+    monkeypatch.setattr("ctypes.CDLL", lambda *a, **k: MockAmdDll())
+
+    amd_ok, reason = _probe_amd_environment("dummy_ffmpeg")
+    assert amd_ok is True
+    assert "AMF" in reason

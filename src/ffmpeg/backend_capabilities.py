@@ -173,7 +173,13 @@ def _probe_nvidia_environment(ffmpeg_exe: str) -> tuple[bool, bool, str, bool, b
 
 
 def _probe_amd_environment(ffmpeg_exe: str) -> tuple[bool, str]:
-    """Probe AMD GPU, drivers, and AMF encoder capability."""
+    """Probe AMD GPU, drivers, and AMF encoder capability.
+    
+    Strict production contract: AMD is usable if and only if:
+    1. AMD GPU is present
+    2. AMF hardware encoding is supported by driver / FFmpeg
+    3. Production runtime\\amd\\bin\\telem_amd_native.dll exists and can be loaded with dependencies.
+    """
     gpu_present = False
     try:
         from src.gui.qt.hardware_info import _get_gpus
@@ -187,21 +193,34 @@ def _probe_amd_environment(ffmpeg_exe: str) -> tuple[bool, str]:
 
     from src.ffmpeg.detection import _test_encoder
     has_amf = _test_encoder("hevc_amf", ffmpeg_exe) or _test_encoder("h264_amf", ffmpeg_exe)
+    if not has_amf:
+        return False, "Sterownik AMD nie obsługuje kodowania AMF w bieżącym runtime"
 
-    # Check DLL
+    # Check DLL and dependencies
     try:
-        from src.runtime_paths import get_amd_native_dll
+        from src.runtime_paths import activate_vendor_dll_directory, get_amd_native_dll
         dll_path = get_amd_native_dll()
         dll_exists = dll_path.is_file()
     except Exception:
+        dll_path = None
         dll_exists = False
 
-    if has_amf and dll_exists:
-        return True, "Dostępny (AMF)"
-    elif has_amf:
-        return True, "Dostępny (AMF FFmpeg)"
-    else:
-        return False, "Sterownik AMD nie obsługuje kodowania AMF w bieżącym runtime"
+    if not dll_exists:
+        return False, "Brak wymaganej biblioteki runtime\\amd\\bin\\telem_amd_native.dll"
+
+    # Probe loading DLL to verify dependencies
+    try:
+        import ctypes
+        activate_vendor_dll_directory("amd")
+        test_dll = ctypes.CDLL(str(dll_path))
+        if hasattr(test_dll, "telem_amd_get_abi_version"):
+            test_dll.telem_amd_get_abi_version.restype = ctypes.c_uint
+            test_dll.telem_amd_get_abi_version.argtypes = []
+            _ = test_dll.telem_amd_get_abi_version()
+    except Exception as exc:
+        return False, f"Błąd ładowania telem_amd_native.dll (brakujące zależności): {exc}"
+
+    return True, "Dostępny (AMF)"
 
 
 def query_backend_capabilities(force_refresh: bool = False) -> BackendCapabilities:
@@ -292,11 +311,14 @@ def get_available_backends(caps: Optional[BackendCapabilities] = None) -> list[s
     """Return ordered list of available backend identifiers for the GUI dropdown.
     
     Order: auto, amd, nv, intel, cpu (omitting unavailable backends).
+    If no backend is available on the machine, returns [] (no fake backend).
     """
     if caps is None:
         caps = query_backend_capabilities()
 
-    backends = ["auto"]
+    backends = []
+    if caps.nvidia_available or caps.amd_available or caps.intel_available or caps.cpu_available:
+        backends.append("auto")
     if caps.amd_available:
         backends.append("amd")
     if caps.nvidia_available:
@@ -312,6 +334,7 @@ def resolve_auto_backend(caps: Optional[BackendCapabilities] = None) -> str:
     """Resolve 'auto' selection strictly among genuinely available backends.
     
     Priority: nv -> amd -> intel -> cpu.
+    If no concrete backend is available, returns 'none' (NO_BACKEND_FALSE_CPU_FALLBACK=NO).
     Logs structured auto selection:
     [AUTO ENCODER]
     available=[...]
@@ -331,7 +354,7 @@ def resolve_auto_backend(caps: Optional[BackendCapabilities] = None) -> str:
         available_concrete.append("cpu")
 
     if not available_concrete:
-        selected = "cpu"
+        selected = "none"
     else:
         selected = available_concrete[0]
 
@@ -402,15 +425,18 @@ def validate_backend_available(
     if caps is None:
         caps = query_backend_capabilities()
 
-    req_norm = requested.strip().lower()
+    req_norm = (requested or "").strip().lower()
     if req_norm == "nvidia":
         req_norm = "nv"
 
+    if req_norm in ("none", ""):
+        return False, "Brak dostępnego jakiegokolwiek kodera sprzętowego ani programowego na tej maszynie (NO_BACKEND_FALSE_CPU_FALLBACK=NO)"
+
     if req_norm == "auto":
-        # Auto is available as long as at least one backend is available
+        # Auto is available as long as at least one concrete backend is available
         if caps.nvidia_available or caps.amd_available or caps.intel_available or caps.cpu_available:
             return True, ""
-        return False, "Brak dostępnego jakiegokolwiek kodera sprzętowego lub programowego."
+        return False, "Brak dostępnego jakiegokolwiek kodera sprzętowego ani programowego na tej maszynie (NO_BACKEND_FALSE_CPU_FALLBACK=NO)"
 
     if req_norm == "amd":
         if caps.amd_available:
