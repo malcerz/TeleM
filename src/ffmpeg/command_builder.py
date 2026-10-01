@@ -857,15 +857,11 @@ intel_codec: str = "hevc",
                         f"[ov_raw_{i}]crop={rw}:{rh}:{atlas_x}:{atlas_y},format=yuva420p,hwupload_cuda[ov_{i}]"
                     )
 
-                is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
-                next_base = f"[v_step_{i}]" if i < n_reg - 1 else ("[v_pre10]" if is_10bit_nv else "[vtemp]")
+                next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
                 overlay_ops.append(
                     f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{next_base}"
                 )
                 curr_base = next_base
-
-            if is_10bit_nv:
-                overlay_ops.append("[v_pre10]scale_cuda=format=p010le[vtemp]")
 
             filter_complex = (
                 f"{base_filter};{ov_input};" + ";".join(crop_ops) + ";" + ";".join(overlay_ops)
@@ -890,11 +886,7 @@ intel_codec: str = "hevc",
                 ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={scaled_stream_w}:{scaled_stream_h}:flags=bilinear,format=yuva420p,hwupload_cuda[ov]"
             else:
                 ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,format=yuva420p,hwupload_cuda[ov]"
-            is_10bit_nv = bool(encoder == "nv" and is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
-            if is_10bit_nv:
-                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y},scale_cuda=format=p010le"
-            else:
-                ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
+            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
             filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
         if "-init_hw_device" not in input_args:
@@ -1128,6 +1120,8 @@ intel_codec: str = "hevc",
             is_10bit=is_10bit_nv,
         )
         cmd.extend(nv_params["ffmpeg_args"])
+        if is_10bit_nv and hwaccel == "cuda" and not needs_cpu_rotation:
+            cmd.extend(["-highbitdepth", "1"])
         cmd.extend([
             "-pix_fmt", "cuda" if (hwaccel == "cuda" and not needs_cpu_rotation) else ("p010le" if is_10bit_nv else "yuv420p"),
             "-gpu", str(gpu),

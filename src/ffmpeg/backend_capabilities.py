@@ -63,10 +63,10 @@ def invalidate_backend_capabilities_cache() -> None:
     _CACHED_BACKEND_CAPS = None
 
 
-def _get_ffmpeg_executable() -> str:
+def _get_ffmpeg_executable(vendor: Optional[str] = None) -> str:
     try:
         from src.runtime_paths import get_ffmpeg_exe
-        return str(get_ffmpeg_exe())
+        return str(get_ffmpeg_exe(vendor=vendor))
     except Exception:
         return "ffmpeg"
 
@@ -237,7 +237,8 @@ def query_backend_capabilities(force_refresh: bool = False) -> BackendCapabiliti
     # 1. AMD Probe
     amd_ok, amd_reason = _probe_amd_environment(ffmpeg_exe)
 
-    # 2. NVIDIA Probe
+    # 2. NVIDIA Probe (uses vendor-isolated NVIDIA FFmpeg if available)
+    nv_ffmpeg_exe = _get_ffmpeg_executable("nv")
     (
         nv_gpu,
         nv_driver,
@@ -249,7 +250,7 @@ def query_backend_capabilities(force_refresh: bool = False) -> BackendCapabiliti
         nv_native_d3d11,
         nv_codecs,
         nv_reason,
-    ) = _probe_nvidia_environment(ffmpeg_exe)
+    ) = _probe_nvidia_environment(nv_ffmpeg_exe)
     nv_ok = nv_legacy_cuda or nv_native_d3d11
 
     # 3. Intel Probe (reuse Phase 1-13 canonical probe)

@@ -58,8 +58,11 @@ class RenderMixin:
             return stats
         from src.ffmpeg.gpmf_export import attach_original_gpmf
 
-        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
-        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        from src.runtime_paths import get_common_ffmpeg_exe, get_common_ffprobe_exe
+        common_ffmpeg = get_common_ffmpeg_exe()
+        common_ffprobe = get_common_ffprobe_exe()
+        ffmpeg_exe = self.ffmpeg_exe or (str(common_ffmpeg) if common_ffmpeg.exists() else find_executable("ffmpeg"))
+        ffprobe_exe = self.ffprobe_exe or (str(common_ffprobe) if common_ffprobe.exists() else find_executable("ffprobe"))
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione do dołączenia GPMF")
         input_paths = options.get("video_paths") or getattr(self, "video_paths", [])
@@ -747,8 +750,16 @@ class RenderMixin:
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
 
-        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
-        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        if encoder in ("nv", "nvidia"):
+            from src.runtime_paths import get_nvidia_ffmpeg_exe, get_nvidia_ffprobe_exe
+            ffmpeg_exe = str(get_nvidia_ffmpeg_exe())
+            ffprobe_exe = str(get_nvidia_ffprobe_exe())
+        else:
+            from src.runtime_paths import get_common_ffmpeg_exe, get_common_ffprobe_exe
+            common_ffmpeg = get_common_ffmpeg_exe()
+            common_ffprobe = get_common_ffprobe_exe()
+            ffmpeg_exe = self.ffmpeg_exe or (str(common_ffmpeg) if common_ffmpeg.exists() else find_executable("ffmpeg"))
+            ffprobe_exe = self.ffprobe_exe or (str(common_ffprobe) if common_ffprobe.exists() else find_executable("ffprobe"))
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione")
 

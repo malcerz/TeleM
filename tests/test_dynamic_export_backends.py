@@ -387,11 +387,13 @@ def test_real_host_probe_truth() -> None:
     assert "AMD" in caps.amd_reason or "Radeon" in caps.amd_reason
 
     # 2. NVIDIA truth: Quadro P400 is physically present with driver 582.78,
-    # but FFmpeg NVENC fails because Nvenc API 13.1 is required (driver >= 610.00)
+    # and working via vendor-isolated FFmpeg 8.1 with NVENC SDK 13.0
     assert caps.nvidia_gpu_present is True
     assert caps.nvidia_driver_present is True
-    assert caps.nvidia_available is False
-    assert "582.78" in caps.nvidia_reason or "nie obsługuje NVENC" in caps.nvidia_reason
+    assert caps.nvidia_available is True
+    assert "H.265" in caps.nvidia_codecs
+    assert "H.264" in caps.nvidia_codecs
+    assert "AV1" not in caps.nvidia_codecs
 
     # 3. Intel truth: UHD 730 is available with QSV
     assert caps.intel_available is True
@@ -402,10 +404,10 @@ def test_real_host_probe_truth() -> None:
     # 4. CPU truth: Software encoders available
     assert caps.cpu_available is True
 
-    # 5. GUI Dropdown truth on this host
+    # 5. GUI Dropdown truth on this host: auto, nv, intel, cpu (AMD absent)
     tab = RenderTab()
     visible_codecs = [tab.cmb_encoder.itemText(i) for i in range(tab.cmb_encoder.count())]
-    assert visible_codecs == ["auto", "intel", "cpu"]
+    assert visible_codecs == ["auto", "nv", "intel", "cpu"]
     assert tab.cmb_encoder.currentText() == "auto"
 
 
