@@ -119,6 +119,11 @@ def test_intel_native_7g_rational_global_timeline_continuity():
 
 def test_intel_native_7g_capacity_hierarchy():
     """Verify the 7G capacity hierarchy: Producer < Consumer << Encoder."""
+    from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+    caps = query_intel_capabilities()
+    if not (caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")):
+        pytest.skip("AV1 hardware encoder not available on this Intel GPU (requires AV1 hardware support)")
+
     dll = _get_intel_dll()
     
     dll.intel_native_measure_encoder_capacity.argtypes = [ctypes.c_int, ctypes.POINTER(EncoderCapacityResults)]

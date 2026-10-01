@@ -977,7 +977,10 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             nvidia_codec=options.get("nvidia_codec", "HEVC"),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
             enable_compression_analysis=bool(options.get("compression_analysis", True)),
-codec=options.get("intel_codec", "av1"),
+            codec=options.get("intel_codec") or (
+                __import__("src.ffmpeg.intel_native_exporter", fromlist=["resolve_supported_intel_codec"]).resolve_supported_intel_codec()
+                if encoder == "intel" else "hevc"
+            ),
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
         )

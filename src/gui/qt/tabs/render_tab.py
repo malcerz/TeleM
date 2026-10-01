@@ -401,29 +401,9 @@ class RenderTab(QWidget):
         layout_intel.setSpacing(6)
 
         self.cmb_intel_codec = QComboBox()
-        self.cmb_intel_codec.addItem("AV1 — 10-bit HDR (Zalecany)", "av1")
-        self.cmb_intel_codec.addItem("H.264 — 8-bit SDR", "h264")
-        self.cmb_intel_codec.addItem("H.265 — 10-bit HDR", "hevc")
-
-        try:
-            from src.ffmpeg.intel_native_exporter import query_intel_capabilities
-            intel_caps = query_intel_capabilities()
-        except Exception:
-            intel_caps = {"AV1_AVAILABLE": True, "H264_AVAILABLE": True, "HEVC_AVAILABLE": True}
-
-        idx_hevc = self.cmb_intel_codec.findData("hevc")
-        if not intel_caps.get("HEVC_AVAILABLE", False) and idx_hevc >= 0:
-            model = self.cmb_intel_codec.model()
-            if model is not None:
-                item = model.item(idx_hevc) if hasattr(model, "item") else None
-                if item is not None:
-                    item.setEnabled(False)
-                    item.setText("H.265 (Niedostępny na aktualnym sterowniku/runtime Intel)")
-                    item.setToolTip("Niedostępny na aktualnym sterowniku/runtime Intel")
-
         self.cmb_intel_codec.setToolTip(
             "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).\n"
-            "AV1: 10-bit HDR (HLG BT.2020, produkcyjny default).\n"
+            "AV1: 10-bit HDR (HLG BT.2020, rekomendowany na obsługiwanych GPU).\n"
             "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).\n"
             "H.265: 10-bit HDR (HLG BT.2020)."
         )
@@ -431,23 +411,8 @@ class RenderTab(QWidget):
         self.lbl_intel_codec_info = QLabel("Format: HDR 10-bit (HLG / BT.2020)")
         self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
 
-        def _on_intel_codec_changed(_idx: int) -> None:
-            c = self.cmb_intel_codec.currentData()
-            if c == "h264":
-                self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
-                self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
-            elif c == "hevc":
-                if intel_caps.get("HEVC_AVAILABLE", False):
-                    self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
-                    self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
-                else:
-                    self.lbl_intel_codec_info.setText("Niedostępny na aktualnym sterowniku/runtime Intel")
-                    self.lbl_intel_codec_info.setStyleSheet("color: #ff7777; font-size: 11px; font-weight: normal;")
-            else:
-                self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
-                self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
-
-        self.cmb_intel_codec.currentIndexChanged.connect(_on_intel_codec_changed)
+        self._populate_intel_codecs(preserve_selection=False)
+        self.cmb_intel_codec.currentIndexChanged.connect(self._on_intel_codec_changed)
 
         row_intel_codec = QVBoxLayout()
         row_intel_codec.setSpacing(2)
@@ -489,6 +454,8 @@ class RenderTab(QWidget):
             self.widget_amd_options.setVisible(is_amd)
             self.widget_nvidia_options.setVisible(is_nv)
             self.widget_intel_options.setVisible(is_intel)
+            if is_intel:
+                self._populate_intel_codecs(preserve_selection=True)
             if hasattr(self, "widget_cpu_options"):
                 self.widget_cpu_options.setVisible(is_cpu)
             if is_nv:
@@ -2051,7 +2018,11 @@ class RenderTab(QWidget):
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
             "nvidia_codec": self.cmb_nvidia_codec.currentText(),
             "nvidia_quality": self.cmb_nvidia_quality.currentText(),
-            "intel_codec": self.cmb_intel_codec.currentData() or "av1",
+            "intel_codec": (
+                self.cmb_intel_codec.currentData()
+                if hasattr(self, "cmb_intel_codec") and self.cmb_intel_codec.currentData() not in (None, "", "none")
+                else self._resolve_current_intel_codec()
+            ),
             "encoder_profile": (
                 self.cmb_encoder_profile.currentData()
                 if hasattr(self, "cmb_encoder_profile")
@@ -3638,3 +3609,106 @@ class RenderTab(QWidget):
             idx = self.cmb_encoder_profile.findData(LEGACY_DEFAULT_ENCODER_PROFILE.value)
             if idx >= 0:
                 self.cmb_encoder_profile.setCurrentIndex(idx)
+
+        if "intel_codec" in settings and hasattr(self, "cmb_intel_codec"):
+            self._populate_intel_codecs(preserve_selection=False, requested_codec=settings.get("intel_codec"))
+
+    def _resolve_current_intel_codec(self) -> str:
+        """Resolve currently supported Intel codec or fallback."""
+        from src.ffmpeg.intel_native_exporter import resolve_supported_intel_codec
+        return resolve_supported_intel_codec()
+
+    def _populate_intel_codecs(self, preserve_selection: bool = True, requested_codec: Optional[str] = None) -> None:
+        """Populate cmb_intel_codec with actual hardware capabilities.
+        
+        Unsupported codecs are hidden from the normal dropdown.
+        The '(Zalecany)' tag is applied dynamically according to priority:
+        1. AV1 (if 10-bit available)
+        2. HEVC (if 10-bit available)
+        3. H.264 (if 8-bit available)
+        """
+        if not hasattr(self, "cmb_intel_codec"):
+            return
+
+        from src.ffmpeg.intel_native_exporter import query_intel_capabilities, resolve_supported_intel_codec
+        intel_caps = query_intel_capabilities()
+        self._intel_caps = intel_caps
+
+        av1_ok = bool(intel_caps.get("AV1_AVAILABLE") and intel_caps.get("AV1_10BIT"))
+        hevc_ok = bool(intel_caps.get("HEVC_AVAILABLE") and intel_caps.get("HEVC_10BIT"))
+        h264_ok = bool(intel_caps.get("H264_AVAILABLE") and intel_caps.get("H264_8BIT"))
+
+        # Determine dynamic recommendation priority
+        recommended = None
+        if av1_ok:
+            recommended = "av1"
+        elif hevc_ok:
+            recommended = "hevc"
+        elif h264_ok:
+            recommended = "h264"
+
+        # Build items to display: (label, data)
+        items: list[tuple[str, str]] = []
+        if av1_ok:
+            lbl = "AV1 — 10-bit HDR (Zalecany)" if recommended == "av1" else "AV1 — 10-bit HDR"
+            items.append((lbl, "av1"))
+        if hevc_ok:
+            lbl = "H.265 — 10-bit HDR (Zalecany)" if recommended == "hevc" else "H.265 — 10-bit HDR"
+            items.append((lbl, "hevc"))
+        if h264_ok:
+            lbl = "H.264 — 8-bit SDR (Zalecany)" if recommended == "h264" else "H.264 — 8-bit SDR"
+            items.append((lbl, "h264"))
+
+        # Determine desired target codec
+        prev_data = self.cmb_intel_codec.currentData() if self.cmb_intel_codec.count() > 0 else None
+        valid_datas = [it[1] for it in items]
+
+        if requested_codec:
+            target = resolve_supported_intel_codec(requested_codec, intel_caps)
+        elif preserve_selection and prev_data in valid_datas:
+            target = prev_data
+        elif prev_data and prev_data not in valid_datas and prev_data != "none":
+            target = resolve_supported_intel_codec(prev_data, intel_caps)
+        else:
+            target = recommended
+
+        self.cmb_intel_codec.blockSignals(True)
+        self.cmb_intel_codec.clear()
+
+        if items:
+            for text, data in items:
+                self.cmb_intel_codec.addItem(text, data)
+            if target and target in valid_datas:
+                idx = self.cmb_intel_codec.findData(target)
+                if idx >= 0:
+                    self.cmb_intel_codec.setCurrentIndex(idx)
+                else:
+                    self.cmb_intel_codec.setCurrentIndex(0)
+            else:
+                self.cmb_intel_codec.setCurrentIndex(0)
+        else:
+            # Case D: No hardware Intel codecs available
+            self.cmb_intel_codec.addItem("Brak obsługiwanych koderów sprzętowych Intel", "none")
+            model = self.cmb_intel_codec.model()
+            if model is not None and hasattr(model, "item"):
+                item = model.item(0)
+                if item is not None:
+                    item.setEnabled(False)
+            self.cmb_intel_codec.setCurrentIndex(0)
+
+        self.cmb_intel_codec.blockSignals(False)
+        self._on_intel_codec_changed()
+
+    def _on_intel_codec_changed(self, _idx: int = -1) -> None:
+        if not hasattr(self, "lbl_intel_codec_info") or not hasattr(self, "cmb_intel_codec"):
+            return
+        c = self.cmb_intel_codec.currentData()
+        if c == "h264":
+            self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
+            self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
+        elif c in ("hevc", "av1"):
+            self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
+            self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
+        else:
+            self.lbl_intel_codec_info.setText("Brak dostępnego kodera sprzętowego Intel")
+            self.lbl_intel_codec_info.setStyleSheet("color: #ff7777; font-size: 11px; font-weight: normal;")

@@ -44,7 +44,7 @@ def test_intel_pipeline_hevc_and_h264_capabilities():
     assert isinstance(caps, dict)
     assert caps.get("HEVC_AVAILABLE") is True
     assert caps.get("H264_AVAILABLE") is True
-    assert caps.get("AV1_AVAILABLE") is True
+    assert isinstance(caps.get("AV1_AVAILABLE"), bool)
 
 def test_intel_pipeline_surface_ownership_model():
     """Verify surface ownership transitions across producer, consumer, and drain threads."""

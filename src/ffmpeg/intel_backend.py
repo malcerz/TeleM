@@ -871,6 +871,7 @@ def resolve_intel_force(
     qsv_hw_usable: Optional[bool] = None,
     ffmpeg_qsv_info: Optional[dict[str, bool]] = None,
     qsv_codecs_usable: Optional[dict[str, bool]] = None,
+    requested_codec: Optional[str] = None,
 ) -> IntelResolution:
     """Resolve INTEL_FORCE.
 
@@ -970,22 +971,46 @@ def resolve_intel_force(
     res.decode_path = "QSV/D3D11VA"
     res.render_path = "D3D11"
 
-    if res.hevc_qsv_usable:
-        res.selected_codec = "hevc"
-        res.selected_encoder = "hevc_qsv"
-        res.encode_path = "QSV-HEVC"
-    elif res.av1_qsv_usable:
+    req_norm = str(requested_codec).strip().lower() if requested_codec else ""
+    if req_norm in ("av1", "av1_qsv") and res.av1_qsv_usable:
         res.selected_codec = "av1"
         res.selected_encoder = "av1_qsv"
         res.encode_path = "QSV-AV1"
-    elif res.h264_qsv_usable:
+    elif req_norm in ("hevc", "hevc_qsv", "h265") and res.hevc_qsv_usable:
+        res.selected_codec = "hevc"
+        res.selected_encoder = "hevc_qsv"
+        res.encode_path = "QSV-HEVC"
+    elif req_norm in ("h264", "h264_qsv", "avc") and res.h264_qsv_usable:
         res.selected_codec = "h264"
         res.selected_encoder = "h264_qsv"
         res.encode_path = "QSV-H264"
     else:
-        res.selected_codec = "none"
-        res.selected_encoder = "none"
-        res.encode_path = "NONE"
+        fallback_happened = bool(req_norm)
+        if res.hevc_qsv_usable:
+            res.selected_codec = "hevc"
+            res.selected_encoder = "hevc_qsv"
+            res.encode_path = "QSV-HEVC"
+        elif res.av1_qsv_usable:
+            res.selected_codec = "av1"
+            res.selected_encoder = "av1_qsv"
+            res.encode_path = "QSV-AV1"
+        elif res.h264_qsv_usable:
+            res.selected_codec = "h264"
+            res.selected_encoder = "h264_qsv"
+            res.encode_path = "QSV-H264"
+        else:
+            res.selected_codec = "none"
+            res.selected_encoder = "none"
+            res.encode_path = "NONE"
+
+        if fallback_happened and res.selected_codec != "none":
+            log(
+                f"[INTEL CODEC FALLBACK]\n"
+                f"requested={req_norm}\n"
+                f"available=0\n"
+                f"resolved={res.selected_codec}\n"
+                f"reason=hardware_capability"
+            )
 
     log(f"[INTEL] INTEL_SELECTED_CODEC: {res.selected_codec.upper()}")
     log(f"[INTEL] INTEL_SELECTED_ENCODER: {res.selected_encoder}")

@@ -997,7 +997,10 @@ def stream_overlay_to_ffmpeg(
         # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU
         # fallback.  On failure resolve_intel_force raises IntelBackendError,
         # which intentionally stops the Intel backend initialisation.
-        intel_resolution = resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
+        intel_resolution = resolve_intel_force(
+            ffmpeg_exe=ffmpeg_exe,
+            requested_codec=kwargs.get("codec") or codec,
+        )
         intel_selection = intel_device_selection(intel_resolution)
 
     t_prod_start = time.perf_counter()

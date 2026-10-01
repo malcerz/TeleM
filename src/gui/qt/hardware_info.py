@@ -179,7 +179,23 @@ def get_hardware_info(force_refresh: bool = False) -> HardwareCapabilitiesInfo:
 
         info.enc_amd = "Dostępne (AMF HEVC / H.264)" if has_amf else "Niedostępne"
         info.enc_nvidia = "Dostępne (NVENC)" if has_nv else "Niedostępne"
-        info.enc_intel = "Dostępne (QSV)" if has_qsv else "Niedostępne"
+        try:
+            from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+            intel_caps = query_intel_capabilities()
+            intel_codecs = []
+            if intel_caps.get("AV1_AVAILABLE") and intel_caps.get("AV1_10BIT"):
+                intel_codecs.append("AV1")
+            if intel_caps.get("HEVC_AVAILABLE") and intel_caps.get("HEVC_10BIT"):
+                intel_codecs.append("HEVC")
+            if intel_caps.get("H264_AVAILABLE") and intel_caps.get("H264_8BIT"):
+                intel_codecs.append("H.264")
+            if intel_codecs:
+                info.enc_intel = f"Dostępne (QSV: {' / '.join(intel_codecs)})"
+            else:
+                info.enc_intel = "Niedostępne"
+        except Exception:
+            has_qsv = _test_encoder("hevc_qsv")
+            info.enc_intel = "Dostępne (QSV)" if has_qsv else "Niedostępne"
         info.enc_cpu = "Dostępne (libx265 / libx264)"
     except Exception:
         info.enc_amd = "Wg sterownika (AMF)"

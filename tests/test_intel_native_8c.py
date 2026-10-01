@@ -51,22 +51,32 @@ def test_intel_native_8c_surface_state_machine():
     assert states[-1] == "ENCODE_DONE"
 
 def test_intel_native_8c_render_tab_codec_selector():
-    """Verify GUI RenderTab persistence and default AV1 / H264 selection."""
+    """Verify GUI RenderTab persistence and capability-aware default selection."""
     app = _get_app()
     from src.gui.qt.tabs.render_tab import RenderTab
+    from src.ffmpeg.intel_native_exporter import query_intel_capabilities
     tab = RenderTab()
     
-    # AV1 default
-    assert tab.cmb_intel_codec.currentData() == "av1"
+    caps = query_intel_capabilities()
+    av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
+    hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
+    h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
     
-    # Select H264
-    idx_h264 = tab.cmb_intel_codec.findData("h264")
-    assert idx_h264 >= 0
-    tab.cmb_intel_codec.setCurrentIndex(idx_h264)
-    assert tab.cmb_intel_codec.currentData() == "h264"
+    expected_default = "av1" if av1_ok else ("hevc" if hevc_ok else ("h264" if h264_ok else "none"))
+    assert tab.cmb_intel_codec.currentData() == expected_default
     
-    # Select AV1 back
+    # Select H264 if available
+    if h264_ok:
+        idx_h264 = tab.cmb_intel_codec.findData("h264")
+        assert idx_h264 >= 0
+        tab.cmb_intel_codec.setCurrentIndex(idx_h264)
+        assert tab.cmb_intel_codec.currentData() == "h264"
+    
+    # Check AV1 is present only if AV1 is supported on HW
     idx_av1 = tab.cmb_intel_codec.findData("av1")
-    assert idx_av1 >= 0
-    tab.cmb_intel_codec.setCurrentIndex(idx_av1)
-    assert tab.cmb_intel_codec.currentData() == "av1"
+    if av1_ok:
+        assert idx_av1 >= 0
+        tab.cmb_intel_codec.setCurrentIndex(idx_av1)
+        assert tab.cmb_intel_codec.currentData() == "av1"
+    else:
+        assert idx_av1 == -1
