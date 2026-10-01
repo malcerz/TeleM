@@ -508,3 +508,150 @@ def test_amd_amf_present_native_dll_and_deps_present_available(monkeypatch: pyte
     amd_ok, reason = _probe_amd_environment("dummy_ffmpeg")
     assert amd_ok is True
     assert "AMF" in reason
+
+
+# =========================================================================
+# NVENC CAPABILITY & PROFILE RESOLUTION TESTS (ETAP 12)
+# =========================================================================
+def test_nvenc_params_modern_gpu_full_features() -> None:
+    """Modern NVIDIA GPU (e.g. RTX 5070 / RTX 40xx / 30xx) must retain 100% of features."""
+    from src.ffmpeg.nvidia_config import NvencFeatureCaps, resolve_nvenc_ffmpeg_params
+
+    caps_modern = NvencFeatureCaps(
+        encoder="hevc_nvenc",
+        preset_p5=True,
+        preset_p7=True,
+        tune_uhq=True,
+        spatial_aq=True,
+        temporal_aq=True,
+        rc_lookahead_16=True,
+        rc_lookahead_32=True,
+        b_ref_middle=True,
+    )
+
+    # 1. Fast profile
+    fast = resolve_nvenc_ffmpeg_params("hevc", "Fast", is_10bit=True, caps_override=caps_modern)
+    assert "-preset" in fast["ffmpeg_args"]
+    assert fast["ffmpeg_args"][fast["ffmpeg_args"].index("-preset") + 1] == "p1"
+    assert "-tune" in fast["ffmpeg_args"]
+    assert fast["ffmpeg_args"][fast["ffmpeg_args"].index("-tune") + 1] == "hq"
+    assert "-profile:v" in fast["ffmpeg_args"]
+    assert fast["ffmpeg_args"][fast["ffmpeg_args"].index("-profile:v") + 1] == "main10"
+
+    # 2. Quality profile
+    qual = resolve_nvenc_ffmpeg_params("hevc", "Quality", is_10bit=True, caps_override=caps_modern)
+    assert "-preset" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-preset") + 1] == "p5"
+    assert "-tune" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-tune") + 1] == "hq"
+    assert "-rc-lookahead" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-rc-lookahead") + 1] == "16"
+    assert "-spatial-aq" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-spatial-aq") + 1] == "1"
+    assert "-temporal-aq" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-temporal-aq") + 1] == "1"
+    assert "-profile:v" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-profile:v") + 1] == "main10"
+
+    # 3. Max Quality profile (zero degradation contract for modern cards)
+    max_q = resolve_nvenc_ffmpeg_params("hevc", "Max Quality", is_10bit=True, caps_override=caps_modern)
+    assert "-preset" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-preset") + 1] == "p7"
+    assert "-tune" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-tune") + 1] == "uhq"
+    assert "-rc-lookahead" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-rc-lookahead") + 1] == "32"
+    assert "-spatial-aq" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-spatial-aq") + 1] == "1"
+    assert "-temporal-aq" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-temporal-aq") + 1] == "1"
+    assert "-b_ref_mode" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-b_ref_mode") + 1] == "middle"
+    assert "-profile:v" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-profile:v") + 1] == "main10"
+
+
+def test_nvenc_params_pascal_p400_features() -> None:
+    """Pascal architecture (e.g. Quadro P400 HEVC) gracefully omits unsupported features."""
+    from src.ffmpeg.nvidia_config import NvencFeatureCaps, resolve_nvenc_ffmpeg_params
+
+    caps_p400 = NvencFeatureCaps(
+        encoder="hevc_nvenc",
+        preset_p5=True,
+        preset_p7=True,
+        tune_uhq=False,
+        spatial_aq=True,
+        temporal_aq=False,
+        rc_lookahead_16=True,
+        rc_lookahead_32=True,
+        b_ref_middle=False,
+    )
+
+    # 1. Quality profile on P400
+    qual = resolve_nvenc_ffmpeg_params("hevc", "Quality", is_10bit=True, caps_override=caps_p400)
+    assert "-preset" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-preset") + 1] == "p5"
+    assert "-tune" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-tune") + 1] == "hq"
+    assert "-rc-lookahead" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-rc-lookahead") + 1] == "16"
+    assert "-spatial-aq" in qual["ffmpeg_args"]
+    assert qual["ffmpeg_args"][qual["ffmpeg_args"].index("-spatial-aq") + 1] == "1"
+    # MUST NOT contain unsupported temporal-aq
+    assert "-temporal-aq" not in qual["ffmpeg_args"]
+
+    # 2. Max Quality profile on P400
+    max_q = resolve_nvenc_ffmpeg_params("hevc", "Max Quality", is_10bit=True, caps_override=caps_p400)
+    assert "-preset" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-preset") + 1] == "p7"
+    # MUST fall back to tune hq because uhq is unsupported on Pascal
+    assert "-tune" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-tune") + 1] == "hq"
+    assert "-rc-lookahead" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-rc-lookahead") + 1] == "32"
+    assert "-spatial-aq" in max_q["ffmpeg_args"]
+    assert max_q["ffmpeg_args"][max_q["ffmpeg_args"].index("-spatial-aq") + 1] == "1"
+    # MUST NOT contain unsupported temporal-aq or b_ref_mode
+    assert "-temporal-aq" not in max_q["ffmpeg_args"]
+    assert "-b_ref_mode" not in max_q["ffmpeg_args"]
+
+
+def test_nvenc_params_minimal_fallback() -> None:
+    """Minimal NVENC capability fallback when no advanced features are supported."""
+    from src.ffmpeg.nvidia_config import NvencFeatureCaps, resolve_nvenc_ffmpeg_params
+
+    caps_minimal = NvencFeatureCaps(
+        encoder="hevc_nvenc",
+        preset_p5=False,
+        preset_p7=False,
+        tune_uhq=False,
+        spatial_aq=False,
+        temporal_aq=False,
+        rc_lookahead_16=False,
+        rc_lookahead_32=False,
+        b_ref_middle=False,
+    )
+
+    max_q = resolve_nvenc_ffmpeg_params("hevc", "Max Quality", is_10bit=False, caps_override=caps_minimal)
+    assert max_q["ffmpeg_args"] == ["-c:v", "hevc_nvenc", "-preset", "p1", "-tune", "hq", "-rc", "vbr", "-cq", "24"]
+
+
+def test_real_host_nvenc_caps_probing_p400() -> None:
+    """Real host verification of capability probing on current Quadro P400 hardware."""
+    from src.ffmpeg.nvidia_config import query_nvenc_encoder_capabilities
+
+    hevc_caps = query_nvenc_encoder_capabilities("hevc_nvenc")
+    assert hevc_caps.preset_p5 is True
+    assert hevc_caps.preset_p7 is True
+    assert hevc_caps.spatial_aq is True
+    assert hevc_caps.temporal_aq is False
+    assert hevc_caps.tune_uhq is False
+    assert hevc_caps.b_ref_middle is False
+
+    h264_caps = query_nvenc_encoder_capabilities("h264_nvenc")
+    assert h264_caps.preset_p5 is True
+    assert h264_caps.preset_p7 is True
+    assert h264_caps.spatial_aq is True
+    assert h264_caps.temporal_aq is True
+    assert h264_caps.b_ref_middle is True
+

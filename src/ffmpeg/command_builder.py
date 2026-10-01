@@ -1118,6 +1118,8 @@ intel_codec: str = "hevc",
             codec=nvidia_codec,
             quality=nvidia_quality,
             is_10bit=is_10bit_nv,
+            ffmpeg_exe=ffmpeg_exe,
+            gpu=gpu,
         )
         cmd.extend(nv_params["ffmpeg_args"])
         if is_10bit_nv and hwaccel == "cuda" and not needs_cpu_rotation:

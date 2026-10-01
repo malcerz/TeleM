@@ -12,10 +12,12 @@ from __future__ import annotations
 import os
 import sys
 import ctypes
+from dataclasses import dataclass, asdict
 from ctypes import wintypes
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Tuple
+import subprocess
 
 
 class NvidiaBackend(str, Enum):
@@ -31,7 +33,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Fast",
-        "gui_label": "HEVC Fast (P1, Real-Time)",
+        "gui_label": "HEVC Fast (Wysoka wydajność, P1)",
     },
     "HEVC_QUALITY": {
         "codec": 0,
@@ -39,7 +41,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Quality",
-        "gui_label": "HEVC Quality (P5, HQ, Lookahead 16)",
+        "gui_label": "HEVC Quality (Zbalansowana jakość, P5/HQ)",
     },
     "HEVC_MAX": {
         "codec": 0,
@@ -47,7 +49,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Max Quality",
-        "gui_label": "HEVC Max Quality (P7, UHQ, TF Level 4, B=5)",
+        "gui_label": "HEVC Max Quality (Maksymalna jakość sprzętowa)",
     },
     "AV1_QUALITY": {
         "codec": 1,          # TELEM_CODEC_AV1
@@ -55,7 +57,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "obu",
         "vtag": "av01",
         "name": "AV1 — Quality",
-        "gui_label": "AV1 Quality (P5, HQ, Lookahead 16)",
+        "gui_label": "AV1 Quality (Zbalansowana jakość, P5/HQ)",
     },
     "AV1_MAX": {
         "codec": 1,
@@ -63,7 +65,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "obu",
         "vtag": "av01",
         "name": "AV1 — Max Quality",
-        "gui_label": "AV1 Max Quality (P7, UHQ, TF Level 4, B=7)",
+        "gui_label": "AV1 Max Quality (Maksymalna jakość sprzętowa)",
     },
     "H264_FAST": {
         "codec": 2,          # TELEM_CODEC_H264
@@ -71,7 +73,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Fast",
-        "gui_label": "H.264 Fast (P1, Real-Time)",
+        "gui_label": "H.264 Fast (Wysoka wydajność, P1)",
     },
     "H264_QUALITY": {
         "codec": 2,
@@ -79,7 +81,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Quality",
-        "gui_label": "H.264 Quality (P5, HQ, Lookahead 16)",
+        "gui_label": "H.264 Quality (Zbalansowana jakość, P5/HQ)",
     },
     "H264_MAX": {
         "codec": 2,
@@ -87,7 +89,7 @@ LOCKED_PROFILES = {
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Max Quality",
-        "gui_label": "H.264 Max Quality (P7, HQ, B=5)",
+        "gui_label": "H.264 Max Quality (Maksymalna jakość sprzętowa)",
     },
 }
 
@@ -129,13 +131,148 @@ def resolve_nvidia_profile(codec: str, quality: str) -> str:
             raise ValueError(f"Nieobsługiwany poziom jakości HEVC: {quality}")
 
 
+@dataclass
+class NvencFeatureCaps:
+    encoder: str
+    preset_p5: bool = True
+    preset_p7: bool = True
+    tune_uhq: bool = True
+    spatial_aq: bool = True
+    temporal_aq: bool = True
+    rc_lookahead_16: bool = True
+    rc_lookahead_32: bool = True
+    b_ref_middle: bool = True
+
+
+_NVENC_CAPS_CACHE: dict[Tuple[str, int, str], NvencFeatureCaps] = {}
+
+
+def invalidate_nvenc_caps_cache() -> None:
+    """Clear cached NVENC capability probe results."""
+    global _NVENC_CAPS_CACHE
+    _NVENC_CAPS_CACHE.clear()
+
+
+def query_nvenc_encoder_capabilities(
+    encoder: str,
+    ffmpeg_exe: Optional[Path | str] = None,
+    gpu: int = 0,
+    force_refresh: bool = False,
+) -> NvencFeatureCaps:
+    """Probe hardware NVENC capabilities for a specific encoder and GPU without hardcoding.
+
+    Executes a fast-path probe for modern GPUs (RTX 30xx/40xx/50xx) in ~0.08s.
+    If the full feature set fails (e.g. on Pascal/Turing), granular micro-probes
+    determine exact feature support (temporal AQ, tune UHQ, B-ref middle, lookahead, presets).
+    Results are cached in memory per (ffmpeg_exe, gpu, encoder).
+    """
+    global _NVENC_CAPS_CACHE
+
+    if ffmpeg_exe is None:
+        try:
+            from src.runtime_paths import get_nvidia_ffmpeg_exe
+            ffmpeg_path = Path(get_nvidia_ffmpeg_exe()).resolve()
+        except Exception:
+            ffmpeg_path = Path("ffmpeg")
+    else:
+        ffmpeg_path = Path(ffmpeg_exe).resolve()
+
+    enc_norm = str(encoder).strip().lower()
+    cache_key = (str(ffmpeg_path).lower(), int(gpu), enc_norm)
+
+    if not force_refresh and cache_key in _NVENC_CAPS_CACHE:
+        return _NVENC_CAPS_CACHE[cache_key]
+
+    si = None
+    if sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+    def _probe_nvenc(extra_args: list[str]) -> bool:
+        cmd = [
+            str(ffmpeg_path), "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=352x288:d=0.1",
+            "-c:v", enc_norm,
+            "-gpu", str(gpu),
+            *extra_args,
+            "-frames:v", "1",
+            "-f", "null", "-",
+        ]
+        try:
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=5,
+                startupinfo=si,
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
+
+    # 1. Fast-Path Probe: Try full Max Quality feature set
+    full_max_args = [
+        "-preset", "p7",
+        "-tune", "uhq",
+        "-rc", "vbr",
+        "-cq", "24",
+        "-rc-lookahead", "32",
+        "-spatial-aq", "1",
+        "-temporal-aq", "1",
+        "-b_ref_mode", "middle",
+    ]
+    if _probe_nvenc(full_max_args):
+        caps = NvencFeatureCaps(
+            encoder=enc_norm,
+            preset_p5=True,
+            preset_p7=True,
+            tune_uhq=True,
+            spatial_aq=True,
+            temporal_aq=True,
+            rc_lookahead_16=True,
+            rc_lookahead_32=True,
+            b_ref_middle=True,
+        )
+        _NVENC_CAPS_CACHE[cache_key] = caps
+        return caps
+
+    # 2. Granular Micro-Probes:
+    p5_ok = _probe_nvenc(["-preset", "p5", "-tune", "hq"])
+    p7_ok = _probe_nvenc(["-preset", "p7", "-tune", "hq"])
+    uhq_ok = _probe_nvenc(["-preset", "p1", "-tune", "uhq"])
+    spatial_ok = _probe_nvenc(["-preset", "p1", "-tune", "hq", "-spatial-aq", "1"])
+    temporal_ok = _probe_nvenc(["-preset", "p1", "-tune", "hq", "-temporal-aq", "1"])
+    la16_ok = _probe_nvenc(["-preset", "p1", "-tune", "hq", "-rc-lookahead", "16"])
+    la32_ok = _probe_nvenc(["-preset", "p1", "-tune", "hq", "-rc-lookahead", "32"])
+    bref_ok = _probe_nvenc(["-preset", "p1", "-tune", "hq", "-b_ref_mode", "middle"])
+
+    caps = NvencFeatureCaps(
+        encoder=enc_norm,
+        preset_p5=p5_ok,
+        preset_p7=p7_ok,
+        tune_uhq=uhq_ok,
+        spatial_aq=spatial_ok,
+        temporal_aq=temporal_ok,
+        rc_lookahead_16=la16_ok,
+        rc_lookahead_32=la32_ok,
+        b_ref_middle=bref_ok,
+    )
+    _NVENC_CAPS_CACHE[cache_key] = caps
+    return caps
+
+
 def resolve_nvenc_ffmpeg_params(
     codec: str,
     quality: str,
     is_10bit: bool = False,
+    ffmpeg_exe: Optional[Path | str] = None,
+    gpu: int = 0,
+    caps_override: Optional[NvencFeatureCaps] = None,
 ) -> dict:
     """Resolve logical (codec, quality) pair to FFmpeg NVENC command arguments.
 
+    Respects hardware capability limits discovered via capability probe.
+    Ensures modern GPUs (e.g. RTX 5070) retain full features while older GPUs (e.g. Pascal P400)
+    gracefully omit unsupported features without failing initialization.
     Bitrate is explicitly excluded (remains independent user setting).
     """
     profile_name = resolve_nvidia_profile(codec, quality)
@@ -145,86 +282,50 @@ def resolve_nvenc_ffmpeg_params(
     if "AV1" in c_norm:
         enc_name = "av1_nvenc"
         vtag = "av01"
-        if "max" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p7", "-tune", "uhq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "32",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-                "-b_ref_mode", "middle",
-            ]
-        elif "fast" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p1", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-            ]
-        else:  # Quality
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "16",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-            ]
     elif "264" in c_norm or "AVC" in c_norm:
         enc_name = "h264_nvenc"
         vtag = "avc1"
-        if "max" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p7", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "32",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-                "-b_ref_mode", "middle",
-                "-profile:v", "high",
-            ]
-        elif "qual" in q_norm or "standard" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "16",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-                "-profile:v", "high",
-            ]
-        else:  # Fast
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p1", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-                "-profile:v", "high",
-            ]
     else:  # HEVC
         enc_name = "hevc_nvenc"
         vtag = "hvc1"
-        if "max" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p7", "-tune", "uhq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "32",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-                "-b_ref_mode", "middle",
-            ]
-        elif "qual" in q_norm or "standard" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "16",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-            ]
-        else:  # Fast
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p1", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
-            ]
-        if is_10bit:
-            args.extend(["-profile:v", "main10"])
+
+    if caps_override is not None:
+        caps = caps_override
+    else:
+        caps = query_nvenc_encoder_capabilities(enc_name, ffmpeg_exe=ffmpeg_exe, gpu=gpu)
+
+    args = ["-c:v", enc_name]
+
+    if "max" in q_norm:
+        preset = "p7" if caps.preset_p7 else ("p5" if caps.preset_p5 else "p1")
+        tune = "uhq" if caps.tune_uhq else "hq"
+        args.extend(["-preset", preset, "-tune", tune, "-rc", "vbr", "-cq", "24"])
+        if caps.rc_lookahead_32:
+            args.extend(["-rc-lookahead", "32"])
+        elif caps.rc_lookahead_16:
+            args.extend(["-rc-lookahead", "16"])
+        if caps.spatial_aq:
+            args.extend(["-spatial-aq", "1"])
+        if caps.temporal_aq:
+            args.extend(["-temporal-aq", "1"])
+        if caps.b_ref_middle:
+            args.extend(["-b_ref_mode", "middle"])
+    elif "qual" in q_norm or "standard" in q_norm:
+        preset = "p5" if caps.preset_p5 else "p1"
+        args.extend(["-preset", preset, "-tune", "hq", "-rc", "vbr", "-cq", "24"])
+        if caps.rc_lookahead_16:
+            args.extend(["-rc-lookahead", "16"])
+        if caps.spatial_aq:
+            args.extend(["-spatial-aq", "1"])
+        if caps.temporal_aq:
+            args.extend(["-temporal-aq", "1"])
+    else:  # Fast
+        args.extend(["-preset", "p1", "-tune", "hq", "-rc", "vbr", "-cq", "24"])
+
+    if "264" in c_norm or "AVC" in c_norm:
+        args.extend(["-profile:v", "high"])
+    elif is_10bit and ("HEVC" in c_norm or "H.265" in c_norm or "H265" in c_norm or "AV1" in c_norm):
+        args.extend(["-profile:v", "main10"])
 
     return {
         "profile_name": profile_name,
@@ -232,6 +333,7 @@ def resolve_nvenc_ffmpeg_params(
         "vtag": vtag,
         "ffmpeg_args": args,
         "is_10bit": is_10bit,
+        "caps": caps,
     }
 
 
