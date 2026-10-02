@@ -88,23 +88,69 @@ def _probe_intel_native_source(input_file: str, ffmpeg_exe: str) -> tuple[bool, 
         return False, "source_probe_failed"
 
 
-def _probe_intel_cpu_download_format(input_file: str, ffmpeg_exe: str) -> str:
-    """Select a CPU-compatible download format without narrowing HDR to 8-bit."""
+def _probe_intel_cpu_download_format(
+    input_files: str | list[str] | tuple[str, ...] | Path,
+    ffmpeg_exe: str,
+) -> str:
+    """Select a CPU-compatible download format without narrowing HDR to 8-bit.
+
+    For multi-file sequences, probes the first clip and verifies that all subsequent
+    clips have a consistent pixel format. Never silently guesses 'nv12' on failure.
+    """
+    if isinstance(input_files, (str, Path)):
+        clips = [str(input_files)]
+    elif isinstance(input_files, (list, tuple)):
+        clips = [str(p) for p in input_files if p]
+    else:
+        clips = []
+
+    if not clips:
+        raise ValueError("Cannot probe Intel download format: input_files list is empty")
+
     ffprobe = str(Path(ffmpeg_exe).with_name("ffprobe.exe"))
     if not Path(ffprobe).exists():
         ffprobe = shutil.which("ffprobe") or "ffprobe"
-    try:
-        result = subprocess.run(
-            [ffprobe, "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=pix_fmt", "-of", "default=nw=1", input_file],
+
+    def _probe_single(clip_path: str) -> tuple[str, str]:
+        res = subprocess.run(
+            [
+                ffprobe, "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=pix_fmt",
+                "-of", "default=nw=1:nk=1", clip_path,
+            ],
             capture_output=True, text=True, timeout=8,
         )
-        pix_fmt = result.stdout.lower()
-        if any(token in pix_fmt for token in ("10le", "10be", "12le", "12be", "p010", "p016")):
-            return "p010le"
-    except Exception:
-        pass
-    return "nv12"
+        if res.returncode != 0:
+            err = res.stderr.strip() or f"exit code {res.returncode}"
+            raise RuntimeError(f"ffprobe failed for '{clip_path}': {err}")
+        raw = res.stdout.strip().lower()
+        if not raw:
+            raise RuntimeError(f"ffprobe returned empty pixel format for '{clip_path}'")
+
+        if any(token in raw for token in ("10le", "10be", "12le", "12be", "p010", "p016")):
+            cat = "p010le"
+        elif any(token in raw for token in ("nv12", "yuv420p", "yuvj420p")):
+            cat = "nv12"
+        else:
+            raise RuntimeError(
+                f"Unsupported or unrecognised pixel format '{raw}' for '{clip_path}'. "
+                f"Intel pipeline expects 10-bit HDR (p010le) or 8-bit (nv12)."
+            )
+        return raw, cat
+
+    raw_first, cat_first = _probe_single(clips[0])
+
+    if len(clips) > 1:
+        for idx, other_clip in enumerate(clips[1:], start=1):
+            raw_other, cat_other = _probe_single(other_clip)
+            if cat_other != cat_first:
+                raise RuntimeError(
+                    f"Multi-file clip format mismatch: clip 0 ('{clips[0]}') has pixel format '{raw_first}' ({cat_first}), "
+                    f"but clip {idx} ('{other_clip}') has pixel format '{raw_other}' ({cat_other}). "
+                    f"All clips in an export sequence must have consistent bit depth."
+                )
+
+    return cat_first
 
 
 def _flag_on_env(name: str) -> bool:
@@ -1137,19 +1183,23 @@ def stream_overlay_to_ffmpeg(
         and intel_force_gpu_compositor
         and not is_no_hud
     )
-    intel_source_file = (
-        input_files if isinstance(input_files, (str, Path))
-        else (input_files[0] if len(input_files) == 1 else None)
-    )
+    if isinstance(input_files, (str, Path)):
+        intel_clips = [str(input_files)]
+    elif isinstance(input_files, (list, tuple)):
+        intel_clips = [str(p) for p in input_files if p]
+    else:
+        intel_clips = []
+    intel_source_file = intel_clips[0] if intel_clips else None
+
     if intel_gpu_resident and intel_source_file is not None:
         probe = _probe_intel_native_source(str(intel_source_file), ffmpeg_exe)
         if not probe[0]:
             intel_gpu_resident = False
             print(f"[INTEL] Fallback reason: {probe[1]}", flush=True)
     intel_cpu_download_format = "nv12"
-    if encoder == "intel" and not intel_gpu_resident and intel_source_file is not None:
-        intel_cpu_download_format = _probe_intel_cpu_download_format(str(intel_source_file), ffmpeg_exe)
-        print(f"[INTEL] CPU_REFERENCE download format: {intel_cpu_download_format}", flush=True)
+    if encoder == "intel" and not intel_gpu_resident and intel_clips:
+        intel_cpu_download_format = _probe_intel_cpu_download_format(intel_clips, ffmpeg_exe)
+        print(f"[INTEL] CPU_REFERENCE download format: {intel_cpu_download_format} (clips={len(intel_clips)})", flush=True)
     intel_cpu_software_decode = (
         encoder == "intel" and not intel_gpu_resident
         and intel_cpu_download_format == "p010le"
@@ -1195,63 +1245,94 @@ def stream_overlay_to_ffmpeg(
         print("[INTEL] QSV look_ahead: 0 | async_depth: 4", flush=True)
 
     # ── ETAP 7D: INTEL_NATIVE_D3D11 In-Process production dispatch ──
-    if encoder == "intel" and os.environ.get("TELEM_INTEL_NATIVE_D3D11", "1").strip().lower() not in ("0", "false", "no", "off"):
-        from src.ffmpeg.intel_native_exporter import export_intel_native_d3d11
-        from src.ffmpeg.command_builder import RESOLUTION_MAP
-        target_res = RESOLUTION_MAP.get(resolution_name)
-        out_w, out_h = target_res if target_res is not None else (render_w, render_h)
-        print("[STREAM INTEL] Dispatching to production INTEL_NATIVE_D3D11 Video Processor GPU pipeline...", flush=True)
-        success = export_intel_native_d3d11(
-            ffmpeg_exe=ffmpeg_exe,
-            input_files=input_files,
-            output_file=str(output_file),
-            duration_s=duration_s,
-            video_width=out_w,
-            video_height=out_h,
-            start_dt_utc=start_dt_utc,
-            tz_offset_hours=tz_offset_hours,
-            speed_samples=speed_samples,
-            track_samples=track_samples,
-            alt_samples=alt_samples,
-            font_path=font_path,
-            layout=layout,
-            field_samples=field_samples,
-            target_fps=target_fps,
-            video_bitrate=video_bitrate,
-            codec=codec,
-            encoder_profile=encoder_profile,
-            quality=encoder_profile,
-            max_distance_m=max_distance_m,
-            iso_samples=iso_samples,
-            exposure_samples=exposure_samples,
-            temperature_samples=temperature_samples,
-            gpx_speed_samples=gpx_speed_samples,
-            gpx_track_samples=gpx_track_samples,
-            gpx_alt_samples=gpx_alt_samples,
-            gpx_power_samples=gpx_power_samples,
-            gpx_atemp_samples=gpx_atemp_samples,
-            gpx_hr_samples=gpx_hr_samples,
-            gpx_cad_samples=gpx_cad_samples,
-            fit_data=fit_data,
-            gps_track=gps_track,
-            progress_cb=progress_cb,
-            on_render_progress=on_render_progress,
-            cancel_event=cancel_event,
-            cancel_reason_provider=cancel_reason_provider,
-            preview_state_provider=preview_state_provider,
-            preview_session=preview_session,
-            generation_id=generation_id,
-            active_process_holder=active_process_holder,
-            video_timeline=video_timeline,
-            inline_gpmf_plan=inline_gpmf_plan,
-            rotation_degrees=rotation_degrees,
-            container_rotation=container_rotation,
-        )
-        if success:
-            return total_overlay_frames
-        if cancel_event is not None and cancel_event.is_set():
-            return 0
-        raise RuntimeError("Native INTEL_NATIVE_D3D11 export failed.")
+    if encoder == "intel":
+        print(f"[INTEL_JOB_START] encoder={encoder} input_files={input_files} output_file={output_file} is_multi_file={is_multi_file}", flush=True)
+        native_requested = os.environ.get("TELEM_INTEL_NATIVE_D3D11", "1").strip().lower() not in ("0", "false", "no", "off")
+        print(f"[INTEL_NATIVE_REQUESTED] requested={'YES' if native_requested else 'NO'}", flush=True)
+
+        from src.ffmpeg.intel_native_exporter import is_intel_native_available
+        native_available, avail_reason = is_intel_native_available()
+        print(f"[INTEL_NATIVE_AVAILABLE] available={'YES' if native_available else 'NO'} reason={avail_reason}", flush=True)
+
+        fallback_reason = None
+
+        if not native_requested:
+            fallback_reason = "TELEM_INTEL_NATIVE_D3D11 environment override disabled native pipeline"
+            print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+        elif not native_available:
+            fallback_reason = f"Intel Native D3D11 unavailable: {avail_reason}"
+            print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+        else:
+            print("[INTEL_NATIVE_ENTERED] entered=YES", flush=True)
+            from src.ffmpeg.intel_native_exporter import export_intel_native_d3d11
+            from src.ffmpeg.command_builder import RESOLUTION_MAP
+            target_res = RESOLUTION_MAP.get(resolution_name)
+            out_w, out_h = target_res if target_res is not None else (render_w, render_h)
+            print("[STREAM INTEL] Dispatching to production INTEL_NATIVE_D3D11 Video Processor GPU pipeline...", flush=True)
+            try:
+                success = export_intel_native_d3d11(
+                    ffmpeg_exe=ffmpeg_exe,
+                    input_files=input_files,
+                    output_file=str(output_file),
+                    duration_s=duration_s,
+                    video_width=out_w,
+                    video_height=out_h,
+                    start_dt_utc=start_dt_utc,
+                    tz_offset_hours=tz_offset_hours,
+                    speed_samples=speed_samples,
+                    track_samples=track_samples,
+                    alt_samples=alt_samples,
+                    font_path=font_path,
+                    layout=layout,
+                    field_samples=field_samples,
+                    target_fps=target_fps,
+                    video_bitrate=video_bitrate,
+                    codec=codec,
+                    encoder_profile=encoder_profile,
+                    quality=encoder_profile,
+                    max_distance_m=max_distance_m,
+                    iso_samples=iso_samples,
+                    exposure_samples=exposure_samples,
+                    temperature_samples=temperature_samples,
+                    gpx_speed_samples=gpx_speed_samples,
+                    gpx_track_samples=gpx_track_samples,
+                    gpx_alt_samples=gpx_alt_samples,
+                    gpx_power_samples=gpx_power_samples,
+                    gpx_atemp_samples=gpx_atemp_samples,
+                    gpx_hr_samples=gpx_hr_samples,
+                    gpx_cad_samples=gpx_cad_samples,
+                    fit_data=fit_data,
+                    gps_track=gps_track,
+                    progress_cb=progress_cb,
+                    on_render_progress=on_render_progress,
+                    cancel_event=cancel_event,
+                    cancel_reason_provider=cancel_reason_provider,
+                    preview_state_provider=preview_state_provider,
+                    preview_session=preview_session,
+                    generation_id=generation_id,
+                    active_process_holder=active_process_holder,
+                    video_timeline=video_timeline,
+                    inline_gpmf_plan=inline_gpmf_plan,
+                    rotation_degrees=rotation_degrees,
+                    container_rotation=container_rotation,
+                )
+                if success:
+                    print("[INTEL_NATIVE_RESULT] success=YES", flush=True)
+                    return total_overlay_frames
+                if cancel_event is not None and cancel_event.is_set():
+                    print("[INTEL_NATIVE_RESULT] success=NO (cancelled)", flush=True)
+                    return 0
+                print("[INTEL_NATIVE_RESULT] success=NO", flush=True)
+                fallback_reason = "export_intel_native_d3d11 returned False"
+                print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+            except Exception as e:
+                import traceback
+                print(f"[INTEL_NATIVE_EXCEPTION] {type(e).__name__}: {e}\n{traceback.format_exc()}", flush=True)
+                print("[INTEL_NATIVE_RESULT] success=NO (exception)", flush=True)
+                fallback_reason = f"export_intel_native_d3d11 raised {type(e).__name__}: {e}"
+                print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+
+        print(f"[INTEL_FFMPEG_FALLBACK_ENTERED] entered=YES reason={fallback_reason}", flush=True)
 
 
     # ── ETAP 4B: AMD_NATIVE_D3D11 multi-file guard ────────────────────────

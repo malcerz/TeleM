@@ -2610,9 +2610,8 @@ def export_amd_native_d3d11(
         log_runtime_diagnostic,
     )
     dll_path_obj = get_amd_native_dll()
-    dll_path = str(dll_path_obj)
-    if not os.path.exists(dll_path):
-        print(f"[AMD NATIVE D3D11] ERROR: DLL not found at {dll_path}", flush=True)
+    if not dll_path_obj.exists():
+        print(f"[AMD NATIVE D3D11] ERROR: DLL not found at {dll_path_obj}", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
@@ -2620,9 +2619,9 @@ def export_amd_native_d3d11(
     log_runtime_diagnostic("amd", dll_path_obj)
 
     try:
-        native_dll = ctypes.CDLL(dll_path)
+        native_dll = ctypes.CDLL(str(dll_path_obj))
     except Exception as e:
-        print(f"[AMD NATIVE D3D11] Failed to load DLL {dll_path}: {e}", flush=True)
+        print(f"[AMD NATIVE D3D11] Failed to load DLL {dll_path_obj}: {e}", flush=True)
         print("AMD_NATIVE_D3D11 = FAIL", flush=True)
         return False
 
@@ -2651,8 +2650,10 @@ def export_amd_native_d3d11(
     build_fields = _parse_build_info(build_info)
     build_id = build_fields.get("build_id", "missing")
     embedded_build_time = build_fields.get("build_timestamp", "missing")
-    file_build_time = datetime.fromtimestamp(os.path.getmtime(dll_path)).astimezone().isoformat(timespec="seconds")
-    print(f"AMD Native DLL path: {dll_path}", flush=True)
+    file_build_time = datetime.fromtimestamp(
+        os.path.getmtime(dll_path_obj)
+    ).astimezone().isoformat(timespec="seconds")
+    print(f"AMD Native DLL path: {dll_path_obj}", flush=True)
     print(f"AMD Native DLL build ID: {build_id}", flush=True)
     print(f"AMD Native DLL build timestamp: {embedded_build_time}", flush=True)
     print(f"AMD Native DLL file timestamp: {file_build_time}", flush=True)
@@ -7538,7 +7539,7 @@ def export_amd_native_d3d11(
         "backend": f"AMD_NATIVE_D3D11_{native_hud_mode}_{native_decode_mode}",
         "map_cache": _tile_stats,
         "dll": {
-            "path": dll_path,
+            "path": str(dll_path_obj),
             "abi_version": loaded_abi,
             "build_info": build_info,
             "build_id": build_id,

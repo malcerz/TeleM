@@ -155,7 +155,7 @@ class RenderMixin:
             _tracker.start_stage("snapshot")
         except Exception:
             pass
-        if options.get("video_paths") and (not getattr(self, "video_paths", None) or not getattr(self, "video_path", None)):
+        if options.get("video_paths"):
             self.video_paths = [Path(p) for p in options["video_paths"]]
             self.video_path = self.video_paths[0] if self.video_paths else None
         if options.get("layout"):
@@ -917,7 +917,7 @@ class RenderMixin:
 
         stream_kwargs = dict(
             ffmpeg_exe=ffmpeg_exe,
-            input_files=self.video_paths,
+            input_files=list(options.get("video_paths") or self.video_paths),
             output_file=output_path,
             duration_s=self.video_duration_s,
             start_dt_utc=self.telemetry.start_dt_utc,

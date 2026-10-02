@@ -32,6 +32,19 @@ def _fps_rational_arg(fps: float) -> str:
     return f"{frac.numerator}/{frac.denominator}"
 
 
+def _resolve_intel_cpu_format(intel_cpu_download_format: str) -> str:
+    """Resolve Intel download format strictly without guessing 'nv12' on invalid/unknown input."""
+    fmt = str(intel_cpu_download_format).lower().strip()
+    if fmt in ("p010", "p010le"):
+        return "p010le"
+    elif fmt in ("nv12", "yuv420p", "yuvj420p"):
+        return "nv12"
+    raise ValueError(
+        f"Unknown or unsupported Intel download format: '{intel_cpu_download_format}'. "
+        f"Must be 'p010le' for 10-bit HDR or 'nv12' for 8-bit SDR. Guessing is disabled."
+    )
+
+
 RESOLUTION_MAP: dict[str, tuple[int, int] | None] = {
     "source": None,
     "8k": (7680, 4320),
@@ -772,7 +785,7 @@ intel_codec: str = "hevc",
         else:
             base_filter = "[0:v]null[base]"
     elif encoder == "intel" and intel_gpu_compositor:
-        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        cpu_format = _resolve_intel_cpu_format(intel_cpu_download_format)
         if target_res:
             base_filter = f"[0:v]format={cpu_format},scale={render_w}:{render_h}:flags=lanczos,hwupload[base]"
         else:
@@ -782,7 +795,7 @@ intel_codec: str = "hevc",
         # applies the source display matrix, so frames arrive already upright.
         # No manual vflip/hflip/transpose here (baking flips while the MP4
         # display matrix is copied to the output double-rotated finals).
-        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        cpu_format = _resolve_intel_cpu_format(intel_cpu_download_format)
         if target_res:
             base_filter = f"[0:v]format={cpu_format},scale={render_w}:{render_h}:flags=lanczos[base]"
         else:
@@ -792,7 +805,7 @@ intel_codec: str = "hevc",
         # Without this, the current FFmpeg rejects QSV frames at scale/overlay
         # negotiation (and the HUD writer can remain blocked behind the failed
         # filter graph).
-        cpu_format = "p010le" if str(intel_cpu_download_format).lower() in ("p010", "p010le") else "nv12"
+        cpu_format = _resolve_intel_cpu_format(intel_cpu_download_format)
         # ETAP 5D: no manual rotation transforms -- see the software-decode
         # branch comment (autorotate contract).
         if target_res:
@@ -1155,9 +1168,9 @@ intel_codec: str = "hevc",
     elif encoder == "intel":
         codec_name = "av1_qsv" if str(intel_codec).lower() in ("av1", "av1_qsv") else "hevc_qsv"
         pix_fmt = (
-            "p010le"
-            if str(intel_cpu_download_format).lower() in ("p010", "p010le") and not intel_gpu_resident
-            else "nv12"
+            "nv12"
+            if intel_gpu_resident
+            else _resolve_intel_cpu_format(intel_cpu_download_format)
         )
         cmd.extend([
             "-c:v", codec_name,

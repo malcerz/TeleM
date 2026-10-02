@@ -205,6 +205,23 @@ def query_intel_capabilities() -> dict[str, Any]:
         }
 
 
+def is_intel_native_available() -> tuple[bool, str]:
+    """Check if Intel Native D3D11 exporter DLL and runtime are available."""
+    try:
+        from src.runtime_paths import get_intel_native_dll
+        dll_path = get_intel_native_dll()
+        if not dll_path.exists():
+            return False, f"Intel native DLL not found at: {dll_path}"
+        lib = _load_native_intel_dll()
+        if lib is None:
+            return False, "Failed to load Intel native DLL"
+        if not hasattr(lib, "intel_native_pipeline_init_multi_ex"):
+            return False, "DLL missing intel_native_pipeline_init_multi_ex entrypoint"
+        return True, "available"
+    except Exception as exc:
+        return False, f"Exception probing Intel native DLL: {exc}"
+
+
 def _load_native_intel_dll() -> ctypes.CDLL:
     global _LIB_NATIVE_INTEL
     if _LIB_NATIVE_INTEL is not None:
