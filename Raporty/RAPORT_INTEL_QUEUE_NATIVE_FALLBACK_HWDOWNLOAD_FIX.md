@@ -32,7 +32,7 @@ TESTS_PASSED=5
 TESTS_FAILED=0
 
 FILES_CHANGED=src/ffmpeg/intel_native_exporter.py, src/ffmpeg/streaming.py, src/ffmpeg/command_builder.py, src/gui/qt/_mixins/render_mixin.py, src/ffmpeg/intel_backend.py, tests/test_intel_queue_native_fallback_hwdownload.py, scripts/test_real_queue_scenario.py
-COMMIT=6213288
+COMMIT=89b1184
 
 FINAL_STATUS=SUCCESS
 ```
