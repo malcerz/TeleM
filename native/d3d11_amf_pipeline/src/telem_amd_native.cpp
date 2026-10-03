@@ -472,13 +472,16 @@ static bool InitializeEncodedOutput(TelemAMDContext* ctx, const wchar_t* outputP
     if (!ctx || !outputPath) return false;
     // The working Stage A/C proof used the normal synchronous stream writer.
     // Windows permits std::ofstream to open the named-pipe path as well as a
-    // regular .h265 file, so no overlapped state machine is required here.
-    const std::wstring h265Path = std::wstring(outputPath) + L".h265";
+    // regular .h264 / .h265 file, so no overlapped state machine is required here.
+    const bool isAvc = ctx->amfEncoder.IsAVC();
+    const bool isAv1 = ctx->amfEncoder.IsAV1();
+    const std::wstring ext = isAvc ? L".h264" : (isAv1 ? L".obu" : L".h265");
+    const std::wstring outPathWithExt = std::wstring(outputPath) + ext;
     std::string path;
-    int n = WideCharToMultiByte(CP_UTF8, 0, h265Path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    int n = WideCharToMultiByte(CP_UTF8, 0, outPathWithExt.c_str(), -1, nullptr, 0, nullptr, nullptr);
     if (n <= 0) return false;
     path.resize(static_cast<size_t>(n));
-    WideCharToMultiByte(CP_UTF8, 0, h265Path.c_str(), -1, path.data(), n, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, outPathWithExt.c_str(), -1, path.data(), n, nullptr, nullptr);
     path.resize(static_cast<size_t>(n - 1));
     ctx->h265Out.open(path, std::ios::binary);
     return ctx->h265Out.is_open();
@@ -1647,6 +1650,40 @@ TELEM_EXPORT void* telem_amd_create(
                   << " 4K_DOWNSCALE_AS_8K_SOLUTION=False" << std::endl;
     }
 
+    // Resolve encoder codec, quality preset and bitrate before output and encoder init.
+    AMFCodecType codecType = AMFCodecType::HEVC;
+    const char* codecEnv = getenv("AMD_NATIVE_CODEC");
+    if (codecEnv && (_stricmp(codecEnv, "h264") == 0 || _stricmp(codecEnv, "avc") == 0 || _stricmp(codecEnv, "h264_amf") == 0)) {
+        codecType = AMFCodecType::AVC;
+    } else if (codecEnv && (_stricmp(codecEnv, "av1") == 0 || _stricmp(codecEnv, "av01") == 0 || _stricmp(codecEnv, "av1_amf") == 0)) {
+        codecType = AMFCodecType::AV1;
+    }
+
+    AMFQualityPreset qualityPreset = AMFQualityPreset::BALANCED;
+    const char* qualityEnv = getenv("AMD_NATIVE_QUALITY");
+    if (qualityEnv) {
+        if (_stricmp(qualityEnv, "FAST") == 0 || _stricmp(qualityEnv, "speed") == 0) {
+            qualityPreset = AMFQualityPreset::FAST;
+        } else if (_stricmp(qualityEnv, "QUALITY") == 0) {
+            qualityPreset = AMFQualityPreset::QUALITY;
+        } else {
+            qualityPreset = AMFQualityPreset::BALANCED;
+        }
+    }
+
+    int64_t bitrateBps = 0;
+    const char* bitrateEnv = getenv("AMD_NATIVE_BITRATE");
+    if (bitrateEnv && strlen(bitrateEnv) > 0) {
+        try {
+            bitrateBps = std::stoll(bitrateEnv);
+        } catch (...) {
+            bitrateBps = 0;
+        }
+    }
+
+    // Pre-configure codec on encoder so InitializeEncodedOutput creates the correct extension (.h264 vs .h265)
+    ctx->amfEncoder.SetCodecType(codecType);
+
     char mbsOut[512] = {};
     wcstombs(mbsOut, output_path, 512);
     ctx->outputPath = std::string(mbsOut);
@@ -1909,11 +1946,11 @@ TELEM_EXPORT void* telem_amd_create(
                   << " -> libx265)" << std::endl;
     }
 
-    // 3. Initialize AMF HEVC Encoder on shared D3D11 device
+    // 3. Initialize AMF Video Encoder (HEVC or AVC) on shared D3D11 device
     // ETAP 5W debug: AMD_DEBUG_NO_AMF=1 skips AMF init (device-ref leak isolation).
     const bool skipAmf = ctx->isX265 || (getenv("AMD_DEBUG_NO_AMF") != nullptr);
     if (!skipAmf) {
-        if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den)) {
+        if (!ctx->amfEncoder.Initialize(ctx->pDevice, width, height, fps_num, fps_den, codecType, qualityPreset, bitrateBps)) {
             std::cerr << "[TELEM AMD DLL] AMF Encoder Initialize failed!" << std::endl;
             DestroyPartialContext(ctx);
             MFShutdown();
@@ -3551,3 +3588,133 @@ TELEM_EXPORT int telem_amd_poll_preview_tap(
     return ctx->vpPipeline.PollPreviewTap(
         out_bgra, capacity, out_frame, out_readback_ms) ? 1 : 0;
 }
+
+TELEM_EXPORT int telem_amd_get_encoder_codec(void* handle) {
+    if (!handle) return -1;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return static_cast<int>(ctx->amfEncoder.GetCodecType());
+}
+
+TELEM_EXPORT int telem_amd_get_encoder_preset(void* handle) {
+    if (!handle) return -1;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return static_cast<int>(ctx->amfEncoder.GetQualityPreset());
+}
+
+struct TelemAMDCapsReport {
+    int h264_available;
+    int h264_8bit_available;
+    int hevc_available;
+    int hevc_main10_available;
+    int av1_available;
+    int av1_8bit_available;
+    int av1_10bit_available;
+    int max_width;
+    int max_height;
+};
+
+TELEM_EXPORT int telem_amd_probe_capabilities(TelemAMDCapsReport* out_caps) {
+    if (!out_caps) return 0;
+    std::memset(out_caps, 0, sizeof(TelemAMDCapsReport));
+
+    HMODULE hAMFRT = LoadLibraryW(L"amfrt64.dll");
+    if (!hAMFRT) {
+        return 0;
+    }
+
+    AMFInit_Fn pAMFInit = (AMFInit_Fn)GetProcAddress(hAMFRT, AMF_INIT_FUNCTION_NAME);
+    if (!pAMFInit) {
+        FreeLibrary(hAMFRT);
+        return 0;
+    }
+
+    amf::AMFFactory* factory = nullptr;
+    AMF_RESULT res = pAMFInit(AMF_FULL_VERSION, &factory);
+    if (res != AMF_OK || !factory) {
+        FreeLibrary(hAMFRT);
+        return 0;
+    }
+
+    amf::AMFContextPtr context;
+    res = factory->CreateContext(&context);
+    if (res != AMF_OK || !context) {
+        FreeLibrary(hAMFRT);
+        return 0;
+    }
+
+    // Initialize with D3D11 device
+    ID3D11Device* pDevice = nullptr;
+    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+    D3D_FEATURE_LEVEL outLevel;
+    HRESULT hr = D3D11CreateDevice(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+        D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+        featureLevels, 2, D3D11_SDK_VERSION,
+        &pDevice, &outLevel, nullptr
+    );
+    if (FAILED(hr) || !pDevice) {
+        hr = D3D11CreateDevice(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+            0, featureLevels, 2, D3D11_SDK_VERSION,
+            &pDevice, &outLevel, nullptr
+        );
+    }
+
+    if (pDevice) {
+        context->InitDX11(pDevice);
+    } else {
+        context->InitDX11(nullptr);
+    }
+
+    // 1. Probe AVC / H.264
+    {
+        amf::AMFComponentPtr encH264;
+        res = factory->CreateComponent(context, AMFVideoEncoderVCE_AVC, &encH264);
+        if (res == AMF_OK && encH264) {
+            out_caps->h264_available = 1;
+            out_caps->h264_8bit_available = 1;
+            encH264->Terminate();
+            encH264 = nullptr;
+        }
+    }
+
+    // 2. Probe HEVC
+    {
+        amf::AMFComponentPtr encHEVC;
+        res = factory->CreateComponent(context, AMFVideoEncoder_HEVC, &encHEVC);
+        if (res == AMF_OK && encHEVC) {
+            out_caps->hevc_available = 1;
+            out_caps->max_width = 4096;
+            out_caps->max_height = 4096;
+            encHEVC->Terminate();
+            encHEVC = nullptr;
+        }
+    }
+
+    // 3. Probe AV1
+    {
+        amf::AMFComponentPtr encAV1;
+        res = factory->CreateComponent(context, AMFVideoEncoder_AV1, &encAV1);
+        if (res == AMF_OK && encAV1) {
+            out_caps->av1_available = 1;
+            out_caps->av1_8bit_available = 1;
+            if (out_caps->max_width < 7680) {
+                out_caps->max_width = 7680;
+                out_caps->max_height = 4320;
+            }
+            encAV1->Terminate();
+            encAV1 = nullptr;
+        }
+    }
+
+    context->Terminate();
+    context = nullptr;
+    if (pDevice) {
+        pDevice->Release();
+        pDevice = nullptr;
+    }
+    FreeLibrary(hAMFRT);
+    return 1;
+}
+
+

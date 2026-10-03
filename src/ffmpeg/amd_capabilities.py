@@ -67,8 +67,13 @@ class GpuCapabilities:
     driver_version: str = "Unknown"
     hardware_encoder: str | None = None
     selected_codec: str | None = None
+    h264_encode_available: bool | None = None
+    h264_8bit_available: bool | None = None
     hevc_encode_available: bool | None = None
     hevc_main10_available: bool | None = None
+    av1_encode_available: bool | None = None
+    av1_8bit_available: bool | None = None
+    av1_10bit_available: bool | None = None
     max_encode_width: int | None = None
     max_encode_height: int | None = None
     hardware_decode_available: bool | None = None
@@ -113,8 +118,13 @@ class GpuCapabilities:
             "driver_version": self.driver_version,
             "hardware_encoder": self.hardware_encoder,
             "selected_codec": self.selected_codec,
+            "h264_encode_available": self.h264_encode_available,
+            "h264_8bit_available": self.h264_8bit_available,
             "hevc_encode_available": self.hevc_encode_available,
             "hevc_main10_available": self.hevc_main10_available,
+            "av1_encode_available": self.av1_encode_available,
+            "av1_8bit_available": self.av1_8bit_available,
+            "av1_10bit_available": self.av1_10bit_available,
             "max_encode_width": self.max_encode_width,
             "max_encode_height": self.max_encode_height,
             "hardware_decode_available": self.hardware_decode_available,
@@ -149,8 +159,13 @@ class GpuCapabilities:
             driver_version=str(data.get("driver_version", "Unknown")),
             hardware_encoder=data.get("hardware_encoder"),
             selected_codec=data.get("selected_codec"),
+            h264_encode_available=_as_bool(data.get("h264_encode_available")),
+            h264_8bit_available=_as_bool(data.get("h264_8bit_available")),
             hevc_encode_available=_as_bool(data.get("hevc_encode_available")),
             hevc_main10_available=_as_bool(data.get("hevc_main10_available")),
+            av1_encode_available=_as_bool(data.get("av1_encode_available")),
+            av1_8bit_available=_as_bool(data.get("av1_8bit_available")),
+            av1_10bit_available=_as_bool(data.get("av1_10bit_available")),
             max_encode_width=_as_int(data.get("max_encode_width", data.get("hevc_max_width"))),
             max_encode_height=_as_int(data.get("max_encode_height", data.get("hevc_max_height"))),
             hardware_decode_available=_as_bool(data.get("hardware_decode_available")),
@@ -240,40 +255,268 @@ def _parse_probe_output(stdout: str, *, identity_only: bool = False) -> dict[str
     }
 
 
-def query_native_amf_capabilities(*, identity_only: bool = False) -> dict[str, Any]:
-    """Query active DXGI adapter and, unless requested, AMFIOCaps."""
-    query_bin = _query_binary()
-    if query_bin is None:
-        return {"status": "UNKNOWN", "capability_source": "NONE", "error": "query_amf_caps.exe not found"}
+def _get_matching_driver_version(device_id_hex: str) -> str:
+    clean_dev = device_id_hex.lower().replace("0x", "")
     try:
-        args = [str(query_bin)] + (["--identity-only"] if identity_only else [])
-        probe_env = os.environ.copy()
-        probe_dirs = [str(query_bin.parent)]
-        # Developer/portable MinGW builds may use the runtime DLLs beside the
-        # toolchain.  Production installs normally place them beside the exe;
-        # adding an existing toolchain directory is harmless and keeps startup
-        # probing independent of the shell that launched the GUI.
-        mingw_bin = Path("C:/tools/mingw64/bin")
-        if mingw_bin.exists():
-            probe_dirs.append(str(mingw_bin))
-        probe_env["PATH"] = os.pathsep.join(probe_dirs + [probe_env.get("PATH", "")])
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env=probe_env,
-            **({"startupinfo": _nt_startupinfo()} if os.name == "nt" else {}),
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
         )
-    except Exception as exc:
-        return {"status": "UNKNOWN", "capability_source": "NONE", "error": str(exc)}
-    if result.returncode != 0:
+        for i in range(winreg.QueryInfoKey(key)[0]):
+            sub_name = winreg.EnumKey(key, i)
+            if sub_name.isdigit():
+                sub = winreg.OpenKey(key, sub_name)
+                try:
+                    pnp, _ = winreg.QueryValueEx(sub, "MatchingDeviceId")
+                    if clean_dev in str(pnp).lower():
+                        ver, _ = winreg.QueryValueEx(sub, "DriverVersion")
+                        return str(ver)
+                except OSError:
+                    pass
+    except Exception:
+        pass
+    return "Unknown"
+
+
+def _probe_dxgi_identity() -> dict[str, Any] | None:
+    """Direct DXGI hardware probe via D3D11 without requiring external exe."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class DXGI_ADAPTER_DESC1(ctypes.Structure):
+            _fields_ = [
+                ("Description", wintypes.WCHAR * 128),
+                ("VendorId", wintypes.UINT),
+                ("DeviceId", wintypes.UINT),
+                ("SubSysId", wintypes.UINT),
+                ("Revision", wintypes.UINT),
+                ("DedicatedVideoMemory", ctypes.c_size_t),
+                ("DedicatedSystemMemory", ctypes.c_size_t),
+                ("SharedSystemMemory", ctypes.c_size_t),
+                ("AdapterLuid_LowPart", wintypes.DWORD),
+                ("AdapterLuid_HighPart", wintypes.LONG),
+                ("Flags", wintypes.UINT),
+            ]
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", wintypes.DWORD),
+                ("Data2", wintypes.WORD),
+                ("Data3", wintypes.WORD),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        d3d11 = ctypes.windll.d3d11
+        pDevice = ctypes.c_void_p()
+        pContext = ctypes.c_void_p()
+        lvl = ctypes.c_uint()
+        hr = d3d11.D3D11CreateDevice(
+            None, 1, None, 0, None, 0, 7,
+            ctypes.byref(pDevice), ctypes.byref(lvl), ctypes.byref(pContext)
+        )
+        if hr != 0 or not pDevice.value:
+            return None
+
+        iid_dxgi_dev = GUID(0x54ec77fa, 0x1377, 0x44e6, (ctypes.c_ubyte*8)(0x8c, 0x32, 0x88, 0xfd, 0x5f, 0x44, 0xc8, 0x4c))
+        vtable = ctypes.cast(ctypes.cast(pDevice, ctypes.POINTER(ctypes.c_void_p)).contents, ctypes.POINTER(ctypes.c_void_p))
+        QI = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))(vtable[0])
+        pDXGIDevice = ctypes.c_void_p()
+        QI(pDevice, ctypes.byref(iid_dxgi_dev), ctypes.byref(pDXGIDevice))
+
+        dxgi_vtable = ctypes.cast(ctypes.cast(pDXGIDevice, ctypes.POINTER(ctypes.c_void_p)).contents, ctypes.POINTER(ctypes.c_void_p))
+        GetAdapter = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(dxgi_vtable[7])
+        pAdapter = ctypes.c_void_p()
+        GetAdapter(pDXGIDevice, ctypes.byref(pAdapter))
+
+        iid_adapter1 = GUID(0x29038f61, 0x3839, 0x4626, (ctypes.c_ubyte*8)(0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05))
+        pAdapter1 = ctypes.c_void_p()
+        adapter_vtable = ctypes.cast(ctypes.cast(pAdapter, ctypes.POINTER(ctypes.c_void_p)).contents, ctypes.POINTER(ctypes.c_void_p))
+        AdapterQI = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))(adapter_vtable[0])
+        AdapterQI(pAdapter, ctypes.byref(iid_adapter1), ctypes.byref(pAdapter1))
+
+        adapter1_vtable = ctypes.cast(ctypes.cast(pAdapter1, ctypes.POINTER(ctypes.c_void_p)).contents, ctypes.POINTER(ctypes.c_void_p))
+        GetDesc1 = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(DXGI_ADAPTER_DESC1))(adapter1_vtable[10])
+        desc = DXGI_ADAPTER_DESC1()
+        GetDesc1(pAdapter1, ctypes.byref(desc))
+
+        ReleaseDXGI = ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(adapter_vtable[2])
+        ReleaseDXGI(pAdapter1)
+        ReleaseDXGI(pAdapter)
+        ReleaseDXGI(pDXGIDevice)
+        ReleaseDev = ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(vtable[2])
+        ReleaseDev(pDevice)
+        if pContext.value:
+            ctx_vtable = ctypes.cast(ctypes.cast(pContext, ctypes.POINTER(ctypes.c_void_p)).contents, ctypes.POINTER(ctypes.c_void_p))
+            ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(ctx_vtable[2])(pContext)
+
+        vendor_id_hex = f"0x{desc.VendorId:04x}".lower()
+        device_id_hex = f"0x{desc.DeviceId:04x}".lower()
+        luid_str = f"0x{desc.AdapterLuid_HighPart:x}:0x{desc.AdapterLuid_LowPart:x}"
+        driver_ver = _get_matching_driver_version(device_id_hex)
+        vendor_name = {
+            AMD_VENDOR_ID: "AMD",
+            "0x10de": "NVIDIA",
+            "0x8086": "Intel",
+        }.get(vendor_id_hex, "UNKNOWN")
+
         return {
-            "status": "UNKNOWN",
-            "capability_source": "NONE",
-            "error": f"query_amf_caps exited with code {result.returncode}: {result.stderr.strip()}",
+            "vendor_id": vendor_id_hex,
+            "device_id": device_id_hex,
+            "adapter_name": str(desc.Description),
+            "vendor": vendor_name,
+            "adapter_luid": luid_str,
+            "driver_version": driver_ver,
         }
-    return _parse_probe_output(result.stdout, identity_only=identity_only)
+    except Exception:
+        return None
+
+
+def _probe_via_native_dll() -> dict[str, Any] | None:
+    """Probe hardware capabilities directly via telem_amd_native.dll."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        repo_root = Path(__file__).resolve().parents[2]
+        candidates = [
+            repo_root / "native" / "d3d11_amf_pipeline" / "bin" / "telem_amd_native.dll",
+            repo_root / "runtime" / "amd" / "bin" / "telem_amd_native.dll",
+        ]
+        dll_path = next((p for p in candidates if p.exists()), None)
+        if not dll_path:
+            return None
+
+        dll = ctypes.CDLL(str(dll_path))
+        if not hasattr(dll, "telem_amd_probe_capabilities"):
+            return None
+
+        buf = (ctypes.c_int * 9)()
+        res = dll.telem_amd_probe_capabilities(ctypes.cast(buf, ctypes.c_void_p))
+        if res != 1:
+            return None
+
+        return {
+            "h264_encode_available": bool(buf[0]),
+            "h264_8bit_available": bool(buf[1]),
+            "hevc_encode_available": bool(buf[2]),
+            "hevc_main10_available": bool(buf[3]),
+            "av1_encode_available": bool(buf[4]),
+            "av1_8bit_available": bool(buf[5]),
+            "av1_10bit_available": bool(buf[6]),
+            "max_encode_width": int(buf[7]),
+            "max_encode_height": int(buf[8]),
+        }
+    except Exception:
+        return None
+
+
+def query_native_amf_capabilities(*, identity_only: bool = False) -> dict[str, Any]:
+    """Query active DXGI adapter and AMF capabilities."""
+    # 0. Check for developer mock override
+    mock_env = os.environ.get("TELEM_AMD_MOCK_CAPS", "").strip().lower()
+    if mock_env in ("1", "true", "rdna3", "av1_rdna3", "av1"):
+        return {
+            "status": "OK",
+            "vendor": "AMD",
+            "adapter_name": "AMD Radeon RX 7900 XTX (Mock RDNA3)",
+            "vendor_id": AMD_VENDOR_ID,
+            "device_id": "0x744c",
+            "adapter_luid": "0x0:0x1234",
+            "driver_version": "31.0.21925.1001",
+            "hardware_encoder": "AMF",
+            "selected_codec": "HEVC",
+            "h264_encode_available": True,
+            "h264_8bit_available": True,
+            "hevc_encode_available": True,
+            "hevc_main10_available": True,
+            "av1_encode_available": True,
+            "av1_8bit_available": True,
+            "av1_10bit_available": True,
+            "max_encode_width": 7680,
+            "max_encode_height": 4320,
+            "hardware_decode_available": True,
+            "hevc_main10_decode_available": True,
+            "capability_source": "MockRDNA3",
+            "probe_timestamp": _now_iso(),
+            "schema_version": SCHEMA_VERSION,
+        }
+
+    # 1. First attempt: Direct DXGI / DLL probe (in-process, fast, 100% reliable)
+    dxgi_id = _probe_dxgi_identity()
+    if dxgi_id is not None:
+        if identity_only:
+            return {
+                "status": "OK",
+                "vendor": dxgi_id["vendor"],
+                "adapter_name": dxgi_id["adapter_name"],
+                "vendor_id": dxgi_id["vendor_id"],
+                "device_id": dxgi_id["device_id"],
+                "adapter_luid": dxgi_id["adapter_luid"],
+                "driver_version": dxgi_id["driver_version"],
+                "capability_source": "DirectDXGI",
+                "probe_timestamp": _now_iso(),
+                "schema_version": SCHEMA_VERSION,
+            }
+
+        dll_caps = _probe_via_native_dll()
+        if dll_caps is not None:
+            is_amd = dxgi_id["vendor_id"] == AMD_VENDOR_ID
+            has_enc = is_amd and (dll_caps["hevc_encode_available"] or dll_caps["h264_encode_available"])
+            return {
+                "status": "OK",
+                "vendor": dxgi_id["vendor"],
+                "adapter_name": dxgi_id["adapter_name"],
+                "vendor_id": dxgi_id["vendor_id"],
+                "device_id": dxgi_id["device_id"],
+                "adapter_luid": dxgi_id["adapter_luid"],
+                "driver_version": dxgi_id["driver_version"],
+                "hardware_encoder": "AMF" if has_enc else None,
+                "selected_codec": "HEVC" if has_enc else None,
+                "h264_encode_available": dll_caps["h264_encode_available"] if is_amd else None,
+                "h264_8bit_available": dll_caps["h264_8bit_available"] if is_amd else None,
+                "hevc_encode_available": dll_caps["hevc_encode_available"] if is_amd else None,
+                "hevc_main10_available": dll_caps["hevc_main10_available"] if is_amd else None,
+                "av1_encode_available": dll_caps["av1_encode_available"] if is_amd else None,
+                "av1_8bit_available": dll_caps["av1_8bit_available"] if is_amd else None,
+                "av1_10bit_available": dll_caps["av1_10bit_available"] if is_amd else None,
+                "max_encode_width": dll_caps["max_encode_width"] if is_amd else None,
+                "max_encode_height": dll_caps["max_encode_height"] if is_amd else None,
+                "hardware_decode_available": True,
+                "hevc_main10_decode_available": True,
+                "capability_source": "NativeDLLProbe",
+                "probe_timestamp": _now_iso(),
+                "schema_version": SCHEMA_VERSION,
+            }
+
+    # 2. Fallback attempt: query_amf_caps.exe if present
+    query_bin = _query_binary()
+    if query_bin is not None:
+        try:
+            args = [str(query_bin)] + (["--identity-only"] if identity_only else [])
+            probe_env = os.environ.copy()
+            probe_dirs = [str(query_bin.parent)]
+            mingw_bin = Path("C:/tools/mingw64/bin")
+            if mingw_bin.exists():
+                probe_dirs.append(str(mingw_bin))
+            probe_env["PATH"] = os.pathsep.join(probe_dirs + [probe_env.get("PATH", "")])
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=probe_env,
+                **({"startupinfo": _nt_startupinfo()} if os.name == "nt" else {}),
+            )
+            if result.returncode == 0:
+                return _parse_probe_output(result.stdout, identity_only=identity_only)
+        except Exception:
+            pass
+
+    return {"status": "UNKNOWN", "capability_source": "NONE", "error": "Unable to probe adapter"}
 
 
 def _same_cache_identity(cached: Mapping[str, Any], identity: Mapping[str, Any]) -> bool:

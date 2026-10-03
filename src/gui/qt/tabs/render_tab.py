@@ -309,24 +309,61 @@ class RenderTab(QWidget):
         row_decode.addWidget(self.lbl_cpu_warning)
         layout_amd.addRow("Dekodowanie AMD:", row_decode)
 
+        self.cmb_amd_codec = QComboBox()
+        self.cmb_amd_codec.addItem("HEVC / H.265", "hevc")
+        self.cmb_amd_codec.addItem("H.264 / AVC", "h264")
+
+        # Dynamic AV1 hardware capability check
+        has_av1 = False
+        try:
+            from src.ffmpeg.amd_capabilities import get_gpu_capabilities
+            caps = get_gpu_capabilities()
+            if getattr(caps, "av1_encode_available", False):
+                has_av1 = True
+        except Exception:
+            has_av1 = False
+
+        if has_av1:
+            self.cmb_amd_codec.addItem("AV1", "av1")
+            self.cmb_amd_codec.setToolTip(
+                "Wybór kodeka wideo w backendzie AMD AMF.\n"
+                "HEVC / H.265: domyślny, wysoka kompresja.\n"
+                "H.264 / AVC: natywny AMD AMF, wysoka kompatybilność (8-bit SDR).\n"
+                "AV1: sprzętowy AMD AMF AV1 nowej generacji."
+            )
+        else:
+            self.cmb_amd_codec.setToolTip(
+                "Wybór kodeka wideo w backendzie AMD AMF.\n"
+                "HEVC / H.265: domyślny, wysoka kompresja.\n"
+                "H.264 / AVC: natywny AMD AMF, wysoka kompatybilność (8-bit SDR)."
+            )
+
+        def _on_amd_codec_changed(idx: int) -> None:
+            val = self.cmb_amd_codec.itemData(idx) or "hevc"
+            self.signals.sig_settings_changed.emit("amd_codec", val)
+
+        self.cmb_amd_codec.currentIndexChanged.connect(_on_amd_codec_changed)
+        layout_amd.addRow("Koder wideo:", self.cmb_amd_codec)
+
         self.cmb_amd_quality = DiscreteSlider([
-            ("Fast", "FAST"),
-            ("Balanced", "BALANCED"),
-            ("Quality", "QUALITY"),
+            ("Szybki", "FAST"),
+            ("Zbalansowany", "BALANCED"),
+            ("Jakość", "QUALITY"),
         ])
+        self.cmb_amd_quality.setCurrentText("Zbalansowany")
         self.cmb_amd_quality.setToolTip(
-            "Wybór profilu jakości kodowania HEVC w backendzie AMD AMF.\n"
-            "Fast = AMF SPEED (szybki, standardowy)\n"
-            "Balanced = AMF BALANCED (zbalansowany)\n"
-            "Quality = AMF QUALITY (maksymalna jakość kosztem szybkości)"
+            "Wybór profilu jakości kodowania w backendzie AMD AMF:\n"
+            "Szybki: AMF SPEED (maksymalna wydajność).\n"
+            "Zbalansowany: AMF BALANCED (rekomendowany zbalansowany).\n"
+            "Jakość: AMF QUALITY (wysoka jakość)."
         )
 
         def _on_quality_changed(idx: int) -> None:
-            val = self.cmb_amd_quality.itemData(idx) or "FAST"
+            val = self.cmb_amd_quality.itemData(idx) or "BALANCED"
             self.signals.sig_settings_changed.emit("amd_encoder_quality", val)
 
         self.cmb_amd_quality.currentIndexChanged.connect(_on_quality_changed)
-        layout_amd.addRow("Preset jakości AMD:", self.cmb_amd_quality)
+        layout_amd.addRow("Profil encodera:", self.cmb_amd_quality)
         form.addRow(self.widget_amd_options)
 
         # ── NVIDIA Options (Stage 8L) ──────────────────────────────────
@@ -358,26 +395,24 @@ class RenderTab(QWidget):
         self.cmb_nvidia_codec.addItems(["HEVC", "AV1", "H.264 (SDR)"])
         layout_nvidia.addRow("Kodek NVIDIA:", self.cmb_nvidia_codec)
 
-        self.cmb_nvidia_quality = QComboBox()
-        self.cmb_nvidia_quality.addItems(["Fast", "Quality", "Max Quality"])
-        layout_nvidia.addRow("Jakość:", self.cmb_nvidia_quality)
+        self.cmb_nvidia_quality = DiscreteSlider([
+            ("Szybki", "P1"),
+            ("Zbalansowany", "P3"),
+            ("Jakość", "P5"),
+        ])
+        self.cmb_nvidia_quality.setCurrentText("P3")
+        self.cmb_nvidia_quality.setToolTip(
+            "Profil jakości/szybkości kodowania NVIDIA NVENC:\n"
+            "Szybki: preset P1 (Real-Time, maksymalna wydajność).\n"
+            "Zbalansowany: preset P3 (rekomendowany zbalansowany).\n"
+            "Jakość: preset P5 (wysoka jakość; developerski override przez TELEM_NVIDIA_QUALITY_PRESET)."
+        )
+        layout_nvidia.addRow("Profil encodera:", self.cmb_nvidia_quality)
 
         self.chk_compression_analysis = QCheckBox("Analiza kompresji podczas eksportu")
         self.chk_compression_analysis.setChecked(True)
         self.chk_compression_analysis.setToolTip("Pomiary QP/Quantizer w czasie rzeczywistym podczas renderowania NVENC")
         layout_nvidia.addRow(self.chk_compression_analysis)
-
-        def _update_nvidia_quality_options():
-            codec = self.cmb_nvidia_codec.currentText().strip().upper()
-            curr_qual = self.cmb_nvidia_quality.currentText()
-            self.cmb_nvidia_quality.blockSignals(True)
-            self.cmb_nvidia_quality.clear()
-            self.cmb_nvidia_quality.addItems(["Fast", "Quality", "Max Quality"])
-            if curr_qual in ["Fast", "Quality", "Max Quality"]:
-                self.cmb_nvidia_quality.setCurrentText(curr_qual)
-            else:
-                self.cmb_nvidia_quality.setCurrentText("Quality")
-            self.cmb_nvidia_quality.blockSignals(False)
 
         # ── CPU Options (libx265) ──────────────────────────────────
         self.widget_cpu_options = QWidget()
@@ -1257,44 +1292,35 @@ class RenderTab(QWidget):
         if not self._export_queue:
             return
         item = self.queue_list.itemAt(pos)
-        if not item:
-            return
-        clicked_job_id = item.data(Qt.UserRole)
-        if not clicked_job_id:
-            return
-        clicked_job = self._export_queue.get_job(clicked_job_id)
-        if not clicked_job:
-            return
-
-        # Jeśli kliknięty element nie jest zaznaczony, zaznacz go
-        if not item.isSelected():
-            self.queue_list.clearSelection()
-            item.setSelected(True)
+        if item:
+            # Jeśli kliknięty element nie był dotąd zaznaczony, zaznacz go (single selection)
+            # Jeśli był już jednym z zaznaczonych elementów, zachowaj istniejące multi-selection
+            if not item.isSelected():
+                self.queue_list.clearSelection()
+                item.setSelected(True)
 
         selected_items = self.queue_list.selectedItems()
-        selected_job_ids = [it.data(Qt.UserRole) for it in selected_items if it.data(Qt.UserRole)]
-        if clicked_job_id not in selected_job_ids:
-            selected_job_ids = [clicked_job_id]
+        if not selected_items:
+            return
 
+        selected_job_ids = [it.data(Qt.UserRole) for it in selected_items if it.data(Qt.UserRole)]
+        if not selected_job_ids:
+            return
+
+        active_id = self._export_queue.get_active_render_id()
         requeueable_ids = []
         for jid in selected_job_ids:
             j = self._export_queue.get_job(jid)
-            if j and j.render_status != "queued" and not j.is_active():
+            if j and j.render_status != "queued" and not j.is_active() and jid != active_id:
                 requeueable_ids.append(jid)
 
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self.queue_list)
 
-        label_requeue = (
-            f"Zmień na Oczekuje ({len(requeueable_ids)})"
-            if len(requeueable_ids) > 1
-            else "Zmień na Oczekuje"
-        )
-        act_requeue = menu.addAction(label_requeue)
+        act_requeue = menu.addAction("Ustaw jako oczekujące")
         if requeueable_ids:
             def _requeue_action() -> None:
-                for jid in requeueable_ids:
-                    self._export_queue.requeue_job(jid)
+                self._export_queue.requeue_jobs(requeueable_ids)
                 self._refresh_queue_ui()
             act_requeue.triggered.connect(_requeue_action)
         else:
@@ -1305,7 +1331,7 @@ class RenderTab(QWidget):
         removable_ids = []
         for jid in selected_job_ids:
             j = self._export_queue.get_job(jid)
-            if j and not j.is_active():
+            if j and not j.is_active() and jid != active_id:
                 removable_ids.append(jid)
 
         if removable_ids:
@@ -1689,6 +1715,7 @@ class RenderTab(QWidget):
         s.sig_error.connect(self._on_error)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
         s.sig_amd_decode_mode_restored.connect(self._on_amd_decode_mode_restored)
+        s.sig_amd_codec_restored.connect(self._on_amd_codec_restored)
         s.sig_amd_encoder_quality_restored.connect(self._on_amd_encoder_quality_restored)
         s.sig_default_export_name_ready.connect(self._on_default_export_name_ready)
         s.sig_video_info_ready.connect(self._on_video_info_ready)
@@ -2115,12 +2142,13 @@ class RenderTab(QWidget):
             "update_rate": self.cmb_update_rate.currentText(),
             "hud_resolution_scale": self.cmb_hud_resolution.currentText(),
             "amd_decode_mode": self.cmb_amd_decode.currentData() or "gpu",
-            "amd_encoder_quality": self.cmb_amd_quality.currentData() or "FAST",
+            "amd_codec": self.cmb_amd_codec.currentData() or "hevc",
+            "amd_encoder_quality": self.cmb_amd_quality.currentData() or "BALANCED",
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
             "nvidia_codec": self.cmb_nvidia_codec.currentText(),
-            "nvidia_quality": self.cmb_nvidia_quality.currentText(),
+            "nvidia_quality": self.cmb_nvidia_quality.currentData() or self.cmb_nvidia_quality.currentText() or "P3",
             "intel_codec": self.cmb_intel_codec.currentData() or "av1",
             "encoder_profile": (
                 self.cmb_encoder_profile.currentData()
@@ -3648,6 +3676,23 @@ class RenderTab(QWidget):
         """Publiczna metoda ustawiająca tryb dekodowania AMD w zakładce Renderowania."""
         self._on_amd_decode_mode_restored(mode)
 
+    def _on_amd_codec_restored(self, codec: str) -> None:
+        """Przywraca zaznaczenie kodeka AMD w cmb_amd_codec."""
+        c_clean = (codec or "hevc").lower()
+        self.cmb_amd_codec.blockSignals(True)
+        idx = self.cmb_amd_codec.findData(c_clean)
+        if idx >= 0:
+            self.cmb_amd_codec.setCurrentIndex(idx)
+        else:
+            if c_clean == "av1":
+                print("[AMD CAPABILITY] requested=AV1 available=NO fallback=HEVC", flush=True)
+            self.cmb_amd_codec.setCurrentIndex(0)
+        self.cmb_amd_codec.blockSignals(False)
+
+    def set_amd_codec(self, codec: str) -> None:
+        """Publiczna metoda ustawiająca kodek AMD w zakładce Renderowania."""
+        self._on_amd_codec_restored(codec)
+
     def _on_amd_encoder_quality_restored(self, quality: str) -> None:
         """Przywraca zaznaczenie presetu jakości AMD w cmb_amd_quality."""
         q_clean = (quality or "FAST").upper()
@@ -3718,3 +3763,38 @@ class RenderTab(QWidget):
             idx = self.cmb_encoder_profile.findData(LEGACY_DEFAULT_ENCODER_PROFILE.value)
             if idx >= 0:
                 self.cmb_encoder_profile.setCurrentIndex(idx)
+
+        # NVIDIA quality / profile restoration (with backward compatibility)
+        if hasattr(self, "cmb_nvidia_quality"):
+            nv_qual = settings.get("nvidia_quality") or settings.get("quality_profile")
+            if nv_qual is not None:
+                s_val = str(nv_qual).strip().lower()
+                if s_val in ("fast", "szybki", "speed", "p1") or "fast" in s_val or "speed" in s_val:
+                    self.cmb_nvidia_quality.setCurrentText("P1")
+                elif s_val in ("max quality", "max", "p5", "p6", "p7") or "max" in s_val:
+                    self.cmb_nvidia_quality.setCurrentText("P5")
+                elif "jakość" in s_val or "jakosc" in s_val:
+                    self.cmb_nvidia_quality.setCurrentText("P5")
+                elif s_val in ("balanced", "zbalansowany", "standard", "p3") or "balanced" in s_val or "zbalansowany" in s_val or "standard" in s_val:
+                    self.cmb_nvidia_quality.setCurrentText("P3")
+                elif "quality" in s_val or "qual" in s_val:
+                    # In legacy config, 'Quality' was the middle position (Zbalansowany)
+                    self.cmb_nvidia_quality.setCurrentText("P3")
+                else:
+                    idx = self.cmb_nvidia_quality.findData(nv_qual)
+                    if idx >= 0:
+                        self.cmb_nvidia_quality.setCurrentIndex(idx)
+                    else:
+                        idx_t = self.cmb_nvidia_quality.findText(str(nv_qual))
+                        if idx_t >= 0:
+                            self.cmb_nvidia_quality.setCurrentIndex(idx_t)
+
+        # AMD codec & quality restoration
+        if hasattr(self, "cmb_amd_codec"):
+            amd_c = settings.get("amd_codec")
+            if amd_c:
+                self.set_amd_codec(str(amd_c))
+        if hasattr(self, "cmb_amd_quality"):
+            amd_q = settings.get("amd_encoder_quality")
+            if amd_q:
+                self.set_amd_encoder_quality(str(amd_q))

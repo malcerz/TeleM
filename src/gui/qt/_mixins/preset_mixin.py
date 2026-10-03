@@ -206,7 +206,7 @@ class PresetMixin:
                 if hasattr(render_tab, "cmb_encoder_profile"):
                     exp["encoder_profile"] = render_tab.cmb_encoder_profile.currentData()
                 if hasattr(render_tab, "cmb_nvidia_quality"):
-                    exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentText()
+                    exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentData() or render_tab.cmb_nvidia_quality.currentText()
                 if hasattr(render_tab, "edit_bitrate"):
                     exp["bitrate"] = render_tab.edit_bitrate.text().strip()
                 if hasattr(render_tab, "chk_compression_analysis"):
@@ -262,6 +262,8 @@ class PresetMixin:
 
             amd_mode = getattr(self, "amd_decode_mode", "gpu") or "gpu"
             saved.setdefault("global", {})["amd_decode_mode"] = amd_mode
+            amd_codec_val = getattr(self, "amd_codec", "hevc") or "hevc"
+            saved.setdefault("global", {})["amd_codec"] = amd_codec_val
             amd_quality = getattr(self, "amd_encoder_quality", "FAST") or "FAST"
             saved.setdefault("global", {})["amd_encoder_quality"] = amd_quality
             saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
@@ -288,6 +290,8 @@ class PresetMixin:
             self.render_threads = int(value)
         elif name == "amd_decode_mode":
             self.amd_decode_mode = str(value).lower()
+        elif name == "amd_codec":
+            self.amd_codec = str(value).lower()
         elif name == "amd_encoder_quality":
             self.amd_encoder_quality = str(value).upper()
         elif name == "render_mode":

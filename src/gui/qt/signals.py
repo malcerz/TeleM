@@ -62,6 +62,10 @@ class AppSignals(QObject):
     sig_amd_decode_mode_restored = Signal(str)
     # (mode: str – 'gpu' lub 'cpu')
 
+    # Kontroler → GUI: przywróć zapisany kodek AMD w UI (po starcie)
+    sig_amd_codec_restored = Signal(str)
+    # (codec: str – 'hevc' lub 'h264')
+
     # Kontroler → GUI: przywróć zapisany preset jakości AMD w UI (po starcie)
     sig_amd_encoder_quality_restored = Signal(str)
     # (quality: str – 'FAST', 'BALANCED', 'QUALITY')

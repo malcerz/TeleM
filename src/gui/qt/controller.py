@@ -170,6 +170,8 @@ class AppController(
 
         # Tryb dekodowania wideo w backendzie AMD: "gpu" (domyślny) lub "cpu"
         self.amd_decode_mode: str = "gpu"
+        # Kodek wideo w backendzie AMD: "hevc" (domyślny) lub "h264"
+        self.amd_codec: str = "hevc"
         # Preset jakości enkodera AMD: "FAST" (domyślny), "BALANCED", "QUALITY"
         self.amd_encoder_quality: str = "FAST"
         self.render_mode: str = "gpu"
@@ -309,6 +311,11 @@ class AppController(
         except Exception:
             pass
         try:
+            from src.indicators.icons import clear_icon_cache
+            clear_icon_cache()
+        except Exception:
+            pass
+        try:
             from src.indicators.moving_map import clear_moving_map_renderers
             clear_moving_map_renderers()
         except Exception:
@@ -359,10 +366,13 @@ class AppController(
                 # Przywróć tryb dekodowania AMD zapisany w pliku
                 saved_decode_mode = self.layout.get("global", {}).get("amd_decode_mode", "gpu")
                 self.amd_decode_mode = (saved_decode_mode or "gpu").lower()
+                saved_codec = self.layout.get("global", {}).get("amd_codec", "hevc")
+                self.amd_codec = (saved_codec or "hevc").lower()
                 saved_quality = self.layout.get("global", {}).get("amd_encoder_quality", "FAST")
                 self.amd_encoder_quality = (saved_quality or "FAST").upper()
                 self.render_mode = str(self.layout.get("global", {}).get("render_mode", "gpu") or "gpu").lower()
                 self.signals.sig_amd_decode_mode_restored.emit(self.amd_decode_mode)
+                self.signals.sig_amd_codec_restored.emit(self.amd_codec)
                 self.signals.sig_amd_encoder_quality_restored.emit(self.amd_encoder_quality)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

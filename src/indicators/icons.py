@@ -223,6 +223,31 @@ _ICON_RENDER_CACHE: dict[tuple[str, int, Tuple[int, int, int, int], Tuple[int, i
 _MAX_CACHE_ENTRIES = 512
 
 
+def _rasterize_svg_master(svg_path: Path, size: int = 256) -> Optional[Image.Image]:
+    """Rasterize an SVG icon into a master RGBA PIL Image using PySide6.QtSvg."""
+    try:
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QImage, QPainter
+        from PySide6.QtSvg import QSvgRenderer
+
+        renderer = QSvgRenderer(str(svg_path))
+        if not renderer.isValid():
+            return None
+
+        qimg = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+        qimg.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(qimg)
+        renderer.render(painter, QRectF(0, 0, size, size))
+        painter.end()
+
+        rgba_qimg = qimg.convertToFormat(QImage.Format.Format_RGBA8888)
+        buf = bytes(rgba_qimg.constBits())
+        return Image.frombuffer("RGBA", (size, size), buf, "raw", "RGBA", 0, 1).copy()
+    except Exception:
+        return None
+
+
 def _load_master_icon(name: str) -> Optional[Image.Image]:
     """Load the high-resolution 256x256 RGBA master asset for an icon."""
     if name in _MASTER_CACHE:
@@ -234,6 +259,22 @@ def _load_master_icon(name: str) -> Optional[Image.Image]:
             img = Image.open(png_path).convert("RGBA")
             _MASTER_CACHE[name] = img
             return img
+        except Exception:
+            pass
+
+    # SVG rasterization fallback (dynamically creates and caches master PNG)
+    svg_path = _SVG_DIR / f"{name}.svg"
+    if svg_path.is_file():
+        try:
+            img = _rasterize_svg_master(svg_path, 256)
+            if img is not None:
+                _MASTER_CACHE[name] = img
+                try:
+                    _PNG_DIR.mkdir(parents=True, exist_ok=True)
+                    img.save(png_path, "PNG")
+                except Exception:
+                    pass
+                return img
         except Exception:
             pass
 

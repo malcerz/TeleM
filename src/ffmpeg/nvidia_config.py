@@ -28,14 +28,25 @@ LOCKED_PROFILES = {
     "HEVC_FAST": {
         "codec": 0,          # TELEM_CODEC_HEVC
         "quality_mode": 0,   # TELEM_QMODE_FAST
+        "preset_p1_to_p7": 1,
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Fast",
         "gui_label": "HEVC Fast (P1, Real-Time)",
     },
+    "HEVC_BALANCED": {
+        "codec": 0,
+        "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 3,
+        "ffmpeg_fmt": "hevc",
+        "vtag": "hvc1",
+        "name": "HEVC — Balanced",
+        "gui_label": "HEVC Balanced (P3, Fast HQ)",
+    },
     "HEVC_QUALITY": {
         "codec": 0,
         "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 5,
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Quality",
@@ -44,14 +55,34 @@ LOCKED_PROFILES = {
     "HEVC_MAX": {
         "codec": 0,
         "quality_mode": 2,   # TELEM_QMODE_MAX
+        "preset_p1_to_p7": 7,
         "ffmpeg_fmt": "hevc",
         "vtag": "hvc1",
         "name": "HEVC — Max Quality",
         "gui_label": "HEVC Max Quality (P7, UHQ, TF Level 4, B=5)",
     },
-    "AV1_QUALITY": {
+    "AV1_FAST": {
         "codec": 1,          # TELEM_CODEC_AV1
+        "quality_mode": 0,   # TELEM_QMODE_FAST
+        "preset_p1_to_p7": 1,
+        "ffmpeg_fmt": "obu",
+        "vtag": "av01",
+        "name": "AV1 — Fast",
+        "gui_label": "AV1 Fast (P1, Real-Time)",
+    },
+    "AV1_BALANCED": {
+        "codec": 1,
         "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 3,
+        "ffmpeg_fmt": "obu",
+        "vtag": "av01",
+        "name": "AV1 — Balanced",
+        "gui_label": "AV1 Balanced (P3, Fast HQ)",
+    },
+    "AV1_QUALITY": {
+        "codec": 1,
+        "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 5,
         "ffmpeg_fmt": "obu",
         "vtag": "av01",
         "name": "AV1 — Quality",
@@ -60,6 +91,7 @@ LOCKED_PROFILES = {
     "AV1_MAX": {
         "codec": 1,
         "quality_mode": 2,   # TELEM_QMODE_MAX
+        "preset_p1_to_p7": 7,
         "ffmpeg_fmt": "obu",
         "vtag": "av01",
         "name": "AV1 — Max Quality",
@@ -68,14 +100,25 @@ LOCKED_PROFILES = {
     "H264_FAST": {
         "codec": 2,          # TELEM_CODEC_H264
         "quality_mode": 0,   # TELEM_QMODE_FAST
+        "preset_p1_to_p7": 1,
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Fast",
         "gui_label": "H.264 Fast (P1, Real-Time)",
     },
+    "H264_BALANCED": {
+        "codec": 2,
+        "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 3,
+        "ffmpeg_fmt": "h264",
+        "vtag": "avc1",
+        "name": "H.264 — Balanced",
+        "gui_label": "H.264 Balanced (P3, Fast HQ)",
+    },
     "H264_QUALITY": {
         "codec": 2,
         "quality_mode": 1,   # TELEM_QMODE_QUALITY
+        "preset_p1_to_p7": 5,
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Quality",
@@ -84,6 +127,7 @@ LOCKED_PROFILES = {
     "H264_MAX": {
         "codec": 2,
         "quality_mode": 2,   # TELEM_QMODE_MAX
+        "preset_p1_to_p7": 7,
         "ffmpeg_fmt": "h264",
         "vtag": "avc1",
         "name": "H.264 — Max Quality",
@@ -92,78 +136,195 @@ LOCKED_PROFILES = {
 }
 
 
-def resolve_nvidia_profile(codec: str, quality: str) -> str:
-    """Resolve logical (codec, quality) pair to canonical locked profile name.
+def resolve_nvidia_preset(gui_quality: str, log: bool = True) -> dict:
+    """Resolve GUI quality slider/config to canonical NVIDIA preset and metadata.
 
-    Strictly forbids AV1 + Fast with zero silent fallback.
+    Mapping:
+        Szybki / Fast -> P1 (source: slider)
+        Zbalansowany / Balanced -> P3 (source: slider)
+        Jakość / Quality -> P5 (source: default), or overridden via TELEM_NVIDIA_QUALITY_PRESET (1..7)
+
+    Invalid override values (<1, >7, text, empty) trigger fallback to P5 with diagnostic log.
     """
+    q_norm = str(gui_quality).strip().lower()
+
+    if q_norm in ("p1", "fast", "szybki", "speed"):
+        gui_label = "Fast"
+        preset = "P1"
+        source = "slider"
+        log_line = "[NVIDIA PRESET] gui=Fast preset=P1 source=slider"
+        if log:
+            print(log_line, flush=True)
+        return {
+            "gui_label": gui_label,
+            "preset": preset,
+            "ffmpeg_preset": "p1",
+            "preset_num": 1,
+            "source": source,
+            "log_line": log_line,
+        }
+
+    if q_norm in ("p3", "balanced", "zbalansowany", "standard"):
+        gui_label = "Balanced"
+        preset = "P3"
+        source = "slider"
+        log_line = "[NVIDIA PRESET] gui=Balanced preset=P3 source=slider"
+        if log:
+            print(log_line, flush=True)
+        return {
+            "gui_label": gui_label,
+            "preset": preset,
+            "ffmpeg_preset": "p3",
+            "preset_num": 3,
+            "source": source,
+            "log_line": log_line,
+        }
+
+    # Quality position (Jakość / P5 / Quality / Max Quality)
+    gui_label = "Quality"
+    env_val = os.environ.get("TELEM_NVIDIA_QUALITY_PRESET")
+
+    if env_val is None:
+        preset = "P5"
+        source = "default"
+        log_line = "[NVIDIA PRESET] gui=Quality preset=P5 source=default"
+        if log:
+            print(log_line, flush=True)
+        return {
+            "gui_label": gui_label,
+            "preset": preset,
+            "ffmpeg_preset": "p5",
+            "preset_num": 5,
+            "source": source,
+            "log_line": log_line,
+        }
+
+    # Environment variable is present -> validate 1..7
+    clean_val = env_val.strip()
+    preset_num: Optional[int] = None
+
+    if clean_val.isdigit():
+        val_int = int(clean_val)
+        if 1 <= val_int <= 7:
+            preset_num = val_int
+    elif clean_val.upper().startswith("P") and clean_val[1:].isdigit():
+        val_int = int(clean_val[1:])
+        if 1 <= val_int <= 7:
+            preset_num = val_int
+
+    if preset_num is not None:
+        preset = f"P{preset_num}"
+        source = "TELEM_NVIDIA_QUALITY_PRESET"
+        log_line = f"[NVIDIA PRESET] gui=Quality preset={preset} source=TELEM_NVIDIA_QUALITY_PRESET"
+        if log:
+            print(log_line, flush=True)
+        return {
+            "gui_label": gui_label,
+            "preset": preset,
+            "ffmpeg_preset": f"p{preset_num}",
+            "preset_num": preset_num,
+            "source": source,
+            "log_line": log_line,
+        }
+
+    # Fallback for invalid TELEM_NVIDIA_QUALITY_PRESET value
+    invalid_msg = f"[NVIDIA PRESET] invalid TELEM_NVIDIA_QUALITY_PRESET='{env_val}' -> fallback P5"
+    print(invalid_msg, flush=True)
+    preset = "P5"
+    source = "default"
+    log_line = "[NVIDIA PRESET] gui=Quality preset=P5 source=default"
+    if log:
+        print(log_line, flush=True)
+    return {
+        "gui_label": gui_label,
+        "preset": preset,
+        "ffmpeg_preset": "p5",
+        "preset_num": 5,
+        "source": source,
+        "log_line": log_line,
+    }
+
+
+def resolve_nvidia_profile(codec: str, quality: str) -> str:
+    """Resolve logical (codec, quality) pair to canonical locked profile name."""
     c_norm = str(codec).strip().upper()
-    q_norm = str(quality).strip().lower()
+    p_info = resolve_nvidia_preset(quality, log=False)
+    p_num = p_info["preset_num"]
 
     if "AV1" in c_norm:
-        if "fast" in q_norm:
+        if p_num == 1:
             return "AV1_FAST"
-        elif "max" in q_norm:
+        elif p_num == 3:
+            return "AV1_BALANCED"
+        elif p_num >= 7:
             return "AV1_MAX"
-        elif "qual" in q_norm or "standard" in q_norm:
+        else:
             return "AV1_QUALITY"
-        else:
-            raise ValueError(f"Nieobsługiwany poziom jakości AV1: {quality}")
     elif "264" in c_norm or "AVC" in c_norm:
-        if "fast" in q_norm:
+        if p_num == 1:
             return "H264_FAST"
-        elif "max" in q_norm:
+        elif p_num == 3:
+            return "H264_BALANCED"
+        elif p_num >= 7:
             return "H264_MAX"
-        elif "qual" in q_norm or "standard" in q_norm:
+        else:
             return "H264_QUALITY"
-        else:
-            raise ValueError(f"Nieobsługiwany poziom jakości H.264: {quality}")
     else:  # HEVC
-        if "fast" in q_norm:
+        if p_num == 1:
             return "HEVC_FAST"
-        elif "max" in q_norm:
+        elif p_num == 3:
+            return "HEVC_BALANCED"
+        elif p_num >= 7:
             return "HEVC_MAX"
-        elif "qual" in q_norm or "standard" in q_norm:
-            return "HEVC_QUALITY"
         else:
-            raise ValueError(f"Nieobsługiwany poziom jakości HEVC: {quality}")
+            return "HEVC_QUALITY"
 
 
 def resolve_nvenc_ffmpeg_params(
     codec: str,
     quality: str,
     is_10bit: bool = False,
+    log: bool = True,
 ) -> dict:
     """Resolve logical (codec, quality) pair to FFmpeg NVENC command arguments.
 
     Bitrate is explicitly excluded (remains independent user setting).
     """
+    preset_info = resolve_nvidia_preset(quality, log=log)
     profile_name = resolve_nvidia_profile(codec, quality)
     c_norm = str(codec).strip().upper()
-    q_norm = str(quality).strip().lower()
+    preset_p = preset_info["ffmpeg_preset"]
 
     if "AV1" in c_norm:
         enc_name = "av1_nvenc"
         vtag = "av01"
-        if "max" in q_norm:
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p7", "-tune", "uhq",
-                "-rc", "vbr", "-cq", "24",
-                "-rc-lookahead", "32",
-                "-spatial-aq", "1", "-temporal-aq", "1",
-                "-b_ref_mode", "middle",
-            ]
-        elif "fast" in q_norm:
+        if preset_p == "p1":
             args = [
                 "-c:v", enc_name,
                 "-preset", "p1", "-tune", "hq",
                 "-rc", "vbr", "-cq", "24",
             ]
-        else:  # Quality
+        elif preset_p == "p3":
             args = [
                 "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
+                "-preset", "p3", "-tune", "hq",
+                "-rc", "vbr", "-cq", "24",
+                "-rc-lookahead", "8",
+                "-spatial-aq", "1",
+            ]
+        elif preset_p in ("p7", "p8"):
+            args = [
+                "-c:v", enc_name,
+                "-preset", preset_p, "-tune", "uhq",
+                "-rc", "vbr", "-cq", "24",
+                "-rc-lookahead", "32",
+                "-spatial-aq", "1", "-temporal-aq", "1",
+                "-b_ref_mode", "middle",
+            ]
+        else:  # p2, p4, p5, p6
+            args = [
+                "-c:v", enc_name,
+                "-preset", preset_p, "-tune", "hq",
                 "-rc", "vbr", "-cq", "24",
                 "-rc-lookahead", "16",
                 "-spatial-aq", "1", "-temporal-aq", "1",
@@ -171,57 +332,74 @@ def resolve_nvenc_ffmpeg_params(
     elif "264" in c_norm or "AVC" in c_norm:
         enc_name = "h264_nvenc"
         vtag = "avc1"
-        if "max" in q_norm:
+        if preset_p == "p1":
             args = [
                 "-c:v", enc_name,
-                "-preset", "p7", "-tune", "hq",
+                "-preset", "p1", "-tune", "hq",
+                "-rc", "vbr", "-cq", "24",
+                "-profile:v", "high",
+            ]
+        elif preset_p == "p3":
+            args = [
+                "-c:v", enc_name,
+                "-preset", "p3", "-tune", "hq",
+                "-rc", "vbr", "-cq", "24",
+                "-rc-lookahead", "8",
+                "-spatial-aq", "1",
+                "-profile:v", "high",
+            ]
+        elif preset_p in ("p7", "p8"):
+            args = [
+                "-c:v", enc_name,
+                "-preset", preset_p, "-tune", "hq",
                 "-rc", "vbr", "-cq", "24",
                 "-rc-lookahead", "32",
                 "-spatial-aq", "1", "-temporal-aq", "1",
                 "-b_ref_mode", "middle",
                 "-profile:v", "high",
             ]
-        elif "qual" in q_norm or "standard" in q_norm:
+        else:  # p2, p4, p5, p6
             args = [
                 "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
+                "-preset", preset_p, "-tune", "hq",
                 "-rc", "vbr", "-cq", "24",
                 "-rc-lookahead", "16",
                 "-spatial-aq", "1", "-temporal-aq", "1",
-                "-profile:v", "high",
-            ]
-        else:  # Fast
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p1", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
                 "-profile:v", "high",
             ]
     else:  # HEVC
         enc_name = "hevc_nvenc"
         vtag = "hvc1"
-        if "max" in q_norm:
+        if preset_p == "p1":
             args = [
                 "-c:v", enc_name,
-                "-preset", "p7", "-tune", "uhq",
+                "-preset", "p1", "-tune", "hq",
+                "-rc", "vbr", "-cq", "24",
+            ]
+        elif preset_p == "p3":
+            args = [
+                "-c:v", enc_name,
+                "-preset", "p3", "-tune", "hq",
+                "-rc", "vbr", "-cq", "24",
+                "-rc-lookahead", "8",
+                "-spatial-aq", "1",
+            ]
+        elif preset_p in ("p7", "p8"):
+            args = [
+                "-c:v", enc_name,
+                "-preset", preset_p, "-tune", "uhq",
                 "-rc", "vbr", "-cq", "24",
                 "-rc-lookahead", "32",
                 "-spatial-aq", "1", "-temporal-aq", "1",
                 "-b_ref_mode", "middle",
             ]
-        elif "qual" in q_norm or "standard" in q_norm:
+        else:  # p2, p4, p5, p6
             args = [
                 "-c:v", enc_name,
-                "-preset", "p5", "-tune", "hq",
+                "-preset", preset_p, "-tune", "hq",
                 "-rc", "vbr", "-cq", "24",
                 "-rc-lookahead", "16",
                 "-spatial-aq", "1", "-temporal-aq", "1",
-            ]
-        else:  # Fast
-            args = [
-                "-c:v", enc_name,
-                "-preset", "p1", "-tune", "hq",
-                "-rc", "vbr", "-cq", "24",
             ]
         if is_10bit:
             args.extend(["-profile:v", "main10"])
@@ -232,6 +410,8 @@ def resolve_nvenc_ffmpeg_params(
         "vtag": vtag,
         "ffmpeg_args": args,
         "is_10bit": is_10bit,
+        "preset": preset_info["preset"],
+        "preset_source": preset_info["source"],
     }
 
 

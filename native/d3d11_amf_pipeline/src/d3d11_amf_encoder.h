@@ -10,6 +10,20 @@
 #include "AMF/core/Factory.h"
 #include "AMF/core/Context.h"
 #include "AMF/components/VideoEncoderHEVC.h"
+#include "AMF/components/VideoEncoderVCE.h"
+#include "AMF/components/VideoEncoderAV1.h"
+
+enum class AMFCodecType {
+    HEVC = 0,
+    AVC = 1,
+    AV1 = 2
+};
+
+enum class AMFQualityPreset {
+    FAST = 0,
+    BALANCED = 1,
+    QUALITY = 2
+};
 
 struct AMFEncoderStats {
     double submit_ms = 0.0;
@@ -29,7 +43,16 @@ public:
     // Idempotent lifecycle boundary for partial native initialization.
     void Shutdown();
 
-    bool Initialize(ID3D11Device* pDevice, UINT width, UINT height, UINT fpsNum = 30000, UINT fpsDen = 1001);
+    bool Initialize(
+        ID3D11Device* pDevice,
+        UINT width,
+        UINT height,
+        UINT fpsNum = 30000,
+        UINT fpsDen = 1001,
+        AMFCodecType codecType = AMFCodecType::HEVC,
+        AMFQualityPreset qualityPreset = AMFQualityPreset::FAST,
+        uint64_t bitrateBps = 0
+    );
     bool CreateSurface(ID3D11Texture2D* pNV12Texture, int64_t pts, amf::AMFSurfacePtr& outSurface, double* outCreateMs = nullptr);
     AMF_RESULT SubmitSurface(amf::AMFSurface* pSurface, AMFEncoderStats* outStats = nullptr);
     bool SubmitTexture(ID3D11Texture2D* pNV12Texture, int64_t pts, AMFEncoderStats* outStats = nullptr);
@@ -49,6 +72,12 @@ public:
 
     bool IsSameDeviceUsed() const { return m_sameDeviceUsed; }
     amf::AMFContextPtr GetContext() const { return m_context; }
+    AMFCodecType GetCodecType() const { return m_codecType; }
+    void SetCodecType(AMFCodecType type) { m_codecType = type; }
+    AMFQualityPreset GetQualityPreset() const { return m_qualityPreset; }
+    void SetQualityPreset(AMFQualityPreset preset) { m_qualityPreset = preset; }
+    bool IsAVC() const { return m_codecType == AMFCodecType::AVC; }
+    bool IsAV1() const { return m_codecType == AMFCodecType::AV1; }
 
 private:
     HMODULE m_hAMFRT = nullptr;
@@ -61,4 +90,7 @@ private:
 
     UINT m_width = 3840;
     UINT m_height = 2160;
+    AMFCodecType m_codecType = AMFCodecType::HEVC;
+    AMFQualityPreset m_qualityPreset = AMFQualityPreset::FAST;
+    uint64_t m_bitrateBps = 0;
 };

@@ -982,6 +982,7 @@ class RenderMixin:
             hud_resolution_scale=hud_resolution_scale,
 active_process_holder=getattr(self, "render_process_holder", {}),
             amd_decode_mode=options.get("amd_decode_mode", getattr(self, "amd_decode_mode", "gpu")),
+            amd_codec=options.get("amd_codec", getattr(self, "amd_codec", "hevc")),
             amd_encoder_quality=options.get("amd_encoder_quality", getattr(self, "amd_encoder_quality", "FAST")),
             preview_session=options.get("_amd_export_preview_session"),
             preview_state_provider=getattr(self, "preview_diagnostics_provider", None),

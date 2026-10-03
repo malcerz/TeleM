@@ -272,7 +272,7 @@ def main() -> None:
                     if idx_backend >= 0:
                         rt.cmb_nvidia_backend.setCurrentIndex(idx_backend)
                     rt.cmb_nvidia_codec.setCurrentText("HEVC")
-                    rt.cmb_nvidia_quality.setCurrentText("Fast")
+                    rt.cmb_nvidia_quality.setCurrentText("P1")
                     rt.edit_bitrate.setText("40M")
                     rt.chk_compression_analysis.setChecked(False)
                     rt.chk_hud_preview.setChecked(False)

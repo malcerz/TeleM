@@ -29,6 +29,7 @@ from src.ffmpeg.nvidia_config import (
     NvidiaBackend,
     LOCKED_PROFILES,
     resolve_nvidia_profile,
+    resolve_nvidia_preset,
     get_native_dll_path,
     load_native_pipeline,
     TelemVideoClipDesc,
@@ -251,7 +252,10 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc_td.style.time_display.time_font_size = float(s(cfg_td.get("time_font_size", 1.5), min_dim) * master)
         desc_td.style.time_display.elapsed_font_size = float(s(cfg_td.get("elapsed_font_size", 1.5), min_dim) * master)
         desc_td.style.time_display.avg_speed_font_size = float(s(cfg_td.get("avg_speed_font_size", 1.1), min_dim) * master)
-        desc_td.style.time_display.icon_name = b"clock"
+        desc_td.style.time_display.icon_name = (
+            b"none" if not cfg_td.get("icon") or str(cfg_td.get("icon")).strip().lower() in ("none", "", "0", "false", "off")
+            else str(cfg_td.get("icon")).strip().lower().encode("utf-8")[:31]
+        )
         desc_td.style.time_display.icon_size = float(max(12, int(global_fs * master * 0.9)))
         desc_td.style.time_display.canvas_x = 13.0
         desc_td.style.time_display.canvas_y = 102.0
@@ -274,7 +278,11 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.text.outline_color = 0xFF000000
         desc.style.text.outline_width = 6.0
         desc.style.text.label = str(cfg.get("label", "Exp"))
-        desc.style.text.icon_name = b"camera"
+        exp_icon = cfg.get("icon", "camera")
+        desc.style.text.icon_name = (
+            b"none" if not exp_icon or str(exp_icon).strip().lower() in ("none", "", "0", "false", "off")
+            else str(exp_icon).strip().lower().encode("utf-8")[:31]
+        )
         desc.style.text.icon_size = 48.0
         desc.style.text.telemetry_field = 13
         desc.style.text.canvas_x = 25.0
@@ -297,7 +305,11 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.text.outline_color = 0xFF000000
         desc.style.text.outline_width = 6.0
         desc.style.text.label = str(cfg.get("label", "ISO"))
-        desc.style.text.icon_name = b"none"
+        iso_icon = cfg.get("icon", "none")
+        desc.style.text.icon_name = (
+            b"none" if not iso_icon or str(iso_icon).strip().lower() in ("none", "", "0", "false", "off")
+            else str(iso_icon).strip().lower().encode("utf-8")[:31]
+        )
         desc.style.text.telemetry_field = 12
         desc.style.text.canvas_x = 25.0
         desc.style.text.canvas_y = 1836.0
@@ -319,7 +331,11 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.text.outline_color = 0xFF000000
         desc.style.text.outline_width = 6.0
         desc.style.text.label = str(cfg.get("label", "Temp"))
-        desc.style.text.icon_name = b"temperature"
+        temp_icon = cfg.get("icon", "temperature")
+        desc.style.text.icon_name = (
+            b"none" if not temp_icon or str(temp_icon).strip().lower() in ("none", "", "0", "false", "off")
+            else str(temp_icon).strip().lower().encode("utf-8")[:31]
+        )
         desc.style.text.icon_size = 48.0
         desc.style.text.telemetry_field = 11
         desc.style.text.canvas_x = 25.0
@@ -342,7 +358,11 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         desc.style.text.outline_color = 0xFF000000
         desc.style.text.outline_width = 6.0
         desc.style.text.label = str(cfg.get("label", "Bat"))
-        desc.style.text.icon_name = b"battery_full"
+        bat_icon = cfg.get("icon", "battery_full")
+        desc.style.text.icon_name = (
+            b"none" if not bat_icon or str(bat_icon).strip().lower() in ("none", "", "0", "false", "off")
+            else str(bat_icon).strip().lower().encode("utf-8")[:31]
+        )
         desc.style.text.icon_size = 48.0
         desc.style.text.telemetry_field = 10
         desc.style.text.canvas_x = 25.0
@@ -996,6 +1016,7 @@ def export_nvidia_native_d3d11(
             print(f"[PAYLOAD DUMP WARNING] {_dump_exc!r}", flush=True)
 
     # 1. Resolve Profile and Bitrate
+    p_info = resolve_nvidia_preset(quality_profile, log=True)
     profile_name = resolve_nvidia_profile(codec, quality_profile)
     spec = LOCKED_PROFILES[profile_name]
 
@@ -1286,7 +1307,7 @@ def export_nvidia_native_d3d11(
         fps_den=fps_den,
         ring_size=0,
         bit_depth=10,
-        preset_p1_to_p7=1,
+        preset_p1_to_p7=p_info["preset_num"],
         tuning_info=1,
         async_nvenc=1,
         enable_debug_layer=0,

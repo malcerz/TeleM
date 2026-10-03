@@ -447,48 +447,64 @@ class ExportQueue:
             self._persist()
         return removed
 
+    @staticmethod
+    def _reset_job_runtime_state(job: ExportJob) -> None:
+        """Reset transient execution metrics and restore clean queued state."""
+        job.render_status = "queued"
+        job.render_progress = 0.0
+        job.render_error = ""
+        job.render_started_at = None
+        job.render_finished_at = None
+        job.render_elapsed_s = 0.0
+        job.frame_render_elapsed_s = 0.0
+        job.finalization_elapsed_s = 0.0
+        job.effective_fps = 0.0
+        job.average_fps = 0.0
+        job.average_qp = None
+        job.codec = ""
+        job.quant_metric = ""
+        job.quant_avg = None
+        job.quant_min = None
+        job.quant_max = None
+        job.quant_samples = None
+        job.is_expanded = False
+        if job.yt_enabled:
+            job.upload_status = "idle"
+            job.upload_progress = 0.0
+            job.upload_error = ""
+            job.upload_started_at = None
+            job.upload_finished_at = None
+            job.yt_video_id = ""
+
     def requeue_job(self, job_id: str) -> bool:
         """Resetuj zadanie ze statusem innym niż 'queued' do stanu 'queued' (Oczekuje)."""
+        requeued = self.requeue_jobs([job_id])
+        return bool(requeued)
+
+    def requeue_jobs(self, job_ids: list[str]) -> list[str]:
+        """Resetuj wiele zadań nieaktywnych do stanu 'queued' (Oczekuje) w jednej atomowej operacji."""
+        requeued: list[ExportJob] = []
         with self._lock:
-            if job_id == self._active_render_id:
-                log.warning("[Queue] requeue_job: nie można zresetować aktywnego renderu %s", job_id)
-                return False
-            job = None
-            for j in self._jobs:
-                if j.job_id == job_id:
-                    job = j
-                    break
-            if job is None or job.render_status == "queued":
-                return False
-            job.render_status = "queued"
-            job.render_progress = 0.0
-            job.render_error = ""
-            job.render_started_at = None
-            job.render_finished_at = None
-            job.render_elapsed_s = 0.0
-            job.frame_render_elapsed_s = 0.0
-            job.finalization_elapsed_s = 0.0
-            job.effective_fps = 0.0
-            job.average_fps = 0.0
-            job.average_qp = None
-            job.codec = ""
-            job.quant_metric = ""
-            job.quant_avg = None
-            job.quant_min = None
-            job.quant_max = None
-            job.quant_samples = None
-            job.is_expanded = False
-            if job.yt_enabled:
-                job.upload_status = "idle"
-                job.upload_progress = 0.0
-                job.upload_error = ""
-                job.upload_started_at = None
-                job.upload_finished_at = None
-        self._persist()
-        self._notify_updated(job)
-        self._wake_scheduler()
-        log.info("[Queue] requeue_job id=%s reset to queued", job_id)
-        return True
+            for jid in job_ids:
+                if jid == self._active_render_id:
+                    log.warning("[Queue] requeue_jobs: nie można zresetować aktywnego renderu %s", jid)
+                    continue
+                job = None
+                for j in self._jobs:
+                    if j.job_id == jid:
+                        job = j
+                        break
+                if job is None or job.render_status == "queued" or job.is_active():
+                    continue
+                self._reset_job_runtime_state(job)
+                requeued.append(job)
+        if requeued:
+            self._persist()
+            for j in requeued:
+                self._notify_updated(j)
+            self._wake_scheduler()
+            log.info("[Queue] requeue_jobs reset %d jobs to queued", len(requeued))
+        return [j.job_id for j in requeued]
 
     def get_jobs(self) -> list[ExportJob]:
         """Zwraca płytką kopię listy jobów (thread-safe)."""

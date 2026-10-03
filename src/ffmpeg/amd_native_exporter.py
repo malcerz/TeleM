@@ -2665,10 +2665,52 @@ def export_amd_native_d3d11(
     print(f"AMD Native HUD compositor: {native_hud_mode}", flush=True)
     print(f"AMD Native video decode: {native_decode_mode}", flush=True)
     print(f"AMD Native source rotation: {source_rotation}", flush=True)
-    print(f"AMD Native HUD upload path: {hud_upload_mode}", flush=True)
     if hud_upload_mode == "DIRTY":
         print(f"AMD Native dirty rect target: {dirty_max_rects}", flush=True)
     print(f"AMD Native HUD buffer mode: {hud_buffer_mode}", flush=True)
+
+    # ── AMD AMF Encoder Codec & Quality Configuration ──
+    codec_lower = str(codec).lower()
+    is_av1 = "av1" in codec_lower or "av01" in codec_lower
+    is_h264 = ("264" in codec_lower or "avc" in codec_lower) and not is_av1
+
+    if is_av1:
+        amd_codec_name = "AV1"
+        os.environ["AMD_NATIVE_CODEC"] = "av1"
+    elif is_h264:
+        amd_codec_name = "H264"
+        os.environ["AMD_NATIVE_CODEC"] = "h264"
+    else:
+        amd_codec_name = "HEVC"
+        os.environ["AMD_NATIVE_CODEC"] = "hevc"
+
+    q_str = str(quality).upper()
+    if "SPEED" in q_str or "FAST" in q_str or "SZYBKI" in q_str:
+        amd_quality_name = "FAST"
+    elif "QUAL" in q_str or "JAKOŚĆ" in q_str or "JAKOSC" in q_str:
+        amd_quality_name = "QUALITY"
+    else:
+        amd_quality_name = "BALANCED"
+    os.environ["AMD_NATIVE_QUALITY"] = amd_quality_name
+
+    # Parse bitrate (e.g. "40M", "40000k", "40000000")
+    amd_bitrate_bps = 0
+    if video_bitrate:
+        vb_clean = str(video_bitrate).strip().upper()
+        try:
+            if vb_clean.endswith("M"):
+                amd_bitrate_bps = int(float(vb_clean[:-1]) * 1_000_000)
+            elif vb_clean.endswith("K"):
+                amd_bitrate_bps = int(float(vb_clean[:-1]) * 1_000)
+            elif vb_clean.isdigit():
+                amd_bitrate_bps = int(vb_clean)
+        except Exception:
+            amd_bitrate_bps = 0
+    os.environ["AMD_NATIVE_BITRATE"] = str(amd_bitrate_bps) if amd_bitrate_bps > 0 else ""
+
+    # Required export start logs:
+    component_name = "AMFVideoEncoderHW_AV1" if is_av1 else ("AMFVideoEncoderHW_AVC" if is_h264 else "AMFVideoEncoderHW_HEVC")
+    print(f"[AMD ENCODER] codec={amd_codec_name} quality={amd_quality_name} component={component_name} input_surface=NV12 bit_depth=8 live_mux=yes", flush=True)
 
     # Function Signatures
     native_dll.telem_amd_create.restype = c_void_p
@@ -3171,7 +3213,16 @@ def export_amd_native_d3d11(
                 pass
         pipe_token = uuid.uuid4().hex[:8]
         pipe_base = rf"\\.\pipe\telem_amf_{os.getpid()}_{pipe_token}"
-        pipe_server_name = pipe_base + ".h265"
+        if is_av1:
+            pipe_ext = ".obu"
+            video_raw_fmt = "obu"
+        elif is_h264:
+            pipe_ext = ".h264"
+            video_raw_fmt = "h264"
+        else:
+            pipe_ext = ".h265"
+            video_raw_fmt = "hevc"
+        pipe_server_name = pipe_base + pipe_ext
         kernel32 = ctypes.windll.kernel32
         h_pipe = kernel32.CreateNamedPipeW(
             pipe_server_name,
@@ -3199,7 +3250,7 @@ def export_amd_native_d3d11(
                 # Explicit legacy diagnostic path: video-only Stage A followed
                 # by the old full-size Stage C remux.
                 cmd_live_mux = [
-                    ffmpeg_exe, "-y", "-f", "hevc",
+                    ffmpeg_exe, "-y", "-f", video_raw_fmt,
                     "-r", f"{fps_num}/{fps_den}", "-i", "-",
                     "-map", "0:v", "-t", f"{duration_s:.6f}",
                     "-c:v", "copy", "-an", "-f", "mp4", target_live_out,
@@ -3253,7 +3304,7 @@ def export_amd_native_d3d11(
                     gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1)
                     cmd_live_mux = [
                         ffmpeg_exe, "-y",
-                        "-f", "hevc",
+                        "-f", video_raw_fmt,
                         "-r", f"{fps_num}/{fps_den}",
                         "-i", "-",
                         *gpmf_inputs,
@@ -3270,7 +3321,7 @@ def export_amd_native_d3d11(
                     gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
                     cmd_live_mux = [
                         ffmpeg_exe, "-y",
-                        "-f", "hevc",
+                        "-f", video_raw_fmt,
                         "-r", f"{fps_num}/{fps_den}",
                         "-i", "-",
                         *audio_args,
@@ -6795,7 +6846,8 @@ def export_amd_native_d3d11(
             progress_dispatcher.stop()
 
     # 5. Final Fast Remux (Copy Video Stream + Copy Audio Stream - ZERO VIDEO RE-ENCODE)
-    temp_h265 = output_file_str + ".h265"
+    temp_encoded = output_file_str + (".h264" if is_h264 else ".h265")
+    temp_h265 = temp_encoded
     if amf_mode in ("SUBMIT_NO_MUX", "BYPASS"):
         # ETAP 5O/5U diagnostic: encode+query done (SUBMIT_NO_MUX) or frontend
         # only with no encoder (BYPASS) — skip mux / file I/O.
@@ -6806,7 +6858,7 @@ def export_amd_native_d3d11(
             "[AMD NATIVE D3D11] " + ("SUBMIT_NO_MUX" if amf_mode == "SUBMIT_NO_MUX"
                                      else "AMF BYPASS")
             + ": encoded packets counted / frontend only, mux skipped "
-            f"(h265 temp = {temp_h265})",
+            f"(raw temp = {temp_encoded})",
             flush=True,
         )
     elif direct_mux_enabled and proc_mux is not None:
