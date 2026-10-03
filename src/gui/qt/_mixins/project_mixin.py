@@ -532,6 +532,9 @@ class ProjectMixin:
         # Suppress decoder callbacks until an explicitly selected FIT has
         # loaded and its presentation plans have been warmed.
         self._preview_telemetry_loading = bool(fit_path)
+        if hasattr(self, "_load_cancel_event") and self._load_cancel_event is not None:
+            self._load_cancel_event.set()
+        self._load_cancel_event = threading.Event()
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
 
         def bg_load() -> None:
@@ -1148,6 +1151,19 @@ class ProjectMixin:
 
             source = detect_camera_telemetry(video_path, ffprobe_exe)
             if source == "dji_djmd":
+                clip_label = f"({clip_idx + 1}/{total_clips})"
+                pct_clip_start = 30 + int(35 * (clip_idx / total_clips))
+                pct_clip_end = 30 + int(35 * ((clip_idx + 1) / total_clips))
+                clip_span = max(1, pct_clip_end - pct_clip_start)
+
+                try:
+                    self.signals.sig_progress.emit(
+                        pct_clip_start,
+                        f"Analiza DJI {clip_label} — przygotowanie...",
+                    )
+                except Exception:
+                    pass
+
                 probe = subprocess.run(
                     [ffprobe_exe, "-v", "error", "-show_entries",
                      "format_tags=creation_time:stream_tags=creation_time", "-of", "json", str(video_path)],
@@ -1163,7 +1179,40 @@ class ProjectMixin:
                 if creation is None:
                     raise RuntimeError(f"DJI clip has no absolute creation time: {video_path}")
                 anchor = datetime.fromisoformat(creation.replace("Z", "+00:00"))
-                fields = load_dji_telemetry(video_path, anchor)
+
+                stage_frac_map = {
+                    "init": 0.05,
+                    "parser_init": 0.20,
+                    "telemetry": 0.70,
+                    "normalized_imu": 0.80,
+                    "convert": 0.90,
+                    "cache_write": 0.95,
+                    "done": 1.0,
+                }
+
+                def _dji_progress(stage: str, elapsed: float, msg: str) -> None:
+                    frac = stage_frac_map.get(stage, 0.5)
+                    p = pct_clip_start + int(frac * clip_span)
+                    try:
+                        self.signals.sig_progress.emit(
+                            min(p, pct_clip_end - 1),
+                            f"Analiza DJI {clip_label} — {msg}",
+                        )
+                    except Exception:
+                        pass
+
+                cancel_evt = getattr(self, "_load_cancel_event", None)
+                try:
+                    fields = load_dji_telemetry(
+                        video_path,
+                        anchor,
+                        progress_cb=_dji_progress,
+                        cancel_event=cancel_evt,
+                    )
+                except Exception as exc:
+                    print(f"[DJI LOAD] ERROR: Failed loading DJI telemetry: {exc}", flush=True)
+                    raise
+
                 fields["_dji"] = True
                 fields["start_dt_utc"] = anchor.astimezone(timezone.utc).replace(tzinfo=None)
                 _profile_load_stage("dji_decode_ms", t0, video_path, len(fields["gyroscope_samples"]))
@@ -1530,7 +1579,7 @@ class ProjectMixin:
 
         for idx, p in enumerate(paths):
             pct_clip_start = 30 + int(35 * (idx / total_clips))
-            self.signals.sig_progress.emit(pct_clip_start, f"Analiza GPMF ({idx + 1}/{total_clips})...")
+            self.signals.sig_progress.emit(pct_clip_start, f"Analiza telemetrii ({idx + 1}/{total_clips})...")
             t_clip_0 = _time.perf_counter()
             fields, records = self._load_single_clip_telemetry(p, clip_idx=idx, total_clips=total_clips)
             _profile_load_stage(f"clip_load_{idx + 1}_ms", t_clip_0, p, len(records) if records else 0)

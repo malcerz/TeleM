@@ -11,15 +11,18 @@ import importlib.machinery
 import json
 import math
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
+from src.process_lifecycle import RenderProcessRegistry
 from src.telemetry_cache_manager import get_media_cache_dir
 
 
@@ -34,6 +37,8 @@ except Exception:
 
 def detect_camera_telemetry(path: Path | str, ffprobe_exe: str) -> str | None:
     """Use MP4 stream tags, never the camera filename."""
+    print("[DJI LOAD] stage=detect start", flush=True)
+    t0 = time.perf_counter()
     result = subprocess.run(
         [ffprobe_exe, "-v", "error", "-show_entries",
          "stream=index,codec_type,codec_tag_string:stream_tags=handler_name",
@@ -41,17 +46,24 @@ def detect_camera_telemetry(path: Path | str, ffprobe_exe: str) -> str | None:
         capture_output=True, text=True, check=True,
     )
     streams = json.loads(result.stdout).get("streams", [])
+    detected = None
     for stream in streams:
         if str(stream.get("codec_tag_string", "")).lower() == "gpmd":
-            return "gopro_gpmf"
-    for stream in streams:
-        tag = str(stream.get("codec_tag_string", "")).lower()
-        handler = str((stream.get("tags") or {}).get("handler_name", "")).lower()
-        if stream.get("codec_type") == "data" and tag == "djmd" and (
-            "cam meta" in handler or "dji meta" in handler
-        ):
-            return "dji_djmd"
-    return None
+            detected = "gopro_gpmf"
+            break
+    if detected is None:
+        for stream in streams:
+            tag = str(stream.get("codec_tag_string", "")).lower()
+            handler = str((stream.get("tags") or {}).get("handler_name", "")).lower()
+            if stream.get("codec_type") == "data" and tag == "djmd" and (
+                "cam meta" in handler or "dji meta" in handler
+            ):
+                detected = "dji_djmd"
+                break
+
+    detect_ms = (time.perf_counter() - t0) * 1000.0
+    print(f"[DJI LOAD] stage=detect end wall_time={detect_ms:.1f}ms source={detected}", flush=True)
+    return detected
 
 
 def _parser_module() -> Any:
@@ -76,8 +88,25 @@ def _parser_module() -> Any:
         ) from exc
 
 
+_default_parser_module = _parser_module
+
+
 def _cache_path(source: Path) -> Path:
     return get_media_cache_dir(source) / "dji_imu.npz"
+
+
+def _cleanup_temp_cache(source: Path) -> None:
+    """Safely remove leftover temporary cache files for this source."""
+    try:
+        parent = _cache_path(source).parent
+        if parent.is_dir():
+            for tmp in parent.glob("dji_imu_*.tmp.npz"):
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def _identity(source: Path) -> dict[str, Any]:
@@ -111,8 +140,8 @@ def _read_cache(source: Path) -> dict[str, Any] | None:
         return None
 
 
-def _write_cache(source: Path, data: dict[str, Any]) -> None:
-    path = _cache_path(source)
+def _write_cache(source: Path, data: dict[str, Any], cache_path: Path | None = None) -> Path:
+    path = cache_path or _cache_path(source)
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {
         **_identity(source),
@@ -128,6 +157,7 @@ def _write_cache(source: Path, data: dict[str, Any]) -> None:
             meta=np.frombuffer(json.dumps(meta, default=str).encode("utf-8"), dtype=np.uint8),
         )
         os.replace(temporary, path)
+        return path
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -157,19 +187,28 @@ def _quaternions(groups: list[Any]) -> np.ndarray:
 
 
 def _parse(source: Path) -> dict[str, Any]:
+    """In-process parsing (used by worker process or unit tests)."""
+    t0_init = time.perf_counter()
     parser = _parser_module().Parser(str(source))
+    init_ms = (time.perf_counter() - t0_init) * 1000.0
     if parser.camera != "DJI":
         raise RuntimeError(f"Expected DJI metadata, parser reported {parser.camera!r}")
+
+    t0_telem = time.perf_counter()
     groups = parser.telemetry()
+    telem_ms = (time.perf_counter() - t0_telem) * 1000.0
+
+    t0_imu = time.perf_counter()
     imu = parser.normalized_imu()
+    imu_ms = (time.perf_counter() - t0_imu) * 1000.0
+
+    t0_conv = time.perf_counter()
     gyro_rows = []
     accel_rows = []
     for sample in imu:
         if not isinstance(sample, dict):
             continue
         stamp = float(sample["timestamp_ms"]) / 1000.0
-        # telemetry-parser normalizes gyroscope to degrees/s and accelerometer
-        # to m/s². TeleM's existing gyro convention is radians/s.
         gyro = sample.get("gyro")
         accel = sample.get("accl")
         if gyro is not None and len(gyro) == 3:
@@ -182,23 +221,208 @@ def _parse(source: Path) -> dict[str, Any]:
             metadata = (group.get("Default") or {}).get("Metadata") or {}
             if metadata:
                 break
+    conv_ms = (time.perf_counter() - t0_conv) * 1000.0
+
     return {
         "gyro": np.asarray(gyro_rows, dtype=np.float64).reshape(-1, 4),
         "accel": np.asarray(accel_rows, dtype=np.float64).reshape(-1, 4),
         "quaternion": _quaternions(groups),
         "camera": parser.camera, "model": parser.model,
         "camera_metadata": metadata, "cache_hit": False,
+        "_timings_ms": {
+            "parser_init_ms": init_ms,
+            "telemetry_ms": telem_ms,
+            "normalized_imu_ms": imu_ms,
+            "convert_ms": conv_ms,
+        }
     }
 
 
-def load_dji_telemetry(source: Path | str, clip_start_utc: datetime) -> dict[str, Any]:
+def spawn_dji_worker(
+    video_path: Path | str,
+    cache_path: Path | str | None = None,
+    progress_cb: Callable[[str, float, str], None] | None = None,
+    cancel_event: Any = None,
+    timeout_s: float = 300.0,
+) -> dict[str, Any]:
+    """Execute heavy DJI telemetry parsing in an isolated worker process.
+
+    This ensures the Qt GUI process is NEVER blocked by native telemetry-parser
+    code holding the Python GIL.
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise RuntimeError("DJI parsing was cancelled by user")
+
+    video_path = Path(video_path).resolve()
+    worker_script = Path(__file__).resolve().parent / "telemetry_dji_worker.py"
+
+    cmd = [sys.executable, str(worker_script), "--video", str(video_path)]
+    if cache_path:
+        cmd.extend(["--cache-path", str(cache_path)])
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    RenderProcessRegistry.get_instance().register(proc, "dji_worker")
+
+    line_queue: queue.Queue[str | None] = queue.Queue()
+
+    def _reader(pipe: Any) -> None:
+        try:
+            for line in iter(pipe.readline, ""):
+                line_queue.put(line)
+        except Exception:
+            pass
+        finally:
+            line_queue.put(None)
+
+    reader_thread = threading.Thread(target=_reader, args=(proc.stdout,), daemon=True)
+    reader_thread.start()
+
+    started_at = time.monotonic()
+    last_activity_time = time.monotonic()
+    current_stage = "parser_init"
+    stage_desc_map = {
+        "init": "przygotowanie...",
+        "parser_init": "odczyt telemetrii...",
+        "telemetry": "przetwarzanie telemetrii...",
+        "normalized_imu": "przetwarzanie IMU...",
+        "convert": "konwersja kwaternionów...",
+        "cache_write": "zapis cache...",
+        "done": "zakończono",
+    }
+    last_ui_update = 0.0
+
+    def _terminate_worker(p: subprocess.Popen) -> None:
+        try:
+            p.terminate()
+            p.wait(timeout=1.5)
+        except Exception:
+            try:
+                p.kill()
+                p.wait(timeout=1.0)
+            except Exception:
+                pass
+
+    try:
+        while proc.poll() is None:
+            # 1. User cancellation
+            if cancel_event is not None and cancel_event.is_set():
+                print(f"[DJI WORKER] Cancellation requested, terminating worker pid={proc.pid}", flush=True)
+                _terminate_worker(proc)
+                _cleanup_temp_cache(video_path)
+                raise RuntimeError("DJI parsing was cancelled by user")
+
+            # 2. Watchdog timeout
+            now = time.monotonic()
+            if now - last_activity_time > timeout_s:
+                print(f"[DJI WORKER] Watchdog timeout ({timeout_s}s), terminating worker pid={proc.pid}", flush=True)
+                _terminate_worker(proc)
+                _cleanup_temp_cache(video_path)
+                raise TimeoutError(f"DJI worker timed out after {timeout_s}s without heartbeat/output")
+
+            # 3. Drain lines from worker stdout
+            while True:
+                try:
+                    line = line_queue.get_nowait()
+                    if line is None:
+                        break
+                    last_activity_time = time.monotonic()
+                    line_str = line.strip()
+                    if line_str:
+                        print(f"[DJI WORKER] {line_str}", flush=True)
+                        if line_str.startswith("DJI_WORKER_STAGE stage="):
+                            current_stage = line_str.split("stage=", 1)[1].split()[0]
+                except queue.Empty:
+                    break
+
+            # 4. Update UI progress with heartbeat elapsed time every ~0.5s
+            now = time.monotonic()
+            if now - last_ui_update >= 0.5:
+                last_ui_update = now
+                elapsed = now - started_at
+                mins = int(elapsed // 60)
+                secs = int(elapsed % 60)
+                time_str = f"{mins:02d}:{secs:02d}"
+                stage_desc = stage_desc_map.get(current_stage, "odczyt telemetrii...")
+                msg = f"{stage_desc} {time_str}"
+                if progress_cb is not None:
+                    try:
+                        progress_cb(current_stage, elapsed, msg)
+                    except Exception:
+                        pass
+
+            time.sleep(0.05)
+
+        retcode = proc.wait()
+
+        # Drain any remaining lines
+        while True:
+            try:
+                line = line_queue.get_nowait()
+                if line is None:
+                    break
+                line_str = line.strip()
+                if line_str:
+                    print(f"[DJI WORKER] {line_str}", flush=True)
+            except queue.Empty:
+                break
+
+        stderr_output = proc.stderr.read() if proc.stderr else ""
+        if retcode != 0:
+            print(f"[DJI WORKER] exit_code={retcode}", flush=True)
+            print(f"[DJI WORKER] error={stderr_output.strip()}", flush=True)
+            _cleanup_temp_cache(video_path)
+            raise RuntimeError(
+                f"DJI telemetry worker failed with exit code {retcode}: {stderr_output.strip()}"
+            )
+
+        # Worker finished with exit code 0
+        cache_data = _read_cache(video_path)
+        if cache_data is None:
+            raise RuntimeError(
+                f"DJI worker completed with code 0 but cache was not found or invalid at {_cache_path(video_path)}"
+            )
+        return cache_data
+
+    finally:
+        RenderProcessRegistry.get_instance().unregister(proc)
+
+
+def load_dji_telemetry(
+    source: Path | str,
+    clip_start_utc: datetime,
+    progress_cb: Callable[[str, float, str], None] | None = None,
+    cancel_event: Any = None,
+    use_worker: bool | None = None,
+) -> dict[str, Any]:
     """Return camera samples as TeleM's timestamped fields, without GPS fields."""
     source = Path(source)
     started = time.perf_counter()
+
+    # Fast path: check valid cache first
     data = _read_cache(source)
+    cache_hit = (data is not None)
     if data is None:
-        data = _parse(source)
-        _write_cache(source, data)
+        # Determine whether to use external worker process
+        if use_worker is None:
+            use_worker = (_parser_module is _default_parser_module)
+
+        if use_worker:
+            data = spawn_dji_worker(
+                source,
+                progress_cb=progress_cb,
+                cancel_event=cancel_event,
+            )
+        else:
+            data = _parse(source)
+            _write_cache(source, data)
+        data["cache_hit"] = False
+
     anchor = clip_start_utc
     if anchor.tzinfo is None:
         anchor = anchor.replace(tzinfo=timezone.utc)
