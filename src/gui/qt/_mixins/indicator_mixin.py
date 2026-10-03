@@ -613,6 +613,28 @@ class IndicatorMixin:
             value_range=(0, 0),
         ))
 
+        # ── Mapa (druga po Czasie, jeśli GPS jest dostępny) ────────────
+        has_gps = bool(
+            (tm.track_samples and len(tm.track_samples) >= 2)
+            or (tm.fit_gps_track and len(tm.fit_gps_track) >= 2)
+            or (tm.gpx_gps_track and len(tm.gpx_gps_track) >= 2)
+            or (tm.gps_track and len(tm.gps_track) >= 2)
+        )
+        if has_gps:
+            resolved_track, resolved_src = tm.resolve_gps_track("auto") if hasattr(tm, "resolve_gps_track") else ([], "auto")
+            src_name = resolved_src if resolved_src not in ("none", "auto") else ("gpmf" if tm.gps_track else "fit")
+            streams.append(DataStream(
+                key="track_map", display_name="Mapa", source=src_name,
+                category="gps", unit="", suggested_form="map",
+                sample_count=len(resolved_track) if resolved_track else max(
+                    len(tm.track_samples or []),
+                    len(tm.fit_gps_track or []),
+                    len(tm.gpx_gps_track or []),
+                    len(tm.gps_track or []),
+                ),
+                value_range=(0, 0),
+            ))
+
         # ── GPMF (GoPro) ──────────────────────────────────────────────
         if tm.speed_samples:
             vals = [v for _, v in tm.speed_samples]
@@ -629,19 +651,6 @@ class IndicatorMixin:
                 category="gps", unit="km", suggested_form="text",
                 sample_count=len(tm.track_samples),
                 value_range=(0, max(vals)),
-            ))
-
-        if tm.track_samples or tm.fit_gps_track or tm.gpx_gps_track or tm.gps_track:
-            streams.append(DataStream(
-                key="track_map", display_name="Mapa", source="fit",
-                category="gps", unit="", suggested_form="map",
-                sample_count=max(
-                    len(tm.track_samples),
-                    len(tm.fit_gps_track),
-                    len(tm.gpx_gps_track),
-                    len(tm.gps_track),
-                ),
-                value_range=(0, 0),
             ))
         heading_source = None
         heading_count = 0

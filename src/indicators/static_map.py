@@ -124,15 +124,16 @@ def _render_static_map_indicator(
             if detail_plan and cached_detail / len(detail_plan) >= 0.5:
                 pass  # fall through to the real render below
             else:
-                ov = render_overview_map(
-                    snap.get("overview_image"), map_w, map_h,
-                    bounds=snap.get("bounds"), marker_latlon=(_lat, _lon),
-                    marker_radius=int(cfg.get("marker_size", 7)),
-                    marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
-                )
-                if ov is not None:
-                    return ov, _pos_xy[0], _pos_xy[1], None
-                return _placeholder()
+                if snap.get("overview_image") is not None:
+                    ov = render_overview_map(
+                        snap.get("overview_image"), map_w, map_h,
+                        bounds=snap.get("bounds"), marker_latlon=(_lat, _lon),
+                        marker_radius=int(cfg.get("marker_size", 7)),
+                        marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
+                    )
+                    if ov is not None:
+                        return ov, _pos_xy[0], _pos_xy[1], None
+                # If no overview yet, fall through to render with whatever tiles are cached + track line
 
         _pc_key = ("static_precache", id(gps_track), zoom, map_style)
         if not hasattr(_render_static_map_indicator, "_precached"):

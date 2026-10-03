@@ -630,69 +630,39 @@ def _render_moving_map_indicator(
             coverage = renderer.viewport_tile_coverage(ts, working_size, working_size)
             draw_track = not bool(cfg.get("hide_track", False))
             draw_marker = not bool(cfg.get("hide_marker", False))
-            if coverage >= 0.5:
-                # Level 2: detail tiles cached — normal moving map render.
-                if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
-                    map_img = renderer.render_track_up(
-                        ts, working_size, heading=map_heading,
-                        download_missing=False,
-                        draw_track=draw_track, draw_marker=draw_marker,
-                    )
-                else:
-                    map_img = renderer.render(
-                        ts, working_size, working_size,
-                        download_missing=False,
-                        draw_track=draw_track, draw_marker=draw_marker,
-                        heading=map_heading,
-                    )
-                if map_img.size != (map_w, map_h):
-                    map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
-                map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
-                map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-                map_img = apply_map_pitch(map_img, cfg.get("pitch"))
-                return map_img, _pos_xy[0], _pos_xy[1], None
 
-            if ctx is None:
-                return _placeholder(label="Ładowanie mapy…")
-            snap = ctx.snapshot()
-            if snap["provider"] != map_style:
-                # A provider switch is in progress (controller restarted the
-                # preload); keep a placeholder until the new provider is ready.
-                return _placeholder(label="Ładowanie mapy…")
-            if snap["status"] == "error":
-                return _placeholder(error="Nie udało się wczytać mapy")
-            # An overview is usable map data even while a newer/detail job is
-            # still preparing. Never replace it with the loading placeholder.
-            overview_ready = snap.get("overview_image") is not None
-            if snap["status"] in ("idle", "preparing") and not overview_ready:
-                return _placeholder(
-                    progress=snap["progress"],
-                    loaded=snap["loaded_tiles"],
-                    required=snap["required_tiles"],
+            # Non-blocking background precache for missing tiles
+            if coverage < 1.0:
+                def _detail_fill():
+                    try:
+                        renderer.viewport_precache(ts, working_size, working_size, max_tiles=25)
+                    except Exception:
+                        pass
+                import threading as _th
+                _th.Thread(target=_detail_fill, daemon=True).start()
+
+            # Always render the moving map (parity with final render: cached tiles
+            # appear immediately, uncached areas stay neutral grey, route and position
+            # marker are always drawn, GUI never blocks).
+            if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
+                map_img = renderer.render_track_up(
+                    ts, working_size, heading=map_heading,
+                    download_missing=False,
+                    draw_track=draw_track, draw_marker=draw_marker,
                 )
-
-            # Level 1: overview image + current-position marker.  Detail tiles
-            # are fetched in the background (never blocks the GUI thread).
-            def _detail_fill():
-                try:
-                    renderer.viewport_precache(ts, working_size, working_size, max_tiles=25)
-                except Exception:
-                    pass
-            import threading as _th
-            _th.Thread(target=_detail_fill, daemon=True).start()
-            latlon = _latlon_at_ts(gps_track, ts)
-            ov = render_overview_map(
-                snap.get("overview_image"), map_w, map_h,
-                bounds=snap.get("bounds"), marker_latlon=latlon,
-                marker_radius=int(cfg.get("marker_size", 7)),
-                marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
-            )
-            if ov is not None:
-                ov = apply_map_shape(ov, cfg.get("map_shape", "square"))
-                ov = apply_map_opacity(ov, cfg.get("opacity"))
-                ov = apply_map_pitch(ov, cfg.get("pitch"))
-                return ov, _pos_xy[0], _pos_xy[1], None
-            return _placeholder()
+            else:
+                map_img = renderer.render(
+                    ts, working_size, working_size,
+                    download_missing=False,
+                    draw_track=draw_track, draw_marker=draw_marker,
+                    heading=map_heading,
+                )
+            if map_img.size != (map_w, map_h):
+                map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
+            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+            map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
+            return map_img, _pos_xy[0], _pos_xy[1], None
 
         if cache_key not in _cache:
             renderer = MovingMapRenderer(

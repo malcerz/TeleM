@@ -1172,8 +1172,9 @@ class RenderTab(QWidget):
             is_nv_selected
             and options.get("nvidia_backend") in ("native_d3d11", "NVIDIA Native D3D11")
         )
-        self._export_preview_hevc = bool(hud_on and resolved_amd)
-        self._export_preview_gpu_tap = bool(hud_on and (resolved_amd or is_nv_native))
+        amd_use_standard_preview = bool(os.environ.get("TELEM_AMD_USE_NATIVE_PREVIEW") == "1")
+        self._export_preview_hevc = bool(hud_on and resolved_amd and not amd_use_standard_preview)
+        self._export_preview_gpu_tap = bool(hud_on and ((resolved_amd and not amd_use_standard_preview) or is_nv_native))
         self._export_preview_lightweight = False
         self._export_preview_native = bool(
             hud_on and self._uses_native_export_video()
@@ -1216,9 +1217,7 @@ class RenderTab(QWidget):
         else:
             self.preview_slot.setVisible(not hud_on)
             self.hud_preview_label.setVisible(hud_on)
-            self.hud_preview_label.setText(
-                "Uruchamianie podglądu HEVC..." if self._export_preview_hevc else "Renderowanie..."
-            )
+            self.hud_preview_label.setText("Renderowanie...")
         options["_amd_export_preview_session"] = (
             self._amd_export_preview_session if self._export_preview_hevc else None
         )
@@ -3106,7 +3105,7 @@ class RenderTab(QWidget):
                 has_video_frame=True,
                 has_hud=True,
                 frame_size=f"{qimg.width()}x{qimg.height()}",
-                preview_update_path="gpu_frame_tap" if gpu_tap else "continuous_ffmpeg_hevc",
+                preview_update_path="gpu_frame_tap" if gpu_tap else ("native_hud_overlay" if self._export_preview_native else "preview_label"),
             )
             return
         if self._export_preview_native:

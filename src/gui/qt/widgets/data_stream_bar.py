@@ -178,12 +178,14 @@ class DataStreamBar(QWidget):
 
         layout.addLayout(header_layout)
 
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         # Scrollowalny obszar na przyciski
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setMaximumHeight(140)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         scroll.setStyleSheet(
             "QScrollArea { border: 1px solid #333; background: #1e1e1e; }"
         )
@@ -195,7 +197,7 @@ class DataStreamBar(QWidget):
         self.flow.setContentsMargins(6, 6, 6, 6)
 
         scroll.setWidget(self.button_widget)
-        layout.addWidget(scroll)
+        layout.addWidget(scroll, 1)
 
         # Placeholder (pokazywany gdy brak danych)
         self.placeholder = QLabel(

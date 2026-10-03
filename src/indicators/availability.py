@@ -269,7 +269,7 @@ def indicator_data_available(
     if key == "track_map":
         gps_src = str(cfg.get("gps_source") or cfg.get("source") or "auto").strip().lower()
         if gps_src == "fit":
-            if _has_track(data.get("fit_gps_track")):
+            if _has_track(data.get("fit_gps_track")) or (_has_track(data.get("gps_track")) and bool(data.get("fit_data"))):
                 return True, "source=fit"
             return False, "no GPS track for configured source 'fit'"
         if gps_src == "gpmf":
@@ -277,7 +277,7 @@ def indicator_data_available(
                 return True, "source=gpmf"
             return False, "no GPS track for configured source 'gpmf'"
         if gps_src == "gpx":
-            if _has_track(data.get("gpx_gps_track")):
+            if _has_track(data.get("gpx_gps_track")) or (_has_track(data.get("gps_track")) and bool(data.get("gpx_track_samples"))):
                 return True, "source=gpx"
             return False, "no GPS track for configured source 'gpx'"
         # Auto candidates in priority: fit -> gpmf -> gpx
@@ -287,6 +287,8 @@ def indicator_data_available(
             return True, "source=gpmf"
         if _has_track(data.get("gpx_gps_track")):
             return True, "source=gpx"
+        if _has_track(data.get("gps_track")):
+            return True, "source=gps_track"
         return False, "no source available (configured=auto, candidates=[fit, gpmf, gpx])"
 
     # ── 3. Lean indicator ─────────────────────────────────────────────

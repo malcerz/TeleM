@@ -315,6 +315,9 @@ def prepare_overlay_frame_data(
             gps_track=gps_track,
             available_fit_fields=fit_field_plan.get("discovered_fit_fields") if fit_field_plan else None,
             start_dt_utc=start_dt_utc,
+            telemetry=kwargs.get("telemetry"),
+            fit_gps_track=kwargs.get("fit_gps_track"),
+            gpx_gps_track=kwargs.get("gpx_gps_track"),
         )
     profiler = get_overlay_profiler()
     # The layout of THIS frame is authoritative. A data manager need not own

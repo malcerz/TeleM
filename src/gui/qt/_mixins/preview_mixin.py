@@ -753,6 +753,14 @@ class PreviewMixin:
                     if not self._prepare_cache:
                         self._build_prepare_cache()
 
+                    if hasattr(self, "layout") and isinstance(self.layout, dict) and "_indicator_availability" not in self.layout:
+                        try:
+                            from src.indicators.availability import compute_indicator_availability
+                            avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
+                            self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
+                        except Exception:
+                            pass
+
                     try:
                         bt.start_timer("telemetry_lookup")
                         try:
@@ -775,6 +783,9 @@ class PreviewMixin:
                                 gpx_hr_samples=self.telemetry.gpx_hr_samples,
                                 gpx_cad_samples=self.telemetry.gpx_cad_samples,
                                 fit_data=self.telemetry.fit_data,
+                                fit_gps_track=getattr(self.telemetry, "fit_gps_track", None),
+                                gpx_gps_track=getattr(self.telemetry, "gpx_gps_track", None),
+                                telemetry=self.telemetry,
                                 gps_track=self.telemetry.resolve_gps_track(
                                     self.layout.get("indicators", {})
                                     .get("track_map", {}).get("gps_source", "auto")
@@ -792,6 +803,7 @@ class PreviewMixin:
                                     if getattr(self, "video_timeline", None) and getattr(self.video_timeline, "clip_count", 0)
                                     else global_time
                                 ),
+                                indicator_availability=self.layout.get("_indicator_availability"),
                             )
                         finally:
                             bt.stop_timer("telemetry_lookup")

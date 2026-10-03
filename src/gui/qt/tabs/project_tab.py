@@ -51,10 +51,10 @@ class ProjectTab(QWidget):
         # LEWY: podgląd wideo + dynamiczne przyciski
         self.left_panel = QWidget()
         self.left_panel.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Preferred,
+            QSizePolicy.Fixed, QSizePolicy.Expanding,
         )
         left_layout = QVBoxLayout(self.left_panel)
-        left_layout.setContentsMargins(0, 4, 4, 4)  # brak lewego marginesu
+        left_layout.setContentsMargins(0, 4, 4, 0)  # brak lewego i dolnego marginesu — pełna wysokość do krawędzi okna
 
         # Kontener na (współdzielony) podgląd wideo
         self.preview_slot = QWidget()
