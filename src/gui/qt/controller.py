@@ -286,6 +286,8 @@ class AppController(
         """Czyszczenie pamięci podręcznej wyliczeń podglądu i rastrów wskaźników."""
         self._prepare_cache.clear()
         self._chart_data_cache = None
+        if hasattr(self, "layout") and isinstance(self.layout, dict):
+            self.layout.pop("_indicator_availability", None)
         try:
             from src.indicators.helpers import _STATIC_CACHE, FONT_CACHE
             if _STATIC_CACHE is not None:

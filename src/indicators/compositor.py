@@ -176,6 +176,7 @@ def normalize_layout_for_save(layout: dict[str, Any]) -> dict[str, Any]:
         if isinstance(cfg, dict) and _is_legacy_vertical_ruler(cfg):
             cfg["orientation"] = "vertical"
             cfg["rotation"] = 0
+    saved.pop("_indicator_availability", None)
     return sanitize_layout_for_json(saved)
 
 def _get_reusable_canvas(
@@ -258,6 +259,8 @@ def compose_overlay(
     auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
     breakdown: Optional[dict[str, float]] = None,
     rot180: bool = False,
+    indicator_availability: Optional[dict[str, bool]] = None,
+    **kwargs: Any,
 ) -> Image.Image:
     """Compose the complete HUD overlay image from all indicators.
 
@@ -266,6 +269,8 @@ def compose_overlay(
     downloading synchronously on the GUI thread.  Final render / GPU paths
     leave it False (unchanged synchronous behaviour).
     """
+    if indicator_availability is None and isinstance(layout, dict):
+        indicator_availability = layout.get("_indicator_availability")
     profiler = get_overlay_profiler()
     # AMD audit: start above_compose timer if enabled
     _audit_above = os.getenv("AMD_AUDIT_ABOVE_COMPose", "0").strip().lower() in {"1", "true", "yes", "on"}
@@ -348,6 +353,8 @@ def compose_overlay(
     # removed legacy ``time_block`` indicator.
     if "time_display" in layout.get("indicators", {}) and (
         render_keys is None or "time_display" in render_keys
+    ) and (
+        indicator_availability is None or indicator_availability.get("time_display", True)
     ):
         with indicator_scope("time_display"):
             t_td0 = time.perf_counter_ns() if breakdown is not None else 0
@@ -467,6 +474,8 @@ def compose_overlay(
         if render_keys is not None and key not in render_keys:
             continue
         if not ind_cfg or not ind_cfg.get("enabled", True):
+            continue
+        if indicator_availability is not None and not indicator_availability.get(key, True):
             continue
         indicator_started_ns = time.perf_counter_ns()
 
@@ -971,6 +980,8 @@ def render_preview(
     map_heading: Optional[float] = None,
     async_map: bool = False,
     auto_ranges: Optional[dict[str, tuple[float, float]]] = None,
+    indicator_availability: Optional[dict[str, bool]] = None,
+    **kwargs: Any,
 ) -> Image.Image:
     """Render a preview image: source frame with HUD overlay composited on top.
 
@@ -1020,6 +1031,7 @@ def render_preview(
         map_heading=map_heading,
         async_map=async_map,
         auto_ranges=auto_ranges,
+        indicator_availability=indicator_availability,
     )
     # Bypass OpenCL to check CPU alpha_composite performance
     img.alpha_composite(overlay)

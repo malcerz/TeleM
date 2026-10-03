@@ -926,6 +926,13 @@ class ProjectMixin:
                         self.layout, BUILTIN_FIELDS,
                     )
                     self.fit_ext_fields = list(fit_keys)
+                    if not self.telemetry.speed_samples and not self.telemetry.records:
+                        self.telemetry.auto_switch_source(self.layout, "fit")
+
+                from src.indicators.availability import compute_indicator_availability, log_indicator_availability
+                avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
+                self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
+                log_indicator_availability(avail)
 
                 # Odkryj strumienie danych
                 self.signals.sig_progress.emit(75, "Przygotowywanie danych...")

@@ -95,6 +95,7 @@ class _Static:
     slope_units: dict[str, str]
     slope_labels: dict[str, str]
     auto_ranges: Optional[dict[str, tuple[float, float]]] = None
+    indicator_availability: Optional[dict[str, bool]] = None
 
 
 class TelemetryFrameCache:
@@ -178,6 +179,7 @@ class TelemetryFrameCache:
             "elapsed_seconds": rec.elapsed_seconds,
             "avg_speed_kmh": rec.avg_speed_kmh,
             "auto_ranges": st.auto_ranges,
+            "indicator_availability": st.indicator_availability,
         }
 
     def stats(self) -> dict[str, Any]:
@@ -1062,6 +1064,30 @@ def build_telemetry_cache(
         gpx_cad_samples=gpx_cad_samples,
         fit_data=fit,
     )
+    indicator_availability = layout.get("_indicator_availability")
+    if indicator_availability is None:
+        from src.indicators.availability import get_effective_indicator_availability
+        indicator_availability = get_effective_indicator_availability(
+            layout,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_s,
+            exposure_samples=exposure_s,
+            temperature_samples=temp_s,
+            gpx_speed_samples=gpx_spd,
+            gpx_track_samples=gpx_trk,
+            gpx_alt_samples=gpx_alt,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit,
+            gps_track=gps_trk,
+            available_fit_fields=fit_field_plan.get("discovered_fit_fields") if fit_field_plan else None,
+            start_dt_utc=start_dt_utc,
+            video_timeline=video_timeline,
+        )
     static = _Static(
         max_distance_m=max_distance_m, max_speed_kmh=max_speed_kmh,
         min_alt=min_alt, max_alt=max_alt, chart_data=chart_data or {},
@@ -1076,6 +1102,7 @@ def build_telemetry_cache(
         slope_keys=slope_keys, slope_units=slope_units,
         slope_labels=slope_labels,
         auto_ranges=auto_ranges,
+        indicator_availability=indicator_availability,
     )
     return TelemetryFrameCache(
         records, static, t_total_ms, memory_bytes,

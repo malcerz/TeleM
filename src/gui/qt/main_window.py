@@ -21,7 +21,7 @@ from src.telemetry_file_validation import TelemetryValidationRequest
 
 
 APP_TITLE = "BikeRideHUD"
-APP_VERSION = "0.7.9"
+APP_VERSION = "1.0"
 
 
 class MainWindow(QMainWindow):

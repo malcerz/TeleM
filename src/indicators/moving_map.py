@@ -162,6 +162,9 @@ def render_map_working_image(
         cfg = layout["indicators"].get(key)
         if not cfg or not cfg.get("enabled", True):
             return None, None
+        avail = layout.get("_indicator_availability")
+        if avail is not None and not avail.get(key, True):
+            return None, None
         map_w = s(cfg.get("size", 0.1), canvas_w)
         render_plan = _map_render_plan(canvas_w, map_w, int(cfg.get("zoom", 16)))
         working_size = render_plan["working_size"]
@@ -324,6 +327,9 @@ def render_map_unrotated_working_image(
 
         cfg = layout["indicators"].get(key)
         if not cfg or not cfg.get("enabled", True):
+            return None, 0.0, None, 0
+        avail = layout.get("_indicator_availability")
+        if avail is not None and not avail.get(key, True):
             return None, 0.0, None, 0
         raw_map_w = s(cfg.get("size", 0.1), canvas_w)
         align_spec = os.environ.get("AMD_MAP_ALIGN", "1")

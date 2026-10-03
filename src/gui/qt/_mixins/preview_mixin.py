@@ -917,6 +917,7 @@ class PreviewMixin:
                                 inplace=self._playing,
                                 async_map=True,
                                 auto_ranges=overlay_data.get("auto_ranges"),
+                                indicator_availability=overlay_data.get("indicator_availability"),
                             )
                     else:
                         # Check if preview already set (cut region or no telemetry)
@@ -938,6 +939,7 @@ class PreviewMixin:
                                 extra_indicators={}, gps_track=[],
                                 target_dt=None, start_dt_utc=None,
                                 async_map=True,
+                                indicator_availability=self.layout.get("_indicator_availability"),
                             )
                             preview = self.src_img.convert("RGBA").copy()
                             preview.alpha_composite(overlay)

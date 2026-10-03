@@ -214,6 +214,19 @@ def _apply_native_layout_geometry(
             desc.style.chart.value_canvas_y = 0.0
 
 
+def _is_indicator_active(layout: dict, key: str) -> bool:
+    ind_cfg = layout.get("indicators", {})
+    if key not in ind_cfg:
+        return False
+    cfg = ind_cfg[key]
+    if isinstance(cfg, dict) and not cfg.get("enabled", True):
+        return False
+    avail = layout.get("_indicator_availability")
+    if avail is not None and not avail.get(key, True):
+        return False
+    return True
+
+
 def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None) -> List[TelemIndicatorDesc]:
     canvas_w = 3840
     canvas_h = 2160
@@ -222,7 +235,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
     ind_cfg = layout.get("indicators", {})
 
     # 1. time_display
-    if "time_display" in ind_cfg:
+    if _is_indicator_active(layout, "time_display"):
         cfg_td = ind_cfg["time_display"]
         desc_td = TelemIndicatorDesc()
         desc_td.type = 1
@@ -263,7 +276,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc_td)
 
     # 2. exposure_text
-    if "exposure_text" in ind_cfg:
+    if _is_indicator_active(layout, "exposure_text"):
         cfg = ind_cfg["exposure_text"]
         desc = TelemIndicatorDesc()
         desc.type = 0
@@ -290,7 +303,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 3. iso_text
-    if "iso_text" in ind_cfg:
+    if _is_indicator_active(layout, "iso_text"):
         cfg = ind_cfg["iso_text"]
         desc = TelemIndicatorDesc()
         desc.type = 0
@@ -316,7 +329,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 4. temp_text
-    if "temp_text" in ind_cfg:
+    if _is_indicator_active(layout, "temp_text"):
         cfg = ind_cfg["temp_text"]
         desc = TelemIndicatorDesc()
         desc.type = 0
@@ -343,7 +356,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 5. fit_gopro_battery_text
-    if "fit_gopro_battery_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_gopro_battery_text"):
         cfg = ind_cfg["fit_gopro_battery_text"]
         desc = TelemIndicatorDesc()
         desc.type = 0
@@ -370,7 +383,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 6. fit_distance_text
-    if "fit_distance_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_distance_text"):
         cfg = ind_cfg["fit_distance_text"]
         desc = TelemIndicatorDesc()
         desc.type = 2
@@ -415,7 +428,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 7. fit_solar_text
-    if "fit_solar_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_solar_text"):
         cfg = ind_cfg["fit_solar_text"]
         desc = TelemIndicatorDesc()
         desc.type = 2
@@ -462,7 +475,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 8. alt_text
-    if "alt_text" in ind_cfg:
+    if _is_indicator_active(layout, "alt_text"):
         cfg = ind_cfg["alt_text"]
         desc = TelemIndicatorDesc()
         desc.type = 3
@@ -510,7 +523,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 9. fit_curVpower_text
-    if "fit_curVpower_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_curVpower_text"):
         cfg = ind_cfg["fit_curVpower_text"]
         desc = TelemIndicatorDesc()
         desc.type = 2
@@ -555,7 +568,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 10. fit_garmin_battery_percent_text
-    if "fit_garmin_battery_percent_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_garmin_battery_percent_text"):
         cfg = ind_cfg["fit_garmin_battery_percent_text"]
         desc = TelemIndicatorDesc()
         desc.type = 4
@@ -598,7 +611,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 11. speed_text (Speed Gauge)
-    if "speed_text" in ind_cfg:
+    if _is_indicator_active(layout, "speed_text"):
         cfg = ind_cfg["speed_text"]
         desc = TelemIndicatorDesc()
         desc.type = 5
@@ -632,7 +645,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 12. fit_cadence_text (Cadence Chart)
-    if "fit_cadence_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_cadence_text"):
         cfg = ind_cfg["fit_cadence_text"]
         desc = TelemIndicatorDesc()
         desc.type = 6
@@ -673,7 +686,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
         indicators.append(desc)
 
     # 13. fit_heart_rate_text (Heart Rate Chart)
-    if "fit_heart_rate_text" in ind_cfg:
+    if _is_indicator_active(layout, "fit_heart_rate_text"):
         cfg = ind_cfg["fit_heart_rate_text"]
         desc = TelemIndicatorDesc()
         desc.type = 6
@@ -719,7 +732,7 @@ def build_canonical_indicators(layout: dict, auto_ranges: Optional[dict] = None)
 
 def build_map_indicator_desc(layout: dict, canvas_w: int = 3840, canvas_h: int = 2160) -> Optional[TelemIndicatorDesc]:
     ind_cfg = layout.get("indicators", {})
-    if "track_map" not in ind_cfg:
+    if not _is_indicator_active(layout, "track_map"):
         return None
 
     cfg = ind_cfg["track_map"]

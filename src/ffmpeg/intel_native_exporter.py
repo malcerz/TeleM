@@ -320,8 +320,11 @@ def _compute_layout_widget_boxes(
     min_dim = min(canvas_w, canvas_h)
     boxes: dict[str, tuple[int, int, int, int]] = {}
 
+    avail = layout.get("_indicator_availability")
     for key, cfg in indicators.items():
         if not cfg or not cfg.get("enabled", True):
+            continue
+        if avail is not None and not avail.get(key, True):
             continue
         lx = cfg.get("x", 0.0)
         ly = cfg.get("y", 0.0)
@@ -947,7 +950,8 @@ def export_intel_native_d3d11(
     if gpu_map_active:
         native_lib.intel_native_gpu_map_init()
         map_cfg = layout.get("indicators", {}).get("track_map", {})
-        if map_cfg and map_cfg.get("enabled", True) and gps_track and len(gps_track) > 1:
+        map_avail = layout.get("_indicator_availability", {}).get("track_map", True) if "_indicator_availability" in layout else True
+        if map_cfg and map_cfg.get("enabled", True) and map_avail and gps_track and len(gps_track) > 1:
             from PIL import Image, ImageDraw
             from src.indicators.helpers import s, _parse_marker_color
             from src.indicators.moving_map import _map_render_plan, _sync_map_ts

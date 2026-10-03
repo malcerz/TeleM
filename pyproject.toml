@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bikeridehud"
-version = "0.16.9"
+version = "1.0"
 description = "BikeRideHUD – Action camera & cycling video telemetry overlay application"
 requires-python = ">=3.10"
 dependencies = [

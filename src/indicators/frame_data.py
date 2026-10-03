@@ -279,6 +279,8 @@ def prepare_overlay_frame_data(
     fit_field_plan: Optional[dict[str, list[str]]] = None,
     resolve_stats: Optional[dict[str, Any]] = None,
     project_elapsed_s: Optional[float] = None,
+    indicator_availability: Optional[dict[str, bool]] = None,
+    **kwargs: Any,
 ) -> dict[str, Any]:
 
     """Prepare all values needed by ``compose_overlay`` for a single frame.
@@ -290,6 +292,30 @@ def prepare_overlay_frame_data(
 
     Returns a dict suitable for ``**kwargs`` to ``compose_overlay``.
     """
+    if indicator_availability is None and isinstance(layout, dict):
+        indicator_availability = layout.get("_indicator_availability")
+    if indicator_availability is None:
+        from src.indicators.availability import get_effective_indicator_availability
+        indicator_availability = get_effective_indicator_availability(
+            layout,
+            speed_samples=speed_samples,
+            track_samples=track_samples,
+            alt_samples=alt_samples,
+            iso_samples=iso_samples,
+            exposure_samples=exposure_samples,
+            temperature_samples=temperature_samples,
+            gpx_speed_samples=gpx_speed_samples,
+            gpx_track_samples=gpx_track_samples,
+            gpx_alt_samples=gpx_alt_samples,
+            gpx_power_samples=gpx_power_samples,
+            gpx_atemp_samples=gpx_atemp_samples,
+            gpx_hr_samples=gpx_hr_samples,
+            gpx_cad_samples=gpx_cad_samples,
+            fit_data=fit_data,
+            gps_track=gps_track,
+            available_fit_fields=fit_field_plan.get("discovered_fit_fields") if fit_field_plan else None,
+            start_dt_utc=start_dt_utc,
+        )
     profiler = get_overlay_profiler()
     # The layout of THIS frame is authoritative. A data manager need not own
     # a GUI layout, and export callbacks may hold a different snapshot.
@@ -897,4 +923,5 @@ def prepare_overlay_frame_data(
         "elapsed_seconds": elapsed_seconds,
         "avg_speed_kmh": avg_speed_kmh,
         "auto_ranges": auto_ranges,
+        "indicator_availability": indicator_availability,
     }

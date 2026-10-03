@@ -77,6 +77,10 @@ class PresetMixin:
                         self.layout, BUILTIN_FIELDS,
                     )
                     self.fit_ext_fields = list(fit_keys)
+                from src.indicators.availability import compute_indicator_availability, log_indicator_availability
+                avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
+                self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
+                log_indicator_availability(avail)
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
             if hasattr(self, "_map_preload_provider_switch"):

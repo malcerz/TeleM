@@ -644,6 +644,9 @@ def _map_gpu_layout_safe(layout: dict) -> tuple[bool, str]:
     indicators = layout.get("indicators", {})
     if "track_map" not in indicators or not indicators["track_map"].get("enabled", True):
         return True, "no active track_map"
+    avail = layout.get("_indicator_availability")
+    if avail is not None and not avail.get("track_map", True):
+        return True, "no active track_map (data unavailable)"
     map_count = sum(1 for key, cfg in indicators.items()
                     if cfg and cfg.get("enabled", True) and key == "track_map")
     if map_count != 1:
@@ -699,10 +702,13 @@ def _amd_layout_roles(
     map_above_layout = None
     map_after_keys: list[str] = []
     track_map_cfg = layout.get("indicators", {}).get("track_map")
+    avail = layout.get("_indicator_availability")
+    map_avail = avail is None or avail.get("track_map", True)
     if (
         gpu_map_enabled
         and track_map_cfg
         and track_map_cfg.get("enabled", True)
+        and map_avail
     ):
         compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(layout)
     return semantic_layout, compose_layout, map_above_layout, map_after_keys
@@ -4235,7 +4241,8 @@ def export_amd_native_d3d11(
     from src.moving_map import set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats
 
     preload_info = {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
-    if layout.get("indicators", {}).get("track_map", {}).get("enabled", True):
+    map_avail = layout.get("_indicator_availability", {}).get("track_map", True) if "_indicator_availability" in layout else True
+    if layout.get("indicators", {}).get("track_map", {}).get("enabled", True) and map_avail:
         _map_t0 = time.perf_counter()
         preload_info = ensure_map_tiles_cached(
             video_width, video_height, layout, "track_map", gps_track,
