@@ -2046,6 +2046,23 @@ def export_amd_native_d3d11(
         total_frames = max(1, int(round(duration_s * target_fps)))
         duration_s = total_frames / target_fps
         per_clip_requested_frames = [total_frames]
+
+    env_max_frames = os.environ.get("TELEM_MAX_FRAMES")
+    if env_max_frames and env_max_frames.isdigit() and int(env_max_frames) > 0:
+        target_max = int(env_max_frames)
+        if target_max < total_frames:
+            total_frames = target_max
+            duration_s = total_frames / target_fps
+            if per_clip_requested_frames:
+                remaining = total_frames
+                new_per_clip = []
+                for count in per_clip_requested_frames:
+                    take = min(count, remaining)
+                    new_per_clip.append(take)
+                    remaining -= take
+                per_clip_requested_frames = new_per_clip
+            print(f"[AMD EXPORTER] TELEM_MAX_FRAMES active: bounded to {total_frames} frames ({duration_s:.2f}s)", flush=True)
+
     from src.render_progress import RenderProgressTracker
     progress_tracker = RenderProgressTracker(total_frames, on_render_progress, target_fps=target_fps)
     if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:

@@ -361,6 +361,22 @@ class ExportQueue:
         queue.add_job(job)
     """
 
+    _queue_progress_update_count: int = 0
+    _queue_gui_refresh_count: int = 0
+
+    @classmethod
+    def get_queue_progress_update_count(cls) -> int:
+        return cls._queue_progress_update_count
+
+    @classmethod
+    def get_queue_gui_refresh_count(cls) -> int:
+        return cls._queue_gui_refresh_count
+
+    @classmethod
+    def reset_queue_diagnostic_counters(cls) -> None:
+        cls._queue_progress_update_count = 0
+        cls._queue_gui_refresh_count = 0
+
     def __init__(self, signals=None, appdata_dir: Optional[Path] = None) -> None:
         self._signals = signals
         self._lock = threading.Lock()
@@ -626,6 +642,7 @@ class ExportQueue:
 
     def notify_render_progress(self, job_id: str, progress: float, phase: str = "") -> None:
         """Aktualizuj postęp renderu (0..1) oraz opcjonalnie stan/fazę."""
+        ExportQueue._queue_progress_update_count += 1
         job = self._find_job(job_id)
         if job is None:
             return
@@ -643,7 +660,8 @@ class ExportQueue:
             job.render_status = "running"
             if job.render_error == "Render worker did not start":
                 job.render_error = ""
-        if curr_pct != prev_pct or (clamped > 0.0 and prev_pct == 0):
+        pct_changed = (curr_pct != prev_pct) or (clamped > 0.0 and prev_pct == 0)
+        if pct_changed:
             log_queue_trace(
                 "QUEUE PROGRESS",
                 job_id=job.job_id,
@@ -651,7 +669,15 @@ class ExportQueue:
                 input_videos=job.video_paths,
                 extra=f"pct={clamped * 100:.1f}% status={job.render_status}",
             )
-        self._notify_updated(job)
+
+        # Developer A/B switch: TELEM_QUEUE_PROGRESS_UI=0 suppresses per-frame UI emissions
+        # during active render, only notifying on integer percent changes or when completed.
+        queue_ui_mode = os.environ.get("TELEM_QUEUE_PROGRESS_UI", "1").strip().lower()
+        if queue_ui_mode == "0":
+            if pct_changed or clamped >= 1.0:
+                self._notify_updated(job, is_progress=True)
+        else:
+            self._notify_updated(job, is_progress=True)
 
     # ── Internal scheduler ────────────────────────────────────────────────
 
@@ -819,18 +845,17 @@ class ExportQueue:
 
     # ── Notifications ─────────────────────────────────────────────────────
 
-    def _notify_updated(self, job: ExportJob) -> None:
-        """Powiadom GUI o zmianie stanu jobu (thread-safe przez Qt sygnał)."""
-        cb = self._on_job_updated_cb
-        if cb:
-            try:
-                cb(job)
-            except Exception:
-                pass
+    def _notify_updated(self, job: ExportJob, is_progress: bool = False) -> None:
+        """Powiadom GUI o zmianie stanu jobu (thread-safe przez Qt sygnał - pojedyncza ścieżka)."""
         sig = getattr(self._signals, "sig_queue_job_updated", None)
-        if sig:
+        if sig is not None:
             try:
                 sig.emit(job)
+            except Exception:
+                pass
+        elif self._on_job_updated_cb is not None:
+            try:
+                self._on_job_updated_cb(job)
             except Exception:
                 pass
 

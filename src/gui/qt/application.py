@@ -557,6 +557,221 @@ def main() -> None:
         QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
             [str(video_path)], "", str(fit_path),
         ))
+    elif "--test-amd-export" in sys.argv:
+        import argparse
+        import json
+        import time
+
+        def _get_ram_used_gb() -> float:
+            try:
+                import psutil
+                return round(psutil.virtual_memory().used / (1024**3), 2)
+            except Exception:
+                try:
+                    import ctypes
+                    class _MEM(ctypes.Structure):
+                        _fields_ = [
+                            ("dwLength", ctypes.c_ulong),
+                            ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong),
+                            ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong),
+                            ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong),
+                            ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                        ]
+                    m = _MEM()
+                    m.dwLength = ctypes.sizeof(_MEM)
+                    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+                    return round((m.ullTotalPhys - m.ullAvailPhys) / (1024**3), 2)
+                except Exception:
+                    return 0.0
+
+        parser = argparse.ArgumentParser(description="BikeRideHUD AMD Export Benchmark")
+        parser.add_argument("--test-amd-export", action="store_true")
+        parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
+        parser.add_argument("--video", default=r"C:\_DEV\BikeRideHUD-main-new\Video\DJI_20261002062647_0003_D.MP4")
+        parser.add_argument("--fit", default="")
+        parser.add_argument("--gpx", default="")
+        parser.add_argument("--bitrate", default="40M")
+        parser.add_argument("--quality", choices=["FAST", "BALANCED", "QUALITY"], default="QUALITY")
+        parser.add_argument("--codec", choices=["hevc", "h264"], default="hevc")
+        parser.add_argument("--frames", type=int, default=3000)
+        parser.add_argument("--output", default=r"scratch\amd_bench_out.mp4")
+        parser.add_argument("--result-json", default="")
+        parser.add_argument("--multi-jobs", type=int, default=1)
+        parser.add_argument("--progress-ui", default="1")
+        parser.add_argument("--restore-prefetch", default="0")
+        parser.add_argument("--preview-hud", action="store_true", default=False)
+        test_args, _ = parser.parse_known_args(sys.argv[1:])
+
+        video_path = Path(test_args.video).resolve()
+        fit_path = Path(test_args.fit).resolve() if test_args.fit else None
+        gpx_path = Path(test_args.gpx).resolve() if test_args.gpx else None
+        out_path = Path(test_args.output).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.exists():
+            try:
+                out_path.unlink()
+            except Exception:
+                pass
+
+        if test_args.frames > 0:
+            os.environ["TELEM_MAX_FRAMES"] = str(test_args.frames)
+        else:
+            os.environ.pop("TELEM_MAX_FRAMES", None)
+
+        os.environ["TELEM_QUEUE_PROGRESS_UI"] = str(test_args.progress_ui)
+        os.environ["TELEM_QUEUE_RESTORE_PREFETCH"] = str(test_args.restore_prefetch)
+        os.environ["AMD_RENDER_CHILD_PROCESS"] = "1"
+
+        t_start = [0.0]
+        t_finish = [0.0]
+        bench_result = {
+            "mode": test_args.mode,
+            "video": str(video_path),
+            "fit": str(fit_path) if fit_path else "",
+            "output": str(out_path),
+            "bitrate": test_args.bitrate,
+            "quality": test_args.quality,
+            "codec": test_args.codec,
+            "max_frames": test_args.frames,
+            "multi_jobs": test_args.multi_jobs,
+            "progress_ui": test_args.progress_ui,
+            "restore_prefetch": test_args.restore_prefetch,
+            "success": False,
+            "error": "",
+            "elapsed_s": 0.0,
+            "total_frames": 0,
+            "effective_fps": 0.0,
+            "ram_used_gb": 0.0,
+            "job_results": [],
+        }
+
+        completed_jobs = []
+
+        def _on_render_finished_bench(stats, final_path):
+            t_finish[0] = time.perf_counter()
+            elapsed = max(0.001, t_finish[0] - t_start[0])
+            frames_done = int(stats.get("frames_rendered", stats.get("total_frames", test_args.frames or 0)) if isinstance(stats, dict) else (test_args.frames or 0))
+            if frames_done <= 0:
+                frames_done = getattr(_controller, "video_frames", 0) or test_args.frames or 3000
+            eff_fps = frames_done / elapsed if elapsed > 0 else 0.0
+
+            job_stat = {
+                "final_path": str(final_path),
+                "elapsed_s": round(elapsed, 2),
+                "frames": frames_done,
+                "fps": round(eff_fps, 2),
+                "native_fps": stats.get("true_fps") or stats.get("real_export_fps") if isinstance(stats, dict) else 0.0,
+            }
+            completed_jobs.append(job_stat)
+
+            if len(completed_jobs) < test_args.multi_jobs:
+                print(f"\n[BENCH MULTI-JOB] Job {len(completed_jobs)} finished ({eff_fps:.2f} FPS). Waiting next job...", flush=True)
+                t_start[0] = time.perf_counter()
+                return
+
+            bench_result["success"] = True
+            bench_result["elapsed_s"] = round(elapsed, 2)
+            bench_result["total_frames"] = frames_done
+            bench_result["effective_fps"] = round(eff_fps, 2)
+            bench_result["ram_used_gb"] = _get_ram_used_gb()
+            bench_result["output_size_bytes"] = os.path.getsize(out_path) if out_path.exists() else 0
+            bench_result["job_results"] = completed_jobs
+            if isinstance(stats, dict):
+                bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
+
+            print(f"\n[BENCH RESULT] mode={test_args.mode} success=True frames={frames_done} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
+            for i, j_res in enumerate(completed_jobs, 1):
+                print(f"  JOB{i}_FPS={j_res['fps']:.2f} (native={j_res['native_fps']})", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            QTimer.singleShot(500, window.close)
+
+        def _on_render_error_bench(msg):
+            t_finish[0] = time.perf_counter()
+            elapsed = max(0.001, t_finish[0] - t_start[0])
+            bench_result["success"] = False
+            bench_result["error"] = str(msg)
+            bench_result["elapsed_s"] = round(elapsed, 2)
+            bench_result["ram_used_gb"] = _get_ram_used_gb()
+            print(f"\n[BENCH RESULT] mode={test_args.mode} success=False error={msg}", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            QTimer.singleShot(500, window.close)
+
+        get_signals().sig_render_finished.connect(_on_render_finished_bench)
+        get_signals().sig_error.connect(_on_render_error_bench)
+
+        def _progress_bench(done, total, elapsed, fps, hud_state):
+            if done in (100, 300, 500, 1000, 2000, 3000) or done == 0 or done % 500 == 0 or (total and done >= total):
+                print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)
+
+        get_signals().sig_render_progress.connect(_progress_bench)
+
+        def _trigger_test_export():
+            rt = window._render_tab
+            window.tabs.setCurrentWidget(rt)
+
+            rt.cmb_render_mode.setCurrentIndex(rt.cmb_render_mode.findData("gpu"))
+            rt.cmb_encoder.setCurrentText("amd")
+            idx_codec = rt.cmb_amd_codec.findData(test_args.codec)
+            if idx_codec >= 0:
+                rt.cmb_amd_codec.setCurrentIndex(idx_codec)
+            idx_q = rt.cmb_amd_quality.findData(test_args.quality)
+            if idx_q >= 0:
+                rt.cmb_amd_quality.setCurrentIndex(idx_q)
+            rt.cmb_resolution.setCurrentText("source")
+            rt.cmb_update_rate.setCurrentText("Full")
+            rt.cmb_hud_resolution.setCurrentText("Auto")
+            rt.edit_bitrate.setText(test_args.bitrate)
+            rt.chk_hud_preview.setChecked(bool(test_args.preview_hud))
+            rt.chk_compression_analysis.setChecked(False)
+            rt.edit_output.setText(str(out_path))
+            rt._user_edited_output = True
+
+            t_start[0] = time.perf_counter()
+
+            if test_args.mode == "queue":
+                # Clear any leftover jobs so only benchmark jobs execute
+                if hasattr(rt, "_export_queue") and rt._export_queue is not None:
+                    for old_j in list(rt._export_queue.get_jobs()):
+                        rt._export_queue.remove_job(old_j.job_id)
+                num_jobs = max(1, test_args.multi_jobs)
+                print(f"[BENCH] Adding {num_jobs} fresh job(s) to queue with identical settings and starting...", flush=True)
+                for j_idx in range(num_jobs):
+                    if j_idx > 0:
+                        j_out = out_path.parent / f"{out_path.stem}_job{j_idx + 1}{out_path.suffix}"
+                        rt.edit_output.setText(str(j_out))
+                    rt._on_add_to_queue()
+                rt._on_queue_start()
+            else:
+                print("[BENCH] Triggering direct render...", flush=True)
+                rt._on_render()
+
+        data_streams_ready_flag = [False]
+        get_signals().sig_data_streams_ready.connect(lambda _: data_streams_ready_flag.__setitem__(0, True))
+
+        def _poll_ready_bench():
+            btn = window._render_tab.btn_render
+            if (
+                data_streams_ready_flag[0]
+                and getattr(_controller, "video_paths", None)
+                and getattr(_controller, "video_duration_s", 0.0) > 0
+                and getattr(_controller, "layout", None)
+                and btn.isEnabled()
+            ):
+                _trigger_test_export()
+            else:
+                QTimer.singleShot(100, _poll_ready_bench)
+
+        print(f"[BENCH] Loading project: {video_path.name} (mode={test_args.mode})", flush=True)
+        QTimer.singleShot(200, lambda: get_signals().sig_files_selected.emit(
+            [str(video_path)], "", str(fit_path) if fit_path else "",
+        ))
+        QTimer.singleShot(400, _poll_ready_bench)
     elif "--test-intel-export" in sys.argv:
         import argparse
         import json

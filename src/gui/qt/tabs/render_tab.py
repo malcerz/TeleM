@@ -1066,19 +1066,27 @@ class RenderTab(QWidget):
                 ctrl._ensure_map_context()
             except Exception:
                 pass
-        if hasattr(ctrl, "_trigger_map_background_prefetch"):
+        # Section 5 & 6: Map prefetch handling on queue restore
+        # By default (TELEM_QUEUE_RESTORE_PREFETCH=0), do not trigger background prefetch
+        # when restoring a job snapshot right before immediate render dispatch.
+        should_prefetch = os.environ.get("TELEM_QUEUE_RESTORE_PREFETCH", "0").strip().lower() in ("1", "true", "yes")
+        prefetch_started = "NO"
+        if should_prefetch and hasattr(ctrl, "_trigger_map_background_prefetch"):
             try:
                 ctrl._trigger_map_background_prefetch(reason="queue_job_restore")
+                prefetch_started = "YES"
             except Exception:
                 pass
-            if job.gpx_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
-                try:
-                    ctrl.telemetry.load_gpx(
-                        ctrl.video_path, getattr(ctrl.telemetry, "start_dt_utc", None),
-                        manual_path=Path(job.gpx_path),
-                    )
-                except Exception as exc:
-                    print(f"[RenderTab] GPX load for job failed: {exc}", flush=True)
+        print(f"[QUEUE PREFETCH DIAG] QUEUE_MAP_PREFETCH_STARTED={prefetch_started}", flush=True)
+
+        if job.gpx_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
+            try:
+                ctrl.telemetry.load_gpx(
+                    ctrl.video_path, getattr(ctrl.telemetry, "start_dt_utc", None),
+                    manual_path=Path(job.gpx_path),
+                )
+            except Exception as exc:
+                print(f"[RenderTab] GPX load for job failed: {exc}", flush=True)
 
     def _start_render(self, options: dict, job: ExportJob | None = None) -> bool:
         """CANONICAL RENDER ENTRYPOINT — wspólna ścieżka uruchamiania dla kolejki i EKSPORTUJ."""
@@ -1110,6 +1118,8 @@ class RenderTab(QWidget):
             options["_queue_job_id"] = job.job_id
             options["_export_queue"] = self._export_queue
             options["output"] = job.output_path
+            from src.gui.export_queue import ExportQueue
+            ExportQueue.reset_queue_diagnostic_counters()
         else:
             self._active_queue_job_id = None
             self._current_render_queue_job_id = None
@@ -1260,7 +1270,76 @@ class RenderTab(QWidget):
 
     def _on_queue_job_updated(self, job: ExportJob) -> None:
         """GUI thread — odśwież wiersz jobu w liście kolejki."""
+        from src.gui.export_queue import ExportQueue
+        ExportQueue._queue_gui_refresh_count += 1
+
+        # Developer A/B switch: TELEM_QUEUE_PROGRESS_UI=0 suppresses UI rebuilds during active render
+        if os.environ.get("TELEM_QUEUE_PROGRESS_UI", "1").strip().lower() == "0":
+            if job.render_status in ("running", "finalizing", "preparing") and not job.is_done():
+                return
+
+        # Attempt fast in-place update first if the list structure matches
+        if self._update_queue_job_in_place(job):
+            return
+
         self._refresh_queue_ui()
+
+    def _update_queue_job_in_place(self, job: ExportJob) -> bool:
+        """In-place update of a single queue item without clearing the QListWidget."""
+        q = self._export_queue
+        if q is None:
+            return False
+        jobs = q.get_jobs()
+        if self.queue_list.count() != len(jobs):
+            return False
+
+        target_item = None
+        for i in range(self.queue_list.count()):
+            item = self.queue_list.item(i)
+            if item and item.data(Qt.UserRole) == job.job_id:
+                target_item = item
+                break
+
+        if target_item is None:
+            return False
+
+        # In-place text update
+        new_text = self._queue_job_text(job)
+        if target_item.text() != new_text:
+            target_item.setText(new_text)
+
+        # In-place color update
+        from PySide6.QtGui import QColor as _QColor
+        if job.render_status == "running":
+            target_item.setForeground(_QColor("#2e7d32"))
+        elif job.render_status in ("done",) and job.upload_status in ("idle", "done"):
+            target_item.setForeground(_QColor("#888"))
+        elif job.render_status == "error" or job.upload_status == "error":
+            target_item.setForeground(_QColor("#c62828"))
+
+        # In-place queue summary label update with light throttling
+        now = time.monotonic()
+        last_lbl_update = getattr(self, "_last_queue_lbl_update", 0.0)
+        if now - last_lbl_update >= 0.5 or job.is_done():
+            self._last_queue_lbl_update = now
+            total = len(jobs)
+            queued = sum(1 for j in jobs if j.render_status == "queued")
+            running = sum(1 for j in jobs if j.render_status == "running")
+            done = sum(1 for j in jobs if j.is_done())
+            parts = []
+            if total == 0:
+                parts.append("pusta")
+            else:
+                parts.append(f"{total} zadań")
+            if running:
+                parts.append(f"{running} renderowanie")
+            if queued:
+                parts.append(f"{queued} oczekuje")
+            if done:
+                parts.append(f"{done} ukończone")
+            self.lbl_queue_status.setText("Kolejka: " + ", ".join(parts))
+
+        return True
 
     def _toggle_job_expansion(self, job_id: str) -> None:
         """Przełącz stan zwinięcia/rozwinięcia szczegółów ukończonego joba."""
@@ -2699,6 +2778,9 @@ class RenderTab(QWidget):
                     finalization_elapsed_s=fin_s,
                     effective_fps=eff_fps,
                 )
+                from src.gui.export_queue import ExportQueue
+                print(f"[QUEUE DIAG] QUEUE_PROGRESS_UPDATE={ExportQueue.get_queue_progress_update_count()}", flush=True)
+                print(f"[QUEUE DIAG] QUEUE_GUI_REFRESH={ExportQueue.get_queue_gui_refresh_count()}", flush=True)
             self._current_render_queue_job_id = None
             if not self._rendering:
                 return

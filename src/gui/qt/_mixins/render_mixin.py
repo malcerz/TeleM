@@ -246,6 +246,10 @@ class RenderMixin:
                         input_videos=[str(p) for p in (options.get("video_paths") or getattr(self, "video_paths", []))],
                         extra=f"frame={completed}/{total}",
                     )
+                    from src.gui.map_prefetch import MapBackgroundPrefetchManager
+                    _p_mgr = MapBackgroundPrefetchManager.get_instance()
+                    prefetch_alive_first = _p_mgr.is_active() or (_p_mgr._active_job is not None and _p_mgr._active_job.is_alive())
+                    print(f"[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME={'YES' if prefetch_alive_first else 'NO'}", flush=True)
                 except Exception:
                     pass
             requested_mode = normalize_render_mode(options.get("render_mode", "gpu"))
@@ -1322,6 +1326,107 @@ codec=options.get("intel_codec", "av1"),
                 StartupTimelineTracker.get_instance().end_stage("snapshot")
             except Exception:
                 pass
+
+            import hashlib
+            import json
+
+            is_queue = bool(options.get("_queue_job_id"))
+            mode_str = "QUEUE" if is_queue else "DIRECT"
+
+            def _canonical_json(obj: Any) -> str:
+                return json.dumps(obj, sort_keys=True, default=str)
+
+            # 1. Layout hash
+            layout_dict = layout if isinstance(layout, dict) else (getattr(self, "layout", {}) or {})
+            layout_json_str = _canonical_json(layout_dict)
+            layout_sha = hashlib.sha256(layout_json_str.encode("utf-8")).hexdigest()
+
+            # 2. Resolved job options
+            job_cfg = {
+                "encoder": str(options.get("encoder", encoder)),
+                "amd_codec": str(options.get("amd_codec", getattr(self, "amd_codec", "hevc"))),
+                "amd_decode_mode": str(options.get("amd_decode_mode", getattr(self, "amd_decode_mode", "gpu"))),
+                "amd_encoder_quality": str(options.get("amd_encoder_quality", getattr(self, "amd_encoder_quality", "FAST"))),
+                "bitrate": str(video_bitrate),
+                "resolution": str(resolution),
+                "update_rate": str(options.get("update_rate", getattr(self, "update_rate", "Full"))),
+                "hud_resolution_scale": str(hud_resolution_scale),
+                "rotation": str(options.get("rotation", getattr(self, "rotation", "auto"))),
+                "compression_analysis": bool(options.get("compression_analysis", True)),
+                "preview_enabled": bool(options.get("_gui_hud_preview_checkbox", getattr(self, "_gui_hud_preview_checkbox", False))),
+                "video_paths": [str(p) for p in (options.get("video_paths") or self.video_paths or [])],
+                "fit_path": str(options.get("fit_path") or getattr(self, "fit_path", "") or ""),
+                "gpx_path": str(options.get("gpx_path") or getattr(self, "gpx_path", "") or ""),
+                "layout_sha256": layout_sha,
+            }
+            cfg_json_str = _canonical_json(job_cfg)
+            cfg_sha = hashlib.sha256(cfg_json_str.encode("utf-8")).hexdigest()
+
+            print(f"\n[AMD {mode_str} JOB CONFIG]", flush=True)
+            for k, v in job_cfg.items():
+                print(f"  {k} = {v}", flush=True)
+            print(f"{mode_str}_CONFIG_SHA256={cfg_sha}", flush=True)
+            print(f"{mode_str}_LAYOUT_SHA={layout_sha}", flush=True)
+
+            global _last_seen_amd_config
+            if "_last_seen_amd_config" in globals() and _last_seen_amd_config:
+                diffs = {k: (job_cfg.get(k), _last_seen_amd_config.get(k)) for k in job_cfg if job_cfg.get(k) != _last_seen_amd_config.get(k)}
+                print(f"CONFIG_DIFF={diffs if diffs else 'NONE (IDENTICAL)'}", flush=True)
+            _last_seen_amd_config = dict(job_cfg)
+
+            # 3. Child process kwargs hash
+            hashable_child = {}
+            for k, v in child_kwargs.items():
+                if k in ("output_file", "generation_id", "_queue_job_id", "_export_queue", "active_process_holder"):
+                    continue
+                if hasattr(v, "clips") and hasattr(v, "base_dt"):
+                    hashable_child[k] = [
+                        (str(getattr(c, "path", "")), round(float(getattr(c, "duration_s", 0.0) or 0.0), 4), round(float(getattr(c, "local_start_s", 0.0) or 0.0), 4))
+                        for c in (getattr(v, "clips", []) or [])
+                    ]
+                elif isinstance(v, (str, int, float, bool, type(None))):
+                    hashable_child[k] = v
+                elif isinstance(v, (dict, list)):
+                    try:
+                        hashable_child[k] = json.loads(_canonical_json(v))
+                    except Exception:
+                        hashable_child[k] = str(v)
+                else:
+                    hashable_child[k] = str(v)
+
+            child_hash = hashlib.sha256(_canonical_json(hashable_child).encode("utf-8")).hexdigest()
+            print(f"{mode_str}_CHILD_CONFIG_HASH={child_hash}", flush=True)
+
+            # 4. Player / preview state before spawn
+            qmedia_st = "none"
+            if hasattr(self, "media_player") and self.media_player is not None:
+                try:
+                    qmedia_st = str(self.media_player.playbackState())
+                except Exception as e:
+                    qmedia_st = f"error({e})"
+            mpv_st = "none"
+            if hasattr(self, "mpv_player") and self.mpv_player is not None:
+                try:
+                    mpv_st = f"pause={self.mpv_player.pause} core_idle={getattr(self.mpv_player, 'core_idle', None)}"
+                except Exception as e:
+                    mpv_st = f"error({e})"
+            prev_st = f"export_preview_hevc={getattr(self, '_export_preview_hevc', False)}"
+            tap_st = f"active={preview_session is not None}"
+
+            print(f"[PLAYER/PREVIEW STATE before spawn] mode={mode_str}", flush=True)
+            print(f"  QMediaPlayer: {qmedia_st}", flush=True)
+            print(f"  MPV: {mpv_st}", flush=True)
+            print(f"  Export Preview: {prev_st}", flush=True)
+            print(f"  AMD Frame Tap: {tap_st}", flush=True)
+
+            # 5. Map prefetch alive at spawn check
+            try:
+                from src.gui.map_prefetch import MapBackgroundPrefetchManager
+                _p_mgr = MapBackgroundPrefetchManager.get_instance()
+                pref_alive = _p_mgr.is_active() or (_p_mgr._active_job is not None and _p_mgr._active_job.is_alive())
+            except Exception:
+                pref_alive = False
+            print(f"[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_CHILD_SPAWN={'YES' if pref_alive else 'NO'}", flush=True)
             child_res = run_amd_render_child(
                 render_kwargs=child_kwargs,
                 preview_config=options.get("_amd_export_preview_config"),
@@ -1377,6 +1482,19 @@ codec=options.get("intel_codec", "av1"),
                 stats["avg_qp"] = enc_info.get("qp_avg")
                 stats["encoder_stats"] = enc_info
                 stats["profile"] = prof_data
+
+                timings = prof_data.get("timings", {})
+                print(f"\n[AMD {mode_str} STAGE TIMINGS]", flush=True)
+                for s_name in (
+                    "producer_prepare", "queue_wait", "decode", "VP_Blt",
+                    "HUD_upload", "GPU_copy", "AMF_submit", "AMF_query", "frame_total",
+                ):
+                    s_data = timings.get(s_name, {})
+                    avg_v = s_data.get("avg_ms", 0.0) if isinstance(s_data, dict) else 0.0
+                    med_v = s_data.get("median_ms", 0.0) if isinstance(s_data, dict) else 0.0
+                    print(f"  {s_name:20s}: avg={avg_v:6.3f} ms | median={med_v:6.3f} ms", flush=True)
+                native_fps = float(prof_data.get("true_fps") or eff_fps or rend_fps or 0.0)
+                print(f"{mode_str}_NATIVE_FPS={native_fps:.2f}", flush=True)
 
             return stats
         else:

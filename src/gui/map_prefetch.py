@@ -373,21 +373,37 @@ class MapBackgroundPrefetchManager:
                 self._active_job = None
             self._is_active = False
 
-    def pause_or_cancel_for_render(self) -> dict[str, Any]:
+    def pause_or_cancel_for_render(self, timeout: float = 2.0) -> dict[str, Any]:
         """Cancel background prefetch gracefully prior to render to ensure 0 duplicate downloads."""
         with self._job_lock:
             active_before = (self._active_job is not None and self._active_job.is_alive())
+            job_to_join = None
             if active_before:
                 self._active_job.cancel()
+                job_to_join = self._active_job
                 self._active_job = None
             self._is_active = False
-            return {
-                "active_before": active_before,
-                "required": self._required_tiles,
-                "cached": self._cached_tiles,
-                "missing": self._missing_tiles,
-                "generation": self._current_generation,
-            }
+
+        alive_after = False
+        if job_to_join is not None:
+            job_to_join.join(timeout=timeout)
+            alive_after = job_to_join.is_alive()
+            if alive_after:
+                print(f"[MapPrefetch] WARNING: active prefetch job still alive after {timeout}s join!", flush=True)
+
+        return {
+            "active_before": active_before,
+            "alive_after": alive_after,
+            "required": self._required_tiles,
+            "cached": self._cached_tiles,
+            "missing": self._missing_tiles,
+            "generation": self._current_generation,
+        }
+
+    def is_active(self) -> bool:
+        """Return whether background prefetch is currently running."""
+        with self._job_lock:
+            return bool(self._is_active or (self._active_job is not None and self._active_job.is_alive()))
 
     def _update_status(self, text: str) -> None:
         self._status_text = text
