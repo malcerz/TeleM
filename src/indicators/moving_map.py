@@ -521,8 +521,8 @@ def _render_moving_map_indicator(
 ):
     """Render a moving-map indicator.
 
-    ``async_map=True`` (GUI preview) never blocks: the prepared MapContext
-    overview is shown immediately and detail tiles load in the background.
+    ``async_map=True`` always draws the viewport, route and marker from cache;
+    missing tiles load through one deduplicated background worker.
     ``async_map=False`` (final render / AMD helpers) keeps the original
     synchronous behaviour unchanged.
     """
@@ -530,11 +530,6 @@ def _render_moving_map_indicator(
         return None, 0, 0, None
     try:
         from src.moving_map import MovingMapRenderer
-        from src.indicators.map_prepare import (
-            get_current_map_context,
-            render_map_placeholder,
-            render_overview_map,
-        )
 
         track_id = id(gps_track)
         zoom = int(cfg.get("zoom", 16))
@@ -571,7 +566,7 @@ def _render_moving_map_indicator(
                 return c_img, cx, cy, cextra
 
         # ETAP 3B GPU Map Prototype Bypass: CPU leaves map area transparent
-        if os.environ.get("TELEM_INTEL_GPU_MAP") == "1":
+        if not async_map and os.environ.get("TELEM_INTEL_GPU_MAP") == "1":
             pos_x = s(cfg["x"], canvas_w)
             pos_y = s(cfg["y"], canvas_h)
             blank_map = Image.new("RGBA", (map_w, map_h), (0, 0, 0, 0))
@@ -583,15 +578,7 @@ def _render_moving_map_indicator(
         if async_map:
             # ── Async path (GUI preview) — never blocks ───────────────────
             ts = _sync_map_ts(gps_track, target_dt, current_position)
-            ctx = get_current_map_context()
             _pos_xy = s(cfg["x"], canvas_w), s(cfg["y"], canvas_h)
-
-            def _placeholder(progress=None, loaded=None, required=None, error=None, label="Ładowanie mapy…"):
-                ph = render_map_placeholder(
-                    map_w, map_h, progress=progress,
-                    loaded=loaded, required=required, error=error, label=label,
-                )
-                return (ph, _pos_xy[0], _pos_xy[1], None)
 
             # Local Cache First: build/get renderer and check if local cache already has tiles
             if cache_key not in _cache:
@@ -627,19 +614,33 @@ def _render_moving_map_indicator(
                 renderer._track_outline_w = track_outline_w
                 renderer._track_outline_color = track_outline_color
 
-            coverage = renderer.viewport_tile_coverage(ts, working_size, working_size)
+            from src.moving_map import track_up_working_size, TileCache
+            prefetch_size = (
+                track_up_working_size(working_size)
+                if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
+                else working_size
+            )
+            coverage = renderer.viewport_tile_coverage(ts, prefetch_size, prefetch_size)
             draw_track = not bool(cfg.get("hide_track", False))
             draw_marker = not bool(cfg.get("hide_marker", False))
 
             # Non-blocking background precache for missing tiles
+            from src.gui.map_viewport_prefetch import preview_viewport_prefetch
             if coverage < 1.0:
                 def _detail_fill():
                     try:
-                        renderer.viewport_precache(ts, working_size, working_size, max_tiles=25)
+                        renderer.viewport_precache(ts, prefetch_size, prefetch_size, max_tiles=25)
                     except Exception:
                         pass
-                import threading as _th
-                _th.Thread(target=_detail_fill, daemon=True).start()
+                viewport_key = (cache_key, renderer._viewport_range(ts, prefetch_size, prefetch_size))
+                preview_viewport_prefetch.schedule(viewport_key, _detail_fill)
+
+            # A completed tile job invalidates the assembled preview grid, so
+            # newly downloaded tiles appear even while paused at the same point.
+            revision = (preview_viewport_prefetch.revision, TileCache.content_revision())
+            if getattr(renderer, "_preview_tiles_revision", None) != revision:
+                renderer._grid_cache_key = None
+                renderer._preview_tiles_revision = revision
 
             # Always render the moving map (parity with final render: cached tiles
             # appear immediately, uncached areas stay neutral grey, route and position

@@ -201,6 +201,7 @@ class AppSignals(QObject):
 
     # Zdalna telemetria: wybór kandydata w wątku GUI
     sig_remote_activity_selection_request = Signal(object)
+    sig_remote_telemetry_status = Signal(object)
 
 
 class RemoteActivitySelectionRequest:

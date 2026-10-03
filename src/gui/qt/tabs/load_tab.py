@@ -422,6 +422,13 @@ class LoadTab(QWidget):
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
         self.btn_telemetry.clicked.connect(self._select_telemetry)
         form_sources.addRow("FIT / GPX:", self.btn_telemetry)
+        self.lbl_remote_status = QLabel(
+            "Automatyczne wyszukiwanie Garmin/Strava rozpoczyna się po kliknięciu „Wczytaj”. "
+            "Źródło wybierzesz w Ustawieniach."
+        )
+        self.lbl_remote_status.setTextFormat(Qt.PlainText)
+        self.lbl_remote_status.setWordWrap(True)
+        form_sources.addRow("Telemetria:", self.lbl_remote_status)
 
         left_box.addWidget(group_sources)
 
@@ -577,6 +584,8 @@ class LoadTab(QWidget):
         )
         if paths:
             self._video_paths = paths
+            self.lbl_remote_status.setText("Kliknij „Wczytaj”, aby wczytać film i wyszukać telemetrię z wybranego źródła.")
+            self.lbl_remote_status.setToolTip("")
             self.btn_mp4.setText("; ".join(paths))
             self.btn_mp4.setStyleSheet(self._selected_style)
             self._rebuild_cards(paths)
@@ -591,6 +600,8 @@ class LoadTab(QWidget):
             "Pliki telemetryczne (*.fit *.FIT *.gpx *.GPX);;FIT (*.fit *.FIT);;GPX (*.gpx *.GPX)",
         )
         if path:
+            self.lbl_remote_status.setText("Wybrany FIT/GPX ma pierwszeństwo przed wyszukiwaniem Garmin/Strava.")
+            self.lbl_remote_status.setToolTip(path)
             self._user_selected_telemetry = True
             ext = path.lower()
             if ext.endswith(".fit"):
@@ -717,6 +728,8 @@ class LoadTab(QWidget):
             return
 
         self._start_loading()
+        if not self._fit_path and not self._gpx_path:
+            self.lbl_remote_status.setText("Wczytywanie filmu i ustalanie czasu dla wyszukiwania telemetrii…")
         self.signals.sig_files_selected.emit(
             list(self._video_paths), self._gpx_path, self._fit_path,
         )
@@ -745,6 +758,11 @@ class LoadTab(QWidget):
             self._finish_loading_success()
 
     def _finish_loading_success(self) -> None:
+        if self.lbl_remote_status.text().startswith("Wczytywanie filmu i ustalanie czasu"):
+            self.lbl_remote_status.setText(
+                "Nie uzyskano wyniku automatycznego wyszukiwania. "
+                "Sprawdź źródło w Ustawieniach lub wybierz FIT/GPX ręcznie."
+            )
         self._loading = False
         self._load_target = 100.0
         self.lbl_load_status.setText("Gotowe")
@@ -787,6 +805,8 @@ class LoadTab(QWidget):
         self.signals.sig_preview_accel_changed.emit(vendor or "auto")
 
     def _on_clear(self) -> None:
+        self.lbl_remote_status.setText("Automatyczne wyszukiwanie rozpoczyna się po kliknięciu „Wczytaj”. Źródło: Ustawienia.")
+        self.lbl_remote_status.setToolTip("")
         self.btn_mp4.setText("Wybierz plik(i) MP4...")
         self.btn_mp4.setStyleSheet(self._placeholder_style)
         self.btn_telemetry.setText("Wybierz FIT/GPX (opcjonalnie)...")
@@ -811,6 +831,7 @@ class LoadTab(QWidget):
     # ═════════════════════════════════════════════════════════════════════
 
     def _connect_local_signals(self) -> None:
+        self.signals.sig_remote_telemetry_status.connect(self._on_remote_telemetry_status)
         self.sig_file_info_ready.connect(self._on_file_info_ready)
         self.sig_file_info_error.connect(self._on_file_info_error)
         self.sig_card_info_ready.connect(self._on_card_info_ready)
@@ -821,6 +842,16 @@ class LoadTab(QWidget):
         self.sig_autofit_matched.connect(self._on_autofit_matched)
         self.signals.sig_progress.connect(self._on_load_progress)
         self.signals.sig_error.connect(self._on_load_error)
+
+    def _on_remote_telemetry_status(self, payload: dict) -> None:
+        # A worker for an older video must never replace the current video's status.
+        normalize = lambda paths: [os.path.normcase(os.path.abspath(str(p))) for p in paths]
+        if normalize(payload.get("video_paths", [])) != normalize(self._video_paths):
+            return
+        if self._user_selected_telemetry:
+            return
+        self.lbl_remote_status.setText(payload.get("message", ""))
+        self.lbl_remote_status.setToolTip(str(payload.get("path") or ""))
 
     def _start_info_inspection(self) -> None:
         """Kompatybilność z istniejącym API — inspekcja wczytanych plików MP4."""

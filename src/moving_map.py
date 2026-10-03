@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import sqlite3
 import threading
 import time
@@ -279,6 +280,12 @@ class TileCache:
     _mem_order: list = []
     _max_mem = 256               # max tiles kept in RAM
     _lock = threading.Lock()
+    _content_revision = 0
+
+    @classmethod
+    def content_revision(cls):
+        with cls._lock:
+            return cls._content_revision
 
     def __init__(self, cache_dir: Path | None = None):
         d = cache_dir or Path.home() / ".telem_map_tiles"
@@ -352,7 +359,7 @@ class TileCache:
         key = (z, x, y, style)
         try:
             img = Image.open(io.BytesIO(data)).convert("RGBA")
-            self._put_mem(key, img)
+            self._put_mem(key, img, content_changed=True)
         except Exception: return
         try:
             with sqlite3.connect(str(self._db)) as c:
@@ -360,8 +367,10 @@ class TileCache:
                           (z, x, y, style, data)); c.commit()
         except Exception: pass
 
-    def _put_mem(self, key, img):
+    def _put_mem(self, key, img, content_changed=False):
         with self._lock:
+            if content_changed:
+                type(self)._content_revision += 1
             self._mem[key] = img; self._mem_order.append(key)
             while len(self._mem_order) > self._max_mem:
                 old = self._mem_order.pop(0)

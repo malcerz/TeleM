@@ -4,7 +4,9 @@
     "text_outline": 3,
     "amd_decode_mode": "gpu",
     "amd_encoder_quality": "FAST",
-    "font": "Digital-7 Mono"
+    "font": "Digital-7 Mono",
+    "amd_codec": "hevc",
+    "render_mode": "gpu"
   },
   "charts_skip_pauses": true,
   "custom_texts": [],
@@ -1121,5 +1123,8 @@
     "method": "moving_average",
     "strength": 3
   },
-  "_startup_preset": ""
+  "_startup_preset": "",
+  "integrations": {
+    "auto_activity_source": "garmin"
+  }
 }

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import threading
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
@@ -24,9 +24,11 @@ class SettingsTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.signals = get_signals()
-        self.base_dir = Path(__file__).resolve().parent.parent.parent.parent
+        self.base_dir = Path(__file__).resolve().parents[4]
         self._render_job_active = False
         self._analysis_active = False
+        self._garmin_dialog = None
+        self._garmin_busy = False
         self.sig_garmin_status.connect(self._update_garmin_status)
         self.sig_strava_status.connect(self._update_strava_status)
         self._build_ui()
@@ -202,24 +204,19 @@ class SettingsTab(QWidget):
         garmin_layout.setContentsMargins(0, 4, 0, 4)
         garmin_layout.setSpacing(8)
 
-        self.edit_garmin_user = QLineEdit("")
-        self.edit_garmin_user.setMinimumHeight(28)
-        self.edit_garmin_user.setPlaceholderText("np. user@example.com")
-        self.edit_garmin_user.textChanged.connect(self._on_garmin_user_changed)
-        garmin_layout.addRow("Login / e-mail:", self.edit_garmin_user)
-
-        self.edit_garmin_pass = QLineEdit("")
-        self.edit_garmin_pass.setMinimumHeight(28)
-        self.edit_garmin_pass.setEchoMode(QLineEdit.Password)
-        self.edit_garmin_pass.setPlaceholderText("(wprowadź hasło)")
-        self.edit_garmin_pass.textChanged.connect(self._on_garmin_pass_changed)
-        garmin_layout.addRow("Hasło:", self.edit_garmin_pass)
-
         row_garmin_btn = QHBoxLayout()
-        self.btn_garmin_test = QPushButton("Zaloguj / Sprawdź połączenie")
+        self.btn_garmin_connect = QPushButton("Połącz z Garmin Connect")
+        self.btn_garmin_connect.setMinimumHeight(28)
+        self.btn_garmin_connect.clicked.connect(self._on_garmin_connect_clicked)
+        row_garmin_btn.addWidget(self.btn_garmin_connect)
+        self.btn_garmin_test = QPushButton("Sprawdź połączenie")
         self.btn_garmin_test.setMinimumHeight(28)
         self.btn_garmin_test.clicked.connect(self._on_garmin_test_clicked)
         row_garmin_btn.addWidget(self.btn_garmin_test)
+        self.btn_garmin_disconnect = QPushButton("Rozłącz")
+        self.btn_garmin_disconnect.setMinimumHeight(28)
+        self.btn_garmin_disconnect.clicked.connect(self._on_garmin_disconnect_clicked)
+        row_garmin_btn.addWidget(self.btn_garmin_disconnect)
         self.lbl_garmin_status = QLabel("Status: Niepołączono")
         self.lbl_garmin_status.setStyleSheet("color: #888888;")
         row_garmin_btn.addWidget(self.lbl_garmin_status, 1)
@@ -276,36 +273,65 @@ class SettingsTab(QWidget):
         self.strava_container.setVisible(source == "strava")
         self.signals.sig_settings_changed.emit("auto_activity_source", source)
 
-    def _on_garmin_user_changed(self, text: str) -> None:
-        self.signals.sig_settings_changed.emit("garmin_username", text.strip())
+    def _set_garmin_busy(self, busy: bool) -> None:
+        self._garmin_busy = busy
+        for button in (self.btn_garmin_connect, self.btn_garmin_test, self.btn_garmin_disconnect):
+            button.setEnabled(not busy)
 
-    def _on_garmin_pass_changed(self, text: str) -> None:
-        if text:
-            from src.integrations import credential_store
-            credential_store.save_garmin_password(text, username=self.edit_garmin_user.text().strip())
+    def _on_garmin_connect_clicked(self) -> None:
+        if self._garmin_busy:
+            return
+        try:
+            from src.gui.qt.garmin_login import GarminLoginDialog
+        except ImportError:
+            self._update_garmin_status("Status: Brak Qt WebEngine. Zainstaluj pełny pakiet PySide6.", "#ff5555")
+            return
+        self._set_garmin_busy(True)
+        self.lbl_garmin_status.setText("Status: Oczekiwanie na logowanie na stronie Garmin…")
+        self.lbl_garmin_status.setStyleSheet("color: #ffa500;")
+        self._garmin_dialog = GarminLoginDialog(self)
+        self._garmin_dialog.auth_finished.connect(self._on_garmin_auth_finished)
+        self._garmin_dialog.show()
+
+    def _on_garmin_auth_finished(self, ok: bool, message: str) -> None:
+        text = "Status: Połączono z Garmin Connect" if ok else f"Status: {message}"
+        if ok and message != "Garmin Connect":
+            text += f" — {message}"
+        self._update_garmin_status(text, "#44ff44" if ok else "#ff5555")
+
+    def _on_garmin_disconnect_clicked(self) -> None:
+        if self._garmin_busy:
+            return
+        self._set_garmin_busy(True)
+        threading.Thread(target=self._bg_disconnect_garmin, daemon=True).start()
+
+    def _bg_disconnect_garmin(self) -> None:
+        from src.integrations.garmin_auth import GarminAuthClient, GarminAuthError
+        try:
+            GarminAuthClient().logout()
+            self.sig_garmin_status.emit("Status: Niepołączono", "#888888")
+        except GarminAuthError as exc:
+            self.sig_garmin_status.emit(f"Status: {exc}", "#ff5555")
 
     def _on_garmin_test_clicked(self) -> None:
-        self.btn_garmin_test.setEnabled(False)
-        self.lbl_garmin_status.setText("Logowanie i sprawdzanie połączenia...")
+        if self._garmin_busy:
+            return
+        self._set_garmin_busy(True)
+        self.lbl_garmin_status.setText("Status: Sprawdzanie zapisanej sesji...")
         self.lbl_garmin_status.setStyleSheet("color: #ffa500;")
         threading.Thread(target=self._bg_test_garmin, daemon=True).start()
 
     def _bg_test_garmin(self) -> None:
-        from src.integrations import credential_store
         from src.integrations.garmin_connect import GarminProvider
-        user = self.edit_garmin_user.text().strip()
-        pwd = self.edit_garmin_pass.text()
-        if pwd:
-            credential_store.save_garmin_password(pwd, username=user)
-        provider = GarminProvider(username=user)
+        provider = GarminProvider()
         ok, msg = provider.test_connection()
         if ok:
-            self.sig_garmin_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
+            self.sig_garmin_status.emit(f"Status: Połączono z Garmin Connect — {msg}", "#44ff44")
         else:
             self.sig_garmin_status.emit(f"Status: {msg}", "#ff5555")
 
     def _update_garmin_status(self, text: str, color: str) -> None:
-        self.btn_garmin_test.setEnabled(True)
+        self._set_garmin_busy(False)
         self.lbl_garmin_status.setText(text)
         self.lbl_garmin_status.setStyleSheet(f"color: {color};")
 
@@ -373,18 +399,13 @@ class SettingsTab(QWidget):
         else:
             self.cmb_auto_source.setCurrentIndex(0)
 
-        garmin_user = integrations.get("garmin_username", "")
-        self.edit_garmin_user.setText(garmin_user)
-
         strava_cid = integrations.get("strava_client_id", "")
         self.edit_strava_client_id.setText(strava_cid)
 
         from src.integrations import credential_store
-        garmin_pass = credential_store.get_garmin_password()
-        garmin_session = credential_store.get_garmin_session()
-        if garmin_pass or garmin_session:
-            self.edit_garmin_pass.setPlaceholderText("(hasło zapisane w bezpiecznym magazynie)")
-            self.lbl_garmin_status.setText("Status: Skonfigurowano")
+        garmin_tokens = credential_store.get_garmin_tokens()
+        if garmin_tokens:
+            self.lbl_garmin_status.setText("Status: Sesja zapisana")
             self.lbl_garmin_status.setStyleSheet("color: #aaffaa;")
 
         strava_tokens = credential_store.get_strava_tokens()
@@ -398,6 +419,13 @@ class SettingsTab(QWidget):
             self.lbl_strava_status.setStyleSheet("color: #aaffaa;")
 
         self._on_auto_source_changed(self.cmb_auto_source.currentIndex())
+        # Restore/refresh only the selected provider; NONE makes zero requests.
+        if auto_source == "garmin" and garmin_tokens:
+            QTimer.singleShot(0, self._restore_garmin_if_selected)
+
+    def _restore_garmin_if_selected(self) -> None:
+        if self.cmb_auto_source.currentData() == "garmin":
+            self._on_garmin_test_clicked()
 
     def _browse_dir(self, target: QLineEdit) -> None:
         path = QFileDialog.getExistingDirectory(self, "Wybierz katalog")

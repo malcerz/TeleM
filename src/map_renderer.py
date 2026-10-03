@@ -163,6 +163,8 @@ def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, downlo
 
 # Cache: (zoom, tx1, tx2, ty1, ty2, style) -> (stitched_img, scale, draw_w, draw_h, off_x, off_y)
 _TILE_CACHE: dict[str, tuple] = {}
+_PREVIEW_TILE_CACHE: dict[str, tuple] = {}
+_PREVIEW_TILE_REVISION = None
 
 # Cache: (zoom, track_fingerprint) -> (abs_tx_list, abs_ty_list)  — no trig per frame
 _TRACK_CACHE: dict[str, tuple] = {}
@@ -274,6 +276,7 @@ def render_map_overlay(
     track_antialiasing: int = 1,
     track_outline_width: int = 0,
     track_outline_color: tuple[int, int, int, int] = (0, 0, 0, 220),
+    preview_only: bool = False,
 ) -> Image.Image:
     """Render a map with GPS track and current-position marker.
 
@@ -306,6 +309,9 @@ def render_map_overlay(
     ci = max(0, min(len(gps_track) - 1, current_index))
     _, center_lat, center_lon = gps_track[ci]
 
+    if preview_only:
+        margin = min(margin, max(0, (min(width, height) - 1) // 2))
+
     # ── Determine tile range centred on current position ─────────────────
     target_w = width - 2 * margin
     target_h = height - 2 * margin
@@ -331,7 +337,17 @@ def render_map_overlay(
 
     # ── Check tile cache ─────────────────────────────────────────────────
     tkey = _tile_cache_key(zoom, tx1, tx2, ty1, ty2, map_style)
-    cached_base = _TILE_CACHE.get(tkey)
+    tile_cache = _TILE_CACHE
+    if preview_only:
+        from src.gui.map_viewport_prefetch import preview_viewport_prefetch
+        from src.moving_map import TileCache
+        global _PREVIEW_TILE_REVISION
+        revision = (preview_viewport_prefetch.revision, TileCache.content_revision())
+        if _PREVIEW_TILE_REVISION != revision:
+            _PREVIEW_TILE_CACHE.clear()
+            _PREVIEW_TILE_REVISION = revision
+        tile_cache = _PREVIEW_TILE_CACHE
+    cached_base = tile_cache.get(tkey)
     if cached_base is not None:
         tile_base_img, scale, draw_w, draw_h, off_x, off_y = cached_base
     else:
@@ -343,7 +359,7 @@ def render_map_overlay(
                 if tile is not None:
                     tile_images[(tx, ty)] = tile
 
-        if not tile_images:
+        if not tile_images and not preview_only:
             return _placeholder(width, height, "Nie można pobrać mapy")
 
         # ── Stitch tiles ─────────────────────────────────────────────────
@@ -351,7 +367,7 @@ def render_map_overlay(
         rows = ty2 - ty1 + 1
         map_w = cols * TILE_SIZE
         map_h = rows * TILE_SIZE
-        tile_base_img = Image.new("RGBA", (map_w, map_h), (0, 0, 0, 0))
+        tile_base_img = Image.new("RGBA", (map_w, map_h), (30, 30, 30, 255) if preview_only else (0, 0, 0, 0))
 
         for (tx, ty), tile in tile_images.items():
             px = (tx - tx1) * TILE_SIZE
@@ -366,7 +382,9 @@ def render_map_overlay(
         off_x = (width - draw_w) // 2
         off_y = (height - draw_h) // 2
 
-        _TILE_CACHE[tkey] = (tile_base_img, scale, draw_w, draw_h, off_x, off_y)
+        if preview_only and len(tile_cache) >= 64:
+            tile_cache.clear()
+        tile_cache[tkey] = (tile_base_img, scale, draw_w, draw_h, off_x, off_y)
 
     # ── Output canvas ───────────────────────────────────────────────────
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))

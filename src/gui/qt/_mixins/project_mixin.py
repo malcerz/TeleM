@@ -535,6 +535,7 @@ class ProjectMixin:
         if hasattr(self, "_load_cancel_event") and self._load_cancel_event is not None:
             self._load_cancel_event.set()
         self._load_cancel_event = threading.Event()
+        load_cancel_event = self._load_cancel_event
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
 
         def bg_load() -> None:
@@ -543,6 +544,19 @@ class ProjectMixin:
                 effective_gpx_path = gpx_path
                 candidate_video_paths = [Path(p) for p in video_paths]
                 candidate_video_path = candidate_video_paths[0]
+                remote_status_path = None
+
+                def on_remote_status(stage, message, path=None):
+                    nonlocal remote_status_path
+                    if load_cancel_event.is_set():
+                        return
+                    if path is not None:
+                        remote_status_path = Path(path)
+                    self.signals.sig_remote_telemetry_status.emit({
+                        "video_paths": [str(p) for p in candidate_video_paths],
+                        "stage": stage, "message": message,
+                        "path": str(path) if path is not None else "",
+                    })
 
                 # Wykryj narzędzia
                 ffprobe_exe = find_executable(
@@ -631,6 +645,7 @@ class ProjectMixin:
                                 config=integrations_cfg,
                                 on_progress=on_progress_cb,
                                 on_select_activity=on_select_cb,
+                                on_status=on_remote_status,
                             )
                             if remote_file and remote_file.exists():
                                 if remote_file.suffix.lower() == ".fit":
@@ -895,6 +910,7 @@ class ProjectMixin:
                                 video_gps_point=(self.telemetry.gps_track[0][1], self.telemetry.gps_track[0][2]) if getattr(self.telemetry, "gps_track", None) else None,
                                 on_progress=on_progress_cb,
                                 on_select_activity=on_select_cb,
+                                on_status=on_remote_status,
                             )
                             if remote_file and remote_file.exists():
                                 if remote_file.suffix.lower() == ".fit":
@@ -913,6 +929,10 @@ class ProjectMixin:
                     )
                     if gpx_loaded:
                         self.gpx_path = Path(effective_gpx_path)
+                        if remote_status_path == self.gpx_path:
+                            on_remote_status("loaded", f"Wczytano automatycznie GPX: {self.gpx_path.name}", self.gpx_path)
+                    elif remote_status_path == Path(effective_gpx_path):
+                        on_remote_status("error", "Pobrano GPX, ale nie udało się wczytać telemetrii.", remote_status_path)
 
                 # Wczytaj FIT (jeśli podano) — reuse the preparsed records
                 if effective_fit_path and _FIT_AVAILABLE:
@@ -923,6 +943,10 @@ class ProjectMixin:
                     )
                     if fit_loaded:
                         self.fit_path = Path(effective_fit_path)
+                        if remote_status_path == self.fit_path:
+                            on_remote_status("loaded", f"Wczytano automatycznie FIT: {self.fit_path.name}", self.fit_path)
+                    elif remote_status_path == Path(effective_fit_path):
+                        on_remote_status("error", "Pobrano FIT, ale nie udało się wczytać telemetrii.", remote_status_path)
 
                 # ── Multi-file timeline (ETAP MULTIFILE) ──────────────────
                 # Build the per-clip model + global timeline now that

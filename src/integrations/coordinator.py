@@ -23,6 +23,7 @@ def resolve_remote_activity(
     on_progress: Optional[Callable[[str], None]] = None,
     on_select_activity: Optional[Callable[[list[tuple[ActivityCandidate, float]]], Optional[ActivityCandidate]]] = None,
     provider_override: Optional[ActivityProvider] = None,
+    on_status: Optional[Callable[[str, str, Optional[Path]], None]] = None,
 ) -> Optional[Path]:
     """Resolve and download remote telemetry matching the video timeline.
 
@@ -33,6 +34,12 @@ def resolve_remote_activity(
     - User cancelled ambiguous candidate selection
     """
     source = str(config.get("auto_activity_source", "none") or "none").lower()
+    label = "Garmin Connect" if source == "garmin" else "Strava"
+
+    def status(stage: str, message: str, path: Optional[Path] = None) -> None:
+        if on_status:
+            on_status(stage, message, path)
+
     if source in ("none", "", "nic"):
         return None
 
@@ -45,6 +52,7 @@ def resolve_remote_activity(
             f"activity_id={act_id} path={path.name}",
             flush=True,
         )
+        status("cached", f"{label}: użyto zapisanej telemetrii — {path.name}", path)
         return path
 
     print(
@@ -58,15 +66,12 @@ def resolve_remote_activity(
     if provider_override is not None:
         provider = provider_override
     elif source == "garmin":
-        username = config.get("garmin_username", "")
-        if not username:
-            print("[REMOTE ACTIVITY] Brak loginu Garmin Connect w konfiguracji.", flush=True)
-            return None
-        provider = GarminProvider(username=username)
+        provider = GarminProvider()
     elif source == "strava":
         client_id = config.get("strava_client_id", "")
         if not client_id:
             print("[REMOTE ACTIVITY] Brak Client ID Strava w konfiguracji.", flush=True)
+            status("error", "Strava: brak Client ID w Ustawieniach.")
             return None
         provider = StravaProvider(client_id=client_id)
     else:
@@ -77,11 +82,13 @@ def resolve_remote_activity(
     window_end = project_end_dt + timedelta(hours=2)
 
     try:
+        status("searching", f"{label}: szukanie aktywności pasującej do czasu filmu…")
         if on_progress:
             on_progress(f"Szukanie aktywności {source.capitalize()}...")
 
         candidates = provider.list_activities(window_start, window_end)
         if not candidates:
+            status("no_match", f"{label}: nie znaleziono aktywności w czasie filmu (±2 godziny).")
             print(f"[REMOTE ACTIVITY] provider={source} brak aktywności w oknie czasowym", flush=True)
             return None
 
@@ -94,6 +101,7 @@ def resolve_remote_activity(
         )
 
         if not ranked:
+            status("no_match", f"{label}: brak pasującej aktywności.")
             return None
 
         best_cand, best_score = ranked[0]
@@ -107,6 +115,7 @@ def resolve_remote_activity(
             )
             selected_candidate = best_cand
         elif decision == "NEEDS_SELECTION":
+            status("selection", f"{label}: wybierz pasującą aktywność w oknie wyboru.")
             print(
                 f"[REMOTE ACTIVITY] provider={source} activity_id={best_cand.activity_id} "
                 f"match_score={best_score:.2f} decision=NEEDS_SELECTION (kandydatów: {len(ranked)})",
@@ -115,6 +124,7 @@ def resolve_remote_activity(
             if on_select_activity is not None:
                 selected_candidate = on_select_activity(ranked)
                 if selected_candidate is None:
+                    status("cancelled", f"{label}: pominięto wybór aktywności.")
                     print("[REMOTE ACTIVITY] Użytkownik pominął wybór aktywności.", flush=True)
                     return None
             else:
@@ -122,8 +132,10 @@ def resolve_remote_activity(
                 if best_score >= 0.70:
                     selected_candidate = best_cand
                 else:
+                    status("no_match", f"{label}: brak pewnego dopasowania aktywności.")
                     return None
         else:
+            status("no_match", f"{label}: brak pasującej aktywności. Możesz wskazać FIT/GPX ręcznie.")
             print(
                 f"[REMOTE ACTIVITY] provider={source} brak pasującej aktywności (najlepszy score: {best_score:.2f})",
                 flush=True,
@@ -134,6 +146,7 @@ def resolve_remote_activity(
             return None
 
         # 5. Download telemetry
+        status("downloading", f"{label}: znaleziono aktywność; pobieranie telemetrii…")
         if on_progress:
             on_progress(f"Pobieranie telemetrii {source.capitalize()} ({selected_candidate.activity_id})...")
 
@@ -155,8 +168,10 @@ def resolve_remote_activity(
             },
         )
 
+        status("downloaded", f"{label}: pobrano {downloaded_file.name}; wczytywanie telemetrii…", downloaded_file)
         return downloaded_file
 
     except Exception as exc:
+        status("error", f"{label}: nie udało się pobrać telemetrii. Sprawdź połączenie i logowanie w Ustawieniach.")
         print(f"[REMOTE ACTIVITY] Błąd pobierania zdalnej telemetrii (offline / błąd API): {exc}", flush=True)
         return None

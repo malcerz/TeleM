@@ -452,11 +452,14 @@ def test_k_settings_tab_ui_toggle():
 )
 def test_real_garmin_connection_opt_in():
     from src.integrations.garmin_connect import GarminProvider
-    username = os.environ.get("GARMIN_TEST_USERNAME", "")
-    assert username, "GARMIN_TEST_USERNAME must be set for real test"
-    provider = GarminProvider(username=username)
-    ok, msg = provider.test_connection()
-    assert ok, f"Real Garmin connection failed: {msg}"
+    # Use a real browser-authorized Credential Manager session. The autouse
+    # fixture remains in mock mode before/after this test, protecting accounts.
+    credential_store.set_mock_mode(False)
+    try:
+        ok, msg = GarminProvider().test_connection()
+        assert ok, f"Real Garmin connection failed: {msg}"
+    finally:
+        credential_store.set_mock_mode(True)
 
 
 @pytest.mark.skipif(

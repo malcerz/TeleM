@@ -65,20 +65,15 @@ def _render_static_map_indicator(
 ):
     """Render a static-map indicator.
 
-    ``async_map=True`` (GUI preview) never blocks: the prepared MapContext
-    overview is shown immediately (Level 1) and detail tiles load in the
-    background.  ``async_map=False`` keeps the original sync behaviour.
+    ``async_map=True`` draws cached tiles or a neutral background with route
+    and marker; detail tiles load in one deduplicated background worker.
+    ``async_map=False`` keeps the original behaviour.
     """
     del map_heading  # static_map is position-following, heading is unused
     if not gps_track or len(gps_track) < 2:
         return None, 0, 0, None
     try:
         from src.map_renderer import render_map_overlay, precache_map_tiles
-        from src.indicators.map_prepare import (
-            get_current_map_context,
-            render_map_placeholder,
-            render_overview_map,
-        )
 
         map_w = size_px
         map_h = map_w  # kwadrat / średnica okręgu (kształt z zakładki Shape)
@@ -86,54 +81,35 @@ def _render_static_map_indicator(
         map_style = cfg.get("map_style", "light_all")
         _pos_xy = s(cfg["x"], canvas_w), s(cfg["y"], canvas_h)
 
-        def _placeholder(progress=None, loaded=None, required=None, error=None):
-            ph = render_map_placeholder(
-                map_w, map_h, progress=progress,
-                loaded=loaded, required=required, error=error,
-            )
-            return ph, _pos_xy[0], _pos_xy[1], None
-
         if async_map:
-            ctx = get_current_map_context()
-            if ctx is None:
-                return _placeholder()
-            snap = ctx.snapshot()
-            if snap["provider"] != map_style:
-                return _placeholder()
-            # An overview is usable map data even while a newer/detail job is
-            # still preparing.  Never replace it with the loading placeholder.
-            overview_ready = snap.get("overview_image") is not None
-            if snap["status"] == "error" and not overview_ready:
-                return _placeholder(error="Nie udało się wczytać mapy")
-            if snap["status"] in ("idle", "preparing") and not overview_ready:
-                return _placeholder(
-                    progress=snap["progress"],
-                    loaded=snap["loaded_tiles"],
-                    required=snap["required_tiles"],
-                )
-            # Context ready: if detail tiles are cached for the current
-            # position, render the real map; otherwise Level 1 overview.
             ci = _static_target_index(gps_track, target_dt, current_position)
             _lat, _lon = gps_track[ci][1], gps_track[ci][2]
-            from src.map_renderer import viewport_tiles_for
+            from src.map_renderer import viewport_tiles_for, download_tile
+            from src.gui.map_viewport_prefetch import preview_viewport_prefetch
             detail_plan = viewport_tiles_for(_lat, _lon, zoom, map_w, map_h)
-            cached_detail = 0
-            for z2, x2, y2 in detail_plan:
-                if _tile_cached(z2, x2, y2, map_style):
-                    cached_detail += 1
-            if detail_plan and cached_detail / len(detail_plan) >= 0.5:
-                pass  # fall through to the real render below
-            else:
-                if snap.get("overview_image") is not None:
-                    ov = render_overview_map(
-                        snap.get("overview_image"), map_w, map_h,
-                        bounds=snap.get("bounds"), marker_latlon=(_lat, _lon),
-                        marker_radius=int(cfg.get("marker_size", 7)),
-                        marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
-                    )
-                    if ov is not None:
-                        return ov, _pos_xy[0], _pos_xy[1], None
-                # If no overview yet, fall through to render with whatever tiles are cached + track line
+            if any(not _tile_cached(z, x, y, map_style) for z, x, y in detail_plan):
+                def fill_viewport():
+                    for z, x, y in detail_plan:
+                        download_tile(z, x, y, map_style, download=True)
+                preview_viewport_prefetch.schedule(("static", map_style, tuple(detail_plan)), fill_viewport)
+
+            map_img = render_map_overlay(
+                gps_track, ci, map_w, map_h, zoom=zoom, map_style=map_style,
+                marker_radius=int(cfg.get("marker_size", 7)),
+                marker_color=_parse_marker_color(cfg.get("marker_color", "#FFFFFF")),
+                track_color=_parse_marker_color(cfg.get("track_color", "#FF3C1E")),
+                track_width=int(cfg.get("track_width", 3)),
+                hide_marker=bool(cfg.get("hide_marker", False)),
+                hide_track=bool(cfg.get("hide_track", False)),
+                download_missing=False, preview_only=True,
+                track_antialiasing=max(1, min(8, int(cfg.get("track_antialiasing", 1) or 1))),
+                track_outline_width=max(0, int(cfg.get("track_outline_width", 0) or 0)),
+                track_outline_color=_parse_marker_color(cfg.get("track_outline_color", "#000000")),
+            )
+            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+            map_img = apply_map_opacity(map_img, cfg.get("opacity"))
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
+            return map_img, _pos_xy[0], _pos_xy[1], None
 
         _pc_key = ("static_precache", id(gps_track), zoom, map_style)
         if not hasattr(_render_static_map_indicator, "_precached"):
