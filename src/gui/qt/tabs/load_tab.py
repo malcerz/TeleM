@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from datetime import timedelta
@@ -346,6 +347,7 @@ class LoadTab(QWidget):
 
     # Wynik asynchronicznego wyszukiwania AutoFIT
     sig_autofit_matched = Signal(str, int)  # (fit_path, gen)
+    sig_autofit_status = Signal(str, str, int, str)  # (field_status, row_status, gen, tooltip)
 
     def __init__(self) -> None:
         super().__init__()
@@ -355,9 +357,18 @@ class LoadTab(QWidget):
         self._card_widgets: list[VideoFileCardWidget] = []
         self._gpx_path: str = ""
         self._fit_path: str = ""
+        self._manual_fit_path: str = ""
+        self._manual_gpx_path: str = ""
+        self._auto_fit_path: str = ""
+        self._auto_gpx_path: str = ""
         self._user_selected_telemetry: bool = False
         self._autofit_gen: int = 0
         self._inspection_gen: int = 0
+        self._autofit_cancel_event: threading.Event | None = None
+        self._autofit_thread: threading.Thread | None = None
+        self._autofit_in_progress: bool = False
+        self._autofit_done_event = threading.Event()
+        self._preflight_done_for_paths: list[str] = []
 
         # Stan analizy QP
         self._qp_gen: int = 0
@@ -407,12 +418,16 @@ class LoadTab(QWidget):
             "QPushButton:hover { background-color: #f0f7ff; border-color: #1084d4; }"
         )
 
+        self.setAcceptDrops(True)
+
         # MP4 bar
         self.btn_mp4 = QPushButton("Wybierz plik(i) MP4...")
         self.btn_mp4.setMinimumHeight(34)
         self.btn_mp4.setCursor(Qt.PointingHandCursor)
         self.btn_mp4.setStyleSheet(self._placeholder_style)
         self.btn_mp4.clicked.connect(self._select_mp4)
+        self.btn_mp4.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.btn_mp4.customContextMenuRequested.connect(self._on_mp4_context_menu)
         form_sources.addRow("MP4 (wymagane):", self.btn_mp4)
 
         # Telemetry bar (FIT / GPX)
@@ -423,8 +438,7 @@ class LoadTab(QWidget):
         self.btn_telemetry.clicked.connect(self._select_telemetry)
         form_sources.addRow("FIT / GPX:", self.btn_telemetry)
         self.lbl_remote_status = QLabel(
-            "Automatyczne wyszukiwanie Garmin/Strava rozpoczyna się po kliknięciu „Wczytaj”. "
-            "Źródło wybierzesz w Ustawieniach."
+            "Automatyczne wyszukiwanie FIT/GPX rozpoczyna się po wybraniu filmu. Źródło: Ustawienia."
         )
         self.lbl_remote_status.setTextFormat(Qt.PlainText)
         self.lbl_remote_status.setWordWrap(True)
@@ -577,22 +591,79 @@ class LoadTab(QWidget):
     # Wybór plików i obsługa kart
     # ═════════════════════════════════════════════════════════════════════
 
+    def dragEnterEvent(self, event: Any) -> None:
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if any(u.toLocalFile().lower().endswith((".mp4", ".mov", ".m4v")) for u in urls):
+                event.acceptProposedAction()
+
+    def dropEvent(self, event: Any) -> None:
+        if event.mimeData().hasUrls():
+            video_files = [
+                u.toLocalFile() for u in event.mimeData().urls()
+                if u.toLocalFile().lower().endswith((".mp4", ".mov", ".m4v"))
+            ]
+            if video_files:
+                event.acceptProposedAction()
+                self.set_video_paths(video_files, start_search=True)
+
+    def keyPressEvent(self, event: Any) -> None:
+        from PySide6.QtGui import QKeySequence, QGuiApplication
+        if event.matches(QKeySequence.Paste):
+            cb_text = QGuiApplication.clipboard().text()
+            if cb_text:
+                self.set_video_paths(cb_text, start_search=True)
+                return
+        super().keyPressEvent(event)
+
+    def _on_mp4_context_menu(self, pos: Any) -> None:
+        from PySide6.QtWidgets import QMenu, QInputDialog
+        from PySide6.QtGui import QGuiApplication
+        menu = QMenu(self)
+        act_browse = menu.addAction("Przeglądaj pliki...")
+        act_paste = menu.addAction("Wklej ścieżkę ze schowka (Ctrl+V)")
+        act_input = menu.addAction("Wprowadź ścieżkę ręcznie...")
+        action = menu.exec(self.btn_mp4.mapToGlobal(pos))
+        if action == act_browse:
+            self._select_mp4()
+        elif action == act_paste:
+            cb_text = QGuiApplication.clipboard().text()
+            if cb_text:
+                self.set_video_paths(cb_text, start_search=True)
+        elif action == act_input:
+            text, ok = QInputDialog.getText(self, "Wprowadź ścieżkę", "Ścieżka do pliku MP4:")
+            if ok and text.strip():
+                self.set_video_paths(text.strip(), start_search=True)
+
+    def set_video_paths(self, paths: list[str] | str, start_search: bool = True) -> None:
+        """Ustawia ścieżki plików MP4 i natychmiast rozpoczyna automatyczne wyszukiwanie telemetrii."""
+        if isinstance(paths, str):
+            raw_items = [p.strip().strip('"').strip("'") for p in paths.replace("\n", ";").split(";")]
+            paths = [p for p in raw_items if p]
+
+        valid_paths = [str(Path(p).resolve()) for p in paths if Path(p).is_file()]
+        if not valid_paths:
+            return
+
+        self._video_paths = valid_paths
+        self.btn_mp4.setText("; ".join(valid_paths))
+        self.btn_mp4.setStyleSheet(self._selected_style)
+        self.btn_mp4.setToolTip("; ".join(valid_paths))
+        self._rebuild_cards(valid_paths)
+        self._start_multi_info_inspection()
+
+        if not self._user_selected_telemetry:
+            self._autofit_gen += 1
+            if start_search:
+                self._start_auto_telemetry_preflight(valid_paths, gen=self._autofit_gen)
+
     def _select_mp4(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Wybierz plik(i) MP4", "",
             "Wideo (*.mp4 *.MP4 *.mov *.MOV)",
         )
         if paths:
-            self._video_paths = paths
-            self.lbl_remote_status.setText("Kliknij „Wczytaj”, aby wczytać film i wyszukać telemetrię z wybranego źródła.")
-            self.lbl_remote_status.setToolTip("")
-            self.btn_mp4.setText("; ".join(paths))
-            self.btn_mp4.setStyleSheet(self._selected_style)
-            self._rebuild_cards(paths)
-            self._start_multi_info_inspection()
-            self._autofit_gen += 1
-            if not self._user_selected_telemetry:
-                self._try_auto_fit_search(paths, gen=self._autofit_gen)
+            self.set_video_paths(paths, start_search=True)
 
     def _select_telemetry(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -600,17 +671,26 @@ class LoadTab(QWidget):
             "Pliki telemetryczne (*.fit *.FIT *.gpx *.GPX);;FIT (*.fit *.FIT);;GPX (*.gpx *.GPX)",
         )
         if path:
-            self.lbl_remote_status.setText("Wybrany FIT/GPX ma pierwszeństwo przed wyszukiwaniem Garmin/Strava.")
+            if self._autofit_cancel_event is not None:
+                self._autofit_cancel_event.set()
+            self._autofit_in_progress = False
+            self._autofit_done_event.set()
+            self.lbl_remote_status.setText("Wybrany ręcznie FIT/GPX ma pierwszeństwo przed automatem.")
             self.lbl_remote_status.setToolTip(path)
             self._user_selected_telemetry = True
             ext = path.lower()
             if ext.endswith(".fit"):
+                self._manual_fit_path = path
+                self._manual_gpx_path = ""
                 self._fit_path = path
                 self._gpx_path = ""
             elif ext.endswith(".gpx"):
+                self._manual_gpx_path = path
+                self._manual_fit_path = ""
                 self._gpx_path = path
                 self._fit_path = ""
-            self.btn_telemetry.setText(path)
+            self.btn_telemetry.setText(Path(path).name)
+            self.btn_telemetry.setToolTip(path)
             self.btn_telemetry.setStyleSheet(self._selected_style)
             self._update_telemetry_on_all_cards()
 
@@ -674,49 +754,131 @@ class LoadTab(QWidget):
         return None
 
     # ═════════════════════════════════════════════════════════════════════
-    # AutoFIT
+    # Auto Telemetry Preflight (Local FIT/GPX + Remote Provider)
     # ═════════════════════════════════════════════════════════════════════
 
+    def _get_integrations_config(self) -> dict[str, Any]:
+        """Pobiera aktualną konfigurację integracji z def_layout.json."""
+        try:
+            from src.runtime_paths import get_app_root
+            p = get_app_root() / "def_layout.json"
+            if p.exists():
+                return json.loads(p.read_text(encoding="utf-8")).get("integrations", {})
+        except Exception:
+            pass
+        try:
+            def_file = Path("def_layout.json")
+            if def_file.exists():
+                return json.loads(def_file.read_text(encoding="utf-8")).get("integrations", {})
+        except Exception:
+            pass
+        return {}
+
     def _try_auto_fit_search(self, paths: list[str], gen: int | None = None) -> None:
-        """Asynchronously search folder for matching .fit file."""
-        if not paths:
+        """Kompatybilność z istniejącym API testów — uruchamia preflight telemetrii."""
+        self._start_auto_telemetry_preflight(paths, gen=gen)
+
+    def _start_auto_telemetry_preflight(self, paths: list[str], gen: int | None = None) -> None:
+        """Asynchroniczne wyszukiwanie telemetrii: najpierw lokalny katalog MP4, potem remote provider."""
+        if not paths or self._user_selected_telemetry:
             return
+
+        if self._autofit_cancel_event is not None:
+            self._autofit_cancel_event.set()
+
+        self._autofit_cancel_event = threading.Event()
+        cancel_ev = self._autofit_cancel_event
+
         if gen is None:
             self._autofit_gen += 1
             gen = self._autofit_gen
         request_gen = gen
 
+        self._autofit_in_progress = True
+        self._autofit_done_event.clear()
+        self._preflight_done_for_paths = []
+
+        # Wyczyść poprzednio automatycznie przypisaną telemetrię
+        self._auto_fit_path = ""
+        self._auto_gpx_path = ""
+        self._fit_path = ""
+        self._gpx_path = ""
+
+        self.btn_telemetry.setText("Szukam lokalnego FIT/GPX...")
+        self.btn_telemetry.setToolTip("")
+        self.btn_telemetry.setStyleSheet(self._placeholder_style)
+        self.lbl_remote_status.setText("Szukam lokalnych danych...")
+        self.lbl_remote_status.setToolTip("")
+        self._update_telemetry_on_all_cards()
+
+        cfg = self._get_integrations_config()
+
+        def status_cb(field_st: str, row_st: str, tooltip: Optional[str] = None) -> None:
+            if not cancel_ev.is_set() and request_gen == self._autofit_gen and not self._user_selected_telemetry:
+                self.sig_autofit_status.emit(field_st, row_st, request_gen, str(tooltip or ""))
+
         def worker() -> None:
             try:
-                if request_gen != self._autofit_gen or self._user_selected_telemetry:
-                    return
-                from src.multifile import probe_clip_time_interval
-                from telemetry_fit import find_best_fit_match
-                intervals = []
-                for p_str in paths:
-                    p = Path(p_str)
-                    start_dt, end_dt, dur_s, conf = probe_clip_time_interval(p)
-                    if start_dt is not None and end_dt is not None:
-                        intervals.append((start_dt, end_dt, dur_s, conf))
-                if not intervals or request_gen != self._autofit_gen:
-                    return
-                parent_dir = Path(paths[0]).parent
-                best_fit, diag = find_best_fit_match(intervals, parent_dir)
-                if best_fit is not None and request_gen == self._autofit_gen and not self._user_selected_telemetry:
-                    self.sig_autofit_matched.emit(str(best_fit), request_gen)
+                from src.integrations.auto_telemetry_preflight import run_auto_telemetry_preflight
+                res_path = run_auto_telemetry_preflight(
+                    video_paths=paths,
+                    config=cfg,
+                    on_status=status_cb,
+                    cancel_event=cancel_ev,
+                )
+                if res_path is not None and not cancel_ev.is_set() and request_gen == self._autofit_gen and not self._user_selected_telemetry:
+                    self.sig_autofit_matched.emit(str(res_path), request_gen)
             except Exception as e:
-                print(f"[AutoFIT] Error scanning directory: {e}", flush=True)
+                print(f"[AutoPreflight] Error running telemetry preflight: {e}", flush=True)
+            finally:
+                if request_gen == self._autofit_gen:
+                    self._autofit_in_progress = False
+                    self._autofit_done_event.set()
+                    self._preflight_done_for_paths = [str(Path(p).resolve()) for p in paths]
 
-        threading.Thread(target=worker, daemon=True).start()
+        thread = threading.Thread(target=worker, name="TeleM-AutoTelemetry", daemon=True)
+        self._autofit_thread = thread
+        thread.start()
 
-    def _on_autofit_matched(self, fit_path: str, gen: int) -> None:
-        """Obsłuż dopasowany plik FIT z asynchronicznego AutoFIT (wątek główny GUI)."""
-        if gen == self._autofit_gen and not self._user_selected_telemetry:
-            self._fit_path = fit_path
+    def _on_autofit_status(self, field_st: str, row_st: str, gen: int, tooltip: str) -> None:
+        """Aktualizacja statusu w polu FIT/GPX oraz wierszu Telemetria w wątku GUI."""
+        if gen != self._autofit_gen or self._user_selected_telemetry:
+            return
+        if field_st:
+            self.btn_telemetry.setText(field_st)
+            self.btn_telemetry.setToolTip(tooltip)
+            if field_st.endswith("✓"):
+                self.btn_telemetry.setStyleSheet(self._selected_style)
+            else:
+                self.btn_telemetry.setStyleSheet(self._placeholder_style)
+        if row_st:
+            self.lbl_remote_status.setText(row_st)
+            self.lbl_remote_status.setToolTip(tooltip)
+
+    def _on_autofit_matched(self, telem_path: str, gen: int) -> None:
+        """Obsłuż dopasowany plik FIT/GPX z asynchronicznego preflightu (wątek główny GUI)."""
+        if gen != self._autofit_gen or self._user_selected_telemetry:
+            return
+        p = Path(telem_path)
+        ext = p.suffix.lower()
+        if ext == ".fit":
+            self._auto_fit_path = telem_path
+            self._auto_gpx_path = ""
+            self._fit_path = telem_path
             self._gpx_path = ""
-            self.btn_telemetry.setText(fit_path)
-            self.btn_telemetry.setStyleSheet(self._selected_style)
-            self._update_telemetry_on_all_cards()
+        elif ext == ".gpx":
+            self._auto_gpx_path = telem_path
+            self._auto_fit_path = ""
+            self._gpx_path = telem_path
+            self._fit_path = ""
+
+        btn_txt = self.btn_telemetry.text()
+        if not btn_txt.endswith("✓"):
+            btn_txt = f"{p.name} ✓"
+        self.btn_telemetry.setText(btn_txt)
+        self.btn_telemetry.setToolTip(telem_path)
+        self.btn_telemetry.setStyleSheet(self._selected_style)
+        self._update_telemetry_on_all_cards()
 
     # ═════════════════════════════════════════════════════════════════════
     # Wczytywanie i obsługa paska postępu
@@ -726,6 +888,14 @@ class LoadTab(QWidget):
         if not self._video_paths:
             QMessageBox.warning(self, "Brak pliku", "Wybierz plik MP4.")
             return
+
+        # Jeśli preflight jeszcze trwa, poczekaj krótko na jego zakończenie
+        if self._autofit_in_progress:
+            deadline = time.time() + 4.0
+            while self._autofit_in_progress and time.time() < deadline:
+                from PySide6.QtWidgets import QApplication
+                QApplication.processEvents()
+                time.sleep(0.02)
 
         self._start_loading()
         if not self._fit_path and not self._gpx_path:
@@ -805,20 +975,33 @@ class LoadTab(QWidget):
         self.signals.sig_preview_accel_changed.emit(vendor or "auto")
 
     def _on_clear(self) -> None:
-        self.lbl_remote_status.setText("Automatyczne wyszukiwanie rozpoczyna się po kliknięciu „Wczytaj”. Źródło: Ustawienia.")
+        if self._autofit_cancel_event is not None:
+            self._autofit_cancel_event.set()
+            self._autofit_cancel_event = None
+        self._autofit_in_progress = False
+        self._autofit_done_event.set()
+        self._autofit_gen += 1
+        self._inspection_gen += 1
+
+        self.lbl_remote_status.setText("Automatyczne wyszukiwanie FIT/GPX rozpoczyna się po wybraniu filmu. Źródło: Ustawienia.")
         self.lbl_remote_status.setToolTip("")
         self.btn_mp4.setText("Wybierz plik(i) MP4...")
         self.btn_mp4.setStyleSheet(self._placeholder_style)
+        self.btn_mp4.setToolTip("")
         self.btn_telemetry.setText("Wybierz FIT/GPX (opcjonalnie)...")
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
+        self.btn_telemetry.setToolTip("")
         self._video_paths = []
         self._gpx_path = ""
         self._fit_path = ""
-        self._files_metadata = []
+        self._manual_fit_path = ""
+        self._manual_gpx_path = ""
+        self._auto_fit_path = ""
+        self._auto_gpx_path = ""
         self._user_selected_telemetry = False
+        self._preflight_done_for_paths = []
+        self._files_metadata = []
         self.lbl_info.setText("Nie wczytano plików.")
-        self._inspection_gen += 1
-        self._autofit_gen += 1
         self.lbl_file_info.setText("Wybierz plik MP4, aby zobaczyć informacje o filmie.")
         self.lbl_mixed_res_banner.setVisible(False)
         self._clear_cards()
@@ -832,6 +1015,8 @@ class LoadTab(QWidget):
 
     def _connect_local_signals(self) -> None:
         self.signals.sig_remote_telemetry_status.connect(self._on_remote_telemetry_status)
+        self.signals.sig_settings_changed.connect(self._on_settings_changed)
+        self.sig_autofit_status.connect(self._on_autofit_status)
         self.sig_file_info_ready.connect(self._on_file_info_ready)
         self.sig_file_info_error.connect(self._on_file_info_error)
         self.sig_card_info_ready.connect(self._on_card_info_ready)
@@ -842,6 +1027,12 @@ class LoadTab(QWidget):
         self.sig_autofit_matched.connect(self._on_autofit_matched)
         self.signals.sig_progress.connect(self._on_load_progress)
         self.signals.sig_error.connect(self._on_load_error)
+
+    def _on_settings_changed(self, name: str, value: Any) -> None:
+        if name == "auto_activity_source":
+            if self._video_paths and not self._user_selected_telemetry:
+                self._autofit_gen += 1
+                self._start_auto_telemetry_preflight(self._video_paths, gen=self._autofit_gen)
 
     def _on_remote_telemetry_status(self, payload: dict) -> None:
         # A worker for an older video must never replace the current video's status.

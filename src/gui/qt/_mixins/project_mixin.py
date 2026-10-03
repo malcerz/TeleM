@@ -606,8 +606,17 @@ class ProjectMixin:
                     except Exception as exc:
                         print(f"[AutoFIT] Candidate preflight failed: {exc}", flush=True)
 
-                # Remote auto-import (Garmin Connect / Strava) if no manual FIT/GPX specified
-                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path:
+                # Check if LoadTab has already completed auto telemetry preflight for this video selection
+                load_tab = getattr(getattr(self, "ui", None), "_load_tab", None)
+                preflight_already_done = False
+                if load_tab is not None:
+                    done_paths = [os.path.normcase(os.path.abspath(str(p))) for p in getattr(load_tab, "_preflight_done_for_paths", [])]
+                    cand_paths = [os.path.normcase(os.path.abspath(str(p))) for p in candidate_video_paths]
+                    if done_paths and done_paths == cand_paths:
+                        preflight_already_done = True
+
+                # Remote auto-import (Garmin Connect / Strava) if no manual FIT/GPX specified and not already searched
+                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path and not preflight_already_done:
                     integrations_cfg = (self.layout or {}).get("integrations")
                     if not integrations_cfg:
                         try:

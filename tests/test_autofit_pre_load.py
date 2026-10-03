@@ -60,7 +60,8 @@ def test_autofit_pre_load_auto_populates_ui(qapp):
         qapp.processEvents()
         
         assert tab._fit_path == str(dummy_fit)
-        assert tab.btn_telemetry.text() == str(dummy_fit)
+        assert tab.btn_telemetry.text() == f"{dummy_fit.name} ✓"
+        assert tab.btn_telemetry.toolTip() == str(dummy_fit)
 
 
 def test_autofit_stale_generation_rejected(qapp):
