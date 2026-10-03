@@ -591,6 +591,57 @@ class ProjectMixin:
                                 effective_fit_path = str(matched_fit)
                     except Exception as exc:
                         print(f"[AutoFIT] Candidate preflight failed: {exc}", flush=True)
+
+                # Remote auto-import (Garmin Connect / Strava) if no manual FIT/GPX specified
+                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path:
+                    integrations_cfg = (self.layout or {}).get("integrations")
+                    if not integrations_cfg:
+                        try:
+                            def_layout_file = self.base_dir / "def_layout.json"
+                            if def_layout_file.exists():
+                                integrations_cfg = json.loads(def_layout_file.read_text(encoding="utf-8")).get("integrations", {})
+                        except Exception:
+                            integrations_cfg = {}
+                    if not integrations_cfg:
+                        integrations_cfg = {}
+
+                    auto_source = str(integrations_cfg.get("auto_activity_source", "none") or "none").lower()
+                    if auto_source and auto_source != "none" and candidate_video_range[0] is not None:
+                        v_start, v_end = candidate_video_range
+                        v_dur = max(1.0, (v_end - v_start).total_seconds())
+                        try:
+                            from src.integrations.coordinator import resolve_remote_activity
+                            from src.gui.qt.signals import RemoteActivitySelectionRequest
+
+                            def on_progress_cb(msg: str) -> None:
+                                self.signals.sig_progress.emit(25, msg)
+
+                            def on_select_cb(ranked_candidates):
+                                req = RemoteActivitySelectionRequest(ranked_candidates)
+                                self.signals.sig_remote_activity_selection_request.emit(req)
+                                if req.completed.wait(timeout=45.0):
+                                    return req.selected_candidate
+                                return None
+
+                            remote_file = resolve_remote_activity(
+                                candidate_video_paths,
+                                project_start_dt=v_start,
+                                project_end_dt=v_end,
+                                project_duration_s=v_dur,
+                                config=integrations_cfg,
+                                on_progress=on_progress_cb,
+                                on_select_activity=on_select_cb,
+                            )
+                            if remote_file and remote_file.exists():
+                                if remote_file.suffix.lower() == ".fit":
+                                    effective_fit_path = str(remote_file)
+                                    print(f"[RemoteTelemetry] Zaimportowano aktywność Garmin: {remote_file.name}", flush=True)
+                                elif remote_file.suffix.lower() == ".gpx":
+                                    effective_gpx_path = str(remote_file)
+                                    print(f"[RemoteTelemetry] Zaimportowano aktywność Strava: {remote_file.name}", flush=True)
+                        except Exception as exc:
+                            print(f"[RemoteTelemetry] Preflight auto-download failed: {exc}", flush=True)
+
                 validated_fit_records = None
                 validated_gpx_points = None
                 if effective_fit_path:
@@ -813,9 +864,45 @@ class ProjectMixin:
                         f"[MapPreload] start source=GPMF points={len(self.telemetry.gps_track)}",
                         flush=True,
                     )
-                    self._start_map_preload(
-                        self.telemetry.gps_track, "gpmf", provider=map_provider,
-                    )
+                # Fallback: remote auto-import if start_dt_utc was established late
+                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path:
+                    integrations_cfg = (self.layout or {}).get("integrations", {})
+                    auto_source = str(integrations_cfg.get("auto_activity_source", "none") or "none").lower()
+                    if auto_source and auto_source != "none" and getattr(self.telemetry, "start_dt_utc", None) is not None:
+                        v_start = self.telemetry.start_dt_utc
+                        v_dur = max(1.0, float(self.video_duration_s or 1.0))
+                        v_end = v_start + timedelta(seconds=v_dur)
+                        try:
+                            from src.integrations.coordinator import resolve_remote_activity
+                            from src.gui.qt.signals import RemoteActivitySelectionRequest
+
+                            def on_progress_cb(msg: str) -> None:
+                                self.signals.sig_progress.emit(35, msg)
+
+                            def on_select_cb(ranked_candidates):
+                                req = RemoteActivitySelectionRequest(ranked_candidates)
+                                self.signals.sig_remote_activity_selection_request.emit(req)
+                                if req.completed.wait(timeout=45.0):
+                                    return req.selected_candidate
+                                return None
+
+                            remote_file = resolve_remote_activity(
+                                self.video_paths,
+                                project_start_dt=v_start,
+                                project_end_dt=v_end,
+                                project_duration_s=v_dur,
+                                config=integrations_cfg,
+                                video_gps_point=(self.telemetry.gps_track[0][1], self.telemetry.gps_track[0][2]) if getattr(self.telemetry, "gps_track", None) else None,
+                                on_progress=on_progress_cb,
+                                on_select_activity=on_select_cb,
+                            )
+                            if remote_file and remote_file.exists():
+                                if remote_file.suffix.lower() == ".fit":
+                                    effective_fit_path = str(remote_file)
+                                elif remote_file.suffix.lower() == ".gpx":
+                                    effective_gpx_path = str(remote_file)
+                        except Exception as exc:
+                            print(f"[RemoteTelemetry] Secondary auto-download failed: {exc}", flush=True)
 
                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
                 if effective_gpx_path and _GPX_AVAILABLE:

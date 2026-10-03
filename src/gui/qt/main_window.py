@@ -170,6 +170,7 @@ class MainWindow(QMainWindow):
         s.sig_video_info_ready.connect(self._on_video_info)
         s.sig_map_status.connect(self._on_map_status)
         s.sig_telemetry_validation_request.connect(self._on_telemetry_validation_request)
+        s.sig_remote_activity_selection_request.connect(self._on_remote_activity_selection_request)
 
     def _on_map_status(self, text: str) -> None:
         t0 = time.perf_counter()
@@ -247,6 +248,45 @@ class MainWindow(QMainWindow):
                 box.setStandardButtons(QMessageBox.Ok)
                 box.exec()
                 request.accepted = False
+        finally:
+            request.completed.set()
+
+    def _on_remote_activity_selection_request(self, request: object) -> None:
+        """Present candidate activity choices to the user when match is ambiguous."""
+        from src.gui.qt.signals import RemoteActivitySelectionRequest
+        if not isinstance(request, RemoteActivitySelectionRequest):
+            return
+        try:
+            from PySide6.QtWidgets import (
+                QDialog, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QDialogButtonBox,
+            )
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Dopasowanie aktywności zdalnej")
+            vbox = QVBoxLayout(dialog)
+            vbox.addWidget(QLabel("<b>Znaleziono kilka pasujących aktywności:</b>"))
+
+            group = QButtonGroup(dialog)
+            for idx, (cand, score) in enumerate(request.candidates):
+                rb = QRadioButton(cand.display_str(score), dialog)
+                if idx == 0:
+                    rb.setChecked(True)
+                group.addButton(rb, idx)
+                vbox.addWidget(rb)
+
+            btn_box = QDialogButtonBox(dialog)
+            btn_use = btn_box.addButton("Użyj zaznaczonej", QDialogButtonBox.AcceptRole)
+            btn_skip = btn_box.addButton("Pomiń", QDialogButtonBox.RejectRole)
+            btn_box.accepted.connect(dialog.accept)
+            btn_box.rejected.connect(dialog.reject)
+            vbox.addWidget(btn_box)
+
+            ret = dialog.exec()
+            if ret == QDialog.Accepted:
+                sel_id = group.checkedId()
+                if 0 <= sel_id < len(request.candidates):
+                    request.selected_candidate = request.candidates[sel_id][0]
+            else:
+                request.selected_candidate = None
         finally:
             request.completed.set()
 

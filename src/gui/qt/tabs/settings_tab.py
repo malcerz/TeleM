@@ -1,12 +1,14 @@
 """Zakładka Ustawienia — konfiguracja programu."""
 
-from __future__ import annotations
+import json
+from pathlib import Path
+import threading
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
-    QStyleFactory, QCheckBox, QMessageBox,
+    QStyleFactory, QCheckBox, QMessageBox, QLabel,
 )
 from PySide6.QtGui import QFontDatabase
 
@@ -16,12 +18,19 @@ from src.gui.qt.signals import get_signals
 class SettingsTab(QWidget):
     """Zakładka ustawień aplikacji."""
 
+    sig_garmin_status = Signal(str, str)
+    sig_strava_status = Signal(str, str)
+
     def __init__(self) -> None:
         super().__init__()
         self.signals = get_signals()
+        self.base_dir = Path(__file__).resolve().parent.parent.parent.parent
         self._render_job_active = False
         self._analysis_active = False
+        self.sig_garmin_status.connect(self._update_garmin_status)
+        self.sig_strava_status.connect(self._update_strava_status)
         self._build_ui()
+        self._load_integration_settings()
         # Przywróć font z kontrolera po jego inicjalizacji (emitowany przez sig_global_font_restored)
         self.signals.sig_global_font_restored.connect(self._on_global_font_restored)
         self.signals.sig_render_state.connect(self._on_render_state)
@@ -175,7 +184,220 @@ class SettingsTab(QWidget):
 
         vbox.addWidget(charts_group)
 
+        # ── Integracje / Dane aktywności ──────────────────────────────
+        integ_group = QGroupBox("Integracje / Dane aktywności")
+        integ_group.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
+        integ_form = QFormLayout(integ_group)
+        integ_form.setSpacing(10)
+
+        self.cmb_auto_source = QComboBox()
+        self.cmb_auto_source.addItem("Nic", "none")
+        self.cmb_auto_source.addItem("Garmin Connect", "garmin")
+        self.cmb_auto_source.addItem("Strava", "strava")
+        integ_form.addRow("Automatyczne źródło aktywności:", self.cmb_auto_source)
+
+        # Garmin panel
+        self.garmin_container = QWidget()
+        garmin_layout = QFormLayout(self.garmin_container)
+        garmin_layout.setContentsMargins(0, 4, 0, 4)
+        garmin_layout.setSpacing(8)
+
+        self.edit_garmin_user = QLineEdit("")
+        self.edit_garmin_user.setMinimumHeight(28)
+        self.edit_garmin_user.setPlaceholderText("np. user@example.com")
+        self.edit_garmin_user.textChanged.connect(self._on_garmin_user_changed)
+        garmin_layout.addRow("Login / e-mail:", self.edit_garmin_user)
+
+        self.edit_garmin_pass = QLineEdit("")
+        self.edit_garmin_pass.setMinimumHeight(28)
+        self.edit_garmin_pass.setEchoMode(QLineEdit.Password)
+        self.edit_garmin_pass.setPlaceholderText("(wprowadź hasło)")
+        self.edit_garmin_pass.textChanged.connect(self._on_garmin_pass_changed)
+        garmin_layout.addRow("Hasło:", self.edit_garmin_pass)
+
+        row_garmin_btn = QHBoxLayout()
+        self.btn_garmin_test = QPushButton("Zaloguj / Sprawdź połączenie")
+        self.btn_garmin_test.setMinimumHeight(28)
+        self.btn_garmin_test.clicked.connect(self._on_garmin_test_clicked)
+        row_garmin_btn.addWidget(self.btn_garmin_test)
+        self.lbl_garmin_status = QLabel("Status: Niepołączono")
+        self.lbl_garmin_status.setStyleSheet("color: #888888;")
+        row_garmin_btn.addWidget(self.lbl_garmin_status, 1)
+        garmin_layout.addRow("", row_garmin_btn)
+
+        integ_form.addRow(self.garmin_container)
+
+        # Strava panel
+        self.strava_container = QWidget()
+        strava_layout = QFormLayout(self.strava_container)
+        strava_layout.setContentsMargins(0, 4, 0, 4)
+        strava_layout.setSpacing(8)
+
+        self.edit_strava_client_id = QLineEdit("")
+        self.edit_strava_client_id.setMinimumHeight(28)
+        self.edit_strava_client_id.setPlaceholderText("np. 123456")
+        self.edit_strava_client_id.textChanged.connect(self._on_strava_client_id_changed)
+        strava_layout.addRow("Client ID:", self.edit_strava_client_id)
+
+        self.edit_strava_client_secret = QLineEdit("")
+        self.edit_strava_client_secret.setMinimumHeight(28)
+        self.edit_strava_client_secret.setEchoMode(QLineEdit.Password)
+        self.edit_strava_client_secret.setPlaceholderText("(wprowadź client secret)")
+        self.edit_strava_client_secret.textChanged.connect(self._on_strava_client_secret_changed)
+        strava_layout.addRow("Client Secret:", self.edit_strava_client_secret)
+
+        row_strava_btn = QHBoxLayout()
+        self.btn_strava_connect = QPushButton("Połącz ze Strava")
+        self.btn_strava_connect.setMinimumHeight(28)
+        self.btn_strava_connect.clicked.connect(self._on_strava_connect_clicked)
+        row_strava_btn.addWidget(self.btn_strava_connect)
+
+        self.btn_strava_test = QPushButton("Sprawdź połączenie")
+        self.btn_strava_test.setMinimumHeight(28)
+        self.btn_strava_test.clicked.connect(self._on_strava_test_clicked)
+        row_strava_btn.addWidget(self.btn_strava_test)
+
+        self.lbl_strava_status = QLabel("Status: Niepołączono")
+        self.lbl_strava_status.setStyleSheet("color: #888888;")
+        row_strava_btn.addWidget(self.lbl_strava_status, 1)
+        strava_layout.addRow("", row_strava_btn)
+
+        integ_form.addRow(self.strava_container)
+
+        self.cmb_auto_source.currentIndexChanged.connect(self._on_auto_source_changed)
+
+        vbox.addWidget(integ_group)
+
         vbox.addStretch()
+
+    def _on_auto_source_changed(self, _index: int = 0) -> None:
+        source = str(self.cmb_auto_source.currentData() or "none")
+        self.garmin_container.setVisible(source == "garmin")
+        self.strava_container.setVisible(source == "strava")
+        self.signals.sig_settings_changed.emit("auto_activity_source", source)
+
+    def _on_garmin_user_changed(self, text: str) -> None:
+        self.signals.sig_settings_changed.emit("garmin_username", text.strip())
+
+    def _on_garmin_pass_changed(self, text: str) -> None:
+        if text:
+            from src.integrations import credential_store
+            credential_store.save_garmin_password(text, username=self.edit_garmin_user.text().strip())
+
+    def _on_garmin_test_clicked(self) -> None:
+        self.btn_garmin_test.setEnabled(False)
+        self.lbl_garmin_status.setText("Logowanie i sprawdzanie połączenia...")
+        self.lbl_garmin_status.setStyleSheet("color: #ffa500;")
+        threading.Thread(target=self._bg_test_garmin, daemon=True).start()
+
+    def _bg_test_garmin(self) -> None:
+        from src.integrations import credential_store
+        from src.integrations.garmin_connect import GarminProvider
+        user = self.edit_garmin_user.text().strip()
+        pwd = self.edit_garmin_pass.text()
+        if pwd:
+            credential_store.save_garmin_password(pwd, username=user)
+        provider = GarminProvider(username=user)
+        ok, msg = provider.test_connection()
+        if ok:
+            self.sig_garmin_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
+        else:
+            self.sig_garmin_status.emit(f"Status: {msg}", "#ff5555")
+
+    def _update_garmin_status(self, text: str, color: str) -> None:
+        self.btn_garmin_test.setEnabled(True)
+        self.lbl_garmin_status.setText(text)
+        self.lbl_garmin_status.setStyleSheet(f"color: {color};")
+
+    def _on_strava_client_id_changed(self, text: str) -> None:
+        self.signals.sig_settings_changed.emit("strava_client_id", text.strip())
+
+    def _on_strava_client_secret_changed(self, text: str) -> None:
+        if text:
+            from src.integrations import credential_store
+            credential_store.save_strava_client_secret(text.strip())
+
+    def _on_strava_connect_clicked(self) -> None:
+        self.btn_strava_connect.setEnabled(False)
+        self.lbl_strava_status.setText("Oczekiwanie na autoryzację w przeglądarce...")
+        self.lbl_strava_status.setStyleSheet("color: #ffa500;")
+        threading.Thread(target=self._bg_connect_strava, daemon=True).start()
+
+    def _bg_connect_strava(self) -> None:
+        from src.integrations import credential_store
+        from src.integrations.strava import run_strava_oauth_flow
+        cid = self.edit_strava_client_id.text().strip()
+        sec = self.edit_strava_client_secret.text().strip() or credential_store.get_strava_client_secret() or ""
+        ok, msg = run_strava_oauth_flow(cid, sec)
+        if ok:
+            self.sig_strava_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
+        else:
+            self.sig_strava_status.emit(f"Status: {msg}", "#ff5555")
+
+    def _on_strava_test_clicked(self) -> None:
+        self.btn_strava_test.setEnabled(False)
+        self.lbl_strava_status.setText("Sprawdzanie połączenia...")
+        self.lbl_strava_status.setStyleSheet("color: #ffa500;")
+        threading.Thread(target=self._bg_test_strava, daemon=True).start()
+
+    def _bg_test_strava(self) -> None:
+        from src.integrations.strava import StravaProvider
+        cid = self.edit_strava_client_id.text().strip()
+        provider = StravaProvider(client_id=cid)
+        ok, msg = provider.test_connection()
+        if ok:
+            self.sig_strava_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
+        else:
+            self.sig_strava_status.emit(f"Status: {msg}", "#ff5555")
+
+    def _update_strava_status(self, text: str, color: str) -> None:
+        self.btn_strava_connect.setEnabled(True)
+        self.btn_strava_test.setEnabled(True)
+        self.lbl_strava_status.setText(text)
+        self.lbl_strava_status.setStyleSheet(f"color: {color};")
+
+    def _load_integration_settings(self) -> None:
+        def_layout_path = self.base_dir / "def_layout.json"
+        integrations: dict = {}
+        if def_layout_path.exists():
+            try:
+                data = json.loads(def_layout_path.read_text(encoding="utf-8"))
+                integrations = data.get("integrations", {})
+            except Exception:
+                pass
+
+        auto_source = integrations.get("auto_activity_source", "none").lower()
+        idx = self.cmb_auto_source.findData(auto_source)
+        if idx >= 0:
+            self.cmb_auto_source.setCurrentIndex(idx)
+        else:
+            self.cmb_auto_source.setCurrentIndex(0)
+
+        garmin_user = integrations.get("garmin_username", "")
+        self.edit_garmin_user.setText(garmin_user)
+
+        strava_cid = integrations.get("strava_client_id", "")
+        self.edit_strava_client_id.setText(strava_cid)
+
+        from src.integrations import credential_store
+        garmin_pass = credential_store.get_garmin_password()
+        garmin_session = credential_store.get_garmin_session()
+        if garmin_pass or garmin_session:
+            self.edit_garmin_pass.setPlaceholderText("(hasło zapisane w bezpiecznym magazynie)")
+            self.lbl_garmin_status.setText("Status: Skonfigurowano")
+            self.lbl_garmin_status.setStyleSheet("color: #aaffaa;")
+
+        strava_tokens = credential_store.get_strava_tokens()
+        strava_sec = credential_store.get_strava_client_secret()
+        if strava_sec:
+            self.edit_strava_client_secret.setPlaceholderText("(secret zapisany w bezpiecznym magazynie)")
+        if strava_tokens:
+            athlete = strava_tokens.get("athlete", {})
+            name = f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip() or "Połączono"
+            self.lbl_strava_status.setText(f"Status: Połączono jako {name}")
+            self.lbl_strava_status.setStyleSheet("color: #aaffaa;")
+
+        self._on_auto_source_changed(self.cmb_auto_source.currentIndex())
 
     def _browse_dir(self, target: QLineEdit) -> None:
         path = QFileDialog.getExistingDirectory(self, "Wybierz katalog")

@@ -199,6 +199,19 @@ class AppSignals(QObject):
     # Request GUI-thread-only deferred MPV diagnostics from a loading worker.
     sig_schedule_mpv_hwdec_check = Signal()
 
+    # Zdalna telemetria: wybór kandydata w wątku GUI
+    sig_remote_activity_selection_request = Signal(object)
+
+
+class RemoteActivitySelectionRequest:
+    """Request sent to the GUI thread when multiple remote activities match the video."""
+
+    def __init__(self, candidates: list[tuple[object, float]]) -> None:
+        import threading
+        self.candidates: list[tuple[object, float]] = candidates
+        self.selected_candidate: object = None
+        self.completed = threading.Event()
+
 
 # Singleton dla całej aplikacji
 _signals: AppSignals | None = None

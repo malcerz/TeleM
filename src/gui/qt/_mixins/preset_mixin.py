@@ -271,6 +271,9 @@ class PresetMixin:
             amd_quality = getattr(self, "amd_encoder_quality", "FAST") or "FAST"
             saved.setdefault("global", {})["amd_encoder_quality"] = amd_quality
             saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
+            integrations_cfg = self.layout.get("integrations")
+            if integrations_cfg:
+                saved["integrations"] = dict(integrations_cfg)
 
             saved = sanitize_layout_for_json(saved)
             with open(def_layout, "w", encoding="utf-8") as f:
@@ -328,6 +331,20 @@ class PresetMixin:
                 else:
                     data = {}
                 data["_startup_preset"] = self._startup_preset_path
+                with open(def_layout, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+        elif name in ("auto_activity_source", "garmin_username", "strava_client_id"):
+            self.layout.setdefault("integrations", {})[name] = str(value)
+            self._layout_dirty = True
+            try:
+                def_layout = self.base_dir / "def_layout.json"
+                if def_layout.exists():
+                    data = json.loads(def_layout.read_text(encoding="utf-8"))
+                else:
+                    data = {}
+                data.setdefault("integrations", {})[name] = str(value)
                 with open(def_layout, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
             except Exception:
