@@ -31,7 +31,7 @@ TESTED_RUNTIME_ROOT=C:\_DEV\BikeRideHUD-main-new
 FILES_CHANGED=src/indicators/moving_map.py, src/indicators/static_map.py, src/map_renderer.py, src/moving_map.py, src/gui/map_viewport_prefetch.py, tests/test_map_overview_first.py, tests/test_preview_map_cache_miss.py, tests/manual_preview_map_real_gui.py
 TESTS_PASSED=16
 TESTS_FAILED=0
-COMMIT=fb4bdb1
+COMMIT=368e792
 FINAL_STATUS=SUCCESS
 ```
 
