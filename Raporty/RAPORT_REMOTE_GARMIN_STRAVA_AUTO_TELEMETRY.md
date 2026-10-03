@@ -34,6 +34,14 @@ GUI_RESPONSIVE_PASS=YES (wszystkie operacje I/O i sieciowe w wątkach roboczych)
 SECRETS_IN_CONFIG=NO
 SECRETS_IN_LOGS=NO
 SECRETS_IN_REPO=NO
+
+FILES_CHANGED=15
+DEPENDENCIES_ADDED=garminconnect, requests
+TESTS_PASSED=11 (11 passed, 2 skipped opt-in real tests)
+TESTS_FAILED=0
+COMMIT=15d8b0b4d7d703f3021f916e287380720f8eec7d
+
+FINAL_STATUS=SUCCESS
 ```
 
 ## 2. Architektura i wdrożone moduły
