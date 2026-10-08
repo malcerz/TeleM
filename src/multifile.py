@@ -1052,6 +1052,20 @@ def probe_video_info(
             frame_count = int(streams[0].get("nb_frames", 0) or 0)
         except (TypeError, ValueError):
             width = height = frame_count = 0
+        # Sanity check: compare reported fps with derived fps from container/stream duration
+        raw_dur = 0.0
+        try:
+            raw_dur = float(streams[0].get("duration") or data.get("format", {}).get("duration", 0) or 0)
+        except (TypeError, ValueError):
+            raw_dur = 0.0
+        if frame_count > 0 and raw_dur > 0 and fps > 0:
+            derived_fps = frame_count / raw_dur
+            if abs(derived_fps - fps) / fps > 0.01:
+                print(
+                    f"[VIDEO FPS WARNING] reported={fps:.4f} derived={derived_fps:.4f} source={path}",
+                    flush=True,
+                )
+
         # The visual stream, not container/audio/GPMF duration, owns clip
         # boundaries.  This prevents MF EOS from arriving before a switch.
         if frame_count > 0 and fps > 0:

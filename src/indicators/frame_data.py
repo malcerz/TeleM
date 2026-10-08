@@ -360,6 +360,20 @@ def prepare_overlay_frame_data(
 
     # ── Per-source indicator values (speed / dist / alt) ──────────────
     section_started = time.perf_counter()
+    active_mapper = None
+    if isinstance(fit_data, dict):
+        active_mapper = fit_data.get("active_time_mapper")
+    if active_mapper is None and fit_data is not None:
+        active_mapper = getattr(fit_data, "active_time_mapper", None)
+
+    skip_pauses = bool(
+        layout.get("charts_skip_pauses", layout.get("global", {}).get("charts_skip_pauses", False))
+    ) if isinstance(layout, dict) else False
+
+    is_paused = False
+    if skip_pauses and active_mapper is not None and target_dt is not None and hasattr(active_mapper, "is_paused"):
+        is_paused = bool(active_mapper.is_paused(target_dt))
+
     indicator_values: dict[str, float] = {}
     for ind_key in ("speed_visual", "speed_text", "dist_visual", "dist_text",
                     "alt_visual", "alt_text"):
@@ -388,13 +402,19 @@ def prepare_overlay_frame_data(
         elif ind_key in ("alt_visual", "alt_text"):
             samples, field = alt_s, 'alt'
         indicator_values[ind_key] = resolve_current_presentation(samples, target_dt, field, ind_cfg,
-            active_time_mapper=getattr(fit_data, 'active_time_mapper', None) if src == 'fit' else None)
+            active_time_mapper=active_mapper if src == 'fit' else None)
 
     # ── Primary values ────────────────────────────────────────────────
     speed_value = indicator_values.get(
         "speed_visual",
         indicator_values.get("speed_text", interpolate_speed(speed_samples, target_dt) if speed_samples else None),
     )
+    if is_paused:
+        speed_value = 0.0
+        if "speed_visual" in indicator_values:
+            indicator_values["speed_visual"] = 0.0
+        if "speed_text" in indicator_values:
+            indicator_values["speed_text"] = 0.0
     distance_m = indicator_values.get(
         "dist_visual",
         indicator_values.get("dist_text", interpolate_distance(track_samples, target_dt) if track_samples else None),
@@ -582,7 +602,7 @@ def prepare_overlay_frame_data(
     def configured_source(indicator_key: str) -> str:
         if indicator_key == "track_map":
             return layout.get("indicators", {}).get("track_map", {}).get("source", "fit")
-        default = "gpmf" if _STANDARD_RESOLVE_CONSUMERS.get(indicator_key) in ("heading", "slope") else "gpx"
+        default = "gpmf" if _STANDARD_RESOLVE_CONSUMERS.get(indicator_key) in ("heading", "slope") else "auto"
         return layout.get("indicators", {}).get(indicator_key, {}).get("source", default)
 
     power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
@@ -590,6 +610,11 @@ def prepare_overlay_frame_data(
     hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None
     cad_value = profiled_resolve("cad", configured_source("cad_text"), "cad_text") if "cad" in standard_resolve_fields else None
     battery_value = profiled_resolve("battery", configured_source("battery_text"), "battery_text") if "battery" in standard_resolve_fields else None
+    if is_paused:
+        if power_value is not None:
+            power_value = 0.0
+        if cad_value is not None:
+            cad_value = 0.0
     heading_consumers = [
         key for key, field in _STANDARD_RESOLVE_CONSUMERS.items()
         if field == "heading"
@@ -669,6 +694,8 @@ def prepare_overlay_frame_data(
     for key in fit_keys:
         field_name = canonical_telemetry_field(key)
         val = profiled_resolve(field_name, "fit", key)
+        if is_paused and field_name in ("speed", "enhanced_speed", "power", "curVpower", "cadence", "cad") and val is not None:
+            val = 0.0
         cfg = layout.get("indicators", {}).get(key, {})
         unit = cfg.get("unit") or FIT_UNIT_HINTS.get(field_name, "")
         label = cfg.get("label", field_name)
@@ -878,10 +905,13 @@ def prepare_overlay_frame_data(
 
     # ── Position / chart data ─────────────────────────────────────────
     section_started = time.perf_counter()
-    current_position = (
-        current_index / max(1, total_frames - 1)
-        if total_frames > 1 else 0.0
-    )
+    if skip_pauses and active_mapper is not None and getattr(active_mapper, "total_active_seconds", 0) > 0:
+        current_position = min(1.0, max(0.0, float(activity_elapsed_s) / max(1.0, float(active_mapper.total_active_seconds))))
+    else:
+        current_position = (
+            current_index / max(1, total_frames - 1)
+            if total_frames > 1 else 0.0
+        )
     profiler.record(
         "telemetry.graph_data",
         (time.perf_counter() - section_started) * 1000.0,
