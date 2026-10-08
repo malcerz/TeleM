@@ -515,24 +515,30 @@ class PlaybackMixin:
         """
         if not self.is_using_mpv():
             return
-        try:
-            diag = get_hwdec_diagnostics(self.mpv_player)
-            # Store for potential UI use
-            self.mpv_hwdec_active = diag.get("hwdec_current")
-            hw = diag.get("hwdec_current")
-            if hw and hw != "no":
-                print(f"[MPV HW] Dekodowanie sprzętowe aktywne: {hw}")
-                print(f"          interop={diag.get('hwdec_interop')}, "
-                      f"vo={diag.get('current_vo')}, "
-                      f"gpu_ctx={diag.get('current_gpu_context')}, "
-                      f"fmt={diag.get('pixelformat')}")
-            else:
-                print("[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE "
-                      "(brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.")
-                print(f"          hwdec-current={hw}, "
-                      f"codec={diag.get('video_codec')}")
-        except Exception as e:
-            print(f"[MPV HW] Nie udało się odczytać diagnostyki: {e}")
+            
+        import threading
+        def _bg_check():
+            try:
+                from src.gui.qt.mpv_hwdec import get_hwdec_diagnostics
+                diag = get_hwdec_diagnostics(self.mpv_player)
+                # Store for potential UI use
+                self.mpv_hwdec_active = diag.get("hwdec_current")
+                hw = diag.get("hwdec_current")
+                if hw and hw != "no":
+                    print(f"[MPV HW] Dekodowanie sprzętowe aktywne: {hw}")
+                    print(f"          interop={diag.get('hwdec_interop')}, "
+                          f"vo={diag.get('current_vo')}, "
+                          f"gpu_ctx={diag.get('current_gpu_context')}, "
+                          f"fmt={diag.get('pixelformat')}")
+                else:
+                    print("[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE "
+                          "(brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.")
+                    print(f"          hwdec-current={hw}, "
+                          f"codec={diag.get('video_codec')}")
+            except Exception as e:
+                print(f"[MPV HW] Błąd odczytu diagnostyki: {e}")
+                
+        threading.Thread(target=_bg_check, daemon=True).start()
 
     def _playback_step(self) -> None:
         """Przesuń pozycję i zaplanuj następny krok.

@@ -157,6 +157,14 @@ GpmfResult ExtractGpmfData(const std::string& mp4_path) {
 
                 if (samples == 0) continue;
 
+                char fourcc[5];
+                fourcc[0] = (char)((key >> 0) & 0xff);
+                fourcc[1] = (char)((key >> 8) & 0xff);
+                fourcc[2] = (char)((key >> 16) & 0xff);
+                fourcc[3] = (char)((key >> 24) & 0xff);
+                fourcc[4] = '\0';
+                result.present_channels.push_back(std::string(fourcc));
+
                 // 1. GPS9
                 if (key == STR2FOURCC("GPS9")) {
                     GPMF_stream find_stream = strm;
@@ -550,6 +558,9 @@ GpmfResult ExtractGpmfData(const std::string& mp4_path) {
                     result.tmpc.front().value, result.tmpc.back().value);
         std::fflush(stdout);
     }
+
+    std::sort(result.present_channels.begin(), result.present_channels.end());
+    result.present_channels.erase(std::unique(result.present_channels.begin(), result.present_channels.end()), result.present_channels.end());
 
     result.success = true;
 

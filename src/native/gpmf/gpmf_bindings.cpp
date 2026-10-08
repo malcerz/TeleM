@@ -2,11 +2,17 @@
 #include <pybind11/stl.h>
 
 #include "gpmf_extractor.h"
+#include <thread>
+#include <chrono>
 
 namespace py = pybind11;
 
 py::dict ExtractGpmfDict(const std::string& mp4_path) {
-    GpmfResult res = ExtractGpmfData(mp4_path);
+    GpmfResult res;
+    {
+        py::gil_scoped_release release;
+        res = ExtractGpmfData(mp4_path);
+    }
     py::dict out;
     out["success"] = res.success;
     out["error_message"] = res.error_message;
@@ -24,7 +30,9 @@ py::dict ExtractGpmfDict(const std::string& mp4_path) {
     py::list speed_samples;
     py::list alt_samples;
     py::list gps_track;
+    size_t _gps_c = 0;
     for (const auto& pt : res.gps) {
+        if (++_gps_c % 5000 == 0) { py::gil_scoped_release r; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         double spd = (pt.speed3d > 1e-4) ? pt.speed3d : pt.speed2d;
         speed_samples.append(py::make_tuple(pt.timestamp, spd));
         alt_samples.append(py::make_tuple(pt.timestamp, pt.alt));
@@ -54,13 +62,17 @@ py::dict ExtractGpmfDict(const std::string& mp4_path) {
 
     // Motion vectors
     py::list accl_samples;
+    size_t _accl_c = 0;
     for (const auto& v : res.accl) {
+        if (++_accl_c % 5000 == 0) { py::gil_scoped_release r; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         accl_samples.append(py::make_tuple(v.timestamp, py::make_tuple(v.vec.x, v.vec.y, v.vec.z)));
     }
     out["accelerometer_samples"] = accl_samples;
 
     py::list gyro_samples;
+    size_t _gyro_c = 0;
     for (const auto& v : res.gyro) {
+        if (++_gyro_c % 5000 == 0) { py::gil_scoped_release r; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         gyro_samples.append(py::make_tuple(v.timestamp, py::make_tuple(v.vec.x, v.vec.y, v.vec.z)));
     }
     out["gyroscope_samples"] = gyro_samples;
@@ -85,6 +97,12 @@ py::dict ExtractGpmfDict(const std::string& mp4_path) {
     out["temperature_samples"] = temp_samples;
     out["raw_accl_tmpc"] = res.raw_accl_tmpc;
     out["raw_gyro_tmpc"] = res.raw_gyro_tmpc;
+
+    py::list present_list;
+    for (const auto& ch : res.present_channels) {
+        present_list.append(ch);
+    }
+    out["present_channels"] = present_list;
 
     return out;
 }

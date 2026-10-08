@@ -591,6 +591,26 @@ class PreviewMixin:
         }
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
+        import threading
+        # Ensure we only have one background render at a time to prevent queue buildup
+        if getattr(self, "_preview_is_rendering", False):
+            self._preview_pending_seek = seek_seconds
+            return
+        self._preview_is_rendering = True
+        self._preview_pending_seek = None
+        
+        def _worker():
+            try:
+                self._render_preview_sync(seek_seconds)
+            finally:
+                self._preview_is_rendering = False
+                pending = getattr(self, "_preview_pending_seek", None)
+                if pending is not None:
+                    self._render_preview(pending)
+                    
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _render_preview_sync(self, seek_seconds: float | None = None) -> None:
         """Renderuje podgląd nakładki i wysyła QImage do GUI."""
         # Async map: expose the prepared MapContext to the map renderers so
         # they show the overview/placeholder instead of blocking on tiles.

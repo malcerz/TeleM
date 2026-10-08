@@ -54,6 +54,8 @@ struct GpmfResult {
     std::vector<TimedInt> shut;
     std::vector<TimedDouble> tmpc;
 
+    std::vector<std::string> present_channels;
+    
     // Metadata
     double start_dt_utc = 0.0;
     std::string start_dt_str;
