@@ -20,8 +20,25 @@ from src.render_progress import RenderProgressState, format_render_progress_stat
 from src.telemetry_file_validation import TelemetryValidationRequest
 
 
+from src.version import APP_VERSION, APP_BUILD_COMMIT
+import os
+
 APP_TITLE = "BikeRideHUD"
-APP_VERSION = "1.0"
+
+def get_window_title() -> str:
+    title = f"BikeRideHUD v{APP_VERSION}"
+    abs_path = os.path.abspath(__file__)
+    if "BikeRideHUD-portable" in abs_path:
+        repo_name = "Portable"
+    elif "BikeRideHUD-main-new" in abs_path:
+        repo_name = "main-new"
+    else:
+        repo_name = "unknown"
+    if APP_BUILD_COMMIT and APP_BUILD_COMMIT != "unknown":
+        return f"{title} — {repo_name} — {APP_BUILD_COMMIT}"
+    return f"{title} — {repo_name}"
+
+
 
 
 class MainWindow(QMainWindow):
@@ -35,7 +52,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"{APP_TITLE} v{APP_VERSION}")
+        self.setWindowTitle(get_window_title())
         self.setMinimumSize(1200, 800)
         self.resize(1600, 1000)
 

@@ -1,0 +1,2 @@
+APP_VERSION = '1.01'
+APP_BUILD_COMMIT = '3adc9ad'
