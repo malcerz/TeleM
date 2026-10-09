@@ -2020,6 +2020,7 @@ def export_amd_native_d3d11(
     preview_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
     preview_session: Optional[Any] = None,
     generation_id: int = 0,
+    cache_key: Optional[str] = None,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
     if active_process_holder is None:
@@ -3139,6 +3140,7 @@ def export_amd_native_d3d11(
             target_fps=target_fps,
             update_rate_step=1,
             total_overlay_frames=total_frames,
+            skip_chart_build=(telemetry_mode == "PRECOMPUTED"),
         )
         progress_tracker.hud_work(1, 8, "worker cache and fonts")
         print(f"[HUD] worker initialization={time.perf_counter() - _init_t0:.3f}s", flush=True)
@@ -4284,9 +4286,11 @@ def export_amd_native_d3d11(
     telemetry_cache = None
     t_precompute_begin = time.perf_counter()
     if telemetry_mode == "PRECOMPUTED":
-        from src.telemetry_precompute import build_telemetry_cache
+        from src.render_preparation import RenderPreparationService
         _pre_t0 = time.perf_counter()
-        telemetry_cache = build_telemetry_cache(
+        telemetry_cache = RenderPreparationService.get_or_build(
+            cache_key=cache_key,
+            video_paths=input_files,
             layout=semantic_layout,
             base_dt=base_dt,
             tz_offset_hours=tz_offset_hours,
@@ -4306,10 +4310,6 @@ def export_amd_native_d3d11(
             gpx_cad_samples=gpx_cad_samples,
             fit_data=fit_data,
             gps_track=gps_track,
-            chart_data=WORKER_CACHE.get("_precomputed_chart_data", {}),
-            resolve_cache_value=_resolve_cache_value,
-            _range_cache=WORKER_CACHE.get("_prep_cache"),
-            fit_field_plan=fit_field_plan,
             total_frames=total_frames,
             target_fps=target_fps,
             video_timeline=video_timeline,
@@ -4319,7 +4319,7 @@ def export_amd_native_d3d11(
                 else 4.5,
                 8,
                 f"{label} {done}/{total}" if label in ("timeline", "frame records") else label,
-            ),
+            ) if progress_tracker else None,
         )
         print(
             f"[AMD NATIVE D3D11] AMD_TELEMETRY_MODE=PRECOMPUTED: "
@@ -4328,6 +4328,8 @@ def export_amd_native_d3d11(
             f"{telemetry_cache.memory_bytes / (1024.0 * 1024.0):.3f} MiB",
             flush=True,
         )
+        if telemetry_cache.static and telemetry_cache.static.chart_data:
+            WORKER_CACHE["_precomputed_chart_data"] = telemetry_cache.static.chart_data
     t_precompute_end = time.perf_counter()
     progress_tracker.hud_work(7, 8, "native HUD resources")
 

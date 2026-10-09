@@ -58,6 +58,7 @@ def init_worker(
     hud_rotate_180: bool = False,
     telemetry_cache: Optional[Any] = None,
     video_timeline: Optional[Any] = None,
+    skip_chart_build: bool = False,
 ) -> None:
     """Initialise WORKER_CACHE with all telemetry data for worker processes.
 
@@ -147,12 +148,15 @@ def init_worker(
                 max(s[-1][0] for s in all_fit_pts),
             )
     act_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
-    WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(
-        layout, _get_source_samples, _resolve_cache_samples,
-        start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
-        source_activity_ranges=source_ranges,
-        active_time_mapper=act_mapper,
-    )
+    if not skip_chart_build:
+        WORKER_CACHE["_precomputed_chart_data"] = build_chart_data(
+            layout, _get_source_samples, _resolve_cache_samples,
+            start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
+            source_activity_ranges=source_ranges,
+            active_time_mapper=act_mapper,
+        )
+    else:
+        WORKER_CACHE["_precomputed_chart_data"] = {}
 
     # ── Precompute static ranges (max_distance_m, max_speed_kmh, min/max_alt) ──
     _prep_cache: dict[str, Any] = {}

@@ -919,7 +919,23 @@ class RenderMixin:
             )
             options["_inline_gpmf_plan"] = inline_gpmf_plan
 
+        try:
+            from src.render_preparation import RenderPreparationService
+            _prep_cache = RenderPreparationService.prepare(
+                options=options,
+                telemetry=self.telemetry,
+                layout=layout,
+                video_timeline=getattr(self, "video_timeline", None),
+                video_paths=list(options.get("video_paths") or self.video_paths),
+                target_fps=fps_stream,
+            )
+            _cache_key = _prep_cache.cache_key if _prep_cache else None
+        except Exception as e:
+            print(f"[Render Mixin] prepare error: {e}")
+            _cache_key = None
+
         stream_kwargs = dict(
+            cache_key=_cache_key,
             ffmpeg_exe=ffmpeg_exe,
             input_files=list(options.get("video_paths") or self.video_paths),
             output_file=output_path,
@@ -1377,7 +1393,7 @@ codec=options.get("intel_codec", "av1"),
             # 3. Child process kwargs hash
             hashable_child = {}
             for k, v in child_kwargs.items():
-                if k in ("output_file", "generation_id", "_queue_job_id", "_export_queue", "active_process_holder"):
+                if k in ("output_file", "generation_id", "_queue_job_id", "_export_queue", "active_process_holder", "fit_data", "gps_track") or k.endswith("_samples"):
                     continue
                 if hasattr(v, "clips") and hasattr(v, "base_dt"):
                     hashable_child[k] = [
