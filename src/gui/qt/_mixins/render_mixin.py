@@ -923,13 +923,24 @@ class RenderMixin:
         if encoder in ("amd", "amd_native"):
             try:
                 from src.render_preparation import RenderPreparationService
+                from src.ffmpeg.streaming import resolve_amd_gui_range_plan
+                
+                cut_regions = list(getattr(self, "_cut_regions", []))
+                resolved_timeline, resolved_frames, _ = resolve_amd_gui_range_plan(
+                    video_timeline=getattr(self, "video_timeline", None),
+                    cut_regions=cut_regions,
+                    target_fps=fps_stream,
+                    fallback_duration_s=self.video_duration_s,
+                )
+                
                 _prep_cache = RenderPreparationService.prepare(
                     options=options,
                     telemetry=self.telemetry,
                     layout=layout,
-                    video_timeline=getattr(self, "video_timeline", None),
+                    video_timeline=resolved_timeline,
                     video_paths=list(options.get("video_paths") or self.video_paths),
                     target_fps=fps_stream,
+                    total_frames=resolved_frames,
                 )
                 _cache_key = _prep_cache.cache_key if _prep_cache else None
             except Exception as e:

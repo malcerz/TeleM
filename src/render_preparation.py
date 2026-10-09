@@ -1070,18 +1070,23 @@ class RenderPreparationService:
         if start_dt_utc is None:
             start_dt_utc = base_dt
         v_paths = list(video_paths or [])
-        if not cache_key:
-            cache_key = cls.compute_cache_key(
-                video_paths=v_paths,
-                total_frames=total_frames,
-                target_fps=target_fps,
-                start_dt_utc=start_dt_utc,
-                fit_path=fit_path,
-                gpx_path=gpx_path,
-                sync_offset_s=sync_offset_s,
-                layout=layout,
-                video_timeline=video_timeline,
-            )
+        
+        computed_key = cls.compute_cache_key(
+            video_paths=v_paths,
+            total_frames=total_frames,
+            target_fps=target_fps,
+            start_dt_utc=start_dt_utc,
+            fit_path=fit_path,
+            gpx_path=gpx_path,
+            sync_offset_s=sync_offset_s,
+            layout=layout,
+            video_timeline=video_timeline,
+        )
+        if cache_key and cache_key != computed_key:
+            print(f"[RENDER PREP] WARNING: Provided cache_key {cache_key[:12]} does not match computed signature {computed_key[:12]}! Using computed.", flush=True)
+            cache_key = computed_key
+        elif not cache_key:
+            cache_key = computed_key
 
         cdir = cls.get_cache_dir(cache_key, base_cache_dir)
         m_path = cdir / "manifest.json"

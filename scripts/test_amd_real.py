@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import subprocess
 import json
@@ -51,7 +51,7 @@ def run_export_mode(mode, output_path):
         "--test-amd-export",
         "--mode", mode,
         "--video", r"F:\GoPro\2026-10-09\GX010361.MP4",
-        "--frames", "150",
+        "--frames", "800",
         "--output", output_path
     ]
     
