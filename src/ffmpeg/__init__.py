@@ -55,7 +55,6 @@ from src.ffmpeg.second_pass import (
 from src.ffmpeg.output_error import (
     ExportOutputError,
     OutputWriteError,
-    ExportOutputCategory,
     check_preflight_storage,
     classify_output_error,
 )
@@ -84,7 +83,6 @@ __all__ = [
     "run_ffmpeg_with_progress",
     "ExportOutputError",
     "OutputWriteError",
-    "ExportOutputCategory",
     "check_preflight_storage",
     "classify_output_error",
 ]
