@@ -1,6 +1,7 @@
 ﻿import re
 import os
 import sys
+from decimal import Decimal
 
 def bump_version():
     version_file = os.path.join(os.path.dirname(__file__), '..', 'src', 'version.py')
@@ -13,9 +14,9 @@ def bump_version():
         sys.exit(1)
 
     old_version_str = match.group(1)
-    old_version_float = float(old_version_str)
-    new_version_float = old_version_float + 0.01
-    new_version_str = f"{new_version_float:.2f}"
+    old_version_dec = Decimal(old_version_str)
+    new_version_dec = old_version_dec + Decimal('0.01')
+    new_version_str = str(new_version_dec)
 
     text = text.replace(f"'{old_version_str}'", f"'{new_version_str}'")
     text = text.replace(f'"{old_version_str}"', f'"{new_version_str}"')

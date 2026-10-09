@@ -1,7 +1,7 @@
 ﻿import os
 import shutil
 import subprocess
-import re
+import json
 
 def get_git_hash():
     try:
@@ -16,14 +16,6 @@ def inject_hash_and_sync():
     current_hash = get_git_hash()
     print(f"Current git hash: {current_hash}")
     
-    version_file = os.path.join(src_dir, 'src', 'version.py')
-    with open(version_file, 'r', encoding='utf-8') as f:
-        text = f.read()
-    
-    text = re.sub(r"APP_BUILD_COMMIT\s*=\s*['\"].*?['\"]", f"APP_BUILD_COMMIT = '{current_hash}'", text)
-    with open(version_file, 'w', encoding='utf-8') as f:
-        f.write(text)
-        
     for root, dirs, files in os.walk(src_dir):
         if '.git' in root or '__pycache__' in root or 'scratch' in root or 'cache' in root:
             continue
@@ -35,6 +27,11 @@ def inject_hash_and_sync():
                 os.makedirs(os.path.dirname(dst_file), exist_ok=True)
                 shutil.copy2(src_file, dst_file)
                 
+    # Write build metadata to Portable ONLY so Portable knows its version
+    meta_path = os.path.join(dst_dir, 'build_meta.json')
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump({'commit': current_hash}, f)
+        
     print("Sync to Portable completed.")
 
 if __name__ == '__main__':
