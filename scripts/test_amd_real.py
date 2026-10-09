@@ -1,112 +1,90 @@
 ﻿import os
 import sys
+import subprocess
+import json
 import time
-from pathlib import Path
-from PySide6.QtWidgets import QApplication
 
-def run_test():
-    from src.gui.qt.main_window import MainWindow
-    
-    app = QApplication.instance() or QApplication(sys.argv)
-    window = MainWindow()
-    
-    # Wait for init
-    app.processEvents()
-    
-    mp4_path = r"F:\GoPro\2026-10-09\GX010361.MP4"
-    if not os.path.exists(mp4_path):
-        print(f"Skipping: test mp4 {mp4_path} not found.")
-        sys.exit(1)
-        
-    # Drive UI to load video
-    window._load_tab.set_video_paths([mp4_path], start_search=True)
-    window._load_tab._on_load()
-    app.processEvents()
-    
-    # Wait for project to be fully loaded
-    t_wait = time.time()
-    while not window._controller._project_manager.is_project_ready() if hasattr(window, "_controller") else False:
-        app.processEvents()
-        time.sleep(0.1)
-        if time.time() - t_wait > 30:
-            print("Timeout waiting for project ready.")
-            sys.exit(1)
-            
-    # Truncate to 150 frames
-    # window._render_tab.edit_duration.setText("5") # Export 5 seconds instead of frame count if possible, or use API
-    # The actual API for setting export range:
-    vt = window._controller._project_manager._video_timeline
-    vt.set_export_range(0, 300)
-    
-    # Ensure AMD backend
-    window._settings_tab.cmb_video_backend.setCurrentText("amd")
-    window._settings_tab._on_save()
-    
-    direct_out = os.path.abspath("direct_export_real.mp4")
-    if os.path.exists(direct_out): os.remove(direct_out)
-    
-    print("\n--- STARTING DIRECT EXPORT ---")
-    window._render_tab.edit_output.setText(direct_out)
-    window._render_tab._on_export_click()
-    
-    t0 = time.time()
-    while window._render_tab.thread and window._render_tab.thread.isRunning():
-        app.processEvents()
-        time.sleep(0.1)
-        if time.time() - t0 > 120:
-            print("Direct export timeout!")
-            break
-            
-    print(f"Direct Export finished in {time.time() - t0:.2f}s")
-    
-    queue_out = os.path.abspath("queue_export_real.mp4")
-    if os.path.exists(queue_out): os.remove(queue_out)
-    
-    print("\n--- STARTING QUEUE EXPORT ---")
-    window._render_tab.edit_output.setText(queue_out)
-    window._render_tab._on_queue_add()
-    window._render_tab._on_queue_start()
-    
-    t0 = time.time()
-    q = window._render_tab._export_queue
-    while q and q.is_running():
-        app.processEvents()
-        time.sleep(0.1)
-        if time.time() - t0 > 120:
-            print("Queue export timeout!")
-            break
-            
-    print(f"Queue Export finished in {time.time() - t0:.2f}s")
-    
-    verify_output(direct_out, "DIRECT")
-    verify_output(queue_out, "QUEUE")
-    
-    # cleanup
-    try: os.remove("direct_export_real.mp4")
-    except: pass
-    try: os.remove("queue_export_real.mp4")
-    except: pass
-    
-    sys.exit(0)
-
-def verify_output(out_path, name):
+def verify(out_path, name):
     if not os.path.exists(out_path):
-        print(f"[{name}] FAIL: Output file does not exist!")
-        return
+        print(f"[{name}] FAIL: Output file does not exist! ({out_path})")
+        return False
         
-    from src.ffmpeg.ffprobe import FFprobeInspector
-    inspector = FFprobeInspector(out_path)
-    meta = inspector.get_metadata()
+    try:
+        cmd = ["ffprobe", "-v", "error", "-show_streams", "-of", "json", out_path]
+        out = subprocess.check_output(cmd).decode("utf-8")
+        meta = json.loads(out)
+    except Exception as e:
+        print(f"[{name}] FAIL to read with ffprobe: {e}")
+        return False
+        
+    frames = 0
+    fps = 0
+    audio = False
     
-    frames = meta.get("video_frames", 0)
-    fps = meta.get("video_fps", 0)
-    audio = meta.get("audio_codec") is not None
-    
-    print(f"[{name}] RESULT: {frames} frames | {fps} FPS | Audio: {audio}")
+    for s in meta.get("streams", []):
+        if s.get("codec_type") == "video":
+            nb = s.get("nb_frames")
+            if not nb: nb = s.get("tags", {}).get("NUMBER_OF_FRAMES-eng", 0)
+            if not nb: nb = s.get("tags", {}).get("NUMBER_OF_FRAMES", 0)
+            frames = int(nb) if nb else 0
+            r_fr = s.get("r_frame_rate", "0/1")
+            num, den = map(int, r_fr.split("/"))
+            fps = num/den if den != 0 else 0
+        elif s.get("codec_type") == "audio":
+            audio = True
+            
+    print(f"[{name}] RESULT: {frames} frames | {fps:.2f} FPS | Audio: {audio}")
     if frames < 100:
-        print(f"[{name}] FAIL: Too few frames!")
+        print(f"[{name}] FAIL: Too few frames! Expected ~150, got {frames}")
+        return False
     else:
         print(f"[{name}] PASS")
+        return True
+
+def run_export_mode(mode, output_path):
+    print(f"\n--- RUNNING {mode.upper()} EXPORT ---")
+    if os.path.exists(output_path):
+        os.remove(output_path)
+        
+    cmd = [
+        sys.executable, "BikeRideHUD.py",
+        "--test-amd-export",
+        "--mode", mode,
+        "--video", r"F:\GoPro\2026-10-09\GX010361.MP4",
+        "--frames", "150",
+        "--output", output_path
+    ]
+    
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "."
+    
+    t0 = time.time()
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    
+    for line in iter(proc.stdout.readline, b''):
+        l = line.decode('utf-8', errors='replace').rstrip()
+        if "PROGRESS" in l or "error" in l.lower() or "completed" in l:
+            print(f"  {l}")
+            
+    proc.wait()
+    duration = time.time() - t0
+    print(f"[{mode.upper()}] Process exited with code {proc.returncode} in {duration:.2f}s")
+    
+    if proc.returncode != 0:
+        return False
+        
+    return verify(output_path, mode.upper())
 
 if __name__ == '__main__':
-    run_test()
+    direct_out = os.path.abspath(r"scratch\amd_bench_direct.mp4")
+    queue_out = os.path.abspath(r"scratch\amd_bench_queue.mp4")
+    
+    direct_ok = run_export_mode("direct", direct_out)
+    queue_ok = run_export_mode("queue", queue_out)
+    
+    if direct_ok and queue_ok:
+        print("\nOVERALL: FULL PASS")
+        sys.exit(0)
+    else:
+        print("\nOVERALL: FAIL")
+        sys.exit(1)

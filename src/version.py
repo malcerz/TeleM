@@ -1,4 +1,4 @@
-﻿APP_VERSION = '1.03'
+﻿APP_VERSION = '1.04'
 
 import os
 import json

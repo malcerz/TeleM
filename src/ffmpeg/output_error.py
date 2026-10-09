@@ -54,7 +54,8 @@ class OutputWriteError(StorageError):
         kwargs.pop("output_path", None)
         kwargs.pop("os_error", None)
         super().__init__(user_message=message, code=code, **kwargs)
-        self.category = cat
+        self.category = "storage"
+        self.legacy_output_category = cat
 
 ExportOutputError = OutputWriteError
 

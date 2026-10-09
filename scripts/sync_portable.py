@@ -32,7 +32,7 @@ def sync_and_manifest():
     print(f"Current git hash: {current_hash}")
     
     extensions_to_copy = ('.py', '.json', '.cpp', '.h', '.md', '.dll', '.pyd', '.png', '.svg', '.qss', '.ini')
-    skip_dirs = {'.git', '__pycache__', 'scratch', 'tests', 'Raporty', 'tests_mocks'}
+    skip_dirs = {'.git', '__pycache__', 'scratch', 'tests', 'Raporty', 'tests_mocks', '.venv', 'venv', 'node_modules', 'build', 'dist', '.pytest_cache', 'Video'}
     
     manifest = {}
     
