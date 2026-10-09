@@ -311,6 +311,7 @@ class RenderPreparationService:
         video_paths: Sequence[Union[Path, str]],
         total_frames: int,
         target_fps: float,
+        start_dt_utc: Optional[datetime] = None,
         fit_path: Union[Path, str, None] = None,
         gpx_path: Union[Path, str, None] = None,
         sync_offset_s: float = 0.0,
@@ -329,13 +330,16 @@ class RenderPreparationService:
         if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
             timeline_repr = f"clips:{getattr(video_timeline, 'clip_count', 0)}:dur:{getattr(video_timeline, 'project_duration_s', 0.0):.3f}"
 
+        start_ts = start_dt_utc.timestamp() if start_dt_utc else 0.0
+        
         key_dict = {
-            "version": "v2_charts_pauses",
+            "version": "v2_charts_pauses_range",
             "v_fps": v_fps,
             "t_fps": t_fps,
             "total_frames": int(total_frames),
             "target_fps": round(float(target_fps), 4),
             "sync_offset_s": round(float(sync_offset_s), 4),
+            "start_ts": round(start_ts, 4),
             "data_sig": data_sig,
             "timeline": timeline_repr,
             "skip_pauses": skip_pauses,
@@ -1063,6 +1067,7 @@ class RenderPreparationService:
                 video_paths=v_paths,
                 total_frames=total_frames,
                 target_fps=target_fps,
+                start_dt_utc=start_dt_utc,
                 fit_path=fit_path,
                 gpx_path=gpx_path,
                 sync_offset_s=sync_offset_s,
@@ -1089,7 +1094,7 @@ class RenderPreparationService:
                     isinstance(cfg, dict) and cfg.get("form") == "chart" and cfg.get("enabled", True)
                     for cfg in layout.get("indicators", {}).values()
                 )
-                if cache.frames == total_frames and (not has_layout_charts or bool(cache.static.chart_data)):
+                if cache.frames >= total_frames and (not has_layout_charts or bool(cache.static.chart_data)):
                     t_load_ms = (time.perf_counter() - t0_load) * 1000.0
                     print(
                         f"[RENDER PREP] HIT (disk memmap) key={cache_key[:12]} "
@@ -1182,6 +1187,7 @@ class RenderPreparationService:
             video_paths=v_paths,
             total_frames=total_frames,
             target_fps=fps,
+            start_dt_utc=base_dt,
             fit_path=fit_p,
             gpx_path=gpx_p,
             sync_offset_s=sync_offset,
@@ -1207,7 +1213,7 @@ class RenderPreparationService:
                     isinstance(cfg, dict) and cfg.get("form") == "chart" and cfg.get("enabled", True)
                     for cfg in layout.get("indicators", {}).values()
                 )
-                if cache.frames == total_frames and (not has_layout_charts or bool(cache.static.chart_data)):
+                if cache.frames >= total_frames and (not has_layout_charts or bool(cache.static.chart_data)):
                     t_load_ms = (time.perf_counter() - t0_load) * 1000.0
                     print(
                         f"[RENDER PREP] HIT (disk memmap) key={cache_key[:12]} "

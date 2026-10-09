@@ -752,6 +752,7 @@ def _child_entry(
             )
 
         child_kwargs = dict(render_kwargs)
+        print(f"CHILD_CACHE_KEY={child_kwargs.get('cache_key')}", flush=True)
         child_kwargs.update({
             "progress_cb": progress_cb,
             "on_render_progress": render_progress,

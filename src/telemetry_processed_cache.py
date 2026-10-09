@@ -54,6 +54,7 @@ class LazySampleList(list):
     lists (indexing, slicing, iteration, equality, bisect, len, bool).
     """
     __slots__ = (
+        "_mutated",
         "_arr", "_is_vector", "_tz_aware", "_materialized", "_audit_label"
     )
 
@@ -69,6 +70,7 @@ class LazySampleList(list):
         self._is_vector = is_vector
         self._tz_aware = tz_aware
         self._materialized = False
+        self._mutated = False
         self._audit_label = str(audit_label or "")
 
     def _audit_materialization(self) -> None:
@@ -144,7 +146,7 @@ class LazySampleList(list):
         backing array is deliberately omitted.
         """
         del protocol  # The reconstruction contract is protocol-independent.
-        if self._materialized:
+        if self._materialized and self._mutated:
             items = tuple(list.__iter__(self))
             arr = None
         else:
@@ -169,34 +171,42 @@ class LazySampleList(list):
             self._arr = np.concatenate([self._arr, iterable._arr], axis=0)
             return
         self._materialize()
+        self._mutated = True
         super().extend(iterable)
 
     def append(self, item: Any) -> None:
         self._materialize()
+        self._mutated = True
         super().append(item)
 
     def insert(self, index: int, item: Any) -> None:
         self._materialize()
+        self._mutated = True
         super().insert(index, item)
 
     def __setitem__(self, item: Any, value: Any) -> None:
         self._materialize()
+        self._mutated = True
         super().__setitem__(item, value)
 
     def __delitem__(self, item: Any) -> None:
         self._materialize()
+        self._mutated = True
         super().__delitem__(item)
 
     def clear(self) -> None:
         self._materialize()
+        self._mutated = True
         super().clear()
 
     def pop(self, index: int = -1) -> Any:
         self._materialize()
+        self._mutated = True
         return super().pop(index)
 
     def remove(self, value: Any) -> None:
         self._materialize()
+        self._mutated = True
         super().remove(value)
 
     def __iadd__(self, iterable: Any) -> "LazySampleList":
@@ -210,6 +220,7 @@ class LazySampleList(list):
 
     def reverse(self) -> None:
         self._materialize()
+        self._mutated = True
         super().reverse()
 
     def sort(self, *args: Any, **kwargs: Any) -> None:
@@ -223,6 +234,7 @@ class LazySampleList(list):
                 self._arr = self._arr[order]
                 return
         self._materialize()
+        self._mutated = True
         super().sort(*args, **kwargs)
 
     def sort_by_timestamp(self) -> None:
@@ -238,8 +250,12 @@ class LazySampleList(list):
         return super().__eq__(other)
 
     def __repr__(self) -> str:
-        self._materialize()
-        return super().__repr__()
+        if self._materialized:
+            return super().__repr__()
+        return f"<LazySampleList unmaterialized count={len(self._arr) if self._arr is not None else 0}>"
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
 
 def _rebuild_lazy_sample_list(

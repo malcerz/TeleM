@@ -919,20 +919,23 @@ class RenderMixin:
             )
             options["_inline_gpmf_plan"] = inline_gpmf_plan
 
-        try:
-            from src.render_preparation import RenderPreparationService
-            _prep_cache = RenderPreparationService.prepare(
-                options=options,
-                telemetry=self.telemetry,
-                layout=layout,
-                video_timeline=getattr(self, "video_timeline", None),
-                video_paths=list(options.get("video_paths") or self.video_paths),
-                target_fps=fps_stream,
-            )
-            _cache_key = _prep_cache.cache_key if _prep_cache else None
-        except Exception as e:
-            print(f"[Render Mixin] prepare error: {e}")
-            _cache_key = None
+        _cache_key = None
+        if encoder in ("amd", "amd_native"):
+            try:
+                from src.render_preparation import RenderPreparationService
+                _prep_cache = RenderPreparationService.prepare(
+                    options=options,
+                    telemetry=self.telemetry,
+                    layout=layout,
+                    video_timeline=getattr(self, "video_timeline", None),
+                    video_paths=list(options.get("video_paths") or self.video_paths),
+                    target_fps=fps_stream,
+                )
+                _cache_key = _prep_cache.cache_key if _prep_cache else None
+            except Exception as e:
+                print(f"[Render Mixin] prepare error: {e}")
+                _cache_key = None
+            print(f"PARENT_CACHE_KEY={_cache_key}", flush=True)
 
         stream_kwargs = dict(
             cache_key=_cache_key,

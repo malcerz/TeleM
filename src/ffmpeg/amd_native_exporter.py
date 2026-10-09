@@ -2023,6 +2023,7 @@ def export_amd_native_d3d11(
     cache_key: Optional[str] = None,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
+    print(f"AMD_EXPORTER_CACHE_KEY={cache_key}", flush=True)
     if active_process_holder is None:
         active_process_holder = {}
 
@@ -4328,8 +4329,33 @@ def export_amd_native_d3d11(
             f"{telemetry_cache.memory_bytes / (1024.0 * 1024.0):.3f} MiB",
             flush=True,
         )
+        from src.ffmpeg.worker_cache import WORKER_CACHE
         if telemetry_cache.static and telemetry_cache.static.chart_data:
             WORKER_CACHE["_precomputed_chart_data"] = telemetry_cache.static.chart_data
+        
+        # Rigorous check: if skip_chart_build=True skipped building but cache had missing charts
+        required_charts = [
+            k for k, cfg in layout.get("indicators", {}).items()
+            if cfg.get("form") == "chart" and cfg.get("enabled", True)
+        ]
+        missing_charts = [k for k in required_charts if k not in WORKER_CACHE.get("_precomputed_chart_data", {})]
+        if missing_charts:
+            print(f"[HUD] WARNING: Layout requires charts {missing_charts} missing from cache! Fallback building...", flush=True)
+            from src.ffmpeg.worker_cache import _get_source_samples, _resolve_cache_samples
+            from src.indicators.chart_builder import build_chart_data
+            act_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
+            end_dt_utc = start_dt_utc + timedelta(seconds=duration_s) if start_dt_utc and duration_s else None
+            source_ranges = {"gpmf": (start_dt_utc, end_dt_utc)} if start_dt_utc and end_dt_utc else None
+            built_charts = build_chart_data(
+                layout, _get_source_samples, _resolve_cache_samples,
+                start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
+                source_activity_ranges=source_ranges,
+                active_time_mapper=act_mapper,
+            )
+            if "_precomputed_chart_data" not in WORKER_CACHE or not WORKER_CACHE["_precomputed_chart_data"]:
+                WORKER_CACHE["_precomputed_chart_data"] = built_charts
+            else:
+                WORKER_CACHE["_precomputed_chart_data"].update(built_charts)
     t_precompute_end = time.perf_counter()
     progress_tracker.hud_work(7, 8, "native HUD resources")
 
