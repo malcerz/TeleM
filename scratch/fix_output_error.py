@@ -1,4 +1,6 @@
-"""Backward compatibility shim for output_error.py -> render_errors.py."""
+﻿import os
+with open('src/ffmpeg/output_error.py', 'w', encoding='utf-8') as f:
+    f.write('''"""Backward compatibility shim for output_error.py -> render_errors.py."""
 from enum import Enum
 from src.ffmpeg.render_errors import (
     RenderError,
@@ -36,25 +38,22 @@ class OutputWriteError(StorageError):
     def __init__(self, message: str, **kwargs):
         os_error = kwargs.get("os_error", "").lower()
         if "no space" in os_error:
-            cat = ExportOutputCategory.DISK_FULL
+            self.category = ExportOutputCategory.DISK_FULL
             code = "ENOSPC"
         elif "permission" in os_error:
-            cat = ExportOutputCategory.PERMISSION_DENIED
+            self.category = ExportOutputCategory.PERMISSION_DENIED
             code = "EACCES"
         elif "device" in os_error or "not ready" in os_error:
-            cat = ExportOutputCategory.DEVICE_UNAVAILABLE
+            self.category = ExportOutputCategory.DEVICE_UNAVAILABLE
             code = "ENOENT"
         elif "broken pipe" in os_error:
-            cat = ExportOutputCategory.BROKEN_PIPE
+            self.category = ExportOutputCategory.BROKEN_PIPE
             code = "EPIPE"
         else:
-            cat = ExportOutputCategory.UNKNOWN
+            self.category = ExportOutputCategory.UNKNOWN
             code = "STORAGE_ERROR"
         
-        kwargs.pop("output_path", None)
-        kwargs.pop("os_error", None)
         super().__init__(user_message=message, code=code, **kwargs)
-        self.category = cat
 
 ExportOutputError = OutputWriteError
 
@@ -81,3 +80,4 @@ __all__ = [
     "estimate_required_export_space", "parse_bitrate_to_bps", "classify_mux_error",
     "validate_partial_output", "RuntimeStorageMonitor"
 ]
+''')
