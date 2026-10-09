@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 
-CACHE_FORMAT_VERSION = 1
+CACHE_FORMAT_VERSION = 2
 CACHE_KEY_ALGORITHM = "stem + sha256(canonical_path|size|mtime_ns|format_version)[:16]"
 
 _LOGGED_CACHE_EVENTS: set[tuple[str, str, str]] = set()

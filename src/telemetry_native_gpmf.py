@@ -32,7 +32,35 @@ def native_channels_used(native_data: dict[str, Any] | None) -> tuple[str, ...]:
 
 
 def missing_native_channels(native_data: dict[str, Any] | None) -> tuple[str, ...]:
-    return tuple(key for key, count in native_channel_counts(native_data).items() if count == 0)
+    if not native_data:
+        return NATIVE_CHANNEL_KEYS
+    present = set(native_data.get("present_channels", []))
+    if not present:
+        return tuple(key for key, count in native_channel_counts(native_data).items() if count == 0)
+    
+    # Map GPMF 4CC to our channel keys
+    FOURCC_MAP = {
+        "GPS5": ("gps_track", "speed_samples", "alt_samples", "track_samples"),
+        "ACCL": ("accelerometer_samples",),
+        "GYRO": ("gyroscope_samples",),
+        "ISOS": ("iso_samples",),
+        "SHUT": ("exposure_samples",),
+        "CORI": (), # Camera orientation
+        "IORI": (), # Image orientation
+        "GRAV": (), # Gravity
+        "WBAL": (), # White balance
+    }
+    
+    expected_keys = set()
+    for fourcc in present:
+        if fourcc in FOURCC_MAP:
+            expected_keys.update(FOURCC_MAP[fourcc])
+            
+    # Always expect temperature if any IMU is present
+    if "ACCL" in present or "GYRO" in present:
+        expected_keys.add("temperature_samples")
+        
+    return tuple(key for key, count in native_channel_counts(native_data).items() if count == 0 and key in expected_keys)
 
 
 def native_result_usable(native_data: dict[str, Any] | None) -> bool:
@@ -199,10 +227,14 @@ def populate_telemetry_from_native(
     def vector_array(samples: list) -> np.ndarray:
         if not samples:
             return np.zeros((0, 4), dtype=np.float64)
-        return np.asarray(
-            [[float(ts), float(vec[0]), float(vec[1]), float(vec[2])] for ts, vec in samples],
-            dtype=np.float64,
-        )
+        # Fast flattening with generator, then fromiter, then reshape
+        def _flatten():
+            for ts, vec in samples:
+                yield float(ts)
+                yield float(vec[0])
+                yield float(vec[1])
+                yield float(vec[2])
+        return np.fromiter(_flatten(), dtype=np.float64).reshape(-1, 4)
 
     manager.accelerometer_array = vector_array(native_data.get("accelerometer_samples", []))
     manager.gyroscope_array = vector_array(native_data.get("gyroscope_samples", []))
