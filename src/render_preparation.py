@@ -328,7 +328,15 @@ class RenderPreparationService:
 
         timeline_repr = ""
         if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
-            timeline_repr = f"clips:{getattr(video_timeline, 'clip_count', 0)}:dur:{getattr(video_timeline, 'project_duration_s', 0.0):.3f}"
+            clip_details = []
+            for i, clip in enumerate(getattr(video_timeline, "clips", [])):
+                c_name = getattr(clip.path, "name", str(clip.path)) if getattr(clip, "path", None) else f"clip{i}"
+                g_start = getattr(clip, "global_start_s", 0.0)
+                g_end = getattr(clip, "global_end_s", 0.0)
+                l_start = getattr(clip, "local_start_s", 0.0)
+                l_end = getattr(clip, "local_end_s", 0.0)
+                clip_details.append(f"{c_name}@[{g_start:.3f}-{g_end:.3f}|{l_start:.3f}-{l_end:.3f}]")
+            timeline_repr = f"clips:{getattr(video_timeline, 'clip_count', 0)}:dur:{getattr(video_timeline, 'project_duration_s', 0.0):.3f}:" + "|".join(clip_details)
 
         start_ts = start_dt_utc.timestamp() if start_dt_utc else 0.0
         
