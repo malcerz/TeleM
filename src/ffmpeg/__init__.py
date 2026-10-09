@@ -52,6 +52,14 @@ from src.ffmpeg.second_pass import (
     apply_overlay_video,
 )
 
+from src.ffmpeg.output_error import (
+    ExportOutputError,
+    OutputWriteError,
+    ExportOutputCategory,
+    check_preflight_storage,
+    classify_output_error,
+)
+
 __all__ = [
     "detect_gpu_decoder",
     "detect_best_encoder",
@@ -74,4 +82,10 @@ __all__ = [
     "RESOLUTION_MAP",
     "WORKER_CACHE",
     "run_ffmpeg_with_progress",
+    "ExportOutputError",
+    "OutputWriteError",
+    "ExportOutputCategory",
+    "check_preflight_storage",
+    "classify_output_error",
 ]
+
