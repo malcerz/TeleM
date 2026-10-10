@@ -14,7 +14,7 @@ VERSION_INCREMENT_TESTS=PASS (zweryfikowano: 1.00 -> 1.01, 1.09 -> 1.10, 1.99 ->
 Zaimplementowano bezpieczny mechanizm generowania hasha dla okna głównego:
 - W MAIN-NEW: odczyt struktury plików \.git\ (\HEAD\ i \packed-refs\) bez wywoływania procesów \git.exe\.
 - W PORTABLE: odczyt wstrzykniętego podczas synchronizacji pliku \uild_meta.json\.
-VERSION_TITLE_PASS=YES (Wyświetla: "BikeRideHUD v1.02 — main-new/Portable — 33a3848")
+VERSION_TITLE_PASS=YES (Wyświetla: "SportCamHUD v1.02 — main-new/Portable — 33a3848")
 
 ## 2. KOMPATYBILNOŚĆ OBSŁUGI BŁĘDÓW (EXPORT ERROR FRAMEWORK)
 EXPORT_OUTPUT_CATEGORY_COMPATIBILITY=RESOLVED
@@ -24,8 +24,8 @@ EXPORT_OUTPUT_CATEGORY_COMPATIBILITY=RESOLVED
 ERROR_FRAMEWORK_TESTS=PASS (symulacje: brak miejsca, brak uprawnień, awaria muxera z rc=1).
 
 ## 3. MODUŁY NATYWNE (SHA256)
-GPMF_NATIVE_SHA256=50e413ff5ff68cb6be014205b475a2c99c18317887a26fa5c1f67975dcb2af6f (C:\_DEV\BikeRideHUD-main-new\src\native\gpmf\telem_gpmf_native.pyd)
-AMD_NATIVE_DLL_SHA256=7f93c483404f970ea4e2110dcfe12535429b25b11df7415b688c07cef508752f (C:\_DEV\BikeRideHUD-main-new\native\d3d11_amf_pipeline\bin\telem_amd_native.dll)
+GPMF_NATIVE_SHA256=50e413ff5ff68cb6be014205b475a2c99c18317887a26fa5c1f67975dcb2af6f (C:\_DEV\SportCamHUD-main-new\src\native\gpmf\telem_gpmf_native.pyd)
+AMD_NATIVE_DLL_SHA256=7f93c483404f970ea4e2110dcfe12535429b25b11df7415b688c07cef508752f (C:\_DEV\SportCamHUD-main-new\native\d3d11_amf_pipeline\bin\telem_amd_native.dll)
 
 ## 4. TESTY URUCHOMIENIA GUI
 MAIN_GUI_START=PASS (Przetestowano start weryfikujący uwierzytelnienie Garmin, wczytywanie GPMF, ładowanie UI)

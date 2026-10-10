@@ -768,7 +768,7 @@ class RenderTab(QWidget):
         self.chk_yt_enabled.setChecked(False)
         self.chk_yt_enabled.setToolTip(
             "Wymaga: pip install google-api-python-client google-auth-oauthlib\n"
-            "Credentiale: %APPDATA%\\BikeRideHUD\\youtube_client_secret.json"
+            "Credentiale: %APPDATA%\\SportCamHUD\\youtube_client_secret.json"
         )
         yt_layout.addRow(self.chk_yt_enabled)
 

@@ -4,23 +4,23 @@
 - **Status zadania**: CASE A — AMD BIKERIDEHUD BOOTSTRAP READY
 - **Branch**: `amd-bikeridehud`
 - **HEAD**: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`
-- **Katalog roboczy**: `C:\_DEV\BikeRideHUD`
+- **Katalog roboczy**: `C:\_DEV\SportCamHUD`
 - **Katalog referencyjny (Oracle)**: `C:\_DEV\TeleM` (nietknięty, stan read-only)
 - **Data wykonania**: 2026-09-16 07:22 CEST
 - **Platforma**: Asus PN51 (AMD Radeon (TM) Graphics, Barcelo / Cezanne APU, Driver 31.0.21925.1001)
 
 ---
 
-## 2. ETAP 1 — REKONSTRUKCJA LAUNCHERA (BikeRideHUD.py)
+## 2. ETAP 1 — REKONSTRUKCJA LAUNCHERA (SportCamHUD.py)
 
-- **Problem wyjściowy**: Po commicie `b3c74bf` brakowało fizycznego pliku `BikeRideHUD.py`, a kompatybilny shim `TeleMGP.py` importował z niego symbole, powodując `ModuleNotFoundError`.
+- **Problem wyjściowy**: Po commicie `b3c74bf` brakowało fizycznego pliku `SportCamHUD.py`, a kompatybilny shim `TeleMGP.py` importował z niego symbole, powodując `ModuleNotFoundError`.
 - **Rozwiązanie**:
-  - Utworzono plik `BikeRideHUD.py`, który implementuje kanoniczny punkt wejścia PySide6 (`src.gui.qt.application.main()`) oraz re-eksportuje 12 kluczowych funkcji telemetrycznych z `src.telemetry_extract` (wspierając zgodność wsteczną z testami i `TeleMGP.py`).
-  - Plik `TeleMGP.py` oraz `BikeRideHUD.py` uruchamiają się bezbłędnie.
+  - Utworzono plik `SportCamHUD.py`, który implementuje kanoniczny punkt wejścia PySide6 (`src.gui.qt.application.main()`) oraz re-eksportuje 12 kluczowych funkcji telemetrycznych z `src.telemetry_extract` (wspierając zgodność wsteczną z testami i `TeleMGP.py`).
+  - Plik `TeleMGP.py` oraz `SportCamHUD.py` uruchamiają się bezbłędnie.
 - **Weryfikacja startu GUI**:
-  - `python BikeRideHUD.py` -> **PASS**
-  - `MainWindow` inicjalizuje się prawidłowo (tytuł: *BikeRideHUD v0.7.9*, 4 zakładki: *Wczytywanie*, *Projekt*, *Rendering*, *Ustawienia*).
-  - Log startu: [gui_start.log](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/gui_start.log)
+  - `python SportCamHUD.py` -> **PASS**
+  - `MainWindow` inicjalizuje się prawidłowo (tytuł: *SportCamHUD v0.7.9*, 4 zakładki: *Wczytywanie*, *Projekt*, *Rendering*, *Ustawienia*).
+  - Log startu: [gui_start.log](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/gui_start.log)
 
 ---
 
@@ -54,7 +54,7 @@
   - Wersja ABI: **9**
   - Przetestowano i potwierdzono obecność oraz poprawne powiązanie wszystkich **66 symboli C** wymaganych przez `src/ffmpeg/amd_native_exporter.py`.
   - **Werdykt ładowania DLL**: **PASS**
-  - Dowód: [dll_proof.txt](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/dll_proof.txt)
+  - Dowód: [dll_proof.txt](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/dll_proof.txt)
 
 ---
 
@@ -74,23 +74,23 @@
   - Status procesu potomnego: `exitcode=0`, czyste zwolnienie zasobów GPU.
   - **Werdykt renderu**: **PASS**
 - **Wygenerowany plik wyjściowy**:
-  - Ścieżka: [smoke_render_10s.mp4](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/smoke_render_10s.mp4)
+  - Ścieżka: [smoke_render_10s.mp4](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/smoke_render_10s.mp4)
   - Rozmiar: **85 375 163 bajty (~85.4 MB)**
   - Kodek: HEVC Main, 3840x2160, 29.97 fps, audio AAC 48 kHz stereo
-  - Profiler: [smoke_render_10s.mp4.amd_profile.json](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/smoke_render_10s.mp4.amd_profile.json)
+  - Profiler: [smoke_render_10s.mp4.amd_profile.json](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/smoke_render_10s.mp4.amd_profile.json)
 
 ---
 
 ## 5. DOWODY WIZUALNE (VISUAL ACCEPTANCE)
 
 Z wyrenderowanego pliku wideo wyodrębniono klatki wzorcowe:
-1. Klatka 0 (0.00s): [frame_000.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/frames/frame_000.png)
-2. Klatka środkowa 150 (5.00s): [frame_150.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/frames/frame_150.png)
-3. Klatka końcowa 299 (9.98s): [frame_299.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/frames/frame_299.png)
-4. Zestawienie (Contact Sheet): [contact_sheet.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/contact_sheet.png)
+1. Klatka 0 (0.00s): [frame_000.png](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/frames/frame_000.png)
+2. Klatka środkowa 150 (5.00s): [frame_150.png](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/frames/frame_150.png)
+3. Klatka końcowa 299 (9.98s): [frame_299.png](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/frames/frame_299.png)
+4. Zestawienie (Contact Sheet): [contact_sheet.png](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/contact_sheet.png)
 
 ### Zestawienie klatek:
-![Contact Sheet](file:///C:/_DEV/BikeRideHUD/scratch/amd_bootstrap/contact_sheet.png)
+![Contact Sheet](file:///C:/_DEV/SportCamHUD/scratch/amd_bootstrap/contact_sheet.png)
 
 - **Status wizualny**: `USER VISUAL ACCEPTANCE=PENDING`
 - Wskaźniki overlayu:
@@ -104,7 +104,7 @@ Z wyrenderowanego pliku wideo wyodrębniono klatki wzorcowe:
 ## 6. PLIKI ZMODYFIKOWANE / UTWORZONE
 
 - Utworzone:
-  - `BikeRideHUD.py` (kanoniczny launcher)
+  - `SportCamHUD.py` (kanoniczny launcher)
   - `native/d3d11_amf_pipeline/bin/telem_amd_native.dll` (zbudowana natywna biblioteka)
   - `scratch/amd_bootstrap/*` (logi, dowody, skrypty walidacji, wyjściowy film MP4, klatki PNG)
   - `Raporty/RAPORT_AMD_BIKERIDEHUD_BOOTSTRAP.md` (niniejszy raport)

@@ -1,7 +1,7 @@
 # Raport: Canonical Visual-State Cache dla Widgetów Segment Bar (AMD D3D11 Pipeline)
 
 Data: 2026-09-16  
-Środowisko: `C:\_DEV\BikeRideHUD`  
+Środowisko: `C:\_DEV\SportCamHUD`  
 Gałąź: `amd-bikeridehud`  
 Dataset: `Video/GX010298.MP4` + `Video/GX010298.fit` (3840x2160, 300 klatek, HEVC AMF)  
 

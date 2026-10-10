@@ -2,7 +2,7 @@
 
 ## 1. Kontekst i Cel Zadania
 
-W BikeRideHUD istniała opcjonalna funkcja automatycznego uploadu wyrenderowanego materiału wideo do YouTube bezpośrednio po zakończeniu renderingu. Ponieważ upload do YouTube wymaga zewnętrznej konfiguracji konta Google Cloud Console oraz autoryzacji OAuth 2.0 (pliki `youtube_client_secret.json` i `youtube_token.json`), na obecnym etapie rozwoju funkcja ta wprowadzała niepotrzebne komplikacje dla użytkowników końcowych.
+W SportCamHUD istniała opcjonalna funkcja automatycznego uploadu wyrenderowanego materiału wideo do YouTube bezpośrednio po zakończeniu renderingu. Ponieważ upload do YouTube wymaga zewnętrznej konfiguracji konta Google Cloud Console oraz autoryzacji OAuth 2.0 (pliki `youtube_client_secret.json` i `youtube_token.json`), na obecnym etapie rozwoju funkcja ta wprowadzała niepotrzebne komplikacje dla użytkowników końcowych.
 
 **Cele wdrożenia:**
 1. Całkowite ukrycie kontrolek YouTube w zakładce Rendering / Eksport w GUI.
@@ -10,7 +10,7 @@ W BikeRideHUD istniała opcjonalna funkcja automatycznego uploadu wyrenderowaneg
 3. Architektura pojedynczego przełącznika (feature flag `ENABLE_YOUTUBE_UPLOAD_UI = False`) umożliwiająca natychmiastowe przywrócenie funkcji w przyszłości.
 4. Poprawa układu okna — przestrzeń zwolniona po usunięciu ramki YouTube została naturalnie wykorzystana przez powiększoną listę kolejki (`queue_list`).
 5. Brak jakichkolwiek skutków ubocznych: brak wyjątków `AttributeError`, brak zapytań o credentiale, brak wyzwalania uploadera w tle, pełna funkcjonalność normalnego eksportu bezpośredniego (Direct) i kolejkowego (Queue).
-6. 100% parytet skrótów SHA-256 (`FIXED_SOURCE_HASH_PARITY=YES`) pomiędzy `BikeRideHUD-main-new` i `BikeRideHUD-portable`.
+6. 100% parytet skrótów SHA-256 (`FIXED_SOURCE_HASH_PARITY=YES`) pomiędzy `SportCamHUD-main-new` i `SportCamHUD-portable`.
 
 ---
 
@@ -112,8 +112,8 @@ tests/test_queue_requeue_pending.py ............                         [100%]
 ## 5. Status Parytetu Źródeł
 
 Wszystkie zmodyfikowane pliki oraz nowy plik testów i raport zostały zsynchronizowane pomiędzy:
-- `C:\_DEV\BikeRideHUD-main-new`
-- `C:\_DEV\BikeRideHUD-portable`
+- `C:\_DEV\SportCamHUD-main-new`
+- `C:\_DEV\SportCamHUD-portable`
 
 Skrypt weryfikacyjny `scripts/check_parity.py` potwierdza:
 `FIXED_SOURCE_HASH_PARITY=YES`.

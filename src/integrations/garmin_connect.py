@@ -1,4 +1,4 @@
-"""Garmin Connect activity provider for BikeRideHUD."""
+"""Garmin Connect activity provider for SportCamHUD."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 # AMD D3D11 Video Device init diagnostics
 
 Date: 2026-09-22  
-Repository: `C:\_DEV\BikeRideHUD-amd`  
+Repository: `C:\_DEV\SportCamHUD-amd`  
 Branch: `amd-bikeridehud`  
 Checkpoint: `0ef407e`
 

@@ -2,7 +2,7 @@
 
 Data: 2026-09-19
 Autor: Antigravity AI
-Worktree: `C:\_DEV\BikeRideHUD-amd`
+Worktree: `C:\_DEV\SportCamHUD-amd`
 Branch: `amd-bikeridehud`
 
 ---

@@ -20,7 +20,7 @@
 
 ## Real FFmpeg/GPMF validation
 
-The canonical `GX020079.MP4` has no `gpmd` stream. Before using another dataset, the proposed pairing was reported: `C:\_DEV\BikeRideHUD-amd\Video\GX010298.MP4` + `GX010298.fit`, solely for GPMF validation (noncanonical; not a performance benchmark). The remux itself does not consume the FIT file.
+The canonical `GX020079.MP4` has no `gpmd` stream. Before using another dataset, the proposed pairing was reported: `C:\_DEV\SportCamHUD-amd\Video\GX010298.MP4` + `GX010298.fit`, solely for GPMF validation (noncanonical; not a performance benchmark). The remux itself does not consume the FIT file.
 
 The project FFmpeg at `C:\tools\ffmpeg.exe` successfully stream-copied the 23:18 source into MP4. A separate stream-copy OFF smoke contained HEVC video and AAC audio and no data stream. The ON finalizer attach completed on the real source/output and passed ffprobe validation.
 

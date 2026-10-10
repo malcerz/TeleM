@@ -155,11 +155,11 @@ Wynik uruchomienia:
 
 ---
 
-## 7. Potwierdzenie Hash Parity (BikeRideHUD-portable)
+## 7. Potwierdzenie Hash Parity (SportCamHUD-portable)
 
 Wszystkie zmodyfikowane pliki źródłowe, skompilowane biblioteki DLL, skrypty testowe oraz niniejszy raport zostały zsynchronizowane pomiędzy:
-- `C:\_DEV\BikeRideHUD-main-new`
-- `C:\_DEV\BikeRideHUD-portable`
+- `C:\_DEV\SportCamHUD-main-new`
+- `C:\_DEV\SportCamHUD-portable`
 
 Skrypt weryfikacyjny `scripts/check_parity.py` potwierdza:
 `FIXED_SOURCE_HASH_PARITY=YES`

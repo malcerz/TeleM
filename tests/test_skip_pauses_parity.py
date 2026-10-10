@@ -193,7 +193,7 @@ class TestSkipPausesParity(unittest.TestCase):
                     self.assertAlmostEqual(exp["current_position"], expected_pos, places=3)
 
     def test_real_fit_activity_parity(self):
-        fit_path = Path(r"C:\Users\Malcerz\AppData\Local\BikeRideHUD\remote_telemetry\garmin\24614281884.fit")
+        fit_path = Path(r"C:\Users\Malcerz\AppData\Local\SportCamHUD\remote_telemetry\garmin\24614281884.fit")
         if not fit_path.exists():
             self.skipTest(f"Real FIT file {fit_path} not found on test machine")
 

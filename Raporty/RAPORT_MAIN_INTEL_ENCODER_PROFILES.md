@@ -2,7 +2,7 @@
 
 ## 1. Metadane i Baza Produkcyjna
 - **BASE_MAIN_HEAD**: `bd88b3d84fafb18c1468ec36dbe66f157bc89e68`
-- **WORKTREE**: `C:\_DEV\BikeRideHUD-main` (dedykowany worktree gałęzi `main`)
+- **WORKTREE**: `C:\_DEV\SportCamHUD-main` (dedykowany worktree gałęzi `main`)
 - **DATASET**: `C:\GoPro\2026-09-21\GX010305.MP4` + `Poranna_jazda_na_rowerze.fit` (4K 3840x2160, 50.0 fps, 10-bit HDR)
 - **LAYOUT**: `def_layout.json`
 - **FINAL_DECISION**: `INTEL_PROFILES_READY`
@@ -18,7 +18,7 @@ W oneVPL parametr `TargetUsage` definiuje kompromis między szybkością a jako�
 - **`QUALITY` (Jakość)**: `TargetUsage = 1` (`MFX_TARGETUSAGE_BEST_QUALITY`) — maksymalna złożoność algorytmów kodowania i jakość.
 
 ### 2.2. Gwarancja Parzystości z Produkcją (Migracja Starszych Projektów)
-Dotychczasowy kod produkcyjny Intel w BikeRideHUD przed wprowadzeniem profili używał w natywnym potoku oneVPL wartości `TargetUsage = 7`.
+Dotychczasowy kod produkcyjny Intel w SportCamHUD przed wprowadzeniem profili używał w natywnym potoku oneVPL wartości `TargetUsage = 7`.
 - **Dla starych projektów/presetów (brak pola `encoder_profile`)**:
   - `LEGACY_MISSING_PROFILE = fast`
   - Wartość w GUI ładuje się jako: `Szybki` (`fast`)
@@ -88,7 +88,7 @@ Testy wykonano z pełnym stosem produkcyjnym GUI (dekoder D3D11VA HW, kompozytor
 - `pytest tests/test_encoder_profiles_intel.py`: **7/7 PASS**
 - `pytest -k intel -q`: **158 passed** (0 failures, 100% zgodności)
 - `pytest -q`: 1644 passed (`NEW_UNRELATED_FAILURES = 0`)
-- **NVIDIA / AMD**: Backendy nienaruszone, pliki źródłowe i repozytoria `C:\_DEV\BikeRideHud-AMD` oraz `C:\_DEV\BikeRideHUD-intel` nienaruszone.
+- **NVIDIA / AMD**: Backendy nienaruszone, pliki źródłowe i repozytoria `C:\_DEV\BikeRideHud-AMD` oraz `C:\_DEV\SportCamHUD-intel` nienaruszone.
 
 ---
 

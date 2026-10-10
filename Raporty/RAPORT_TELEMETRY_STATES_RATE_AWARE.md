@@ -59,7 +59,7 @@ Wymagania:
 
 ## 3. Zastosowana Implementacja
 
-Utworzono dedykowany, zoptymalizowany moduł [`src/telemetry_states_fast.py`](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py):
+Utworzono dedykowany, zoptymalizowany moduł [`src/telemetry_states_fast.py`](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py):
 
 ### A. Wektoryzacja Osi Czasu i Przeliczania Znaczników
 1. Wygenerowanie tablicy indeksów klatek i sekund globalnych: `frame_indices = np.arange(export_frames)`, `t_global = frame_indices / fps`.
@@ -181,9 +181,9 @@ CLIP 2 -> CLIP 3 (wokół klatki 54516, t=1819.02 s):
 ## 7. Izolacja Backendów i Zmodyfikowane Pliki
 
 - **Zmienione pliki:**
-  1. [`src/telemetry_states_fast.py`](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py) *(Nowy moduł: wektorowa prekomputacja stanów telemetrycznych)*
-  2. [`src/ffmpeg/nvidia_native_exporter.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_native_exporter.py) *(Zastąpienie skalarnej pętli przez `compute_fast_telemetry_states`)*
-  3. [`tests/test_telemetry_states_rate_aware.py`](file:///H:/_Dev/BikeRideHUD/tests/test_telemetry_states_rate_aware.py) *(Nowe testy jednostkowe i integracyjne)*
+  1. [`src/telemetry_states_fast.py`](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py) *(Nowy moduł: wektorowa prekomputacja stanów telemetrycznych)*
+  2. [`src/ffmpeg/nvidia_native_exporter.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_native_exporter.py) *(Zastąpienie skalarnej pętli przez `compute_fast_telemetry_states`)*
+  3. [`tests/test_telemetry_states_rate_aware.py`](file:///H:/_Dev/SportCamHUD/tests/test_telemetry_states_rate_aware.py) *(Nowe testy jednostkowe i integracyjne)*
 - **Pliki nienaruszone:**
   - Kod AMD, Intel, D3D11 Compositor, koder NVENC/AMF, layout parser, render preview, audio slice, polityka zaokrągleń i formatowania liczb.
 
@@ -207,5 +207,5 @@ CLIP 2 -> CLIP 3 (wokół klatki 54516, t=1819.02 s):
 ## 9. Podsumowanie NTFY Gate
 
 Powiadomienie zostało wysłane i odebrane:
-- **Treść:** `BikeRideHUD telemetry rate-aware: CASE A — <5S + PARITY PASS, before=34.23s, after=0.42s, speedup=82.1x.`
+- **Treść:** `SportCamHUD telemetry rate-aware: CASE A — <5S + PARITY PASS, before=34.23s, after=0.42s, speedup=82.1x.`
 - **Status:** `200 OK (Attempt 1/3)`

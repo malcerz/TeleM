@@ -1,4 +1,4 @@
-"""Credential Store for BikeRideHUD.
+"""Credential Store for SportCamHUD.
 
 Secure storage for sensitive credentials (passwords, tokens, client secrets)
 using Windows Credential Manager (via advapi32.dll) with in-memory mock support
@@ -16,12 +16,12 @@ import sys
 import uuid
 from typing import Optional
 
-_TARGET_GARMIN_PASSWORD = "BikeRideHUD:garmin:password"
-_TARGET_GARMIN_SESSION = "BikeRideHUD:garmin:session"
-_TARGET_GARMIN_DI_SESSION = "BikeRideHUD/Garmin/session"
-_GARMIN_PART_PREFIX = "BikeRideHUD/Garmin/session/"
-_TARGET_STRAVA_SECRET = "BikeRideHUD:strava:client_secret"
-_TARGET_STRAVA_TOKENS = "BikeRideHUD:strava:tokens"
+_TARGET_GARMIN_PASSWORD = "SportCamHUD:garmin:password"
+_TARGET_GARMIN_SESSION = "SportCamHUD:garmin:session"
+_TARGET_GARMIN_DI_SESSION = "SportCamHUD/Garmin/session"
+_GARMIN_PART_PREFIX = "SportCamHUD/Garmin/session/"
+_TARGET_STRAVA_SECRET = "SportCamHUD:strava:client_secret"
+_TARGET_STRAVA_TOKENS = "SportCamHUD:strava:tokens"
 
 # In-memory store for unit testing or fallback
 _MOCK_STORE: dict[str, str] = {}
@@ -86,7 +86,7 @@ def _credential_api():
     return api
 
 
-def _win_write_credential(target: str, secret: str, username: str = "BikeRideHUD") -> bool:
+def _win_write_credential(target: str, secret: str, username: str = "SportCamHUD") -> bool:
     try:
         advapi32 = _credential_api()
         blob = secret.encode("utf-8")
@@ -97,7 +97,7 @@ def _win_write_credential(target: str, secret: str, username: str = "BikeRideHUD
         cred.Flags = 0
         cred.Type = CRED_TYPE_GENERIC
         cred.TargetName = target
-        cred.Comment = "BikeRideHUD Secure Credential"
+        cred.Comment = "SportCamHUD Secure Credential"
         cred.CredentialBlobSize = len(blob)
         cred.CredentialBlob = blob_buffer
         cred.Persist = CRED_PERSIST_LOCAL_MACHINE
@@ -138,7 +138,7 @@ def _win_delete_credential(target: str) -> bool:
 # Public generic API
 # ---------------------------------------------------------------------------
 
-def set_credential(target: str, secret: str, username: str = "BikeRideHUD") -> bool:
+def set_credential(target: str, secret: str, username: str = "SportCamHUD") -> bool:
     """Save a secret string associated with target."""
     if is_mock_mode():
         _MOCK_STORE[target] = secret
@@ -318,3 +318,44 @@ def clear_all_credentials() -> None:
     delete_garmin_session()
     delete_strava_client_secret()
     delete_strava_tokens()
+
+
+def migrate_legacy_credentials():
+    legacy_targets = {
+        "SportCamHUD:garmin:password": "BikeRideHUD:garmin:password",
+        "SportCamHUD:garmin:session": "BikeRideHUD:garmin:session",
+        "SportCamHUD/Garmin/session": "BikeRideHUD/Garmin/session",
+        "SportCamHUD:strava:client_secret": "BikeRideHUD:strava:client_secret",
+        "SportCamHUD:strava:tokens": "BikeRideHUD:strava:tokens",
+    }
+    for new_tgt, old_tgt in legacy_targets.items():
+        old_val = _win_read_credential(old_tgt)
+        if old_val:
+            # We assume it has legacy username 'BikeRideHUD' or similar, we just write it with new username
+            _win_write_credential(new_tgt, old_val, username="SportCamHUD")
+            _win_delete_credential(old_tgt)
+            print(f"[Credential Migration] Migrated {old_tgt} to {new_tgt}", flush=True)
+            
+        # Special case for DI Garmin Session chunks which had BikeRideHUD prefix
+        if new_tgt == "SportCamHUD/Garmin/session" and old_val:
+            try:
+                import json
+                manifest = json.loads(old_val)
+                parts = manifest.get("parts", [])
+                for part in parts:
+                    if part.startswith("BikeRideHUD/Garmin/session/"):
+                        chunk_val = _win_read_credential(part)
+                        new_part = part.replace("BikeRideHUD", "SportCamHUD", 1)
+                        if chunk_val:
+                            _win_write_credential(new_part, chunk_val, username="garmin_di")
+                            _win_delete_credential(part)
+                
+                # Replace manifest parts with new names
+                manifest["parts"] = [p.replace("BikeRideHUD", "SportCamHUD", 1) for p in parts]
+                _win_write_credential(new_tgt, json.dumps(manifest), username="garmin_di")
+                _win_delete_credential(old_tgt)
+                
+            except Exception:
+                pass
+
+migrate_legacy_credentials()

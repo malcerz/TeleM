@@ -1,4 +1,4 @@
-"""Strava activity provider for BikeRideHUD using OAuth 2.0 and activity streams."""
+"""Strava activity provider for SportCamHUD using OAuth 2.0 and activity streams."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class _OAuthCallbackHandler(BaseHTTPRequestHandler):
             self.end_headers()
             html = """<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
                 <h2 style="color: #2e7d32;">Autoryzacja Strava zakończona sukcesem!</h2>
-                <p>Możesz zamknąć to okno przeglądarki i wrócić do BikeRideHUD.</p>
+                <p>Możesz zamknąć to okno przeglądarki i wrócić do SportCamHUD.</p>
             </body></html>"""
             self.wfile.write(html.encode("utf-8"))
         elif "error" in params:
@@ -351,7 +351,7 @@ def _convert_strava_streams_to_gpx(act_start: datetime, streams: dict[str, Any])
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<gpx version="1.1" creator="BikeRideHUD Strava Sync" xmlns="http://www.topografix.com/GPX/1/1"',
+        '<gpx version="1.1" creator="SportCamHUD Strava Sync" xmlns="http://www.topografix.com/GPX/1/1"',
         '     xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">',
         '  <trk>',
         '    <trkseg>',

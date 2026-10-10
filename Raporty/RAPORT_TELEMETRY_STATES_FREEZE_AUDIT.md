@@ -1,7 +1,7 @@
 # RAPORT: Telemetry States Freeze Audit & Backend Readiness
 
 Data wykonania: 2026-09-15  
-Workspace: `H:\_Dev\BikeRideHUD`  
+Workspace: `H:\_Dev\SportCamHUD`  
 Status: **COMPLETE (CASE A — NVIDIA TELEMETRY FROZEN, F64 ONLY DIAGNOSTIC, AMD NOT YET CONNECTED)**
 
 ---

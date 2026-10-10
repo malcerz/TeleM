@@ -25,13 +25,13 @@ TELEMETRY_EXPORTS = (
 
 
 def test_bikeridehud_reexports_existing_telemetry_functions() -> None:
-    import BikeRideHUD
+    import SportCamHUD
     import TeleMGP
     from src import telemetry_extract
 
     for name in TELEMETRY_EXPORTS:
         implementation = getattr(telemetry_extract, name)
-        assert getattr(BikeRideHUD, name) is implementation
+        assert getattr(SportCamHUD, name) is implementation
         assert getattr(TeleMGP, name) is implementation
 
 
@@ -40,18 +40,18 @@ def test_bikeridehud_direct_entry_calls_application_main(monkeypatch) -> None:
     calls: list[bool] = []
     monkeypatch.setattr(application, "main", lambda: calls.append(True))
 
-    runpy.run_path(str(ROOT / "BikeRideHUD.py"), run_name="__main__")
+    runpy.run_path(str(ROOT / "SportCamHUD.py"), run_name="__main__")
 
     assert calls == [True]
     assert sys.path[0] == str(ROOT)
 
 
 def test_start_cmd_is_repo_relative_and_keeps_startup_errors_visible() -> None:
-    launcher = (ROOT / "Start_BikeRideHUD.cmd").read_text(encoding="utf-8")
+    launcher = (ROOT / "Start_SportCamHUD.cmd").read_text(encoding="utf-8")
 
     assert 'pushd "%~dp0"' in launcher
-    assert '".venv\\Scripts\\python.exe" "BikeRideHUD.py" %*' in launcher
-    assert 'python "BikeRideHUD.py" %*' in launcher
+    assert '".venv\\Scripts\\python.exe" "SportCamHUD.py" %*' in launcher
+    assert 'python "SportCamHUD.py" %*' in launcher
     assert "%ERRORLEVEL%" in launcher
     assert "pause >nul" in launcher
     assert re.search(r"\b[A-Za-z]:\\", launcher) is None

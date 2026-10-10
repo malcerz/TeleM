@@ -11,7 +11,7 @@
 
 ## 1. CEL AUDYTU
 
-Przeprowadzenie kompletnego, rygorystycznego audytu stanu repozytorium `H:\_Dev\BikeRideHUD` przed utworzeniem punktu kontrolnego (checkpointu) i późniejszym przejściem do prac nad backendem AMD:
+Przeprowadzenie kompletnego, rygorystycznego audytu stanu repozytorium `H:\_Dev\SportCamHUD` przed utworzeniem punktu kontrolnego (checkpointu) i późniejszym przejściem do prac nad backendem AMD:
 1. Potwierdzenie stanu gałęzi, HEAD i remote.
 2. Analiza diffu od punktu bazowego `463b4bc` oraz audyt wszystkich plików śledzonych (tracked modified) i nieśledzonych (untracked).
 3. Klasyfikacja wszystkich elementów working tree do kategorii A–I.
@@ -28,7 +28,7 @@ Przeprowadzenie kompletnego, rygorystycznego audytu stanu repozytorium `H:\_Dev\
 
 | Parametr | Wartość |
 |---|---|
-| **Ścieżka repozytorium** | `H:\_Dev\BikeRideHUD` |
+| **Ścieżka repozytorium** | `H:\_Dev\SportCamHUD` |
 | **Bieżąca gałąź** | `main` |
 | **HEAD Commit** | `463b4bc` (`463b4bc4727cb1ba9a3fafe2230626b9ffb5749f`) |
 | **Ostatni commit** | `463b4bc TeleM: checkpoint telemetry presentation fixes before NVIDIA work` |
@@ -43,38 +43,38 @@ Wszystkie pliki zmodyfikowane i nieśledzone w repozytorium zostały jednoznaczn
 
 ### A. SHARED / BACKEND-NEUTRAL (34 pliki produkcyjne)
 Architektoniczne poprawki współdzielone przez wszystkie backendy (GUI, telemetria, wskaźniki, mapy, serializacja):
-- **Prezentacja telemetrii (integer-only):** [`src/telemetry_resolver.py`](file:///H:/_Dev/BikeRideHUD/src/telemetry_resolver.py), [`src/indicators/helpers.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/helpers.py) (pola HR, Cadence, Power, ISO, Exposure jako 0 decimals)
-- **Bounded initial telemetry backfill (klatka 0):** [`src/gui/telemetry_manager.py`](file:///H:/_Dev/BikeRideHUD/src/gui/telemetry_manager.py), [`src/gui/qt/_mixins/project_mixin.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/_mixins/project_mixin.py)
-- **Auto-placement wskaźników (siatka 8x8 px bez kolizji):** [`src/gui/autoplacement.py`](file:///H:/_Dev/BikeRideHUD/src/gui/autoplacement.py), [`src/gui/qt/_mixins/indicator_mixin.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/_mixins/indicator_mixin.py)
-- **Ścisła persystencja JSON (brak default=str, path-aware TypeError):** [`src/indicators/compositor.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/compositor.py), [`src/gui/layout_manager.py`](file:///H:/_Dev/BikeRideHUD/src/gui/layout_manager.py), [`src/gui/qt/_mixins/preset_mixin.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/_mixins/preset_mixin.py)
-- **Modele i schematy GUI:** [`src/gui/qt/models.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/models.py), [`src/gui/qt/tabs/render_tab.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/tabs/render_tab.py), [`src/gui/qt/main_window.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/main_window.py), [`src/gui/qt/application.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/application.py)
-- **Cykl życia procesów i stabilność renderera:** [`src/process_lifecycle.py`](file:///H:/_Dev/BikeRideHUD/src/process_lifecycle.py), [`src/render_progress.py`](file:///H:/_Dev/BikeRideHUD/src/render_progress.py)
-- **Wskaźniki, wykresy i mapy:** [`src/indicators/chart.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/chart.py), `chart_builder.py`, `chart_utils.py`, `frame_data.py`, `moving_map.py`, `static_map.py`, `rotated_paste.py`
+- **Prezentacja telemetrii (integer-only):** [`src/telemetry_resolver.py`](file:///H:/_Dev/SportCamHUD/src/telemetry_resolver.py), [`src/indicators/helpers.py`](file:///H:/_Dev/SportCamHUD/src/indicators/helpers.py) (pola HR, Cadence, Power, ISO, Exposure jako 0 decimals)
+- **Bounded initial telemetry backfill (klatka 0):** [`src/gui/telemetry_manager.py`](file:///H:/_Dev/SportCamHUD/src/gui/telemetry_manager.py), [`src/gui/qt/_mixins/project_mixin.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/_mixins/project_mixin.py)
+- **Auto-placement wskaźników (siatka 8x8 px bez kolizji):** [`src/gui/autoplacement.py`](file:///H:/_Dev/SportCamHUD/src/gui/autoplacement.py), [`src/gui/qt/_mixins/indicator_mixin.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/_mixins/indicator_mixin.py)
+- **Ścisła persystencja JSON (brak default=str, path-aware TypeError):** [`src/indicators/compositor.py`](file:///H:/_Dev/SportCamHUD/src/indicators/compositor.py), [`src/gui/layout_manager.py`](file:///H:/_Dev/SportCamHUD/src/gui/layout_manager.py), [`src/gui/qt/_mixins/preset_mixin.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/_mixins/preset_mixin.py)
+- **Modele i schematy GUI:** [`src/gui/qt/models.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/models.py), [`src/gui/qt/tabs/render_tab.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/tabs/render_tab.py), [`src/gui/qt/main_window.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/main_window.py), [`src/gui/qt/application.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/application.py)
+- **Cykl życia procesów i stabilność renderera:** [`src/process_lifecycle.py`](file:///H:/_Dev/SportCamHUD/src/process_lifecycle.py), [`src/render_progress.py`](file:///H:/_Dev/SportCamHUD/src/render_progress.py)
+- **Wskaźniki, wykresy i mapy:** [`src/indicators/chart.py`](file:///H:/_Dev/SportCamHUD/src/indicators/chart.py), `chart_builder.py`, `chart_utils.py`, `frame_data.py`, `moving_map.py`, `static_map.py`, `rotated_paste.py`
 - **Pomocnicze moduły telemetrii i pipeline FFmpeg:** `telemetry_heading.py`, `telemetry_precompute.py`, `telemetry_slope.py`, `command_builder.py`, `frame_renderer.py`, `pipeline_audit.py`, `shared_memory.py`, `streaming.py`, `worker_cache.py`
 
 ### B. NVIDIA-SPECIFIC (14 plików)
 Pełny natywny stos akceleracji NVIDIA:
-- [`src/telemetry_states_fast.py`](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py) — wektoryzowany silnik prekomputacji telemetrii NumPy (~0.41–0.43 s dla 63 391 klatek)
-- [`src/ffmpeg/nvidia_native_exporter.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_native_exporter.py) — runner pipeline D3D11 NVENC zero-copy z muxerem MP4 i podglądem na żywo
-- [`src/ffmpeg/nvidia_config.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_config.py) — profile jakości (P1–P7), analiza QP, obsługa Main10/P010/HLG i bitrate
-- [`src/ffmpeg/nvidia_child_process.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_child_process.py) — proces roboczy enkodera sprzętowego NVENC
-- [`src/ffmpeg/nvidia_native_preview.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_native_preview.py) — współdzielenie tekstur podglądu renderowania w czasie rzeczywistym
-- [`src/ffmpeg/nvidia_payload_dump.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_payload_dump.py) — snapshoting i haszowanie kanonicznego layoutu
-- [`src/ffmpeg/compression_tracker.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/compression_tracker.py) — śledzenie kompresji i bitrate w locie
-- [`native/d3d11_nvenc_pipeline/**`](file:///H:/_Dev/BikeRideHUD/native/d3d11_nvenc_pipeline/) — kod źródłowy C++ (pipeline, encoder, zasoby D3D11, CMake)
+- [`src/telemetry_states_fast.py`](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py) — wektoryzowany silnik prekomputacji telemetrii NumPy (~0.41–0.43 s dla 63 391 klatek)
+- [`src/ffmpeg/nvidia_native_exporter.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_native_exporter.py) — runner pipeline D3D11 NVENC zero-copy z muxerem MP4 i podglądem na żywo
+- [`src/ffmpeg/nvidia_config.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_config.py) — profile jakości (P1–P7), analiza QP, obsługa Main10/P010/HLG i bitrate
+- [`src/ffmpeg/nvidia_child_process.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_child_process.py) — proces roboczy enkodera sprzętowego NVENC
+- [`src/ffmpeg/nvidia_native_preview.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_native_preview.py) — współdzielenie tekstur podglądu renderowania w czasie rzeczywistym
+- [`src/ffmpeg/nvidia_payload_dump.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_payload_dump.py) — snapshoting i haszowanie kanonicznego layoutu
+- [`src/ffmpeg/compression_tracker.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/compression_tracker.py) — śledzenie kompresji i bitrate w locie
+- [`native/d3d11_nvenc_pipeline/**`](file:///H:/_Dev/SportCamHUD/native/d3d11_nvenc_pipeline/) — kod źródłowy C++ (pipeline, encoder, zasoby D3D11, CMake)
 
 ### C. AMD-SPECIFIC (2 pliki)
-- [`src/ffmpeg/amd_child_process.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/amd_child_process.py) — drobne optymalizacje cyklu życia
-- [`src/ffmpeg/amd_native_exporter.py`](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/amd_native_exporter.py) — nienaruszony produkcyjny compositor D3D11 i enkoder AMF HEVC (pełna izolacja zachowana)
+- [`src/ffmpeg/amd_child_process.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/amd_child_process.py) — drobne optymalizacje cyklu życia
+- [`src/ffmpeg/amd_native_exporter.py`](file:///H:/_Dev/SportCamHUD/src/ffmpeg/amd_native_exporter.py) — nienaruszony produkcyjny compositor D3D11 i enkoder AMF HEVC (pełna izolacja zachowana)
 
 ### D. INTEL-SPECIFIC (1 plik)
-- [`tests/test_intel_auto_hud_policy.py`](file:///H:/_Dev/BikeRideHUD/tests/test_intel_auto_hud_policy.py) — testy reguł wykrywania i polisy QSV
+- [`tests/test_intel_auto_hud_policy.py`](file:///H:/_Dev/SportCamHUD/tests/test_intel_auto_hud_policy.py) — testy reguł wykrywania i polisy QSV
 
 ### E. TESTS (14 plików testów)
 - Nowe i zaktualizowane zestawy testowe: `test_integer_fields_presentation.py`, `test_telemetry_states_rate_aware.py`, `test_gopro_battery_iso_decimal_ui.py`, `test_chart_decimals_preview_dim.py`, `test_process_lifecycle.py`, manualne smoke testy baterii Garmin/GoPro, `test_rt_quality_display.py`, `test_hud_prep_progress.py`, `test_presentation_architecture.py`.
 
 ### F. RAPORTY (150+ raportów)
-- Udokumentowane wszystkie etapy prac w podkatalogu [`Raporty/`](file:///H:/_Dev/BikeRideHUD/Raporty/).
+- Udokumentowane wszystkie etapy prac w podkatalogu [`Raporty/`](file:///H:/_Dev/SportCamHUD/Raporty/).
 
 ### G. SCRATCH / GENERATED
 - Pliki robocze, skrypty walidacyjne, logi diagnostyczne i tymczasowe pliki testowe w katalogu `scratch/` (przeznaczone do wykluczenia z repozytorium).
@@ -93,7 +93,7 @@ Pełny natywny stos akceleracji NVIDIA:
 ## 4. AUDYT NVIDIA FAST TELEMETRY (~0.42 s)
 
 Zweryfikowano kompletność i nienaruszalność modułów odpowiedzialnych za błyskawiczną prekomputację stanów telemetrii NVIDIA:
-- [`src/telemetry_states_fast.py`](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py): obecny, wektoryzowany, zgodny z najnowszym schematem pól.
+- [`src/telemetry_states_fast.py`](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py): obecny, wektoryzowany, zgodny z najnowszym schematem pól.
 - Wynik wydajnościowy: **0.4131 s** dla pełnego datasetu 63 391 klatek (~153 000 fps).
 - Komponenty C++ w `native/d3d11_nvenc_pipeline/` gotowe do budowania i działania z biblioteką `telem_d3d11_nvenc.dll`.
 
@@ -146,15 +146,15 @@ Wszystkie kluczowe testy regresyjne i walidacyjne świeżo wdrożonych obszarów
 
 Potwierdzono fizyczną obecność i poprawność wszystkich 9 kluczowych raportów:
 
-- [x] [`Raporty/RAPORT_INTEGER_FIELDS_NO_DECIMALS.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_INTEGER_FIELDS_NO_DECIMALS.md) (6 658 bytes)
-- [x] [`Raporty/RAPORT_TELEMETRY_STATES_RATE_AWARE.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_TELEMETRY_STATES_RATE_AWARE.md) (12 010 bytes)
-- [x] [`Raporty/RAPORT_TELEMETRY_STATES_BOUNDARY_FULL_PARITY.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_TELEMETRY_STATES_BOUNDARY_FULL_PARITY.md) (13 116 bytes)
-- [x] [`Raporty/RAPORT_TELEMETRY_STATES_FREEZE_AUDIT.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_TELEMETRY_STATES_FREEZE_AUDIT.md) (7 624 bytes)
-- [x] [`Raporty/RAPORT_GARMIN_BATTERY_NATIVE_DECIMALS.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_GARMIN_BATTERY_NATIVE_DECIMALS.md) (6 036 bytes)
-- [x] [`Raporty/RAPORT_INITIAL_TELEMETRY_BACKFILL.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_INITIAL_TELEMETRY_BACKFILL.md) (10 462 bytes)
-- [x] [`Raporty/RAPORT_INDICATOR_AUTOPLACEMENT.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_INDICATOR_AUTOPLACEMENT.md) (7 917 bytes)
-- [x] [`Raporty/RAPORT_PROJECT_LAYOUT_DATETIME_FIX.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_PROJECT_LAYOUT_DATETIME_FIX.md) (9 946 bytes)
-- [x] [`Raporty/RAPORT_STRICT_JSON_FINAL_GATE.md`](file:///H:/_Dev/BikeRideHUD/Raporty/RAPORT_STRICT_JSON_FINAL_GATE.md) (11 462 bytes)
+- [x] [`Raporty/RAPORT_INTEGER_FIELDS_NO_DECIMALS.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_INTEGER_FIELDS_NO_DECIMALS.md) (6 658 bytes)
+- [x] [`Raporty/RAPORT_TELEMETRY_STATES_RATE_AWARE.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_TELEMETRY_STATES_RATE_AWARE.md) (12 010 bytes)
+- [x] [`Raporty/RAPORT_TELEMETRY_STATES_BOUNDARY_FULL_PARITY.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_TELEMETRY_STATES_BOUNDARY_FULL_PARITY.md) (13 116 bytes)
+- [x] [`Raporty/RAPORT_TELEMETRY_STATES_FREEZE_AUDIT.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_TELEMETRY_STATES_FREEZE_AUDIT.md) (7 624 bytes)
+- [x] [`Raporty/RAPORT_GARMIN_BATTERY_NATIVE_DECIMALS.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_GARMIN_BATTERY_NATIVE_DECIMALS.md) (6 036 bytes)
+- [x] [`Raporty/RAPORT_INITIAL_TELEMETRY_BACKFILL.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_INITIAL_TELEMETRY_BACKFILL.md) (10 462 bytes)
+- [x] [`Raporty/RAPORT_INDICATOR_AUTOPLACEMENT.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_INDICATOR_AUTOPLACEMENT.md) (7 917 bytes)
+- [x] [`Raporty/RAPORT_PROJECT_LAYOUT_DATETIME_FIX.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_PROJECT_LAYOUT_DATETIME_FIX.md) (9 946 bytes)
+- [x] [`Raporty/RAPORT_STRICT_JSON_FINAL_GATE.md`](file:///H:/_Dev/SportCamHUD/Raporty/RAPORT_STRICT_JSON_FINAL_GATE.md) (11 462 bytes)
 
 ---
 
@@ -210,7 +210,7 @@ READY_FOR_AMD = YES
 
 ## 10. MANIFEST ARTEFAKTÓW AUDYTU
 
-Katalog: `H:\_Dev\BikeRideHUD\scratch\pre_amd_checkpoint_audit\`
+Katalog: `H:\_Dev\SportCamHUD\scratch\pre_amd_checkpoint_audit\`
 
 - `git_status.txt` — pełny stan repozytorium, gałęzi i remote
 - `diff_stat_from_463b4bc.txt` — statystyki zmian od bazy 463b4bc

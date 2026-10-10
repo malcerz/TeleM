@@ -3,7 +3,7 @@
 ## Metadane Etapu
 - **Data wykonania**: 2026-09-19
 - **Środowisko testowe**: Windows 11, AMD Radeon RX 7900 XTX
-- **Katalog roboczy**: `C:\_DEV\BikeRideHUD-amd`
+- **Katalog roboczy**: `C:\_DEV\SportCamHUD-amd`
 - **Gałąź Git**: `amd-bikeridehud` (HEAD: `1b5485c`)
 - **Dataset kanoniczny**: `Video/GX020079.MP4` + `Video/GX020079.fit` + `def_layout.json`
 - **Punkt odniesienia (Oracle Frame)**: Timestamp `793.0s` (2026-07-20T04:43:57), GPS: `(54.337200, 18.637168)`, heading `24.19°`

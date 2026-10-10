@@ -12,7 +12,7 @@ GARMIN_LOGIN_IMPLEMENTED=YES
 GARMIN_CREDENTIAL_STORE=YES (Windows Credential Manager via advapi32.dll CredWriteW/CredReadW + mock fallback)
 GARMIN_ACTIVITY_SEARCH=YES (okno +/- 2h wokół osi czasu wideo)
 GARMIN_FIT_DOWNLOAD=YES (oryginalny .fit z archiwum ZIP lub raw strumienia)
-GARMIN_CACHE=YES (%LOCALAPPDATA%\BikeRideHUD\remote_telemetry\garmin\)
+GARMIN_CACHE=YES (%LOCALAPPDATA%\SportCamHUD\remote_telemetry\garmin\)
 
 STRAVA_OAUTH_IMPLEMENTED=YES (OAuth 2.0 z lokalnym serwerem callback i przeglądarką)
 STRAVA_TOKEN_REFRESH=YES (automatyczne odświeżenie tokenu przed wygaśnięciem)
@@ -73,7 +73,7 @@ FINAL_STATUS=SUCCESS
   - `NO_MATCH`: brak aktywności spełniającej próg 0.60.
 
 ### `src/integrations/remote_cache.py`
-- Trwały cache w `%LOCALAPPDATA%\BikeRideHUD\remote_telemetry\`.
+- Trwały cache w `%LOCALAPPDATA%\SportCamHUD\remote_telemetry\`.
 - Podkatalogi: `garmin/` (`<id>.fit`, `<id>.json`), `strava/` (`<id>.gpx`, `<id>.json`).
 - Indeks `video_index.json` mapujący `video_fingerprint` (nazwy, rozmiary, czasy modyfikacji klipów) na pobraną aktywność.
 - Mechanizm `REMOTE_CACHE_HIT=YES`: ponowne otwarcie filmu natychmiast korzysta z pliku lokalnego bez zapytań sieciowych.

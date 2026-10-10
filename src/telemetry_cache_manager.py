@@ -1,4 +1,4 @@
-"""Central Telemetry and Media Cache Manager for BikeRideHUD / TeleM.
+"""Central Telemetry and Media Cache Manager for SportCamHUD / TeleM.
 
 Provides a unified, versioned, atomic AppData storage for all automatically
 generated media sidecars (GPMF JSON, Processed Telemetry NPZ, Telem Time mapping,
@@ -25,7 +25,7 @@ _LOGGED_CACHE_EVENTS: set[tuple[str, str, str]] = set()
 
 
 def get_cache_root() -> Path:
-    """Return the central cache root directory (%LOCALAPPDATA%\\BikeRideHUD\\cache)."""
+    """Return the central cache root directory (%LOCALAPPDATA%\\SportCamHUD\\cache)."""
     env_root = os.environ.get("TELEM_CACHE_ROOT")
     if env_root:
         root = Path(env_root)
@@ -34,7 +34,7 @@ def get_cache_root() -> Path:
             "LOCALAPPDATA",
             str(Path.home() / "AppData" / "Local")
         )
-        root = Path(local_appdata) / "BikeRideHUD" / "cache"
+        root = Path(local_appdata) / "SportCamHUD" / "cache"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

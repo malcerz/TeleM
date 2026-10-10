@@ -152,14 +152,14 @@ Przeprowadzono test ciągły (`scratch/test_sustained_gui_responsiveness.py`):
 
 ## 7. SYNCHRONIZACJA Z BIKERIDEHUD-PORTABLE
 
-Zsynchronizowano wymagane pliki produkcyjne do `C:\_DEV\BikeRideHUD-portable`:
+Zsynchronizowano wymagane pliki produkcyjne do `C:\_DEV\SportCamHUD-portable`:
 - `src/telemetry_dji.py`
 - `src/telemetry_dji_worker.py`
 - `src/gui/qt/_mixins/project_mixin.py`
 - `tests/test_dji_gui_worker.py`
 - `tests/test_dji_telemetry.py`
 
-Wszystkie 11 testów jednostkowych i integracyjnych w `C:\_DEV\BikeRideHUD-portable` zakończyły się statusem **PASSED** (1 skipped – opt-in real file).
+Wszystkie 11 testów jednostkowych i integracyjnych w `C:\_DEV\SportCamHUD-portable` zakończyły się statusem **PASSED** (1 skipped – opt-in real file).
 
 ---
 

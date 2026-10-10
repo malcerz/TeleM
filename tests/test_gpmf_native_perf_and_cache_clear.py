@@ -142,7 +142,7 @@ def test_cache_cleanup_preserves_user_files(tmp_path, monkeypatch):
 def test_cache_cleanup_preserves_gpu_capabilities(tmp_path, monkeypatch):
     import src.telemetry_cache_manager as cache_manager
 
-    appdata = tmp_path / "BikeRideHUD"
+    appdata = tmp_path / "SportCamHUD"
     root = appdata / "cache"
     (root / "media" / "source_key").mkdir(parents=True)
     capabilities = appdata / "gpu_capabilities.json"

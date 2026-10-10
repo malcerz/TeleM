@@ -1,7 +1,7 @@
 # Raport: Przebudowa panelu Wczytywanie — Możliwości sprzętu oraz Wieloplikowe Informacje o filmach
 
 Data: 2026-09-24  
-Workspace: `C:\_DEV\BikeRideHUD-amd`  
+Workspace: `C:\_DEV\SportCamHUD-amd`  
 Branch: `amd-bikeridehud`  
 Commit baseline: `0ef407e`
 

@@ -309,7 +309,7 @@ _QSV_CODECS_CACHE: dict[str, dict[str, bool]] = {}
 
 def _get_qsv_cache_file() -> Path | None:
     try:
-        p = Path(os.environ.get("LOCALAPPDATA", ".")) / "BikeRideHUD" / "cache" / "qsv_codecs.json"
+        p = Path(os.environ.get("LOCALAPPDATA", ".")) / "SportCamHUD" / "cache" / "qsv_codecs.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
     except Exception:

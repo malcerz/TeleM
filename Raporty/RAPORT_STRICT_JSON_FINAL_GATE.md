@@ -9,7 +9,7 @@
 
 ## 1. CEL ZADANIA
 
-Domknięcie kontraktu persystencji JSON w `BikeRideHUD`:
+Domknięcie kontraktu persystencji JSON w `SportCamHUD`:
 1. **Usunięcie cichego fallbacku `return str(obj)`** z `sanitize_layout_for_json` — nieznane/nieobsługiwane typy obiektów środowiskowych (runtime objects) mają głośno zgłaszać `TypeError` zamiast być po cichu zamieniane na bezużyteczny string.
 2. **Wprowadzenie path-aware diagnostics** w rekursji (`path="root"`), umożliwiające precyzyjne namierzenie ścieżki w strukturze JSON (np. `root.export_settings.foo.bar`, `root.indicators.speed_text.custom_runtime`, `root.cut_regions[1][1]`).
 3. **Zachowanie pełnego wsparcia dla znanych typów:**
@@ -41,7 +41,7 @@ Mogło to maskować błędy w przypadku przypadkowego wstawienia do drzewa layou
 
 ## 3. IMPLEMENTACJA
 
-W pliku [`src/indicators/compositor.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/compositor.py):
+W pliku [`src/indicators/compositor.py`](file:///H:/_Dev/SportCamHUD/src/indicators/compositor.py):
 
 ### 3.1 Nowa sygnatura i logika `sanitize_layout_for_json`
 ```python
@@ -168,7 +168,7 @@ Plik: `scratch/strict_json_final_gate/roundtrip_test.txt`
 
 ## 5. ARTEFAKTY
 
-Katalog: `H:\_Dev\BikeRideHUD\scratch\strict_json_final_gate\`
+Katalog: `H:\_Dev\SportCamHUD\scratch\strict_json_final_gate\`
 
 - `supported_types.txt` — matryca obsługiwanych typów i potwierdzenie kontraktu
 - `unsupported_type_test.txt` — log testów negatywnych (TypeError z dokładną ścieżką)
@@ -181,7 +181,7 @@ Katalog: `H:\_Dev\BikeRideHUD\scratch\strict_json_final_gate\`
 
 ## 6. NTFY NOTIFICATION
 
-- **Komenda:** `curl.exe -fsS --connect-timeout 5 --max-time 10 -H "Title: BikeRideHUD" -H "Tags: white_check_mark" -d "BikeRideHUD strict JSON final gate: CASE A — STRICT JSON PASS + UNKNOWN TYPES FAIL LOUDLY." "https://ntfy.sh/MalcerzPOP"`
+- **Komenda:** `curl.exe -fsS --connect-timeout 5 --max-time 10 -H "Title: SportCamHUD" -H "Tags: white_check_mark" -d "SportCamHUD strict JSON final gate: CASE A — STRICT JSON PASS + UNKNOWN TYPES FAIL LOUDLY." "https://ntfy.sh/MalcerzPOP"`
 - **Status:** Exit code 0 (sukces w próbie 1)
 - **ID wiadomości:** `vKo3IkUBWuA3`
 - **Topic:** `MalcerzPOP`

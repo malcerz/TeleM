@@ -19,13 +19,13 @@ GIT_IGNORED_REQUIRED_FILES=telem_gpmf_native.pyd, telem_amd_native.dll
 ## 3. GPMF
 GPMF_REGRESSION_ROOT_CAUSE=Funkcja missing_native_channels sprawdzała wszystkie możliwe kanały zamiast tylko obecnych w pliku (present_channels), wymuszając powrót do pełnego powolnego parsowania w Pythonie.
 GPMF_OPTIMIZATIONS_PRESENT=TAK (usunięto O(N^2) przez derive_heading_samples, przywrócono wektoryzację np.fromiter, wymuszono weryfikację present_channels).
-NATIVE_GPMF_MODULE_SHA256=2290bf4 (przywrócony prawidłowy binarny moduł telem_gpmf_native.pyd z C:\_DEV\BikeRideHUD-portable)
+NATIVE_GPMF_MODULE_SHA256=2290bf4 (przywrócony prawidłowy binarny moduł telem_gpmf_native.pyd z C:\_DEV\SportCamHUD-portable)
 GPMF_COLD_LOAD_S=0.3s (Native Parse) + 2.7s (Convert) = 3.0s
 GPMF_WARM_LOAD_S=< 0.2s
 GPMF_FULL_FALLBACK_COUNT=0
 
 ## 4. PORTABLE
-PORTABLE_IMPORT_ERROR_ROOT_CAUSE=Moduły src.ffmpeg.render_errors oraz src.ffmpeg.output_error, z których korzystała aplikacja, zostały wcześniej utracone w C:\_DEV\BikeRideHUD-main-new (przez \git clean\), a w starym pliku output_error.py w C:\_DEV\BikeRideHUD-portable brakowało nowo wymaganej klasy ExportOutputCategory.
+PORTABLE_IMPORT_ERROR_ROOT_CAUSE=Moduły src.ffmpeg.render_errors oraz src.ffmpeg.output_error, z których korzystała aplikacja, zostały wcześniej utracone w C:\_DEV\SportCamHUD-main-new (przez \git clean\), a w starym pliku output_error.py w C:\_DEV\SportCamHUD-portable brakowało nowo wymaganej klasy ExportOutputCategory.
 EXPORT_OUTPUT_CATEGORY_FIXED=TAK (Klasa została dodana z powrotem do \output_error.py\ jako odpowiednik nowej \ErrorScope\, a pliki przywrócone i dodane do repozytorium).
 
 ## 5. SMOKE TESTY I KOMPATYBILNOŚĆ
@@ -37,8 +37,8 @@ GARMIN_AUTH_IMPORT_PASS=YES (Przywrócono moduł garmin_auth.py oraz wpisano w �
 OLD_APP_VERSION=1.00
 NEW_APP_VERSION=1.01
 VERSION_INCREMENT=+0.01 (Wdrożono skrypt \scripts/bump_version.py\)
-TITLE_BAR_VERSION=BikeRideHUD v1.01 — main-new — 23a9518
-PORTABLE_TITLE_BAR_VERSION=BikeRideHUD v1.01 — Portable — 23a9518
+TITLE_BAR_VERSION=SportCamHUD v1.01 — main-new — 23a9518
+PORTABLE_TITLE_BAR_VERSION=SportCamHUD v1.01 — Portable — 23a9518
 
 ## 7. WYNIKI KOŃCOWE
 STARTUP_TESTS_PASS=YES

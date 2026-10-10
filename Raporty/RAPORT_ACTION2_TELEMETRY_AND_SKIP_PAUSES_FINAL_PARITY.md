@@ -4,7 +4,7 @@
 **Dotyczy:**
 1. Eliminacja długiego, bezowocnego wczytywania telemetrii DJI Action 2 (`DJI_0010.MP4` .. `DJI_0015.MP4`) poprzez ultra-szybki Capability Probe (<35 ms) i pomijanie pełnego parsowania w przypadku braku użytecznych kanałów HUD.
 2. Pełny parytet działania opcji „Pomiń pauzy” (`charts_skip_pauses`) pomiędzy Podglądem (Preview / `prepare_overlay_frame_data`), Bezpośrednim Eksportem (`build_telemetry_cache_vectorized`), Eksportem z Kolejki (`build_telemetry_cache` / `worker_cache.py`) oraz wskaźnikiem pozycji i średniej prędkości.
-3. 100% zgodność skrótów SHA256 pomiędzy repozytorium roboczym `C:\_DEV\BikeRideHUD-main-new` a `C:\_DEV\BikeRideHUD-portable`.
+3. 100% zgodność skrótów SHA256 pomiędzy repozytorium roboczym `C:\_DEV\SportCamHUD-main-new` a `C:\_DEV\SportCamHUD-portable`.
 
 ---
 
@@ -94,7 +94,7 @@ Weryfikacja wykonana testem integracyjnym `tests/test_skip_pauses_parity.py` na 
 
 ---
 
-## 4. Tabela Skrótów SHA256 (Parytet z `BikeRideHUD-portable`)
+## 4. Tabela Skrótów SHA256 (Parytet z `SportCamHUD-portable`)
 
 Wszystkie zmodyfikowane i nowo utworzone pliki zostały zsynchronizowane 1:1 z katalogiem przenośnym:
 

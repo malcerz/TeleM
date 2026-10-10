@@ -1,7 +1,7 @@
 # Raport: Generic CPU Render Cache dla Widgetów CPU ABOVE (AMD Native D3D11 Pipeline)
 
 Data: 2026-09-16  
-Środowisko: `C:\_DEV\BikeRideHUD`  
+Środowisko: `C:\_DEV\SportCamHUD`  
 Gałąź: `amd-bikeridehud`  
 Dataset: `Video/GX020079.mp4` + `Video/GX020079.fit` (3840x2160, 300 klatek, HEVC AMF)  
 Oracle: `C:\_DEV\TeleM` (READ-ONLY)

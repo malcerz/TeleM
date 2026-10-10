@@ -9,7 +9,7 @@ Autor wdrożenia: Antigravity
 
 ## 1. Cel zadania
 
-Odbudowa funkcjonalności projektu na bazie szybkiego, sprawdzonego backendu AMD (`0ef407e` / wersja z `F:\_DEV\BikeRideHUD-amd`), który osiąga stabilne **40+ FPS**, traktując aktualny stan jako źródło późniejszych funkcji, a nie bazę renderera.
+Odbudowa funkcjonalności projektu na bazie szybkiego, sprawdzonego backendu AMD (`0ef407e` / wersja z `F:\_DEV\SportCamHUD-amd`), który osiąga stabilne **40+ FPS**, traktując aktualny stan jako źródło późniejszych funkcji, a nie bazę renderera.
 
 Priorytet bezwzględny: **Utrzymanie wydajności > 40 FPS oraz izolacja backendu D3D11/AMF**.
 
@@ -17,7 +17,7 @@ Priorytet bezwzględny: **Utrzymanie wydajności > 40 FPS oraz izolacja backendu
 
 ## 2. Weryfikacja bazy i fizycznej kopii z dysku F:
 
-### 2.1. Pomiary na `F:\_DEV\BikeRideHUD-amd` (wersja reference known-good)
+### 2.1. Pomiary na `F:\_DEV\SportCamHUD-amd` (wersja reference known-good)
 Wykonano 3-krotny kanoniczny Performance Gate (`tools/amd_performance_gate.py --runs 3`):
 - Run 1: 41.958 FPS | 14.9% CPU | 17.299 ms prep
 - Run 2: 42.692 FPS | 17.6% CPU | 17.448 ms prep

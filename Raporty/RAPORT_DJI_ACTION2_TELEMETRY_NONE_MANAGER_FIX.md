@@ -1,7 +1,7 @@
 # RAPORT: NAPRAWA REGRESJI ŁADOWANIA TELEMETRII DJI ACTION 2 — NoneType.load_dji_telemetry ORAZ POPRAWKA SEMANTYKI REMOTE CACHE
 
 Data: 2026-10-06  
-Wersja: BikeRideHUD 2.0  
+Wersja: SportCamHUD 2.0  
 Status: ROZWIĄZANE I ZWERYFIKOWANE (TESTY AUTOMATYCZNE + PRAWDZIWY SPRZĘT + PEŁNA PARZYSTOŚĆ)
 
 ---
@@ -118,7 +118,7 @@ Przetestowano zestaw 6 rzeczywistych klipów DJI Action 2:
 - `F:\GoPro\2026-10-05\DJI_0014.MP4` (3.8 GB)
 - `F:\GoPro\2026-10-05\DJI_0015.MP4` (2.8 GB)
 oraz plik aktywności Garmin Connect z cache:
-- `C:\Users\Malcerz\AppData\Local\BikeRideHUD\remote_telemetry\garmin\24614281884.fit`
+- `C:\Users\Malcerz\AppData\Local\SportCamHUD\remote_telemetry\garmin\24614281884.fit`
 
 Logi z wykonania:
 ```text
@@ -148,7 +148,7 @@ Brak błędów `NoneType`, brak wycieków pamięci, pełna koegzystencja obu źr
 
 Wszystkie zmodyfikowane pliki zostały zsynchronizowane z instalacją portable:
 ```text
-C:\_DEV\BikeRideHUD-main-new <===> C:\_DEV\BikeRideHUD-portable
+C:\_DEV\SportCamHUD-main-new <===> C:\_DEV\SportCamHUD-portable
 ```
 
 Wynik weryfikacji skryptem `scripts/check_parity.py`:

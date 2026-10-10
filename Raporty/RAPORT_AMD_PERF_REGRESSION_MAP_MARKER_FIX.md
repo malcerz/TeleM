@@ -30,7 +30,7 @@ Zgodnie z wymogami `AGENTS.md` oraz poleceniem użytkownika:
 - Użyto kanonicznego zestawu danych:
   - Wideo: `Video/GX020079.MP4` (4K 3840x2160, 1131 klatek)
   - Telemetria: `Video/GX020079.fit`
-  - Preset layoutu: `C:\_DEV\BikeRideHUD-amd\def_layout.json`
+  - Preset layoutu: `C:\_DEV\SportCamHUD-amd\def_layout.json`
   - Backend: `AMD_NATIVE_D3D11` (Media Foundation D3D11VA + D3D11 compositor + AMF HEVC)
   - Quality: `fast`
 - Testy wykonano na ujednoliconej liczbie 300 klatek przy użyciu skryptu `scratch/bench_regression_harness.py`, który:

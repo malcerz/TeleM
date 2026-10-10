@@ -39,18 +39,18 @@ Przeprowadzono ponowne przeliczenie wszystkich 8 par z etapu 3C.2 bezpośrednio 
 
 ### 2.1. Weryfikacja ścieżek i sum kontrolnych
 Zbadano wszystkie potencjalne lokalizacje pliku `def_layout.json`:
-- `WORKTREE_LAYOUT_PATH = C:\_DEV\BikeRideHUD-intel\def_layout.json` (Rozmiar: 28,856 B, SHA256: `a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9`)
+- `WORKTREE_LAYOUT_PATH = C:\_DEV\SportCamHUD-intel\def_layout.json` (Rozmiar: 28,856 B, SHA256: `a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9`)
 - `EXTERNAL_LAYOUT_PATH = C:\_DEV\TeleM\def_layout.json` (**NIE ISTNIEJE** na tej maszynie)
 - `LAYOUT_HASH_MATCH = NO` (zewnętrzny katalog `C:\_DEV\TeleM` nie istnieje)
 
 ### 2.2. Ustalenie faktycznego layoutu aplikacji i harnessu
 Audyt kodu źródłowego (`src/gui/qt/controller.py:316`, `src/gui/qt/_mixins/render_mixin.py:661`, `src/gui/qt/_mixins/project_mixin.py:338` oraz `scratch/run_300f_mapon.py:99`) wykazał, że aplikacja oraz harness zawsze odwoływały się do pliku `def_layout.json` w głównym katalogu bieżącego repozytorium:
-- `ACTUAL_LAYOUT_PATH = C:\_DEV\BikeRideHUD-intel\def_layout.json`
+- `ACTUAL_LAYOUT_PATH = C:\_DEV\SportCamHUD-intel\def_layout.json`
 - `ACTUAL_LAYOUT_EXISTS = YES`
 - `ACTUAL_LAYOUT_SHA256 = a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9`
-- `LAYOUT_SELECTED_BY_HARNESS = C:\_DEV\BikeRideHUD-intel\def_layout.json`
+- `LAYOUT_SELECTED_BY_HARNESS = C:\_DEV\SportCamHUD-intel\def_layout.json`
 - `HARNESS_LAYOUT_MATCH = YES`
-- `FINAL_LAYOUT_PATH = C:\_DEV\BikeRideHUD-intel\def_layout.json`
+- `FINAL_LAYOUT_PATH = C:\_DEV\SportCamHUD-intel\def_layout.json`
 - `FINAL_LAYOUT_SHA256 = a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9`
 
 ---
@@ -72,7 +72,7 @@ W rozdzielczości 4K (3840x2160, `min_dim = 2160`), dla parametrów `size = 30.0
 ## 4. PROWENIENCJA HARNESSU I JAWNA KOREKTA GX020079
 
 ### 4.1. Ustalenie faktycznego harnessu
-- `HARNESS_PATH = C:\_Dev\BikeRideHUD-intel\scratch\run_300f_mapon.py`
+- `HARNESS_PATH = C:\_Dev\SportCamHUD-intel\scratch\run_300f_mapon.py`
 - `HARNESS_TRACKED = NO` (skrypt pomocniczy pod `scratch/`, utworzony w Etapie 2/Faza 6)
 - `HARNESS_SHA256 = efc3f335e96f1a233c748caa9a73bba275c2b1c5a671702ce6014a564da90f12`
 - `HARNESS_COMMAND = python scratch/run_300f_mapon.py`
@@ -235,24 +235,24 @@ RECALC_ORDER_EFFECT_8_PERCENT=-0.5582%
 3C2_PRIMARY_6_PAIR_GATE_PASS=NO
 3C2_EXTENDED_8_OPT_WIN_COUNT=5
 3C2_EXTENDED_8_REF_WIN_COUNT=3
-WORKTREE_LAYOUT_PATH=C:\_DEV\BikeRideHUD-intel\def_layout.json
+WORKTREE_LAYOUT_PATH=C:\_DEV\SportCamHUD-intel\def_layout.json
 WORKTREE_LAYOUT_SHA256=a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9
 EXTERNAL_LAYOUT_PATH=C:\_DEV\TeleM\def_layout.json
 EXTERNAL_LAYOUT_SHA256=DOES_NOT_EXIST
 LAYOUT_HASH_MATCH=NO
 LAYOUT_SEMANTIC_MATCH=NO
-ACTUAL_LAYOUT_PATH=C:\_DEV\BikeRideHUD-intel\def_layout.json
+ACTUAL_LAYOUT_PATH=C:\_DEV\SportCamHUD-intel\def_layout.json
 ACTUAL_LAYOUT_EXISTS=YES
 ACTUAL_LAYOUT_SHA256=a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9
-LAYOUT_SELECTED_BY_HARNESS=C:\_DEV\BikeRideHUD-intel\def_layout.json
+LAYOUT_SELECTED_BY_HARNESS=C:\_DEV\SportCamHUD-intel\def_layout.json
 HARNESS_LAYOUT_MATCH=YES
-FINAL_LAYOUT_PATH=C:\_DEV\BikeRideHUD-intel\def_layout.json
+FINAL_LAYOUT_PATH=C:\_DEV\SportCamHUD-intel\def_layout.json
 FINAL_LAYOUT_SHA256=a696d15157265c2d2abe8b5d922100a1cad1372b37216fa6acaef4d7e2c0d6e9
 FINAL_CADENCE_SIZE=1160 x 532 px (2,468,480 RGBA bytes)
 FINAL_HEART_SIZE=1160 x 532 px (2,468,480 RGBA bytes)
 FINAL_CHART_RAW_BYTES_FRAME=4936960 B
 CHART_BYTE_ACCOUNTING_DIFFERENCE_CAUSE=Arithmetic conversion error in 3C.2 report (4.94 * 1024^2 ≈ 5,180,672 B) vs true pixel geometry 2 * 1160 * 532 * 4 = 4,936,960 B
-HARNESS_PATH=C:\_Dev\BikeRideHUD-intel\scratch\run_300f_mapon.py
+HARNESS_PATH=C:\_Dev\SportCamHUD-intel\scratch\run_300f_mapon.py
 HARNESS_TRACKED=NO
 HARNESS_SHA256=efc3f335e96f1a233c748caa9a73bba275c2b1c5a671702ce6014a564da90f12
 HARNESS_COMMAND=python scratch/run_300f_mapon.py

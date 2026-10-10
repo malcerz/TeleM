@@ -8,12 +8,12 @@
 ## 1. WYMAGANE ŚCIEŻKI ŚRODOWISKA I RÓL (MANDATORY PATHS)
 
 ```ini
-RUNTIME_TEST_ROOT=C:\_DEV\BikeRideHUD-portable
-SOURCE_REPO_ROOT=C:\_DEV\BikeRideHUD-main-new
-DIRECT_TEST_ROOT=C:\_DEV\BikeRideHUD-main-new
-QUEUE_TEST_ROOT=C:\_DEV\BikeRideHUD-main-new
-FIX_IMPLEMENTED_IN=C:\_DEV\BikeRideHUD-main-new
-FINAL_VALIDATION_ROOT=C:\_DEV\BikeRideHUD-portable
+RUNTIME_TEST_ROOT=C:\_DEV\SportCamHUD-portable
+SOURCE_REPO_ROOT=C:\_DEV\SportCamHUD-main-new
+DIRECT_TEST_ROOT=C:\_DEV\SportCamHUD-main-new
+QUEUE_TEST_ROOT=C:\_DEV\SportCamHUD-main-new
+FIX_IMPLEMENTED_IN=C:\_DEV\SportCamHUD-main-new
+FINAL_VALIDATION_ROOT=C:\_DEV\SportCamHUD-portable
 FIXED_SOURCE_HASH_PARITY=YES
 ```
 
@@ -47,7 +47,7 @@ Jednak po dodaniu tego samego zadania do kolejki (`Queue Export`) wydajność dr
 
 ## 3. WPROWADZONE POPRAWKI I IMPLEMENTACJA
 
-Wszystkie modyfikacje zostały zaimplementowane w `C:\_DEV\BikeRideHUD-main-new`, a następnie zsynchronizowane do `C:\_DEV\BikeRideHUD-portable`:
+Wszystkie modyfikacje zostały zaimplementowane w `C:\_DEV\SportCamHUD-main-new`, a następnie zsynchronizowane do `C:\_DEV\SportCamHUD-portable`:
 
 1. **`src/gui/export_queue.py`**:
    - Skonsolidowano powiadomienia w jedną kanoniczną ścieżkę: jeśli ustawione są sygnały Qt (`self._signals`), emitowany jest wyłącznie sygnał Qt; w przeciwnym razie następuje fallback do callbacka.
@@ -80,7 +80,7 @@ Wszystkie modyfikacje zostały zaimplementowane w `C:\_DEV\BikeRideHUD-main-new`
 
 Wszystkie zmodyfikowane pliki źródłowe posiadają identyczną sumę kontrolną SHA-256 w repozytorium źródłowym oraz w środowisku portable:
 
-| Plik | SHA256 (`C:\_DEV\BikeRideHUD-main-new`) | SHA256 (`C:\_DEV\BikeRideHUD-portable`) | Status |
+| Plik | SHA256 (`C:\_DEV\SportCamHUD-main-new`) | SHA256 (`C:\_DEV\SportCamHUD-portable`) | Status |
 | :--- | :--- | :--- | :---: |
 | `src/gui/export_queue.py` | `C6AAC7F3AABDC33A9AE5B4DCD647F38AAA7066A1C308BF248F115AD50283684D` | `C6AAC7F3AABDC33A9AE5B4DCD647F38AAA7066A1C308BF248F115AD50283684D` | **MATCH** |
 | `src/gui/map_prefetch.py` | `C3BC003FBF5FB85CF92AF77A97DBA4C4277CD7088CA9A7764B331561B5FC74B3` | `C3BC003FBF5FB85CF92AF77A97DBA4C4277CD7088CA9A7764B331561B5FC74B3` | **MATCH** |
@@ -111,7 +111,7 @@ CONFIG_PARITY=100.0% EXACT MATCH (0 diff)
 ## 6. WYNIKI TESTÓW BENCHMARKOWYCH A/B (3000 KLATEK 4K HEVC QUALITY)
 
 Parametry testowe:
-- **Plik źródłowy:** `C:\_DEV\BikeRideHUD-main-new\Video\DJI_20261002062647_0003_D.MP4` (3840x2160 HEVC 29.97 FPS, 15.3 GB)
+- **Plik źródłowy:** `C:\_DEV\SportCamHUD-main-new\Video\DJI_20261002062647_0003_D.MP4` (3840x2160 HEVC 29.97 FPS, 15.3 GB)
 - **Kodek / Jakość:** HEVC AMF Native D3D11, Jakość: QUALITY, Bitrate: 40 Mbit/s
 - **Liczba klatek:** 3000 klatek na zadanie
 
@@ -135,7 +135,7 @@ Parametry testowe:
 
 ## 7. WYNIKI TESTU WSADOWEGO KOLEJKI (3-JOB QUEUE BATCH)
 
-Uruchomienie: `python BikeRideHUD.py --test-amd-export --mode queue --frames 3000 --multi-jobs 3`  
+Uruchomienie: `python SportCamHUD.py --test-amd-export --mode queue --frames 3000 --multi-jobs 3`  
 Łącznie przetworzono **9000 klatek 4K** w trybie ciągłym.
 
 | Zadanie w kolejce | Klatki | Czas trwania (s) | Effective FPS | Native Render FPS | Parytet do Direct Baseline | Status |

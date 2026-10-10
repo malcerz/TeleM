@@ -2,7 +2,7 @@
 
 Data audytu i integracji: 2026-09-27  
 Środowisko testowe: Intel Core Ultra 5 135U / Windows 11  
-Kanoniczny katalog aplikacji: C:\_DEV\BikeRideHUD-main  
+Kanoniczny katalog aplikacji: C:\_DEV\SportCamHUD-main  
 Repozytorium: https://github.com/malcerz/TeleM.git  
 
 ---
@@ -89,7 +89,7 @@ efs/tags/amd-final-2026-09-09
 ## 4. Faza 3–8: Dedykowane Worktree Integracyjne i Weryfikacja Scalenia
 
 Utworzono bezpieczne, dedykowane worktree integracyjne:
-C:\_DEV\BikeRideHUD-main-amd-integration
+C:\_DEV\SportCamHUD-main-amd-integration
 na gałęzi integration/amd-into-main bazującej na origin/main (ae3186b5ac4af8f39dfe19628100ee996948169).
 
 Weryfikacja relacji gałęzi:
@@ -201,8 +201,8 @@ v w GUI: PASS
    - INTEL_PROFILES_REACHABLE_FROM_MAIN=YES
    - OLD_MAIN_REACHABLE=YES
 4. Stan kanoniczny:
-   - C:\_DEV\BikeRideHUD-main zawiera kompletny kod aplikacji ze wszystkimi backendami (Intel, AMD, NVIDIA, CPU) i profilami enkodera.
-   - Launcher Start_BikeRideHUD.cmd przetestowany i w pełni sprawny (USER_LAUNCHER_PASS=YES).
-   - Worktree referencyjne C:\_DEV\BikeRideHUD-intel nienaruszone.
+   - C:\_DEV\SportCamHUD-main zawiera kompletny kod aplikacji ze wszystkimi backendami (Intel, AMD, NVIDIA, CPU) i profilami enkodera.
+   - Launcher Start_SportCamHUD.cmd przetestowany i w pełni sprawny (USER_LAUNCHER_PASS=YES).
+   - Worktree referencyjne C:\_DEV\SportCamHUD-intel nienaruszone.
 
 FINAL_STATUS=AMD_MERGED_TO_MAIN_FULL_APP_READY

@@ -23,14 +23,14 @@ from src.telemetry_file_validation import TelemetryValidationRequest
 from src.version import APP_VERSION, APP_BUILD_COMMIT
 import os
 
-APP_TITLE = "BikeRideHUD"
+APP_TITLE = "SportCamHUD"
 
 def get_window_title() -> str:
-    title = f"BikeRideHUD v{APP_VERSION}"
+    title = f"SportCamHUD v{APP_VERSION}"
     abs_path = os.path.abspath(__file__)
-    if "BikeRideHUD-portable" in abs_path:
+    if "SportCamHUD-portable" in abs_path:
         repo_name = "Portable"
-    elif "BikeRideHUD-main-new" in abs_path:
+    elif "SportCamHUD-main-new" in abs_path:
         repo_name = "main-new"
     else:
         repo_name = "unknown"

@@ -1,7 +1,7 @@
 # Raport: AMD Map Marker Arrow Parity Fix (Orientation + Anchor on Route)
 
 **Data:** 2026-09-21  
-**Repo:** BikeRideHUD AMD (`C:\_DEV\BikeRideHUD-amd`)  
+**Repo:** SportCamHUD AMD (`C:\_DEV\SportCamHUD-amd`)  
 **Branch:** `amd-bikeridehud`  
 **Commit:** `1b5485c` (z poprawkami w obszarze markera i rotacji GPU)  
 **Status Końcowy:** PASS

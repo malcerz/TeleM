@@ -26,7 +26,7 @@ GYRO_DATA_VALID=True — native extraction and array population smoke passed
 
 ## Cache
 
-CACHE_PATH=`%LOCALAPPDATA%\\BikeRideHUD\\cache\\media\\<source_key>\\`
+CACHE_PATH=`%LOCALAPPDATA%\\SportCamHUD\\cache\\media\\<source_key>\\`
 CACHE_SCHEMA_VERSION=5 processed telemetry / 5 GPMF JSON / 1 central cache manager format
 FIRST_LOAD_CACHE_HIT=False — end-to-end cold smoke on a unique hardlink source
 SECOND_LOAD_CACHE_HIT=True — same end-to-end smoke

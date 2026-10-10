@@ -1,7 +1,7 @@
 # Raport: AMD Map Arrow Final Anchor / Parity Fix
 
 **Data:** 2026-09-21  
-**Repo:** BikeRideHUD AMD (`C:\_DEV\BikeRideHUD-amd`)  
+**Repo:** SportCamHUD AMD (`C:\_DEV\SportCamHUD-amd`)  
 **Branch:** `amd-bikeridehud`  
 **Commit:** `1b5485c` (z poprawkami pozycjonowania i orientacji markera)  
 **Status:** **COMPLETE / PASS**

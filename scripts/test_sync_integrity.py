@@ -18,7 +18,7 @@ def run_case(name: str, video: Path, fit: Path, expected: set[str], timeout: int
     result_path = ROOT / "scratch" / f"sync_integrity_{name}.json"
     result_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        sys.executable, "BikeRideHUD.py", "--test-sync-integrity",
+        sys.executable, "SportCamHUD.py", "--test-sync-integrity",
         "--video", str(video), "--fit", str(fit), "--result-json", str(result_path),
     ]
     print(f"\n[SYNC TEST] {name}: {' '.join(command)}", flush=True)

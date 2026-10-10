@@ -38,7 +38,7 @@ def verify_sync_pair(video: Path, fit: Path) -> dict:
     result_path = ROOT / "scratch" / "amd_benchmark_sync.json"
     log_path = ROOT / "scratch" / "amd_benchmark_sync.log"
     process = subprocess.run([
-        sys.executable, "BikeRideHUD.py", "--test-sync-integrity",
+        sys.executable, "SportCamHUD.py", "--test-sync-integrity",
         "--video", str(video), "--fit", str(fit), "--result-json", str(result_path),
     ], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     log_path.write_text(process.stdout, encoding="utf-8", errors="replace")
@@ -76,7 +76,7 @@ def run_one(mode: str, preview: bool, repetition: int, video: Path, fit: Path, f
     result_json = output_dir / f"{label}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        sys.executable, "BikeRideHUD.py", "--test-amd-export", "--mode", mode,
+        sys.executable, "SportCamHUD.py", "--test-amd-export", "--mode", mode,
         "--video", str(video), "--fit", str(fit), "--frames", str(frames),
         "--quality", "QUALITY", "--codec", "hevc", "--bitrate", bitrate, "--start-seconds", str(start_seconds),
         "--output", str(output), "--result-json", str(result_json),

@@ -3,8 +3,8 @@
 **Data sporządzenia:** 2026-10-06  
 **Środowisko:** Windows 11, AMD Cezanne (Radeon Vega Graphics), Python 3.14.7 x64, MSVC v143  
 **Repozytoria:**  
-- Główny: `C:\_DEV\BikeRideHUD-main-new`  
-- Portable: `C:\_DEV\BikeRideHUD-portable`  
+- Główny: `C:\_DEV\SportCamHUD-main-new`  
+- Portable: `C:\_DEV\SportCamHUD-portable`  
 
 ---
 
@@ -18,7 +18,7 @@
   - `F:\GoPro\2026-10-05\DJI_0013.MP4`
   - `F:\GoPro\2026-10-05\DJI_0014.MP4`
   - `F:\GoPro\2026-10-05\DJI_0015.MP4`
-- **Plik FIT powiązany:** `C:\Users\Malcerz\AppData\Local\BikeRideHUD\remote_telemetry\garmin\24614281884.fit` (Garmin Connect)
+- **Plik FIT powiązany:** `C:\Users\Malcerz\AppData\Local\SportCamHUD\remote_telemetry\garmin\24614281884.fit` (Garmin Connect)
 - **Known-Good GoPro:** `D:\GoPro\TEST\GX010305.MP4` (3840x2160, 10-bit P010, 180° metadata)
 - **Known-Good 0° Rotation:** `D:\GoPro\20261002-0625.mp4` (3840x2160, 8-bit NV12, 0° metadata)
 

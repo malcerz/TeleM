@@ -1,7 +1,7 @@
 # Raport: Naprawa błędu Intel Queue — Native Pipeline Fallback + Błędny hwdownload nv12
 
 Data wykonania: 2026-10-02  
-Środowiska: `C:\_DEV\BikeRideHUD-main-new`, `C:\_DEV\BikeRideHUD-portable`  
+Środowiska: `C:\_DEV\SportCamHUD-main-new`, `C:\_DEV\SportCamHUD-portable`  
 Branch: `main`
 
 ---
@@ -136,7 +136,7 @@ Dla zadania z dwoma klipami (`len(input_files) == 2`), warunek `len(input_files)
 1. Zapewniono odświeżanie `self.video_paths` na początku każdego wywołania `_on_render_requested`.
 2. Do `stream_kwargs["input_files"]` przekazywana jest bezpośrednio aktualna lista `list(options.get("video_paths") or self.video_paths)`.
 
-### 3.5. Synchronizacja z `BikeRideHUD-portable`
+### 3.5. Synchronizacja z `SportCamHUD-portable`
 - Zaktualizowano `src/ffmpeg/intel_native_exporter.py`, `src/ffmpeg/streaming.py`, `src/ffmpeg/command_builder.py`, `src/gui/qt/_mixins/render_mixin.py` oraz `src/ffmpeg/intel_backend.py`.
 - Zachowano plik `src/ffmpeg/output_error.py` specyficzny dla wersji portable.
 
@@ -159,7 +159,7 @@ tests/test_intel_queue_native_fallback_hwdownload.py::test_intel_fallback_record
 Wykonano scenariusz:
 - Job #1: 1 klip 10-bit HEVC 4K30 (`GX010319.MP4`)
 - Job #2: 2 klipy multi-file 10-bit HEVC 4K30 (`GX010321.MP4` + `GX010322.MP4`)
-w tym samym procesie w środowisku `C:\_DEV\BikeRideHUD-portable`.
+w tym samym procesie w środowisku `C:\_DEV\SportCamHUD-portable`.
 
 Wynik:
 ```

@@ -1,7 +1,7 @@
 # RAPORT AMD: Przeniesienie alt_visual do natywnego GPU AFTER-MAP
 
 Data: 2026-09-16
-Środowisko: `C:\_DEV\BikeRideHUD`
+Środowisko: `C:\_DEV\SportCamHUD`
 Gałąź: `amd-bikeridehud` (HEAD bazowy: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`)
 Referencja Oracle: `C:\_DEV\TeleM` (READ-ONLY)
 
@@ -85,7 +85,7 @@ W plikach `native/d3d11_amf_pipeline/src/d3d11_vp_pipeline.h`, `d3d11_vp_pipelin
 
 ## 5. Wyniki A/B (Real GUI Path)
 
-Oba przebiegi wykonano w pełnym procesie produkcyjnym GUI (`BikeRideHUD.py -> GUI -> RenderMixin -> AMD child process -> amd_native_exporter -> telem_amd_native.dll -> AMF`):
+Oba przebiegi wykonano w pełnym procesie produkcyjnym GUI (`SportCamHUD.py -> GUI -> RenderMixin -> AMD child process -> amd_native_exporter -> telem_amd_native.dll -> AMF`):
 - Workload: `Video/GX020079.mp4` + `Video/GX020079.fit` (4K UHD 3840x2160, 300 klatek / 10.0 s @ 29.97 fps, AMF HEVC).
 - RUN A (CPU baseline): `AMD_AFTER_MAP_ALT_VISUAL_GPU=0`
 - RUN B (GPU AFTER-MAP): `AMD_AFTER_MAP_ALT_VISUAL_GPU=1`

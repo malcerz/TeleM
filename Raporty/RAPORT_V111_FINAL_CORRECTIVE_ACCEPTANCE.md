@@ -1,7 +1,7 @@
-# BikeRideHUD v1.11 — final corrective acceptance
+# SportCamHUD v1.11 — final corrective acceptance
 
 Validation date: 2026-10-10
-Repository: `C:\_DEV\BikeRideHUD-main-new`
+Repository: `C:\_DEV\SportCamHUD-main-new`
 Branch: `fix/gui-freeze-hud-composite`
 Initial commit: `f8c80b73b745a04c0f62d2dd3fdd8afbd7897826`
 Tested code HEAD: `a515c77370575c4bf70b3cb0d889e70db118af19`

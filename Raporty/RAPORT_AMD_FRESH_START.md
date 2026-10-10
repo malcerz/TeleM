@@ -3,7 +3,7 @@
 ## 1. METADANE ZADANIA
 - **Data audytu**: 2026-09-16 06:21 CEST
 - **Stacja robocza**: Asus PN51 (AMD Ryzen / Barcelo / Cezanne APU, Windows 11 Pro)
-- **Repozytorium docelowe**: `C:\_DEV\BikeRideHUD`
+- **Repozytorium docelowe**: `C:\_DEV\SportCamHUD`
 - **Repozytorium referencyjne (Oracle)**: `C:\_DEV\TeleM`
 
 ---
@@ -57,13 +57,13 @@ READY_FOR_AMD_PORT=YES
   - `src/ffmpeg/amd_native_exporter.py`: integracja callbacków `progress_tracker`
   - `src/gui/qt/tabs/render_tab.py`: obsługa `global_pct`
   - `src/telemetry_precompute.py`: callbacki `progress_cb`
-  - *Uwaga*: Plik `src/render_progress.py` znajduje się już na `main` w `BikeRideHUD`.
+  - *Uwaga*: Plik `src/render_progress.py` znajduje się już na `main` w `SportCamHUD`.
 
 ---
 
 ### Krok 2, 3 & 4: Fresh Clone i Utworzenie Gałęzi AMD
-- **Ścieżka**: `C:\_DEV\BikeRideHUD`
-- Przed wykonaniem operacji katalog `C:\_DEV\BikeRideHUD` nie istniał.
+- **Ścieżka**: `C:\_DEV\SportCamHUD`
+- Przed wykonaniem operacji katalog `C:\_DEV\SportCamHUD` nie istniał.
 - Wykonano czysty klon z `https://github.com/malcerz/TeleM.git`.
 - **Weryfikacja SHA origin/main**:
   - `branch`: `main`
@@ -98,7 +98,7 @@ READY_FOR_AMD_PORT=YES
 
 ---
 
-### Krok 8: Porównanie Nowy Main (`BikeRideHUD`) vs Stary AMD (`TeleM`)
+### Krok 8: Porównanie Nowy Main (`SportCamHUD`) vs Stary AMD (`TeleM`)
 1. `src/ffmpeg/amd_native_exporter.py`:
    - Stary AMD: 301 729 bajtów (6110 linii)
    - Nowy main: 385 602 bajty (7698 linii)
@@ -117,12 +117,12 @@ READY_FOR_AMD_PORT=YES
 ---
 
 ### Krok 10: Próba Uruchomienia Aplikacji (Smoke Test)
-1. `python BikeRideHUD.py`:
+1. `python SportCamHUD.py`:
    - **Wynik**: `FAIL` (`[Errno 2] No such file or directory`).
-   - **Przyczyna**: W commicie `b3c74bf` zmieniono `README.md` i `TeleMGP.py`, deklarując `BikeRideHUD.py` jako kanoniczny launcher, jednak sam plik `BikeRideHUD.py` nie został dodany do repozytorium.
+   - **Przyczyna**: W commicie `b3c74bf` zmieniono `README.md` i `TeleMGP.py`, deklarując `SportCamHUD.py` jako kanoniczny launcher, jednak sam plik `SportCamHUD.py` nie został dodany do repozytorium.
 2. `python TeleMGP.py`:
-   - **Wynik**: `FAIL` (`ModuleNotFoundError: No module named 'BikeRideHUD'`).
-   - **Przyczyna**: `TeleMGP.py` próbuje wykonać `from BikeRideHUD import ...`.
+   - **Wynik**: `FAIL` (`ModuleNotFoundError: No module named 'SportCamHUD'`).
+   - **Przyczyna**: `TeleMGP.py` próbuje wykonać `from SportCamHUD import ...`.
 3. Bezpośredni import modułów aplikacji:
    - `from src.gui.qt.application import main` wykonuje się poprawnie (środowisko Qt i Python są gotowe).
 4. Wykrywanie backendu:
@@ -139,6 +139,6 @@ READY_FOR_AMD_PORT=YES
 - Środowisko sprzętowe, sterowniki AMD i enkodery AMF są w 100% sprawne i zweryfikowane.
 - Gałąź robocza `amd-bikeridehud` bazuje na zatwierdzonym punkcie wyjścia `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`.
 - W kolejnym kroku ("dalej"):
-  1. Należy odtworzyć launcher `BikeRideHUD.py` (lub przywrócić poprawny import w `TeleMGP.py`).
+  1. Należy odtworzyć launcher `SportCamHUD.py` (lub przywrócić poprawny import w `TeleMGP.py`).
   2. Należy zapewnić obecność `telem_amd_native.dll` (poprzez skompilowanie nowej wersji C++ pod Barcelo APU lub użycie dedykowanego artefaktu DLL).
   3. Przeprowadzić krótki smoke render (10–20 s).

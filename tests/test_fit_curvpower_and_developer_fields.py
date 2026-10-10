@@ -79,7 +79,7 @@ def test_standard_power_and_developer_curvpower_coexistence_precedence():
 
 def test_gx010298_ground_truth_timestamps():
     """Verify ground truth on real GX010298.fit dataset across all target timestamps."""
-    root_dir = Path("C:/_DEV/BikeRideHUD")
+    root_dir = Path("C:/_DEV/SportCamHUD")
     video_path = root_dir / "Video" / "GX010298.MP4"
     fit_path = root_dir / "Video" / "GX010298.fit"
     layout_path = root_dir / "Video" / "GX010298.layout.json"

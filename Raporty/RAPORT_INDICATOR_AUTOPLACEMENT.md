@@ -25,7 +25,7 @@ Dotychczas podczas dodawania nowego wskaźnika w GUI (metoda `_create_indicator`
 ## 2. Architektura i Implementacja
 
 ### Bounding Box & Geometria
-Implementacja w dedykowanym module [`src/gui/autoplacement.py`](file:///H:/_Dev/BikeRideHUD/src/gui/autoplacement.py):
+Implementacja w dedykowanym module [`src/gui/autoplacement.py`](file:///H:/_Dev/SportCamHUD/src/gui/autoplacement.py):
 - Bounding box wyznaczany jest w oparciu o kanoniczny silnik renderujący TeleM (`render_value_indicator` / `render_time_display`).
 - Uwzględnia typ kotwicy:
   - `top_left`: dla wskaźników `form="text"` oraz `key="time_display"`.
@@ -51,7 +51,7 @@ Implementacja w dedykowanym module [`src/gui/autoplacement.py`](file:///H:/_Dev/
 
 ## 3. Integracja z GUI
 
-Zmodyfikowano metodę `_create_indicator` w [`src/gui/qt/_mixins/indicator_mixin.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/_mixins/indicator_mixin.py):
+Zmodyfikowano metodę `_create_indicator` w [`src/gui/qt/_mixins/indicator_mixin.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/_mixins/indicator_mixin.py):
 
 ```python
 # Auto-placement: ensure newly created indicator does not overlap active widgets
@@ -162,9 +162,9 @@ Wszystkie artefakty zapisano w katalogu `scratch/indicator_autoplacement/`:
 Wysłano powiadomienie NTFY:
 ```powershell
 curl.exe -fsS --connect-timeout 5 --max-time 10 `
-  -H "Title: BikeRideHUD" `
+  -H "Title: SportCamHUD" `
   -H "Tags: white_check_mark" `
-  -d "BikeRideHUD indicator autoplacement: CASE A — NEW INDICATORS AUTO-PLACED WITHOUT OVERLAP, overlap_after=0, elapsed=9.8ms." `
+  -d "SportCamHUD indicator autoplacement: CASE A — NEW INDICATORS AUTO-PLACED WITHOUT OVERLAP, overlap_after=0, elapsed=9.8ms." `
   "https://ntfy.sh/MalcerzPOP"
 ```
 Status: **SUCCESS** (kod wyjścia 0).

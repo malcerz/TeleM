@@ -181,7 +181,7 @@ Drzewo zawiera wcześniejsze eksperymenty (m.in. prototyp GPU Map z etapu 3B). D
 ## 8. PEŁNA TABELA TOKENÓW RAPORTOWYCH (MANDATORY RESULT TOKENS)
 
 ```text
-ROOT=C:/_Dev/BikeRideHUD-intel
+ROOT=C:/_Dev/SportCamHUD-intel
 BRANCH=intel-225u
 HEAD=2cd43bad3fbd99e756cc651256cfe2ee27ee08a8
 ORIGIN_URL=https://github.com/malcerz/TeleM.git

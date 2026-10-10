@@ -3,9 +3,9 @@
 
 **Data:** 2026-09-16  
 **Platforma:** Asus PN51 (AMD Radeon (TM) Graphics, Driver 31.0.21925.1001), Windows 11  
-**Repozytorium robocze:** `C:\_DEV\BikeRideHUD` (branch: `amd-bikeridehud`, HEAD: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`)  
+**Repozytorium robocze:** `C:\_DEV\SportCamHUD` (branch: `amd-bikeridehud`, HEAD: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`)  
 **Oracle READ-ONLY:** `C:\_DEV\TeleM` (branch: `amd-render`, HEAD: `7e4e34ecae13eae947c0386443e6a7317b42256f`)  
-**Ścieżka wykonania:** Pełna produkcyjna ścieżka Real GUI (`BikeRideHUD.py` -> `MainWindow` -> `RenderTab` -> `RenderMixin` -> `AMDChildProcess` -> `amd_native_exporter` -> `telem_amd_native.dll` -> `AMF HEVC`).  
+**Ścieżka wykonania:** Pełna produkcyjna ścieżka Real GUI (`SportCamHUD.py` -> `MainWindow` -> `RenderTab` -> `RenderMixin` -> `AMDChildProcess` -> `amd_native_exporter` -> `telem_amd_native.dll` -> `AMF HEVC`).  
 
 ---
 
@@ -94,9 +94,9 @@ RECOMMENDED_RING_SIZE=1
 | **Frame 299** | 9.98 s | 0 | 0.0000 | 0 | 0.00% | `EXACT PARITY` |
 
 - **Status wizualny**: `USER VISUAL ACCEPTANCE=PENDING`
-- **Contact Sheet Run A**: [contact_sheet.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_vp_ring_ab/runA/contact_sheet.png)
-- **Contact Sheet Run B**: [contact_sheet.png](file:///C:/_DEV/BikeRideHUD/scratch/amd_vp_ring_ab/runB/contact_sheet.png)
-- **Raport wizualny**: [visual_diff.md](file:///C:/_DEV/BikeRideHUD/scratch/amd_vp_ring_ab/visual_diff.md)
+- **Contact Sheet Run A**: [contact_sheet.png](file:///C:/_DEV/SportCamHUD/scratch/amd_vp_ring_ab/runA/contact_sheet.png)
+- **Contact Sheet Run B**: [contact_sheet.png](file:///C:/_DEV/SportCamHUD/scratch/amd_vp_ring_ab/runB/contact_sheet.png)
+- **Raport wizualny**: [visual_diff.md](file:///C:/_DEV/SportCamHUD/scratch/amd_vp_ring_ab/visual_diff.md)
 
 ---
 

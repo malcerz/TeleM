@@ -1,7 +1,7 @@
 # Raport: Profiling Komponentów CPU ABOVE (AMD Native D3D11 Pipeline)
 
 Data: 2026-09-16  
-Środowisko: `C:\_DEV\BikeRideHUD`  
+Środowisko: `C:\_DEV\SportCamHUD`  
 Gałąź: `amd-bikeridehud`  
 Oracle: `C:\_DEV\TeleM` (READ-ONLY)  
 
@@ -33,7 +33,7 @@ CASE=CASE B — COST DISTRIBUTED ACROSS MANY SMALL WIDGETS
 ## 2. Środowisko i Konfiguracja Produkcyjna
 
 Wykonano dokładnie jeden pełny przebieg kontrolny w produkcyjnej ścieżce GUI:
-`BikeRideHUD.py -> GUI -> RenderMixin -> AMD child process -> amd_native_exporter -> telem_amd_native.dll -> AMF`.
+`SportCamHUD.py -> GUI -> RenderMixin -> AMD child process -> amd_native_exporter -> telem_amd_native.dll -> AMF`.
 
 - **Zestaw danych**: `Video/GX020079.mp4` + `Video/GX020079.fit`
 - **Rozdzielczość**: 3840x2160 (4K UHD)

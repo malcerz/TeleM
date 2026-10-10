@@ -1,7 +1,7 @@
 # RAPORT: AMD Map Prefetch Scale 12 / High-Zoom Startup Fix
 
 ## 1. Task & Context
-- **Repository:** `C:\_DEV\BikeRideHUD-amd`
+- **Repository:** `C:\_DEV\SportCamHUD-amd`
 - **Branch:** `amd-bikeridehud`
 - **Commit:** `1b5485c`
 - **Problem Statement:** After changing map scale/zoom to 12 (or higher), map preparation before render displayed `Przygotowanie mapy: 630 / 10122 (6%)` and hung for tens of minutes before render start, stalling the ~42 FPS AMD GPU runtime.

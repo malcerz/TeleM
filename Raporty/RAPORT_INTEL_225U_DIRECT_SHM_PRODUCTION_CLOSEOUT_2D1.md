@@ -45,7 +45,7 @@ Pomiary bezpośrednie z rejestrów systemu Windows (WMI / DXGI / PnP):
 - **Native DLL SHA256:** `eb53f230233f8f9dc754b989ec036a0b04941e061f3dbdca4708acb1acc29d40`
 - **Native DLL Timestamp:** `2026-09-22T08:24:32.195765`
 - **Python Executable:** `C:\Python\python.exe` (v3.14.7)
-- **FFmpeg Executable:** `C:\_Dev\BikeRideHUD-intel\ffmpeg.exe`
+- **FFmpeg Executable:** `C:\_Dev\SportCamHUD-intel\ffmpeg.exe`
 - **oneVPL Runtime Version:** `2.14 / 2.11` (Intel GPU oneVPL API 2.11+)
 
 ---

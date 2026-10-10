@@ -1,4 +1,4 @@
-# RAPORT: TRWALE USUNIĘCIE AUDIO CACHE Z BikeRideHUD — AUDIO ZAWSZE BEZPOŚREDNIO Z ORYGINALNEGO MP4
+# RAPORT: TRWALE USUNIĘCIE AUDIO CACHE Z SportCamHUD — AUDIO ZAWSZE BEZPOŚREDNIO Z ORYGINALNEGO MP4
 
 **Data:** 2026-10-05  
 **Autor:** Antigravity AI  
@@ -185,7 +185,7 @@ Wynik:
 
 ## 6. SYNCHRONIZACJA I PARZYSTOŚĆ (PORTABLE)
 
-Wszystkie zmienione pliki zostały zsynchronizowane do `C:\_DEV\BikeRideHUD-portable`.
+Wszystkie zmienione pliki zostały zsynchronizowane do `C:\_DEV\SportCamHUD-portable`.
 Skrypt `scripts/check_parity.py` potwierdza:
 ```text
 FIXED_SOURCE_HASH_PARITY=YES

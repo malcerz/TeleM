@@ -65,6 +65,6 @@ tests/test_render_tab_controls_cleanup.py::test_output_dialog_prefill_logic PASS
 ```
 
 ### 4.2. Weryfikacja Real GUI
-- Skrypt `scratch/gui_bitrate_step_arrows/capture_bitrate_control.py` uruchomił pełne GUI `BikeRideHUD.py` i zapisał zrzuty:
+- Skrypt `scratch/gui_bitrate_step_arrows/capture_bitrate_control.py` uruchomił pełne GUI `SportCamHUD.py` i zapisał zrzuty:
   - `scratch/gui_bitrate_step_arrows/bitrate_control.png`: Wygląd kontrolki z wektorowymi strzałkami lewo/prawo, suwakiem i polem wartości.
   - `scratch/gui_bitrate_step_arrows/rendering_controls_updated.png`: Całościowy zrzut panelu ustawień renderowania.

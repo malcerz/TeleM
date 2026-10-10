@@ -15,6 +15,6 @@ print("E. Importing src.integrations.garmin_connect")
 import src.integrations.garmin_connect
 print("F. Importing src.gui.qt.application")
 import src.gui.qt.application
-print("G. Checking BikeRideHUD imports")
-import BikeRideHUD
+print("G. Checking SportCamHUD imports")
+import SportCamHUD
 print("Smoke test pass.")

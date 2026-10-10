@@ -9,7 +9,7 @@ Added `src/telemetry_dji.py` to detect `djmd` by MP4 stream tag and `CAM meta`/`
 The current upstream DJI MP4 parser source inserts `Quaternion` and camera/lens metadata; it does **not** insert `Gyroscope` or `Accelerometer` groups for DJI MP4. Consequently `normalized_imu()` cannot supply those channels for this format at the pinned commit. The provided 2.496 s file contains 74 `djmd` packets, but only its first telemetry group has a camera header; the other 73 groups are empty. Its normalized IMU and quaternion collections are empty. The adapter intentionally does not fabricate camera motion from other fields. A longer genuine Action 6 file with motion metadata and/or an upstream parser capability change is needed to meet the requested IMU acceptance gates.
 
 HEAD=1ecc2fc6c87d04e87fbcf8a7e3c830f24ac9f935 (initial)
-DJI_TEST_FILE=C:\_DEV\BikeRideHUD-main\Video\DJI_20260928071657_0002_D.MP4
+DJI_TEST_FILE=C:\_DEV\SportCamHUD-main\Video\DJI_20260928071657_0002_D.MP4
 UPSTREAM_REPO=https://github.com/AdrianEddy/telemetry-parser
 UPSTREAM_COMMIT=d45ebf2afce85fa691838fd32b3da8ae2fcac773
 UPSTREAM_LICENSE=MIT OR Apache-2.0
@@ -63,7 +63,7 @@ DJI_MULTIFILE_ACCEL_PASS=synthetic two-clip timestamp test; real clips NOT TESTE
 
 DJI_COLD_LOAD_SECONDS=0.0228 after process startup on the supplied 13.9 MB file
 DJI_WARM_LOAD_SECONDS=0.0103
-DJI_WARM_CACHE_PASS=YES; central cache path under `%LOCALAPPDATA%/BikeRideHUD/cache/media/.../dji_imu.npz` (1,254 bytes). Key includes resolved path, file size, mtime, schema and upstream commit. No MP4 sidecar was written.
+DJI_WARM_CACHE_PASS=YES; central cache path under `%LOCALAPPDATA%/SportCamHUD/cache/media/.../dji_imu.npz` (1,254 bytes). Key includes resolved path, file size, mtime, schema and upstream commit. No MP4 sidecar was written.
 DJI_PARSER_OFFLINE_RUNTIME_PASS=YES; `python -S` loaded the bundled package without site packages
 GUI_DJI_LOAD_PASS=NOT TESTED; computer-control runtime failed to initialize
 GUI_DJI_TELEMETRY_PASS=NOT TESTED; project loader method parsed the real file, but GUI and real IMU samples were unavailable

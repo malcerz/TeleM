@@ -1,8 +1,8 @@
 # RAPORT: AUTOMATYCZNE WYSZUKIWANIE FIT/GPX NATYCHMIAST PO WYBORZE MP4 — BEZ KLIKANIA „WCZYTAJ”
 
 Data wdrożenia: 2026-10-03  
-Projekt: BikeRideHUD  
-Środowiska: `C:\_DEV\BikeRideHUD-main-new` oraz `C:\_DEV\BikeRideHUD-portable`  
+Projekt: SportCamHUD  
+Środowiska: `C:\_DEV\SportCamHUD-main-new` oraz `C:\_DEV\SportCamHUD-portable`  
 Status: **ZAKOŃCZONE SUKCESEM — 100% WYMAGAŃ SPEŁNIONE**
 
 ---
@@ -120,7 +120,7 @@ Przeprowadzono pełne testy E2E na rzeczywistych danych w systemie Windows:
   3. Status wiersza: `Szukam lokalnych danych...`
   4. Po braku lokalnego FIT przejście do: `Szukam aktywności Garmin Connect...`
   5. Wyszukanie na serwerze Garmin Connect aktywności o identyfikatorze `24574176578` („Gdańsk Kolarstwo”, 2026-10-02 04:26:43 UTC, czas trwania 2135s — zgodność co do sekundy z czasem trwania wideo!).
-  6. Pobranie pliku FIT z serwerów Garmin Connect do pamięci podręcznej `C:\Users\Malcerz\AppData\Local\BikeRideHUD\remote_telemetry\garmin\24574176578.fit` (174 809 bajtów).
+  6. Pobranie pliku FIT z serwerów Garmin Connect do pamięci podręcznej `C:\Users\Malcerz\AppData\Local\SportCamHUD\remote_telemetry\garmin\24574176578.fit` (174 809 bajtów).
   7. Aktualizacja UI:  
      Przycisk: `Pobrano 24574176578.fit ✓` (ze stylem wybranym)  
      Wiersz: `Gotowe — 24574176578.fit`

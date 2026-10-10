@@ -2,7 +2,7 @@
 
 ## EXECUTIVE SUMMARY
 
-Real-time compression quality telemetry has been successfully implemented and validated for Intel AV1 exports in BikeRideHUD.
+Real-time compression quality telemetry has been successfully implemented and validated for Intel AV1 exports in SportCamHUD.
 For AV1 encoding via the Intel oneVPL native D3D11 pipeline, the actual hardware quantization metric ase_q_idx (range 0–255) is extracted with zero-copy efficiency from the encoded OBU bitstream headers directly as frames complete in the native encoder ring buffer.
 The metric is exposed through non-blocking native aggregates, polled at low GUI frequency (<= 2 Hz), displayed as Q / Quant / Quantizer in the real-time UI without faking classical H.264/H.265 QP, and fully persisted in Export Queue job history.
 
@@ -58,7 +58,7 @@ In contrast, the AOMedia Video 1 (AV1) specification (Section 5.9.11 *Quantizati
 1. ase_q_idx indexes into non-linear hardware lookup tables (dc_qlookup and c_qlookup) to determine the exact DC and AC quantization scales.
 2. The mapping is non-linear across the 256 indices and cannot be expressed as a linear scalar of H.264 QP.
 3. Converting ase_q_idx to QP via an arbitrary formula (e.g. ase_q_idx / 5.0) would fabricate a false sense of classical QP comparability, misleading users, engineers, and automated quality assessment pipelines.
-4. Per AV1 industry standards (libaom, rav1e, SVT-AV1), quantizer values are presented as Q, Quant, or Quantizer. In BikeRideHUD, AV1 exports explicitly display Q: / Quantizer: in both live rendering stats and Export Queue cards (Średni Quantizer: <avg>, Zakres Quantizer: <min>–<max>), while HEVC and H.264 exports continue to display QP: / Średnie QP:.
+4. Per AV1 industry standards (libaom, rav1e, SVT-AV1), quantizer values are presented as Q, Quant, or Quantizer. In SportCamHUD, AV1 exports explicitly display Q: / Quantizer: in both live rendering stats and Export Queue cards (Średni Quantizer: <avg>, Zakres Quantizer: <min>–<max>), while HEVC and H.264 exports continue to display QP: / Średnie QP:.
 
 ---
 

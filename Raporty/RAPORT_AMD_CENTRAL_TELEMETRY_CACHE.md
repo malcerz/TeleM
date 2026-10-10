@@ -19,7 +19,7 @@ Katalog źródłowy GoPro (np. karta SD / folder materiałów) musi pozostać w 
 * `NEW_GENERATED_FILES_IN_SOURCE_DIRECTORY = 0`
 * `SOURCE_DIRECTORY_WRITE_COUNT = 0`
 * Przeniesienie wszystkich automatycznie generowanych cache do centralnego katalogu:
-  `%LOCALAPPDATA%\BikeRideHUD\cache\media\<source_key>\`
+  `%LOCALAPPDATA%\SportCamHUD\cache\media\<source_key>\`
 * Zachowanie read-only wstecznej kompatybilności (migracja istniejących plików legacy bez ich modyfikacji i bez kasowania).
 * Odchudzenie kolejki renderowania (`ExportJob`) – brak osadzania wielomegabajtowych struktur telemetrii, praca wyłącznie na ścieżkach źródłowych, snapshocie layoutu i opcjonalnym hincie `telemetry_cache_key`.
 
@@ -39,9 +39,9 @@ GENERATED_SIDECAR_TYPES=
 
 | Typ Sidecara | Cel (Purpose) | Zapisywany wcześniej przez (Before) | Zapisywany obecnie (After) | Czytany przez | Invalidating conditions |
 |---|---|---|---|---|---|
-| `gpmf.json` / `.meta` | Raw payload parsowania GPMF | `project_mixin._write_gpmf_cache`, `telemetry_extract.py` | `%LOCALAPPDATA%\BikeRideHUD\cache\media\<key>\gpmf.json` via `telemetry_cache_manager` | `project_mixin`, `render_mixin` | Zmiana ścieżki, rozmiaru, mtime, `CACHE_FORMAT_VERSION` |
-| `telemetry.npz` | Binarne tablice NumPy z interpolowaną telemetrią | `telemetry_processed_cache.write_processed_cache` | `%LOCALAPPDATA%\BikeRideHUD\cache\media\<key>\telemetry.npz` via `telemetry_cache_manager` | `telemetry_processed_cache.read_processed_cache_arrays` | Zmiana ścieżki, rozmiaru, mtime, `PROCESSED_CACHE_VERSION` |
-| `telem_time.json` / `.meta` | Globalny start i synchronizacja klipu | `multifile._write_telem_time_cache` | `%LOCALAPPDATA%\BikeRideHUD\cache\media\<key>\telem_time.json` via `telemetry_cache_manager` | `multifile._load_valid_telem_time_cache` | Zmiana ścieżki, rozmiaru, mtime |
+| `gpmf.json` / `.meta` | Raw payload parsowania GPMF | `project_mixin._write_gpmf_cache`, `telemetry_extract.py` | `%LOCALAPPDATA%\SportCamHUD\cache\media\<key>\gpmf.json` via `telemetry_cache_manager` | `project_mixin`, `render_mixin` | Zmiana ścieżki, rozmiaru, mtime, `CACHE_FORMAT_VERSION` |
+| `telemetry.npz` | Binarne tablice NumPy z interpolowaną telemetrią | `telemetry_processed_cache.write_processed_cache` | `%LOCALAPPDATA%\SportCamHUD\cache\media\<key>\telemetry.npz` via `telemetry_cache_manager` | `telemetry_processed_cache.read_processed_cache_arrays` | Zmiana ścieżki, rozmiaru, mtime, `PROCESSED_CACHE_VERSION` |
+| `telem_time.json` / `.meta` | Globalny start i synchronizacja klipu | `multifile._write_telem_time_cache` | `%LOCALAPPDATA%\SportCamHUD\cache\media\<key>\telem_time.json` via `telemetry_cache_manager` | `multifile._load_valid_telem_time_cache` | Zmiana ścieżki, rozmiaru, mtime |
 
 ```text
 SIDECAR_WRITERS_BEFORE=
@@ -51,7 +51,7 @@ SIDECAR_WRITERS_BEFORE=
 - src/telemetry_extract.py (find_metadata_json_for_write)
 
 SIDECAR_WRITERS_AFTER=
-- src/telemetry_cache_manager.py (centralized atomic writer to %LOCALAPPDATA%\BikeRideHUD\cache\)
+- src/telemetry_cache_manager.py (centralized atomic writer to %LOCALAPPDATA%\SportCamHUD\cache\)
 - ZERO writers in video source directory
 ```
 
@@ -59,15 +59,15 @@ SIDECAR_WRITERS_AFTER=
 
 ## 3. Centralny Cache Manager i Algorytm Klucza
 
-Utworzono dedykowany moduł [telemetry_cache_manager.py](file:///C:/_DEV/BikeRideHUD-amd/src/telemetry_cache_manager.py).
+Utworzono dedykowany moduł [telemetry_cache_manager.py](file:///C:/_DEV/SportCamHUD-amd/src/telemetry_cache_manager.py).
 
 * **Cache Root:**
   ```text
-  CACHE_ROOT=%LOCALAPPDATA%\BikeRideHUD\cache\
+  CACHE_ROOT=%LOCALAPPDATA%\SportCamHUD\cache\
   ```
   Przechowywanie per źródło w:
   ```text
-  %LOCALAPPDATA%\BikeRideHUD\cache\media\<source_key>\
+  %LOCALAPPDATA%\SportCamHUD\cache\media\<source_key>\
       gpmf.json
       gpmf.meta.json
       telemetry.npz
@@ -117,7 +117,7 @@ Utworzono dedykowany moduł [telemetry_cache_manager.py](file:///C:/_DEV/BikeRid
 
 ## 5. Odchudzenie Kolejki Renderowania (`ExportJob`)
 
-Zadanie kolejki [ExportJob](file:///C:/_DEV/BikeRideHUD-amd/src/gui/export_queue.py) zawiera:
+Zadanie kolejki [ExportJob](file:///C:/_DEV/SportCamHUD-amd/src/gui/export_queue.py) zawiera:
 * Ścieżki wideo (`video_paths`)
 * Opcjonalną ścieżkę FIT/GPX
 * Opcjonalną jawną ścieżkę `external_gpmf_path` (jeśli dostarczona przez usera)
@@ -157,7 +157,7 @@ python -m pytest tests/test_central_telemetry_cache.py tests/test_telemetry_proc
 ```
 **Wynik:** **74 passed in 18.65s (100% PASS)**
 
-Nowe testy jednostkowe w [test_central_telemetry_cache.py](file:///C:/_DEV/BikeRideHUD-amd/tests/test_central_telemetry_cache.py):
+Nowe testy jednostkowe w [test_central_telemetry_cache.py](file:///C:/_DEV/SportCamHUD-amd/tests/test_central_telemetry_cache.py):
 1. `test_generated_gpmf_json_goes_to_appdata` — PASS
 2. `test_generated_telemetry_npz_goes_to_appdata` — PASS
 3. `test_telem_time_goes_to_appdata` — PASS
@@ -201,13 +201,13 @@ GENERATED_SIDECAR_TYPES=GPMF_JSON, TELEMETRY_NPZ, TELEM_TIME_JSON, LAYOUT_JSON
 SIDECAR_WRITERS_BEFORE=project_mixin, telemetry_processed_cache, multifile, telemetry_extract
 SIDECAR_WRITERS_AFTER=telemetry_cache_manager (AppData only, 0 in source dir)
 
-CACHE_ROOT=C:\Users\Malcerz\AppData\Local\BikeRideHUD\cache\
+CACHE_ROOT=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\
 CACHE_KEY_ALGORITHM=stem + sha256(canonical_path|size|mtime_ns|format_version)[:16]
 CACHE_FORMAT_VERSION=1
 
-GPMF_JSON_CACHE=%LOCALAPPDATA%\BikeRideHUD\cache\media\<source_key>\gpmf.json
-TELEMETRY_NPZ_CACHE=%LOCALAPPDATA%\BikeRideHUD\cache\media\<source_key>\telemetry.npz
-TELEM_TIME_CACHE=%LOCALAPPDATA%\BikeRideHUD\cache\media\<source_key>\telem_time.json
+GPMF_JSON_CACHE=%LOCALAPPDATA%\SportCamHUD\cache\media\<source_key>\gpmf.json
+TELEMETRY_NPZ_CACHE=%LOCALAPPDATA%\SportCamHUD\cache\media\<source_key>\telemetry.npz
+TELEM_TIME_CACHE=%LOCALAPPDATA%\SportCamHUD\cache\media\<source_key>\telem_time.json
 
 LEGACY_CACHE_IMPORT=True
 LEGACY_SOURCE_FILES_MODIFIED=False

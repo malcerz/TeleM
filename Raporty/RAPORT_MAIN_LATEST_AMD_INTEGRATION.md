@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-28  
 **Środowisko:** Intel Core Ultra 7 255U / Intel Graphics (PC Intel)  
-**Kanon:** `C:\_DEV\BikeRideHUD-main`  
+**Kanon:** `C:\_DEV\SportCamHUD-main`  
 **Autor:** Antigravity / Gemini High  
 
 ---
@@ -143,10 +143,10 @@ AMD_ACCEPTED_HARDWARE_SMOKE_FPS = 41.897
 | Output contract 4K HLG -180° | Dokładna zgodność | Potwierdzone ffprobe na 300 klatkach | **PASS** |
 | Praca w worktree | Izolowane worktree | Użyto i czysto usunięto | **PASS** |
 | Brak force-push | Wyłącznie fast-forward | `49fed08..a6910e0 main -> main` | **PASS** |
-| Skrypty startowe | Nienaruszone | `BikeRideHUD.py` i `Start_BikeRideHUD.cmd` gotowe | **PASS** |
+| Skrypty startowe | Nienaruszone | `SportCamHUD.py` i `Start_SportCamHUD.cmd` gotowe | **PASS** |
 
 ---
 
 ## 10. Podsumowanie
 
-Integracja najnowszego zaakceptowanego backendu AMD do gałęzi `main` została pomyślnie zakończona, przetestowana sprzętowo na platformie Intel oraz wypchnięta do repozytorium zdalnego `origin/main`. Repozytorium w katalogu `C:\_DEV\BikeRideHUD-main` stanowi teraz jednolitą, kompletną aplikację BikeRideHUD obsługującą wszystkie platformy (Intel, AMD, NVIDIA, CPU).
+Integracja najnowszego zaakceptowanego backendu AMD do gałęzi `main` została pomyślnie zakończona, przetestowana sprzętowo na platformie Intel oraz wypchnięta do repozytorium zdalnego `origin/main`. Repozytorium w katalogu `C:\_DEV\SportCamHUD-main` stanowi teraz jednolitą, kompletną aplikację SportCamHUD obsługującą wszystkie platformy (Intel, AMD, NVIDIA, CPU).

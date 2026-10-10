@@ -1,7 +1,7 @@
 # RAPORT — GPU Runtime Capability Production
 
 Data: 2026-09-23  
-Repozytorium: `C:\\_DEV\\BikeRideHUD-amd`  
+Repozytorium: `C:\\_DEV\\SportCamHUD-amd`  
 Branch: `amd-bikeridehud`  
 Commit bazowy: `0ef407e`
 
@@ -11,7 +11,7 @@ Wprowadzenie produkcyjnego, runtime'owego systemu capability GPU dla eksportu AM
 
 - jeden model capability zamiast rozproszonych limitów,
 - probe AMF/DXGI/D3D11 przy starcie,
-- cache w `%LOCALAPPDATA%\\BikeRideHUD\\gpu_capabilities.json`,
+- cache w `%LOCALAPPDATA%\\SportCamHUD\\gpu_capabilities.json`,
 - walidacja cache po schema/LUID/vendor/device/driver,
 - GUI gate rozdzielczości wyjściowej i `source` na podstawie aktualnych wymiarów,
 - clamp nieprawidłowej rozdzielczości do 4K z logiem `OUTPUT_RESOLUTION_CLAMPED`,
@@ -136,7 +136,7 @@ PASS:
 
 Niepowiązany regression command dla istniejącego `tests/test_video_helpers.py`
 ma 2 FAIL w testach Intel/CPU (`vflip,hflip`). Traceback wskazuje ścieżkę
-`C:\\_DEV\\BikeRideHUD\\tests\\test_video_helpers.py`; nie zmieniano Intel/NVIDIA
+`C:\\_DEV\\SportCamHUD\\tests\\test_video_helpers.py`; nie zmieniano Intel/NVIDIA
 ani tego zakresu.
 
 ## PERFORMANCE
@@ -204,7 +204,7 @@ ACTIVE_ADAPTER=AMD Radeon (TM) Graphics
 ADAPTER_LUID=0x00000000:0x0000b1ef
 DRIVER_VERSION=31.0.21925.1001
 
-CAPABILITY_CACHE_PATH=%LOCALAPPDATA%\\BikeRideHUD\\gpu_capabilities.json
+CAPABILITY_CACHE_PATH=%LOCALAPPDATA%\\SportCamHUD\\gpu_capabilities.json
 CAPABILITY_CACHE_HIT=True
 CAPABILITY_PROBE_COLD_MS=~83-92
 CAPABILITY_CACHE_WARM_MS=~99.47

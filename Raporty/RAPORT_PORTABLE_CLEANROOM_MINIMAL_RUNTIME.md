@@ -9,9 +9,9 @@ Target środowiskowy: Intel Core i7 / Intel Iris Xe / Windows 11
 ## 1. METRYKI GŁÓWNE I STATUS KOŃCOWY
 
 ```ini
-SOURCE_PORTABLE=C:\_DEV\BikeRideHUD-portable
-SOURCE_REPO=C:\_DEV\BikeRideHUD-main-new
-CLEAN_TARGET=C:\_DEV\BikeRideHUD-portable-clean
+SOURCE_PORTABLE=C:\_DEV\SportCamHUD-portable
+SOURCE_REPO=C:\_DEV\SportCamHUD-main-new
+CLEAN_TARGET=C:\_DEV\SportCamHUD-portable-clean
 
 ORIGINAL_FILE_COUNT=2499
 ORIGINAL_TOTAL_BYTES=1710662812
@@ -65,7 +65,7 @@ NVIDIA_RUNTIME_CONTRACT_PASS=YES
 
 PORTABLE_MANIFEST=runtime\portable_manifest.json
 
-CLEAN_ZIP=C:\_DEV\BikeRideHUD-portable-clean.zip
+CLEAN_ZIP=C:\_DEV\SportCamHUD-portable-clean.zip
 CLEAN_ZIP_BYTES=322832187
 
 ZIP_EXTRACT_START_PASS=YES
@@ -84,12 +84,12 @@ FINAL_STATUS=PORTABLE_CLEANROOM_PASS
 
 ## 2. CEL I ZAŁOŻENIA PROJEKTOWE
 
-Celem zadania było utworzenie czystego, drastycznie zredukowanego pakietu produkcyjnego BikeRideHUD Portable w lokalizacji:
-`C:\_DEV\BikeRideHUD-portable-clean`
-oraz jego archiwum dystrybucyjnego `C:\_DEV\BikeRideHUD-portable-clean.zip`, zawierającego **wyłącznie** pliki niezbędne do uruchomienia i pełnego działania aplikacji.
+Celem zadania było utworzenie czystego, drastycznie zredukowanego pakietu produkcyjnego SportCamHUD Portable w lokalizacji:
+`C:\_DEV\SportCamHUD-portable-clean`
+oraz jego archiwum dystrybucyjnego `C:\_DEV\SportCamHUD-portable-clean.zip`, zawierającego **wyłącznie** pliki niezbędne do uruchomienia i pełnego działania aplikacji.
 
 ### Kluczowe zasady bezpieczeństwa (Safety Rules):
-1. **Nietknięte środowisko wzorcowe (Golden Runtime)**: `C:\_DEV\BikeRideHUD-portable` pozostało w 100% nienaruszone (2499 plików, 1.59 GB).
+1. **Nietknięte środowisko wzorcowe (Golden Runtime)**: `C:\_DEV\SportCamHUD-portable` pozostało w 100% nienaruszone (2499 plików, 1.59 GB).
 2. **Zachowanie produkcyjnej biblioteki Intel AV1 Quantizer**: Pakiet zawiera zaakceptowaną bibliotekę `telem_intel_native.dll` (`113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b`, 216 064 B) ze wsparciem dla live telemetrii kwantyzatora Q. Poprzednia wersja fallback (`41658018ae...`) została wykluczona.
 3. **Zachowanie kontraktu AMD i NVIDIA**: Biblioteki AMD (`telem_amd_native.dll`, SHA256: `90be5af56bb5...`) oraz struktura i resolvery NVIDIA zostały w pełni zachowane.
 4. **Ścisła izolacja vendorów**: Brak mieszania plików DLL pomiędzy `runtime/common`, `runtime/amd/bin`, `runtime/intel/bin` oraz `runtime/nvidia/bin`.
@@ -112,7 +112,7 @@ oraz jego archiwum dystrybucyjnego `C:\_DEV\BikeRideHUD-portable-clean.zip`, zaw
 ### 3.2. Identyfikacja i usunięcie grup zbędnych (Bloat Analysis)
 
 1. **Root Duplicate Executables (-427 MB)**:
-   - Duplikaty `ffmpeg.exe` (213.7 MB) oraz `ffprobe.exe` (213.6 MB) w katalogu głównym. Aplikacja BikeRideHUD korzysta ze scentralizowanej ścieżki `runtime/common/ffmpeg.exe` i `ffprobe.exe`.
+   - Duplikaty `ffmpeg.exe` (213.7 MB) oraz `ffprobe.exe` (213.6 MB) w katalogu głównym. Aplikacja SportCamHUD korzysta ze scentralizowanej ścieżki `runtime/common/ffmpeg.exe` i `ffprobe.exe`.
 2. **Unused FFplay (-215 MB)**:
    - `runtime/common/ffplay.exe` (215.1 MB) – binarka odtwarzacza FFmpeg nieużywana przez aplikację (podgląd wideo oparty jest na `libmpv-2.dll`).
 3. **Raporty developerskie (-100.2 MB)**:
@@ -145,10 +145,10 @@ Utworzono automatyczne, deterministyczne narzędzie pakujące allowlistowe:
 ### 4.1. Struktura katalogów pakietu produkcyjnego (256 plików)
 
 ```text
-C:\_DEV\BikeRideHUD-portable-clean\
-├── BikeRideHUD.py                     [Główny punkt wejścia GUI]
+C:\_DEV\SportCamHUD-portable-clean\
+├── SportCamHUD.py                     [Główny punkt wejścia GUI]
 ├── TeleMGP.py                         [Punkt wejścia CLI / headless export]
-├── Start_BikeRideHUD.cmd              [Launcher cmd dla Windows]
+├── Start_SportCamHUD.cmd              [Launcher cmd dla Windows]
 ├── def_layout.json                    [Domyślny układ HUD]
 ├── telemetry_fit.py                   [Moduł parsera FIT dla telemetrii]
 ├── telemetry_gpx.py                   [Moduł parsera GPX dla telemetrii]
@@ -206,8 +206,8 @@ Skrypt budujący posiada wbudowaną blokadę bezpieczeństwa odrzucającą budow
 
 ## 6. WERYFIKACJA BRAKU ZEWNĘTRZNYCH ZALEŻNOŚCI (FAZY 16, 17)
 
-Wykonano audyt importów modułów oraz ładowania zasobów (`sys.modules`, `os.walk`, uchwyty bibliotek DLL) podczas startu z katalogu `C:\_DEV\BikeRideHUD-portable-clean`.
-- Żaden moduł ani biblioteka nie zostały załadowane z `C:\_DEV\BikeRideHUD-main-new`, `C:\_DEV\BikeRideHUD-portable`, `C:\_DEV\BikeRideHUD-intel`, dysku `Z:` ani lokalizacji deweloperskich.
+Wykonano audyt importów modułów oraz ładowania zasobów (`sys.modules`, `os.walk`, uchwyty bibliotek DLL) podczas startu z katalogu `C:\_DEV\SportCamHUD-portable-clean`.
+- Żaden moduł ani biblioteka nie zostały załadowane z `C:\_DEV\SportCamHUD-main-new`, `C:\_DEV\SportCamHUD-portable`, `C:\_DEV\SportCamHUD-intel`, dysku `Z:` ani lokalizacji deweloperskich.
 - Wynik audytu: **EXTERNAL_APPLICATION_FILE_LOADS=0**.
 - Test uruchomienia GUI:
   - `GUI_START_PASS=YES`
@@ -261,14 +261,14 @@ Wszystkie testy wykonano na rzeczywistych plikach wideo (GoPro 4K HDR 10-bit + d
 ## 8. WERYFIKACJA ARCHIWUM DYSTRYBUCYJNEGO I ROZPAKUJ-I-URUCHOM (FAZY 25, 26, 27)
 
 ### 8.1. Archiwum ZIP
-- Ścieżka: `C:\_DEV\BikeRideHUD-portable-clean.zip`
+- Ścieżka: `C:\_DEV\SportCamHUD-portable-clean.zip`
 - Rozmiar: **322 832 187 bajtów (307.88 MB)**
 - Zawartość: dokładnie 256 plików produkcyjnych (zgodnych co do jednego pliku z `portable_manifest.json`).
 - Brak jakichkolwiek raportów, testów, plików `.pdb`, archiwów zagnieżdżonych ani plików tymczasowych (postawa w 100% Defender-friendly).
 
 ### 8.2. Test Extract-and-Run (`portable-clean-verify`)
 - Archiwum ZIP zostało rozpakowane do nowego, czystego folderu:
-  `C:\_DEV\BikeRideHUD-portable-clean-verify` (czas ekstrakcji: 2.7 s).
+  `C:\_DEV\SportCamHUD-portable-clean-verify` (czas ekstrakcji: 2.7 s).
 - Bez jakiegokolwiek ręcznego kopiowania plików:
   1. Wykonano test uruchomienia aplikacji: **ZIP_EXTRACT_START_PASS=YES**.
   2. Wykonano test eksportu Intel AV1 10-bit HDR (300 klatek) do `C:\GoPro\TO\verify_intel_direct_300.mp4`:
@@ -280,7 +280,7 @@ Wszystkie testy wykonano na rzeczywistych plikach wideo (GoPro 4K HDR 10-bit + d
 
 ## 9. PODSUMOWANIE BEZPIECZEŃSTWA GITA I STATUSU ZADAŃ (FAZA 28)
 
-- Środowisko `C:\_DEV\BikeRideHUD-portable` **nie zostało zmienione** i pozostaje nietkniętym punktem odniesienia.
+- Środowisko `C:\_DEV\SportCamHUD-portable` **nie zostało zmienione** i pozostaje nietkniętym punktem odniesienia.
 - Wszystkie testy jednostkowe izolacji vendorów (`tests/test_vendor_runtime_isolation.py`) zakończone wynikiem pozytywnym: **12 passed**.
 - Wszystkie testy enkodera Intel AV1 i Live Mux zakończone wynikiem pozytywnym: **13 passed**.
 - Wszystkie testy kolejki eksportu zakończone wynikiem pozytywnym: **32 passed**.

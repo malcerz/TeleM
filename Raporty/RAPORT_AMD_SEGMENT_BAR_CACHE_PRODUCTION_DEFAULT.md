@@ -1,7 +1,7 @@
 # Raport: Ustanowienie AMD_CPU_WIDGET_CACHE=1 jako Produkcyjnego Defaultu (AMD D3D11 Pipeline)
 
 Data: 2026-09-16  
-Środowisko: `C:\_DEV\BikeRideHUD`  
+Środowisko: `C:\_DEV\SportCamHUD`  
 Gałąź: `amd-bikeridehud`  
 Dataset: `Video/GX020079.mp4` + `Video/GX020079.fit` (3840x2160, 300 klatek, HEVC AMF, produkcyjny `def_layout.json`)  
 
@@ -57,7 +57,7 @@ Po pomyślnej walidacji canonical visual-state cache dla `segment_bar` (98.01% h
 ## 3. Wyniki Produkcyjnego Eksportu Kontrolnego (Real GUI Path)
 
 Wykonano pojedynczy kontrolny eksport produkcyjny na kanonicznym projekcie `GX020079.mp4` + `GX020079.fit` z domyślnym layoutem `def_layout.json` (3840x2160 @ 29.97 fps, 300 klatek / 10.0 s):
-- **Ścieżka:** `BikeRideHUD.py` -> `MainWindow` -> `RenderTab` -> `AMD Child Process` -> `amd_native_exporter.py` -> `telem_amd_native.dll` -> `AMF HEVC`
+- **Ścieżka:** `SportCamHUD.py` -> `MainWindow` -> `RenderTab` -> `AMD Child Process` -> `amd_native_exporter.py` -> `telem_amd_native.dll` -> `AMF HEVC`
 - **Ustawienia produkcyjne:**
   - `AMD_QUEUE_DEPTH=2`
   - `AMD_CPU_GPU_PIPELINE=ASYNC`

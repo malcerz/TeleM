@@ -11,7 +11,7 @@ W wersji produkcyjnej materiał wideo bez określonych strumieni telemetrii (np.
 - puste wykresy lub puste podziałki linijek.
 
 Dodatkowo, wersja aplikacji została oficjalnie podbita do:
-**BikeRideHUD v1.0** (zarówno w oknie aplikacji: `APP_TITLE v1.0`, jak i w `pyproject.toml`).
+**SportCamHUD v1.0** (zarówno w oknie aplikacji: `APP_TITLE v1.0`, jak i w `pyproject.toml`).
 
 ---
 
@@ -75,7 +75,7 @@ Zaimplementowano ścisłe rozróżnienie:
    - `src/ffmpeg/intel_native_exporter.py`: weryfikacja w `_compute_layout_widget_boxes` i eksporcie GPU mapy.
    - `src/ffmpeg/nvidia_native_exporter.py`: filtracja deskryptorów w `build_canonical_indicators()` i `build_map_indicator_desc()`.
 9. **Podbicie wersji do 1.0:**
-   - `src/gui/qt/main_window.py`: `APP_VERSION = "1.0"` (Tytuł: `BikeRideHUD v1.0`).
+   - `src/gui/qt/main_window.py`: `APP_VERSION = "1.0"` (Tytuł: `SportCamHUD v1.0`).
    - `pyproject.toml`: `version = "1.0"`.
 
 ---
@@ -122,4 +122,4 @@ tests/test_indicator_availability.py::test_nvidia_and_intel_exporters_parity PAS
 ============================== 9 passed in 0.91s ==============================
 ```
 
-Zsynchronizowano pełny zestaw zmian z repozytorium portable: `C:\_DEV\BikeRideHUD-portable`.
+Zsynchronizowano pełny zestaw zmian z repozytorium portable: `C:\_DEV\SportCamHUD-portable`.

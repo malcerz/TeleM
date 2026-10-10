@@ -14,7 +14,7 @@ def get_remote_cache_root() -> Path:
     """Return root directory for remote telemetry cache in LocalAppData."""
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
     if base:
-        root = Path(base) / "BikeRideHUD" / "remote_telemetry"
+        root = Path(base) / "SportCamHUD" / "remote_telemetry"
     else:
         root = Path.home() / ".bikeridehud" / "remote_telemetry"
     root.mkdir(parents=True, exist_ok=True)

@@ -1,7 +1,7 @@
 # RAPORT: Telemetry States Boundary Fix & Full 63,391-Frame Parity
 
 Data wykonania: 2026-09-15  
-Workspace: `H:\_Dev\BikeRideHUD`  
+Workspace: `H:\_Dev\SportCamHUD`  
 Status zadania: **PASS (CASE A — FULL 63,391 PARITY + BATTERY BOUNDARY RATIO 1.00 + <1.0s)**
 
 ---
@@ -175,7 +175,7 @@ Przetestowano zachowanie funkcji `np.searchsorted(side='right') - 1` oraz `np.in
 
 ## 6. Manifest Zapisanych Artefaktów
 
-Wszystkie wymagane artefakty zostały zapisane w katalogu `H:\_Dev\BikeRideHUD\scratch\telemetry_states_boundary_full_parity\`:
+Wszystkie wymagane artefakty zostały zapisane w katalogu `H:\_Dev\SportCamHUD\scratch\telemetry_states_boundary_full_parity\`:
 
 1. `battery_clip12.txt` (audyt granicy Clip 1 $\to$ 2: klatki 4590..4602)
 2. `battery_clip23.txt` (audyt granicy Clip 2 $\to$ 3: klatki 54510..54522)

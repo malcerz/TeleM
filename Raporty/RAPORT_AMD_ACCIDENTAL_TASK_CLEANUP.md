@@ -70,7 +70,7 @@ AMD_AFTER_MAP_ALT_VISUAL_GPU YES - niezmienione
 alt_visual C ABI + upload    YES - niezmienione
 alt_visual profiling         YES - niezmienione
 Q2/R1 production defaults    YES - niezmienione
-BikeRideHUD.py launcher      YES - niezmieniony
+SportCamHUD.py launcher      YES - niezmieniony
 ```
 
 ---

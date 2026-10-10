@@ -37,22 +37,22 @@ Status: **PEŁNY SUKCES (ALL GATES PASS)**
 
 ## 3. Zmienione pliki (CHANGED FILES)
 
-1. [src/indicators/compositor.py](file:///c:/_DEV/BikeRideHUD-amd/src/indicators/compositor.py):
+1. [src/indicators/compositor.py](file:///c:/_DEV/SportCamHUD-amd/src/indicators/compositor.py):
    - Dodano argumenty `vehicle_heading: Optional[float] = None`, `heading: Optional[float] = None` oraz `**extra_kwargs: Any` do sygnatury `compose_overlay`.
    - Zabezpieczono fallback kursu pojazdu i przekazano go do `draw_indicator`.
-2. [src/ffmpeg/amd_native_exporter.py](file:///c:/_DEV/BikeRideHUD-amd/src/ffmpeg/amd_native_exporter.py):
+2. [src/ffmpeg/amd_native_exporter.py](file:///c:/_DEV/SportCamHUD-amd/src/ffmpeg/amd_native_exporter.py):
    - Dodano `last_uploaded_marker_deg` do deklaracji `nonlocal` w `_consume_prepared_frame` i zainicjalizowano na `-9999.0`.
    - Zintegrowano obliczanie względnego kąta strzałki ekranowej według reguły najkrótszego łuku kołowego z rzutowaniem perspektywicznym dla pochylenia mapy.
    - Wprowadzono logowanie per-frame `[MAP ORIENTATION]` oraz zasilanie `telem_amd_update_map_marker`.
    - Zapewniono propagację `avg_qp` w statystykach enkodera AMF.
-3. [native/d3d11_amf_pipeline/src/telem_amd_native.cpp](file:///c:/_DEV/BikeRideHUD-amd/native/d3d11_amf_pipeline/src/telem_amd_native.cpp):
+3. [native/d3d11_amf_pipeline/src/telem_amd_native.cpp](file:///c:/_DEV/SportCamHUD-amd/native/d3d11_amf_pipeline/src/telem_amd_native.cpp):
    - Poprawiono warunek `CanUseInputSurface`: w trybie konwersji obliczeniowej `IsBaseConvertCompute()` powierzchnia dekodera jest zawsze kopiowana do `pDecodedCopyTex` posiadającej flagę `D3D11_BIND_SHADER_RESOURCE`, co pozwala shaderowi `DownscaleCompute` bezbłędnie utworzyć SRV i wykonać konwersję P010 $\to$ NV12.
-4. [src/ffmpeg/amd_child_process.py](file:///c:/_DEV/BikeRideHUD-amd/src/ffmpeg/amd_child_process.py):
+4. [src/ffmpeg/amd_child_process.py](file:///c:/_DEV/SportCamHUD-amd/src/ffmpeg/amd_child_process.py):
    - W `_child_entry` po zakończeniu eksportu odczytywany jest plik `.amd_profile.json` i dołączany jako `"profile": prof_data` w terminalnym komunikacie IPC `"complete"`.
    - W `run_amd_render_child` profil jest propagowany do słownika wyjściowego.
-5. [src/gui/qt/_mixins/render_mixin.py](file:///c:/_DEV/BikeRideHUD-amd/src/gui/qt/_mixins/render_mixin.py):
+5. [src/gui/qt/_mixins/render_mixin.py](file:///c:/_DEV/SportCamHUD-amd/src/gui/qt/_mixins/render_mixin.py):
    - Do słownika `stats` zwracanego do GUI wprowadzono: `real_export_fps`, `true_fps`, `render_fps`, `effective_fps`, `avg_qp`, `encoder_stats`, `profile` oraz `generation_id`.
-6. [src/gui/qt/tabs/render_tab.py](file:///c:/_DEV/BikeRideHUD-amd/src/gui/qt/tabs/render_tab.py):
+6. [src/gui/qt/tabs/render_tab.py](file:///c:/_DEV/SportCamHUD-amd/src/gui/qt/tabs/render_tab.py):
    - Resetowanie `_last_export_fps = None`, `_last_export_qp = None` w `_start_render`.
    - W `_show_export_finished_popup` odczytywanie numerycznego FPS (`stats["real_export_fps"]` lub `stats["true_fps"]` lub `stats["render_fps"]`) oraz `avg_qp` z profilu AMF lub fallbacku `analyze_qp(output)`.
    - Zapisywanie zmierzonych wartości w polach `_last_export_fps` i `_last_export_qp` na potrzeby testów i audytu.

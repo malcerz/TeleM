@@ -1,7 +1,7 @@
 # RAPORT: DOMYŚLNY FOLDER EKSPORTU JAKO JAWNE USTAWIENIE W „USTAWIENIA → OGÓLNE”
 
 **Data wykonania:** 2026-10-05  
-**Środowiska:** `C:\_DEV\BikeRideHUD-main-new` oraz `C:\_DEV\BikeRideHUD-portable`  
+**Środowiska:** `C:\_DEV\SportCamHUD-main-new` oraz `C:\_DEV\SportCamHUD-portable`  
 **Status:** ZAKOŃCZONE SUKCESEM (100% testów PASS, pełna zgodność hashów)
 
 ---
@@ -51,13 +51,13 @@ Poprzednia logika wyznaczania katalogu eksportu opierała się na niejawnej heur
   - Wartość `default_export_dir` jest przywracana do pola `self.edit_default_export_dir` z pliku konfiguracji lub układu kontrolera.
 
 ### 2.2. Kontroler i Presety (`src/gui/qt/controller.py`, `src/gui/qt/_mixins/preset_mixin.py`, `src/gui/layout_manager.py`)
-- W [`src/gui/qt/controller.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/controller.py):
+- W [`src/gui/qt/controller.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/controller.py):
   - Zainicjalizowano atrybut `self.default_export_dir: str = ""` w `__init__`.
   - W `_load_startup_preset()` przywracana jest wartość `self.default_export_dir` z wczytanego układu.
-- W [`src/gui/qt/_mixins/preset_mixin.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/_mixins/preset_mixin.py):
+- W [`src/gui/qt/_mixins/preset_mixin.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/_mixins/preset_mixin.py):
   - W obsłudze sygnału `_on_settings_changed(name, value)` dodano gałąź dla `name == "default_export_dir"`, aktualizującą stan w pamięci oraz utrwalającą go w `def_layout.json`.
   - W `_save_current_layout_to_default()` zapewniono zapis `default_export_dir` do słownika zapisu.
-- W [`src/gui/layout_manager.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/layout_manager.py):
+- W [`src/gui/layout_manager.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/layout_manager.py):
   - W `normalize_layout` dodano zachowywanie klucza `default_export_dir` zarówno na poziomie głównym, jak i w gałęzi `"global"`.
 
 ### 2.3. Zakładka Renderingu i Rozwiązywanie Ścieżek (`src/gui/qt/tabs/render_tab.py`)
@@ -76,7 +76,7 @@ Poprzednia logika wyznaczania katalogu eksportu opierała się na niejawnej heur
 
 ## 3. ZESTAW TESTÓW I WERYFIKACJA JAKOŚCI
 
-Utworzono dedykowany zestaw testów w pliku [`tests/test_default_export_dir_settings.py`](file:///C:/_DEV/BikeRideHUD-main-new/tests/test_default_export_dir_settings.py):
+Utworzono dedykowany zestaw testów w pliku [`tests/test_default_export_dir_settings.py`](file:///C:/_DEV/SportCamHUD-main-new/tests/test_default_export_dir_settings.py):
 
 | Lp. | Nazwa testu | Cel weryfikacji | Wynik |
 |---|---|---|:---:|

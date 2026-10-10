@@ -54,7 +54,7 @@ Bramka potwierdza, że usunięcie sztucznego opóźnienia ~49.7 s oraz unifikacj
   - `AMD_ABOVE_BATCHED=0`
   - `AMD_AFTER_MAP_ALT_VISUAL_GPU=0`
   - `AMD_CPU_WIDGET_CACHE=0`
-- **Ścieżka:** `BikeRideHUD.py` -> `MainWindow` -> `RenderTab` -> `AMD Child Process` -> `telem_amd_native.dll` -> `AMF HEVC`
+- **Ścieżka:** `SportCamHUD.py` -> `MainWindow` -> `RenderTab` -> `AMD Child Process` -> `telem_amd_native.dll` -> `AMF HEVC`
 - **Format:** 3840x2160 @ 29.97 fps, 300 klatek (10.0 s).
 - **Statystyki wykonania:**
   - Klatki: `300 / 300` klatek (100.0%)

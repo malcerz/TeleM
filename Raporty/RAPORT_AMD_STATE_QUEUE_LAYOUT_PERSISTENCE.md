@@ -1,11 +1,11 @@
 # RAPORT AMD: State, Queue & Layout Persistence Cleanup
 
 ## 1. TASK
-Uporządkowanie zarządzania stanem aplikacji TeleM / BikeRideHUD:
+Uporządkowanie zarządzania stanem aplikacji TeleM / SportCamHUD:
 1. Kolejka eksportu automatycznie zapisywana i odczytywana przy starcie aplikacji (`QUEUE_AUTOLOAD_ON_START = True`).
 2. Przywrócenie widocznego i funkcjonalnego przycisku `STOP` w kolejce eksportu (`btn_queue_stop`).
 3. Naprawa `Resetuj układ` (`_on_reset_layout`): zerowanie wskaźników (`INDICATOR_COUNT = 0`), czyszczenie selekcji/properties/cache, czysty podgląd, bez odtwarzania/nadpisywania sidecara.
-4. Całkowite wyeliminowanie automatycznego tworzenia plików `*.layout.json` obok filmów w katalogu materiałów (`NEW_LAYOUT_SIDECAR_FILES_CREATED = 0`). Przeniesienie sesji aktywnego układu do `%LOCALAPPDATA%\BikeRideHUD\session\active_layout.json`.
+4. Całkowite wyeliminowanie automatycznego tworzenia plików `*.layout.json` obok filmów w katalogu materiałów (`NEW_LAYOUT_SIDECAR_FILES_CREATED = 0`). Przeniesienie sesji aktywnego układu do `%LOCALAPPDATA%\SportCamHUD\session\active_layout.json`.
 5. Ręczny eksport i import kolejki eksportu (`.telemqueue.json`) z niezmiennym snapshotem layoutu i bez tokenów/danych poufnych (`TOKENS_EXPORTED = False`).
 6. Architektoniczne uniezależnienie render queue: każdy job posiada w pełni odizolowany snapshot layoutu (`ACTIVE_JOB_DECOUPLED_FROM_GUI_STATE = True`).
 
@@ -38,17 +38,17 @@ Zidentyfikowano miejsca tworzenia i zapisu plików `*.layout.json` obok materia�
 
 ## 4. CHANGED FILES
 1. `src/gui/export_queue.py`:
-   - Wersjonowanie schematu kolejki: `QUEUE_FORMAT_NAME = "BikeRideHUD Export Queue"`, `QUEUE_FORMAT_VERSION = 1`.
+   - Wersjonowanie schematu kolejki: `QUEUE_FORMAT_NAME = "SportCamHUD Export Queue"`, `QUEUE_FORMAT_VERSION = 1`.
    - Klasa `ExportJob`: obsługa statusu `interrupted` dla `render_status` i `upload_status`, aktualizacja `is_done()`.
    - `ExportQueue.__init__`: opcjonalny parametr `appdata_dir` dla elastycznego testowania i izolacji.
-   - `_persist()`: atomowy zapis (plik tymczasowy `.tmp` + `os.replace`) do `%LOCALAPPDATA%\BikeRideHUD\export_queue.json` w formacie słownika ze schematem `version: 1`.
+   - `_persist()`: atomowy zapis (plik tymczasowy `.tmp` + `os.replace`) do `%LOCALAPPDATA%\SportCamHUD\export_queue.json` w formacie słownika ze schematem `version: 1`.
    - `_load_persisted()`: migracja formatu v0 (lista) do v1 (słownik z metadanymi), obsługa awarii/restartu aplikacji (stan `running`/`preparing` -> `interrupted` z błędem `"Przerwano (restart aplikacji)"`).
    - `export_to_file(filepath)`: eksport zadań do pliku `.telemqueue.json` z wyczyszczeniem tokenów (`TOKENS_EXPORTED = False`).
    - `import_from_file(filepath, mode="append")`: walidacja schematu, regeneracja kolidujących ID, weryfikacja istnienia plików wideo (brak crasha, status `error`), wybudzenie schedulera.
    - Nowe metody pomocnicze: `get_active_render_id()`, `cancel_active_render(reason)`, `reorder_jobs(job_ids)`.
 
 2. `src/gui/qt/_mixins/preset_mixin.py`:
-   - Dodano `get_session_layout_path()` -> `%LOCALAPPDATA%\BikeRideHUD\session\active_layout.json`.
+   - Dodano `get_session_layout_path()` -> `%LOCALAPPDATA%\SportCamHUD\session\active_layout.json`.
    - Dodano `_save_session_layout()`: atomowy zapis aktywnej sesji layoutu do AppData.
    - Przekierowano `_save_project_layout()` oraz `get_project_layout_path()` do sesji w AppData, całkowicie eliminując tworzenie plików `*.layout.json` w katalogu wideo (`NEW_LAYOUT_SIDECAR_FILES_CREATED = 0`).
 
@@ -81,14 +81,14 @@ Zidentyfikowano miejsca tworzenia i zapisu plików `*.layout.json` obok materia�
 | Cecha | Przed zmianą | Po zmianie |
 | :--- | :--- | :--- |
 | **Kolejka: Autoload** | Ręczny lub brak gwarancji | `QUEUE_AUTOLOAD_ON_START = True` automatycznie przy starcie kontrolera/RenderTab |
-| **Kolejka: Format zapisu** | Płaska lista w `%APPDATA%\BikeRideHUD\export_queue.json` | Schemat v1 ze strukturą `{"format": "...", "version": 1, "jobs": [...]}` |
+| **Kolejka: Format zapisu** | Płaska lista w `%APPDATA%\SportCamHUD\export_queue.json` | Schemat v1 ze strukturą `{"format": "...", "version": 1, "jobs": [...]}` |
 | **Kolejka: Zapis na dysk** | Standardowy `open()` | Atomowy `os.replace` przez plik tymczasowy `.tmp` |
 | **Kolejka: Crash recovery** | Zadanie wisiało w `running`/`preparing` | Automatyczna tranzycja do `interrupted` z błędem `"Przerwano (restart aplikacji)"` |
 | **Kolejka: Kontrolki** | Brak przycisku `STOP` | Dostępne: `Start`, `Pauza`, `⏹ STOP`, `Importuj`, `Eksportuj` |
 | **Przycisk STOP** | Nieobecny | Anuluje aktywny proces renderu, pauzuje scheduler, zachowuje resztę kolejki |
 | **Resetuj układ** | Zostawiał śmieci / nadpisywał sidecar | Zeruje `INDICATOR_COUNT = 0`, czyści podgląd i właściwości, nie dotyka wideo |
 | **Pliki obok wideo** | Tworzone automatycznie `*.layout.json` | `NEW_LAYOUT_SIDECAR_FILES_CREATED = 0` (katalog wideo pozostaje czysty) |
-| **Lokalizacja sesji** | Katalog wideo | `%LOCALAPPDATA%\BikeRideHUD\session\active_layout.json` |
+| **Lokalizacja sesji** | Katalog wideo | `%LOCALAPPDATA%\SportCamHUD\session\active_layout.json` |
 | **Legacy sidecar** | Źródło prawdy i cel zapisu | Read-only import do pamięci RAM przy otwarciu wideo |
 | **Eksport/Import kolejki** | Brak | Pełne wsparcie dla `.telemqueue.json` (wersja 1, sanityzacja tokenów) |
 | **Decoupling layoutu** | Render modyfikował/czytał wspólny layout | Render job posiada niezmienny snapshot w pamięci RAM |

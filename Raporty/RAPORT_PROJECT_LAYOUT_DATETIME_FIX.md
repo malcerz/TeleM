@@ -60,7 +60,7 @@ json.dump(saved, f, indent=2, ensure_ascii=False, default=str)
 
 ### 3.1 Nowa funkcja `sanitize_layout_for_json`
 
-Dodano do [`src/indicators/compositor.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/compositor.py):
+Dodano do [`src/indicators/compositor.py`](file:///H:/_Dev/SportCamHUD/src/indicators/compositor.py):
 
 ```python
 def sanitize_layout_for_json(obj: Any) -> Any:
@@ -117,9 +117,9 @@ przechodzący przez ten gateway jest gwarantowanie serializowalny przez standard
 
 | Plik                                                          | Zmiana                                              |
 |---------------------------------------------------------------|-----------------------------------------------------|
-| [`src/indicators/compositor.py`](file:///H:/_Dev/BikeRideHUD/src/indicators/compositor.py)     | Dodano `sanitize_layout_for_json`; `normalize_layout_for_save` teraz ją wywołuje |
-| [`src/gui/qt/_mixins/preset_mixin.py`](file:///H:/_Dev/BikeRideHUD/src/gui/qt/_mixins/preset_mixin.py) | Usunięto `default=str`; dodano sanityzację w 3 miejscach zapisu |
-| [`src/gui/layout_manager.py`](file:///H:/_Dev/BikeRideHUD/src/gui/layout_manager.py)           | `LayoutManager.save` teraz normalizuje i sanityzuje  |
+| [`src/indicators/compositor.py`](file:///H:/_Dev/SportCamHUD/src/indicators/compositor.py)     | Dodano `sanitize_layout_for_json`; `normalize_layout_for_save` teraz ją wywołuje |
+| [`src/gui/qt/_mixins/preset_mixin.py`](file:///H:/_Dev/SportCamHUD/src/gui/qt/_mixins/preset_mixin.py) | Usunięto `default=str`; dodano sanityzację w 3 miejscach zapisu |
+| [`src/gui/layout_manager.py`](file:///H:/_Dev/SportCamHUD/src/gui/layout_manager.py)           | `LayoutManager.save` teraz normalizuje i sanityzuje  |
 
 ---
 
@@ -207,7 +207,7 @@ Katalog: `scratch/project_layout_datetime_fix/`
 ```
 Topic:   MalcerzPOP
 Status:  SUCCESS (exit 0)
-Message: BikeRideHUD ProjectLayout JSON: CASE A — PROJECT LAYOUT JSON ROUNDTRIP PASS,
+Message: SportCamHUD ProjectLayout JSON: CASE A — PROJECT LAYOUT JSON ROUNDTRIP PASS,
          datetime_field=sanitized, strict_json=NO_default_str.
 ID:      mzwObJv9Tw3j
 ```

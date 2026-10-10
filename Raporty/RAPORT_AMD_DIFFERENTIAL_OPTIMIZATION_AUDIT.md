@@ -1,9 +1,9 @@
 # RAPORT: AUDYT PORÓWNAWCZY OPTYMALIZACJI AMD
-## Old AMD Oracle (`C:\_DEV\TeleM`) vs Fresh BikeRideHUD (`C:\_DEV\BikeRideHUD`)
+## Old AMD Oracle (`C:\_DEV\TeleM`) vs Fresh SportCamHUD (`C:\_DEV\SportCamHUD`)
 
 **Data:** 2026-09-16  
 **Środowisko:** AMD Radeon (TM) Graphics (Driver 31.0.21925.1001), Windows 11  
-**Repozytorium robocze:** `C:\_DEV\BikeRideHUD` (branch: `amd-bikeridehud`, HEAD: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`)  
+**Repozytorium robocze:** `C:\_DEV\SportCamHUD` (branch: `amd-bikeridehud`, HEAD: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`)  
 **Oracle READ-ONLY:** `C:\_DEV\TeleM` (branch: `amd-render`, HEAD: `7e4e34ecae13eae947c0386443e6a7317b42256f`)  
 
 ---
@@ -14,7 +14,7 @@
 CASE B — CURRENT BIKERIDEHUD ALREADY CONTAINS MOST OLD AMD OPTIMIZATIONS
 ```
 
-*(W rzeczywistości BikeRideHUD zawiera WSZYSTKIE dotychczasowe optymalizacje AMD ETAP 0 – ETAP 10R, a kluczowe obszary architektoniczne zostały zastąpione znacznie nowocześniejszymi rozwiązaniami).*
+*(W rzeczywistości SportCamHUD zawiera WSZYSTKIE dotychczasowe optymalizacje AMD ETAP 0 – ETAP 10R, a kluczowe obszary architektoniczne zostały zastąpione znacznie nowocześniejszymi rozwiązaniami).*
 
 Odpowiedzi na pytania kluczowe:
 ```text
@@ -38,7 +38,7 @@ WHAT_IS_SUPERSEDED=
 - Pętla anulowania i lifecycle: proste flagi boolean -> formalny RenderCancelReason, watchdog i dispatcher postępu bez blokowania GUI
 
 WHAT_IS_MISSING=
-ŻADNA produkcyjna ani przetestowana optymalizacja starego AMD nie została utracona ani pominięta w BikeRideHUD.
+ŻADNA produkcyjna ani przetestowana optymalizacja starego AMD nie została utracona ani pominięta w SportCamHUD.
 
 BEST_NEXT_OPTIMIZATION=
 Ewaluacja i benchmark aktywacji wariantu AMD_ABOVE_BATCHED=1 (ETAP 5K batched upload wycinków warstwy ABOVE), który jest już zaimplementowany w C++ i Pythonie, lecz domyślnie wyłączony (opt-in). Następnie przejście do optymalizacji pozostałych wąskich gardeł CPU ABOVE (alt_visual ~3.2ms, compass ~1.8ms).
@@ -59,12 +59,12 @@ ZERO (dla AMD_ABOVE_BATCHED jest to ten sam zbiór prostokątów dirty-rect i te
   - 0 zmodyfikowanych plików śledzonych
   - Repo pozostało ściśle READ-ONLY (nie wykonano żadnych zmian ani poleceń modyfikujących).
 
-### BikeRideHUD (`C:\_DEV\BikeRideHUD`)
+### SportCamHUD (`C:\_DEV\SportCamHUD`)
 - Branch: `amd-bikeridehud`
 - HEAD: `1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98`
 - Stan working tree:
   - Czyste pliki śledzone (brak modyfikacji plików produkcyjnych).
-  - Pliki lokalne/robocze: `BikeRideHUD.py` (kanoniczny launcher), skrypty audytowe w `scratch/`, zbudowana z czystego źródła DLL `native/d3d11_amf_pipeline/bin/telem_amd_native.dll`.
+  - Pliki lokalne/robocze: `SportCamHUD.py` (kanoniczny launcher), skrypty audytowe w `scratch/`, zbudowana z czystego źródła DLL `native/d3d11_amf_pipeline/bin/telem_amd_native.dll`.
 
 ---
 
@@ -72,7 +72,7 @@ ZERO (dla AMD_ABOVE_BATCHED jest to ten sam zbiór prostokątów dirty-rect i te
 
 Szczegółowa tabela została zapisana w: `scratch\amd_diff_audit\optimization_matrix.md`.
 
-| Obszar | Stary stan (TeleM) | Nowy stan (BikeRideHUD) | Werdykt | Spodziewana wartość | Ryzyko |
+| Obszar | Stary stan (TeleM) | Nowy stan (SportCamHUD) | Werdykt | Spodziewana wartość | Ryzyko |
 |---|---|---|---|---|---|
 | **async AMF pipeline** | Queue depth 2, producer-consumer | Queue depth 2, producer-consumer w C++ i Pythonie | `ALREADY PRESENT` | Wysoka (~36 FPS bazowe) | Zero |
 | **ring/in-flight depth** | `AMD_VP_PROCESSOR_RING_SIZE=1..3` | `AMD_VP_PROCESSOR_RING_SIZE=1..3` | `ALREADY PRESENT` | Średnia (~1-2 FPS zapasu) | Niskie |
@@ -99,7 +99,7 @@ Szczegółowa tabela została zapisana w: `scratch\amd_diff_audit\optimization_m
 
 Zestawienie sum kontrolnych plików krytycznych potwierdza:
 1. Pliki C++ w `native/d3d11_amf_pipeline` zawierają dokładnie ten sam zestaw 66 funkcji API C co w Oracle, powiększony o optymalizacje logowania renderera (`TELEM_RENDER_DEBUG`) i śledzenie diagnostyki klatek in-flight.
-2. `src/ffmpeg/amd_native_exporter.py` w BikeRideHUD posiada 7698 linii (wobec 6110 w TeleM). Zawiera wszystkie implementacje ETAP 0..10R, wzbogacone o integrację z procesem potomnym, watchdogiem, obsługą podglądu GPU oraz bezpiecznym muksowaniem audio/wideo.
+2. `src/ffmpeg/amd_native_exporter.py` w SportCamHUD posiada 7698 linii (wobec 6110 w TeleM). Zawiera wszystkie implementacje ETAP 0..10R, wzbogacone o integrację z procesem potomnym, watchdogiem, obsługą podglądu GPU oraz bezpiecznym muksowaniem audio/wideo.
 3. Wszelkie usunięte drobne fragmenty (np. bezpośrednie rzutowania tablic Pillow na adresy bazowe w module głównym) zostały zastąpione zoptymalizowanymi procedurami wycinków dirty-rect i batchingu.
 
 ---
@@ -126,6 +126,6 @@ Zgodnie z dokumentem `scratch\amd_diff_audit\recommended_port_order.md`:
 
 ## 6. STATUS I WNIOSKI KOŃCOWE
 
-- Fresh checkout `C:\_DEV\BikeRideHUD` jest w pełni funkcjonalny, stabilny i zawiera pełny zestaw historycznych osiągnięć gałęzi AMD.
+- Fresh checkout `C:\_DEV\SportCamHUD` jest w pełni funkcjonalny, stabilny i zawiera pełny zestaw historycznych osiągnięć gałęzi AMD.
 - Brak jakichkolwiek strat wydajnościowych czy regresji funkcjonalnych względem starego repozytorium Oracle.
 - Kolejne kroki mogą bezpośrednio skupić się na weryfikacji i włączaniu zaawansowanych trybów (np. `AMD_ABOVE_BATCHED`) lub migracji kolejnych widgetów z CPU do GPU, bez konieczności przepisywania czy portowania starszego kodu.

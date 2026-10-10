@@ -27,7 +27,7 @@ PREFETCH_THREAD_STORM_FIXED=YES (BEFORE=thread-per-frame, AFTER=1 dedykowany wor
 MAIN_NEW_SHA=15d84235bfc57aaf919c707dadd60502688a535d739071d57a9a20920414b734
 PORTABLE_SHA=15d84235bfc57aaf919c707dadd60502688a535d739071d57a9a20920414b734
 SOURCE_HASH_PARITY=YES
-TESTED_RUNTIME_ROOT=C:\_DEV\BikeRideHUD-main-new
+TESTED_RUNTIME_ROOT=C:\_DEV\SportCamHUD-main-new
 FILES_CHANGED=src/indicators/moving_map.py, src/indicators/static_map.py, src/map_renderer.py, src/moving_map.py, src/gui/map_viewport_prefetch.py, tests/test_map_overview_first.py, tests/test_preview_map_cache_miss.py, tests/manual_preview_map_real_gui.py
 TESTS_PASSED=16
 TESTS_FAILED=0
@@ -138,7 +138,7 @@ Przetestowane scenariusze:
 
 ## 6. WERYFIKACJA NA RZECZYWISTYM GUI (REAL GUI E2E EVIDENCE)
 
-Przeprowadzono automatyczny test na rzeczywistym oknie aplikacji `BikeRideHUD-main-new`, z realnym filmem `D:\GoPro\GX010338.MP4` oraz powiązanym plikiem FIT `24574176578.fit`, z wymuszonym pustym cache (`isolated_cache` w tempie).
+Przeprowadzono automatyczny test na rzeczywistym oknie aplikacji `SportCamHUD-main-new`, z realnym filmem `D:\GoPro\GX010338.MP4` oraz powiązanym plikiem FIT `24574176578.fit`, z wymuszonym pustym cache (`isolated_cache` w tempie).
 
 Wyniki z `scratch/preview_map_real_gui/evidence.json`:
 
@@ -163,4 +163,4 @@ Wyniki z `scratch/preview_map_real_gui/evidence.json`:
 ---
 
 ## 7. PODSUMOWANIE
-Wszystkie 15 punktów specyfikacji zadania zostało zrealizowanych i zweryfikowanych. Kod został zsynchronizowany pomiędzy `C:\_DEV\BikeRideHUD-main-new` a `C:\_DEV\BikeRideHUD-portable` z potwierdzeniem zgodności SHA-256 (`SOURCE_HASH_PARITY=YES`).
+Wszystkie 15 punktów specyfikacji zadania zostało zrealizowanych i zweryfikowanych. Kod został zsynchronizowany pomiędzy `C:\_DEV\SportCamHUD-main-new` a `C:\_DEV\SportCamHUD-portable` z potwierdzeniem zgodności SHA-256 (`SOURCE_HASH_PARITY=YES`).

@@ -18,7 +18,7 @@ Status obejmował również wcześniejsze zmiany raportów, skryptów, scratch, 
 
 ## Checkpoint worktree
 
-- Worktree: `C:\_DEV\BikeRideHUD-amd-checkpoint`
+- Worktree: `C:\_DEV\SportCamHUD-amd-checkpoint`
 - HEAD: `0ef407e9ce71cb192f43289abebf6b60c8259839`
 - `CHECKPOINT_WORKTREE_CLEAN=True`
 - Worktree usunięto po sprawdzeniu czystości.
@@ -41,7 +41,7 @@ DLL_BUILT_FROM_CHECKPOINT=True
 DLL wygenerowana z commita:
 
 ```text
-C:\_DEV\BikeRideHUD-amd-checkpoint\native\d3d11_amf_pipeline\bin\telem_amd_native.dll
+C:\_DEV\SportCamHUD-amd-checkpoint\native\d3d11_amf_pipeline\bin\telem_amd_native.dll
 ```
 
 Build zakończył się ostrzeżeniami kompilatora, ale bez błędu linkowania.

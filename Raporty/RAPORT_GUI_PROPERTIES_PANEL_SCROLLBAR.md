@@ -2,7 +2,7 @@
 
 ## METADATA
 - **Data**: 2026-09-16
-- **Workspace**: `C:\_DEV\BikeRideHUD`
+- **Workspace**: `C:\_DEV\SportCamHUD`
 - **Gałąź**: `amd-bikeridehud`
 - **Status końcowy**: `CASE A — PROPERTIES PANEL SCROLLBAR FIXED`
 
@@ -27,7 +27,7 @@ CASE=CASE A — PROPERTIES PANEL SCROLLBAR FIXED
 ## 2. ARCHITEKTURA I IMPLEMENTACJA
 
 1. **Identyfikacja widgetu**:
-   - Odpowiedzialny widget: [PropertyEditor](file:///C:/_DEV/BikeRideHUD/src/gui/qt/widgets/property_editor.py#L24) w `src/gui/qt/widgets/property_editor.py`, osadzony w prawej części [ProjectTab](file:///C:/_DEV/BikeRideHUD/src/gui/qt/tabs/project_tab.py#L75) (`src/gui/qt/tabs/project_tab.py`).
+   - Odpowiedzialny widget: [PropertyEditor](file:///C:/_DEV/SportCamHUD/src/gui/qt/widgets/property_editor.py#L24) w `src/gui/qt/widgets/property_editor.py`, osadzony w prawej części [ProjectTab](file:///C:/_DEV/SportCamHUD/src/gui/qt/tabs/project_tab.py#L75) (`src/gui/qt/tabs/project_tab.py`).
 2. **Dodanie `QScrollArea`**:
    - Utworzono `self.scroll_area = QScrollArea()`.
    - Skonfigurowano:

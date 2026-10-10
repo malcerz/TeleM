@@ -15,10 +15,10 @@ from src.gui.qt.signals import get_signals
 
 
 def main() -> None:
-    """Główny entry point aplikacji BikeRideHUD (PySide6)."""
+    """Główny entry point aplikacji SportCamHUD (PySide6)."""
     import os
     app = QApplication(sys.argv)
-    app.setApplicationName("BikeRideHUD")
+    app.setApplicationName("SportCamHUD")
 
     # Inicjalizacja kontrolera (most GUI ↔ logika biznesowa)
     _controller = AppController()
@@ -588,10 +588,10 @@ def main() -> None:
                 except Exception:
                     return 0.0
 
-        parser = argparse.ArgumentParser(description="BikeRideHUD AMD Export Benchmark")
+        parser = argparse.ArgumentParser(description="SportCamHUD AMD Export Benchmark")
         parser.add_argument("--test-amd-export", action="store_true")
         parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
-        parser.add_argument("--video", default=r"C:\_DEV\BikeRideHUD-main-new\Video\DJI_20261002062647_0003_D.MP4")
+        parser.add_argument("--video", default=r"C:\_DEV\SportCamHUD-main-new\Video\DJI_20261002062647_0003_D.MP4")
         parser.add_argument("--fit", default="")
         parser.add_argument("--gpx", default="")
         parser.add_argument("--bitrate", default="40M")
@@ -823,7 +823,7 @@ def main() -> None:
         import psutil
         import time
 
-        parser = argparse.ArgumentParser(description="BikeRideHUD Intel Export Benchmark")
+        parser = argparse.ArgumentParser(description="SportCamHUD Intel Export Benchmark")
         parser.add_argument("--test-intel-export", action="store_true")
         parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
         parser.add_argument("--video", default=r"C:\GoPro\2026-09-30\GX010331.MP4")

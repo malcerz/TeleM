@@ -1,8 +1,8 @@
 # RAPORT: Audyt Matematyki Wskaźnika Lean (Przechył) i Zgodności z GPMF Gyroscope Z
 
 Data: 2026-09-17  
-Projekt: `BikeRideHUD` (gałąź `amd-bikeridehud`)  
-Katalog roboczy: `C:\_DEV\BikeRideHUD`  
+Projekt: `SportCamHUD` (gałąź `amd-bikeridehud`)  
+Katalog roboczy: `C:\_DEV\SportCamHUD`  
 Materiały referencyjne: `Video/GX020079.mp4`, `Video/GX010115.MP4`
 
 ---
@@ -26,7 +26,7 @@ INTERPOLATION_MODE=linear_continuous (interpolate_roll / target_dt)
 RAW_NEUTRAL_PARITY=PASS (dokładne mapowanie matematyczne w całym pipeline)
 CACHE_HIT_MISS_PARITY=PASS (max_diff = 0.0000000000e+00 pomiędzy Cache HIT a MISS)
 
-ROOT_CAUSE=Rozbieżność semantyczna pomiędzy narzędziem referencyjnym (wyświetlającym surowy strumień prędkości kątowej Gyroscope Z w deg/s) a wskaźnikiem BikeRideHUD Forma=Przechył (który całkuje prędkość kątową i koryguje ją wektorem grawitacji akcelerometru w celu wyznaczenia kąta statycznego w stopniach °). Dodatkowo dla osi Z (pionowej) estymator grawitacyjny akcelerometru nie posiada składowej poziomej, co powodowało ściąganie estymatora do szumu przyspieszeń bocznych.
+ROOT_CAUSE=Rozbieżność semantyczna pomiędzy narzędziem referencyjnym (wyświetlającym surowy strumień prędkości kątowej Gyroscope Z w deg/s) a wskaźnikiem SportCamHUD Forma=Przechył (który całkuje prędkość kątową i koryguje ją wektorem grawitacji akcelerometru w celu wyznaczenia kąta statycznego w stopniach °). Dodatkowo dla osi Z (pionowej) estymator grawitacyjny akcelerometru nie posiada składowej poziomej, co powodowało ściąganie estymatora do szumu przyspieszeń bocznych.
 FIX=Pełny audyt matematyczny, wyznaczenie Ground Truth CSV, formalizacja kontraktu jednostek deg/s vs °, weryfikacja operacji Invert/Offset/Smoothing, utworzenie zestawu testów regresyjnych test_lean_gpmf_gyro_z_parity.py oraz przygotowanie klatek walidacyjnych.
 
 USER_VISUAL_ACCEPTANCE=PENDING
@@ -39,7 +39,7 @@ CASE=CASE E — UNIT SEMANTICS BUG: GYRO RATE PRESENTED AS ANGLE
 
 ## 1. Cel i Zakres Audytu
 
-Zbadano przyczynę rozbieżności pomiędzy wskaźnikiem w BikeRideHUD:
+Zbadano przyczynę rozbieżności pomiędzy wskaźnikiem w SportCamHUD:
 - `Forma = Przechył`
 - `Grafika = Rower (ikona)`
 - `Źródło danych = IMU GoPro (żyroskop + akcelerometr)`

@@ -1,7 +1,7 @@
 # Raport: AMD GPU Map Perspective Pitch & Post-Transform Marker Overlay
 
 Data wykonania: 2026-09-21
-Projekt: TeleM (BikeRideHUD-amd)
+Projekt: TeleM (SportCamHUD-amd)
 Branch: `amd-bikeridehud`
 Pipeline: `AMD_NATIVE_D3D11` / Direct AMF HEVC
 

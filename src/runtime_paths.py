@@ -1,4 +1,4 @@
-"""BikeRideHUD Central Runtime Path and Vendor Isolation Resolver.
+"""SportCamHUD Central Runtime Path and Vendor Isolation Resolver.
 
 Provides canonical, isolated runtime path resolution for:
 - Common runtime (FFmpeg, telemetry parsers, shared licenses)

@@ -3,7 +3,7 @@
 Data: 2026-09-16
 Autor: Antigravity / TeleM Team
 Gałąź: `amd-bikeridehud`
-Środowisko: `C:\_DEV\BikeRideHUD`
+Środowisko: `C:\_DEV\SportCamHUD`
 
 ---
 

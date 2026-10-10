@@ -1,6 +1,6 @@
-# Dokumentacja modułów projektu BikeRideHUD
+# Dokumentacja modułów projektu SportCamHUD
 
-Projekt BikeRideHUD to aplikacja do nakładania telemetrii (prędkość, wysokość, mapa GPS, dane FIT/GPX) na wideo, z GUI w PySide6.
+Projekt SportCamHUD to aplikacja do nakładania telemetrii (prędkość, wysokość, mapa GPS, dane FIT/GPX) na wideo, z GUI w PySide6.
 
 ## Struktura ogólna
 
@@ -10,8 +10,8 @@ Repozytorium dzieli się na katalogi: `src/gui` (interfejs PySide6), `src/indica
 
 | Plik | Rola | Zależności |
 |---|---|---|
-| BikeRideHUD.py | Główny kanoniczny launcher aplikacji — uruchamia GUI PySide6 z zakładkami | src.telemetry_extract, src.gui.qt.application |
-| TeleMGP.py | Kompatybilny shim startowy zachowujący zgodność wsteczną | BikeRideHUD.py, src.gui.qt.application |
+| SportCamHUD.py | Główny kanoniczny launcher aplikacji — uruchamia GUI PySide6 z zakładkami | src.telemetry_extract, src.gui.qt.application |
+| TeleMGP.py | Kompatybilny shim startowy zachowujący zgodność wsteczną | SportCamHUD.py, src.gui.qt.application |
 
 ## Moduły telemetryczne (root)
 

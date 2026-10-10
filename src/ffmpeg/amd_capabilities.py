@@ -182,7 +182,7 @@ class GpuCapabilities:
 
 def get_capabilities_cache_path() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
-    base_dir = Path(local_app_data) / "BikeRideHUD" if local_app_data else Path.home() / ".bikeridehud"
+    base_dir = Path(local_app_data) / "SportCamHUD" if local_app_data else Path.home() / ".bikeridehud"
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir / "gpu_capabilities.json"
 

@@ -1,4 +1,4 @@
-"""Remote telemetry integrations package for BikeRideHUD."""
+"""Remote telemetry integrations package for SportCamHUD."""
 
 from src.integrations.activity_provider import ActivityCandidate, ActivityProvider
 from src.integrations.activity_matcher import (

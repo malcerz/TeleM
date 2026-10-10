@@ -14,7 +14,7 @@ ICON_BACKEND=SVG master vectors + PNG raster cache (QPixmap / PIL RGBA, no icon 
 
 ICON_ID_CAMERA=camera
 ICON_CODEPOINT=N/A (SVG vector geometry / PNG raster master)
-ICON_RESOURCE_RESOLVED_PATH=C:\_DEV\BikeRideHUD-amd\src\assets\icons\png\camera.png (and svg\camera.svg)
+ICON_RESOURCE_RESOLVED_PATH=C:\_DEV\SportCamHUD-amd\src\assets\icons\png\camera.png (and svg\camera.svg)
 RESOURCE_EXISTS=True
 FONT_LOADED=N/A (system uses vector/raster graphics, not QFont icon fonts)
 GLYPH_EXISTS=True

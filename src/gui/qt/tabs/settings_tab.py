@@ -448,7 +448,7 @@ class SettingsTab(QWidget):
             )
         else:
             self.btn_clear_cache.setToolTip(
-                "Usuń wygenerowany cache telemetryczny BikeRideHUD."
+                "Usuń wygenerowany cache telemetryczny SportCamHUD."
             )
 
     def _on_render_state(self, snapshot: object) -> None:
@@ -473,7 +473,7 @@ class SettingsTab(QWidget):
         answer = QMessageBox.question(
             self,
             "Czyść cache",
-            "Czy wyczyścić cache BikeRideHUD?",
+            "Czy wyczyścić cache SportCamHUD?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

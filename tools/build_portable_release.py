@@ -1,4 +1,4 @@
-"""BikeRideHUD Canonical Production Portable Release Packager.
+"""SportCamHUD Canonical Production Portable Release Packager.
 
 Builds an isolated, minimal production portable directory using a strict ALLOWLIST.
 Excludes all development, test, scratch, native source, debug, and backup materials.
@@ -90,9 +90,9 @@ def build_portable(source_dir: Path, target_dir: Path) -> Dict[str, Any]:
 
     # 1. Top-Level Allowlist
     top_level_allowed = [
-        "BikeRideHUD.py",
+        "SportCamHUD.py",
         "TeleMGP.py",
-        "Start_BikeRideHUD.cmd",
+        "Start_SportCamHUD.cmd",
         "def_layout.json",
         "telemetry_fit.py",
         "telemetry_gpx.py",
@@ -216,7 +216,7 @@ def build_portable(source_dir: Path, target_dir: Path) -> Dict[str, Any]:
     manifest_path = target_dir / "runtime" / "portable_manifest.json"
     manifest_payload = {
         "$schema": "bikeridehud_portable_manifest_v2",
-        "description": "Deterministic manifest of production BikeRideHUD portable runtime files.",
+        "description": "Deterministic manifest of production SportCamHUD portable runtime files.",
         "file_count": len(manifest_entries) + 1,  # +1 for the manifest itself
         "files": manifest_entries,
     }
@@ -281,9 +281,9 @@ def build_portable(source_dir: Path, target_dir: Path) -> Dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="BikeRideHUD Clean Portable Release Packager")
-    parser.add_argument("--source", default=r"C:\_DEV\BikeRideHUD-portable", help="Source directory")
-    parser.add_argument("--target", default=r"C:\_DEV\BikeRideHUD-portable-clean", help="Target clean directory")
+    parser = argparse.ArgumentParser(description="SportCamHUD Clean Portable Release Packager")
+    parser.add_argument("--source", default=r"C:\_DEV\SportCamHUD-portable", help="Source directory")
+    parser.add_argument("--target", default=r"C:\_DEV\SportCamHUD-portable-clean", help="Target clean directory")
     args = parser.parse_args()
 
     source_dir = Path(args.source).resolve()

@@ -12,7 +12,8 @@ Zgodnie z wymaganiem, przywrócono starszy semantyczny interfejs błędu zapisu 
 
 Całkowicie przebudowano scripts/sync_portable.py by:
 
-- Tworzyć jawny manifest plików (untime_manifest.json) przechowujący sumy kontrolne (SHA256).
+- Tworzyć jawny manifest plików (
+untime_manifest.json) przechowujący sumy kontrolne (SHA256).
 - Skrypt wykrywa przestarzałe pliki w Portable, których nie ma w Main-New (oznaczane jako [STALE DETECTED]).
 - Mechanizm odczytuje Git HEAD bezwzględnie ze ścieżki źródłowej Main-New (nigdy CWD). 
 - **Zaimplementowano flagę -DIRTY**, która dopisuje się do wersji, jeżeli drzewo robocze przed zrzutem nie było wyczyszczone / zatwierdzone.
@@ -37,8 +38,8 @@ W obu przypadkach aplikacja odpaliła się prawidłowo i odczytała konfiguracj�
 
 - Poprawiono skrypt wersjonowania w scripts/bump_version.py z użyciem typu decimal.
 - Przestawiono program na nową oficjalną wersję **1.03**.
-- Widoczność na UI paska (Main): BikeRideHUD v1.03 — main-new — c52248b
-- Widoczność na UI paska (Portable): BikeRideHUD v1.03 — Portable — c52248b
+- Widoczność na UI paska (Main): SportCamHUD v1.03 — main-new — c52248b
+- Widoczność na UI paska (Portable): SportCamHUD v1.03 — Portable — c52248b
 - Wykonano rzetelny git push do głównego repozytorium GitHub na gałąź ix/gui-freeze-hud-composite. Weryfikacja udana.
 
 Wydanie V1.03 jest zapieczętowane i stabilne.

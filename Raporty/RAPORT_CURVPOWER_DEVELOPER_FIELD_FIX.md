@@ -2,7 +2,7 @@
 
 ## METADATA
 - **Data**: 2026-09-16
-- **Workspace**: `C:\_DEV\BikeRideHUD`
+- **Workspace**: `C:\_DEV\SportCamHUD`
 - **Gałąź**: `amd-bikeridehud`
 - **Dataset referencyjny**: `Video\GX010298.MP4` + `Video\GX010298.fit` + `Video\GX010298.layout.json`
 - **Status końcowy**: `CASE A — CURVPOWER DEVELOPER FIELD FULLY FIXED`

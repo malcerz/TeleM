@@ -3,7 +3,7 @@
 
 **Data:** 2026-09-22
 **Platforma:** Intel Core Ultra 7 225U (Intel Graphics, 4 Xe-cores, 32069 / 0x7D55, Driver 32.0.101.6127 / Win11)
-**Target:** `c:\_Dev\BikeRideHUD-intel` (Branch: `intel-225u`)
+**Target:** `c:\_Dev\SportCamHUD-intel` (Branch: `intel-225u`)
 **Status:** **COMPLETE / SUCCESS**
 
 ---

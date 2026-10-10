@@ -10,7 +10,7 @@ Reguły:
     MAX_CONCURRENT_YOUTUBE_UPLOADS = 1
     Render #2 NIE czeka na zakończenie Upload #1.
 
-Persystencja: export_queue.json w katalogu AppData (BikeRideHUD).
+Persystencja: export_queue.json w katalogu AppData (SportCamHUD).
 Credentiale YouTube: youtube_client_secret.json + youtube_token.json w tym samym katalogu.
 NIE commituj plików credentiali!
 """
@@ -95,9 +95,9 @@ def validate_job_snapshot(job: ExportJob) -> tuple[bool, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _appdata_dir() -> Path:
-    """Zwraca katalog AppData\\Roaming\\BikeRideHUD (tworzy jeśli nie istnieje)."""
+    """Zwraca katalog AppData\\Roaming\\SportCamHUD (tworzy jeśli nie istnieje)."""
     base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    d = base / "BikeRideHUD"
+    d = base / "SportCamHUD"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -233,8 +233,8 @@ class YouTubeUploader:
         pip install google-api-python-client google-auth-oauthlib
 
     Credentiale:
-        %APPDATA%\\BikeRideHUD\\youtube_client_secret.json
-        %APPDATA%\\BikeRideHUD\\youtube_token.json  (generowany przy pierwszym uruchomieniu)
+        %APPDATA%\\SportCamHUD\\youtube_client_secret.json
+        %APPDATA%\\SportCamHUD\\youtube_token.json  (generowany przy pierwszym uruchomieniu)
     """
 
     SECRET_FILE = "youtube_client_secret.json"
@@ -344,7 +344,7 @@ class YouTubeUploader:
 # ─────────────────────────────────────────────────────────────────────────────
 
 QUEUE_FILE = "export_queue.json"
-QUEUE_FORMAT_NAME = "BikeRideHUD Export Queue"
+QUEUE_FORMAT_NAME = "SportCamHUD Export Queue"
 QUEUE_FORMAT_VERSION = 1
 
 _RENDER_TERMINAL = {"done", "error", "cancelled", "interrupted"}

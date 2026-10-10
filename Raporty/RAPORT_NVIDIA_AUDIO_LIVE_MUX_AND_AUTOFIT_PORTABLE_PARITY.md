@@ -3,8 +3,8 @@
 **Data:** 2026-10-06  
 **Status:** ZAKOŃCZONO POMYŚLNIE  
 **Środowiska:**  
-- `C:\_DEV\BikeRideHUD-main-new`  
-- `C:\_DEV\BikeRideHUD-portable`  
+- `C:\_DEV\SportCamHUD-main-new`  
+- `C:\_DEV\SportCamHUD-portable`  
 
 ---
 
@@ -80,7 +80,7 @@ Wszystkie testy zaliczone w 100%:
 
 ### 1. Tabela SHA256 plików Auto FIT
 
-Porównanie SHA-256 pomiędzy `C:\_DEV\BikeRideHUD-main-new` a `C:\_DEV\BikeRideHUD-portable`:
+Porównanie SHA-256 pomiędzy `C:\_DEV\SportCamHUD-main-new` a `C:\_DEV\SportCamHUD-portable`:
 
 | Plik | Hash main-new | Hash portable | Status |
 | :--- | :--- | :--- | :--- |
@@ -116,7 +116,7 @@ Porównanie SHA-256 pomiędzy `C:\_DEV\BikeRideHUD-main-new` a `C:\_DEV\BikeRide
   3. Asynchroniczne odpytanie wybranej integracji (Garmin lub Strava) z late attach po zakończeniu pobierania.
 
 ### 3. Wyniki testów Auto FIT w Portable
-Uruchomiono pełny zestaw testów Auto FIT i Audio Cache w `C:\_DEV\BikeRideHUD-portable`:
+Uruchomiono pełny zestaw testów Auto FIT i Audio Cache w `C:\_DEV\SportCamHUD-portable`:
 - Liczba testów: **43**
 - Wynik: **43 PASSED (100%)**
   - `tests/test_audio_cache.py`: 9 passed

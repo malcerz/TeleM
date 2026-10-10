@@ -8,7 +8,7 @@ Pliki testów zachowane jako archiwum (wraz z .bak).
 import os
 from pathlib import Path
 
-ff_bin = Path(r"C:\_Dev\BikeRideHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
+ff_bin = Path(r"C:\_Dev\SportCamHUD-intel\third_party\ffmpeg-9.0.1-full_build-shared\bin")
 if ff_bin.exists():
     if hasattr(os, "add_dll_directory"):
         try:

@@ -1,7 +1,7 @@
 # RAPORT: Prezentacja Garmin Battery w Natywnym HUD NVIDIA (2 Miejsca po Przecinku)
 
 Data wykonania: 2026-09-15  
-Workspace: `H:\_Dev\BikeRideHUD`  
+Workspace: `H:\_Dev\SportCamHUD`  
 Status: **PASS (CASE B — NATIVE STRING FIXED TO 2 DECIMALS)**
 
 ---
@@ -25,16 +25,16 @@ Status: **PASS (CASE B — NATIVE STRING FIXED TO 2 DECIMALS)**
 
 ### 2.2. Dokładna proweniencja kodu:
 1. **Plik generowania telemetrii (Python precompute):**
-   - [src/telemetry_states_fast.py](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py), linia 277:
+   - [src/telemetry_states_fast.py](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py), linia 277:
      ```python
      st.garmin_battery_str = f"{st.garmin_battery_pct:.2f}".encode("ascii")
      ```
 2. **Definicja struktury C-struct:**
-   - [src/ffmpeg/nvidia_config.py](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_config.py) $\to$ `class TelemFrameState(ctypes.Structure)`:
+   - [src/ffmpeg/nvidia_config.py](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_config.py) $\to$ `class TelemFrameState(ctypes.Structure)`:
      - Pole string: `("garmin_battery_str", ctypes.c_char * 32)`
      - Pole float: `("garmin_battery_pct", ctypes.c_float)`
 3. **Deskryptor wskaźnika w eksporterze:**
-   - [src/ffmpeg/nvidia_native_exporter.py](file:///H:/_Dev/BikeRideHUD/src/ffmpeg/nvidia_native_exporter.py), linie 538–578:
+   - [src/ffmpeg/nvidia_native_exporter.py](file:///H:/_Dev/SportCamHUD/src/ffmpeg/nvidia_native_exporter.py), linie 538–578:
      - Typ wskaźnika: `4` (`SegmentBarIndicator`)
      - Klucz: `b"fit_garmin_battery_percent_text"`
      - Pole telemetrii: `9`
@@ -65,7 +65,7 @@ Status: **PASS (CASE B — NATIVE STRING FIXED TO 2 DECIMALS)**
 
 ## 3. Wprowadzona Poprawka
 
-W pliku [src/telemetry_states_fast.py](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py) zmieniono formatowanie ciągu z `1` na `2` miejsca po przecinku:
+W pliku [src/telemetry_states_fast.py](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py) zmieniono formatowanie ciągu z `1` na `2` miejsca po przecinku:
 ```diff
 - st.garmin_battery_str = f"{st.garmin_battery_pct:.1f}".encode("ascii")
 + st.garmin_battery_str = f"{st.garmin_battery_pct:.2f}".encode("ascii")

@@ -1,7 +1,7 @@
 # RAPORT: AMD — MAP SHAPE UNDER PITCH, UI LEGACY CLEANUP, RESET LAYOUT CLEAN SLATE
 
 **Data**: 2026-09-19  
-**Środowisko**: AMD (`C:\_DEV\BikeRideHUD-amd`), branch `amd-bikeridehud`  
+**Środowisko**: AMD (`C:\_DEV\SportCamHUD-amd`), branch `amd-bikeridehud`  
 **Autor**: Antigravity Assistant  
 **Status**: COMPLETE (PASS)  
 **CASE**: `CASE A` (wszystkie 3 zadania PASS)

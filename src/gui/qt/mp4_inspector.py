@@ -69,7 +69,7 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
     # GPMF — istniejący, tani mechanizm wykrywania (ffprobe -show_streams)
     gpmf = find_gpmf_stream_index(path, ffprobe) is not None
 
-gpmf_meta = {}
+    gpmf_meta = {}
     if gpmf:
         try:
             from src.telemetry_native_gpmf import extract_gpmf_native

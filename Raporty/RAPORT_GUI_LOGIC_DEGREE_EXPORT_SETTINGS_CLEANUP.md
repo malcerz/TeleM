@@ -1,7 +1,7 @@
 # RAPORT: UX / LOGIKA PROJEKTU — BLOKADA PROJEKTU BEZ PLIKU, NATYCHMIASTOWY HUD, GLIF ° Z ARIAL, USUNIĘCIE „LICZBY WĄTKÓW”, DOMYŚLNY EXPORT FOLDER I NAPRAWA „INTEGRACJI”
 
 **Data wykonania:** 2026-10-05  
-**Środowiska:** `C:\_DEV\BikeRideHUD-main-new` oraz `C:\_DEV\BikeRideHUD-portable`  
+**Środowiska:** `C:\_DEV\SportCamHUD-main-new` oraz `C:\_DEV\SportCamHUD-portable`  
 **Status:** ZAKOŃCZONE SUKCESEM (100% testów PASS, pełne parity hashów)
 
 ---
@@ -21,46 +21,46 @@ Celem zadania było rozwiązanie 6 kluczowych problemów UX i logiki aplikacji z
 ## 2. SZCZEGÓŁOWY OPIS WPROWADZONYCH ZMIAN
 
 ### 2.1. Blokada zakładki „Projekt” bez wideo (`main_window.py`, `signals.py`, `load_tab.py`, `controller.py`)
-- W [`src/gui/qt/main_window.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/main_window.py) zaimplementowano metodę `_update_main_tabs_state()`:
+- W [`src/gui/qt/main_window.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/main_window.py) zaimplementowano metodę `_update_main_tabs_state()`:
   - Sprawdza stan załadowania wideo (`self.controller.video_loaded` lub `self.controller.current_video_path`).
   - Ustawia `self.tabs.setTabEnabled(idx, has_video)` wyłącznie dla zakładki o nazwie „Projekt”.
   - Zakładki „Rendering” oraz „Ustawienia” (a także „Wczytywanie”) są zawsze aktywne (`setTabEnabled(..., True)`).
   - Wywoływana przy inicjalizacji GUI (start programu ze stanem `Projekt = disabled`), po pomyślnym załadowaniu wideo (`Projekt = enabled`), oraz po wyczyszczeniu projektu (`Projekt = disabled`).
-- W [`src/gui/qt/signals.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/signals.py) dodano sygnał `sig_project_cleared = Signal()`.
-- W [`src/gui/qt/tabs/load_tab.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/tabs/load_tab.py) akcja `_on_clear()` emituje sygnał `sig_project_cleared`, a [`src/gui/qt/controller.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/controller.py) udostępnia metodę `clear_project()` resetującą stan wideo i telemetrii.
+- W [`src/gui/qt/signals.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/signals.py) dodano sygnał `sig_project_cleared = Signal()`.
+- W [`src/gui/qt/tabs/load_tab.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/tabs/load_tab.py) akcja `_on_clear()` emituje sygnał `sig_project_cleared`, a [`src/gui/qt/controller.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/controller.py) udostępnia metodę `clear_project()` resetującą stan wideo i telemetrii.
 
 ### 2.2. Natychmiastowy HUD po załadowaniu wideo/telemetrii (`preview_mixin.py`, `project_mixin.py`, `main_window.py`)
-- W [`src/gui/qt/_mixins/preview_mixin.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/_mixins/preview_mixin.py) dodano metodę `request_preview_refresh(current_time=0.0)`:
+- W [`src/gui/qt/_mixins/preview_mixin.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/_mixins/preview_mixin.py) dodano metodę `request_preview_refresh(current_time=0.0)`:
   - Wymusza bezpośrednie ponowne wygenerowanie i nałożenie HUD na bieżącą klatkę wideo w widgetcie podglądu (`preview_widget.update_hud()`).
   - Nie używa sztuczek z wywoływaniem `play()`/`pause()`, co gwarantuje stabilność odtwarzacza.
-- W [`src/gui/qt/_mixins/project_mixin.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/_mixins/project_mixin.py):
+- W [`src/gui/qt/_mixins/project_mixin.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/_mixins/project_mixin.py):
   - Flaga `self._preview_telemetry_loading` jest przestawiana na `False` przed rozesłaniem powiadomień do podglądu.
   - Wywołanie `request_preview_refresh(0.0)` w miejscach finalizacji wczytywania telemetrii (`bg_load`, `attach_late_telemetry`).
-- W [`src/gui/qt/main_window.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/main_window.py) w obsłudze `_on_data_streams_ready()` dodano wywołanie `self.request_preview_refresh(0.0)`.
+- W [`src/gui/qt/main_window.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/main_window.py) w obsłudze `_on_data_streams_ready()` dodano wywołanie `self.request_preview_refresh(0.0)`.
 
 ### 2.3. Dedykowany fallback Arial dla glifu stopnia „°” (`helpers.py`, indykatory)
-- W [`src/indicators/helpers.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/helpers.py) zaimplementowano funkcje pomocnicze:
+- W [`src/indicators/helpers.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/helpers.py) zaimplementowano funkcje pomocnicze:
   - `get_arial_fallback_font(font_size)`: pobiera lub ładuje systemowy font `Arial.ttf` / `arial.ttf` z cache w żądanym rozmiarze pikselowym.
   - `split_text_degree_chunks(text)`: dzieli tekst na segmenty z flagą `is_degree` (np. `"45°"` -> `[("45", False), ("°", True)]`).
   - `measure_text_with_degree_fallback(draw, text, primary_font, font_size)`: dokładnie mierzy łączną szerokość `w = w(cyfry, primary_font) + w("°", arial_font)` oraz maksymalną wysokość `h`.
   - `draw_text_with_degree_fallback(draw, xy, text, primary_font, font_size, fill, align, anchor, shadow, stroke)`: rysuje tekst z pełną obsługą obrysu (`stroke_width`, `stroke_fill`), cienia (`shadow_offset`, `shadow_fill`) oraz wyrównania (`left`, `center`, `right`).
 - Zintegrowano obsługę glifu `°` we wszystkich wskaźnikach projektu:
-  - [`src/indicators/gauge.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/gauge.py): etykiety heading oraz główny tekst wskaźnika (`txt_main`), kafle buforowane oraz fallback.
-  - [`src/indicators/lean.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/lean.py): `_text_size`, `_draw_text_bounded`, `_draw_text_bounded_cached`.
-  - [`src/indicators/bar.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/bar.py): pomiar i renderowanie wartości kątowych/temperatury z symbolem `°`.
-  - [`src/indicators/text.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/text.py) oraz [`src/indicators/custom_text.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/custom_text.py): pełna obsługa glifu `°`.
-  - [`src/indicators/compositor.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/indicators/compositor.py): standalone value_text oraz etykiety skali (`left_text`, `right_text`).
+  - [`src/indicators/gauge.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/gauge.py): etykiety heading oraz główny tekst wskaźnika (`txt_main`), kafle buforowane oraz fallback.
+  - [`src/indicators/lean.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/lean.py): `_text_size`, `_draw_text_bounded`, `_draw_text_bounded_cached`.
+  - [`src/indicators/bar.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/bar.py): pomiar i renderowanie wartości kątowych/temperatury z symbolem `°`.
+  - [`src/indicators/text.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/text.py) oraz [`src/indicators/custom_text.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/custom_text.py): pełna obsługa glifu `°`.
+  - [`src/indicators/compositor.py`](file:///C:/_DEV/SportCamHUD-main-new/src/indicators/compositor.py): standalone value_text oraz etykiety skali (`left_text`, `right_text`).
 
 ### 2.4. Usunięcie „Liczby wątków” i auto-maksimum CPU (`settings_tab.py`, `render_mixin.py`, `streaming.py`)
-- W [`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/tabs/settings_tab.py):
+- W [`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/tabs/settings_tab.py):
   - Całkowicie usunięto kontrolkę `self.spin_threads` z GUI, siatki layoutu, zapisu (`_save_settings`) oraz odczytu (`_load_settings`).
-- W [`src/gui/qt/_mixins/render_mixin.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/_mixins/render_mixin.py):
+- W [`src/gui/qt/_mixins/render_mixin.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/_mixins/render_mixin.py):
   - Przypisywanie wątków CPU korzysta z automatycznego maksimum: `max(1, (os.cpu_count() or 1) - 1)`.
-- W [`src/ffmpeg/streaming.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/ffmpeg/streaming.py):
+- W [`src/ffmpeg/streaming.py`](file:///C:/_DEV/SportCamHUD-main-new/src/ffmpeg/streaming.py):
   - Dla trybu CPU silnik automatycznie stosuje optymalne maksimum rdzeni procesora.
 
 ### 2.5. Inteligentny domyślny folder eksportu (`render_tab.py`)
-- W [`src/gui/qt/tabs/render_tab.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/tabs/render_tab.py) zaimplementowano funkcję `resolve_default_export_dir()`:
+- W [`src/gui/qt/tabs/render_tab.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/tabs/render_tab.py) zaimplementowano funkcję `resolve_default_export_dir()`:
   - Priorytet 1: Jeśli użytkownik w przeszłości wskazał folder i jest on zapisany w `layout["global"]["last_export_dir"]` (lub `self._last_output_dir`), sprawdzana jest jego dostępność i uprawnienie do zapisu `os.access(..., os.W_OK)`.
   - Priorytet 2: Katalog źródłowego pliku wideo (np. `D:\GoPro\video.mp4` -> `D:\GoPro\`). Sprawdzane uprawnienia do zapisu.
   - Priorytet 3: Domyślny folder wideo użytkownika systemu (`~/Videos` lub `~/Documents`).
@@ -72,7 +72,7 @@ Celem zadania było rozwiązanie 6 kluczowych problemów UX i logiki aplikacji z
   - Następuje automatyczna weryfikacja i utworzenie folderu docelowego w razie potrzeby (`os.makedirs`).
 
 ### 2.6. Naprawa „Integracji” w Ustawieniach (`settings_tab.py`)
-- W [`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/BikeRideHUD-main-new/src/gui/qt/tabs/settings_tab.py):
+- W [`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/SportCamHUD-main-new/src/gui/qt/tabs/settings_tab.py):
   - Etykieta pozycji braku integracji w liście rozwijanej została zmieniona z `"Nic"` na `"--"` (kod wewnętrzny `"none"`).
   - W `_ensure_disk_persistence` i `_save_settings` poprawnie zapisywane jest pole `layout["integrations"]["auto_activity_source"]`.
   - W `_load_integration_settings_from_dict`:
@@ -106,7 +106,7 @@ Przetestowane przypadki:
 
 ## 4. WERYFIKACJA SYNCHRONIZACJI I PARITY (MAIN-NEW vs PORTABLE)
 
-Zmodyfikowane pliki źródłowe zostały zsynchronizowane do `C:\_DEV\BikeRideHUD-portable`.
+Zmodyfikowane pliki źródłowe zostały zsynchronizowane do `C:\_DEV\SportCamHUD-portable`.
 Skrypt `scripts/check_parity.py` potwierdza 100% zgodność skrótów SHA-256:
 
 ```

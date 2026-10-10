@@ -1,7 +1,7 @@
 ﻿# RAPORT: Intel Encoder Profile Control Modernization (DiscreteSlider)
 
 **Data:** 2026-09-28
-**Środowisko:** Intel PC (C:\_DEV\BikeRideHUD-main)
+**Środowisko:** Intel PC (C:\_DEV\SportCamHUD-main)
 **Autor:** Antigravity / Gemini High
 **Status:** COMPLETE (PASS)
 

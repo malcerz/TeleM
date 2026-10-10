@@ -176,7 +176,7 @@ class PresetMixin:
         """Zwraca ścieżkę do roboczego layoutu sesji w AppData."""
         import os
         base = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or (Path.home() / ".bikeridehud"))
-        d = base / "BikeRideHUD" / "session"
+        d = base / "SportCamHUD" / "session"
         d.mkdir(parents=True, exist_ok=True)
         return d / "active_layout.json"
 
@@ -185,7 +185,7 @@ class PresetMixin:
         return self.get_session_layout_path()
 
     def _save_session_layout(self) -> Optional[Path]:
-        """Zapisuje stan roboczy layoutu w katalogu aplikacji (%LOCALAPPDATA%\\BikeRideHUD\\session\\).
+        """Zapisuje stan roboczy layoutu w katalogu aplikacji (%LOCALAPPDATA%\\SportCamHUD\\session\\).
 
         NIGDY nie tworzy ani nie modyfikuje plików w katalogu z materiałami wideo!
         """

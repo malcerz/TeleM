@@ -1,7 +1,7 @@
 # RAPORT: Bounded Initial Telemetry Backfill (Kompensacja Opóźnienia Pierwszej Próbki)
 
 Data wykonania: 2026-09-15  
-Workspace: `H:\_Dev\BikeRideHUD`  
+Workspace: `H:\_Dev\SportCamHUD`  
 Status: **PASS (CASE A — FRAME0 FILLED + NO OUTSIDE-WINDOW REGRESSION + <1S)**
 
 ---
@@ -28,11 +28,11 @@ Wdrożono scentralizowany mechanizm **ograniczonego wstecznego wypełnienia pocz
 ## 2. Zmiany w Kodzie
 
 ### 2.1. Zmodyfikowane pliki
-1. [src/telemetry_states_fast.py](file:///H:/_Dev/BikeRideHUD/src/telemetry_states_fast.py):
+1. [src/telemetry_states_fast.py](file:///H:/_Dev/SportCamHUD/src/telemetry_states_fast.py):
    - Wprowadzono stałą `INITIAL_BACKFILL_MAX_S: float = 0.5`.
    - Zaimplementowano wektorowe funkcje pomocnicze `_eval_continuous_channel` oraz `_eval_discrete_channel` z wbudowanym bounded initial backfill.
    - Usunięto destruktywne nadpisywania `arr_xxx[frame_rel_s < 0.0] = ...`, które zerowały prawidłowe próbki ujemnego offsetu.
-2. [tests/test_telemetry_states_rate_aware.py](file:///H:/_Dev/BikeRideHUD/tests/test_telemetry_states_rate_aware.py):
+2. [tests/test_telemetry_states_rate_aware.py](file:///H:/_Dev/SportCamHUD/tests/test_telemetry_states_rate_aware.py):
    - Zaktualizowano asercje testowe: weryfikacja wypełnienia prędkości $5.508\text{ km/h}$ na klatkach $0..10$ oraz 100% parzystości poza oknem backfillu ($f \ge 11$).
 
 ### 2.2. Implementacja funkcji wektorowych

@@ -1,7 +1,7 @@
 # AMD production SHADER_ONLY verification
 
 Date: 2026-09-22  
-Repository: `C:\_DEV\BikeRideHUD-amd`  
+Repository: `C:\_DEV\SportCamHUD-amd`  
 Branch: `amd-bikeridehud`  
 Checkpoint baseline: `0ef407e9ce71cb192f43289abebf6b60c8259839`
 

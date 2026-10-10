@@ -1,7 +1,7 @@
 # Raport AMD PRE_8K_BASE vs checkpoint — 4K VideoProcessorBlt
 
 Data: 2026-09-23  
-Repozytorium: `C:\_DEV\BikeRideHUD-amd`  
+Repozytorium: `C:\_DEV\SportCamHUD-amd`  
 Branch glowny: `amd-bikeridehud`
 
 ## Wynik
@@ -27,7 +27,7 @@ this A/B test. No source change or diff-isolation was performed.
 ```text
 CHECKPOINT_PARENT_COMMAND=git show --no-patch --oneline 0ef407e^
 CHECKPOINT_PARENT=1b5485c test: add regression coverage and pre-AMD validation reports
-PRE8K_WORKTREE=C:\_DEV\BikeRideHUD-amd-pre8k
+PRE8K_WORKTREE=C:\_DEV\SportCamHUD-amd-pre8k
 PRE8K_HEAD=1b5485c0c7cd6f7b3d10e677aba315a40e0a3c98
 PRE8K_WORKTREE_CLEAN_BEFORE_TEST=True
 MAIN_DIRTY_TREE_PRESERVED=True
@@ -40,7 +40,7 @@ pushed.
 ## Exact workload
 
 ```text
-VIDEO=C:\_DEV\BikeRideHUD-amd\Video\GX020079.MP4
+VIDEO=C:\_DEV\SportCamHUD-amd\Video\GX020079.MP4
 INPUT=3840x2160
 OUTPUT=3840x2160
 DECODE=D3D11VA / Media Foundation

@@ -1,7 +1,7 @@
 # Raport AMD 4K VideoProcessorBlt checkpoint A/B
 
 Data: 2026-09-23  
-Repozytorium: `C:\_DEV\BikeRideHUD-amd`  
+Repozytorium: `C:\_DEV\SportCamHUD-amd`  
 Branch główny: `amd-bikeridehud`  
 Checkpoint: `0ef407e9ce71cb192f43289abebf6b60c8259839`
 
@@ -20,9 +20,9 @@ Nie wykonano diff-isolation ani fixa.
 ## Worktree i build
 
 ```text
-REQUESTED_WORKTREE=C:\_DEV\BikeRideHUD-amd-vp-checkpoint
+REQUESTED_WORKTREE=C:\_DEV\SportCamHUD-amd-vp-checkpoint
 REQUESTED_WORKTREE_STATUS=NOT CLEAN (pre-existing modification in d3d11_vp_pipeline.cpp)
-TEST_WORKTREE=C:\_DEV\BikeRideHUD-amd-vp-checkpoint-clean
+TEST_WORKTREE=C:\_DEV\SportCamHUD-amd-vp-checkpoint-clean
 WORKTREE_CLEAN_BEFORE_TEST=True
 HEAD=0ef407e9ce71cb192f43289abebf6b60c8259839
 CHECKPOINT_BUILD=PASS
@@ -38,7 +38,7 @@ pushowany.
 Dokładny workload:
 
 ```text
-VIDEO=C:\_DEV\BikeRideHUD-amd\Video\GX020079.MP4
+VIDEO=C:\_DEV\SportCamHUD-amd\Video\GX020079.MP4
 INPUT=3840x2160 4K
 OUTPUT=3840x2160 4K
 DECODE=D3D11VA / Media Foundation

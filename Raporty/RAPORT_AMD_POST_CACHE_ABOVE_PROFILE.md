@@ -1,7 +1,7 @@
 # Raport: Profiling Komponentów CPU ABOVE po Wdrożeniu Visual-State Cache (AMD D3D11 Pipeline)
 
 Data: 2026-09-16  
-Środowisko: `C:\_DEV\BikeRideHUD`  
+Środowisko: `C:\_DEV\SportCamHUD`  
 Gałąź: `amd-bikeridehud`  
 Oracle: `C:\_DEV\TeleM` (READ-ONLY)  
 
@@ -35,7 +35,7 @@ CASE=CASE B — CPU COST NOW DISTRIBUTED ACROSS MULTIPLE RENDERERS
 
 ## 2. Konfiguracja Środowiska i Weryfikacja Braku Override
 
-Eksport wykonano w pełnej ścieżce GUI potomnej (`BikeRideHUD.py -> GUI -> RenderMixin -> AMD child -> amd_native_exporter -> DLL -> AMF`):
+Eksport wykonano w pełnej ścieżce GUI potomnej (`SportCamHUD.py -> GUI -> RenderMixin -> AMD child -> amd_native_exporter -> DLL -> AMF`):
 - **Zestaw danych**: `Video/GX020079.mp4` + `Video/GX020079.fit`
 - **Rozdzielczość**: 3840x2160 (4K UHD)
 - **Klatki**: 300 klatek / 10.0 s @ 29.97 fps, HEVC AMF

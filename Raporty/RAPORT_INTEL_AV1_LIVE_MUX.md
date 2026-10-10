@@ -3,8 +3,8 @@
 **Data:** 2026-09-30  
 **Autor:** Antigravity / Gemini High  
 **Środowisko:** Intel Machine (Windows 11, Intel(R) Graphics, Python 3.14.7, FFmpeg 63.6.100)  
-**Katalog roboczy:** `c:\_Dev\BikeRideHUD-portable`  
-**Repozytorium Git:** `c:\_Dev\BikeRideHUD-main-new` (Commit: `d8aec6826c591cbf49f3a6d094679a25570b4a72`)  
+**Katalog roboczy:** `c:\_Dev\SportCamHUD-portable`  
+**Repozytorium Git:** `c:\_Dev\SportCamHUD-main-new` (Commit: `d8aec6826c591cbf49f3a6d094679a25570b4a72`)  
 **Plik testowy wideo:** `C:\GoPro\2026-09-30\GX010331.MP4` (4K HEVC Main10, 29.97 fps)  
 **Plik testowy telemetrii:** `C:\GoPro\2026-09-30\Poranna_jazda_na_rowerze.fit`  
 
@@ -122,7 +122,7 @@ Przetestowano wpływ flagi `-movflags +faststart` na identycznym pliku IVF o wie
 | **Średnia** | **0.665 s** | **0.501 s** | **+0.164 s** | **+32.7%** |
 
 ### Wnioski dotyczące Faststart:
-Dla eksportów lokalnych BikeRideHUD flaga `+faststart` wprowadza zbędną drugą operację I/O polegającą na przesuwaniu całego pliku i przenoszeniu atomu `moov` na początek. Przy plikach o wielkości 10–20 GB powoduje to wielosekundowe zamrożenie interfejsu.
+Dla eksportów lokalnych SportCamHUD flaga `+faststart` wprowadza zbędną drugą operację I/O polegającą na przesuwaniu całego pliku i przenoszeniu atomu `moov` na początek. Przy plikach o wielkości 10–20 GB powoduje to wielosekundowe zamrożenie interfejsu.
 Zgodnie z wytycznymi wprowadzono:
 `FASTSTART_DEFAULT = OFF`. W razie potrzeby flaga może być aktywowana zmienną środowiskową `TELEM_INTEL_FASTSTART=1` lub argumentem `faststart=True`.
 
@@ -223,7 +223,7 @@ Porównanie starej architektury z osobnym remuksem (Baseline) vs Nowej architekt
 2. `src/ffmpeg/detection.py`:
    - Zwiększono limit czasu w `_test_encoder` z 10s na 35s, zapobiegając fałszywym błędom timeoutu podczas inicjalizacji sterownika QSV.
 3. `src/ffmpeg/intel_backend.py`:
-   - Dodano trwały cache dyskowy `_QSV_CODECS_CACHE` w `AppData\Local\BikeRideHUD\cache\qsv_codecs.json`, skracając czas sprawdzania koderów przy starcie aplikacji z 60s do <1 ms.
+   - Dodano trwały cache dyskowy `_QSV_CODECS_CACHE` w `AppData\Local\SportCamHUD\cache\qsv_codecs.json`, skracając czas sprawdzania koderów przy starcie aplikacji z 60s do <1 ms.
 4. `tests/test_intel_live_mux.py`:
    - Dodano 4 nowe testy jednostkowe weryfikujące: brak flagi faststart, obecność statystyk kontraktu, mockowanie Live Muxa, oraz działanie flagi fallback `TELEM_INTEL_LEGACY_POST_MUX`.
 5. `tests/test_intel_finalization.py`:
@@ -243,4 +243,4 @@ Wszystkie wymagania zadania zostały w 100% zrealizowane:
 3. `TEMP_FULL_VIDEO_FILE = NO`.
 4. Brak regresji klatkażu renderowania (>65 FPS AV1 10-bit HDR).
 5. Bezpieczne i stabilne działanie pod nadzorem watchdog.
-6. Zmiany zatwierdzone w głównym repozytorium `c:\_Dev\BikeRideHUD-main-new`.
+6. Zmiany zatwierdzone w głównym repozytorium `c:\_Dev\SportCamHUD-main-new`.

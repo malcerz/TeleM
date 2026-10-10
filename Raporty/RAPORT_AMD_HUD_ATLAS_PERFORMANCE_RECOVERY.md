@@ -98,7 +98,7 @@ Two interacting factors caused the packed atlas to blow past 2160 px height:
 
 ## 5. Technical Implementation (The Fix)
 
-File modified: [command_builder.py](file:///C:/_DEV/BikeRideHUD-amd/src/ffmpeg/command_builder.py)
+File modified: [command_builder.py](file:///C:/_DEV/SportCamHUD-amd/src/ffmpeg/command_builder.py)
 
 1. **Tightened Bounding Box Estimations:**
    - Horizontal bars: capped at `max(60, min(240, int(size_px * 0.10) + 60))`.

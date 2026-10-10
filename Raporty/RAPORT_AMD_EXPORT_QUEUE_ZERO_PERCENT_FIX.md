@@ -1,7 +1,7 @@
 # RAPORT: Naprawa błędu "0% Stuck" w Kolejce Eksportu TeleM (AMD Native D3D11)
 
 ## 1. Cel i Zakres Zadania
-Naprawa krytycznego błędu w GUI TeleM (`C:\_DEV\BikeRideHUD-amd`, branch `amd-bikeridehud`), gdzie po dodaniu zadań do kolejki i kliknięciu "▶ Start":
+Naprawa krytycznego błędu w GUI TeleM (`C:\_DEV\SportCamHUD-amd`, branch `amd-bikeridehud`), gdzie po dodaniu zadań do kolejki i kliknięciu "▶ Start":
 - Job 1 wchodził natychmiast w stan `RENDER 0%`,
 - Job 2 pozostawał w stanie `OCZEKUJE`,
 - Nie powstawał żaden proces roboczy / wątek renderera / FFmpeg,
