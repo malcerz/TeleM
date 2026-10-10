@@ -904,10 +904,9 @@ class TelemetryDataManager:
         # preload already parsed the file, reuse those records (no re-parse).
         records = preparsed if preparsed is not None else parse_fit(fit_path)
         if not records:
-            self.fit_path = None
             return False
         
-        self.fit_path = Path(fit_path)
+        resolved_fit_path = Path(fit_path)
 
         # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
         # Prefer GPS-track cross-correlation when both tracks are available.
@@ -933,6 +932,9 @@ class TelemetryDataManager:
         fit_result = sync_fit_to_video(records, start_dt)
         if not fit_result:
             return False
+
+        # Only assign state upon success
+        self.fit_path = resolved_fit_path
 
         processed_fit: dict[str, SampleList] = {}
         for key, samples in fit_result.items():

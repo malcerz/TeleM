@@ -1192,8 +1192,8 @@ class RenderPreparationService:
         if base_dt is None:
             base_dt = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        fit_p = getattr(telemetry, "fit_path", kwargs.get("fit_path", None))
-        gpx_p = getattr(telemetry, "gpx_path", kwargs.get("gpx_path", None))
+        fit_p = getattr(telemetry, "fit_path", None) or kwargs.get("fit_path")
+        gpx_p = getattr(telemetry, "gpx_path", None) or kwargs.get("gpx_path")
         sync_offset = float(layout.get("telemetry_sync_offset_s", 0.0) or 0.0)
 
         cache_key = cls.compute_cache_key(

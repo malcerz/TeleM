@@ -936,29 +936,54 @@ def main() -> None:
         QTimer.singleShot(400, _poll_ready_bench)
 
     elif "--test-sync-integrity" in sys.argv:
-        print("[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...", flush=True)
-        get_signals().sig_error.connect(lambda msg: print(f"[TEST SYNC INTEGRITY] ERROR: {msg}", flush=True))
+        import argparse
+        import json
+        import time
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--test-sync-integrity", action="store_true")
+        parser.add_argument("--video", required=True)
+        parser.add_argument("--fit", required=True)
+        parser.add_argument("--result-json", required=False)
+        test_args, _ = parser.parse_known_args(sys.argv[1:])
+
+        video_path = Path(test_args.video).resolve()
+        fit_path = Path(test_args.fit).resolve()
+
+        print(f"[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...\n  VIDEO: {video_path}\n  FIT: {fit_path}", flush=True)
+
+        if not video_path.is_file():
+            print("[TEST SYNC INTEGRITY] FAIL: Brak pliku wideo", flush=True)
+            sys.exit(1)
+        if not fit_path.is_file():
+            print("[TEST SYNC INTEGRITY] FAIL: Brak pliku FIT", flush=True)
+            sys.exit(1)
+
+        get_signals().sig_error.connect(lambda msg: (print(f"[TEST SYNC INTEGRITY] ERROR: {msg}", flush=True), sys.exit(1)))
         
         def _on_sync_validation_request(request):
             import src.telemetry_file_validation as val
-            if request.result.state != val.ValidationState.VALID:
-                print(f"[TEST SYNC INTEGRITY] FAIL: Odrzucono kandydata ze statusem {request.result.state}", flush=True)
+            state = getattr(request.result, "state", None) or getattr(request.result, "validation_state", None)
+            if state != val.ValidationState.VALID:
+                print(f"[TEST SYNC INTEGRITY] FAIL: Odrzucono kandydata ze statusem {state}", flush=True)
                 request.accepted = False
                 request.user_override = False
                 request.completed.set()
-                QTimer.singleShot(500, app.quit)
+                app.exit(1)
             else:
                 print(f"[TEST SYNC INTEGRITY] PASS: Zaakceptowano kandydata", flush=True)
                 request.accepted = True
                 request.user_override = False
                 request.completed.set()
-                QTimer.singleShot(500, app.quit)
+                app.exit(0)
                 
         get_signals().sig_telemetry_validation_request.connect(_on_sync_validation_request)
-        get_signals().sig_data_streams_ready.connect(lambda _: (print("[TEST SYNC INTEGRITY] SUCCESS_IMPLICIT", flush=True), QTimer.singleShot(500, app.quit)))
+        get_signals().sig_data_streams_ready.connect(lambda _: (print("[TEST SYNC INTEGRITY] SUCCESS_IMPLICIT", flush=True), app.exit(0)))
+        
+        # Timeout safety check
+        QTimer.singleShot(10000, lambda: (print("[TEST SYNC INTEGRITY] BLOCKED: Timeout", flush=True), app.exit(1)))
         
         QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
-            [str(video_path)], "", str(fit_path) if fit_path else "",
+            [str(video_path)], "", str(fit_path)
         ))
 
     rc = app.exec()
