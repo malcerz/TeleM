@@ -44,7 +44,7 @@ import numpy as np
 from pathlib import Path
 from typing import Any, Callable, Optional
 from src.ffmpeg.amd_pipeline_watchdog import NonBlockingProgressDispatcher
-from src.telemetry_cache_manager import ensure_audio_cache, get_audio_cache_path
+
 
 try:
     from PIL import Image
@@ -3224,16 +3224,6 @@ def export_amd_native_d3d11(
     stage_c_growth_mbps = 0.0
     finalization_summary: dict[str, Any] = {}
 
-    def _resolve_cached_audio(src: str | Path) -> str | Path:
-        if _env_flag("AMD_AUDIO_CACHE", True):
-            try:
-                cached = ensure_audio_cache(src, ffmpeg_exe=ffmpeg_exe)
-                if cached is not None and cached.is_file():
-                    return cached
-            except Exception as e:
-                print(f"[AUDIO CACHE] fallback to source MP4 ({e})", flush=True)
-        return src
-
     if direct_mux_enabled:
         if os.path.exists(output_part_str):
             try:
@@ -3286,7 +3276,7 @@ def export_amd_native_d3d11(
                 ]
             else:
                 target_live_out = output_part_str
-                resolved_single_audio = _resolve_cached_audio(input_file_str)
+                resolved_single_audio = input_file_str
                 audio_args: list[str] = ["-i", str(resolved_single_audio)]
                 if single_pass_av_mux:
                     audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
@@ -3300,7 +3290,7 @@ def export_amd_native_d3d11(
                             default_input_file=input_file_str,
                             duration_s=duration_s,
                             local_start_s=clip0_local_start,
-                            audio_source_resolver=_resolve_cached_audio,
+                            audio_source_resolver=None,
                         )
                     except OSError as exc:
                         # A storage failure while creating the tiny plan is a
@@ -7173,7 +7163,7 @@ def export_amd_native_d3d11(
             _write_audio_concat_plan(
                 audio_concat_path,
                 video_timeline=video_timeline,
-                audio_source_resolver=_resolve_cached_audio,
+                audio_source_resolver=None,
             )
 
             cmd_stage_c = [
@@ -7408,17 +7398,7 @@ def export_amd_native_d3d11(
             print(f"[AMD NATIVE D3D11] ERROR: Raw bitstream {temp_h265} is missing or empty!", flush=True)
             return False
 
-        def _resolve_cached_audio_fallback(src: str | Path) -> str | Path:
-            if _env_flag("AMD_AUDIO_CACHE", True):
-                try:
-                    cached = ensure_audio_cache(src, ffmpeg_exe=ffmpeg_exe)
-                    if cached is not None and cached.is_file():
-                        return cached
-                except Exception as e:
-                    print(f"[AUDIO CACHE] fallback to source MP4 ({e})", flush=True)
-            return src
-
-        audio_input = str(_resolve_cached_audio_fallback(input_file_str))
+        audio_input = str(input_file_str)
         audio_args: list[str] = ["-i", audio_input]
         audio_concat_path: Optional[Path] = None
         if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 1:
@@ -7426,7 +7406,7 @@ def export_amd_native_d3d11(
             _write_audio_concat_plan(
                 audio_concat_path,
                 video_timeline=video_timeline,
-                audio_source_resolver=_resolve_cached_audio_fallback,
+                audio_source_resolver=None,
             )
             audio_args = ["-f", "concat", "-safe", "0", "-i", str(audio_concat_path)]
         elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) == 1:
