@@ -705,6 +705,12 @@ def main() -> None:
         get_signals().sig_render_finished.connect(_on_render_finished_bench)
         get_signals().sig_error.connect(_on_render_error_bench)
 
+        def _auto_accept_validation(request):
+            request.accepted = True
+            request.user_override = True
+            request.completed.set()
+        get_signals().sig_telemetry_validation_request.connect(_auto_accept_validation)
+
         def _progress_bench(done, total, elapsed, fps, hud_state):
             if done in (100, 300, 500, 1000, 2000, 3000) or done == 0 or done % 500 == 0 or (total and done >= total):
                 print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)

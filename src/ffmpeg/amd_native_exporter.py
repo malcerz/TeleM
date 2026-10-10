@@ -2021,6 +2021,9 @@ def export_amd_native_d3d11(
     preview_session: Optional[Any] = None,
     generation_id: int = 0,
     cache_key: Optional[str] = None,
+    fit_path: Union[Path, str, None] = None,
+    gpx_path: Union[Path, str, None] = None,
+    sync_offset_s: float = 0.0,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
     print(f"AMD_EXPORTER_CACHE_KEY={cache_key}", flush=True)
@@ -4292,6 +4295,9 @@ def export_amd_native_d3d11(
         telemetry_cache = RenderPreparationService.get_or_build(
             cache_key=cache_key,
             video_paths=input_files,
+            fit_path=fit_path,
+            gpx_path=gpx_path,
+            sync_offset_s=sync_offset_s,
             layout=semantic_layout,
             base_dt=base_dt,
             tz_offset_hours=tz_offset_hours,

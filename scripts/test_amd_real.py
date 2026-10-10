@@ -50,7 +50,8 @@ def run_export_mode(mode, output_path):
         sys.executable, "BikeRideHUD.py",
         "--test-amd-export",
         "--mode", mode,
-        "--video", r"F:\GoPro\2026-10-09\GX010361.MP4",
+        "--video", r"F:\GoPro\2026-09-25\GX010321.MP4",
+        "--fit", r"F:\GoPro\2026-09-25\Poranna_jazda_na_rowerze.fit",
         "--frames", "800",
         "--output", output_path
     ]
@@ -63,8 +64,10 @@ def run_export_mode(mode, output_path):
     
     for line in iter(proc.stdout.readline, b''):
         l = line.decode('utf-8', errors='replace').rstrip()
-        if "PROGRESS" in l or "error" in l.lower() or "completed" in l:
+        try:
             print(f"  {l}")
+        except UnicodeEncodeError:
+            print(f"  {l.encode('ascii', 'replace').decode('ascii')}")
             
     proc.wait()
     duration = time.time() - t0

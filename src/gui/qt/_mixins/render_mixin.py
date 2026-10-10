@@ -941,6 +941,8 @@ class RenderMixin:
                     video_paths=list(options.get("video_paths") or self.video_paths),
                     target_fps=fps_stream,
                     total_frames=resolved_frames,
+                    fit_path=getattr(self, "fit_path", None),
+                    gpx_path=getattr(self, "gpx_path", None),
                 )
                 _cache_key = _prep_cache.cache_key if _prep_cache else None
             except Exception as e:
@@ -950,6 +952,9 @@ class RenderMixin:
 
         stream_kwargs = dict(
             cache_key=_cache_key,
+            fit_path=getattr(self, "fit_path", None),
+            gpx_path=getattr(self, "gpx_path", None),
+            sync_offset_s=float(layout.get("telemetry_sync_offset_s", 0.0) or 0.0),
             ffmpeg_exe=ffmpeg_exe,
             input_files=list(options.get("video_paths") or self.video_paths),
             output_file=output_path,

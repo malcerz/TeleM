@@ -12,7 +12,7 @@ from src.ffmpeg.streaming import resolve_amd_gui_range_plan
 
 class TestV108CacheTimelineIntegrity(unittest.TestCase):
     def test_cache_integrity_full_vs_cut(self):
-        video_path = r"F:\GoPro\2026-10-09\GX010361.MP4"
+        video_path = r"F:\GoPro\2026-09-25\GX010321.MP4"
         if not os.path.exists(video_path):
             self.skipTest(f"Video {video_path} not found")
 
