@@ -999,6 +999,8 @@ class RenderTab(QWidget):
         if job.gpx_path:
             ctrl.gpx_path = Path(job.gpx_path)
         ctrl._cut_regions = []
+        if str(job.options.get("encoder", "")).lower() in ("amd", "amd_native", "auto") and "_amd_cut_regions" in job.options:
+            ctrl._cut_regions = [tuple(region) for region in job.options.get("_amd_cut_regions", [])]
 
         # Check if telemetry is loaded on controller
         has_telem = False
@@ -1583,6 +1585,16 @@ class RenderTab(QWidget):
         import copy
         # Snapshot opcji renderowania
         options = self._build_options_from_gui()
+        queue_encoder = str(options.get("encoder", "")).strip().lower()
+        if queue_encoder == "auto":
+            try:
+                from src.ffmpeg import detect_best_encoder
+                queue_encoder = detect_best_encoder()
+            except Exception:
+                pass
+        if queue_encoder in ("amd", "amd_native"):
+            self._ensure_range_applied()
+            options["_amd_cut_regions"] = copy.deepcopy(list(getattr(ctrl, "_cut_regions", [])))
         options.pop("output", None)
         # Snapshot ścieżek
         video_paths = [str(p) for p in (getattr(ctrl, "video_paths", None) or [])]
