@@ -47,5 +47,5 @@ CANONICAL_HARNESS=scripts/test_amd_real.py, scripts/test_sync_integrity.py
 TEST_ARTIFACT_PATHS=scratch/amd_bench_direct.mp4, scratch/amd_bench_queue.mp4
 COMMITS_CREATED=YES
 GIT_PUSH_STATUS=YES
-REMOTE_HEAD=TBD
+REMOTE_HEAD=e4dde4fe19e22400a76d2e65a86e3a7b519d4292
 FINAL_STATUS=PASS
