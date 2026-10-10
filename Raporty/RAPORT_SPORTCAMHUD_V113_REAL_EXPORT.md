@@ -23,3 +23,13 @@
 ## 6. Stan Git
 * **Gałąź:** fix/gui-freeze-hud-composite
 * Wszystkie zmiany bezpiecznie zatwierdzone z sygnaturą "DOCS: Generate v1.13 verification report" oraz poprawkami GPS/tests.
+
+## 7. Poprawa komunikatów wyszukiwania FIT/GPX (Aktualizacja)
+* **Spójność statusów GUI:** Usunięto usterkę zatrzymującego się komunikatu wyszukiwania lokalnego. Zaktualizowano zdarzenia emiterów (on_status) wewnątrz uto_telemetry_preflight.py tak, by z zachowaniem odpowiedniego kodowania poprawnie powiadamiały interfejs (przez pętle Qt) o aktualnym etapie, m.in.:
+  - *Wyszukiwanie lokalnych plików FIT/GPX...*
+  - *Wyszukiwanie aktywności w Garmin Connect...*
+  - *Pobieranie aktywności z Garmin Connect...*
+  - *Znaleziono dopasowaną aktywność: [nazwa]*
+  - *Nie znaleziono pasującego pliku FIT/GPX.*
+* **Zarządzanie błędami:** Wyodrębniono dokładne błędy wygasłej autoryzacji (Zaloguj się w Ustawieniach) i błędów sieci (Sprawdź połączenie z internetem). 
+* **Weryfikacja testami:** Dodano plik 	est_telemetry_status_transitions.py wykonujący wirtualne mockowanie dostawcy GarminProvider w celu rygorystycznego sprawdzenia przepływu komunikatów od fazy lokalnej do pobierania (lub błędu sieci). Wszystkie testy jednostkowe asynchronicznego menedżera przechodzą pomyślnie.

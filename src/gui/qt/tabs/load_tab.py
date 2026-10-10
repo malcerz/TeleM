@@ -805,10 +805,10 @@ class LoadTab(QWidget):
         self._fit_path = ""
         self._gpx_path = ""
 
-        self.btn_telemetry.setText("Szukam lokalnego FIT/GPX...")
+        self.btn_telemetry.setText("Wyszukiwanie lokalnych plik?w FIT/GPX...")
         self.btn_telemetry.setToolTip("")
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
-        self.lbl_remote_status.setText("Szukam lokalnych danych...")
+        self.lbl_remote_status.setText("Wyszukiwanie lokalnych plik?w FIT/GPX...")
         self.lbl_remote_status.setToolTip("")
         self._update_telemetry_on_all_cards()
 

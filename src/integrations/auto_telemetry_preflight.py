@@ -280,7 +280,7 @@ def run_auto_telemetry_preflight(
     if is_cancelled():
         return None
 
-    on_status("Szukam lokalnego FIT/GPX...", "Szukam lokalnych danych...", None)
+    on_status("Wyszukiwanie lokalnych plików FIT/GPX...", "Wyszukiwanie lokalnych plików FIT/GPX...", None)
 
     # 1. Lightweight video intervals probing
     from src.multifile import probe_clip_time_interval
@@ -328,7 +328,7 @@ def run_auto_telemetry_preflight(
         return None
 
     if matched_local is not None:
-        on_status(f"{matched_local.name} ✓", f"Gotowe — {matched_local.name}", str(matched_local))
+        on_status(f"Znaleziono dopasowaną aktywność: {matched_local.name}", f"Znaleziono dopasowaną aktywność: {matched_local.name}", str(matched_local))
         print(f"[AutoPreflight] Local telemetry matched: {matched_local.name} (score: {diag.get('score', 0)})", flush=True)
         return matched_local
 
@@ -336,7 +336,7 @@ def run_auto_telemetry_preflight(
     source = str(config.get("auto_activity_source", "none") or "none").lower()
 
     if source in ("none", "", "nic"):
-        on_status("Nie znaleziono lokalnego FIT/GPX", "Nie znaleziono lokalnego FIT/GPX", None)
+        on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
         print("[AutoPreflight] Source=none -> No remote search performed.", flush=True)
         return None
 
@@ -344,7 +344,7 @@ def run_auto_telemetry_preflight(
     cached = remote_cache.find_cached_video_telemetry(video_paths)
     if cached is not None:
         _prov, _act_id, cached_path = cached
-        on_status(f"Znaleziono w cache: {cached_path.name} ✓", f"Gotowe (z cache) — {cached_path.name}", str(cached_path))
+        on_status(f"Znaleziono dopasowaną aktywność: {cached_path.name}", f"Znaleziono dopasowaną aktywność: {cached_path.name}", str(cached_path))
         print(f"[AutoPreflight] Remote cache hit: {cached_path.name}", flush=True)
         return cached_path
 
@@ -353,7 +353,7 @@ def run_auto_telemetry_preflight(
 
     # Remote provider flow
     if source == "garmin":
-        on_status("Brak lokalnej telemetrii — sprawdzam Garmin Connect...", "Brak lokalnego FIT/GPX — sprawdzanie Garmin Connect...", None)
+        on_status("Wyszukiwanie aktywności w Garmin Connect...", "Wyszukiwanie aktywności w Garmin Connect...", None)
         provider: ActivityProvider
         if provider_override is not None:
             provider = provider_override
@@ -367,16 +367,16 @@ def run_auto_telemetry_preflight(
             connected = False
 
         if not connected:
-            on_status("Garmin Connect: niepołączono", "Garmin Connect: brak aktywnej sesji (zaloguj się w Ustawieniach).", None)
+            on_status("Brak autoryzacji (Garmin Connect)", "Brak autoryzacji. Zaloguj się w ustawieniach Garmin Connect.", None)
             return None
 
         if is_cancelled():
             return None
 
-        on_status("Łączenie z Garmin Connect...", "Łączenie z Garmin Connect...", None)
+        on_status("Wyszukiwanie aktywności w Garmin Connect...", "Wyszukiwanie aktywności w Garmin Connect...", None)
 
         if not intervals:
-            on_status("Garmin Connect: brak pasującej aktywności", "Garmin Connect: nie udało się ustalić czasu filmu.", None)
+            on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
             return None
 
         v_start = min(s for s, _, _, _ in intervals)
@@ -384,7 +384,7 @@ def run_auto_telemetry_preflight(
         v_dur = sum(d for _, _, d, _ in intervals)
 
         try:
-            on_status("Szukam aktywności Garmin Connect...", "Garmin Connect: szukanie aktywności w oknie czasowym filmu…", None)
+            on_status("Wyszukiwanie aktywności w Garmin Connect...", "Wyszukiwanie aktywności w Garmin Connect...", None)
             window_start = v_start - timedelta(hours=2)
             window_end = v_end + timedelta(hours=2)
             candidates = provider.list_activities(window_start, window_end)
@@ -393,7 +393,7 @@ def run_auto_telemetry_preflight(
                 return None
 
             if not candidates:
-                on_status("Garmin Connect: brak pasującej aktywności", "Garmin Connect: nie znaleziono aktywności w oknie ±2h.", None)
+                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
                 return None
 
             decision, ranked = rank_and_evaluate_candidates(
@@ -404,14 +404,14 @@ def run_auto_telemetry_preflight(
             )
 
             if not ranked:
-                on_status("Garmin Connect: brak pasującej aktywności", "Garmin Connect: brak pasującej aktywności.", None)
+                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
                 return None
 
             best_cand, best_score = ranked[0]
             if is_cancelled():
                 return None
 
-            on_status("Znaleziono aktywność — pobieram FIT...", f"Pobieranie aktywności Garmin {best_cand.activity_id}...", None)
+            on_status("Pobieranie aktywności z Garmin Connect...", "Pobieranie aktywności z Garmin Connect...", None)
             dest_dir = remote_cache.get_provider_cache_dir("garmin")
             downloaded_file = provider.download_telemetry(best_cand.activity_id, dest_dir)
 
@@ -432,18 +432,18 @@ def run_auto_telemetry_preflight(
                 },
             )
 
-            on_status(f"Pobrano {downloaded_file.name} ✓", f"Gotowe — {downloaded_file.name}", str(downloaded_file))
+            on_status(f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", str(downloaded_file))
             print(f"[AutoPreflight] Garmin FIT downloaded successfully: {downloaded_file.name}", flush=True)
             return downloaded_file
 
         except Exception as exc:
             err_str = str(exc).lower()
             if "połączen" in err_str or "connection" in err_str or "timeout" in err_str or "offline" in err_str:
-                on_status("Garmin Connect: brak połączenia", "Garmin Connect: brak połączenia z siecią.", None)
+                on_status("Błąd sieci (Garmin Connect)", "Błąd sieci. Sprawdź połączenie z internetem.", None)
             elif "sesj" in err_str or "auth" in err_str or "zaloguj" in err_str:
-                on_status("Garmin Connect: niepołączono", "Garmin Connect: sesja wygasła (zaloguj się w Ustawieniach).", None)
+                on_status("Brak autoryzacji (Garmin Connect)", "Brak autoryzacji. Zaloguj się w ustawieniach Garmin Connect.", None)
             else:
-                on_status("Nie znaleziono telemetrii", f"Garmin Connect: błąd pobierania telemetrii.", None)
+                on_status("Błąd pobierania (Garmin Connect)", "Garmin Connect: Błąd dostępu do usługi lub pobierania telemetrii.", None)
             print(f"[AutoPreflight] Garmin fetch failed: {exc}", flush=True)
             return None
 
