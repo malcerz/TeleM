@@ -3,23 +3,31 @@ import os
 import sys
 from decimal import Decimal
 
+def next_version(version: str) -> str:
+    fractional_digits = len(version.partition(".")[2])
+    if fractional_digits < 1 or not version.partition(".")[0].isdigit() or not version.partition(".")[2].isdigit():
+        raise ValueError(f"Invalid decimal version: {version}")
+    current = Decimal(version)
+    increment = Decimal(1).scaleb(-fractional_digits)
+    return f"{current + increment:.{fractional_digits}f}"
+
+
 def bump_version():
     version_file = os.path.join(os.path.dirname(__file__), '..', 'src', 'version.py')
     with open(version_file, 'r', encoding='utf-8') as f:
         text = f.read()
 
-    match = re.search(r"APP_VERSION\s*=\s*['\"](\d+\.\d+)['\"]", text)
+    match = re.search(r"(?m)^APP_VERSION\s*=\s*(['\"])(\d+\.\d+)\1\s*$", text)
     if not match:
         print("Could not find APP_VERSION in src/version.py")
         sys.exit(1)
 
-    old_version_str = match.group(1)
-    old_version_dec = Decimal(old_version_str)
-    new_version_dec = old_version_dec + Decimal('0.01')
-    new_version_str = str(new_version_dec)
+    quote, old_version_str = match.group(1), match.group(2)
+    new_version_str = next_version(old_version_str)
 
-    text = text.replace(f"'{old_version_str}'", f"'{new_version_str}'")
-    text = text.replace(f'"{old_version_str}"', f'"{new_version_str}"')
+    text = text[:match.start()] + (
+        f"APP_VERSION = {quote}{new_version_str}{quote}"
+    ) + text[match.end():]
 
     with open(version_file, 'w', encoding='utf-8') as f:
         f.write(text)
