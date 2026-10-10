@@ -14,8 +14,8 @@ def get_file_hash(filepath):
         return None
 
 def check_parity():
-    portable_dir = r'C:\_DEV\SportCamHUD-portable'
-    main_dir = r'C:\_DEV\SportCamHUD-main-new'
+    portable_dir = r'C:\_DEV\BikeRideHUD-portable'
+    main_dir = r'C:\_DEV\BikeRideHUD-main-new'
     manifest_path = os.path.join(portable_dir, 'runtime_manifest.json')
     
     if not os.path.exists(manifest_path):

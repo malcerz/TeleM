@@ -25,8 +25,8 @@ def get_git_hash(src_dir):
         return "unknown"
 
 def sync_and_manifest():
-    src_dir = r'C:\_DEV\SportCamHUD-main-new'
-    dst_dir = r'C:\_DEV\SportCamHUD-portable'
+    src_dir = r'C:\_DEV\BikeRideHUD-main-new'
+    dst_dir = r'C:\_DEV\BikeRideHUD-portable'
     
     current_hash = get_git_hash(src_dir)
     print(f"Current git hash: {current_hash}")
