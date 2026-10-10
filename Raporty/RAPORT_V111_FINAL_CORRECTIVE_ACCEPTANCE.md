@@ -11,7 +11,7 @@ Tested code HEAD: `a515c77370575c4bf70b3cb0d889e70db118af19`
 ```text
 APP_VERSION=1.11
 GIT_HEAD=a515c77370575c4bf70b3cb0d889e70db118af19 (tested code HEAD)
-REMOTE_HEAD=PENDING_PUSH
+REMOTE_HEAD=20a013d4dcf1f152785cc255da6158a266a7a86a (verified after code/acceptance push; final report status update is pushed afterward)
 VERSION_API_PASS=PASS (APP_VERSION, APP_BUILD_COMMIT, get_build_commit())
 MAIN_START=PASS (AMD/AMF initialization and MainWindow startup; strict missing-file CLI returned expected 1)
 PORTABLE_START=PASS (synced Portable AMD/AMF initialization; strict missing-file CLI returned expected 1)
@@ -61,8 +61,8 @@ CACHE_KEY_PARITY=FIT switch invalidation PASS; parent/child runtime parity NOT P
 
 CANONICAL_HARNESS_PASS=PARTIAL (negative sync paths pass; positive real sync and 800-frame exports not run)
 PORTABLE_PARITY=PASS (100% manifest match)
-GIT_COMMIT_HASHES=0d7eb672f3d6f90d91ab533345e4cb72dfde0de2, a515c77370575c4bf70b3cb0d889e70db118af19
-GIT_PUSH_STATUS=PENDING
+GIT_COMMIT_HASHES=0d7eb672f3d6f90d91ab533345e4cb72dfde0de2, a515c77370575c4bf70b3cb0d889e70db118af19, 20a013d4dcf1f152785cc255da6158a266a7a86a
+GIT_PUSH_STATUS=PASS (code and acceptance report pushed; final status-recording commit fast-forwarded and reverified)
 
 FINAL_STATUS=PERFORMANCE_PARTIAL; not FULL PASS
 ```
