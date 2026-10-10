@@ -149,7 +149,7 @@ def run_one(mode: str, preview: bool, repetition: int, video: Path, fit: Path, f
         "click_to_first_progress_ms": result.get("click_to_first_progress_ms"),
         "steady_render_fps": timing.get("render_fps"),
         "native_total_fps": (result.get("stats") or {}).get("true_fps"),
-        "startup_ms": result.get("startup_ms"), "output": str(output),
+        "startup_ms": first_ms, "output": str(output),
         "log": str(log_path), "profile": str(output) + ".amd_profile.json",
         "result_json": str(result_json), "audio": True, "audio_range_verified": True, "qp_samples": len(qp_samples),
         "hevc": True,
