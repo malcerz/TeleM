@@ -72,13 +72,27 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
     gpmf_meta = {}
     if gpmf:
         try:
+
             from src.telemetry_native_gpmf import extract_gpmf_native
-            ndata = extract_gpmf_native(path)
+            ndata = extract_gpmf_native(path, metadata_only=True)
             if ndata:
+                date_str = ndata.get("start_dt_str")
+                # start_dt_utc is also available? Let's use it for local time conversion
+                utc_ts = ndata.get("start_dt_utc")
+                if utc_ts:
+                    from datetime import datetime
+                    import time
+                    # Convert to local time
+                    local_dt = datetime.fromtimestamp(utc_ts)
+                    date_str = local_dt.strftime("%Y-%m-%d %H:%M:%S")
+                elif date_str and "." in date_str:
+                    date_str = date_str.split(".")[0]
+                    
                 gpmf_meta = {
                     "camera": ndata.get("camera_model"),
-                    "date": ndata.get("start_dt_str")
+                    "date": date_str
                 }
+
         except Exception:
             pass
 

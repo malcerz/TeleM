@@ -82,7 +82,7 @@ std::string FormatUtcIso(double ts) {
 
 } // anonymous namespace
 
-GpmfResult ExtractGpmfData(const std::string& mp4_path) {
+GpmfResult ExtractGpmfData(const std::string& mp4_path, bool metadata_only) {
     GpmfResult result;
 
     size_t mp4 = OpenMP4Source((char*)mp4_path.c_str(), MOV_GPMF_TRAK_TYPE, MOV_GPMF_TRAK_SUBTYPE, 0);
@@ -128,6 +128,8 @@ GpmfResult ExtractGpmfData(const std::string& mp4_path) {
     GPMF_stream ms;
 
     for (uint32_t p = 0; p < payloads; p++) {
+        if (metadata_only && p >= 20) { break; }
+
         uint32_t payloadsize = GetPayloadSize(mp4, p);
         res = GetPayloadResource(mp4, res, payloadsize);
         uint32_t* payload = GetPayload(mp4, res, p);

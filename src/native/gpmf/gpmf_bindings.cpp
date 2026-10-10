@@ -7,11 +7,11 @@
 
 namespace py = pybind11;
 
-py::dict ExtractGpmfDict(const std::string& mp4_path) {
+py::dict ExtractGpmfDict(const std::string& mp4_path, bool metadata_only = false) {
     GpmfResult res;
     {
         py::gil_scoped_release release;
-        res = ExtractGpmfData(mp4_path);
+        res = ExtractGpmfData(mp4_path, metadata_only);
     }
     py::dict out;
     out["success"] = res.success;
@@ -159,6 +159,6 @@ PYBIND11_MODULE(telem_gpmf_native, m) {
         .def_readonly("success", &GpmfResult::success)
         .def_readonly("error_message", &GpmfResult::error_message);
 
-    m.def("extract_gpmf_data", &ExtractGpmfData, "Extract raw typed GPMF data structures from MP4", py::arg("mp4_path"));
-    m.def("extract_gpmf_dict", &ExtractGpmfDict, "Extract canonical TeleM telemetry dict from MP4", py::arg("mp4_path"));
+    m.def("extract_gpmf_data", &ExtractGpmfData, "Extract raw typed GPMF data structures from MP4", py::arg("mp4_path"), py::arg("metadata_only") = false);
+    m.def("extract_gpmf_dict", &ExtractGpmfDict, "Extract canonical TeleM telemetry dict from MP4", py::arg("mp4_path"), py::arg("metadata_only") = false);
 }

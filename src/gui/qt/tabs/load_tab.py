@@ -181,6 +181,8 @@ class VideoFileCardWidget(QFrame):
         self.lbl_color = _field_lbl("<b>Kolor:</b> —")
         self.lbl_audio = _field_lbl("<b>Audio:</b> —")
         self.lbl_gpmf = _field_lbl("<b>GPMF:</b> —")
+        self.lbl_record_date = _field_lbl("<b>Data nagrania:</b> Brak danych")
+        self.lbl_camera = _field_lbl("<b>Kamera:</b> Brak danych")
 
         # Row 0
         self.grid.addWidget(self.lbl_res, 0, 0)
@@ -193,6 +195,11 @@ class VideoFileCardWidget(QFrame):
         self.grid.addWidget(self.lbl_color, 1, 1)
         self.grid.addWidget(self.lbl_audio, 1, 2)
         self.grid.addWidget(self.lbl_gpmf, 1, 3)
+
+        # Row 2
+        self.grid.addWidget(self.lbl_record_date, 2, 0, 1, 2)
+        self.grid.addWidget(self.lbl_camera, 2, 2, 1, 2)
+
 
         vbox.addLayout(self.grid)
 
@@ -256,8 +263,25 @@ class VideoFileCardWidget(QFrame):
         else:
             self.lbl_audio.setText("<b>Audio:</b> <span style='color:#888;'>Brak</span>")
 
-        gpmf_txt = "<span style='color:#137333; font-weight:bold;'>TAK</span>" if info.get("gpmf") else "<span style='color:#666;'>NIE</span>"
-        self.lbl_gpmf.setText(f"<b>GPMF:</b> {gpmf_txt}")
+        if info.get("gpmf"):
+            self.lbl_gpmf.setText("<b>GPMF:</b> <span style='color:#137333; font-weight:bold;'>TAK</span>")
+            gpmf_meta = info.get("gpmf_meta", {})
+            date_str = gpmf_meta.get("date")
+            camera = gpmf_meta.get("camera")
+            
+            if date_str:
+                self.lbl_record_date.setText(f"<b>Data nagrania:</b> {date_str}")
+            else:
+                self.lbl_record_date.setText("<b>Data nagrania:</b> Brak danych")
+                
+            if camera:
+                self.lbl_camera.setText(f"<b>Kamera:</b> {camera}")
+            else:
+                self.lbl_camera.setText("<b>Kamera:</b> Brak danych")
+        else:
+            self.lbl_gpmf.setText("<b>GPMF:</b> <span style='color:#666;'>NIE</span>")
+            self.lbl_record_date.setText("<b>Data nagrania:</b> Brak danych")
+            self.lbl_camera.setText("<b>Kamera:</b> Brak danych")
 
         self.update_telemetry(paired_telemetry)
 

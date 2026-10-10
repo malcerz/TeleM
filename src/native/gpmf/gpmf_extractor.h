@@ -68,4 +68,4 @@ struct GpmfResult {
     std::string error_message;
 };
 
-GpmfResult ExtractGpmfData(const std::string& mp4_path);
+GpmfResult ExtractGpmfData(const std::string& mp4_path, bool metadata_only = false);

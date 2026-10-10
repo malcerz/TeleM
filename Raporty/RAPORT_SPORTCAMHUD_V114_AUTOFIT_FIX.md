@@ -40,3 +40,10 @@ W pliku load_tab.py usunięto usterkę blokującą zastosowanie nowej wartości 
 * Przeprowadzono nowe testy jednostkowe asercji menedżera 	est_telemetry_status_transitions.py, udowadniające logiczną poprawność okna wyszukiwania i odnajdowania telemetrii w chmurze przy fałszywym czasie wideo bez uszkodzenia interfejsu.
 * Dodatkowo symulowano błędy po utracie pakietów bez zamrożenia (Freeze) okna programu (zastosowano wątki poboczne). 
 * Zmiany zacommitowano na branchu ix/gui-freeze-hud-composite (Zoptymalizowany pod kątem braku ingerencji w mechanizmy ekstrakcji Audio / demuxingu AMD/Intel). Niewielka ilość testów w starszych gałęziach środowiska wykazuje ImportError starych metod, co jest podyktowane historycznymi migracjami niezwiązanymi z powyższą naprawą.
+
+## 8. Naprawa wyświetlania metadanych GPMF w UI (Kamera i Data nagrania)
+W odpowiedzi na brak widocznych metadanych kamery w siatce parametrów technicznych wczytanego pliku:
+1. **Edycja natywnego parsera C++ (.pyd):** Zmodyfikowano kod w pliku gpmf_extractor.cpp (pętla ładunków GPMF) oraz gpmf_bindings.cpp, dodając parametr metadata_only. Skompilowano pomyślnie natywny moduł C++ za pomocą MSVC, co rozwiązuje problem wydajności (natychmiastowe wyjście z pętli po pierwszych klatkach telemetrii zamiast skanowania całego pliku 8 GB).
+2. **Ulepszenie konwersji daty:** W pliku mp4_inspector.py używamy parametru metadata_only=True podczas wywoływania natywnej biblioteki. Wyodrębniony znacznik czasu (start_dt_utc) reprezentujący autentyczny czas z satelit (GPS Lock) jest następnie konwertowany z UTC do natywnej strefy czasowej systemu Windows i formatowany jako YYYY-MM-DD HH:MM:SS. 
+3. **Modyfikacja interfejsu (LoadTab):** Do widgetu VideoFileCardWidget dodano trzeci wiersz (Row 2) na siatce (QGridLayout). Zawiera on teraz lbl_record_date (Data nagrania) oraz lbl_camera (Kamera). Uzupełniono funkcję update_info, by bezpiecznie wiązała info["gpmf_meta"] z interfejsem graficznym.
+* Zmiany pomyślnie przeszły testy layoutu (brak zniszczenia stylów / zakładek) oraz zapobiegły długim blokadom aplikacji przy wczytywaniu dużych nagrań wideo.

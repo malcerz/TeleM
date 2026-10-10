@@ -180,7 +180,7 @@ def is_native_gpmf_available() -> bool:
     return _get_native_module() is not None
 
 
-def extract_gpmf_native(video_path: str | Path) -> dict[str, Any] | None:
+def extract_gpmf_native(video_path: str | Path, metadata_only: bool = False) -> dict[str, Any] | None:
     """Extract telemetry dictionary directly from MP4 using native C++ parser.
 
     Returns dict containing canonical telemetry streams, or None on failure.
@@ -191,7 +191,7 @@ def extract_gpmf_native(video_path: str | Path) -> dict[str, Any] | None:
 
     path_str = str(video_path)
     try:
-        res = mod.extract_gpmf_dict(path_str)
+        res = mod.extract_gpmf_dict(path_str, metadata_only)
         if res and res.get("success"):
             return res
         return None
