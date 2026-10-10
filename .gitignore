@@ -29,3 +29,5 @@ native/d3d11_amf_pipeline/build*/
 # Scratch dir
 scratch/*
 !scratch/.gitkeep
+
+/cache/
