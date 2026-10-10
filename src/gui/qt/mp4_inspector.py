@@ -69,6 +69,19 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
     # GPMF — istniejący, tani mechanizm wykrywania (ffprobe -show_streams)
     gpmf = find_gpmf_stream_index(path, ffprobe) is not None
 
+gpmf_meta = {}
+    if gpmf:
+        try:
+            from src.telemetry_native_gpmf import extract_gpmf_native
+            ndata = extract_gpmf_native(path)
+            if ndata:
+                gpmf_meta = {
+                    "camera": ndata.get("camera_model"),
+                    "date": ndata.get("start_dt_str")
+                }
+        except Exception:
+            pass
+
     return {
         "filename": path.name,
         "size_bytes": _to_int(fmt.get("size")),
@@ -79,6 +92,7 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
         "audio": _parse_audio(audio_stream),
         "color": _parse_color(video_stream),
         "gpmf": bool(gpmf),
+        "gpmf_meta": gpmf_meta,
     }
 
 
@@ -379,6 +393,16 @@ def format_file_info_text(info: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append(f"GPMF: {'TAK' if info.get('gpmf') else 'NIE'}")
+
+    if info.get('gpmf'):
+        meta = info.get('gpmf_meta') or {}
+        lines.extend([
+            "",
+            "Kamera (GPMF):",
+            f"Model: {meta.get('camera') or '-'}",
+            f"Data nagrania: {meta.get('date') or '-'}",
+        ])
+
     return "\n".join(lines)
 
 
