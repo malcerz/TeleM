@@ -370,6 +370,7 @@ class LoadTab(QWidget):
         self._autofit_in_progress: bool = False
         self._autofit_done_event = threading.Event()
         self._preflight_done_for_paths: list[str] = []
+        self._dynamic_integrations_config: dict[str, Any] = {}
 
         # Stan analizy QP
         self._qp_gen: int = 0
@@ -759,21 +760,30 @@ class LoadTab(QWidget):
     # ═════════════════════════════════════════════════════════════════════
 
     def _get_integrations_config(self) -> dict[str, Any]:
-        """Pobiera aktualną konfigurację integracji z def_layout.json."""
+        """Pobiera aktualną konfigurację integracji (dynamiczną + dyskową)."""
+        cfg = {}
         try:
             from src.runtime_paths import get_app_root
             p = get_app_root() / "def_layout.json"
             if p.exists():
-                return json.loads(p.read_text(encoding="utf-8")).get("integrations", {})
+                import json
+                cfg = json.loads(p.read_text(encoding="utf-8")).get("integrations", {})
         except Exception:
             pass
-        try:
-            def_file = Path("def_layout.json")
-            if def_file.exists():
-                return json.loads(def_file.read_text(encoding="utf-8")).get("integrations", {})
-        except Exception:
-            pass
-        return {}
+            
+        if not cfg:
+            try:
+                from pathlib import Path
+                import json
+                def_file = Path("def_layout.json")
+                if def_file.exists():
+                    cfg = json.loads(def_file.read_text(encoding="utf-8")).get("integrations", {})
+            except Exception:
+                pass
+                
+        # Nadpisz dynamicznymi zmianami z UI (np. zmienione źródło bez restartu)
+        cfg.update(self._dynamic_integrations_config)
+        return cfg
 
     def _try_auto_fit_search(self, paths: list[str], gen: int | None = None) -> None:
         """Kompatybilność z istniejącym API testów — uruchamia preflight telemetrii."""
@@ -1030,6 +1040,7 @@ class LoadTab(QWidget):
         self.signals.sig_error.connect(self._on_load_error)
 
     def _on_settings_changed(self, name: str, value: Any) -> None:
+        self._dynamic_integrations_config[name] = value
         if name == "auto_activity_source":
             if self._video_paths and not self._user_selected_telemetry:
                 self._autofit_gen += 1

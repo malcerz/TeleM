@@ -314,18 +314,47 @@ def run_auto_telemetry_preflight(
     if is_cancelled():
         return None
 
-    # 2. Local search in video folder
+    # 2. Local search in configured and video folders
     parent_dir = Path(video_paths[0]).parent
-    matched_local, diag = scan_and_match_local_telemetry(
-        video_paths=video_paths,
-        intervals=intervals,
-        directory=parent_dir,
-        on_status=lambda field_st, row_st: on_status(field_st, row_st, None),
-        video_gps_point=video_gps_point,
-    )
-
-    if is_cancelled():
-        return None
+    
+    search_dirs = [parent_dir]
+    
+    cfg_tel_dir = config.get("telemetry_dir")
+    if cfg_tel_dir:
+        p = Path(cfg_tel_dir)
+        if p.exists() and p.is_dir() and p not in search_dirs:
+            search_dirs.append(p)
+            
+    import psutil
+    for part in psutil.disk_partitions(all=False):
+        if 'cdrom' in part.opts or part.fstype == '':
+            continue
+        p1 = Path(part.mountpoint) / "Garmin" / "Activities"
+        if p1.exists() and p1.is_dir() and p1 not in search_dirs:
+            search_dirs.append(p1)
+        p2 = Path(part.mountpoint) / "Garmin" / "Activity"
+        if p2.exists() and p2.is_dir() and p2 not in search_dirs:
+            search_dirs.append(p2)
+            
+    matched_local = None
+    diag = {}
+    for search_dir in search_dirs:
+        if is_cancelled():
+            return None
+            
+        on_status(f"Wyszukiwanie lokalnych plików FIT/GPX...", f"Przeszukiwanie: {search_dir}...", None)
+        
+        m_loc, m_diag = scan_and_match_local_telemetry(
+            video_paths=video_paths,
+            intervals=intervals,
+            directory=search_dir,
+            on_status=lambda st, lg: on_status(st, lg, None),
+            video_gps_point=video_gps_point
+        )
+        if m_loc is not None:
+            matched_local = m_loc
+            diag = m_diag
+            break
 
     if matched_local is not None:
         on_status(f"Znaleziono dopasowaną aktywność: {matched_local.name}", f"Znaleziono dopasowaną aktywność: {matched_local.name}", str(matched_local))
@@ -388,6 +417,17 @@ def run_auto_telemetry_preflight(
             window_start = v_start - timedelta(hours=2)
             window_end = v_end + timedelta(hours=2)
             candidates = provider.list_activities(window_start, window_end)
+            
+            ignore_time_match = False
+            
+            if not candidates and video_gps_point is not None:
+                # Fallback: maybe GoPro clock is completely wrong. Let's search recent 45 days.
+                on_status("Wyszukiwanie aktywności w Garmin Connect...", "Garmin Connect: szukanie awaryjne (nieprawidłowy zegar kamery)...", None)
+                now = datetime.now(timezone.utc)
+                fallback_start = now - timedelta(days=45)
+                fallback_end = now + timedelta(days=1)
+                candidates = provider.list_activities(fallback_start, fallback_end)
+                ignore_time_match = True
 
             if is_cancelled():
                 return None
@@ -401,10 +441,15 @@ def run_auto_telemetry_preflight(
                 v_start,
                 v_end,
                 video_gps_point=video_gps_point,
+                ignore_time_match=ignore_time_match,
             )
 
-            if not ranked:
-                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
+            if not ranked or decision == "NO_MATCH":
+                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono aktywności, ale żadna nie pasuje do nagrania.", None)
+                return None
+                
+            if decision == "NEEDS_SELECTION":
+                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono kilka aktywności (dopasowanie niejednoznaczne). Wybierz ręcznie.", None)
                 return None
 
             best_cand, best_score = ranked[0]
@@ -431,7 +476,6 @@ def run_auto_telemetry_preflight(
                     "start_dt": best_cand.start_dt.isoformat(),
                 },
             )
-
             on_status(f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", str(downloaded_file))
             print(f"[AutoPreflight] Garmin FIT downloaded successfully: {downloaded_file.name}", flush=True)
             return downloaded_file
@@ -544,4 +588,8 @@ def run_auto_telemetry_preflight(
             print(f"[AutoPreflight] Strava fetch failed: {exc}", flush=True)
             return None
 
+    elif source == "none" or not source:
+        on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono lokalnych plików, a wyszukiwanie online jest wyłączone.", None)
+        return None
+        
     return None

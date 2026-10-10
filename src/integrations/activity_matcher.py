@@ -36,6 +36,7 @@ def score_candidate(
     project_start_utc: datetime,
     project_end_utc: datetime,
     video_gps_point: Optional[tuple[float, float]] = None,
+    ignore_time_match: bool = False,
 ) -> float:
     """Compute matching score [0.0 .. 1.0] for a candidate activity.
 
@@ -73,16 +74,23 @@ def score_candidate(
         and candidate.start_lon is not None
     )
 
+
     if has_gps:
         v_lat, v_lon = video_gps_point  # type: ignore[misc]
         dist_km = haversine_km(v_lat, v_lon, candidate.start_lat, candidate.start_lon)  # type: ignore[arg-type]
         gps_score = max(0.0, 1.0 - (dist_km / 10.0))  # 1.0 at 0km, 0.0 at >= 10km
-        total_score = (
-            0.45 * overlap_score
-            + 0.25 * start_score
-            + 0.15 * dur_score
-            + 0.15 * gps_score
-        )
+        
+        if ignore_time_match:
+            total_score = 0.60 * gps_score + 0.40 * dur_score
+        else:
+            total_score = (
+                0.45 * overlap_score
+                + 0.25 * start_score
+                + 0.15 * dur_score
+                + 0.15 * gps_score
+            )
+
+
     else:
         total_score = (
             0.55 * overlap_score
@@ -98,6 +106,7 @@ def rank_and_evaluate_candidates(
     project_start_utc: datetime,
     project_end_utc: datetime,
     video_gps_point: Optional[tuple[float, float]] = None,
+    ignore_time_match: bool = False,
 ) -> tuple[str, list[tuple[ActivityCandidate, float]]]:
     """Rank candidates and return (decision, ranked_pairs).
 
@@ -116,6 +125,7 @@ def rank_and_evaluate_candidates(
             project_start_utc,
             project_end_utc,
             video_gps_point=video_gps_point,
+            ignore_time_match=ignore_time_match,
         )
         scored.append((cand, sc))
 
