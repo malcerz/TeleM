@@ -586,353 +586,6 @@ class ProjectMixin:
                     ffmpeg_exe=ffmpeg_exe,
                     ffprobe_exe=ffprobe_exe,
                 )
-                if not effective_fit_path and not effective_gpx_path:
-                    try:
-                        from src.multifile import probe_clip_time_interval
-                        from telemetry_fit import find_best_fit_match
-                        candidate_intervals = []
-                        for candidate_path in candidate_video_paths:
-                            start_dt, end_dt, duration_s, confidence = probe_clip_time_interval(
-                                candidate_path,
-                                ffmpeg_exe=ffmpeg_exe,
-                                ffprobe_exe=ffprobe_exe,
-                            )
-                            if start_dt is not None and end_dt is not None:
-                                candidate_intervals.append(
-                                    (start_dt, end_dt, duration_s, confidence)
-                                )
-                        if candidate_intervals:
-                            matched_fit, _diag = find_best_fit_match(
-                                candidate_intervals, candidate_video_paths[0].parent,
-                            )
-                            if matched_fit is not None:
-                                effective_fit_path = str(matched_fit)
-                    except Exception as exc:
-                        print(f"[AutoFIT] Candidate preflight failed: {exc}", flush=True)
-
-                # Check if LoadTab has already completed auto telemetry preflight for this video selection
-                load_tab = getattr(getattr(self, "ui", None), "_load_tab", None)
-                preflight_already_done = False
-                if load_tab is not None:
-                    done_paths = [os.path.normcase(os.path.abspath(str(p))) for p in getattr(load_tab, "_preflight_done_for_paths", [])]
-                    cand_paths = [os.path.normcase(os.path.abspath(str(p))) for p in candidate_video_paths]
-                    if done_paths and done_paths == cand_paths:
-                        preflight_already_done = True
-
-                # Remote auto-import (Garmin Connect / Strava) if no manual FIT/GPX specified and not already searched
-                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path and not preflight_already_done:
-                    integrations_cfg = (self.layout or {}).get("integrations")
-                    if not integrations_cfg:
-                        try:
-                            def_layout_file = self.base_dir / "def_layout.json"
-                            if def_layout_file.exists():
-                                integrations_cfg = json.loads(def_layout_file.read_text(encoding="utf-8")).get("integrations", {})
-                        except Exception:
-                            integrations_cfg = {}
-                    if not integrations_cfg:
-                        integrations_cfg = {}
-
-                    auto_source = str(integrations_cfg.get("auto_activity_source", "none") or "none").lower()
-                    if auto_source and auto_source != "none" and candidate_video_range[0] is not None:
-                        v_start, v_end = candidate_video_range
-                        v_dur = max(1.0, (v_end - v_start).total_seconds())
-                        try:
-                            from src.integrations.coordinator import resolve_remote_activity
-                            from src.gui.qt.signals import RemoteActivitySelectionRequest
-
-                            def on_progress_cb(msg: str) -> None:
-                                self.signals.sig_progress.emit(25, msg)
-
-                            def on_select_cb(ranked_candidates):
-                                req = RemoteActivitySelectionRequest(ranked_candidates)
-                                self.signals.sig_remote_activity_selection_request.emit(req)
-                                if req.completed.wait(timeout=45.0):
-                                    return req.selected_candidate
-                                return None
-
-                            remote_file = resolve_remote_activity(
-                                candidate_video_paths,
-                                project_start_dt=v_start,
-                                project_end_dt=v_end,
-                                project_duration_s=v_dur,
-                                config=integrations_cfg,
-                                on_progress=on_progress_cb,
-                                on_select_activity=on_select_cb,
-                                on_status=on_remote_status,
-                            )
-                            if remote_file and remote_file.exists():
-                                if remote_file.suffix.lower() == ".fit":
-                                    effective_fit_path = str(remote_file)
-                                    print(f"[RemoteTelemetry] Zaimportowano aktywność Garmin: {remote_file.name}", flush=True)
-                                elif remote_file.suffix.lower() == ".gpx":
-                                    effective_gpx_path = str(remote_file)
-                                    print(f"[RemoteTelemetry] Zaimportowano aktywność Strava: {remote_file.name}", flush=True)
-                        except Exception as exc:
-                            print(f"[RemoteTelemetry] Preflight auto-download failed: {exc}", flush=True)
-
-                validated_fit_records = None
-                validated_gpx_points = None
-                if effective_fit_path:
-                    fit_ok, validated_fit_records = self._validate_external_telemetry_candidate(
-                        "FIT", effective_fit_path, video_time_range=candidate_video_range,
-                    )
-                    if not fit_ok:
-                        self._preview_telemetry_loading = False
-                        self.signals.sig_progress.emit(100, "Gotowe")
-                        return
-                if effective_gpx_path:
-                    gpx_ok, validated_gpx_points = self._validate_external_telemetry_candidate(
-                        "GPX", effective_gpx_path, video_time_range=candidate_video_range,
-                    )
-                    if not gpx_ok:
-                        self._preview_telemetry_loading = False
-                        self.signals.sig_progress.emit(100, "Gotowe")
-                        return
-
-                # Atomic project-state commit starts only after candidate
-                # telemetry has passed validation or the user explicitly
-                # selected the override action.
-                self.video_paths = candidate_video_paths
-                self.video_path = candidate_video_path
-                self.ffprobe_exe = ffprobe_exe
-                self.ffmpeg_exe = ffmpeg_exe
-                self._clear_caches()
-                try:
-                    from src.indicators.moving_map import clear_moving_map_cache
-                    clear_moving_map_cache()
-                except Exception:
-                    pass
-
-                # Ustaw źródło QMediaPlayer (GPU-accelerated preview)
-                if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
-                    self.media_player.setSource(
-                        QUrl.fromLocalFile(str(candidate_video_path))
-                    )
-
-                if self.is_using_mpv():
-                    self.mpv_player.play(str(candidate_video_path))
-                    self.mpv_player.pause = True
-
-                # Analiza wideo
-                self.signals.sig_progress.emit(15, "Analiza strumienia...")
-                candidate_state = self._probe_candidate_video_state(
-                    candidate_video_path, ffprobe_exe,
-                    default_fps=self.fps if hasattr(self, "fps") else 30.0,
-                )
-                w = candidate_state["width"]
-                h = candidate_state["height"]
-                self.video_width = w
-                self.video_height = h
-                self.video_info = dict(candidate_state["video_info"])
-                self.video_rotation_degrees = candidate_state["rotation"]
-                self.fps = float(candidate_state["fps"])
-                self.video_info["fps"] = self.fps
-                total_dur = sum(
-                    float(
-                        ffprobe_stream_info(ffprobe_exe, p)
-                        .get("format", {})
-                        .get("duration", 0)
-                        or 0
-                    )
-                    for p in self.video_paths
-                )
-                self.video_duration_s = total_dur
-
-                self.signals.sig_video_info_ready.emit(
-                    f"{w}x{h} @ {self.fps:.1f} fps, {total_dur:.1f}s"
-                )
-                # FIX A: do NOT emit sig_video_duration_ready here.
-                # format.duration and player.duration() are source-local/provisional
-                # values.  The canonical project_duration comes from VideoTimeline
-                # (video-stream frame-count based).  Emission is deferred to after
-                # build_timeline_from_paths below; total_dur is only a fallback used
-                # if timeline build fails.
-
-                # Layout — priorytet:
-                # 1. Istniejący layout roboczy powiązany z filmem (video.layout.json)
-                # 2. Startowy preset użytkownika jeśli skonfigurowany
-                # 3. Szablon bazowy def_layout.json
-                proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
-                if proj_layout.exists():
-                    try:
-                        self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
-                        normalize_indicator_decimal_defaults(self.layout)
-                        print(f"[ProjectLayout] Wczytano istniejący layout filmu z {proj_layout}", flush=True)
-                    except Exception as e:
-                        print(f"[ProjectLayout] Błąd odczytu {proj_layout}: {e}", flush=True)
-                        proj_layout = None
-                if not proj_layout or not proj_layout.exists():
-                    preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
-                    if preset_path and Path(preset_path).exists():
-                        self.layout = json.loads(
-                            Path(preset_path).read_text(encoding="utf-8")
-                        )
-                        normalize_indicator_decimal_defaults(self.layout)
-                    else:
-                        def_layout = self.base_dir / "def_layout.json"
-                        self.layout = normalize_layout(def_layout, w, h)
-                render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
-                if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
-                    render_tab.apply_export_settings(self.layout.get("export_settings", {}))
-                self._selected_stream_key = ""
-                self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
-
-                # ── Map preload (ETAP MAP PRELOAD) — parallel with GPMF ──
-                # Parse FIT/GPX GPS EARLY (fast) so the coarse overview map can
-                # start downloading tiles while GPMF/JSON is still parsing.
-                # The parsed records are REUSED later (no double parsing).
-                self._map_preload_fit_records = validated_fit_records
-                self._map_preload_gpx_points = validated_gpx_points
-                map_gps = None
-                map_source = None
-                if not effective_fit_path and not effective_gpx_path and self.video_paths:
-                    try:
-                        from src.multifile import probe_clip_time_interval
-                        from telemetry_fit import find_best_fit_match
-                        intervals = []
-                        for vp in self.video_paths:
-                            start_dt, end_dt, dur_s, conf = probe_clip_time_interval(vp)
-                            if start_dt is not None and end_dt is not None:
-                                intervals.append((start_dt, end_dt, dur_s, conf))
-                        if intervals:
-                            matched_fit, diag = find_best_fit_match(intervals, Path(self.video_paths[0]).parent)
-                            if matched_fit is not None:
-                                effective_fit_path = str(matched_fit)
-                    except Exception as e:
-                        print(f"[AutoFIT] Error in project auto-fit: {e}", flush=True)
-                configured_gps_src = (self.layout or {}).get("indicators", {}).get("track_map", {}).get("gps_source", "auto")
-                if (
-                    self._map_preload_fit_records is None
-                    and configured_gps_src != "gpmf"
-                    and effective_fit_path
-                    and _FIT_AVAILABLE
-                    and _parse_fit is not None
-                ):
-                    try:
-                        records = _parse_fit(effective_fit_path)
-                        if records:
-                            self._map_preload_fit_records = records
-                            map_gps = [
-                                (r["timestamp"], r["lat"], r["lon"])
-                                for r in records
-                                if r.get("lat") is not None and r.get("lon") is not None
-                            ]
-                            map_source = "fit"
-                            print(
-                                f"[MapPreload] start source=FIT points={len(map_gps)}",
-                                flush=True,
-                            )
-                    except Exception as exc:
-                        print(f"[MapPreload] FIT preparse failed: {exc}", flush=True)
-                if (
-                    self._map_preload_gpx_points is None
-                    and map_gps is None
-                    and effective_gpx_path
-                    and _GPX_AVAILABLE
-                    and _parse_gpx is not None
-                ):
-                    try:
-                        points = _parse_gpx(effective_gpx_path)
-                        if points:
-                            self._map_preload_gpx_points = points
-                            map_gps = [
-                                (p[0], p[1], p[2])
-                                for p in points
-                                if p[1] is not None and p[2] is not None
-                            ]
-                            map_source = "gpx"
-                            print(
-                                f"[MapPreload] start source=GPX points={len(map_gps)}",
-                                flush=True,
-                            )
-                    except Exception as exc:
-                        print(f"[MapPreload] GPX preparse failed: {exc}", flush=True)
-                # The saved/default layout is authoritative for the map
-                # provider.  Starting preload with the hard-coded Standard
-                # provider makes a saved Satellite map fail the async
-                # renderer's provider gate and remain on the placeholder.
-                map_provider = _map_provider_from_layout(self.layout)
-                if map_gps is not None and not (effective_fit_path or effective_gpx_path):
-                    self._start_map_preload(
-                        map_gps, map_source, provider=map_provider,
-                    )
-
-                # Wczytaj/wygeneruj metadane (GPMF — heavy, runs in parallel
-                # with the map preload thread started above)
-                self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
-                self._load_or_generate_telemetry()
-
-                # Candidate validation/decision was completed before commit;
-                # only reuse the accepted temporary data here.
-                map_gps = None
-                map_source = None
-                if effective_fit_path and validated_fit_records:
-                    map_gps = [
-                        (r["timestamp"], r["lat"], r["lon"])
-                        for r in validated_fit_records
-                        if r.get("lat") is not None and r.get("lon") is not None
-                    ]
-                    map_source = "fit"
-                elif effective_gpx_path and validated_gpx_points:
-                    map_gps = [
-                        (p[0], p[1], p[2])
-                        for p in validated_gpx_points
-                        if p[1] is not None and p[2] is not None
-                    ]
-                    map_source = "gpx"
-                if map_gps is not None:
-                    self._start_map_preload(
-                        map_gps, map_source, provider=map_provider,
-                    )
-
-                # If no FIT/GPX GPS was available, start the map preload from
-                # the GPMF GPS track once it exists (fallback contract).
-                if map_gps is None and getattr(self.telemetry, "gps_track", None):
-                    print(
-                        f"[MapPreload] start source=GPMF points={len(self.telemetry.gps_track)}",
-                        flush=True,
-                    )
-                # Fallback: remote auto-import if start_dt_utc was established late
-                if not effective_fit_path and not effective_gpx_path and not fit_path and not gpx_path:
-                    integrations_cfg = (self.layout or {}).get("integrations", {})
-                    auto_source = str(integrations_cfg.get("auto_activity_source", "none") or "none").lower()
-                    if auto_source and auto_source != "none" and getattr(self.telemetry, "start_dt_utc", None) is not None:
-                        v_start = self.telemetry.start_dt_utc
-                        v_dur = max(1.0, float(self.video_duration_s or 1.0))
-                        v_end = v_start + timedelta(seconds=v_dur)
-                        try:
-                            from src.integrations.coordinator import resolve_remote_activity
-                            from src.gui.qt.signals import RemoteActivitySelectionRequest
-
-                            def on_progress_cb(msg: str) -> None:
-                                self.signals.sig_progress.emit(35, msg)
-
-                            def on_select_cb(ranked_candidates):
-                                req = RemoteActivitySelectionRequest(ranked_candidates)
-                                self.signals.sig_remote_activity_selection_request.emit(req)
-                                if req.completed.wait(timeout=45.0):
-                                    return req.selected_candidate
-                                return None
-
-                            remote_file = resolve_remote_activity(
-                                self.video_paths,
-                                project_start_dt=v_start,
-                                project_end_dt=v_end,
-                                project_duration_s=v_dur,
-                                config=integrations_cfg,
-                                video_gps_point=(self.telemetry.gps_track[0][1], self.telemetry.gps_track[0][2]) if getattr(self.telemetry, "gps_track", None) else None,
-                                on_progress=on_progress_cb,
-                                on_select_activity=on_select_cb,
-                                on_status=on_remote_status,
-                            )
-                            if remote_file and remote_file.exists():
-                                if remote_file.suffix.lower() == ".fit":
-                                    effective_fit_path = str(remote_file)
-                                elif remote_file.suffix.lower() == ".gpx":
-                                    effective_gpx_path = str(remote_file)
-                        except Exception as exc:
-                            print(f"[RemoteTelemetry] Secondary auto-download failed: {exc}", flush=True)
-
                 # Wczytaj GPX (jeśli podano) — reuse the preparsed points
                 if effective_gpx_path and _GPX_AVAILABLE:
                     gpx_loaded = self.telemetry.load_gpx(
@@ -1817,3 +1470,35 @@ class ProjectMixin:
                 self.signals.sig_error.emit(f"Błąd generowania metadanych: {e}")
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def late_attach_telemetry(self, telem_path: str) -> None:
+        """Late attach telemetry."""
+        if not getattr(self, "video_path", None):
+            return
+        
+        from pathlib import Path
+        ext = telem_path.lower()
+        if ext.endswith(".fit") and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
+            fit_loaded = self.telemetry.load_fit(
+                self.video_path, getattr(self.telemetry, "start_dt_utc", None),
+                manual_path=Path(telem_path)
+            )
+            if fit_loaded:
+                self.fit_path = Path(telem_path)
+                if self.telemetry.gps_track:
+                    self._ensure_map_context()
+                    self.signals.sig_map_prefetch_trigger.emit("late_attach")
+                self.signals.sig_telemetry_ready.emit()
+                self._update_all_indicator_availabilities()
+        elif ext.endswith(".gpx") and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
+            gpx_loaded = self.telemetry.load_gpx(
+                self.video_path, getattr(self.telemetry, "start_dt_utc", None),
+                manual_path=Path(telem_path)
+            )
+            if gpx_loaded:
+                self.gpx_path = Path(telem_path)
+                if self.telemetry.gps_track:
+                    self._ensure_map_context()
+                    self.signals.sig_map_prefetch_trigger.emit("late_attach")
+                self.signals.sig_telemetry_ready.emit()
+                self._update_all_indicator_availabilities()

@@ -71,6 +71,7 @@ def scan_and_match_local_telemetry(
     directory: Path | str,
     on_status: Optional[Callable[[str, str], None]] = None,
     max_tolerance_s: float = 1800.0,
+    video_gps_point: Optional[tuple[float, float]] = None,
 ) -> tuple[Optional[Path], dict[str, Any]]:
     """Scan local directory for matching .fit and .gpx files based on time overlap and basename priority.
 
@@ -171,6 +172,7 @@ def scan_and_match_local_telemetry(
         # 2. If exact name match, allow tolerance within same day / reasonable window (<= 86400s or overlap).
         # 3. For general candidates, allow start_diff within max_tolerance_s or overlapping range.
         is_acceptable = False
+        dist_m = None
         if total_overlap > 0.0:
             is_acceptable = True
         elif has_exact_name and start_diff <= 86400.0:
@@ -182,6 +184,21 @@ def scan_and_match_local_telemetry(
                 is_acceptable = True
             elif video_earliest > telem_end and (video_earliest - telem_end).total_seconds() <= max_tolerance_s:
                 is_acceptable = True
+
+        # Fallback to GPS distance if time is completely off (e.g., GoPro clock reset)
+        if not is_acceptable and video_gps_point is not None:
+            try:
+                from telemetry_fit import parse_fit, _haversine
+                if ext == ".fit":
+                    fit_rec = parse_fit(p)
+                    if fit_rec and fit_rec.gps_track:
+                        first_pt = fit_rec.gps_track[0]
+                        dist_m = _haversine(video_gps_point[0], video_gps_point[1], first_pt[1], first_pt[2])
+                        if dist_m < 3000.0:  # 3km match
+                            is_acceptable = True
+                            print(f"[AutoPreflight] Accepted {p.name} based on GPS distance: {dist_m:.1f}m", flush=True)
+            except Exception as exc:
+                print(f"[AutoPreflight] GPS check failed for {p.name}: {exc}", flush=True)
 
         if not is_acceptable:
             continue
@@ -195,6 +212,10 @@ def scan_and_match_local_telemetry(
             score += 500.0
         if total_overlap > 0.0:
             score += 100.0 + (coverage * 100.0)
+        
+        if dist_m is not None:
+            score += 1000.0 - (dist_m / 10.0)
+            
         # Penalize start difference (1 point per 60 seconds diff)
         score -= (start_diff / 60.0)
 
@@ -269,6 +290,21 @@ def run_auto_telemetry_preflight(
     if is_cancelled():
         return None
 
+    # Try to extract video GPS point for matching if not provided
+    if video_gps_point is None:
+        try:
+            from src.telemetry_native_gpmf import extract_gpmf_native
+            ndata = extract_gpmf_native(video_paths[0])
+            if ndata and ndata.get("gps_track"):
+                pt = ndata["gps_track"][0]
+                video_gps_point = (pt[1], pt[2])
+                print(f"[AutoPreflight] Extracted video GPS point: {video_gps_point}", flush=True)
+        except Exception as e:
+            print(f"[AutoPreflight] Could not extract video GPS: {e}", flush=True)
+
+    if is_cancelled():
+        return None
+
     # 2. Local search in video folder
     parent_dir = Path(video_paths[0]).parent
     matched_local, diag = scan_and_match_local_telemetry(
@@ -276,6 +312,7 @@ def run_auto_telemetry_preflight(
         intervals=intervals,
         directory=parent_dir,
         on_status=lambda field_st, row_st: on_status(field_st, row_st, None),
+        video_gps_point=video_gps_point,
     )
 
     if is_cancelled():

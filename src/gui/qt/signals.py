@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Signal
 
 
 class AppSignals(QObject):
+    sig_late_telemetry_matched = Signal(str)
     """Wszystkie sygnały aplikacji w jednym miejscu."""
 
     # ── GUI → Kontroler ──────────────────────────────────────────────────

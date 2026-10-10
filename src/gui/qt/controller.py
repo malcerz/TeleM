@@ -326,6 +326,7 @@ class AppController(
     def _connect_signals(self) -> None:
         s = self.signals
         s.sig_files_selected.connect(self._on_files_selected)
+        s.sig_late_telemetry_matched.connect(self.late_attach_telemetry)
         s.sig_stream_clicked.connect(self._on_stream_clicked)
         s.sig_indicator_clicked.connect(self._on_stream_clicked)
         s.sig_indicator_moved.connect(self._on_indicator_moved)
