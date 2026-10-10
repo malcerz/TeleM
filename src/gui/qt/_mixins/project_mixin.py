@@ -439,7 +439,9 @@ class ProjectMixin:
 
     def _request_telemetry_validation(self, result: TelemetryFileValidationResult) -> bool:
         """Synchronously ask the GUI thread for a mismatch/unknown decision."""
+        self._last_external_telemetry_validation_result = result
         if result.state is ValidationState.VALID:
+            self._last_telemetry_user_override = False
             log_validation(result, user_override=False)
             return True
         request = TelemetryValidationRequest(result)
@@ -451,6 +453,7 @@ class ProjectMixin:
         except Exception as exc:
             print(f"[TELEMETRY VALIDATION] GUI request failed: {exc}", flush=True)
             return False
+        self._last_telemetry_user_override = bool(request.user_override)
         log_validation(result, user_override=request.user_override)
         return bool(request.accepted)
 
@@ -519,6 +522,7 @@ class ProjectMixin:
             point_count=point_count,
             parse_error=parse_error,
         )
+        self._last_external_telemetry_validation_result = result
         accepted = self._request_telemetry_validation(result)
         return accepted, parsed
 

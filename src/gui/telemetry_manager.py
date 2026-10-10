@@ -76,6 +76,9 @@ except ImportError:
         return {}
 
 
+# Last measured spatial SmartSync result, consumed by the strict CLI integrity harness.
+LAST_SMARTSYNC_DIAGNOSTICS: dict[str, Any] = {"status": "NOT_RUN"}
+
 # ---- Type aliases ----
 Sample = tuple[datetime, float]
 SampleList = list[Sample]
@@ -245,6 +248,18 @@ def _align_offset_by_track(
     else:
         best_s, metrics = 0.0, baseline_metrics
     if metrics["median"] > 100.0 or metrics["p90"] > 250.0:
+        LAST_SMARTSYNC_DIAGNOSTICS.clear()
+        LAST_SMARTSYNC_DIAGNOSTICS.update({
+            "status": "INVALID",
+            "matched_points": int(metrics["matched"]),
+            "total_points": len(reference_gpmf),
+            "median_error_m": metrics["median"],
+            "p90_error_m": metrics["p90"],
+            "coverage": metrics["coverage"],
+            "offset_s": best_s,
+            "method": "absolute_time_trajectory_refine",
+            "reason": "trajectory_alignment_threshold",
+        })
         print(
             "[SmartSync] absolute_overlap=yes "
             "WARNING: trajectory alignment rejected: "
@@ -257,6 +272,18 @@ def _align_offset_by_track(
         return None
 
     offset = timedelta(seconds=best_s)
+    LAST_SMARTSYNC_DIAGNOSTICS.clear()
+    LAST_SMARTSYNC_DIAGNOSTICS.update({
+        "status": "VALID",
+        "gps_overlap": True,
+        "matched_points": int(metrics["matched"]),
+        "total_points": len(reference_gpmf),
+        "median_error_m": metrics["median"],
+        "p90_error_m": metrics["p90"],
+        "coverage": metrics["coverage"],
+        "offset_s": offset.total_seconds(),
+        "method": "absolute_time_trajectory_refine",
+    })
     confidence = "high" if metrics["coverage"] >= 0.5 and metrics["p90"] <= 100.0 else "medium"
     print(
         "[SmartSync] absolute_overlap=yes "
@@ -285,7 +312,10 @@ def _compute_smart_time_offset(
     2. Timezone difference (e.g. FIT in local time UTC+2, video in naive/UTC) -> integer hour offset.
     3. Unsynced/independent clocks -> offset fit_start to video_start_dt.
     """
+    LAST_SMARTSYNC_DIAGNOSTICS.clear()
+    LAST_SMARTSYNC_DIAGNOSTICS.update({"status": "NO_SPATIAL_MATCH"})
     if video_start_dt is None:
+        LAST_SMARTSYNC_DIAGNOSTICS.update({"status": "NO_VIDEO_START"})
         return timedelta(0)
 
     # 0. GPS-track-based alignment — ground truth when both tracks are available
@@ -794,10 +824,7 @@ class TelemetryDataManager:
         # MapPreload parse when available (no double parsing).
         points = preparsed if preparsed is not None else parse_gpx(gpx_path)
         if not points:
-            self.gpx_path = None
             return False
-            
-        self.gpx_path = Path(gpx_path)
 
         # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
         # Prefer GPS-track cross-correlation when both tracks are available.
@@ -847,6 +874,9 @@ class TelemetryDataManager:
             gpx_track_samples, gpx_alt_samples
         )
 
+        # Commit the new source only after parsing, synchronization, and sample
+        # preparation have all succeeded; failed candidate loads preserve state.
+        self.gpx_path = Path(gpx_path)
         self.gpx_gps_track = gpx_gps_track
         self.gpx_speed_samples = gpx_speed_samples
         self.gpx_track_samples = gpx_track_samples

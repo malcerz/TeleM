@@ -650,6 +650,7 @@ def main() -> None:
         }
 
         completed_jobs = []
+        live_qp_samples = []
 
         def _on_render_finished_bench(stats, final_path):
             t_finish[0] = time.perf_counter()
@@ -682,6 +683,7 @@ def main() -> None:
             bench_result["job_results"] = completed_jobs
             if isinstance(stats, dict):
                 bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
+            bench_result["live_qp_samples"] = live_qp_samples
 
             print(f"\n[BENCH RESULT] mode={test_args.mode} success=True frames={frames_done} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
             for i, j_res in enumerate(completed_jobs, 1):
@@ -706,13 +708,31 @@ def main() -> None:
         get_signals().sig_error.connect(_on_render_error_bench)
 
         def _auto_accept_validation(request):
-            print(f"[TEST OVERRIDE] SYNC_VALIDATION=OVERRIDDEN", flush=True)
-            request.accepted = True
-            request.user_override = True
+            state = getattr(getattr(request, "result", None), "state", None)
+            state_value = getattr(state, "value", str(state))
+            request.accepted = state_value == "VALID"
+            request.user_override = False
             request.completed.set()
+            print(f"[BENCH] SYNC_VALIDATION={state_value} USER_OVERRIDE=NO", flush=True)
+            if state_value != "VALID":
+                _on_render_error_bench(f"FIT validation rejected: {state_value}")
+
+        try:
+            get_signals().sig_telemetry_validation_request.disconnect(window._on_telemetry_validation_request)
+        except Exception:
+            pass
+        try:
+            get_signals().sig_error.disconnect(window._on_error)
+        except Exception:
+            pass
         get_signals().sig_telemetry_validation_request.connect(_auto_accept_validation)
 
         def _progress_bench(done, total, elapsed, fps, hud_state):
+            if isinstance(hud_state, dict):
+                qp_value = next((hud_state.get(key) for key in ("avg_qp", "qp_avg", "mean_qp", "current_qp") if hud_state.get(key) is not None), None)
+                compression_text = hud_state.get("compression_text")
+                if qp_value is not None or compression_text:
+                    live_qp_samples.append({"frame": done, "qp": qp_value, "text": compression_text})
             if done in (100, 300, 500, 1000, 2000, 3000) or done == 0 or done % 500 == 0 or (total and done >= total):
                 print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)
 
@@ -938,53 +958,116 @@ def main() -> None:
     elif "--test-sync-integrity" in sys.argv:
         import argparse
         import json
-        import time
+        from dataclasses import asdict, is_dataclass
+        from datetime import datetime
+        from enum import Enum
+
         parser = argparse.ArgumentParser()
         parser.add_argument("--test-sync-integrity", action="store_true")
         parser.add_argument("--video", required=True)
         parser.add_argument("--fit", required=True)
         parser.add_argument("--result-json", required=False)
         test_args, _ = parser.parse_known_args(sys.argv[1:])
-
         video_path = Path(test_args.video).resolve()
         fit_path = Path(test_args.fit).resolve()
+        result_path = Path(test_args.result_json).resolve() if test_args.result_json else None
+        print(
+            f"[TEST SYNC INTEGRITY] Starting real validation\n  VIDEO: {video_path}\n  FIT: {fit_path}",
+            flush=True,
+        )
 
-        print(f"[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...\n  VIDEO: {video_path}\n  FIT: {fit_path}", flush=True)
+        def _json_value(value):
+            if isinstance(value, Enum):
+                return value.value
+            if isinstance(value, (Path, datetime)):
+                return str(value)
+            if is_dataclass(value):
+                return asdict(value)
+            raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
+        def _finish_sync_test(status, validation=None, error=None, exit_code=1):
+            import src.gui.telemetry_manager as telemetry_manager
+            result = {
+                "status": status,
+                "video": str(video_path),
+                "fit": str(fit_path),
+                "validation": validation,
+                "smart_sync": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),
+                "user_override": bool(getattr(window, "_last_telemetry_user_override", False)),
+                "error": str(error) if error is not None else None,
+            }
+            if result_path is not None:
+                result_path.parent.mkdir(parents=True, exist_ok=True)
+                result_path.write_text(json.dumps(result, indent=2, default=_json_value), encoding="utf-8")
+            print(f"[TEST SYNC INTEGRITY] RESULT={status}", flush=True)
+            if error is not None:
+                print(f"[TEST SYNC INTEGRITY] ERROR={error}", flush=True)
+            app.exit(exit_code)
 
         if not video_path.is_file():
-            print("[TEST SYNC INTEGRITY] FAIL: Brak pliku wideo", flush=True)
-            sys.exit(1)
-        if not fit_path.is_file():
-            print("[TEST SYNC INTEGRITY] FAIL: Brak pliku FIT", flush=True)
-            sys.exit(1)
-
-        get_signals().sig_error.connect(lambda msg: (print(f"[TEST SYNC INTEGRITY] ERROR: {msg}", flush=True), sys.exit(1)))
-        
-        def _on_sync_validation_request(request):
-            import src.telemetry_file_validation as val
-            state = getattr(request.result, "state", None) or getattr(request.result, "validation_state", None)
-            if state != val.ValidationState.VALID:
-                print(f"[TEST SYNC INTEGRITY] FAIL: Odrzucono kandydata ze statusem {state}", flush=True)
+            QTimer.singleShot(0, lambda: _finish_sync_test("MISSING_FILE", error=f"Missing video: {video_path}"))
+        elif not fit_path.is_file():
+            QTimer.singleShot(0, lambda: _finish_sync_test("MISSING_FILE", error=f"Missing FIT: {fit_path}"))
+        else:
+            def _on_sync_validation_request(request):
+                result = request.result
+                state = getattr(result, "state", None)
+                state_value = getattr(state, "value", str(state))
+                if state_value == "VALID":
+                    # Valid candidates are normally accepted synchronously without a prompt.
+                    request.accepted = True
+                    request.user_override = False
+                    request.completed.set()
+                    return
                 request.accepted = False
                 request.user_override = False
                 request.completed.set()
-                app.exit(1)
-            else:
-                print(f"[TEST SYNC INTEGRITY] PASS: Zaakceptowano kandydata", flush=True)
-                request.accepted = True
-                request.user_override = False
-                request.completed.set()
-                app.exit(0)
-                
-        get_signals().sig_telemetry_validation_request.connect(_on_sync_validation_request)
-        get_signals().sig_data_streams_ready.connect(lambda _: (print("[TEST SYNC INTEGRITY] SUCCESS_IMPLICIT", flush=True), app.exit(0)))
-        
-        # Timeout safety check
-        QTimer.singleShot(10000, lambda: (print("[TEST SYNC INTEGRITY] BLOCKED: Timeout", flush=True), app.exit(1)))
-        
-        QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
-            [str(video_path)], "", str(fit_path)
-        ))
+                _finish_sync_test(
+                    "INVALID", validation=result, error=getattr(result, "reason_code", "INVALID"),
+                )
+
+            def _on_sync_ready(*_args):
+                result = getattr(window, "_last_external_telemetry_validation_result", None)
+                telemetry = getattr(_controller, "telemetry", None)
+                loaded_path = getattr(telemetry, "fit_path", None)
+                fit_data = getattr(telemetry, "fit_data", None)
+                import src.gui.telemetry_manager as telemetry_manager
+                smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)
+                if result is None or getattr(getattr(result, "state", None), "value", None) != "VALID":
+                    _finish_sync_test("INVALID", validation=result, error="No explicit VALID file validation")
+                    return
+                if not loaded_path or Path(loaded_path).resolve() != fit_path or not fit_data:
+                    _finish_sync_test("INVALID", validation=result, error="FIT did not load from the requested source")
+                    return
+                if smart_sync.get("status") != "VALID" or not smart_sync.get("matched_points"):
+                    _finish_sync_test("INVALID", validation=result, error="No accepted spatial SmartSync result")
+                    return
+                if getattr(window, "_last_telemetry_user_override", False):
+                    _finish_sync_test("INVALID", validation=result, error="Unexpected user override")
+                    return
+                _finish_sync_test("VALID", validation=result, exit_code=0)
+
+            def _on_sync_error(message):
+                _finish_sync_test("INTERNAL_ERROR", error=message)
+
+            try:
+                get_signals().sig_telemetry_validation_request.disconnect(window._on_telemetry_validation_request)
+            except Exception:
+                pass
+            try:
+                get_signals().sig_error.disconnect(window._on_error)
+            except Exception:
+                pass
+            get_signals().sig_telemetry_validation_request.connect(_on_sync_validation_request)
+            get_signals().sig_data_streams_ready.connect(_on_sync_ready)
+            get_signals().sig_error.connect(_on_sync_error)
+            QTimer.singleShot(
+                120000,
+                lambda: _finish_sync_test("TIMEOUT", error="Validation timed out"),
+            )
+            QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
+                [str(video_path)], "", str(fit_path)
+            ))
 
     rc = app.exec()
     print(f"[PROC] QApplication returned rc={rc}", flush=True)
