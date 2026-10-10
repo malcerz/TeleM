@@ -173,6 +173,8 @@ def scan_and_match_local_telemetry(
         # 3. For general candidates, allow start_diff within max_tolerance_s or overlapping range.
         is_acceptable = False
         dist_m = None
+        gps_duration_ratio = 0.0
+
         if total_overlap > 0.0:
             is_acceptable = True
         elif has_exact_name and start_diff <= 86400.0:
@@ -194,9 +196,17 @@ def scan_and_match_local_telemetry(
                     if fit_rec and fit_rec.gps_track:
                         first_pt = fit_rec.gps_track[0]
                         dist_m = _haversine(video_gps_point[0], video_gps_point[1], first_pt[1], first_pt[2])
-                        if dist_m < 3000.0:  # 3km match
-                            is_acceptable = True
-                            print(f"[AutoPreflight] Accepted {p.name} based on GPS distance: {dist_m:.1f}m", flush=True)
+                        fit_dur = (fit_rec.gps_track[-1][0] - fit_rec.gps_track[0][0]).total_seconds()
+                        
+                        if total_video_duration > 0 and fit_dur > 0:
+                            gps_duration_ratio = min(total_video_duration, fit_dur) / max(total_video_duration, fit_dur)
+                        
+                        # Fix Priority 3: Do not accept ONLY based on dist < 3000.
+                        # Require duration ratio >= 0.7 or length >= video
+                        if dist_m < 3000.0:
+                            if fit_dur >= total_video_duration * 0.7:
+                                is_acceptable = True
+                                print(f"[AutoPreflight] Accepted {p.name} on GPS distance: {dist_m:.1f}m, dur_ratio: {gps_duration_ratio:.2f}", flush=True)
             except Exception as exc:
                 print(f"[AutoPreflight] GPS check failed for {p.name}: {exc}", flush=True)
 
@@ -205,19 +215,17 @@ def scan_and_match_local_telemetry(
 
         coverage = total_overlap / total_video_duration if total_video_duration > 0 else 0.0
 
-        # Score computation:
-        # High priority to exact basename match, then overlap, then start_diff
         score = 0.0
         if has_exact_name:
-            score += 500.0
+            score += 10000.0
         if total_overlap > 0.0:
-            score += 100.0 + (coverage * 100.0)
-        
-        if dist_m is not None:
-            score += 1000.0 - (dist_m / 10.0)
-            
-        # Penalize start difference (1 point per 60 seconds diff)
-        score -= (start_diff / 60.0)
+            score += 5000.0 + (coverage * 1000.0)
+            score -= (start_diff / 60.0)
+        elif dist_m is not None:
+            # Strong GPS match but broken time
+            score += 2000.0 - (dist_m / 10.0) + (gps_duration_ratio * 100.0)
+        else:
+            score -= (start_diff / 60.0)
 
         scored_candidates.append({
             "path": p,
@@ -229,6 +237,7 @@ def scan_and_match_local_telemetry(
             "start_diff": start_diff,
             "has_exact_name": has_exact_name,
             "score": score,
+            "dist_m": dist_m,
         })
 
     if not scored_candidates:
