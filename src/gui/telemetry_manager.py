@@ -794,7 +794,10 @@ class TelemetryDataManager:
         # MapPreload parse when available (no double parsing).
         points = preparsed if preparsed is not None else parse_gpx(gpx_path)
         if not points:
+            self.gpx_path = None
             return False
+            
+        self.gpx_path = Path(gpx_path)
 
         # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
         # Prefer GPS-track cross-correlation when both tracks are available.
@@ -901,7 +904,10 @@ class TelemetryDataManager:
         # preload already parsed the file, reuse those records (no re-parse).
         records = preparsed if preparsed is not None else parse_fit(fit_path)
         if not records:
+            self.fit_path = None
             return False
+        
+        self.fit_path = Path(fit_path)
 
         # Apply smart timestamp alignment (direct match, timezone offset, or start alignment)
         # Prefer GPS-track cross-correlation when both tracks are available.

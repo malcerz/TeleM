@@ -706,6 +706,7 @@ def main() -> None:
         get_signals().sig_error.connect(_on_render_error_bench)
 
         def _auto_accept_validation(request):
+            print(f"[TEST OVERRIDE] SYNC_VALIDATION=OVERRIDDEN", flush=True)
             request.accepted = True
             request.user_override = True
             request.completed.set()
@@ -933,6 +934,32 @@ def main() -> None:
             [str(video_path)], "", str(fit_path),
         ))
         QTimer.singleShot(400, _poll_ready_bench)
+
+    elif "--test-sync-integrity" in sys.argv:
+        print("[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...", flush=True)
+        get_signals().sig_error.connect(lambda msg: print(f"[TEST SYNC INTEGRITY] ERROR: {msg}", flush=True))
+        
+        def _on_sync_validation_request(request):
+            import src.telemetry_file_validation as val
+            if request.result.state != val.ValidationState.VALID:
+                print(f"[TEST SYNC INTEGRITY] FAIL: Odrzucono kandydata ze statusem {request.result.state}", flush=True)
+                request.accepted = False
+                request.user_override = False
+                request.completed.set()
+                QTimer.singleShot(500, app.quit)
+            else:
+                print(f"[TEST SYNC INTEGRITY] PASS: Zaakceptowano kandydata", flush=True)
+                request.accepted = True
+                request.user_override = False
+                request.completed.set()
+                QTimer.singleShot(500, app.quit)
+                
+        get_signals().sig_telemetry_validation_request.connect(_on_sync_validation_request)
+        get_signals().sig_data_streams_ready.connect(lambda _: (print("[TEST SYNC INTEGRITY] SUCCESS_IMPLICIT", flush=True), QTimer.singleShot(500, app.quit)))
+        
+        QTimer.singleShot(500, lambda: get_signals().sig_files_selected.emit(
+            [str(video_path)], "", str(fit_path) if fit_path else "",
+        ))
 
     rc = app.exec()
     print(f"[PROC] QApplication returned rc={rc}", flush=True)

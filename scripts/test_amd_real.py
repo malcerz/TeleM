@@ -20,6 +20,8 @@ def verify(out_path, name):
     frames = 0
     fps = 0
     audio = False
+    v_dur = 0.0
+    a_dur = 0.0
     
     for s in meta.get("streams", []):
         if s.get("codec_type") == "video":
@@ -30,16 +32,24 @@ def verify(out_path, name):
             r_fr = s.get("r_frame_rate", "0/1")
             num, den = map(int, r_fr.split("/"))
             fps = num/den if den != 0 else 0
+            v_dur = float(s.get("duration", 0))
         elif s.get("codec_type") == "audio":
             audio = True
+            a_dur = float(s.get("duration", 0))
             
-    print(f"[{name}] RESULT: {frames} frames | {fps:.2f} FPS | Audio: {audio}")
-    if frames < 100:
-        print(f"[{name}] FAIL: Too few frames! Expected ~150, got {frames}")
+    print(f"[{name}] RESULT: {frames} frames | {fps:.2f} FPS | Audio: {audio} | V_DUR: {v_dur:.2f}s | A_DUR: {a_dur:.2f}s")
+    if frames < 790 or frames > 810:
+        print(f"[{name}] FAIL: Expected 800 frames, got {frames}")
         return False
-    else:
-        print(f"[{name}] PASS")
-        return True
+    if not audio:
+        print(f"[{name}] FAIL: Audio stream missing")
+        return False
+    if abs(v_dur - a_dur) > 0.5:
+        print(f"[{name}] FAIL: Audio/Video duration mismatch (V:{v_dur} vs A:{a_dur})")
+        return False
+        
+    print(f"[{name}] PASS")
+    return True
 
 def run_export_mode(mode, output_path):
     print(f"\n--- RUNNING {mode.upper()} EXPORT ---")
