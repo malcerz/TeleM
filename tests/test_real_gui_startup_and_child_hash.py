@@ -4,7 +4,7 @@ Ensures that:
 1. CHILD_CONFIG_HASH runs in < 2 ms with payload < 100 KB without serializing raw sample arrays.
 2. RAW_TELEMETRY_REPARSE_ON_RENDER=NO when telemetry is in memory, preventing 15-30s raw GPMF JSON re-parse.
 3. RenderPreparationService checks memory and disk cache first before doing any heavy chart/sample calculations.
-4. StartupAuditTracker outputs [REAL GUI STARTUP] and [GUI STARTUP BREAKDOWN] with exact stage sum equality.
+4. StartupTimelineTracker saves and merges intervals with overlap-safe startup accounting.
 5. Map prefetch and cache checks do not block render startup synchronously on network I/O.
 """
 
@@ -23,7 +23,7 @@ import pytest
 from src.indicators.moving_map import ensure_map_tiles_cached
 from src.render_preparation import RenderPreparationService
 from src.render_telemetry_cache import RenderTelemetryCache, RenderTelemetryStatic
-from src.startup_timeline import StartupAuditTracker
+from src.startup_timeline import StartupTimelineTracker, merge_startup_timelines, compute_accounting_summary
 
 
 def test_child_config_hash_payload_and_speed():
@@ -174,73 +174,28 @@ def test_render_preparation_checks_cache_first(tmp_path):
             assert mock_chart_build.call_count == 0
 
 
-def test_startup_audit_metrics_exact_sum_and_report(capsys):
-    """Verify StartupAuditTracker stage metrics breakdown and sum equality."""
-    StartupAuditTracker._ts.clear()
-
-    t0 = 1000.0
-    StartupAuditTracker.set("CLICK_RENDER_TS", t0)
-    StartupAuditTracker.set("RAW_METADATA_START_TS", t0 + 0.001)
-    StartupAuditTracker.set("RAW_METADATA_END_TS", t0 + 0.002)
-    StartupAuditTracker.set("GPMF_JSON_MS", 0.0)
-    StartupAuditTracker.set("MAP_CHECK_START_TS", t0 + 0.003)
-    StartupAuditTracker.set("MAP_CHECK_END_TS", t0 + 0.005)
-    StartupAuditTracker.set("PREP_START_TS", t0 + 0.006)
-    StartupAuditTracker.set("PREP_END_TS", t0 + 0.050)
-    StartupAuditTracker.set("CHARTS_MS", 0.0)
-    StartupAuditTracker.set("JOB_BUILD_START_TS", t0 + 0.001)
-    StartupAuditTracker.set("JOB_BUILD_END_TS", t0 + 0.055)
-    StartupAuditTracker.set("CHILD_HASH_START_TS", t0 + 0.056)
-    StartupAuditTracker.set("CHILD_HASH_END_TS", t0 + 0.057)
-    StartupAuditTracker.set("SPAWN_START_TS", t0 + 0.060)
-    StartupAuditTracker.set("CHILD_READY_TS", t0 + 0.200)
-    StartupAuditTracker.set("DECODER_INIT_START_TS", t0 + 0.210)
-    StartupAuditTracker.set("DECODER_INIT_END_TS", t0 + 0.250)
-    StartupAuditTracker.set("ENCODER_INIT_START_TS", t0 + 0.260)
-    StartupAuditTracker.set("ENCODER_INIT_END_TS", t0 + 0.320)
-    StartupAuditTracker.set("FIRST_FRAME_TS", t0 + 0.400)
-
-    metrics = StartupAuditTracker.compute_metrics()
-
-    # Sum of sub-stages must equal TOTAL_MS
-    sub_sum = (
-        metrics["RAW_METADATA_MS"]
-        + metrics["GPMF_JSON_MS"]
-        + metrics["PREP_TOTAL_MS"]
-        + metrics["CHARTS_MS"]
-        + metrics["MAP_CHECK_MS"]
-        + metrics["CHILD_HASH_MS"]
-        + metrics["SPAWN_MS"]
-        + metrics["BACKEND_INIT_MS"]
-        + metrics["OTHER_MS"]
-    )
-    assert abs(sub_sum - metrics["TOTAL_MS"]) < 1e-6
-    assert abs(metrics["TOTAL_MS"] - metrics["CLICK_TO_FIRST_FRAME_MS"]) < 1e-6
-
-    # Verify audit report output formatting
-    StartupAuditTracker.print_audit_report(prep_cache_status="HIT")
-    captured = capsys.readouterr().out
-
-    assert "[REAL GUI STARTUP]" in captured
-    assert "CLICK_RENDER_TS=" in captured
-    assert "FIRST_FRAME_TS=" in captured
-    assert "CLICK_TO_FIRST_FRAME_MS=" in captured
-
-    assert "[GUI STARTUP BREAKDOWN]" in captured
-    assert "raw_metadata=" in captured
-    assert "gpmf_json=" in captured
-    assert "common_prep=" in captured
-    assert "charts=" in captured
-    assert "map=" in captured
-    assert "child_hash=" in captured
-    assert "spawn=" in captured
-    assert "backend_init=" in captured
-    assert "other=" in captured
-    assert "TOTAL=" in captured
+def test_startup_timeline_accounting_and_csv(tmp_path):
+    """Exercise the supported tracker, CSV merge, and overlapping interval union."""
+    parent = StartupTimelineTracker(role="parent")
+    child = StartupTimelineTracker(role="child")
+    parent.mark_event("GUI Render clicked", timestamp=1000.0)
+    parent.record_interval("dispatch", 1000.0, 1000.2)
+    child.record_interval("backend init", 1000.1, 1000.39)
+    child.mark_event("first encoded frame", timestamp=1000.4)
+    rows = merge_startup_timelines(parent.save_partial_csv(tmp_path / "parent.csv"),
+                                   child.save_partial_csv(tmp_path / "child.csv"),
+                                   tmp_path / "merged.csv")
+    summary = compute_accounting_summary(rows)
+    assert summary["click_to_first_frame_ms"] == pytest.approx(400)
+    assert summary["accounted_stage_ms"] == pytest.approx(390)
+    assert summary["unaccounted_ms"] == pytest.approx(10)
+    assert summary["unaccounted_pct"] == pytest.approx(2.5)
+    assert summary["gate_pass"] is True
+    assert {row["process"].split(":")[0] for row in rows} == {"parent", "child"}
 
 
-def test_ensure_map_tiles_cached_no_network_on_render():
-    """Verify that ensure_map_tiles_cached with allow_network=False never downloads from network."""
+def test_ensure_map_tiles_cached_no_network_on_render(tmp_path):
+    """A populated real tile cache requires no network on the next prefetch."""
     layout = {
         "indicators": {
             "track_map": {
@@ -256,9 +211,17 @@ def test_ensure_map_tiles_cached_no_network_on_render():
         (datetime.now(), 52.2300, 21.0130),
     ]
 
-    with patch("src.moving_map._download_tile_raw") as mock_download:
-        info = ensure_map_tiles_cached(
-            1920, 1080, layout, "track_map", gps_track, allow_network=False
-        )
-        assert mock_download.call_count == 0
-        assert info["downloaded"] == 0
+    from src.moving_map import TileCache
+    cache = TileCache(tmp_path / "tiles")
+    from PIL import Image
+    tile_bytes = io.BytesIO()
+    Image.new("RGB", (256, 256), "white").save(tile_bytes, format="PNG")
+    # First call populates the real SQLite cache from an isolated tile supplier.
+    with patch("src.moving_map.get_shared_tile_cache", return_value=cache):
+        with patch("src.moving_map._download_tile_raw", return_value=tile_bytes.getvalue()):
+            cold = ensure_map_tiles_cached(1920, 1080, layout, "track_map", gps_track)
+        assert cold["required"] > 0 and cold["missing"] == 0
+        with patch("src.moving_map._download_tile_raw", side_effect=AssertionError("warm cache requested network")):
+            warm = ensure_map_tiles_cached(1920, 1080, layout, "track_map", gps_track)
+        assert warm["cached"] == warm["required"]
+        assert warm["downloaded"] == 0 and warm["missing"] == 0

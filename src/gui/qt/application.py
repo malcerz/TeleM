@@ -598,6 +598,7 @@ def main() -> None:
         parser.add_argument("--quality", choices=["FAST", "BALANCED", "QUALITY"], default="QUALITY")
         parser.add_argument("--codec", choices=["hevc", "h264"], default="hevc")
         parser.add_argument("--frames", type=int, default=3000)
+        parser.add_argument("--start-seconds", type=float, default=0.0)
         parser.add_argument("--output", default=r"scratch\amd_bench_out.mp4")
         parser.add_argument("--result-json", default="")
         parser.add_argument("--multi-jobs", type=int, default=1)
@@ -674,6 +675,7 @@ def main() -> None:
                 t_start[0] = time.perf_counter()
                 return
 
+            bench_result["finish_epoch"] = time.time()
             bench_result["success"] = True
             bench_result["elapsed_s"] = round(elapsed, 2)
             bench_result["total_frames"] = frames_done
@@ -728,6 +730,13 @@ def main() -> None:
         get_signals().sig_telemetry_validation_request.connect(_auto_accept_validation)
 
         def _progress_bench(done, total, elapsed, fps, hud_state):
+            if (
+                done > 0 and total >= test_args.frames
+                and isinstance(hud_state, dict)
+                and any(hud_state.get(key) is not None for key in ("avg_qp", "qp_avg", "mean_qp", "current_qp"))
+                and "click_to_first_progress_ms" not in bench_result
+            ):
+                bench_result["click_to_first_progress_ms"] = (time.perf_counter() - t_start[0]) * 1000.0
             if isinstance(hud_state, dict):
                 qp_value = next((hud_state.get(key) for key in ("avg_qp", "qp_avg", "mean_qp", "current_qp") if hud_state.get(key) is not None), None)
                 compression_text = hud_state.get("compression_text")
@@ -759,7 +768,16 @@ def main() -> None:
             rt.edit_output.setText(str(out_path))
             rt._user_edited_output = True
 
+            if test_args.start_seconds > 0:
+                rt._in_orig = test_args.start_seconds
+                rt._out_orig = test_args.start_seconds + test_args.frames / max(0.001, float(_controller.fps))
+                rt._ensure_range_applied()
+                rt._update_inout_labels()
+            bench_result["range_start_seconds"] = test_args.start_seconds
+            bench_result["preview_hud"] = bool(test_args.preview_hud)
             t_start[0] = time.perf_counter()
+            bench_result["click_perf_counter"] = t_start[0]
+            bench_result["click_epoch"] = time.time()
 
             if test_args.mode == "queue":
                 # Clear any leftover jobs so only benchmark jobs execute
@@ -993,7 +1011,7 @@ def main() -> None:
                 "fit": str(fit_path),
                 "validation": validation,
                 "smart_sync": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),
-                "user_override": bool(getattr(window, "_last_telemetry_user_override", False)),
+                "user_override": bool(getattr(_controller, "_last_telemetry_user_override", False)),
                 "error": str(error) if error is not None else None,
             }
             if result_path is not None:
@@ -1027,7 +1045,7 @@ def main() -> None:
                 )
 
             def _on_sync_ready(*_args):
-                result = getattr(window, "_last_external_telemetry_validation_result", None)
+                result = getattr(_controller, "_last_external_telemetry_validation_result", None)
                 telemetry = getattr(_controller, "telemetry", None)
                 loaded_path = getattr(telemetry, "fit_path", None)
                 fit_data = getattr(telemetry, "fit_data", None)
@@ -1042,7 +1060,7 @@ def main() -> None:
                 if smart_sync.get("status") != "VALID" or not smart_sync.get("matched_points"):
                     _finish_sync_test("INVALID", validation=result, error="No accepted spatial SmartSync result")
                     return
-                if getattr(window, "_last_telemetry_user_override", False):
+                if getattr(_controller, "_last_telemetry_user_override", False):
                     _finish_sync_test("INVALID", validation=result, error="Unexpected user override")
                     return
                 _finish_sync_test("VALID", validation=result, exit_code=0)

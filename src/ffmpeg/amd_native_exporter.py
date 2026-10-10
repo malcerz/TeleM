@@ -3455,6 +3455,8 @@ def export_amd_native_d3d11(
                             mux_pump_stats["ffmpeg_stdin_bytes"] += len(mux_chunk)
                             if not mux_pump_stats.get("first_packet_logged"):
                                 mux_pump_stats["first_packet_logged"] = True
+                                mux_pump_stats["first_encoded_packet_perf_counter"] = time.perf_counter()
+                                mux_pump_stats["first_encoded_packet_epoch"] = time.time()
                                 try:
                                     first_output_size = os.path.getsize(target_live_out)
                                 except OSError:
