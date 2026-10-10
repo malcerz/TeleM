@@ -128,7 +128,8 @@ GpmfResult ExtractGpmfData(const std::string& mp4_path, bool metadata_only) {
     GPMF_stream ms;
 
     for (uint32_t p = 0; p < payloads; p++) {
-        if (metadata_only && p >= 20) { break; }
+        if (metadata_only && p >= 20 && (first_gps9_abs_ts > 0.0 || raw_gps.size() > 0)) { break; }
+        if (metadata_only && p > 2000) { break; }
 
         uint32_t payloadsize = GetPayloadSize(mp4, p);
         res = GetPayloadResource(mp4, res, payloadsize);

@@ -261,6 +261,7 @@ def run_auto_telemetry_preflight(
     video_paths: list[Path | str],
     config: dict[str, Any],
     on_status: Callable[[str, str, Optional[str]], None],
+    on_needs_selection: Optional[Callable[[list[tuple[Any, float]]], Any]] = None,
     cancel_event: Optional[threading.Event] = None,
     provider_override: Optional[ActivityProvider] = None,
     video_gps_point: Optional[tuple[float, float]] = None,
@@ -436,6 +437,7 @@ def run_auto_telemetry_preflight(
                 on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
                 return None
 
+            print(f"[AutoFIT] Znaleziono {len(candidates)} aktywności.", flush=True)
             decision, ranked = rank_and_evaluate_candidates(
                 candidates,
                 v_start,
@@ -444,15 +446,23 @@ def run_auto_telemetry_preflight(
                 ignore_time_match=ignore_time_match,
             )
 
+            for cand, score in ranked:
+                print(f"[AutoFIT]  - Kandydat {cand.activity_id} ({cand.sport_type}): score={score:.2f}", flush=True)
+
             if not ranked or decision == "NO_MATCH":
-                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono aktywności, ale żadna nie pasuje do nagrania.", None)
+                on_status("Nie znaleziono pasujacego pliku FIT/GPX.", "Znaleziono aktywnosci, ale zadna nie pasuje do nagrania.", None)
                 return None
                 
+            best_cand = None
             if decision == "NEEDS_SELECTION":
-                on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono kilka aktywności (dopasowanie niejednoznaczne). Wybierz ręcznie.", None)
-                return None
+                if on_needs_selection:
+                    best_cand = on_needs_selection(ranked)
+                if not best_cand:
+                    on_status("Nie znaleziono pasujacego pliku FIT/GPX.", "Znaleziono kilka aktywnosci (dopasowanie niejednoznaczne). Wybierz recznie.", None)
+                    return None
+            else:
+                best_cand = ranked[0][0]
 
-            best_cand, best_score = ranked[0]
             if is_cancelled():
                 return None
 

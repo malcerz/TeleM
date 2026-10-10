@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QMetaObject, Q_ARG, Q_RETURN_ARG, Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
     QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox, QProgressBar,
@@ -859,6 +859,7 @@ class LoadTab(QWidget):
                     video_paths=paths,
                     config=cfg,
                     on_status=status_cb,
+                    on_needs_selection=lambda ranked: QMetaObject.invokeMethod(self, "_prompt_activity_selection", Qt.BlockingQueuedConnection, Q_RETURN_ARG(object), Q_ARG(object, ranked)),
                     cancel_event=cancel_ev,
                 )
                 if res_path is not None and not cancel_ev.is_set() and request_gen == self._autofit_gen and not self._user_selected_telemetry:
@@ -874,6 +875,23 @@ class LoadTab(QWidget):
         thread = threading.Thread(target=worker, name="TeleM-AutoTelemetry", daemon=True)
         self._autofit_thread = thread
         thread.start()
+
+
+    @Slot(object, result=object)
+    def _prompt_activity_selection(self, candidates):
+        """Pytanie o wybor aktywnosci (wolane z watku preflight przez BlockingQueuedConnection)."""
+        from PySide6.QtWidgets import QInputDialog
+        items = []
+        for cand, score in candidates:
+            start_local = cand.start_dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            items.append(f"{start_local} | {cand.sport_type} | {cand.duration_s//60} min | ID: {cand.activity_id}")
+            
+        item, ok = QInputDialog.getItem(self, "Wybierz aktywnosc", "Wybierz pasujaca aktywnosc z Garmin Connect:", items, 0, False)
+        if ok and item:
+            idx = items.index(item)
+            return candidates[idx][0]
+        return None
+
 
     def _on_autofit_status(self, field_st: str, row_st: str, gen: int, tooltip: str) -> None:
         """Aktualizacja statusu w polu FIT/GPX oraz wierszu Telemetria w wątku GUI."""

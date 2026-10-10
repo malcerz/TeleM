@@ -47,7 +47,7 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
     cmd = [
         ffprobe, "-v", "error",
         "-show_entries",
-        "format=duration,size,bit_rate:"
+        "format=duration,size,bit_rate:format_tags:"
         "stream=index,codec_type,codec_name,profile,width,height,pix_fmt,"
         "avg_frame_rate,r_frame_rate,bit_rate,bits_per_raw_sample,"
         "sample_rate,channels,channel_layout,"
@@ -88,10 +88,26 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
                 elif date_str and "." in date_str:
                     date_str = date_str.split(".")[0]
                     
+
+                camera_model = ndata.get("camera_model")
+                if camera_model == "GoPro":
+                    # Sprawdź wiarygodne metadane kontenera (ffprobe format tags)
+                    fmt_tags = fmt.get("tags", {})
+                    fw = fmt_tags.get("firmware", "")
+                    if fw:
+                        if fw.startswith("H19"): camera_model = "GoPro HERO9 Black"
+                        elif fw.startswith("H21"): camera_model = "GoPro HERO10 Black"
+                        elif fw.startswith("H22"): camera_model = "GoPro HERO11 Black"
+                        elif fw.startswith("H23"): camera_model = "GoPro HERO12 Black"
+                        elif fw.startswith("H24"): camera_model = "GoPro HERO11 Black Mini"
+                        elif fw.startswith("H26"): camera_model = "GoPro HERO13 Black"
+                        else: camera_model = f"GoPro (fw: {fw})"
+
                 gpmf_meta = {
-                    "camera": ndata.get("camera_model"),
+                    "camera": camera_model,
                     "date": date_str
                 }
+
 
         except Exception:
             pass
