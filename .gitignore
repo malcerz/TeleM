@@ -13,6 +13,8 @@ video/*.fit
 *.dll.a
 *.lib
 *.a
+*.obj
+*.exp
 exiftool_files/
 exiftool.exe
 ffmpeg.exe

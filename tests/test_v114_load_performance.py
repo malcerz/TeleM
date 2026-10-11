@@ -202,9 +202,12 @@ def test_non_blocking_load_click(qapp, tmp_path):
 
 
 def test_late_attach_signal_emitted(qapp, tmp_path):
-    """Verify _on_autofit_matched emits sig_late_telemetry_matched when already loading."""
+    """Verify _on_autofit_matched attaches telemetry cleanly when project loading completes or when already loaded."""
     tab = LoadTab()
-    tab._loading = True
+    video_path = str(tmp_path / "video.mp4")
+    tab._video_paths = [video_path]
+    tab._autofit_target_paths = [video_path]
+    tab._loaded_paths = [video_path]
 
     late_attached = []
     tab.signals.sig_late_telemetry_matched.connect(lambda p: late_attached.append(p))
@@ -215,6 +218,162 @@ def test_late_attach_signal_emitted(qapp, tmp_path):
     assert len(late_attached) == 1
     assert late_attached[0] == fit_path
     tab.close()
+
+
+def test_autofit_lifecycle_film_a_to_b(qapp, tmp_path):
+    """Verify that switching from Film A to Film B cancels Film A's search, bumps generation, and prevents Film A's FIT from being attached to Film B."""
+    tab = LoadTab()
+    video_a = tmp_path / "film_a.mp4"
+    video_a.write_bytes(b"video_a")
+    video_b = tmp_path / "film_b.mp4"
+    video_b.write_bytes(b"video_b")
+
+    fit_a = str(tmp_path / "activity_a.fit")
+    fit_b = str(tmp_path / "activity_b.fit")
+
+    late_attached = []
+    tab.signals.sig_late_telemetry_matched.connect(lambda p: late_attached.append(p))
+
+    with patch.object(tab, "_start_multi_info_inspection"):
+        tab.set_video_paths([str(video_a)], start_search=False)
+        gen_a = tab._autofit_gen
+        tab._autofit_target_paths = [str(video_a.resolve())]
+
+        tab.set_video_paths([str(video_b)], start_search=False)
+        gen_b = tab._autofit_gen
+        tab._autofit_target_paths = [str(video_b.resolve())]
+
+        assert gen_b > gen_a
+        assert tab._loaded_paths == []
+        assert tab._loaded_once is False
+        assert tab._pending_late_fit == ""
+
+        # Delayed worker from Film A returns with old gen_a
+        tab._on_autofit_matched(fit_a, gen=gen_a)
+
+        # Must NOT be attached to Film B!
+        assert late_attached == []
+        assert tab._fit_path == ""
+        assert tab.btn_telemetry.text() != f"{Path(fit_a).name} ✓"
+
+        # Worker from Film B returns with gen_b for loaded project
+        tab._finish_loading_success()
+        assert tab._loaded_paths == [str(video_b.resolve())]
+
+        tab._on_autofit_matched(fit_b, gen=gen_b)
+        assert len(late_attached) == 1
+        assert late_attached[0] == fit_b
+        assert tab._fit_path == fit_b
+    tab.close()
+
+
+def test_fit_found_during_loading_attached_on_success(qapp, tmp_path):
+    """Verify that if FIT arrives while project is loading (self._loading=True), it is buffered and emitted on load completion."""
+    tab = LoadTab()
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+    fit_path = str(tmp_path / "activity.fit")
+
+    late_attached = []
+    tab.signals.sig_late_telemetry_matched.connect(lambda p: late_attached.append(p))
+
+    with patch.object(tab, "_start_multi_info_inspection"):
+        tab.set_video_paths([str(video)], start_search=False)
+        tab._autofit_target_paths = [str(video.resolve())]
+
+        tab._start_loading()
+        assert tab._loading is True
+
+        # FIT arrives mid-load
+        tab._on_autofit_matched(fit_path, gen=tab._autofit_gen)
+
+        # Must be buffered, not emitted yet
+        assert tab._pending_late_fit == fit_path
+        assert late_attached == []
+
+        # Project finishes loading
+        tab._on_load_progress(100, "Gotowe")
+
+        # Now late_attach is emitted!
+        assert len(late_attached) == 1
+        assert late_attached[0] == fit_path
+        assert tab._pending_late_fit == ""
+        assert tab._loaded_once is True
+        assert tab._loaded_paths == [str(video.resolve())]
+    tab.close()
+
+
+def test_clear_resets_loaded_once_and_cancels_worker(qapp, tmp_path):
+    """Verify that _on_clear cancels autofit, bumps generation, and resets _loaded_once and _loaded_paths."""
+    tab = LoadTab()
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+
+    with patch.object(tab, "_start_multi_info_inspection"):
+        tab.set_video_paths([str(video)], start_search=False)
+        tab._finish_loading_success()
+        assert tab._loaded_once is True
+        assert tab._loaded_paths != []
+
+        tab._on_clear()
+        assert tab._loaded_once is False
+        assert tab._loaded_paths == []
+        assert tab._loading is False
+        assert tab._pending_late_fit == ""
+        assert tab._video_paths == []
+    tab.close()
+
+
+def test_real_late_attach_telemetry_execution(qapp, tmp_path):
+    """Verify that calling late_attach_telemetry on AppController actually loads FIT telemetry and updates controller state."""
+    from src.gui.qt.controller import AppController
+    ctrl = AppController()
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"dummy")
+    fit_path = tmp_path / "activity.fit"
+    fit_path.write_bytes(b"dummy_fit")
+
+    ctrl.video_path = video_path
+    ctrl.fit_path = None
+    ctrl.gpx_path = None
+
+    streams_ready_called = []
+    ctrl.signals.sig_data_streams_ready.connect(lambda s: streams_ready_called.append(s))
+
+    with patch.object(ctrl.telemetry, "load_fit", return_value=True) as mock_load_fit, \
+         patch.object(ctrl, "refresh_preview_geometry_and_hud") as mock_refresh:
+
+        ctrl.late_attach_telemetry(str(fit_path))
+
+        mock_load_fit.assert_called_once()
+        assert ctrl.fit_path == fit_path
+        assert len(streams_ready_called) == 1
+        assert "_indicator_availability" in ctrl.layout
+        assert mock_refresh.call_count >= 1
+
+
+def test_gx010361_real_file_metadata_and_card_display(qapp):
+    """Verify real reference file GX010361.MP4 metadata and card widget display."""
+    ref_file = Path("F:/GoPro/2026-10-09/GX010361.MP4")
+    if not ref_file.exists():
+        pytest.skip("F:/GoPro/2026-10-09/GX010361.MP4 not found on disk")
+
+    info = inspect_mp4(ref_file)
+    assert info["gpmf"] is True
+    meta = info["gpmf_meta"]
+    assert meta["date"] == "2026-10-09 06:27:55"
+    assert meta["date_source"] == "GPMF (GPS)"
+    assert meta["timezone"] == "UTC+2"
+    assert meta["camera"] == "GoPro HERO13 Black"
+    assert "H26" in meta["camera_source"]
+
+    card = VideoFileCardWidget(0, str(ref_file))
+    card.update_info(info, "")
+    assert "2026-10-09 06:27:55" in card.lbl_record_date.text()
+    assert "GPMF (GPS), UTC+2" in card.lbl_record_date.text()
+    assert "GoPro HERO13 Black" in card.lbl_camera.text()
+    assert "firmware H26" in card.lbl_camera.text()
+    card.close()
 
 
 def test_multifile_resolver_uses_light_metadata(tmp_path):

@@ -586,12 +586,92 @@ class ProjectMixin:
                     ffmpeg_exe=ffmpeg_exe,
                     ffprobe_exe=ffprobe_exe,
                 )
-                # Wczytaj GPX (jeśli podano) — reuse the preparsed points
+
+                self.video_paths = candidate_video_paths
+                self.video_path = candidate_video_path
+                self.ffprobe_exe = ffprobe_exe
+                self.ffmpeg_exe = ffmpeg_exe
+                self._clear_caches()
+                try:
+                    from src.indicators.moving_map import clear_moving_map_cache
+                    clear_moving_map_cache()
+                except Exception:
+                    pass
+
+                # Ustaw źródło odtwarzacza
+                if _QT_MULTIMEDIA_AVAILABLE and hasattr(self, "media_player"):
+                    self.media_player.setSource(
+                        QUrl.fromLocalFile(str(candidate_video_path))
+                    )
+
+                if self.is_using_mpv():
+                    self.mpv_player.play(str(candidate_video_path))
+                    self.mpv_player.pause = True
+
+                # Analiza wideo
+                self.signals.sig_progress.emit(15, "Analiza strumienia...")
+                candidate_state = self._probe_candidate_video_state(
+                    candidate_video_path, ffprobe_exe,
+                    default_fps=self.fps if hasattr(self, "fps") else 30.0,
+                )
+                w = candidate_state["width"]
+                h = candidate_state["height"]
+                self.video_width = w
+                self.video_height = h
+                self.video_info = dict(candidate_state["video_info"])
+                self.video_rotation_degrees = candidate_state["rotation"]
+                self.fps = float(candidate_state["fps"])
+                self.video_info["fps"] = self.fps
+                total_dur = sum(
+                    float(
+                        ffprobe_stream_info(ffprobe_exe, p)
+                        .get("format", {})
+                        .get("duration", 0)
+                        or 0
+                    )
+                    for p in self.video_paths
+                )
+                self.video_duration_s = total_dur
+
+                self.signals.sig_video_info_ready.emit(
+                    f"{w}x{h} @ {self.fps:.1f} fps, {total_dur:.1f}s"
+                )
+
+                # Layout — priorytet:
+                proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
+                if proj_layout.exists():
+                    try:
+                        self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
+                        normalize_indicator_decimal_defaults(self.layout)
+                        print(f"[ProjectLayout] Wczytano istniejący layout filmu z {proj_layout}", flush=True)
+                    except Exception as e:
+                        print(f"[ProjectLayout] Błąd odczytu {proj_layout}: {e}", flush=True)
+                        proj_layout = None
+                if not proj_layout or not proj_layout.exists():
+                    preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
+                    if preset_path and Path(preset_path).exists():
+                        self.layout = json.loads(
+                            Path(preset_path).read_text(encoding="utf-8")
+                        )
+                        normalize_indicator_decimal_defaults(self.layout)
+                    else:
+                        def_layout = self.base_dir / "def_layout.json"
+                        self.layout = normalize_layout(def_layout, w, h)
+                render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
+                if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
+                    render_tab.apply_export_settings(self.layout.get("export_settings", {}))
+                self._selected_stream_key = ""
+                self.src_img = Image.new("RGB", (w, h), (0, 0, 0))
+
+                # Wczytaj/wygeneruj metadane (GPMF)
+                self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
+                self._load_or_generate_telemetry()
+
+                # Wczytaj GPX (jeśli podano)
                 if effective_gpx_path and _GPX_AVAILABLE:
                     gpx_loaded = self.telemetry.load_gpx(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=Path(effective_gpx_path),
-                        preparsed=validated_gpx_points,
                     )
                     if gpx_loaded:
                         self.gpx_path = Path(effective_gpx_path)
@@ -600,12 +680,11 @@ class ProjectMixin:
                     elif remote_status_path == Path(effective_gpx_path):
                         on_remote_status("error", "Pobrano GPX, ale nie udało się wczytać telemetrii.", remote_status_path)
 
-                # Wczytaj FIT (jeśli podano) — reuse the preparsed records
+                # Wczytaj FIT (jeśli podano)
                 if effective_fit_path and _FIT_AVAILABLE:
                     fit_loaded = self.telemetry.load_fit(
                         self.video_path, self.telemetry.start_dt_utc,
                         manual_path=Path(effective_fit_path),
-                        preparsed=validated_fit_records,
                     )
                     if fit_loaded:
                         self.fit_path = Path(effective_fit_path)
@@ -1478,33 +1557,50 @@ class ProjectMixin:
         threading.Thread(target=worker, daemon=True).start()
 
     def late_attach_telemetry(self, telem_path: str) -> None:
-        """Late attach telemetry."""
+        """Późne podłączenie telemetrii (late-attach) po zakończeniu preflightu."""
         if not getattr(self, "video_path", None):
             return
         
         from pathlib import Path
-        ext = telem_path.lower()
-        if ext.endswith(".fit") and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
+        ext = Path(telem_path).suffix.lower()
+        if ext == ".fit" and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
             fit_loaded = self.telemetry.load_fit(
                 self.video_path, getattr(self.telemetry, "start_dt_utc", None),
                 manual_path=Path(telem_path)
             )
             if fit_loaded:
                 self.fit_path = Path(telem_path)
-                if self.telemetry.gps_track:
-                    self._ensure_map_context()
-                    self.signals.sig_map_prefetch_trigger.emit("late_attach")
-                self.signals.sig_telemetry_ready.emit()
-                self._update_all_indicator_availabilities()
-        elif ext.endswith(".gpx") and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
+                if getattr(self.telemetry, "fit_data", None):
+                    fit_keys = self.telemetry.register_fit_fields(
+                        self.layout, BUILTIN_FIELDS,
+                    )
+                    self.fit_ext_fields = list(fit_keys)
+                    if not getattr(self.telemetry, "speed_samples", None) and not getattr(self.telemetry, "records", None):
+                        self.telemetry.auto_switch_source(self.layout, "fit")
+                from src.indicators.availability import compute_indicator_availability, log_indicator_availability
+                avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
+                self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
+                log_indicator_availability(avail)
+                if getattr(self.telemetry, "gps_track", None):
+                    map_provider = _map_provider_from_layout(self.layout) if hasattr(self, "layout") else "light_all"
+                    self._start_map_preload(self.telemetry.gps_track, source="fit", provider=map_provider)
+                streams = self._discover_data_streams()
+                self.signals.sig_data_streams_ready.emit(streams)
+                self.refresh_preview_geometry_and_hud()
+        elif ext == ".gpx" and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
             gpx_loaded = self.telemetry.load_gpx(
                 self.video_path, getattr(self.telemetry, "start_dt_utc", None),
                 manual_path=Path(telem_path)
             )
             if gpx_loaded:
                 self.gpx_path = Path(telem_path)
-                if self.telemetry.gps_track:
-                    self._ensure_map_context()
-                    self.signals.sig_map_prefetch_trigger.emit("late_attach")
-                self.signals.sig_telemetry_ready.emit()
-                self._update_all_indicator_availabilities()
+                from src.indicators.availability import compute_indicator_availability, log_indicator_availability
+                avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
+                self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
+                log_indicator_availability(avail)
+                if getattr(self.telemetry, "gps_track", None):
+                    map_provider = _map_provider_from_layout(self.layout) if hasattr(self, "layout") else "light_all"
+                    self._start_map_preload(self.telemetry.gps_track, source="gpx", provider=map_provider)
+                streams = self._discover_data_streams()
+                self.signals.sig_data_streams_ready.emit(streams)
+                self.refresh_preview_geometry_and_hud()

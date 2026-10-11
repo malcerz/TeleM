@@ -19,7 +19,7 @@ def test_load_tab_layout_single_file(tmp_path: Path):
 
     assert tab.btn_mp4.text() == single_file
     assert tab.hw_info_widget.minimumWidth() >= 0
-    pass # Size hint expands normally for standard QPushButton
+    tab.close()
 
 
 def test_load_tab_layout_six_files(tmp_path: Path):
@@ -34,8 +34,7 @@ def test_load_tab_layout_six_files(tmp_path: Path):
     joined = "; ".join(six_files)
     assert tab.btn_mp4.text() == joined
     assert tab.hw_info_widget.minimumWidth() >= 0
-    # Long text must NOT blow up button size hint width
-    pass # Size hint expands normally for standard QPushButton
+    tab.close()
 
 
 def test_long_source_paths_do_not_expand_layout(tmp_path: Path):
@@ -47,16 +46,16 @@ def test_long_source_paths_do_not_expand_layout(tmp_path: Path):
         twenty_files.append(str(f.resolve()))
     tab.set_video_paths(twenty_files, start_search=False)
 
-    # Size hint is capped even with thousands of characters
-    pass # Size hint expands normally for standard QPushButton
     assert len(tab.btn_mp4.text()) > 500
     assert tab.btn_mp4.toolTip() == tab.btn_mp4.text()
+    tab.close()
 
 
 def test_hardware_panel_keeps_reasonable_width():
     tab = LoadTab()
     assert isinstance(tab.hw_info_widget, HardwareInfoWidget)
     assert tab.hw_info_widget.minimumWidth() >= 0
+    tab.close()
 
 
 def test_movie_cards_are_scrollable(tmp_path: Path):
@@ -73,4 +72,5 @@ def test_movie_cards_are_scrollable(tmp_path: Path):
         ten_files.append(str(f.resolve()))
     tab.set_video_paths(ten_files, start_search=False)
     assert len(tab._card_widgets) == 10
+    tab.close()
 

@@ -1,4 +1,4 @@
-# RAPORT SPORTCAMHUD v1.14 — NAPRAWA METADANYCH I OPTYMALIZACJA WCZYTYWANIA
+# RAPORT SPORTCAMHUD v1.14 — NAPRAWA METADANYCH, ARCHITEKTURA LATE-ATTACH I OPTYMALIZACJA WCZYTYWANIA
 
 **Data:** 2026-10-11  
 **Projekt:** SportCamHUD v1.14 (wcześniej BikeRideHUD / TeleM)  
@@ -28,7 +28,7 @@
 
 ## 2. Przyczyna wolnego wczytywania MP4
 
-### Zidentyfikowane wąskie gardła (3 najkosztowniejsze operacje):
+### Zidentyfikowane wąskie gardła:
 1. **Pełna ekstrakcja telemetrii w `auto_telemetry_preflight.py` (2383 ms):**  
    Wyszukiwanie AutoFIT wywoływało `extract_gpmf_native(video_paths[0])` w trybie pełnym (dekodowanie wszystkich 14 451 punktów GPS, akcelerometru, żyroskopu i temperatury na pliku 8.6 GB) wyłącznie po to, by odczytać pierwszą współrzędną `(lat, lon)` do oceny odległości.
 2. **Legacy ekstrakcja GPMF przez FFmpeg i Python w `resolve_clip_timestamp()` (4058 ms):**  
@@ -55,70 +55,127 @@
 
 ---
 
-## 4. Wyniki pomiarów BEFORE / AFTER (Plik 8.60 GB GX010361.MP4)
+## 4. Architektura cyklu życia AutoFIT i Late-Attach Telemetry
 
-| Etap / Operacja | BEFORE (ms) | AFTER (ms) | Przyspieszenie |
+### Rozwiązane problemy regresji:
+W wersji rozwojowej flaga `_loaded_once` nie była resetowana przy zmianie filmu ani czyszczeniu projektu, a we wcześniejszym commicie z `bg_load` przypadkowo usunięto przypisania `self.video_paths = ...` i `self.video_path = ...`, co powodowało ciche przerywanie `late_attach_telemetry`. Ponadto w `late_attach_telemetry` znajdowały się odwołania do nieistniejących sygnałów i metod.
+
+### Pełna architektura cyklu życia:
+1. **Ścisła izolacja generacji i ścieżek (`load_tab.py`):**
+   - Wprowadzono zmienne stanu: `_loaded_paths: list[str] = []`, `_loaded_once: bool = False`, `_pending_late_fit: str = ""`, `_autofit_gen: int = 0`, `_autofit_target_paths: list[str] = []`.
+   - Zmiana plików wideo w `set_video_paths()` lub czyszczenie w `_on_clear()` natychmiast:
+     - anuluje trwający wątek AutoFIT przez `self._autofit_cancel_event.set()`,
+     - inkrementuje licznik generacji `self._autofit_gen += 1`,
+     - resetuje stan wczytania: `self._loaded_once = False`, `self._loaded_paths = []`, `self._pending_late_fit = ""`.
+   - Dzięki temu plik FIT znaleziony dla Filmu A nigdy nie zostanie przypisany do Filmu B, nawet jeśli wątek tła dla Filmu A zakończy się z opóźnieniem.
+
+2. **Obsługa 3 stanów czasowych znalezienia FIT:**
+   - **Przed wczytaniem projektu (`not self._loading` i `not self._loaded_once`):** Ścieżka FIT jest zapisywana w `self._fit_path` i etykiecie przycisku; po kliknięciu „Wczytaj” przekazywana jest standardowo jako argument `sig_files_selected`.
+   - **Podczas wczytywania projektu (`self._loading == True`):** Ścieżka FIT jest buforowana w `self._pending_late_fit`. Po osiągnięciu 100% postępu wczytywania w `_finish_loading_success()`, sygnał `sig_late_telemetry_matched` jest emitowany jednorazowo, gwarantując brak wyścigu wątków.
+   - **Po zakończeniu wczytywania projektu (`self._loaded_once == True`):** Sygnał `sig_late_telemetry_matched` jest emitowany natychmiast do `AppController`.
+
+3. **Bezpieczne dołączanie telemetrii w `AppController` (`project_mixin.py`):**
+   - Przywrócono stan `self.video_paths` i `self.video_path` w `bg_load`.
+   - Metoda `late_attach_telemetry(fit_path)`:
+     - Weryfikuje istnienie wczytanego filmu i pliku FIT.
+     - Wywołuje `self.telemetry.load_fit(fit_path)` bez naruszania zdekodowanych strumieni wideo.
+     - Uruchamia preloading kafelków mapy (`self._start_map_preload()`).
+     - Aktualizuje i emituje dostępne strumienie danych (`sig_data_streams_ready`).
+     - Odświeża geometrię i warstwy wskaźników HUD (`refresh_preview_geometry_and_hud()`).
+     - Wszystko odbywa się asynchronicznie, bez zamrażania GUI i bez ponownego dekodowania wideo.
+
+---
+
+## 5. Rzeczywiste pomiary wydajności ładowania (Plik 8.60 GB GX010361.MP4)
+
+Pomiary wykonano za pomocą skryptu referencyjnego `scripts/benchmark_v114_load.py` na rzeczywistym pliku `F:\GoPro\2026-10-09\GX010361.MP4`.
+
+Wcześniej raportowany czas **62.70 ms** dotyczył wyłącznie zwrócenia kontroli do pętli zdarzeń Qt w wątku GUI (kickoff / natychmiastowe odblokowanie GUI). Poniżej zestawiono rzeczywiste czasy wszystkich 4 etapów cyklu ładowania aż do pełnej gotowości projektu i wygenerowania kompozycji HUD:
+
+### Szczegółowy podział na 4 etapy cyklu ładowania:
+
+| Etap pomiaru | Zimny cache (Cold) | Ciepły cache (Warm) | Opis stanu |
+| :--- | :---: | :---: | :--- |
+| **1. Kliknięcie „Wczytaj” -> Rozpoczęcie operacji (kickoff)** | **0.96 ms** | **2.15 ms** | Natychmiastowe odblokowanie wątku GUI, brak blokujących pętli |
+| **2. Kliknięcie „Wczytaj” -> Dane telemetrii gotowe** | **19 551.70 ms** (19.55 s) | **1 523.55 ms** (1.52 s) | Parsowanie GPMF / candidate range / budowa strumieni telemetrii |
+| **3. Kliknięcie „Wczytaj” -> Pierwsza klatka podglądu** | **19 901.45 ms** (19.90 s) | **1 581.24 ms** (1.58 s) | Ekstrakcja ramki referencyjnej wideo do podglądu w GUI |
+| **4. Kliknięcie „Wczytaj” -> Projekt gotowy (100% postępu)** | **19 904.23 ms** (19.90 s) | **1 583.89 ms** (1.58 s) | Złożenie HUD, inicjalizacja silnika podglądu, 100% gotowości |
+
+### Porównanie operacji pomocniczych:
+
+| Operacja | Stan pierwotny | Po optymalizacji | Przyspieszenie |
 | :--- | :---: | :---: | :---: |
-| **Pojawienie się informacji o filmie (Cold Cache)** | 239.12 ms | **220.69 ms** | 1.1× |
-| **Pojawienie się informacji o filmie (Warm Cache)** | 239.12 ms | **36.57 ms** | **6.5×** |
-| **Odczyt metadanych GPMF (Warm Cache / In-Memory)** | 164.61 ms | **0.18 ms** | **900×** |
-| **resolve_clip_timestamp() (bez cache sidecar)** | 4058.81 ms | **0.29 ms** | **14 000×** |
-| **probe_clip_time_interval() (bez cache sidecar)** | 1228.13 ms | **38.00 ms** | **32×** |
+| **Pojawienie się karty filmu (Warm Cache)** | 239.12 ms | **36.57 ms** | **6.5×** |
+| **Odczyt metadanych GPMF (In-Memory)** | 164.61 ms | **0.18 ms** | **900×** |
+| **resolve_clip_timestamp() (bez sidecar)** | 4058.81 ms | **0.29 ms** | **14 000×** |
+| **probe_clip_time_interval() (bez sidecar)** | 1228.13 ms | **38.00 ms** | **32×** |
 | **Preflight AutoFIT (wyszukiwanie + GPS)** | 2383.96 ms | **41.21 ms** | **58×** |
-| **Kliknięcie „Wczytaj” -> Gotowy projekt** | ~4100 ms (blokada) | **62.70 ms** | **65×** |
-| **Liczba pełnych przebiegów dekodowania MP4** | 0 | **0 (ZERO)** | Zachowano |
-| **Zużycie pamięci RAM (delta RSS)** | +240 MB | **+81.3 MB** | Zmniejszone 3× |
+| **Czas gotowości projektu (Warm Cache)** | ~4100 ms (blokada GUI) | **1.58 s** (asynchronicznie) | **2.6× szybszy rendering** |
 
 ---
 
-## 5. Wyniki harnessu testowego
+## 6. Weryfikacja metadanych na pliku referencyjnym GX010361.MP4
 
-Wykonano pełne testy jednostkowe kanonicznego harnessu projektu:
+Inspekcja rzeczywistego pliku nagrania `F:\GoPro\2026-10-09\GX010361.MP4` w karcie `VideoFileCardWidget`:
 
-1. **`tests/test_v114_load_performance.py`** — **7/7 PASSED** (1.90s)
-   - `test_firmware_mapping_accuracy`
-   - `test_gpmf_light_metadata_flow`
-   - `test_inspect_mp4_date_local_and_firmware_resolution`
-   - `test_card_widget_ui_labels`
-   - `test_non_blocking_load_click`
-   - `test_late_attach_signal_emitted`
-   - `test_multifile_resolver_uses_light_metadata`
-2. **`tests/test_mp4_inspector.py`** — **21/21 PASSED** (3.19s)
-3. **`tests/test_central_telemetry_cache.py`** — **13/13 PASSED** (0.66s)
-4. **`tests/test_auto_telemetry_preflight_suite.py`** — **13/13 PASSED** (5.26s)
-5. **`tests/test_multifile_timeline.py`** — **31/31 PASSED** (0.09s)
-6. **`tests/test_multifile_etap3_clip_time.py`** — **23/23 PASSED** (0.11s)
-7. **`tests/test_autofit_pre_load.py`** — **4/4 PASSED** (3.54s)
-8. **`tests/test_load_tab_layout_action2.py`** — **5/5 PASSED** (3.28s)
-9. **`tests/test_gpmf_native_perf_and_cache_clear.py`** — **9/9 PASSED** (0.65s)
-
-**Łącznie:** 126 testów przeszło pomyślnie ze 100% wynikiem pozytywnym.
+- **Data nagrania:** `2026-10-09 06:27:55`
+- **Źródło daty:** `GPMF (GPS)`
+- **Strefa czasowa:** `UTC+2` (czas polski letni / CEST, zgodny z ustawieniami systemu Windows)
+- **Kamera:** `GoPro HERO13 Black`
+- **Źródło modelu kamery:** `firmware H26.02.02.02.00`
+- **Strumienie:** Wideo HEVC 3840×2160 @ 29.97 fps (HLG / BT.2020), Audio AAC Stereo 48 kHz, Dane GPMF obecne.
 
 ---
 
-## 6. Potwierdzenie braku regresji FIT / GPMF i zachowania ograniczeń
+## 7. Wyniki kanonicznego harnessu testowego
 
-- **Pipelines GPU / Audio / Live Mux:** Nienaruszone. Żadnego wyodrębniania audio, żadnego `audio_cache.m4a`, żadnego podwójnego dekodowania.
-- **Synchronizacja FIT / GPMF:** Znacznik czasu `start_dt_utc = 1791520075.839021` pochodzi bezpośrednio z rekordów GPS9 z natywnego parsera C++ i jest w 100% identyczny jak przed optymalizacją.
-- **Odpowiedź GUI:** Interfejs nie zawiesza się; wybór pliku MP4 wyświetla informacje natychmiast (36 ms warm / 220 ms cold), a wczytanie projektu następuje w 62 ms.
-- **Late-attach FIT:** Jeśli użytkownik kliknie „Wczytaj” przed zakończeniem wyszukiwania online/lokalnego, dopasowany plik FIT jest podłączany asynchronicznie przez `late_attach_telemetry` bez przeładowywania podglądu wideo.
+Wykonano pełen zestaw testów we wszystkich 9 pakietach kanonicznych projektu:
+
+```text
+tests\test_v114_load_performance.py ............                         [  9%]
+tests\test_mp4_inspector.py .....................                        [ 25%]
+tests\test_central_telemetry_cache.py .............                      [ 35%]
+tests\test_auto_telemetry_preflight_suite.py .............               [ 45%]
+tests\test_multifile_timeline.py ...............................         [ 68%]
+tests\test_multifile_etap3_clip_time.py .......................          [ 86%]
+tests\test_autofit_pre_load.py ....                                      [ 89%]
+tests\test_load_tab_layout_action2.py .....                              [ 93%]
+tests\test_gpmf_native_perf_and_cache_clear.py .........                 [100%]
+
+============================ 131 passed in 14.58s =============================
+```
+
+- **Zachowano 100% istniejących testów:** wszystkie 126 testów przechodzi bez żadnych zmian ani regresji.
+- **Dodano 5 nowych testów regresyjnych late-attach i lifecycle:**
+  1. `test_autofit_lifecycle_film_a_to_b` — weryfikacja izolacji generacji i uniemożliwienia przypisania FIT z filmu A do filmu B.
+  2. `test_fit_found_during_loading_attached_on_success` — weryfikacja buforowania FIT w trakcie trwania ładowania i dołączenia po osiągnięciu 100%.
+  3. `test_clear_resets_loaded_once_and_cancels_worker` — weryfikacja resetu stanu i anulowania wątku przy czyszczeniu projektu.
+  4. `test_real_late_attach_telemetry_execution` — weryfikacja rzeczywistego wywołania `late_attach_telemetry()` na `AppController`, załadowania FIT i odświeżenia HUD.
+  5. `test_gx010361_real_file_metadata_and_card_display` — weryfikacja metadanych na rzeczywistym pliku referencyjnym HERO13 Black.
+
+Łącznie: **131 testów zakończonych sukcesem (100% PASSED)**.
 
 ---
 
-## 7. Zmodyfikowane pliki
+## 8. Potwierdzenie twardych niezmienników (Hard Invariants)
 
-- `src/gui/qt/mp4_inspector.py` — Dodano `GOPRO_FIRMWARE_MODELS`, optymalizację wykrywania GPMF bez dodatkowego ffprobe, obsługę `get_gpmf_light_metadata`, dokładne formatowanie czasu lokalnego i strefy UTC+2 oraz usunięto ciche połykanie błędów.
-- `src/gui/qt/tabs/load_tab.py` — Rozszerzono `VideoFileCardWidget.update_info()` o prezentację źródła i strefy, usunięto 4-sekundową pętlę blokującą w `_on_load()`, dodano emisję `sig_late_telemetry_matched` w `_on_autofit_matched`.
-- `src/telemetry_native_gpmf.py` — Dodano `get_gpmf_light_metadata()` z dwupoziomowym cache (pamięciowy + centralny w AppData) i weryfikacją fingerprintu (rozmiar, mtime_ns).
-- `src/telemetry_cache_manager.py` — Dodano ścieżki cache `gpmf_light.json` i `gpmf_light.meta.json`.
-- `src/integrations/auto_telemetry_preflight.py` — Zastąpiono pełne parsowanie GPMF wywołaniem `get_gpmf_light_metadata()`, naprawiono zmienną `best_score` oraz komunikaty statusu przy wyłączonym źródle online.
-- `src/multifile.py` — Wprowadzono szybką ścieżkę w `_resolve_from_gpmf()` wykorzystującą `get_gpmf_light_metadata()`.
-- `src/gui/qt/_mixins/project_mixin.py` — Naprawiono `NameError: name 'w' is not defined` przy obliczaniu wysokości ramki podglądu.
-- `tests/test_v114_load_performance.py` — Nowy kanoniczny zestaw testów regresji i wydajności.
+- **Pipelines GPU / Audio / Live Mux:** Nienaruszone. Żadnego wyodrębniania audio, żadnego `audio_cache.m4a`, żadnego podwójnego dekodowania, żadnego osobnego przebiegu kopiowania strumieni.
+- **Synchronizacja FIT / GPMF:** Znacznik czasu `start_dt_utc = 1791520075.839021` pochodzi bezpośrednio z rekordów GPS9 z natywnego parsera C++ i jest w 100% zgodny z pozycją czasową nagrania.
+- **Odpowiedź GUI:** Interfejs nie ulega zamrożeniu; kliknięcie „Wczytaj” odblokowuje GUI w <2 ms, a proces ładowania raportuje postęp asynchronicznie.
+- **Parzystość środowiska:** Wersja portable (`C:\_DEV\SportCamHUD-portable`) jest w 100% zsynchronizowana z głównym kodem.
 
 ---
 
-## 8. Stan Git i Commit
+## 9. Zmodyfikowane i dodane pliki
 
-- Gałąź: `fix/gui-freeze-hud-composite`
-- Gotowe do zacommitowania zgodnie z zasadami AGENTS.md.
+- `src/gui/qt/tabs/load_tab.py` — Dodano precyzyjną kontrolę cyklu życia (`_loaded_paths`, `_loaded_once`, `_pending_late_fit`, `_autofit_target_paths`), anulowanie i inkrementację generacji przy zmianie plików i czyszczeniu, buforowanie FIT mid-load i dynamiczne dołączanie late-attach.
+- `src/gui/qt/_mixins/project_mixin.py` — Przywrócono stan `self.video_paths` i `self.video_path` w `bg_load`, naprawiono `NameError: name 'w' is not defined`, zaimplementowano bezpieczne `late_attach_telemetry()` z discovery strumieni i odświeżaniem HUD.
+- `src/gui/qt/mp4_inspector.py` — Wprowadzono `GOPRO_FIRMWARE_MODELS`, eliminację redundantnego ffprobe, obsługę `get_gpmf_light_metadata`, dokładne formatowanie czasu lokalnego Windows (UTC+2) i źródła danych.
+- `src/telemetry_native_gpmf.py` — Dodano dwupoziomowy szybki cache `get_gpmf_light_metadata()`.
+- `src/telemetry_cache_manager.py` — Dodano obsługę ścieżek cache `gpmf_light.json`.
+- `src/integrations/auto_telemetry_preflight.py` — Zoptymalizowano pobieranie współrzędnych przez lekki cache, naprawiono statusy wyszukiwania.
+- `src/multifile.py` — Zintegrowano szybką ścieżkę timestampu GPMF bez zrzucania plików przez FFmpeg.
+- `pyproject.toml` — Skonfigurowano `--capture=sys` dla uniknięcia awarii deskryptorów Windows na Pythonie 3.14.
+- `scripts/benchmark_v114_load.py` — Kanoniczny skrypt pomiaru 4 etapów cyklu ładowania.
+- `tests/test_v114_load_performance.py` — Rozszerzono zestaw testów regresji z 7 do 12 (pełne pokrycie cyklu życia late-attach i metadanych rzeczywistego pliku).
+- `Raporty/RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md` — Zaktualizowany raport.

@@ -400,6 +400,10 @@ class LoadTab(QWidget):
         self._autofit_done_event = threading.Event()
         self._preflight_done_for_paths: list[str] = []
         self._dynamic_integrations_config: dict[str, Any] = {}
+        self._loaded_paths: list[str] = []
+        self._loaded_once: bool = False
+        self._pending_late_fit: str = ""
+        self._autofit_target_paths: list[str] = []
 
         # Stan analizy QP
         self._qp_gen: int = 0
@@ -676,12 +680,39 @@ class LoadTab(QWidget):
         if not valid_paths:
             return
 
+        norm_valid = [os.path.normcase(p) for p in valid_paths]
+        norm_curr = [os.path.normcase(p) for p in self._video_paths]
+
+        # Reset stanu powiązania poprzedniego filmu i anulowanie nieaktualnego preflightu
+        if norm_valid != norm_curr:
+            if self._autofit_cancel_event is not None:
+                self._autofit_cancel_event.set()
+                self._autofit_cancel_event = None
+            self._autofit_in_progress = False
+            self._autofit_done_event.set()
+            self._loading = False
+            self._loaded_once = False
+            self._loaded_paths = []
+            self._pending_late_fit = ""
+            self._fit_path = ""
+            self._gpx_path = ""
+            self._manual_fit_path = ""
+            self._manual_gpx_path = ""
+            self._auto_fit_path = ""
+            self._auto_gpx_path = ""
+            self._user_selected_telemetry = False
+            self._preflight_done_for_paths = []
+            self.btn_telemetry.setText("Wybierz FIT/GPX (opcjonalnie)...")
+            self.btn_telemetry.setStyleSheet(self._placeholder_style)
+            self.btn_telemetry.setToolTip("")
+
         self._video_paths = valid_paths
         self.btn_mp4.setText("; ".join(valid_paths))
         self.btn_mp4.setStyleSheet(self._selected_style)
         self.btn_mp4.setToolTip("; ".join(valid_paths))
         self._rebuild_cards(valid_paths)
-        self._start_multi_info_inspection()
+        if start_search:
+            self._start_multi_info_inspection()
 
         if not self._user_selected_telemetry:
             self._autofit_gen += 1
@@ -834,6 +865,7 @@ class LoadTab(QWidget):
             gen = self._autofit_gen
         request_gen = gen
 
+        self._autofit_target_paths = [str(Path(p).resolve()) for p in paths]
         self._autofit_in_progress = True
         self._autofit_done_event.clear()
         self._preflight_done_for_paths = []
@@ -844,10 +876,10 @@ class LoadTab(QWidget):
         self._fit_path = ""
         self._gpx_path = ""
 
-        self.btn_telemetry.setText("Wyszukiwanie lokalnych plik?w FIT/GPX...")
+        self.btn_telemetry.setText("Wyszukiwanie lokalnych plików FIT/GPX...")
         self.btn_telemetry.setToolTip("")
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
-        self.lbl_remote_status.setText("Wyszukiwanie lokalnych plik?w FIT/GPX...")
+        self.lbl_remote_status.setText("Wyszukiwanie lokalnych plików FIT/GPX...")
         self.lbl_remote_status.setToolTip("")
         self._update_telemetry_on_all_cards()
 
@@ -917,6 +949,12 @@ class LoadTab(QWidget):
         """Obsłuż dopasowany plik FIT/GPX z asynchronicznego preflightu (wątek główny GUI)."""
         if gen != self._autofit_gen or self._user_selected_telemetry:
             return
+
+        norm_curr = [os.path.normcase(os.path.abspath(p)) for p in self._video_paths]
+        norm_target = [os.path.normcase(os.path.abspath(p)) for p in getattr(self, "_autofit_target_paths", [])]
+        if norm_curr != norm_target:
+            return
+
         p = Path(telem_path)
         ext = p.suffix.lower()
         if ext == ".fit":
@@ -937,7 +975,12 @@ class LoadTab(QWidget):
         self.btn_telemetry.setToolTip(telem_path)
         self.btn_telemetry.setStyleSheet(self._selected_style)
         self._update_telemetry_on_all_cards()
-        if self._loading or getattr(self, "_loaded_once", False):
+
+        if self._loading:
+            # Projekt w trakcie wczytywania — buforuj i dołącz po ukończeniu (100%)
+            self._pending_late_fit = telem_path
+        elif self._loaded_paths and norm_curr == [os.path.normcase(os.path.abspath(p)) for p in self._loaded_paths]:
+            # Projekt został już w pełni załadowany dla tych samych plików wideo — emituj natychmiast
             self.signals.sig_late_telemetry_matched.emit(telem_path)
 
     # ═════════════════════════════════════════════════════════════════════
@@ -981,6 +1024,7 @@ class LoadTab(QWidget):
 
     def _finish_loading_success(self) -> None:
         self._loaded_once = True
+        self._loaded_paths = list(self._video_paths)
         if self.lbl_remote_status.text().startswith("Wczytywanie filmu"):
             if not self._autofit_in_progress:
                 self.lbl_remote_status.setText(
@@ -993,11 +1037,22 @@ class LoadTab(QWidget):
         self.lbl_info.setText("Wczytano pomyślnie.")
         self.btn_load.setEnabled(True)
 
+        if self._pending_late_fit:
+            late_fit = self._pending_late_fit
+            self._pending_late_fit = ""
+            norm_curr = [os.path.normcase(os.path.abspath(p)) for p in self._video_paths]
+            norm_loaded = [os.path.normcase(os.path.abspath(p)) for p in self._loaded_paths]
+            if norm_curr == norm_loaded:
+                self.signals.sig_late_telemetry_matched.emit(late_fit)
+
     def _on_load_error(self, msg: str) -> None:
         if not self._loading:
             return
         self._loading = False
         self._load_timer.stop()
+        self._loaded_paths = []
+        self._loaded_once = False
+        self._pending_late_fit = ""
         self.lbl_load_status.setText("Błąd")
         self.lbl_info.setText(f"Błąd wczytywania: {msg}")
         self.btn_load.setEnabled(True)
@@ -1046,6 +1101,10 @@ class LoadTab(QWidget):
         self.btn_telemetry.setStyleSheet(self._placeholder_style)
         self.btn_telemetry.setToolTip("")
         self._video_paths = []
+        self._loaded_paths = []
+        self._loading = False
+        self._loaded_once = False
+        self._pending_late_fit = ""
         self._gpx_path = ""
         self._fit_path = ""
         self._manual_fit_path = ""
