@@ -7,6 +7,7 @@ Padding preserves the widget centre; original raster composited on top.
 from __future__ import annotations
 
 import math
+from hashlib import blake2b
 from typing import Any
 import numpy as np
 import cv2
@@ -154,27 +155,27 @@ def apply_indicator_effects(image: Image.Image | None, cfg: dict[str, Any] | Non
     outline_color = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
     shadow_color = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
 
-    # Fast cache lookup by object ID and content signature
+    # Cache only the effect layers by alpha content. Object IDs can be reused
+    # and images can be mutated in place, so validate the alpha every time.
+    # RGB is deliberately not part of the cached layer: it is composited from
+    # the current image below, which keeps dynamic values/colors fresh.
     cfg_sig = (
         outline_enabled, outline_color[:3], width, out_opacity, out_fade,
         shadow_enabled, shadow_color[:3], round(distance, 2), round(length, 2),
         shadow_angle, shad_opacity, shad_fade,
     )
-    cache_id_key = (id(image), cfg_sig)
-    cached = _EFFECT_CACHE.get(cache_id_key)
-    if cached is not None:
-        return cached
-
     src_alpha = np.array(image.getchannel("A"), dtype=np.uint8)
     if not np.any(src_alpha):
         return image
 
-    content_hash = hash(src_alpha.tobytes())
-    cache_hash_key = (content_hash, image.size, cfg_sig)
-    cached = _EFFECT_CACHE.get(cache_hash_key)
+    content_hash = blake2b(src_alpha.tobytes(), digest_size=16).digest()
+    cache_key = (content_hash, image.size, cfg_sig)
+    cached = _EFFECT_CACHE.get(cache_key)
     if cached is not None:
-        _EFFECT_CACHE[cache_id_key] = cached
-        return cached
+        effect_layer, pad = cached
+        result = effect_layer.copy()
+        result.alpha_composite(image, (pad, pad))
+        return result
 
     # Compute bounds and padding
     raw_pad = max(width, (distance + length) if shadow_enabled else 0.0)
@@ -245,8 +246,7 @@ def apply_indicator_effects(image: Image.Image | None, cfg: dict[str, Any] | Non
             tile.putalpha(Image.fromarray(out_alpha, mode="L"))
             result.alpha_composite(tile)
 
-    result.alpha_composite(image, (pad, pad))
-
-    _EFFECT_CACHE[cache_id_key] = result
-    _EFFECT_CACHE[cache_hash_key] = result
-    return result
+    _EFFECT_CACHE[cache_key] = (result, pad)
+    output = result.copy()
+    output.alpha_composite(image, (pad, pad))
+    return output

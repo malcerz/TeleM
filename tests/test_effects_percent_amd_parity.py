@@ -61,6 +61,33 @@ def test_fast_path_when_effects_disabled():
     assert apply_indicator_effects(im, {"outline_enabled": True, "outline_width": 0.0}, 540) is im
 
 
+def test_effect_cache_distinguishes_rgb_and_mutated_source_rasters():
+    """Cached effects must preserve current RGB pixels even when alpha is unchanged."""
+    cfg = {
+        "effects_version": 2,
+        "outline_enabled": True,
+        "outline_width": 10.0,
+        "outline_opacity": 100.0,
+        "outline_fade": 0.0,
+    }
+
+    red = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    ImageDraw.Draw(red).rectangle((8, 8, 23, 23), fill=(255, 0, 0, 255))
+    green = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    ImageDraw.Draw(green).rectangle((8, 8, 23, 23), fill=(0, 255, 0, 255))
+
+    red_result = apply_indicator_effects(red, cfg, 32)
+    green_result = apply_indicator_effects(green, cfg, 32)
+    center = (red_result.width // 2, red_result.height // 2)
+    assert red_result.getpixel(center) == (255, 0, 0, 255)
+    assert green_result.getpixel(center) == (0, 255, 0, 255)
+
+    # The same PIL object may be reused and edited by a renderer between frames.
+    red.paste((0, 0, 255, 255), (8, 8, 24, 24))
+    blue_result = apply_indicator_effects(red, cfg, 32)
+    assert blue_result.getpixel(center) == (0, 0, 255, 255)
+
+
 def test_resolution_proportional_scaling_v2():
     """Etap 4: Geometric percentages scale relative to indicator min dimension."""
     im_540 = sample_circle_image(100)
