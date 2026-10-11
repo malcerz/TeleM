@@ -137,7 +137,7 @@ def _render_compass_indicator(
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
-    """Render a compass dial with rotating needle and cardinal points."""
+    """Render the selected course-up rose or north-up rotating needle."""
     ss = max(1, ss)
     radius = int(round(size_px * ss))
     img_size = int(round(radius * 2.4))
@@ -170,6 +170,18 @@ def _render_compass_indicator(
     major_len = max(4, int(round(radius * (0.14 if pixel_profile else 0.10))))
     minor_len = max(2, int(round(radius * (0.065 if pixel_profile else 0.055))))
 
+    missing = bool(cfg.get("_compass_missing", False)) or value is None
+    heading = None
+    if not missing:
+        try:
+            heading = float(value) % 360.0
+            if not math.isfinite(heading):
+                heading = None
+        except (TypeError, ValueError):
+            heading = None
+    rotate_rose = str(cfg.get("compass_rotation_mode", "needle")).strip().lower() == "rose"
+    rose_heading = heading if rotate_rose and heading is not None else 0.0
+
     def screen_angle(degrees: float) -> float:
         # PIL's 0° points east; geographic 0° must point up.
         return math.radians(float(degrees) - 90.0)
@@ -178,7 +190,7 @@ def _render_compass_indicator(
         "compass_static_v1", img_size, radius, ring_r, font_path, fs, outline,
         ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
         tick_degrees, major_degrees, pixel_profile,
-        bool(cfg.get("compass_show_cardinals", True)),
+        bool(cfg.get("compass_show_cardinals", True)), rose_heading,
     )
     img = _STATIC_CACHE.get(static_key)
     if img is None:
@@ -189,7 +201,7 @@ def _render_compass_indicator(
             outline=(*ring_rgb, 235), width=ring_width,
         )
         for degrees in range(0, 360, tick_degrees):
-            angle = screen_angle(degrees)
+            angle = screen_angle(degrees - rose_heading)
             major = degrees % major_degrees == 0
             length = major_len if major else minor_len
             outer = ring_r - ring_width
@@ -209,7 +221,7 @@ def _render_compass_indicator(
         if cfg.get("compass_show_cardinals", True):
             label_radius = ring_r - int(round(radius * 0.22))
             for degrees, text in ((0, "N"), (90, "E"), (180, "S"), (270, "W")):
-                angle = screen_angle(degrees)
+                angle = screen_angle(degrees - rose_heading)
                 tx = cx + math.cos(angle) * label_radius
                 ty = cy + math.sin(angle) * label_radius
                 draw.text((tx, ty), text, font=compass_font, anchor="mm",
@@ -220,18 +232,8 @@ def _render_compass_indicator(
     img = img.copy()
     draw = ImageDraw.Draw(img)
 
-    missing = bool(cfg.get("_compass_missing", False)) or value is None
-    heading = None
-    if not missing:
-        try:
-            heading = float(value) % 360.0
-            if not math.isfinite(heading):
-                heading = None
-        except (TypeError, ValueError):
-            heading = None
-
     if heading is not None:
-        angle = screen_angle(heading)
+        angle = screen_angle(0.0 if rotate_rose else heading)
         needle_tip = int(round(ring_r * float(cfg.get("compass_needle_length", 0.62))))
         needle_base = max(2, int(round(ring_r * 0.08)))
         px = -math.sin(angle)

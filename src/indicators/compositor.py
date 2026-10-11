@@ -368,6 +368,12 @@ def compose_overlay(
                 breakdown["time_display_render_ms"] = td_r_ms
                 breakdown["time_display.render"] = td_r_ms
         if td:
+            from src.indicators.effects import apply_indicator_effects
+            original_width = td.width
+            td = apply_indicator_effects(td, layout["indicators"]["time_display"], min(canvas_w, canvas_h))
+            effect_pad = (td.width - original_width) // 2
+            tdx -= effect_pad
+            tdy -= effect_pad
             td_rotation = layout["indicators"]["time_display"].get("rotation", 0)
             cx = tdx + td.width // 2
             cy = tdy + td.height // 2

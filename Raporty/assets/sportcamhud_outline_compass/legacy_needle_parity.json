@@ -1,0 +1,30 @@
+[
+  {
+    "heading": null,
+    "byte_identical": true
+  },
+  {
+    "heading": 0,
+    "byte_identical": true
+  },
+  {
+    "heading": 45,
+    "byte_identical": true
+  },
+  {
+    "heading": 90,
+    "byte_identical": true
+  },
+  {
+    "heading": 180,
+    "byte_identical": true
+  },
+  {
+    "heading": 270,
+    "byte_identical": true
+  },
+  {
+    "heading": 359,
+    "byte_identical": true
+  }
+]

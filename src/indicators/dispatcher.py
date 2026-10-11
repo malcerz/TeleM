@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 from datetime import datetime
+from functools import wraps
 from typing import Any, Optional
 
 try:
@@ -25,7 +26,7 @@ from src.indicators.text import _render_text_indicator
 from src.indicators.widget_cache import compute_visual_signature, get_widget_cache
 
 
-def render_value_indicator(
+def _render_value_indicator(
     canvas_w: int,
     canvas_h: int,
     layout: dict[str, Any],
@@ -169,3 +170,28 @@ def render_value_indicator(
         )
 
     return None, 0, 0, None
+
+
+@wraps(_render_value_indicator)
+def render_value_indicator(*args, **kwargs):
+    """Apply the shared effects after the canonical per-form renderer."""
+    result = _render_value_indicator(*args, **kwargs)
+    image, x, y, extra = result
+    layout = kwargs.get("layout", args[2] if len(args) > 2 else {})
+    key = kwargs.get("key", args[4] if len(args) > 4 else "")
+    cfg = kwargs.get("cfg_override") or layout.get("indicators", {}).get(key, {})
+    from src.indicators.effects import effects_enabled, apply_indicator_effects
+    if image is None or not effects_enabled(cfg):
+        return result
+    width = kwargs.get("canvas_w", args[0] if args else 0)
+    height = kwargs.get("canvas_h", args[1] if len(args) > 1 else 0)
+    styled = apply_indicator_effects(image, cfg, min(width, height))
+    if cfg.get("form", "text") == "text":
+        pad = (styled.width - image.width) // 2
+        x -= pad
+        y -= pad
+    if cfg.get("form") in ("gauge", "compass"):
+        from src.indicators.gauge import record_gauge_dynamic_info
+        # The existing FULL_TILE path carries the entire effect support.
+        record_gauge_dynamic_info(key, kind="effects", supported=False)
+    return styled, x, y, extra

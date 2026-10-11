@@ -410,7 +410,7 @@ def text_indicator_fields() -> list[FieldSchema]:
     return (
         _header_fields(text_size=True) + _form_field()
         + _text_tab_fields(include_font_size=False)
-    )
+    ) + _effects_fields()
 
 
 def gauge_indicator_fields() -> list[FieldSchema]:
@@ -422,7 +422,7 @@ def gauge_indicator_fields() -> list[FieldSchema]:
                        choices=["default", "pixel"], default="default")]
         + _ticks_tab_fields(with_step=False)
         + _gauge_tab_fields()
-    )
+    ) + _effects_fields()
 
 
 def compass_indicator_fields() -> list[FieldSchema]:
@@ -430,6 +430,9 @@ def compass_indicator_fields() -> list[FieldSchema]:
     return (
         _header_fields(with_icon=False, with_label=False, with_unit=False) + _form_field(["gauge"])
         + [
+            FieldSchema("compass_rotation_mode", "choice", "Obracanie kompasu", tab="Compass",
+                        choices=[("needle", "Wskazówka na stałej tarczy"),
+                                 ("rose", "Tarcza / róża do kierunku jazdy")], default="needle"),
             FieldSchema("font_size", "float", "Rozmiar tekstu", tab="Compass", min_val=0.5, max_val=10.0, step=0.1, default=2.5),
             FieldSchema("tick_profile", "choice", "Profil ticków", tab="Compass",
                         choices=["default", "pixel"], default="default"),
@@ -454,7 +457,7 @@ def compass_indicator_fields() -> list[FieldSchema]:
             FieldSchema("compass_ring_width", "int", "Grubość pierścienia", tab="Compass", min_val=1, max_val=15, step=1, default=2),
             FieldSchema("compass_tick_width", "int", "Grubość ticków", tab="Compass", min_val=1, max_val=10, step=1, default=1),
         ]
-    )
+    ) + _effects_fields()
 
 
 def _bar_ruler_fields() -> list[FieldSchema]:
@@ -706,7 +709,7 @@ def lean_indicator_fields() -> list[FieldSchema]:
             FieldSchema("decimals", "int", "Miejsca dzies.", tab="Text",
                         min_val=0, max_val=2, step=1, default=0),
         ]
-    )
+    ) + _effects_fields()
 
 
 def chart_indicator_fields(chart_time_scope: str = "activity") -> list[FieldSchema]:
@@ -849,7 +852,7 @@ def time_display_indicator_fields() -> list[FieldSchema]:
                     tab="Śr. prędkość", min_val=0.8, max_val=8.0, step=0.1, default=1.5),
         FieldSchema("avg_speed_color", "color", "Kolor", tab="Śr. prędkość", default="#FFFFFF"),
     ]
-    return header + date_tab + time_tab + elapsed_tab + avg_speed_tab
+    return header + date_tab + time_tab + elapsed_tab + avg_speed_tab + _effects_fields()
 
 
 # Mapa: forma → funkcja generująca schemat
@@ -867,14 +870,32 @@ FORM_SCHEMA_MAP: dict[str, callable] = {
 }
 
 
+def _effects_fields():
+    fields = []
+    for prefix, label in (("shadow", "Cień"), ("outline", "Obrys")):
+        fields += [
+            FieldSchema(prefix+"_enabled", "bool", label, tab="Efekty", default=False),
+            FieldSchema(prefix+"_color", "color", label+": kolor", tab="Efekty", default="#000000"),
+            FieldSchema(prefix+"_opacity", "float", label+": krycie", tab="Efekty", min_val=0,max_val=1,step=0.05,default=0.7 if prefix=="shadow" else 1.0),
+            FieldSchema(prefix+"_fade", "float", label+": zanikanie", tab="Efekty", min_val=0,max_val=1,step=0.05,default=1.0 if prefix=="shadow" else 0.0),
+        ]
+    fields += [
+        FieldSchema("outline_width", "float", "Obrys: zasięg [px przy 540p]", tab="Efekty",min_val=0,max_val=30,step=0.5,default=2.0),
+        FieldSchema("shadow_distance", "float", "Cień: odsunięcie [px przy 540p]", tab="Efekty",min_val=0,max_val=60,step=0.5,default=3.0),
+        FieldSchema("shadow_length", "float", "Cień: długość [px przy 540p]", tab="Efekty",min_val=0,max_val=60,step=0.5,default=0.0),
+        FieldSchema("shadow_angle", "float", "Cień: kierunek [stopnie]", tab="Efekty",min_val=0,max_val=360,step=5,default=45.0),
+    ]
+    return fields
+
+
 def get_schema_for_form(
     form: str, bar_style: str = "ruler", chart_time_scope: str = "activity",
 ) -> list[FieldSchema]:
     """Zwraca schemat pól dla podanej formy wskaźnika."""
     if form == "bar":
-        return bar_indicator_fields(bar_style=bar_style)
+        return bar_indicator_fields(bar_style=bar_style) + _effects_fields()
     if form == "segment_bar":
-        return bar_indicator_fields(bar_style="segments")
+        return bar_indicator_fields(bar_style="segments") + _effects_fields()
     if form == "chart":
         return chart_indicator_fields(chart_time_scope=chart_time_scope)
     fn = FORM_SCHEMA_MAP.get(form, text_indicator_fields)

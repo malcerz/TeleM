@@ -172,15 +172,21 @@ def _vectorize_heading(
     samples: list[tuple[datetime, Optional[float]]],
     target_ts_arr: np.ndarray,
     ref_dt: datetime,
+    *, preserve_missing: bool = False,
 ) -> np.ndarray:
     """Vectorized circular interpolation for heading and compass."""
     if not samples:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
+    def sample_time(dt):
+        if dt.tzinfo is None:
+            return dt
+        return (dt.astimezone(timezone.utc) if preserve_missing else dt).replace(tzinfo=None)
+
     ordered = sorted(
         [
-            (dt.replace(tzinfo=None) if dt.tzinfo is not None else dt, val)
-            for dt, val in samples if val is not None
+            (sample_time(dt), val)
+            for dt, val in samples if preserve_missing or val is not None
         ],
         key=lambda item: item[0],
     )
@@ -352,6 +358,9 @@ class RenderPreparationService:
             "timeline": timeline_repr,
             "skip_pauses": skip_pauses,
         }
+        compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
+        if compass_cfg and compass_cfg.get("enabled", True):
+            key_dict["compass_heading_contract"] = "selected_source_cog_v1"
         raw = json.dumps(key_dict, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -739,6 +748,17 @@ class RenderPreparationService:
         # 7. Heading & Compass
         heading_samples = fit.get("heading") or fit.get("track") or track_samples or []
         columns["heading"] = _vectorize_heading(heading_samples, target_ts_arr, ref_dt)
+        if "compass" in heading_keys:
+            compass_samples = kwargs.get("compass_heading_samples")
+            if compass_samples is None:
+                from src.ffmpeg.worker_cache import _resolve_cache_samples
+                compass_source = str(indicators["compass"].get("source", "gpmf")).strip().lower()
+                compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
+                if compass_source == "fit":
+                    compass_samples = fit.get("heading") or []
+            columns["heading_compass"] = _vectorize_heading(
+                compass_samples or [], target_ts_arr, ref_dt, preserve_missing=True,
+            )
         if "track_map" in heading_keys:
             map_cfg = indicators.get("track_map", {})
             smooth_s = float(map_cfg.get("map_rotation_smoothing_s", 0.0) or 0.0)
@@ -1326,7 +1346,20 @@ class RenderPreparationService:
         except Exception:
             pass
 
+        compass_cfg = layout.get("indicators", {}).get("compass", {})
+        compass_samples = None
+        if compass_cfg.get("enabled", True) and compass_cfg:
+            source = str(compass_cfg.get("source", "gpmf")).strip().lower()
+            resolver = getattr(telemetry, "resolve_samples", None)
+            if callable(resolver):
+                compass_samples = resolver("heading", source)
+            elif source == "fit":
+                compass_samples = fit_data.get("heading") or []
+            else:
+                attr = "gpx_heading_samples" if source == "gpx" else "heading_samples"
+                compass_samples = getattr(telemetry, attr, []) or []
         return cls.get_or_build(
+            compass_heading_samples=compass_samples,
             layout=layout,
             base_dt=base_dt,
             tz_offset_hours=2.0,

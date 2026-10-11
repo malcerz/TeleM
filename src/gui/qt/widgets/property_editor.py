@@ -228,7 +228,7 @@ class PropertyEditor(QWidget):
         # ── Zakładki ──────────────────────────────────────────────────
         tab_order = ["Text", "Ikona", "Data", "Czas", "Od początku", "Śr. prędkość",
                      "Labels", "Ticks", "Gauge", "Compass", "Chart", "Segments",
-                     "Colors", "Marker", "Range", "Path", "Shape", "Zaawansowane"]
+                     "Colors", "Marker", "Range", "Path", "Shape", "Efekty", "Zaawansowane"]
         grouped: dict[str, list[FieldSchema]] = {t: [] for t in tab_order}
         for field in schema:
             if field.tab in grouped:

@@ -458,7 +458,10 @@ class RenderTelemetryCache:
         for k, arr, unit, label in self._lean_items:
             extra_indicators[k] = (_scalar_val(arr, frame_idx), unit, label)
         for k, is_map, unit, label in self._heading_items:
-            extra_indicators[k] = (map_heading_val if is_map else heading_val, unit, label)
+            value = map_heading_val if is_map else heading_val
+            if k == "compass" and "heading_compass" in self.columns:
+                value = _scalar_val(self.columns["heading_compass"], frame_idx)
+            extra_indicators[k] = (value, unit, label)
         for k, unit, label in self._slope_items:
             extra_indicators[k] = (slope_val, unit, label)
 

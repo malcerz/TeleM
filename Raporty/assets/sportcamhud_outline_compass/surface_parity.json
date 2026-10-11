@@ -1,0 +1,58 @@
+[
+  {
+    "mode": "needle",
+    "heading": 0,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "needle",
+    "heading": 90,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "needle",
+    "heading": 180,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "needle",
+    "heading": 270,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "rose",
+    "heading": 0,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "rose",
+    "heading": 90,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "rose",
+    "heading": 180,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  },
+  {
+    "mode": "rose",
+    "heading": 270,
+    "max_diff": 0,
+    "MAE": 0.0,
+    "different_pixels": 0
+  }
+]
