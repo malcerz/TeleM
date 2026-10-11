@@ -874,16 +874,24 @@ def _effects_fields():
     fields = []
     for prefix, label in (("shadow", "Cień"), ("outline", "Obrys")):
         fields += [
-            FieldSchema(prefix+"_enabled", "bool", label, tab="Efekty", default=False),
-            FieldSchema(prefix+"_color", "color", label+": kolor", tab="Efekty", default="#000000"),
-            FieldSchema(prefix+"_opacity", "float", label+": krycie", tab="Efekty", min_val=0,max_val=1,step=0.05,default=0.7 if prefix=="shadow" else 1.0),
-            FieldSchema(prefix+"_fade", "float", label+": zanikanie", tab="Efekty", min_val=0,max_val=1,step=0.05,default=1.0 if prefix=="shadow" else 0.0),
+            FieldSchema(prefix + "_enabled", "bool", label, tab="Efekty", default=False),
+            FieldSchema(prefix + "_color", "color", label + ": kolor", tab="Efekty", default="#000000"),
+            FieldSchema(
+                prefix + "_opacity", "float", label + ": krycie [%]", tab="Efekty",
+                min_val=0.0, max_val=100.0, step=1.0,
+                default=70.0 if prefix == "shadow" else 100.0,
+            ),
+            FieldSchema(
+                prefix + "_fade", "float", label + ": zanikanie [%]", tab="Efekty",
+                min_val=0.0, max_val=100.0, step=1.0,
+                default=100.0 if prefix == "shadow" else 0.0,
+            ),
         ]
     fields += [
-        FieldSchema("outline_width", "float", "Obrys: zasięg [px przy 540p]", tab="Efekty",min_val=0,max_val=30,step=0.5,default=2.0),
-        FieldSchema("shadow_distance", "float", "Cień: odsunięcie [px przy 540p]", tab="Efekty",min_val=0,max_val=60,step=0.5,default=3.0),
-        FieldSchema("shadow_length", "float", "Cień: długość [px przy 540p]", tab="Efekty",min_val=0,max_val=60,step=0.5,default=0.0),
-        FieldSchema("shadow_angle", "float", "Cień: kierunek [stopnie]", tab="Efekty",min_val=0,max_val=360,step=5,default=45.0),
+        FieldSchema("outline_width", "float", "Obrys: zasięg [%]", tab="Efekty", min_val=0.0, max_val=100.0, step=0.1, default=2.0),
+        FieldSchema("shadow_distance", "float", "Cień: odsunięcie [%]", tab="Efekty", min_val=0.0, max_val=100.0, step=0.1, default=3.0),
+        FieldSchema("shadow_length", "float", "Cień: długość [%]", tab="Efekty", min_val=0.0, max_val=100.0, step=0.1, default=0.0),
+        FieldSchema("shadow_angle", "float", "Cień: kierunek [stopnie]", tab="Efekty", min_val=0.0, max_val=360.0, step=5.0, default=45.0),
     ]
     return fields
 

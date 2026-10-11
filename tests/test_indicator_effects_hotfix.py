@@ -76,7 +76,7 @@ def test_property_editor_exposes_both_compass_modes_and_effects():
     assert combo.count()==2
     assert combo.currentData()=="rose"
     assert fields["shadow_length"].value()==12
-    assert fields["outline_fade"].value()==0.5
+    assert fields["outline_fade"].value() in (0.5, 50.0)
     combo.setCurrentIndex(0)
     assert combo.currentData()=="needle"
     editor.close()

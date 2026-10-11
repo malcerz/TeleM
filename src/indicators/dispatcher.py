@@ -190,7 +190,7 @@ def render_value_indicator(*args, **kwargs):
         pad = (styled.width - image.width) // 2
         x -= pad
         y -= pad
-    if cfg.get("form") in ("gauge", "compass"):
+    if cfg.get("form") == "gauge" and key in ("speed_text", "speed_visual"):
         from src.indicators.gauge import record_gauge_dynamic_info
         # The existing FULL_TILE path carries the entire effect support.
         record_gauge_dynamic_info(key, kind="effects", supported=False)

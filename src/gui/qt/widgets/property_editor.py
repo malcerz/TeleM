@@ -33,6 +33,7 @@ class PropertyEditor(QWidget):
         super().__init__()
         self.signals = get_signals()
         self._current_key: str = ""
+        self._current_values: dict = {}
         self._suppress_emit: bool = False
         self._field_widgets: dict[str, QWidget] = {}
         self._field_rows: dict[str, QWidget] = {}
@@ -100,6 +101,9 @@ class PropertyEditor(QWidget):
 
     def update_field_values(self, values: dict) -> None:
         """Aktualizuje wartości w istniejących widgetach bez przebudowywania UI."""
+        self._current_values = values or {}
+        from src.indicators.effects import is_effects_v2
+        v2 = is_effects_v2(self._current_values)
         self._suppress_emit = True
         try:
             for name, w in self._field_widgets.items():
@@ -107,7 +111,11 @@ class PropertyEditor(QWidget):
                 if isinstance(w, QDoubleSpinBox):
                     if val is not None:
                         try:
-                            w.setValue(float(val))
+                            vf = float(val)
+                            if name in ("outline_opacity", "shadow_opacity", "outline_fade", "shadow_fade"):
+                                if not v2 and vf <= 1.0:
+                                    vf = round(vf * 100.0, 1)
+                            w.setValue(vf)
                         except (ValueError, TypeError):
                             pass
                 elif isinstance(w, QSpinBox):
@@ -143,6 +151,7 @@ class PropertyEditor(QWidget):
         if not stream_key:
             # Wyczyść panel
             self._current_key = ""
+            self._current_values = {}
             self.key_label.setText("")
             self.delete_btn.setVisible(False)
             self.placeholder.setVisible(True)
@@ -155,6 +164,7 @@ class PropertyEditor(QWidget):
             self._field_labels.clear()
             return
 
+        self._current_values = values or {}
         if self._current_key == stream_key and len(self._field_widgets) == len(schema):
             self.update_field_values(values)
             return
@@ -378,10 +388,31 @@ class PropertyEditor(QWidget):
             else:
                 spin.setRange(-9999.0, 99999.0)
             spin.setSingleStep(field.step or 0.001)
-            spin.setDecimals(4)
+            if field.step is not None:
+                if field.step >= 1.0:
+                    spin.setDecimals(1 if (field.tab == "Efekty" or "[%]" in field.label) else 2)
+                elif field.step >= 0.1:
+                    spin.setDecimals(1)
+                elif field.step >= 0.01:
+                    spin.setDecimals(2)
+                else:
+                    spin.setDecimals(4)
+            else:
+                spin.setDecimals(4)
+
+            if "[%]" in field.label or (field.tab == "Efekty" and ("krycie" in field.label or "zanikanie" in field.label or "zasięg" in field.label or "odsunięcie" in field.label or "długość" in field.label)):
+                spin.setSuffix(" %")
+            elif "[stopnie]" in field.label:
+                spin.setSuffix("°")
+
             if value is not None:
                 try:
-                    spin.setValue(float(value))
+                    val_float = float(value)
+                    if field.tab == "Efekty" and ("krycie" in field.label or "zanikanie" in field.label):
+                        from src.indicators.effects import is_effects_v2
+                        if not is_effects_v2(getattr(self, "_current_values", {})) and val_float <= 1.0:
+                            val_float = round(val_float * 100.0, 1)
+                    spin.setValue(val_float)
                 except (ValueError, TypeError):
                     spin.setValue(0.0)
             spin.valueChanged.connect(
@@ -510,6 +541,12 @@ class PropertyEditor(QWidget):
     def _emit_change(self, field_name: str, value: Any) -> None:
         """Emituje sygnał zmiany właściwości."""
         if self._current_key and not self._suppress_emit:
+            if field_name.startswith(("outline_", "shadow_")):
+                self.signals.sig_property_changed.emit(
+                    self._current_key, "effects_version", 2,
+                )
+                if hasattr(self, "_current_values") and isinstance(self._current_values, dict):
+                    self._current_values["effects_version"] = 2
             self.signals.sig_property_changed.emit(
                 self._current_key, field_name, value,
             )
@@ -595,4 +632,15 @@ class PropertyEditor(QWidget):
             auto_scale = self._get_field_bool("auto_scale", default=False)
             self._set_field_enabled("min_val", not auto_scale)
             self._set_field_enabled("max_val", not auto_scale)
+
+        # 7. Efekty (outline / shadow)
+        outline_enabled = self._get_field_bool("outline_enabled", default=False)
+        for of in ("outline_color", "outline_opacity", "outline_fade", "outline_width"):
+            if of in self._field_widgets:
+                self._set_field_enabled(of, outline_enabled)
+
+        shadow_enabled = self._get_field_bool("shadow_enabled", default=False)
+        for sf in ("shadow_color", "shadow_opacity", "shadow_fade", "shadow_distance", "shadow_length", "shadow_angle"):
+            if sf in self._field_widgets:
+                self._set_field_enabled(sf, shadow_enabled)
 

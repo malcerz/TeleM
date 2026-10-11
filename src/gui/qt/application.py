@@ -605,6 +605,7 @@ def main() -> None:
         parser.add_argument("--progress-ui", default="1")
         parser.add_argument("--restore-prefetch", default="0")
         parser.add_argument("--preview-hud", action="store_true", default=False)
+        parser.add_argument("--layout", default="")
         test_args, _ = parser.parse_known_args(sys.argv[1:])
 
         video_path = Path(test_args.video).resolve()
@@ -691,7 +692,7 @@ def main() -> None:
             for i, j_res in enumerate(completed_jobs, 1):
                 print(f"  JOB{i}_FPS={j_res['fps']:.2f} (native={j_res['native_fps']})", flush=True)
             if test_args.result_json:
-                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2, default=str), encoding="utf-8")
             QTimer.singleShot(500, window.close)
 
         def _on_render_error_bench(msg):
@@ -808,6 +809,10 @@ def main() -> None:
                 and getattr(_controller, "layout", None)
                 and btn.isEnabled()
             ):
+                if test_args.layout and Path(test_args.layout).is_file():
+                    from src.gui.layout_manager import normalize_layout
+                    _controller.layout = normalize_layout(Path(test_args.layout).resolve(), 1280, 720)
+                    print(f"[BENCH] Loaded custom benchmark layout: {test_args.layout}", flush=True)
                 _trigger_test_export()
             else:
                 QTimer.singleShot(100, _poll_ready_bench)

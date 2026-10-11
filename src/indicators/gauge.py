@@ -50,6 +50,8 @@ def clear_compass_cache() -> None:
     _COMPASS_INDICATOR_CACHE.clear()
     _COMPASS_INDICATOR_CACHE.hits = 0
     _COMPASS_INDICATOR_CACHE.misses = 0
+    from src.indicators.effects import clear_effects_cache
+    clear_effects_cache()
 
 
 def clear_gauge_cache() -> None:
@@ -63,6 +65,8 @@ def clear_gauge_cache() -> None:
         _STATIC_CACHE.clear()
     if FONT_CACHE is not None:
         FONT_CACHE.clear()
+    from src.indicators.effects import clear_effects_cache
+    clear_effects_cache()
 # ── ETAP 2C: renderer-reported dynamic-support info for AUTO regions ──────────
 # Keyed by indicator key. Updated by EVERY _render_gauge_indicator call so the
 # AMD native exporter can derive ghost-free AUTO upload rectangles from the
@@ -180,7 +184,7 @@ def _render_compass_indicator(
         except (TypeError, ValueError):
             heading = None
     rotate_rose = str(cfg.get("compass_rotation_mode", "needle")).strip().lower() == "rose"
-    rose_heading = heading if rotate_rose and heading is not None else 0.0
+    rose_heading = round(heading, 1) if rotate_rose and heading is not None else 0.0
 
     def screen_angle(degrees: float) -> float:
         # PIL's 0° points east; geographic 0° must point up.
