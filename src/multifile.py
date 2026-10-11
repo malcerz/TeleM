@@ -330,6 +330,23 @@ def _resolve_from_gpmf(
 ) -> ClipTimestampResolution:
     """Extract + parse the clip's GPMF and resolve its absolute start."""
     try:
+        from src.telemetry_native_gpmf import get_gpmf_light_metadata
+        light_meta = get_gpmf_light_metadata(path)
+        if light_meta and light_meta.get("success") and light_meta.get("start_dt_utc"):
+            utc_ts = light_meta["start_dt_utc"]
+            dt = datetime.fromtimestamp(utc_ts, tz=timezone.utc).replace(tzinfo=None)
+            detail = f"resolved from native gpmf light metadata ({light_meta.get('start_dt_str', '')})"
+            return ClipTimestampResolution(
+                absolute_start_dt=dt,
+                timestamp_source=TIMESTAMP_SOURCE_GPMF_GPS9,
+                timestamp_reliable=True,
+                timestamp_detail=detail,
+                timestamp_quality=TIMESTAMP_QUALITY_EXACT,
+            )
+    except Exception:
+        pass
+
+    try:
         from src.telemetry_gpmf_new import extract_gpmf, parse_gpmf
     except Exception as exc:  # pragma: no cover - import guard
         return ClipTimestampResolution(

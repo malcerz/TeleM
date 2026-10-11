@@ -268,14 +268,19 @@ class VideoFileCardWidget(QFrame):
             gpmf_meta = info.get("gpmf_meta", {})
             date_str = gpmf_meta.get("date")
             camera = gpmf_meta.get("camera")
+            tz_str = gpmf_meta.get("timezone", "")
+            date_src = gpmf_meta.get("date_source", "GPMF")
+            cam_src = gpmf_meta.get("camera_source", "")
             
             if date_str:
-                self.lbl_record_date.setText(f"<b>Data nagrania:</b> {date_str}")
+                tz_label = f" <span style='color:#666; font-size:10px;'>({date_src}, {tz_str})</span>" if tz_str else ""
+                self.lbl_record_date.setText(f"<b>Data nagrania:</b> {date_str}{tz_label}")
             else:
                 self.lbl_record_date.setText("<b>Data nagrania:</b> Brak danych")
                 
             if camera:
-                self.lbl_camera.setText(f"<b>Kamera:</b> {camera}")
+                cam_label = f" <span style='color:#666; font-size:10px;'>({cam_src})</span>" if cam_src and cam_src != "GPMF" else ""
+                self.lbl_camera.setText(f"<b>Kamera:</b> {camera}{cam_label}")
             else:
                 self.lbl_camera.setText("<b>Kamera:</b> Brak danych")
         else:
@@ -932,6 +937,8 @@ class LoadTab(QWidget):
         self.btn_telemetry.setToolTip(telem_path)
         self.btn_telemetry.setStyleSheet(self._selected_style)
         self._update_telemetry_on_all_cards()
+        if self._loading or getattr(self, "_loaded_once", False):
+            self.signals.sig_late_telemetry_matched.emit(telem_path)
 
     # ═════════════════════════════════════════════════════════════════════
     # Wczytywanie i obsługa paska postępu
@@ -942,17 +949,9 @@ class LoadTab(QWidget):
             QMessageBox.warning(self, "Brak pliku", "Wybierz plik MP4.")
             return
 
-        # Jeśli preflight jeszcze trwa, poczekaj krótko na jego zakończenie
-        if self._autofit_in_progress:
-            deadline = time.time() + 4.0
-            while self._autofit_in_progress and time.time() < deadline:
-                from PySide6.QtWidgets import QApplication
-                QApplication.processEvents()
-                time.sleep(0.02)
-
         self._start_loading()
-        if not self._fit_path and not self._gpx_path:
-            self.lbl_remote_status.setText("Wczytywanie filmu i ustalanie czasu dla wyszukiwania telemetrii…")
+        if not self._fit_path and not self._gpx_path and not self._autofit_in_progress:
+            self.lbl_remote_status.setText("Wczytywanie filmu...")
         self.signals.sig_files_selected.emit(
             list(self._video_paths), self._gpx_path, self._fit_path,
         )
@@ -981,11 +980,13 @@ class LoadTab(QWidget):
             self._finish_loading_success()
 
     def _finish_loading_success(self) -> None:
-        if self.lbl_remote_status.text().startswith("Wczytywanie filmu i ustalanie czasu"):
-            self.lbl_remote_status.setText(
-                "Nie uzyskano wyniku automatycznego wyszukiwania. "
-                "Sprawdź źródło w Ustawieniach lub wybierz FIT/GPX ręcznie."
-            )
+        self._loaded_once = True
+        if self.lbl_remote_status.text().startswith("Wczytywanie filmu"):
+            if not self._autofit_in_progress:
+                self.lbl_remote_status.setText(
+                    "Nie uzyskano wyniku automatycznego wyszukiwania. "
+                    "Sprawdź źródło w Ustawieniach lub wybierz FIT/GPX ręcznie."
+                )
         self._loading = False
         self._load_target = 100.0
         self.lbl_load_status.setText("Gotowe")

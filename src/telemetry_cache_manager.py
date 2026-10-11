@@ -90,6 +90,16 @@ def get_gpmf_metadata_path(source_path: Path | str, create_dir: bool = True) -> 
     return get_media_cache_dir(source_path, create=create_dir) / "gpmf.meta.json"
 
 
+def get_gpmf_light_json_path(source_path: Path | str, create_dir: bool = True) -> Path:
+    """Return the central cache path for lightweight GPMF metadata JSON."""
+    return get_media_cache_dir(source_path, create=create_dir) / "gpmf_light.json"
+
+
+def get_gpmf_light_metadata_path(source_path: Path | str, create_dir: bool = True) -> Path:
+    """Return the central cache path for lightweight GPMF contract metadata."""
+    return get_media_cache_dir(source_path, create=create_dir) / "gpmf_light.meta.json"
+
+
 def get_telem_time_json_path(source_path: Path | str, create_dir: bool = True) -> Path:
     """Return the central cache path for telem_time JSON."""
     return get_media_cache_dir(source_path, create=create_dir) / "telem_time.json"

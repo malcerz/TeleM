@@ -303,11 +303,10 @@ def run_auto_telemetry_preflight(
     # Try to extract video GPS point for matching if not provided
     if video_gps_point is None:
         try:
-            from src.telemetry_native_gpmf import extract_gpmf_native
-            ndata = extract_gpmf_native(video_paths[0])
-            if ndata and ndata.get("gps_track"):
-                pt = ndata["gps_track"][0]
-                video_gps_point = (pt[1], pt[2])
+            from src.telemetry_native_gpmf import get_gpmf_light_metadata
+            light_meta = get_gpmf_light_metadata(video_paths[0])
+            if light_meta and light_meta.get("first_gps"):
+                video_gps_point = light_meta["first_gps"]
                 print(f"[AutoPreflight] Extracted video GPS point: {video_gps_point}", flush=True)
         except Exception as e:
             print(f"[AutoPreflight] Could not extract video GPS: {e}", flush=True)
@@ -366,7 +365,7 @@ def run_auto_telemetry_preflight(
     source = str(config.get("auto_activity_source", "none") or "none").lower()
 
     if source in ("none", "", "nic"):
-        on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Nie znaleziono pasującego pliku FIT/GPX.", None)
+        on_status("Nie znaleziono lokalnego FIT/GPX", "Nie znaleziono lokalnych plików, a wyszukiwanie online jest wyłączone.", None)
         print("[AutoPreflight] Source=none -> No remote search performed.", flush=True)
         return None
 
@@ -454,14 +453,19 @@ def run_auto_telemetry_preflight(
                 return None
                 
             best_cand = None
+            best_score = 0.0
             if decision == "NEEDS_SELECTION":
                 if on_needs_selection:
                     best_cand = on_needs_selection(ranked)
                 if not best_cand:
-                    on_status("Nie znaleziono pasujacego pliku FIT/GPX.", "Znaleziono kilka aktywnosci (dopasowanie niejednoznaczne). Wybierz recznie.", None)
+                    on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono kilka aktywności (dopasowanie niejednoznaczne). Wybierz ręcznie.", None)
                     return None
+                for c, s in ranked:
+                    if c.activity_id == getattr(best_cand, "activity_id", None):
+                        best_score = s
+                        break
             else:
-                best_cand = ranked[0][0]
+                best_cand, best_score = ranked[0]
 
             if is_cancelled():
                 return None

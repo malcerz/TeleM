@@ -200,6 +200,105 @@ def extract_gpmf_native(video_path: str | Path, metadata_only: bool = False) -> 
         return None
 
 
+GPMF_LIGHT_CACHE_VERSION = 1
+_IN_MEMORY_LIGHT_CACHE: dict[str, tuple[int, int, dict[str, Any]]] = {}
+
+
+def get_gpmf_light_metadata(video_path: str | Path, use_cache: bool = True) -> dict[str, Any] | None:
+    """Extract or load cached lightweight GPMF metadata (start_dt, first_gps, duration, camera).
+
+    Guarantees:
+    - Never performs full telemetry extraction (GPS/ACCL/GYRO/TMPC).
+    - Checks in-memory cache first (0 ms).
+    - Checks central AppData cache (%LOCALAPPDATA%\\SportCamHUD\\cache\\media\\<key>\\gpmf_light.json).
+    - Validates cache against source size and mtime_ns fingerprint.
+    - If missing, executes native C++ parser with metadata_only=True and writes cache.
+    """
+    path = Path(video_path)
+    if not path.exists():
+        return None
+
+    path_resolved = str(path.resolve())
+    try:
+        stat = path.stat()
+    except Exception:
+        stat = None
+
+    if use_cache and stat and path_resolved in _IN_MEMORY_LIGHT_CACHE:
+        cached_mtime, cached_size, cached_data = _IN_MEMORY_LIGHT_CACHE[path_resolved]
+        if cached_mtime == stat.st_mtime_ns and cached_size == stat.st_size:
+            return dict(cached_data)
+
+    from src.telemetry_cache_manager import (
+        get_gpmf_light_json_path,
+        get_gpmf_light_metadata_path,
+        atomic_save_json,
+        log_cache_event,
+    )
+
+    if use_cache and stat:
+        try:
+            json_path = get_gpmf_light_json_path(path, create_dir=False)
+            meta_path = get_gpmf_light_metadata_path(path, create_dir=False)
+            if json_path.exists() and meta_path.exists():
+                import json
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                contract = meta.get("_gpmf_light_cache", {})
+                if (
+                    contract.get("version") == GPMF_LIGHT_CACHE_VERSION
+                    and contract.get("source_size") == stat.st_size
+                    and contract.get("source_mtime_ns") == stat.st_mtime_ns
+                ):
+                    data = json.loads(json_path.read_text(encoding="utf-8"))
+                    if data and data.get("success"):
+                        if data.get("first_gps"):
+                            data["first_gps"] = tuple(data["first_gps"])
+                        _IN_MEMORY_LIGHT_CACHE[path_resolved] = (stat.st_mtime_ns, stat.st_size, data)
+                        log_cache_event(path, "HIT", json_path, extra="gpmf_light")
+                        return dict(data)
+        except Exception:
+            pass
+
+    # Extract via native C++ parser with metadata_only=True
+    raw = extract_gpmf_native(path, metadata_only=True)
+    if not raw or not raw.get("success"):
+        return None
+
+    gps_track = raw.get("gps_track", [])
+    first_gps = (gps_track[0][1], gps_track[0][2]) if gps_track else None
+    light_meta = {
+        "success": True,
+        "camera_model": raw.get("camera_model") or "GoPro",
+        "duration_sec": raw.get("duration_sec"),
+        "payload_count": raw.get("payload_count"),
+        "start_dt_utc": raw.get("start_dt_utc"),
+        "start_dt_str": raw.get("start_dt_str"),
+        "first_gps": first_gps,
+    }
+
+    if stat:
+        _IN_MEMORY_LIGHT_CACHE[path_resolved] = (stat.st_mtime_ns, stat.st_size, light_meta)
+        try:
+            json_path = get_gpmf_light_json_path(path, create_dir=True)
+            meta_path = get_gpmf_light_metadata_path(path, create_dir=True)
+            atomic_save_json(json_path, light_meta)
+            atomic_save_json(
+                meta_path,
+                {
+                    "_gpmf_light_cache": {
+                        "version": GPMF_LIGHT_CACHE_VERSION,
+                        "source_size": stat.st_size,
+                        "source_mtime_ns": stat.st_mtime_ns,
+                    }
+                },
+            )
+            log_cache_event(path, "MISS", json_path, extra="gpmf_light")
+        except Exception:
+            pass
+
+    return dict(light_meta)
+
+
 def populate_telemetry_from_native(
     video_path: Path,
     native_data: dict[str, Any],

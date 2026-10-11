@@ -34,6 +34,36 @@ def resolve_ffprobe() -> str:
 
 # ── Główna inspekcja ──────────────────────────────────────────────────────
 
+GOPRO_FIRMWARE_MODELS: dict[str, str] = {
+    "HD3": "GoPro HERO3",
+    "HD3.11": "GoPro HERO3+ Black",
+    "HD4": "GoPro HERO4",
+    "HD5": "GoPro HERO5 Black",
+    "HD6": "GoPro HERO6 Black",
+    "H17": "GoPro HERO7 Black",
+    "H18": "GoPro HERO8 Black",
+    "H19": "GoPro HERO9 Black",
+    "H21": "GoPro HERO10 Black",
+    "H22": "GoPro HERO11 Black",
+    "H23": "GoPro HERO12 Black",
+    "H24": "GoPro HERO11 Black Mini",
+    "H26": "GoPro HERO13 Black",
+}
+
+
+def _has_gpmf_stream(streams: list[dict[str, Any]]) -> bool:
+    """Check if stream list already contains GoPro GPMF metadata stream."""
+    for s in streams:
+        codec_name = str(s.get("codec_name") or "").lower()
+        codec_tag = str(s.get("codec_tag_string") or "").lower()
+        handler = str(s.get("tags", {}).get("handler_name") or "").lower()
+        if any(x in codec_name for x in ("gpmd", "gpmf")) or any(x in codec_tag for x in ("gpmd", "gpmf")):
+            return True
+        if str(s.get("codec_type") or "").lower() == "data" and "gopro" in handler and "met" in handler:
+            return True
+    return False
+
+
 def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[str, Any]:
     """Odczytaj podstawowe informacje techniczne o pliku MP4.
 
@@ -48,10 +78,10 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
         ffprobe, "-v", "error",
         "-show_entries",
         "format=duration,size,bit_rate:format_tags:"
-        "stream=index,codec_type,codec_name,profile,width,height,pix_fmt,"
+        "stream=index,codec_type,codec_name,codec_tag_string,profile,width,height,pix_fmt,"
         "avg_frame_rate,r_frame_rate,bit_rate,bits_per_raw_sample,"
         "sample_rate,channels,channel_layout,"
-        "color_range,color_space,color_transfer,color_primaries",
+        "color_range,color_space,color_transfer,color_primaries:stream_tags=handler_name",
         "-of", "json",
         str(path),
     ]
@@ -66,51 +96,60 @@ def inspect_mp4(video_path: str | Path, ffprobe_exe: str | None = None) -> dict[
     video_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
     audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
 
-    # GPMF — istniejący, tani mechanizm wykrywania (ffprobe -show_streams)
-    gpmf = find_gpmf_stream_index(path, ffprobe) is not None
+    # GPMF: sprawdź najpierw w odczytanych strumieniach (0 dodatkowych procesów),
+    # w razie wątpliwości użyj dedykowanego find_gpmf_stream_index.
+    gpmf = _has_gpmf_stream(streams)
+    if not gpmf:
+        gpmf = find_gpmf_stream_index(path, ffprobe) is not None
 
     gpmf_meta = {}
     if gpmf:
         try:
-
-            from src.telemetry_native_gpmf import extract_gpmf_native
-            ndata = extract_gpmf_native(path, metadata_only=True)
-            if ndata:
-                date_str = ndata.get("start_dt_str")
-                # start_dt_utc is also available? Let's use it for local time conversion
-                utc_ts = ndata.get("start_dt_utc")
+            from src.telemetry_native_gpmf import get_gpmf_light_metadata
+            light_meta = get_gpmf_light_metadata(path)
+            if light_meta and light_meta.get("success"):
+                utc_ts = light_meta.get("start_dt_utc")
+                date_str = None
+                tz_str = ""
+                date_source = "GPMF (GPS)"
                 if utc_ts:
                     from datetime import datetime
-                    import time
-                    # Convert to local time
                     local_dt = datetime.fromtimestamp(utc_ts)
                     date_str = local_dt.strftime("%Y-%m-%d %H:%M:%S")
-                elif date_str and "." in date_str:
-                    date_str = date_str.split(".")[0]
-                    
+                    tz_sec = local_dt.astimezone().utcoffset().total_seconds() if local_dt.astimezone().utcoffset() else 0
+                    tz_hours = int(tz_sec // 3600)
+                    tz_str = f"UTC{tz_hours:+d}" if tz_hours != 0 else "UTC"
 
-                camera_model = ndata.get("camera_model")
+                camera_model = light_meta.get("camera_model") or "GoPro"
+                camera_source = "GPMF"
                 if camera_model == "GoPro":
                     # Sprawdź wiarygodne metadane kontenera (ffprobe format tags)
                     fmt_tags = fmt.get("tags", {})
                     fw = fmt_tags.get("firmware", "")
                     if fw:
-                        if fw.startswith("H19"): camera_model = "GoPro HERO9 Black"
-                        elif fw.startswith("H21"): camera_model = "GoPro HERO10 Black"
-                        elif fw.startswith("H22"): camera_model = "GoPro HERO11 Black"
-                        elif fw.startswith("H23"): camera_model = "GoPro HERO12 Black"
-                        elif fw.startswith("H24"): camera_model = "GoPro HERO11 Black Mini"
-                        elif fw.startswith("H26"): camera_model = "GoPro HERO13 Black"
-                        else: camera_model = f"GoPro (fw: {fw})"
+                        for prefix, model_name in GOPRO_FIRMWARE_MODELS.items():
+                            if fw.startswith(prefix):
+                                camera_model = model_name
+                                camera_source = f"firmware {fw}"
+                                break
+                        else:
+                            camera_model = f"GoPro ({fw})"
+                            camera_source = f"firmware {fw}"
 
                 gpmf_meta = {
                     "camera": camera_model,
-                    "date": date_str
+                    "camera_source": camera_source,
+                    "date": date_str,
+                    "date_source": date_source,
+                    "timezone": tz_str,
+                    "start_dt_utc": utc_ts,
+                    "duration_sec": light_meta.get("duration_sec"),
+                    "first_gps": light_meta.get("first_gps"),
                 }
-
-
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("[mp4_inspector] Nie udało się odczytać metadanych GPMF dla %s: %s", path, exc)
+            print(f"[mp4_inspector] Błąd odczytu GPMF dla {path}: {exc}", flush=True)
 
     return {
         "filename": path.name,
@@ -426,11 +465,17 @@ def format_file_info_text(info: dict[str, Any]) -> str:
 
     if info.get('gpmf'):
         meta = info.get('gpmf_meta') or {}
+        cam_info = meta.get('camera') or '-'
+        if meta.get('camera_source') and meta.get('camera_source') != "GPMF":
+            cam_info += f" ({meta.get('camera_source')})"
+        date_info = meta.get('date') or '-'
+        if meta.get('timezone'):
+            date_info += f" ({meta.get('date_source') or 'GPMF'}, {meta.get('timezone')})"
         lines.extend([
             "",
             "Kamera (GPMF):",
-            f"Model: {meta.get('camera') or '-'}",
-            f"Data nagrania: {meta.get('date') or '-'}",
+            f"Model: {cam_info}",
+            f"Data nagrania: {date_info}",
         ])
 
     return "\n".join(lines)

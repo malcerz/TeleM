@@ -721,6 +721,12 @@ class ProjectMixin:
                 self.signals.sig_progress.emit(90, "Pobieranie klatki...")
                 target_w = getattr(self, "_preview_target_w", 960)
                 target_h = getattr(self, "_preview_target_h", None)
+                w = getattr(self.video_metadata, "width", 0) if getattr(self, "video_metadata", None) else 0
+                if not w and getattr(self, "video_clips", None) and self.video_clips:
+                    w = getattr(self.video_clips[0], "width", 0)
+                h = getattr(self.video_metadata, "height", 0) if getattr(self, "video_metadata", None) else 0
+                if not h and getattr(self, "video_clips", None) and self.video_clips:
+                    h = getattr(self.video_clips[0], "height", 0)
                 if target_h is None or target_h <= 0:
                     target_h = max(1, int(round(target_w * h / w))) if w > 0 else 540
 
