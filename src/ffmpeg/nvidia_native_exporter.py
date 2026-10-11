@@ -1057,7 +1057,18 @@ def export_nvidia_native_d3d11(
     if output_final_path.exists():
         output_final_path.unlink()
     if output_tmp_path.exists():
-        output_tmp_path.unlink()
+        from src.ffmpeg.render_errors import MuxError
+
+        raise MuxError(
+            code="PARTIAL_OUTPUT_EXISTS",
+            user_message="Poprzedni częściowy plik MP4 nadal istnieje. Zachowaj go lub usuń przed ponowieniem eksportu.",
+            technical_message=f"Refusing to overwrite prior partial output: {output_tmp_path}",
+            stage="preflight_output",
+            backend=f"NVIDIA_NATIVE_{profile_name}",
+            output_path=str(output_tmp_path),
+            partial_output_possible=True,
+            partial_output_state="unverified",
+        )
 
     # 2. Build Video Sequence Descriptors and Resolve FPS
     from src.video_helpers import ffprobe_stream_info, find_executable
@@ -1685,6 +1696,20 @@ def export_nvidia_native_d3d11(
         if output_tmp_path.exists():
             output_tmp_path.unlink()
         return False
+
+    if proc_mux.returncode not in (None, 0):
+        from src.ffmpeg.render_errors import classify_mux_error
+
+        stderr_tail = "\n".join(list(mux_stderr_lines)[-20:])
+        render_error = classify_mux_error(
+            proc_mux.returncode,
+            stderr_tail=stderr_tail,
+            backend=f"NVIDIA_NATIVE_{profile_name}",
+        )
+        render_error.stage = "live_mux"
+        render_error.output_path = str(output_tmp_path)
+        render_error.partial_output_possible = output_tmp_path.exists()
+        raise render_error
 
     # 9. Atomic Rename & Terminal Progress
     if output_tmp_path.exists() and output_tmp_path.stat().st_size > 0:

@@ -162,6 +162,7 @@ class ExportJob:
     render_status: str = "queued"   # queued | preparing | running | done | error | cancelled | interrupted
     render_progress: float = 0.0    # 0..1
     render_error: str = ""
+    render_error_payload: dict = field(default_factory=dict)
 
     # Stan uploadu
     upload_status: str = "idle"     # idle | waiting | running | done | error | interrupted
@@ -581,6 +582,7 @@ class ExportQueue:
         cancelled: bool = False,
         output_path: str = "",
         error_message: str = "",
+        render_error: object | None = None,
         elapsed_s: float = 0.0,
         average_fps: float = 0.0,
         average_qp: float | None = None,
@@ -638,6 +640,19 @@ class ExportQueue:
                 self._notify_updated(job)
             return
 
+        from src.ffmpeg.render_errors import RenderError
+
+        if isinstance(render_error, dict):
+            try:
+                render_error = RenderError.from_dict(render_error)
+            except Exception:
+                render_error = None
+        if isinstance(render_error, RenderError):
+            job.render_error_payload = render_error.to_dict()
+            error_message = render_error.display_message() or error_message
+        elif not success and not cancelled:
+            job.render_error_payload = {}
+
         job.render_finished_at = time.time()
         if not job.render_elapsed_s and job.render_started_at:
             job.render_elapsed_s = max(0.0, job.render_finished_at - job.render_started_at)
@@ -664,6 +679,8 @@ class ExportQueue:
         )
         self._persist()
         self._notify_updated(job)
+        if isinstance(render_error, RenderError) and render_error.pause_queue and not cancelled:
+            self.pause()
         self._wake_scheduler()
 
     def notify_render_progress(self, job_id: str, progress: float, phase: str = "") -> None:
@@ -763,6 +780,7 @@ class ExportQueue:
             job.render_started_at = time.time()
             job.render_progress = 0.0
             job.render_error = ""
+            job.render_error_payload = {}
             self._active_render_id = job.job_id
 
         self._persist()

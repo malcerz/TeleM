@@ -162,6 +162,8 @@ class AppSignals(QObject):
     # Błąd
     sig_error = Signal(str)
     # (error_message: str)
+    # Typed render failure payload. Legacy consumers continue receiving sig_error(str).
+    sig_render_error = Signal(object)
 
     # Worker -> GUI request for a user decision on a suspicious FIT/GPX file.
     # Payload is TelemetryValidationRequest; the worker waits on its Event.

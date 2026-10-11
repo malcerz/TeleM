@@ -1832,6 +1832,9 @@ class RenderTab(QWidget):
         s.sig_export_path_warning.connect(self._on_export_path_warning)
         s.sig_render_stopped.connect(self._on_stopped)
         s.sig_error.connect(self._on_error)
+        typed_error_signal = getattr(s, "sig_render_error", None)
+        if typed_error_signal is not None:
+            typed_error_signal.connect(self._on_render_error_payload)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
         s.sig_amd_decode_mode_restored.connect(self._on_amd_decode_mode_restored)
         s.sig_amd_codec_restored.connect(self._on_amd_codec_restored)
@@ -2992,6 +2995,18 @@ class RenderTab(QWidget):
             0.0, f"Błąd: {msg}",
         )
         self._end_render()
+
+    def _on_render_error_payload(self, error: object) -> None:
+        """Retain the typed failure alongside the legacy user-facing string signal."""
+        from src.ffmpeg.render_errors import RenderError
+
+        if isinstance(error, dict):
+            try:
+                error = RenderError.from_dict(error)
+            except Exception:
+                return
+        if isinstance(error, RenderError):
+            self._last_render_error = error
 
     def _end_render(self) -> None:
         """Powrót do stanu idle po zakończeniu / anulowaniu / błędzie."""

@@ -32,7 +32,45 @@ def test_classify_device_unavailable():
         output_path="test.mp4",
         os_error="The device is not ready"
     )
-    assert cat == "ENOENT"
+    assert cat == "DEVICE_UNAVAILABLE"
+
+
+def test_output_path_survives_typed_error_roundtrip():
+    import json
+    from src.ffmpeg.render_errors import RenderError
+
+    exc = OutputWriteError(
+        "Write failed",
+        output_path="Z:/exports/out.mp4",
+        os_error=OSError(28, "No space left on device"),
+        job_id="job-7",
+        stage="live_mux",
+        partial_output_possible=True,
+    )
+    restored = RenderError.from_dict(json.loads(json.dumps(exc.to_dict())))
+    assert isinstance(restored, OutputWriteError)
+    assert restored.code == "ENOSPC"
+    assert restored.output_path == "Z:/exports/out.mp4"
+    assert restored.job_id == "job-7"
+    assert restored.stage == "live_mux"
+
+
+def test_os_errors_keep_queue_scope_and_paths():
+    from src.ffmpeg.render_errors import StorageError, coerce_render_error
+
+    error = coerce_render_error(
+        OSError(28, "No space left on device"),
+        job_id="job-8",
+        stage="mux_write",
+        output_path="out.mp4",
+    )
+    assert isinstance(error, StorageError)
+    assert error.code == "ENOSPC"
+    assert error.pause_queue is True
+    assert error.output_path == "out.mp4"
+    assert error.stage == "mux_write"
+    assert "Lokalizacja: out.mp4" in error.display_message()
+    assert "Zwolnij miejsce" in error.display_message()
 
 def test_typed_exception():
     exc = ExportOutputError(

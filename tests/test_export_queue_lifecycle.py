@@ -144,6 +144,33 @@ def test_queue_render_failure_sets_failed_not_stuck(tmp_path):
     assert q._active_render_id is None, "Po błędzie _active_render_id musi zostać zwolniony"
 
 
+def test_typed_storage_failure_is_persisted_and_pauses_queue(tmp_path):
+    from src.ffmpeg.render_errors import StorageError
+
+    q = make_queue(tmp_path)
+    job = make_job(tmp_path, "disk-full")
+    q.add_job(job)
+    q._paused = False
+
+    error = StorageError(
+        code="ENOSPC",
+        user_message="Brak miejsca",
+        technical_message="simulated full disk",
+        job_id=job.job_id,
+        output_path=job.output_path,
+        stage="live_mux",
+        pause_queue=True,
+        partial_output_possible=True,
+    )
+    q.notify_render_done(job.job_id, success=False, render_error=error)
+
+    assert job.render_status == "error"
+    assert job.render_error.startswith("Brak miejsca\nLokalizacja:")
+    assert job.render_error_payload["code"] == "ENOSPC"
+    assert job.render_error_payload["stage"] == "live_mux"
+    assert q._paused is True
+
+
 # ── 5. test_queue_start_watchdog ──────────────────────────────────────────────
 
 def test_queue_start_watchdog(tmp_path, monkeypatch):

@@ -146,7 +146,7 @@ def _create_amd_local_scratch_dir(output_file: str | Path) -> Path:
 
 
 def _cleanup_cancelled_amd_outputs(
-    output_part: str | Path,
+    output_part: str | Path | None,
     stage_video: str | Path | None,
     audio_concat: str | Path | None,
 ) -> list[Path]:
@@ -3226,10 +3226,18 @@ def export_amd_native_d3d11(
 
     if direct_mux_enabled:
         if os.path.exists(output_part_str):
-            try:
-                os.remove(output_part_str)
-            except OSError:
-                pass
+            from src.ffmpeg.render_errors import MuxError
+
+            raise MuxError(
+                code="PARTIAL_OUTPUT_EXISTS",
+                user_message="Poprzedni częściowy plik MP4 nadal istnieje. Zachowaj go lub usuń przed ponowieniem eksportu.",
+                technical_message=f"Refusing to overwrite prior partial output: {output_part_str}",
+                stage="preflight_output",
+                backend="AMD_NATIVE_D3D11",
+                output_path=output_part_str,
+                partial_output_possible=True,
+                partial_output_state="unverified",
+            )
         pipe_token = uuid.uuid4().hex[:8]
         pipe_base = rf"\\.\pipe\telem_amf_{os.getpid()}_{pipe_token}"
         if is_av1:
@@ -3726,7 +3734,9 @@ def export_amd_native_d3d11(
             except Exception as _ce:
                 print(f"[AMD NATIVE D3D11] telem_amd_close error: {_ce}", flush=True)
 
-    def _abort_direct_mux(*, preserve_stage_a: bool = True) -> None:
+    def _abort_direct_mux(
+        *, preserve_stage_a: bool = True, preserve_partial_output: bool = True
+    ) -> None:
         nonlocal proc_mux, h_pipe, audio_concat_path
         dispatcher = progress_dispatcher_holder[0]
         if dispatcher is not None:
@@ -3764,7 +3774,9 @@ def export_amd_native_d3d11(
             print("[AMD DIRECT MUX] WARNING: pump did not stop within 2s; handle left to worker.", flush=True)
         proc_mux = None
         if preserve_stage_a:
-            cleanup_candidates = [Path(output_part_str), audio_concat_path]
+            cleanup_candidates = [audio_concat_path]
+            if not preserve_partial_output:
+                cleanup_candidates.append(Path(output_part_str))
             for candidate in cleanup_candidates:
                 if candidate is None:
                     continue
@@ -3775,9 +3787,8 @@ def export_amd_native_d3d11(
                 except OSError:
                     pass
         else:
-            removed = _cleanup_cancelled_amd_outputs(
-                output_part_str, stage_video_str, audio_concat_path
-            )
+            cleanup_output = None if preserve_partial_output else output_part_str
+            removed = _cleanup_cancelled_amd_outputs(cleanup_output, stage_video_str, audio_concat_path)
             print(
                 "[AMD CANCEL CLEANUP] removed="
                 + (",".join(str(path) for path in removed) or "none"),
@@ -6572,7 +6583,7 @@ def export_amd_native_d3d11(
                     if cancel_evt.is_set():
                         print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                         _cleanup_native_resources()
-                        _abort_direct_mux(preserve_stage_a=False)
+                        _abort_direct_mux(preserve_stage_a=False, preserve_partial_output=False)
                         return False
                     if item is _END_OF_STREAM:
                         break
@@ -6598,7 +6609,7 @@ def export_amd_native_d3d11(
                 if cancel_event is not None and cancel_event.is_set():
                     print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                     _cleanup_native_resources()
-                    _abort_direct_mux(preserve_stage_a=False)
+                    _abort_direct_mux(preserve_stage_a=False, preserve_partial_output=False)
                     return False
                 if sync_frame_accounting_enabled:
                     _sync_parent_start = time.perf_counter_ns()
@@ -7135,6 +7146,7 @@ def export_amd_native_d3d11(
             print(f"[AMD DIRECT MUX STDERR] {logical_stderr}", flush=True)
 
         if proc_mux.returncode != 0 or mux_pump_error:
+            mux_returncode = proc_mux.returncode
             print(
                 f"[AMD NATIVE D3D11] ERROR: Direct MP4 live mux failed (rc={proc_mux.returncode if proc_mux else 'N/A'}, pump={mux_pump_error})!\n"
                 f"[FFmpeg Command]: {' '.join(cmd_live_mux)}\n"
@@ -7143,13 +7155,32 @@ def export_amd_native_d3d11(
             )
             if is_multi_file and stage_video_str and os.path.exists(stage_video_str) and os.path.getsize(stage_video_str) > 0:
                 print(f"[AMD MULTI-FILE] NOTICE: Preserved Stage A video at: {stage_video_str}", flush=True)
-            _abort_direct_mux()
-            return False
+            _abort_direct_mux(preserve_partial_output=True)
+            from src.ffmpeg.render_errors import classify_mux_error
+
+            render_error = classify_mux_error(
+                mux_returncode,
+                stderr_tail=logical_stderr or str(mux_pump_error or ""),
+                backend="AMD_NATIVE_D3D11",
+            )
+            render_error.stage = "live_mux"
+            render_error.output_path = str(output_part_str)
+            raise render_error
 
         if not os.path.exists(live_target) or os.path.getsize(live_target) == 0:
             print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output {live_target} is missing or empty!\n[FFmpeg Stderr]:\n{logical_stderr}", flush=True)
-            _abort_direct_mux()
-            return False
+            _abort_direct_mux(preserve_partial_output=True)
+            from src.ffmpeg.render_errors import MuxError
+
+            raise MuxError(
+                code="MUX_OUTPUT_MISSING",
+                user_message="Nie udało się prawidłowo zakończyć zapisu pliku MP4.",
+                technical_message=f"Mux output missing or empty: {live_target}. {logical_stderr[-2000:]}",
+                stage="live_mux",
+                backend="AMD_NATIVE_D3D11",
+                output_path=str(output_part_str),
+                partial_output_possible=True,
+            )
 
         if is_multi_file and stage_video_str and not single_pass_av_mux:
             # ── MULTI-FILE STAGE B & C: ROBUST STREAM-COPY REMUX ──
@@ -7292,7 +7323,7 @@ def export_amd_native_d3d11(
 
             if cancel_event is not None and cancel_event.is_set():
                 print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
-                _abort_direct_mux(preserve_stage_a=False)
+                _abort_direct_mux(preserve_stage_a=False, preserve_partial_output=False)
                 return False
             if p_remux.returncode != 0:
                 remux_err_raw = "".join(remux_stderr_lines).encode("utf-8", errors="replace")
@@ -7305,10 +7336,17 @@ def export_amd_native_d3d11(
                     f"  {' '.join(cmd_stage_c)}",
                     flush=True,
                 )
-                _abort_direct_mux()
-                raise AMDNativeFinalizationError(
-                    f"AMD multi-file Stage C remux failed (rc={p_remux.returncode})"
+                _abort_direct_mux(preserve_partial_output=True)
+                from src.ffmpeg.render_errors import classify_mux_error
+
+                render_error = classify_mux_error(
+                    p_remux.returncode,
+                    stderr_tail=remux_err_filtered,
+                    backend="AMD_NATIVE_D3D11",
                 )
+                render_error.stage = "stage_c_remux"
+                render_error.output_path = str(output_part_str)
+                raise render_error
 
         t_mux_end = time.perf_counter()
         mux_elapsed_ms = (t_mux_end - t_mux_begin) * 1000.0
@@ -7335,9 +7373,17 @@ def export_amd_native_d3d11(
             print(f"[AMD NATIVE D3D11] ERROR: Direct MP4 output has 0 muxed video frames!", flush=True)
             if is_multi_file and stage_video_str and os.path.exists(stage_video_str):
                 print(f"[AMD MULTI-FILE] NOTICE: Preserved Stage A video at: {stage_video_str}", flush=True)
-            _abort_direct_mux()
-            raise AMDNativeFinalizationError(
-                "AMD direct A/V mux produced zero video frames"
+            _abort_direct_mux(preserve_partial_output=True)
+            from src.ffmpeg.render_errors import MuxError
+
+            raise MuxError(
+                code="MUX_NO_VIDEO_FRAMES",
+                user_message="Nie udało się prawidłowo zakończyć zapisu pliku MP4.",
+                technical_message="AMD direct A/V mux produced zero video frames",
+                stage="output_validation",
+                backend="AMD_NATIVE_D3D11",
+                output_path=str(output_part_str),
+                partial_output_possible=True,
             )
 
         progress_tracker.finalize(

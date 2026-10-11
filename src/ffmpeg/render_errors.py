@@ -16,9 +16,11 @@ nie zatrzymują pozostałych poprawnych zadań.
 from __future__ import annotations
 
 import enum
+import errno
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -56,6 +58,11 @@ class RenderError(RuntimeError):
     pause_queue: bool = False
     partial_output_possible: bool = False
     partial_output_valid: bool = False
+    partial_output_state: str = "unknown"
+    recommended_action: str = ""
+    stage: str = "render"
+    source_path: str = ""
+    output_path: str = ""
     scope: str = ErrorScope.JOB_ONLY.value
     hresult: Optional[int] = None
     win32_error: Optional[int] = None
@@ -74,16 +81,57 @@ class RenderError(RuntimeError):
 
     def to_dict(self) -> dict[str, Any]:
         """Konwertuje błąd do postaci słownika JSON-serializable dla IPC."""
-        d = asdict(self)
+        def json_safe(value: Any) -> Any:
+            if isinstance(value, Path):
+                return str(value)
+            if isinstance(value, enum.Enum):
+                return value.value
+            if isinstance(value, dict):
+                return {str(k): json_safe(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple, set)):
+                return [json_safe(v) for v in value]
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            return str(value)
+
+        d = json_safe(asdict(self))
         d["type"] = "render_error"
         d["exception_class"] = self.__class__.__name__
         return d
+
+    def display_message(self) -> str:
+        """Short GUI-safe reason with the relevant location and next step."""
+        message = self.user_message
+        if self.category == "source":
+            location = str(self.clip or self.source_path or self.output_path or "")
+        else:
+            location = str(
+                self.details.get("partial_output_path")
+                or self.output_path
+                or self.source_path
+                or self.clip
+                or ""
+            )
+        if location and location not in message:
+            message += f"\nLokalizacja: {location}"
+        if self.recommended_action:
+            message += f"\nCo możesz zrobić: {self.recommended_action}"
+        if self.partial_output_state not in ("", "unknown"):
+            message += f"\nStan częściowego MP4: {self.partial_output_state}"
+        return message
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RenderError":
         """Rekonstruuje obiekt błędu z payloadu IPC zachowując odpowiednią klasę."""
         exc_cls_name = data.get("exception_class") or data.get("type")
         target_cls = ERROR_CLASS_MAP.get(exc_cls_name, RenderError)
+        if exc_cls_name == "OutputWriteError" and target_cls is RenderError:
+            try:
+                from src.ffmpeg.output_error import OutputWriteError
+
+                target_cls = OutputWriteError
+            except Exception:
+                target_cls = StorageError
         
         # Filtrujemy tylko znane pola dataclass
         field_names = {f.name for f in cls.__dataclass_fields__.values()}
@@ -246,6 +294,102 @@ ERROR_CLASS_MAP: dict[str, type[RenderError]] = {
 }
 
 
+def coerce_render_error(
+    exc: BaseException,
+    *,
+    job_id: str = "",
+    stage: str = "render",
+    source_path: str = "",
+    output_path: str = "",
+    backend: str = "",
+) -> RenderError:
+    """Preserve typed render failures and classify common I/O/backend exceptions."""
+    if isinstance(exc, RenderError):
+        error = exc
+        error.job_id = error.job_id or job_id
+        if error.stage in ("", "render"):
+            error.stage = stage
+        error.source_path = error.source_path or source_path
+        error.output_path = error.output_path or output_path
+        error.backend = error.backend or backend
+        return error
+
+    message = str(exc) or type(exc).__name__
+    context = dict(
+        technical_message=f"{type(exc).__name__}: {message}",
+        job_id=job_id,
+        stage=stage,
+        source_path=source_path,
+        output_path=output_path,
+        backend=backend,
+    )
+    if isinstance(exc, OSError):
+        code = getattr(exc, "errno", None)
+        winerror = getattr(exc, "winerror", None)
+        lower = message.lower()
+        if code == errno.ENOSPC or winerror == 112 or "no space left" in lower:
+            return StorageError(code="ENOSPC", user_message="Nie można zakończyć eksportu. Na dysku docelowym zabrakło miejsca.", recommended_action="Zwolnij miejsce albo wybierz inny katalog docelowy.", pause_queue=True, recoverable=True, partial_output_possible=True, scope=ErrorScope.QUEUE_BLOCKER.value, win32_error=winerror, **context)
+        if code in (errno.EACCES, errno.EPERM) or winerror in (5, 32) or "permission denied" in lower:
+            return StorageError(code="EACCES", user_message="Program nie ma uprawnień do zapisu w wybranym katalogu.", recommended_action="Wybierz katalog, w którym program może tworzyć pliki.", pause_queue=True, scope=ErrorScope.QUEUE_BLOCKER.value, win32_error=winerror, **context)
+        if code == errno.ENOENT or winerror in (2, 3):
+            filename = getattr(exc, "filename", None)
+            output_related = "storage" in stage or "output" in stage or stage.startswith("runtime_")
+            if filename and output_path:
+                try:
+                    file_path = Path(filename).resolve()
+                    final_path = Path(output_path).resolve()
+                    output_related = output_related or file_path in (final_path, final_path.parent)
+                except Exception:
+                    pass
+            if output_path and output_related:
+                return StorageError(code="DEVICE_UNAVAILABLE", user_message="Dysk docelowy stał się niedostępny podczas eksportu.", recommended_action="Sprawdź połączenie dysku; wznowienie kolejki po naprawie wymaga działania użytkownika.", pause_queue=True, scope=ErrorScope.QUEUE_BLOCKER.value, win32_error=winerror, **context)
+            return SourceReadError(code="ENOENT", user_message="Nie znaleziono pliku źródłowego lub katalogu docelowego.", win32_error=winerror, recoverable=False, **context)
+        if code in (errno.ENODEV, errno.EIO) or winerror in (21, 23, 55):
+            return StorageError(code="DEVICE_UNAVAILABLE", user_message="Dysk docelowy stał się niedostępny podczas eksportu.", recommended_action="Sprawdź połączenie dysku; wznowienie kolejki po naprawie wymaga działania użytkownika.", pause_queue=True, scope=ErrorScope.QUEUE_BLOCKER.value, win32_error=winerror, **context)
+        if code == errno.EPIPE:
+            return MuxError(code="EPIPE", user_message="Nie udało się przekazać klatek do procesu zapisu wideo.", partial_output_possible=True, **context)
+    lower = message.lower()
+    if any(token in lower for token in ("no space left", "enospc", "error 28", "disk full")):
+        return StorageError(code="ENOSPC", user_message="Nie można zakończyć eksportu. Na dysku docelowym zabrakło miejsca.", recommended_action="Zwolnij miejsce albo wybierz inny katalog docelowy.", pause_queue=True, recoverable=True, partial_output_possible=True, scope=ErrorScope.QUEUE_BLOCKER.value, **context)
+    if any(token in lower for token in ("permission denied", "access is denied", "eacces")):
+        return StorageError(code="EACCES", user_message="Program nie ma uprawnień do zapisu w wybranym katalogu.", recommended_action="Wybierz katalog, w którym program może tworzyć pliki.", pause_queue=True, scope=ErrorScope.QUEUE_BLOCKER.value, **context)
+    if any(token in lower for token in ("device not ready", "no such device", "device unavailable", "device_unavailable")):
+        return StorageError(code="DEVICE_UNAVAILABLE", user_message="Dysk docelowy stał się niedostępny podczas eksportu.", recommended_action="Sprawdź połączenie dysku i wybierz dostępny katalog.", pause_queue=True, scope=ErrorScope.QUEUE_BLOCKER.value, partial_output_possible=True, **context)
+    if "broken pipe" in lower or "epipe" in lower:
+        return MuxError(code="EPIPE", user_message="Nie udało się przekazać klatek do procesu zapisu wideo.", partial_output_possible=True, **context)
+    if isinstance(exc, BrokenPipeError):
+        return MuxError(code="EPIPE", user_message="Nie udało się przekazać klatek do procesu zapisu wideo.", partial_output_possible=True, **context)
+    if any(token in lower for token in ("decoder", "decode", "demuxer", "invalid data found")):
+        return DecoderError(user_message="Nie udało się odczytać lub zdekodować materiału źródłowego.", **context)
+    if any(token in lower for token in ("device removed", "gpu device", "d3d11 device", "amf error")):
+        return GpuError(user_message="Urządzenie graficzne zakończyło eksport z błędem.", **context)
+    if any(token in lower for token in ("encoder", "nvenc", "qsv", "hevc_amf", "amf encoder")):
+        return EncoderError(user_message="Sprzętowy enkoder zakończył działanie z błędem.", **context)
+    if "child" in lower and any(token in lower for token in ("process", "worker", "complete")):
+        return ChildProcessError(
+            code="CHILD_PROCESS_ERROR",
+            user_message="Proces renderujący zakończył się nieoczekiwanie.",
+            partial_output_possible=True,
+            **context,
+        )
+    if any(token in lower for token in ("mux", "ffmpeg exited", "ffmpeg process", "mp4")):
+        match = re.search(r"(?:return\s*code|exit(?:ed)?\s*(?:with\s*)?(?:code)?|\brc)\s*[=: ]\s*(-?\d+)", message, re.IGNORECASE)
+        returncode = int(match.group(1)) if match else None
+        error = classify_mux_error(
+            returncode,
+            stderr_tail=message[-4000:],
+            job_id=job_id,
+            backend=backend,
+        )
+        error.stage = stage
+        error.source_path = source_path
+        error.output_path = output_path
+        error.technical_message = context["technical_message"]
+        error.partial_output_possible = True
+        return error
+    return RenderError(code="RENDER_ERROR", category="general", user_message="Eksport zakończył się błędem.", scope=ErrorScope.JOB_ONLY.value, **context)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Estymacja i Preflight miejsca na dysku (Storage Preflight)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -319,14 +463,15 @@ def check_preflight_storage(
     out_p = Path(output_path).resolve()
     target_dir = out_p.parent
 
-    # Upewnij się, że katalog istnieje lub można go utworzyć
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except Exception as exc:
+    # Export settings freeze a destination; preflight must never create it.
+    if not target_dir.is_dir():
         err = StorageError(
-            code="DIR_CREATE_FAILED",
-            user_message=f"Nie można utworzyć katalogu docelowego:\n{target_dir}",
-            technical_message=f"mkdir failed for {target_dir}: {exc}",
+            code="ENOENT",
+            user_message=f"Katalog docelowy nie istnieje lub jest niedostępny:\n{target_dir}",
+            technical_message=f"Output directory is unavailable: {target_dir}",
+            output_path=str(out_p),
+            stage="preflight_storage",
+            pause_queue=True,
             scope=ErrorScope.QUEUE_BLOCKER.value,
         )
         return False, err
@@ -339,9 +484,11 @@ def check_preflight_storage(
             test_file.unlink()
     except Exception as exc:
         err = StorageError(
-            code="DIR_NOT_WRITABLE",
+            code="EACCES",
             user_message=f"Brak uprawnień do zapisu w folderze:\n{target_dir}",
             technical_message=f"Permission test failed on {target_dir}: {exc}",
+            output_path=str(out_p),
+            stage="preflight_storage",
             scope=ErrorScope.QUEUE_BLOCKER.value,
         )
         return False, err
@@ -354,6 +501,8 @@ def check_preflight_storage(
             code="DISK_QUERY_FAILED",
             user_message=f"Nie można odczytać stanu dysku docelowego:\n{target_dir}",
             technical_message=f"disk_usage failed for {target_dir}: {exc}",
+            output_path=str(out_p),
+            stage="preflight_storage",
             scope=ErrorScope.QUEUE_BLOCKER.value,
         )
         return False, err
@@ -382,11 +531,13 @@ def check_preflight_storage(
             f"required={req_bytes} B ({req_gb:.2f} GB) on {target_dir}"
         )
         err = StorageError(
-            code="ENOSPC_PREFLIGHT",
+            code="ENOSPC",
             user_message=msg_user,
             technical_message=f"ENOSPC_PREFLIGHT_FAIL: Insufficient disk space. {msg_tech}",
             pause_queue=True,
             scope=ErrorScope.QUEUE_BLOCKER.value,
+            output_path=str(out_p),
+            stage="preflight_storage",
             details={
                 "free_bytes": free_bytes,
                 "required_bytes": req_bytes,
@@ -466,6 +617,7 @@ class RuntimeStorageMonitor:
         self._thread: Optional[threading.Thread] = None
         self.last_free_bytes: int = -1
         self.last_query_time: float = 0.0
+        self.last_error: Optional[BaseException] = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -487,27 +639,32 @@ class RuntimeStorageMonitor:
     def _monitor_loop(self) -> None:
         while not self._thread_stop_event.is_set():
             try:
-                if self.target_dir.exists():
-                    usage = shutil.disk_usage(str(self.target_dir))
-                    self.last_free_bytes = usage.free
-                    self.last_query_time = time.monotonic()
+                if not self.target_dir.exists():
+                    self.last_error = FileNotFoundError(f"Output directory disappeared: {self.target_dir}")
+                    self.stop_requested_low_space.set()
+                    break
+                usage = shutil.disk_usage(str(self.target_dir))
+                self.last_free_bytes = usage.free
+                self.last_query_time = time.monotonic()
 
-                    if usage.free <= self.finalization_reserve_bytes:
-                        log.warning(
-                            "[STORAGE MONITOR] LOW SPACE DETECTED: free=%d B <= reserve=%d B on %s",
-                            usage.free,
-                            self.finalization_reserve_bytes,
-                            self.target_dir,
-                        )
-                        self.stop_requested_low_space.set()
-                        if self.on_low_space_callback:
-                            try:
-                                self.on_low_space_callback(usage.free, self.finalization_reserve_bytes)
-                            except Exception as cb_err:
-                                log.error("[STORAGE MONITOR] Callback error: %s", cb_err)
-                        break
+                if usage.free <= self.finalization_reserve_bytes:
+                    log.warning(
+                        "[STORAGE MONITOR] LOW SPACE DETECTED: free=%d B <= reserve=%d B on %s",
+                        usage.free,
+                        self.finalization_reserve_bytes,
+                        self.target_dir,
+                    )
+                    self.last_error = OSError(errno.ENOSPC, "No space left on device", str(self.target_dir))
+                    self.stop_requested_low_space.set()
+                    if self.on_low_space_callback:
+                        try:
+                            self.on_low_space_callback(usage.free, self.finalization_reserve_bytes)
+                        except Exception as cb_err:
+                            log.error("[STORAGE MONITOR] Callback error: %s", cb_err)
+                    break
             except Exception as exc:
                 # W przypadku odłączenia nośnika/awarii dysku
+                self.last_error = exc
                 log.error("[STORAGE MONITOR] Query error: %s", exc)
                 self.stop_requested_low_space.set()
                 break
@@ -554,7 +711,7 @@ def classify_mux_error(
     # 2. Brak uprawnień do zapisu
     if "permission denied" in low_stderr:
         return StorageError(
-            code="PERMISSION_DENIED",
+            code="EACCES",
             user_message="Brak uprawnień do zapisu w lokalizacji docelowej.",
             technical_message=f"FFmpeg permission denied: {stderr_tail[-300:].strip()}",
             frame=frame_idx,
@@ -582,7 +739,7 @@ def classify_mux_error(
     # 4. Standardowy Broken Pipe w potoku
     if "broken pipe" in low_stderr:
         return MuxError(
-            code="BROKEN_PIPE",
+            code="EPIPE",
             user_message="Połączenie z procesem kodowania/muksowania zostało przerwane (Broken pipe).",
             technical_message=f"FFmpeg pipe broken: {stderr_tail[-300:].strip()}",
             frame=frame_idx,
@@ -590,6 +747,36 @@ def classify_mux_error(
             backend=backend,
             ffmpeg_return_code=returncode,
             stderr_tail=stderr_tail,
+        )
+
+    # Preserve decoder, device and encoder failures instead of labelling every
+    # nonzero FFmpeg exit as a generic mux error.
+    if any(token in low_stderr for token in ("decoder", "decode_slice", "invalid data found", "error while decoding")):
+        return DecoderError(
+            code="DECODER_ERROR",
+            user_message="Nie udało się odczytać lub zdekodować materiału źródłowego.",
+            technical_message=f"FFmpeg decoder failure: {stderr_tail[-1000:]}",
+            frame=frame_idx, job_id=job_id, backend=backend,
+            ffmpeg_return_code=returncode, stderr_tail=stderr_tail,
+            partial_output_possible=True,
+        )
+    if any(token in low_stderr for token in ("device removed", "device lost", "d3d device", "gpu device")):
+        return GpuError(
+            code="GPU_DEVICE_ERROR",
+            user_message="Urządzenie graficzne zakończyło eksport z błędem.",
+            technical_message=f"FFmpeg GPU failure: {stderr_tail[-1000:]}",
+            frame=frame_idx, job_id=job_id, backend=backend,
+            ffmpeg_return_code=returncode, stderr_tail=stderr_tail,
+            partial_output_possible=True,
+        )
+    if any(token in low_stderr for token in ("encoder", "nvenc", "qsv", "amf", "error initializing output stream")):
+        return EncoderError(
+            code="ENCODER_ERROR",
+            user_message="Sprzętowy enkoder zakończył działanie z błędem.",
+            technical_message=f"FFmpeg encoder failure: {stderr_tail[-1000:]}",
+            frame=frame_idx, job_id=job_id, backend=backend,
+            ffmpeg_return_code=returncode, stderr_tail=stderr_tail,
+            partial_output_possible=True,
         )
 
     # 5. Domyślny błąd procesu FFmpeg

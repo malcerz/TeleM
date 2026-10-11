@@ -560,7 +560,11 @@ class RenderMixin:
         self._emit_render_progress_callback = emit_render_progress
         self._emit_render_terminal_state = emit_terminal_state
 
-        def _notify_queue(success: bool, stats: dict | None = None) -> None:
+        def _notify_queue(
+            success: bool,
+            stats: dict | None = None,
+            render_error: object | None = None,
+        ) -> None:
             """Powiadom ExportQueue o zakończeniu renderu tego jobu."""
             job_id = options.get("_queue_job_id")
             queue = options.get("_export_queue")
@@ -598,7 +602,8 @@ class RenderMixin:
                     queue.notify_render_done(
                         job_id,
                         success=success,
-                        cancelled=bool(self.render_cancel_event.is_set()),
+                        cancelled=bool(self.render_cancel_event.is_set()) and render_error is None,
+                        render_error=render_error,
                         output_path=output,
                         elapsed_s=elapsed,
                         average_fps=fps,
@@ -628,6 +633,44 @@ class RenderMixin:
                 stats = self._render_pipeline(options)
                 if not isinstance(stats, dict):
                     stats = {}
+                monitor = getattr(self, "_active_storage_monitor", None)
+                if monitor is not None and monitor.stop_requested_low_space.is_set():
+                    from src.ffmpeg.render_errors import coerce_render_error
+
+                    storage_exc = monitor.last_error or OSError(28, "No space left on device")
+                    raise coerce_render_error(
+                        storage_exc,
+                        job_id=str(job_id or ""),
+                        stage="runtime_storage_monitor",
+                        source_path=str(self.video_path or ""),
+                        output_path=str(options.get("_resolved_output_path") or options.get("output") or ""),
+                    )
+                if not self.render_cancel_event.is_set():
+                    from src.ffmpeg.render_errors import MuxError, validate_partial_output
+
+                    final_output = Path(options.get("_resolved_output_path") or options.get("output") or "")
+                    ffprobe = self.ffprobe_exe or find_executable("ffprobe")
+                    valid, duration, probe = validate_partial_output(
+                        ffprobe or "ffprobe", final_output, min_duration_s=0.0
+                    )
+                    if not valid:
+                        raise MuxError(
+                            code="OUTPUT_VALIDATION_FAILED",
+                            user_message="Nie udało się potwierdzić poprawnego pliku MP4 po eksporcie.",
+                            technical_message=f"Final output validation failed: {probe}",
+                            job_id=str(job_id or ""),
+                            stage="final_output_validation",
+                            output_path=str(final_output),
+                            partial_output_possible=final_output.exists(),
+                            partial_output_state="unverified",
+                            details={"duration_s": duration, "probe": probe},
+                        )
+                    stats["output_validation"] = {
+                        "state": "valid",
+                        "duration_s": duration,
+                        "size_bytes": probe.get("size_bytes", 0),
+                        "has_audio": bool(probe.get("has_audio", False)),
+                    }
                 stats.setdefault("generation_id", generation_id)
                 if not self.render_cancel_event.is_set():
                     plan = options.get("_inline_gpmf_plan")
@@ -673,21 +716,68 @@ class RenderMixin:
                     self.signals.sig_render_stopped.emit()
                     _notify_queue(success=False)
             except Exception as e:
+                from src.ffmpeg.render_errors import (
+                    RenderCancelled,
+                    RenderError,
+                    coerce_render_error,
+                    validate_partial_output,
+                )
+
+                monitor = getattr(self, "_active_storage_monitor", None)
+                storage_cancel = monitor is not None and monitor.stop_requested_low_space.is_set()
+                if isinstance(e, RenderCancelled) and not storage_cancel:
+                    emit_terminal_state("cancelled")
+                    self.signals.sig_render_stopped.emit()
+                    _notify_queue(success=False)
+                    return
+                render_error = coerce_render_error(
+                    monitor.last_error if storage_cancel and monitor.last_error else e,
+                    job_id=str(job_id or ""),
+                    stage="runtime_storage_monitor" if storage_cancel else str(getattr(e, "stage", "render")),
+                    source_path=str(self.video_path or ""),
+                    output_path=str(options.get("_resolved_output_path") or options.get("output") or ""),
+                    backend=str(options.get("encoder") or ""),
+                )
+                output_path = Path(render_error.output_path) if render_error.output_path else None
+                if output_path is not None:
+                    ffprobe = self.ffprobe_exe or find_executable("ffprobe")
+                    candidates = [Path(str(output_path) + ".part"), Path(str(output_path) + ".part.mp4")]
+                    for candidate in candidates:
+                        if candidate.is_file():
+                            render_error.partial_output_possible = True
+                            render_error.partial_output_state = "unverified"
+                            if ffprobe:
+                                valid, duration, probe = validate_partial_output(ffprobe, candidate)
+                                render_error.partial_output_valid = bool(valid)
+                                render_error.partial_output_state = "partial_valid" if valid else "partial_invalid"
+                                render_error.details["partial_output_path"] = str(candidate)
+                                render_error.details["partial_output_duration_s"] = duration
+                                render_error.details["partial_output_probe"] = probe
+                            break
                 primary_error = f"{type(e).__name__}: {e}".strip()
-                if primary_error.endswith(":"):
-                    primary_error = f"{type(e).__name__}: <empty message>"
+                if isinstance(e, RenderError):
+                    primary_error = render_error.technical_message or str(e)
                 self._render_primary_error = primary_error
                 trace = traceback.format_exc()
                 print(f"[RENDER PRIMARY ERROR] {primary_error}", flush=True)
                 print(f"[RENDER PRIMARY TRACEBACK]\n{trace}", flush=True)
-                if not self.render_cancel_event.is_set():
+                explicit_cancel = getattr(self, "_render_cancel_reason", RenderCancelReason.NONE) is not RenderCancelReason.NONE
+                if not self.render_cancel_event.is_set() or storage_cancel or not explicit_cancel:
                     emit_terminal_state("failed", error=True)
-                    self.signals.sig_error.emit(f"Render error: {primary_error}")
+                    typed_signal = getattr(self.signals, "sig_render_error", None)
+                    if typed_signal is not None:
+                        typed_signal.emit(render_error)
+                    self.signals.sig_error.emit(render_error.display_message())
+                    _notify_queue(success=False, render_error=render_error)
                 else:
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
-                _notify_queue(success=False)
+                    _notify_queue(success=False)
             finally:
+                monitor = getattr(self, "_active_storage_monitor", None)
+                if monitor is not None:
+                    monitor.stop()
+                    self._active_storage_monitor = None
                 plan = options.pop("_inline_gpmf_plan", None)
                 if plan is not None:
                     plan.cleanup()
@@ -793,6 +883,62 @@ class RenderMixin:
         # Completion signals, queue updates, and finalization use this same path.
         options["output"] = str(output_path)
         output = str(output_path)
+
+        from src.ffmpeg.render_errors import (
+            RuntimeStorageMonitor,
+            check_preflight_sources,
+            check_preflight_storage,
+            parse_bitrate_to_bps,
+        )
+
+        source_paths = list(options.get("video_paths") or getattr(self, "video_paths", []) or [])
+        if not source_paths and getattr(self, "video_path", None):
+            source_paths = [str(self.video_path)]
+        sources_ok, source_error = check_preflight_sources(source_paths)
+        if not sources_ok and source_error is not None:
+            source_error.output_path = str(output_path)
+            source_error.job_id = str(options.get("_queue_job_id") or "")
+            source_error.stage = "preflight_sources"
+            raise source_error
+
+        # A bitrate-based free-space estimate is only a cautionary preflight.
+        # Constant-QP exports deliberately skip it because their final size is unknown.
+        qp_mode = options.get("qp") is not None or any(
+            "qp" in str(value).lower()
+            for key, value in options.items()
+            if any(token in str(key).lower() for token in ("rate", "quality", "mode", "bitrate", "qp"))
+        )
+        bitrate_value = options.get("bitrate")
+        if bitrate_value and not qp_mode:
+            try:
+                source_info_for_storage = ffprobe_stream_info(
+                    self.ffprobe_exe or find_executable("ffprobe"), self.video_path
+                )
+                duration = float(source_info_for_storage.get("format", {}).get("duration", 0.0) or 0.0)
+                if duration > 0:
+                    ok, storage_error = check_preflight_storage(
+                        output_path,
+                        duration_s=duration,
+                        video_bitrate_bps=parse_bitrate_to_bps(bitrate_value),
+                        codec=str(options.get("codec", "hevc")),
+                        has_audio=True,
+                        is_vbr=True,
+                    )
+                    if not ok and storage_error is not None:
+                        storage_error.output_path = str(output_path)
+                        storage_error.job_id = str(options.get("_queue_job_id") or "")
+                        storage_error.stage = "preflight_storage"
+                        raise storage_error
+            except (OSError, ValueError, TypeError):
+                # Preflight probes are advisory; actual write failures remain authoritative.
+                pass
+
+        def _storage_failure(free_bytes: int, reserve_bytes: int) -> None:
+            self.render_cancel_event.set()
+
+        monitor = RuntimeStorageMonitor(str(output_path), on_low_space_callback=_storage_failure)
+        self._active_storage_monitor = monitor
+        monitor.start()
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
 

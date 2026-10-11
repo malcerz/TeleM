@@ -748,10 +748,18 @@ def export_intel_native_d3d11(
     rotation_mux_args = ["-display_rotation:v:0", str(effective_rotation)] if effective_rotation != 0 else []
     output_part_str = output_file_str + ".part.mp4"
     if os.path.exists(output_part_str):
-        try:
-            os.remove(output_part_str)
-        except Exception:
-            pass
+        from src.ffmpeg.render_errors import MuxError
+
+        raise MuxError(
+            code="PARTIAL_OUTPUT_EXISTS",
+            user_message="Poprzedni częściowy plik MP4 nadal istnieje. Zachowaj go lub usuń przed ponowieniem eksportu.",
+            technical_message=f"Refusing to overwrite prior partial output: {output_part_str}",
+            stage="preflight_output",
+            backend="INTEL_QSV",
+            output_path=output_part_str,
+            partial_output_possible=True,
+            partial_output_state="unverified",
+        )
 
     concat_txt_path = None
     from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
@@ -1865,12 +1873,17 @@ def export_intel_native_d3d11(
                             p_mux.wait(timeout=3.0)
                         except subprocess.TimeoutExpired:
                             p_mux.kill()
-                        if os.path.exists(output_part_str):
-                            try:
-                                os.remove(output_part_str)
-                            except Exception:
-                                pass
-                        return False
+                        from src.ffmpeg.render_errors import MuxError
+
+                        raise MuxError(
+                            code="MUX_STALLED",
+                            user_message="Nie udało się prawidłowo zakończyć zapisu pliku MP4.",
+                            technical_message=f"Intel FFmpeg mux stalled for {stall_sec:.1f}s; partial output retained.",
+                            stage="live_mux",
+                            backend="INTEL_QSV",
+                            output_path=output_part_str,
+                            partial_output_possible=os.path.exists(output_part_str),
+                        )
                     elif stall_sec >= 30.0 and (now_m - last_warn_time >= 5.0):
                         render_print(f"[STREAM INTEL WATCHDOG] 30s stall diagnosis: out_time_us={c_out_time_us} eff_size={eff_sz} (state=ACTIVE_BUT_SLOW / moov relocation)", flush=True)
                         last_warn_time = now_m
@@ -1920,24 +1933,24 @@ def export_intel_native_d3d11(
             if p_mux.returncode != 0:
                 err_details = "\n".join(mux_stderr_lines[-20:])
                 render_print(f"[STREAM INTEL] Final container remux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
-                if os.path.exists(output_part_str):
-                    try:
-                        os.remove(output_part_str)
-                    except Exception:
-                        pass
-                return False
+                from src.ffmpeg.render_errors import classify_mux_error
+
+                error = classify_mux_error(p_mux.returncode, err_details, backend="INTEL_QSV")
+                error.stage = "final_mux"
+                error.output_path = output_part_str
+                raise error
         else:
             # Live Mux Pipeline: container mux completed concurrently during render & drain!
             mux_wall_s = 0.0
             if p_mux is not None and p_mux.returncode != 0:
                 err_details = "\n".join(mux_stderr_lines[-20:])
                 render_print(f"[STREAM INTEL] Live container mux failed with code {p_mux.returncode}:\n{err_details}", flush=True)
-                if os.path.exists(output_part_str):
-                    try:
-                        os.remove(output_part_str)
-                    except Exception:
-                        pass
-                return False
+                from src.ffmpeg.render_errors import classify_mux_error
+
+                error = classify_mux_error(p_mux.returncode, err_details, backend="INTEL_QSV")
+                error.stage = "live_mux"
+                error.output_path = output_part_str
+                raise error
 
         # Stage 3: Verification (Phase 11) - Common to both paths
         t_verify_start = time.perf_counter()
@@ -1960,21 +1973,31 @@ def export_intel_native_d3d11(
         expected_c = "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc")
         if probe_v_codec != expected_c:
             render_print(f"[STREAM INTEL VERIFY ERROR] Output codec {probe_v_codec} != expected {expected_c}", flush=True)
-            if os.path.exists(output_part_str):
-                try:
-                    os.remove(output_part_str)
-                except Exception:
-                    pass
-            return False
+            from src.ffmpeg.render_errors import MuxError
+
+            raise MuxError(
+                code="OUTPUT_CODEC_MISMATCH",
+                user_message="Nie udało się potwierdzić poprawnego pliku MP4 po eksporcie.",
+                technical_message=f"Output codec {probe_v_codec} != expected {expected_c}; partial output retained.",
+                stage="output_validation",
+                backend="INTEL_QSV",
+                output_path=output_part_str,
+                partial_output_possible=os.path.exists(output_part_str),
+            )
 
         if probe_duration <= 0.0:
             render_print(f"[STREAM INTEL VERIFY ERROR] Invalid duration {probe_duration}", flush=True)
-            if os.path.exists(output_part_str):
-                try:
-                    os.remove(output_part_str)
-                except Exception:
-                    pass
-            return False
+            from src.ffmpeg.render_errors import MuxError
+
+            raise MuxError(
+                code="OUTPUT_DURATION_INVALID",
+                user_message="Nie udało się potwierdzić poprawnego pliku MP4 po eksporcie.",
+                technical_message=f"Invalid output duration {probe_duration}; partial output retained.",
+                stage="output_validation",
+                backend="INTEL_QSV",
+                output_path=output_part_str,
+                partial_output_possible=os.path.exists(output_part_str),
+            )
 
         t_verify_end = time.perf_counter()
         verify_s = max(0.0, t_verify_end - t_verify_start)

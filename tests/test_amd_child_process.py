@@ -138,6 +138,29 @@ def test_parent_ipc_reader_observes_eof_without_terminal_message():
         reader.close()
 
 
+def test_legacy_child_string_error_keeps_phase_and_context(tmp_path):
+    from src.ffmpeg.amd_child_process import _error_from_child_message
+    from src.ffmpeg.render_errors import RenderError
+
+    error = _error_from_child_message(
+        {
+            "kind": "error",
+            "error_type": "RuntimeError",
+            "error": "legacy child failure",
+            "phase": "render",
+            "traceback": "legacy traceback",
+        },
+        output_path=tmp_path / "legacy.mp4",
+        child_pid=42,
+        exitcode=1,
+    )
+    assert isinstance(error, RenderError)
+    assert "legacy child failure" in error.technical_message
+    assert "phase=render" in error.technical_message
+    assert error.details["child_traceback"] == "legacy traceback"
+    assert error.output_path.endswith("legacy.mp4")
+
+
 def test_external_preview_frame_updates_gui_session_without_native_handle():
     frames = []
     preview = AMDGPUNativeFrameTapPreview(

@@ -782,11 +782,27 @@ def _child_entry(
             }, critical=True)
     except BaseException as exc:
         details = traceback.format_exc()
+        try:
+            from src.ffmpeg.render_errors import coerce_render_error
+
+            typed_error = coerce_render_error(
+                exc,
+                job_id=str(render_kwargs.get("job_id") or ""),
+                stage=child_phase,
+                source_path=str((render_kwargs.get("video_paths") or [""])[0]),
+                output_path=str(render_kwargs.get("output_file") or ""),
+                backend="AMD_NATIVE_D3D11",
+            )
+            typed_error.details.setdefault("render_argument_keys", sorted(str(key) for key in render_kwargs))
+            typed_payload = typed_error.to_dict()
+        except Exception:
+            typed_payload = None
         emitter.send({
             "kind": "error",
             "phase": child_phase,
             "error_type": type(exc).__name__,
             "error": str(exc) or "<empty message>",
+            "error_payload": typed_payload,
             "traceback": details,
             "diagnostics_path": str(log_path),
         }, critical=True)
@@ -831,6 +847,46 @@ def _kill_process_tree(pid: Optional[int]) -> None:
             )
         except Exception:
             pass
+
+
+def _error_from_child_message(
+    message: dict[str, Any],
+    *,
+    output_path: Path,
+    child_pid: int,
+    exitcode: Optional[int],
+    diagnostics_tail: str = "",
+) -> Any:
+    """Read typed child errors and legacy string terminals through one adapter."""
+    from src.ffmpeg.render_errors import RenderError, coerce_render_error
+
+    payload = message.get("error_payload")
+    if isinstance(payload, dict):
+        error = RenderError.from_dict(payload)
+    else:
+        error_type = str(message.get("error_type", "RuntimeError"))
+        text = str(message.get("error", "<empty message>"))
+        phase = str(message.get("phase") or "child_process")
+        error = coerce_render_error(
+            RuntimeError(f"{error_type}: {text}"),
+            stage=phase,
+            output_path=str(output_path),
+            backend="AMD_NATIVE_D3D11",
+        )
+        error.technical_message = f"{error_type}: {text} (phase={phase})"
+    error.technical_message = (
+        (error.technical_message or "")
+        + f"\nphase={message.get('phase', error.stage)} "
+        + f"[AMD CHILD STATE] pid={child_pid} exitcode={exitcode}"
+    )
+    if message.get("traceback"):
+        trace = str(message["traceback"])[-12000:]
+        error.details.setdefault("child_traceback", trace)
+        error.technical_message += "\n" + trace
+    if diagnostics_tail:
+        error.details.setdefault("child_diagnostics_tail", diagnostics_tail[-8000:])
+    error.output_path = error.output_path or str(output_path)
+    return error
 
 
 def run_amd_render_child(
@@ -1041,7 +1097,16 @@ def run_amd_render_child(
         )
         if tail:
             detail += f"\n[AMD CHILD DIAGNOSTICS: {diagnostics_path}]\n{tail}"
-        raise RuntimeError(detail)
+        from src.ffmpeg.render_errors import ChildProcessError
+        raise ChildProcessError(
+            code="CHILD_LIFECYCLE_ERROR",
+            user_message="Proces renderujący zakończył się nieoczekiwanie.",
+            technical_message=detail,
+            stage="child_process",
+            output_path=str(output),
+            partial_output_possible=True,
+            details={"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"},
+        )
 
     if (
         terminal is not None
@@ -1084,6 +1149,17 @@ def run_amd_render_child(
 
     tail = _tail(diagnostics_path)
     if terminal is not None and terminal.get("kind") == "error":
+        typed_error = _error_from_child_message(
+            terminal,
+            output_path=output,
+            child_pid=process.pid,
+            exitcode=process.exitcode,
+            diagnostics_tail=tail,
+        )
+        argument_keys = typed_error.details.get("render_argument_keys")
+        if argument_keys:
+            typed_error.technical_message += f"\nrender_argument_keys={argument_keys}"
+        raise typed_error
         message = (
             f"{terminal.get('error_type', 'RuntimeError')}: "
             f"{terminal.get('error', '<empty message>')}"
@@ -1104,4 +1180,13 @@ def run_amd_render_child(
     )
     if tail:
         detail += f"\n[AMD CHILD DIAGNOSTICS: {diagnostics_path}]\n{tail}"
-    raise RuntimeError(detail)
+    from src.ffmpeg.render_errors import ChildProcessError
+    raise ChildProcessError(
+        code="CHILD_NO_TERMINAL_RESULT",
+        user_message="Proces renderujący zakończył się bez wyniku końcowego.",
+        technical_message=detail,
+        stage="child_process",
+        output_path=str(output),
+        partial_output_possible=True,
+        details={"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"},
+    )
