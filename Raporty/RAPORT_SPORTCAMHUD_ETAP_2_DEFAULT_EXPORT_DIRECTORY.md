@@ -51,6 +51,7 @@ Historyczny wynik z raportu audytu przed naprawą: `7 FAILED, 1 PASSED, 1 DESELE
 Po zmianach, w `APPDATA`/`LOCALAPPDATA` odizolowanym przez fixture:
 
 - `tests/test_default_export_dir_settings.py`: **13 passed**.
+- `tests/test_export_queue_basic.py` + `tests/test_export_queue_lifecycle.py`: **32 passed** in the isolated profile.
 - `compileall` dla zmienionych modułów: **PASS**.
 - `ruff check src/export_paths.py`: **PASS**.
 - `ruff check` dla całego zestawu zmodyfikowanych modułów: **FAIL** — wykrył 90 uwag w dużych, istniejących plikach (m.in. kolejność importów, długość linii i wcześniejsze duplikaty metod). Nie uruchamiano masowego autofixu poza zakresem zadania.
