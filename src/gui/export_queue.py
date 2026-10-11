@@ -29,6 +29,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from src.export_paths import requires_deferred_validation
+
 log = logging.getLogger(__name__)
 
 
@@ -79,11 +81,14 @@ def validate_job_snapshot(job: ExportJob) -> tuple[bool, str]:
     if not str(job.output_path).strip():
         return False, "Pusta ścieżka pliku wyjściowego (output_path)"
     out_p = Path(job.output_path)
-    if out_p.parent and not out_p.parent.exists():
-        try:
-            out_p.parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            return False, f"Nie można utworzyć katalogu wyjściowego: {out_p.parent} ({e})"
+    if not out_p.is_absolute():
+        return False, f"Nierozstrzygnięta ścieżka pliku wyjściowego: {out_p}"
+    if out_p.parent and requires_deferred_validation(out_p.parent):
+        # Network/removable media are checked by the render worker, never by
+        # the GUI dispatch path. This also avoids implicit mkdir on those drives.
+        pass
+    elif out_p.parent and not out_p.parent.is_dir():
+        return False, f"Katalog wyjściowy nie istnieje: {out_p.parent}"
     if not isinstance(job.layout, dict) or not job.layout:
         return False, "Brak lub nieprawidłowy snapshot layoutu (layout pusty)"
     return True, ""
@@ -102,9 +107,13 @@ def _appdata_dir() -> Path:
     return d
 
 
-def _safe_output_path(path: str) -> str:
+def _safe_output_path(path: str, *, probe_remote: bool = False) -> str:
     """Jeśli plik już istnieje, dodaje sufiks _001, _002, …"""
     p = Path(path)
+    if requires_deferred_validation(p.parent) and not probe_remote:
+        # Probing a UNC/removable target here would block the GUI. The render
+        # worker will validate it before opening the output.
+        return str(p)
     if not p.exists():
         return str(p)
     stem = p.stem
@@ -449,6 +458,23 @@ class ExportQueue:
         self._notify_updated(job)
         self._wake_scheduler()
         log.info("[Queue] add_job id=%s out=%s", job.job_id, job.output_path)
+
+    def update_job_output_path(self, job_id: str, output_path: str) -> bool:
+        """Atomically update a queued destination after deferred collision checks."""
+        with self._lock:
+            job = next((item for item in self._jobs if item.job_id == job_id), None)
+            if job is None:
+                return False
+            job.output_path = str(output_path)
+            job.options["output"] = job.output_path
+            job.options["_resolved_output_path"] = job.output_path
+            fallback = job.options.get("_fallback_output_path")
+            if fallback:
+                job.options["_fallback_output_path"] = str(
+                    Path(fallback).with_name(Path(job.output_path).name)
+                )
+        self._notify_updated(job)
+        return True
 
     def remove_job(self, job_id: str) -> bool:
         """Usuń job (tylko jeśli nie jest aktualnie renderowany)."""

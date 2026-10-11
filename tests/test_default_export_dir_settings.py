@@ -2,11 +2,12 @@
 fallback resolution priorities, and isolation from manual output selection.
 """
 
+import hashlib
 import json
 import os
 from pathlib import Path
 import pytest
-from PySide6.QtWidgets import QApplication, QFileDialog, QLineEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QFileDialog, QLineEdit, QPushButton, QMessageBox
 
 from src.gui.qt.tabs.settings_tab import SettingsTab
 from src.gui.qt.tabs.render_tab import RenderTab
@@ -20,7 +21,14 @@ def qapp():
     yield app
 
 
-def test_default_export_dir_setting_visible_in_general(qapp):
+@pytest.fixture(autouse=True)
+def isolated_appdata(monkeypatch, tmp_path):
+    """Keep preference and queue persistence out of the user's real profile."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+
+
+def test_default_export_dir_setting_visible_in_general(qapp, tmp_path, monkeypatch):
     """1. Setting 'Domyślny folder eksportu' is present in 'Ogólne' with browse/clear buttons and placeholder."""
     tab = SettingsTab()
     assert hasattr(tab, "edit_default_export_dir")
@@ -30,53 +38,47 @@ def test_default_export_dir_setting_visible_in_general(qapp):
     assert hasattr(tab, "btn_clear_export_dir")
     assert isinstance(tab.btn_clear_export_dir, QPushButton)
 
-    assert tab.edit_default_export_dir.placeholderText() == "(domyślnie: folder pliku źródłowego)"
+    assert tab.edit_default_export_dir.placeholderText() == "Domyślnie: katalog filmu źródłowego."
     assert tab.btn_export_dir.text() == "Wybierz"
     assert tab.btn_clear_export_dir.text() == "Wyczyść"
 
-    # Test clear button functionality
-    tab.edit_default_export_dir.setText("C:/some/custom/path")
-    assert tab.edit_default_export_dir.text() == "C:/some/custom/path"
+    chosen_dir = tmp_path / "Żółć i gęślą jaźń"
+    chosen_dir.mkdir()
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *args, **kwargs: str(chosen_dir))
+    tab.btn_export_dir.click()
+    assert tab.edit_default_export_dir.text() == str(chosen_dir)
+
+    # Clear immediately persists automatic source-folder mode.
     tab.btn_clear_export_dir.click()
     assert tab.edit_default_export_dir.text() == ""
+    from src.export_paths import load_default_export_dir
+    assert load_default_export_dir() == ""
 
 
-def test_default_export_dir_persists_after_restart(qapp, tmp_path):
-    """2. Setting default_export_dir persists to def_layout.json and restores on simulated restart."""
+def test_default_export_dir_persists_after_restart(qapp, tmp_path, monkeypatch):
+    """2. Setting default_export_dir persists in the user profile, not in the layout."""
     def_layout_path = Path(__file__).resolve().parents[1] / "def_layout.json"
-    orig_content = def_layout_path.read_text(encoding="utf-8")
+    orig_hash = hashlib.sha256(def_layout_path.read_bytes()).hexdigest()
     custom_dir = tmp_path / "persistent_export_dir"
     custom_dir.mkdir(parents=True)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
 
-    try:
-        # A: Set custom export dir and save
-        tab1 = SettingsTab()
-        tab1.edit_default_export_dir.setText(str(custom_dir))
-        tab1._on_save_settings_clicked()
+    tab1 = SettingsTab()
+    tab1.edit_default_export_dir.setText(str(custom_dir))
+    tab1._save_default_export_dir()
 
-        data_saved = json.loads(def_layout_path.read_text(encoding="utf-8"))
-        assert data_saved.get("default_export_dir") == str(custom_dir)
-        assert data_saved.get("global", {}).get("default_export_dir") == str(custom_dir)
+    pref_path = Path(os.environ["APPDATA"]) / "SportCamHUD" / "app_preferences.json"
+    data_saved = json.loads(pref_path.read_text(encoding="utf-8"))
+    assert data_saved["default_export_dir"] == str(custom_dir)
+    assert SettingsTab().edit_default_export_dir.text() == str(custom_dir)
 
-        # Simulate restart by creating fresh SettingsTab
-        tab2 = SettingsTab()
-        assert tab2.edit_default_export_dir.text() == str(custom_dir)
-
-        # B: Clear export dir (AUTO mode) and save
-        tab2.btn_clear_export_dir.click()
-        assert tab2.edit_default_export_dir.text() == ""
-        tab2._on_save_settings_clicked()
-
-        data_saved2 = json.loads(def_layout_path.read_text(encoding="utf-8"))
-        assert data_saved2.get("default_export_dir") == ""
-        assert data_saved2.get("global", {}).get("default_export_dir") == ""
-
-        # Reload in a third instance
-        tab3 = SettingsTab()
-        assert tab3.edit_default_export_dir.text() == ""
-
-    finally:
-        def_layout_path.write_text(orig_content, encoding="utf-8")
+    tab2 = SettingsTab()
+    tab2.btn_clear_export_dir.click()
+    tab2._save_default_export_dir()
+    assert json.loads(pref_path.read_text(encoding="utf-8"))["default_export_dir"] == ""
+    assert SettingsTab().edit_default_export_dir.text() == ""
+    assert hashlib.sha256(def_layout_path.read_bytes()).hexdigest() == orig_hash
 
 
 def test_default_export_dir_configured_is_used(qapp, tmp_path):
@@ -90,11 +92,14 @@ def test_default_export_dir_configured_is_used(qapp, tmp_path):
     configured_dir = tmp_path / "configured_export_dir"
     configured_dir.mkdir(parents=True)
 
+    from src.export_paths import save_default_export_dir
+    save_default_export_dir(str(configured_dir))
+
     class DummyCtrl:
         video_paths = [str(video_file)]
         video_path = str(video_file)
-        default_export_dir = str(configured_dir)
-        layout = {"default_export_dir": str(configured_dir), "global": {"default_export_dir": str(configured_dir)}}
+        default_export_dir = ""
+        layout = {}
 
     tab._controller = DummyCtrl()
     resolved = tab.resolve_default_export_dir()
@@ -121,9 +126,10 @@ def test_default_export_dir_empty_uses_source_directory(qapp, tmp_path):
     assert resolved == source_dir
 
 
-def test_invalid_default_export_dir_falls_back_to_source(qapp, tmp_path, capsys):
+def test_invalid_default_export_dir_falls_back_to_source(qapp, tmp_path, capsys, monkeypatch):
     """5. Non-existent/unavailable default_export_dir logs warning and falls back to source folder."""
     tab = RenderTab()
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
     source_dir = tmp_path / "fallback_source"
     source_dir.mkdir(parents=True)
     video_file = source_dir / "DJI_0001.MP4"
@@ -181,6 +187,70 @@ def test_manual_output_selection_does_not_change_default_export_dir(qapp, tmp_pa
     assert tab._controller.layout.get("global", {}).get("default_export_dir") == str(configured_dir)
     # Nor should last_export_dir be added or point to manual_dir
     assert tab._controller.layout.get("global", {}).get("last_export_dir") != str(manual_dir)
+    assert tab._resolve_gui_export_path(str(chosen_file)) == chosen_file
+
+
+def test_multiclip_uses_first_mp4_parent(qapp, tmp_path, monkeypatch):
+    from src.export_paths import save_default_export_dir
+
+    save_default_export_dir("")
+    first_dir = tmp_path / "clip_one"
+    second_dir = tmp_path / "clip_two"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_video = first_dir / "one.mp4"
+    second_video = second_dir / "two.mp4"
+    first_video.touch()
+    second_video.touch()
+
+    class DummyCtrl:
+        video_paths = [str(first_video), str(second_video)]
+        video_path = str(first_video)
+        layout = {}
+
+    tab = RenderTab()
+    tab._controller = DummyCtrl()
+    assert tab.resolve_default_export_dir() == first_dir
+
+
+def test_unc_destination_is_deferred_without_gui_probe(qapp, tmp_path):
+    from src.export_paths import resolve_export_path
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_video = source_dir / "ride.mp4"
+    source_video.touch()
+    resolved = resolve_export_path(
+        "ride_export.mp4",
+        source_paths=[source_video],
+        configured_dir=r"\\offline-server\share\exports",
+        defer_remote_validation=True,
+    )
+    assert str(resolved).startswith(r"\\offline-server\share\exports")
+
+
+def test_unwritable_default_falls_back_to_source(qapp, tmp_path, monkeypatch, capsys):
+    import src.export_paths as export_paths
+
+    source_dir = tmp_path / "source_writable"
+    source_dir.mkdir()
+    source_video = source_dir / "ride.mp4"
+    source_video.touch()
+    blocked_dir = tmp_path / "configured_but_unwritable"
+    blocked_dir.mkdir()
+    real_check = export_paths.is_export_dir_usable
+
+    def check(path):
+        return Path(path) != blocked_dir and real_check(path)
+
+    monkeypatch.setattr(export_paths, "is_export_dir_usable", check)
+    resolved = export_paths.resolve_export_path(
+        "render.mp4",
+        source_paths=[source_video],
+        configured_dir=blocked_dir,
+    )
+    assert resolved == source_dir / "render.mp4"
+    assert "configured directory unavailable" in capsys.readouterr().out
 
 
 def test_queue_job_keeps_resolved_output_snapshot(qapp, tmp_path):
@@ -218,6 +288,7 @@ def test_queue_job_keeps_resolved_output_snapshot(qapp, tmp_path):
     job = jobs[-1]
     expected_path = str(configured_dir / "rendered_job.mp4")
     assert job.output_path == expected_path
+    assert job.options["_resolved_output_path"] == expected_path
 
     # Mutate tab fields and controller default_export_dir
     tab.edit_output.setText("different_job.mp4")
@@ -225,6 +296,41 @@ def test_queue_job_keeps_resolved_output_snapshot(qapp, tmp_path):
 
     # Queued job remains identical (snapshot invariant)
     assert job.output_path == expected_path
+    assert job.options["_resolved_output_path"] == expected_path
+    from src.export_paths import save_default_export_dir
+    save_default_export_dir(str(tmp_path / "new_global_destination"))
+
+    from src.gui.qt._mixins.render_mixin import RenderMixin
+
+    class DummyQueuedRenderer(RenderMixin):
+        video_paths = [str(video_file)]
+        video_path = str(video_file)
+        layout = job.layout
+
+    # Execution sees the job's frozen absolute output, regardless of the new preference.
+    assert DummyQueuedRenderer()._resolve_render_output_path(job.output_path) == Path(expected_path)
+
+
+def test_queue_rejects_relative_and_missing_output_without_creating_directories(tmp_path):
+    from src.gui.export_queue import ExportJob, validate_job_snapshot
+
+    source_video = tmp_path / "source.mp4"
+    source_video.touch()
+    missing_dir = tmp_path / "must_not_be_created"
+    job = ExportJob(
+        video_paths=[str(source_video)],
+        layout={"global": {"font": "Arial"}},
+        output_path=str(missing_dir / "render.mp4"),
+    )
+    valid, message = validate_job_snapshot(job)
+    assert not valid
+    assert "nie istnieje" in message
+    assert not missing_dir.exists()
+
+    job.output_path = "render.mp4"
+    valid, message = validate_job_snapshot(job)
+    assert not valid
+    assert "Nierozstrzygnięta" in message
 
 
 def test_direct_queue_use_same_export_dir_resolver(qapp, tmp_path):
@@ -253,8 +359,17 @@ def test_direct_queue_use_same_export_dir_resolver(qapp, tmp_path):
     options = tab._build_options_from_gui()
     expected_resolved = str(configured_dir / "clip.mp4")
 
-    # Options built for direct export have resolved path
-    assert tab.edit_output.text() == expected_resolved
+    # The direct render mixin and queue use the same central resolution policy.
+    from src.gui.qt._mixins.render_mixin import RenderMixin
+
+    class DummyRenderer(RenderMixin):
+        video_paths = [str(video_file)]
+        video_path = str(video_file)
+        layout = DummyCtrl.layout
+
+    assert str(DummyRenderer()._resolve_render_output_path("clip.mp4")) == expected_resolved
+    assert str(tab._resolve_gui_export_path("clip.mp4")) == expected_resolved
+    assert options["output"] == "clip.mp4"
 
     # Reset to relative
     tab.edit_output.setText("clip2.mp4")
@@ -269,12 +384,10 @@ def test_cwd_is_never_default_export_directory(qapp):
     """9. resolve_default_export_dir() NEVER returns current working directory (CWD)."""
     tab = RenderTab()
 
-    # No controller, no video
+    # No controller, no video: fail clearly rather than using CWD or a guessed path.
     tab._controller = None
-    resolved_none = tab.resolve_default_export_dir()
-    assert resolved_none != Path.cwd()
-    assert resolved_none.is_dir()
-    assert resolved_none.is_absolute()
+    with pytest.raises(RuntimeError, match="Brak dostępnego katalogu eksportu"):
+        tab.resolve_default_export_dir()
 
     # Controller with empty paths and empty default_export_dir
     class DummyEmptyCtrl:
@@ -284,7 +397,5 @@ def test_cwd_is_never_default_export_directory(qapp):
         layout = {}
 
     tab._controller = DummyEmptyCtrl()
-    resolved_empty = tab.resolve_default_export_dir()
-    assert resolved_empty != Path.cwd()
-    assert resolved_empty.is_dir()
-    assert resolved_empty.is_absolute()
+    with pytest.raises(RuntimeError, match="Brak dostępnego katalogu eksportu"):
+        tab.resolve_default_export_dir()

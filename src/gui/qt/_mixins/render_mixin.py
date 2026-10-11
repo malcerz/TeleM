@@ -39,18 +39,29 @@ from src.render_progress import (
     next_render_generation_id,
 )
 from src.ffmpeg.hybrid_render import GpuTopology, RenderMode, choose_hybrid_mode, normalize_render_mode
+from src.export_paths import legacy_default_export_dir, load_default_export_dir, resolve_export_path
 
 
 class RenderMixin:
     def _resolve_render_output_path(self, output: str | Path) -> Path:
-        """Resolve a GUI/queue output name to the canonical render location."""
+        """Resolve GUI and queue output names through the shared export policy."""
         output_path = sanitize_output_path(Path(output))
-        if not output_path.is_absolute():
-            video_path = getattr(self, "video_path", None)
-            if video_path is None:
-                raise RuntimeError("Cannot resolve render output without a source video path")
-            output_path = Path(video_path).parent / output_path
-        return output_path
+        saved = load_default_export_dir()
+        legacy = ""
+        if saved is None:
+            legacy = legacy_default_export_dir(
+                getattr(self, "layout", None),
+                base_dir=getattr(self, "base_dir", None),
+            )
+        sources = list(getattr(self, "video_paths", None) or [])
+        if not sources and getattr(self, "video_path", None):
+            sources = [str(self.video_path)]
+        return resolve_export_path(
+            output_path,
+            source_paths=sources,
+            configured_dir=saved,
+            legacy_dir=legacy,
+        )
 
     def _finalize_requested_gpmf(self, options: dict, stats: dict) -> dict:
         """Run the optional metadata attach in the common render finalization."""
@@ -747,9 +758,38 @@ class RenderMixin:
 
         resolution = options.get("resolution", "source")
         raw_output = options.get("output", "output.mp4")
-        output_path = self._resolve_render_output_path(raw_output)
+        try:
+            output_path = self._resolve_render_output_path(raw_output)
+        except RuntimeError:
+            # A queued remote/removable destination is frozen at enqueue time,
+            # together with this safe source-folder fallback. Validate here on
+            # the render worker so network probing never blocks the GUI thread.
+            fallback_output = options.get("_fallback_output_path")
+            if not fallback_output:
+                raise
+            output_path = self._resolve_render_output_path(fallback_output)
+            print(
+                "[EXPORT DIR] queued destination unavailable, using frozen source fallback",
+                flush=True,
+            )
+            self.signals.sig_export_path_warning.emit(
+                "Katalog eksportu na dysku zewnętrznym lub sieciowym jest niedostępny. "
+                "Zadanie zostanie zapisane w folderze źródłowego filmu."
+            )
         options["_render_output_raw"] = str(raw_output)
         options["_resolved_output_path"] = str(output_path)
+        if options.get("_queue_job_id") and output_path.exists():
+            from src.gui.export_queue import _safe_output_path
+
+            unique_path = _safe_output_path(str(output_path), probe_remote=True)
+            if unique_path == str(output_path):
+                raise FileExistsError(
+                    f"Queued output already exists; refusing to overwrite: {output_path}"
+                )
+            output_path = Path(unique_path)
+            queue = options.get("_export_queue")
+            if queue is not None:
+                queue.update_job_output_path(str(options["_queue_job_id"]), str(output_path))
         # Completion signals, queue updates, and finalization use this same path.
         options["output"] = str(output_path)
         output = str(output_path)

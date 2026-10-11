@@ -46,6 +46,12 @@ from src.ffmpeg.amd_hevc_preview import (
     AMDGPUNativeFrameTapPreview,
 )
 from src.telemetry_resolver import build_activity_range_cache
+from src.export_paths import (
+    legacy_default_export_dir,
+    load_default_export_dir,
+    requires_deferred_validation,
+    resolve_export_path,
+)
 from src.render_progress import (
     RenderCancelReason,
     RenderCancelRequest,
@@ -1619,6 +1625,19 @@ class RenderTab(QWidget):
                 pass
 
         output = self.edit_output.text().strip() or "output_h265.mp4"
+        try:
+            output_path = self._resolve_gui_export_path(output, video_paths)
+        except RuntimeError as exc:
+            QMessageBox.warning(self, "Kolejka", str(exc))
+            return
+        output = str(output_path)
+        options["output"] = output
+        options["_render_output_raw"] = str(self.edit_output.text().strip() or "output_h265.mp4")
+        options["_resolved_output_path"] = output
+        raw_output = Path(options["_render_output_raw"]).expanduser()
+        if not raw_output.is_absolute() and requires_deferred_validation(Path(output).parent):
+            source = Path(video_paths[0]).expanduser()
+            options["_fallback_output_path"] = str(source.parent / raw_output)
 
         job = ExportJob(
             video_paths=video_paths,
@@ -1633,6 +1652,15 @@ class RenderTab(QWidget):
             yt_description=self.edit_yt_desc.text().strip(),
         )
         q.add_job(job)
+        # ExportQueue may select a collision-safe suffix. Keep execution and
+        # GPMF finalization bound to that exact frozen path.
+        job.options["output"] = job.output_path
+        job.options["_resolved_output_path"] = job.output_path
+        if job.options.get("_fallback_output_path"):
+            job.options["_fallback_output_path"] = str(
+                Path(job.options["_fallback_output_path"]).with_name(Path(job.output_path).name)
+            )
+        q._persist()
         self._refresh_queue_ui()
         print(f"[ExportQueue] Job added: {job.job_id} output={job.output_path}", flush=True)
 
@@ -1801,6 +1829,7 @@ class RenderTab(QWidget):
         s.sig_render_state.connect(self._on_render_state)
         s.sig_export_preview_ready.connect(self._on_export_preview_ready)
         s.sig_render_finished.connect(self._on_finished)
+        s.sig_export_path_warning.connect(self._on_export_path_warning)
         s.sig_render_stopped.connect(self._on_stopped)
         s.sig_error.connect(self._on_error)
         s.sig_video_duration_ready.connect(self._on_video_duration_ready)
@@ -1817,6 +1846,9 @@ class RenderTab(QWidget):
             self._source_dimensions = (int(match.group(1)), int(match.group(2)))
             if hasattr(self, "_update_backend_visibility"):
                 self._update_backend_visibility()
+
+    def _on_export_path_warning(self, message: str) -> None:
+        QMessageBox.warning(self, "Domyślny folder eksportu", str(message))
 
     def _connect_preview_signals(self) -> None:
         """Podłącz sygnały podglądu — tylko gdy zakładka posiada podgląd.
@@ -2060,12 +2092,12 @@ class RenderTab(QWidget):
         curr = self.edit_output.text().strip()
         if curr and os.path.isabs(curr):
             initial_path = curr
-        elif curr:
-            initial_dir = getattr(self, "_last_output_dir", None) or os.getcwd()
-            initial_path = os.path.join(initial_dir, os.path.basename(curr))
         else:
-            initial_dir = getattr(self, "_last_output_dir", None) or os.getcwd()
-            initial_path = os.path.join(initial_dir, "output_h265.mp4")
+            name = os.path.basename(curr) if curr else "output_h265.mp4"
+            try:
+                initial_path = str(self.resolve_default_export_dir() / name)
+            except RuntimeError:
+                initial_path = name
 
         path, _ = QFileDialog.getSaveFileName(
             self, "Plik wyjściowy", initial_path, "MP4 (*.mp4);;Wszystkie pliki (*.*)",
@@ -2074,6 +2106,52 @@ class RenderTab(QWidget):
             self._last_output_dir = os.path.dirname(path)
             self._user_edited_output = True
             self.edit_output.setText(path)
+
+    def resolve_default_export_dir(self) -> Path:
+        """Resolve the saved global export directory or first source directory."""
+        return self._resolve_gui_export_path("output_h265.mp4").parent
+
+    def _resolve_gui_export_path(
+        self, output: str | Path, source_paths: list[str] | None = None
+    ) -> Path:
+        ctrl = self._controller
+        sources = source_paths
+        if sources is None:
+            sources = list(getattr(ctrl, "video_paths", None) or []) if ctrl is not None else []
+            if not sources and ctrl is not None and getattr(ctrl, "video_path", None):
+                sources = [str(ctrl.video_path)]
+        saved = load_default_export_dir()
+        legacy = ""
+        if saved is None and ctrl is not None:
+            legacy = str(getattr(ctrl, "default_export_dir", "") or "")
+            if not legacy:
+                legacy = legacy_default_export_dir(
+                    getattr(ctrl, "layout", None),
+                    base_dir=getattr(ctrl, "base_dir", None) or Path(__file__).resolve().parents[4],
+                )
+        resolved = resolve_export_path(
+            output,
+            source_paths=sources or [],
+            configured_dir=saved,
+            legacy_dir=legacy,
+            defer_remote_validation=True,
+        )
+        preferred = saved if saved is not None else legacy
+        raw = Path(output).expanduser()
+        if (
+            preferred
+            and not raw.is_absolute()
+            and Path(preferred).is_absolute()
+            and not requires_deferred_validation(preferred)
+            and resolved.parent != Path(preferred)
+        ):
+            QMessageBox.warning(
+                self,
+                "Domyślny folder eksportu",
+                "Skonfigurowany folder jest niedostępny lub niezapisywalny. "
+                "Eksport użyje katalogu pierwszego filmu źródłowego.",
+            )
+        return resolved
 
     def _log_preview_resource_snapshot(self, label: str) -> None:
         """Emit one process/resource snapshot for Preview lifecycle forensics."""
@@ -2261,6 +2339,46 @@ class RenderTab(QWidget):
         if self._rendering or self._cancelling:
             return
         options = self._build_options_from_gui()
+        raw_output = str(options.get("output") or "output_h265.mp4")
+        try:
+            output_path = self._resolve_gui_export_path(raw_output)
+        except RuntimeError as exc:
+            QMessageBox.warning(self, "Eksport", str(exc))
+            return
+        deferred_target = requires_deferred_validation(output_path.parent)
+        if deferred_target:
+            answer = QMessageBox.question(
+                self,
+                "Eksport do dysku zewnętrznego lub sieciowego",
+                "Czy potwierdzasz zapis pod wskazaną ścieżką? Jeśli plik już istnieje, "
+                "render może go zastąpić.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        elif output_path.exists():
+            answer = QMessageBox.question(
+                self,
+                "Plik już istnieje",
+                f"Plik już istnieje:\n{output_path}\n\nCzy chcesz go nadpisać?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        options["_render_output_raw"] = raw_output
+        options["_resolved_output_path"] = str(output_path)
+        options["output"] = str(output_path)
+        if not Path(raw_output).expanduser().is_absolute() and deferred_target:
+            ctrl = self._controller
+            sources = list(getattr(ctrl, "video_paths", None) or []) if ctrl is not None else []
+            if not sources and ctrl is not None and getattr(ctrl, "video_path", None):
+                sources = [str(ctrl.video_path)]
+            if sources:
+                options["_fallback_output_path"] = str(
+                    Path(sources[0]).expanduser().parent / Path(raw_output).expanduser()
+                )
         self._start_render(options, job=None)
 
     def _start_export_preview_generation(self) -> None:

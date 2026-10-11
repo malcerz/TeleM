@@ -81,6 +81,25 @@ class SettingsTab(QWidget):
         row_preset.addWidget(btn_clear)
         form.addRow("Startowy preset:", row_preset)
 
+        row_export_dir = QHBoxLayout()
+        self.edit_default_export_dir = QLineEdit("")
+        self.edit_default_export_dir.setMinimumHeight(28)
+        self.edit_default_export_dir.setPlaceholderText("Domyślnie: katalog filmu źródłowego.")
+        row_export_dir.addWidget(self.edit_default_export_dir)
+        self.btn_export_dir = QPushButton("Wybierz")
+        self.btn_export_dir.setMinimumHeight(28)
+        self.btn_export_dir.clicked.connect(self._browse_default_export_dir)
+        row_export_dir.addWidget(self.btn_export_dir)
+        self.btn_clear_export_dir = QPushButton("Wyczyść")
+        self.btn_clear_export_dir.setMinimumHeight(28)
+        self.btn_clear_export_dir.clicked.connect(self._clear_default_export_dir)
+        row_export_dir.addWidget(self.btn_clear_export_dir)
+        form.addRow("Domyślny folder eksportu:", row_export_dir)
+        self.btn_save_export_dir = QPushButton("Zapisz folder eksportu")
+        self.btn_save_export_dir.setMinimumHeight(28)
+        self.btn_save_export_dir.clicked.connect(self._save_default_export_dir)
+        form.addRow(self.btn_save_export_dir)
+
         vbox.addWidget(general)
 
         # ── Czcionka HUD ──────────────────────────────────────────────
@@ -383,6 +402,13 @@ class SettingsTab(QWidget):
         self.lbl_strava_status.setStyleSheet(f"color: {color};")
 
     def _load_integration_settings(self) -> None:
+        from src.export_paths import legacy_default_export_dir, load_default_export_dir
+
+        export_dir = load_default_export_dir()
+        if export_dir is None:
+            export_dir = legacy_default_export_dir(base_dir=self.base_dir)
+        self.edit_default_export_dir.setText(export_dir or "")
+
         def_layout_path = self.base_dir / "def_layout.json"
         integrations: dict = {}
         if def_layout_path.exists():
@@ -422,6 +448,49 @@ class SettingsTab(QWidget):
         # Restore/refresh only the selected provider; NONE makes zero requests.
         if auto_source == "garmin" and garmin_tokens:
             QTimer.singleShot(0, self._restore_garmin_if_selected)
+
+    def _browse_default_export_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, "Wybierz domyślny folder eksportu", self.edit_default_export_dir.text().strip()
+        )
+        if path:
+            self.edit_default_export_dir.setText(path)
+
+    def _save_default_export_dir(self) -> None:
+        from src.export_paths import (
+            is_export_dir_usable,
+            requires_deferred_validation,
+            save_default_export_dir,
+        )
+
+        value = self.edit_default_export_dir.text().strip()
+        deferred = bool(value and requires_deferred_validation(value))
+        if value and not deferred and not is_export_dir_usable(value):
+            QMessageBox.warning(
+                self,
+                "Domyślny folder eksportu",
+                "Folder nie istnieje albo nie można w nim zapisywać. Wybierz istniejący, zapisywalny folder.",
+            )
+            return
+        try:
+            save_default_export_dir(value)
+        except OSError as exc:
+            QMessageBox.warning(self, "Domyślny folder eksportu", f"Nie można zapisać ustawienia:\n{exc}")
+            return
+        message = "Zapisano ustawienie katalogu eksportu. Folder zostanie sprawdzony podczas eksportu."
+        if not deferred:
+            message = "Zapisano ustawienie katalogu eksportu."
+        QMessageBox.information(self, "Domyślny folder eksportu", message)
+
+    def _clear_default_export_dir(self) -> None:
+        """Immediately persist automatic source-folder mode."""
+        from src.export_paths import save_default_export_dir
+
+        self.edit_default_export_dir.clear()
+        try:
+            save_default_export_dir("")
+        except OSError as exc:
+            QMessageBox.warning(self, "Domyślny folder eksportu", f"Nie można zapisać ustawienia:\n{exc}")
 
     def _restore_garmin_if_selected(self) -> None:
         if self.cmb_auto_source.currentData() == "garmin":

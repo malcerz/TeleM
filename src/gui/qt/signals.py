@@ -171,6 +171,9 @@ class AppSignals(QObject):
     sig_render_finished = Signal(dict, str)
     # (stats: dict, output_path: str)
 
+    # Export destination fallback discovered by the render worker.
+    sig_export_path_warning = Signal(str)
+
     # Renderowanie zatrzymane / anulowane (potwierdzone zakończenie workera po cancel)
     sig_render_stopped = Signal()
 
