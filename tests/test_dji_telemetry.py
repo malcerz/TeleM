@@ -116,6 +116,7 @@ def test_two_clips_keep_absolute_monotonic_imu_time(monkeypatch, tmp_path):
 
 def test_missing_runtime_reports_python_abi(monkeypatch, tmp_path):
     monkeypatch.setattr(telemetry_dji, "DJI_RUNTIME", tmp_path / "missing")
+    monkeypatch.setattr(telemetry_dji.importlib.machinery, "EXTENSION_SUFFIXES", [".missing"])
     with pytest.raises(RuntimeError, match="Python 3.14"):
         telemetry_dji._parser_module()
 

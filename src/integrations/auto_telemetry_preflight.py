@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 import os
 from pathlib import Path
 import threading
@@ -72,12 +73,9 @@ def scan_and_match_local_telemetry(
     on_status: Optional[Callable[[str, str], None]] = None,
     max_tolerance_s: float = 1800.0,
     video_gps_point: Optional[tuple[float, float]] = None,
+    on_needs_selection: Optional[Callable[[list[tuple[Any, float]]], Any]] = None,
 ) -> tuple[Optional[Path], dict[str, Any]]:
-    """Scan local directory for matching .fit and .gpx files based on time overlap and basename priority.
-
-    Returns:
-        (matched_path, diagnostics_dict)
-    """
+    """Rank local FIT/GPX candidates and refuse weak or ambiguous auto-match."""
     dir_path = Path(directory)
     if not intervals:
         return None, {"status": "no_intervals", "reason": "No video intervals provided"}
@@ -89,20 +87,8 @@ def scan_and_match_local_telemetry(
         s_utc = s if s.tzinfo is not None else s.replace(tzinfo=timezone.utc)
         e_utc = e if e.tzinfo is not None else e.replace(tzinfo=timezone.utc)
         norm_intervals.append((s_utc, e_utc))
-
-    # 1. Try find_best_fit_match first (preserves test patches and standard FIT matching)
-    try:
-        from telemetry_fit import find_best_fit_match
-        matched_fit, diag_fit = find_best_fit_match(
-            [(s, e) for s, e in norm_intervals],
-            dir_path,
-            max_tolerance_s=max_tolerance_s,
-        )
-        if matched_fit is not None:
-            chosen = Path(matched_fit)
-            return chosen, {"status": "matched", "path": chosen, "diag": diag_fit}
-    except Exception:
-        pass
+    if not norm_intervals:
+        return None, {"status": "no_intervals", "reason": "No video intervals provided"}
 
     if not dir_path.is_dir():
         return None, {"status": "no_dir", "reason": f"Directory not found: {directory}"}
@@ -167,17 +153,15 @@ def scan_and_match_local_telemetry(
         start_diff = abs((video_earliest - telem_start).total_seconds())
         has_exact_name = p.stem.lower() in video_stems
 
-        # Time validation:
-        # 1. Any positive overlap is acceptable.
-        # 2. If exact name match, allow tolerance within same day / reasonable window (<= 86400s or overlap).
-        # 3. For general candidates, allow start_diff within max_tolerance_s or overlapping range.
+        # Time-only matches must overlap or fall within the configured window.
+        # A same-basename label is useful for ranking, but cannot make a stale
+        # or clock-reset timestamp acceptable by itself.
         is_acceptable = False
         dist_m = None
+        gps_lat = gps_lon = None
         gps_duration_ratio = 0.0
 
         if total_overlap > 0.0:
-            is_acceptable = True
-        elif has_exact_name and start_diff <= 86400.0:
             is_acceptable = True
         elif start_diff <= max_tolerance_s:
             if telem_start <= video_latest and telem_end >= video_earliest:
@@ -196,6 +180,7 @@ def scan_and_match_local_telemetry(
                     if fit_rec and fit_rec.gps_track:
                         first_pt = fit_rec.gps_track[0]
                         dist_m = _haversine(video_gps_point[0], video_gps_point[1], first_pt[1], first_pt[2])
+                        gps_lat, gps_lon = float(first_pt[1]), float(first_pt[2])
                         fit_dur = (fit_rec.gps_track[-1][0] - fit_rec.gps_track[0][0]).total_seconds()
                         
                         if total_video_duration > 0 and fit_dur > 0:
@@ -215,18 +200,6 @@ def scan_and_match_local_telemetry(
 
         coverage = total_overlap / total_video_duration if total_video_duration > 0 else 0.0
 
-        score = 0.0
-        if has_exact_name:
-            score += 10000.0
-        if total_overlap > 0.0:
-            score += 5000.0 + (coverage * 1000.0)
-            score -= (start_diff / 60.0)
-        elif dist_m is not None:
-            # Strong GPS match but broken time
-            score += 2000.0 - (dist_m / 10.0) + (gps_duration_ratio * 100.0)
-        else:
-            score -= (start_diff / 60.0)
-
         scored_candidates.append({
             "path": p,
             "telem_start": telem_start,
@@ -236,25 +209,95 @@ def scan_and_match_local_telemetry(
             "coverage": coverage,
             "start_diff": start_diff,
             "has_exact_name": has_exact_name,
-            "score": score,
             "dist_m": dist_m,
+            "gps_lat": gps_lat,
+            "gps_lon": gps_lon,
         })
 
     if not scored_candidates:
         return None, {"status": "no_match", "reason": "No local candidates met time criteria"}
 
-    # Sort descending by score
-    scored_candidates.sort(key=lambda c: c["score"], reverse=True)
-    best = scored_candidates[0]
+    from src.integrations.activity_matcher import rank_and_evaluate_candidates
+    gps_fallback_rows = [row for row in scored_candidates if row.get("dist_m") is not None]
+    ranking_rows = gps_fallback_rows or scored_candidates
+    candidates: list[ActivityCandidate] = []
+    for row in ranking_rows:
+        p = row["path"]
+        candidates.append(ActivityCandidate(
+            activity_id=str(p.resolve()), provider="local", name=p.name,
+            sport_type="FIT" if p.suffix.lower() == ".fit" else "GPX",
+            start_dt=row["telem_start"], end_dt=row["telem_end"],
+            duration_s=float(row["telem_dur"]),
+            start_lat=row.get("gps_lat"), start_lon=row.get("gps_lon"),
+            raw_data={"path": str(p.resolve()), **row},
+        ))
 
-    return best["path"], {
-        "status": "matched",
-        "path": best["path"],
-        "score": best["score"],
-        "has_exact_name": best["has_exact_name"],
-        "total_overlap": best["total_overlap"],
-        "candidates_count": len(scored_candidates),
+    # Broken/naive camera time and filesystem mtime are suggestion anchors only.
+    low_confidence_time = any(
+        len(item) > 3 and str(item[3]).lower() not in ("exact", "estimated")
+        for item in intervals
+    )
+    decision, ranked = rank_and_evaluate_candidates(
+        candidates, video_earliest, video_latest,
+        video_gps_point=video_gps_point,
+        ignore_time_match=bool(gps_fallback_rows),
+    )
+    if not ranked or decision == "NO_MATCH":
+        return None, {"status": "no_match", "reason": "No local candidates met safe match criteria"}
+
+    if low_confidence_time or decision == "NEEDS_SELECTION":
+        selected = on_needs_selection(ranked) if on_needs_selection else None
+        if selected is not None:
+            selected_path = Path(selected.raw_data.get("path", ""))
+            if selected_path in [Path(candidate.raw_data["path"]) for candidate, _score in ranked]:
+                return selected_path, {"status": "selected", "ranked": ranked}
+        return None, {
+            "status": "selection_cancelled" if on_needs_selection else "needs_selection",
+            "ranked": ranked,
+            "reason": "Low-confidence video time" if low_confidence_time else "Close local candidates",
+        }
+
+    best, best_score = ranked[0]
+    return Path(best.raw_data["path"]), {
+        "status": "matched", "path": Path(best.raw_data["path"]),
+        "score": best_score, "candidates_count": len(ranked),
+        "ranked": ranked,
     }
+
+
+def resolve_local_fit(
+    video_paths: list[Path | str],
+    intervals: Optional[list[tuple[datetime, datetime, float, str]]] = None,
+    directory: Path | str | None = None,
+    on_status: Optional[Callable[[str, str], None]] = None,
+    on_needs_selection: Optional[Callable[[list[tuple[Any, float]]], Any]] = None,
+    video_gps_point: Optional[tuple[float, float]] = None,
+    return_diagnostics: bool = False,
+) -> Path | None | tuple[Path | None, dict[str, Any]]:
+    """Resolve local telemetry through the existing matcher (non-recursive).
+
+    When no directory is supplied, only the source MP4 parent directory is
+    searched. The preflight coordinator calls this for each already-approved
+    local search directory, keeping configured/Garmin folder policy centralized.
+    """
+    from src.multifile import probe_clip_time_interval
+    paths = [Path(p) for p in video_paths]
+    if intervals is None:
+        intervals = []
+        for path in paths:
+            start, end, duration, confidence = probe_clip_time_interval(path)
+            if start is not None:
+                intervals.append((start, end or start + timedelta(seconds=duration or 600), duration, confidence))
+    if not paths:
+        result = (None, {"status": "no_video"})
+        return result if return_diagnostics else None
+    search_dir = Path(directory) if directory is not None else paths[0].parent
+    result = scan_and_match_local_telemetry(
+        paths, intervals, search_dir, on_status=on_status,
+        video_gps_point=video_gps_point,
+        on_needs_selection=on_needs_selection,
+    )
+    return result if return_diagnostics else result[0]
 
 
 def run_auto_telemetry_preflight(
@@ -311,6 +354,16 @@ def run_auto_telemetry_preflight(
         except Exception as e:
             print(f"[AutoPreflight] Could not extract video GPS: {e}", flush=True)
 
+    if video_gps_point is not None:
+        try:
+            lat, lon = float(video_gps_point[0]), float(video_gps_point[1])
+            if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+                video_gps_point = None
+            else:
+                video_gps_point = (lat, lon)
+        except (TypeError, ValueError, IndexError):
+            video_gps_point = None
+
     if is_cancelled():
         return None
 
@@ -324,6 +377,17 @@ def run_auto_telemetry_preflight(
         p = Path(cfg_tel_dir)
         if p.exists() and p.is_dir() and p not in search_dirs:
             search_dirs.append(p)
+
+    # Previously downloaded provider activities are valid local candidates too;
+    # rank them by the same timestamp rules rather than requiring an old
+    # video-to-cache association to exist.
+    for provider_name in ("garmin", "strava"):
+        try:
+            cached_dir = remote_cache.get_provider_cache_dir(provider_name)
+        except Exception:
+            continue
+        if cached_dir.is_dir() and cached_dir not in search_dirs:
+            search_dirs.append(cached_dir)
             
     import psutil
     for part in psutil.disk_partitions(all=False):
@@ -336,30 +400,95 @@ def run_auto_telemetry_preflight(
         if p2.exists() and p2.is_dir() and p2 not in search_dirs:
             search_dirs.append(p2)
             
-    matched_local = None
-    diag = {}
+    local_ranked: list[tuple[ActivityCandidate, float]] = []
     for search_dir in search_dirs:
         if is_cancelled():
             return None
             
         on_status(f"Wyszukiwanie lokalnych plików FIT/GPX...", f"Przeszukiwanie: {search_dir}...", None)
         
-        m_loc, m_diag = scan_and_match_local_telemetry(
+        local_result = resolve_local_fit(
             video_paths=video_paths,
             intervals=intervals,
             directory=search_dir,
             on_status=lambda st, lg: on_status(st, lg, None),
-            video_gps_point=video_gps_point
+            video_gps_point=video_gps_point,
+            return_diagnostics=True,
         )
-        if m_loc is not None:
-            matched_local = m_loc
-            diag = m_diag
-            break
+        # Keep test/plugin monkeypatch compatibility with callers that replace
+        # the path-only public resolver.
+        m_loc, m_diag = local_result if isinstance(local_result, tuple) else (local_result, {})
+        local_ranked.extend(m_diag.get("ranked") or [])
+        # A path-only replacement resolver is retained for integrations/tests.
+        if m_loc is not None and not m_diag.get("ranked"):
+            p = Path(m_loc)
+            try:
+                start, end, duration = probe_fit_time_range(p)
+            except Exception:
+                start = end = None
+                duration = 0.0
+            if start is not None and end is not None:
+                local_ranked.append((ActivityCandidate(
+                    activity_id=str(p.resolve()), provider="local", name=p.name,
+                    sport_type=p.suffix.lstrip(".").upper(), start_dt=start,
+                    end_dt=end, duration_s=float(duration), raw_data={"path": str(p.resolve())},
+                ), 1.0))
 
-    if matched_local is not None:
-        on_status(f"Znaleziono dopasowaną aktywność: {matched_local.name}", f"Znaleziono dopasowaną aktywność: {matched_local.name}", str(matched_local))
-        print(f"[AutoPreflight] Local telemetry matched: {matched_local.name} (score: {diag.get('score', 0)})", flush=True)
-        return matched_local
+    # Deduplicate paths found through overlapping configured/Garmin locations,
+    # then arbitrate across all locations rather than accepting the first one.
+    unique_local: dict[str, ActivityCandidate] = {}
+    for candidate, _score in local_ranked:
+        candidate_path = str(Path(candidate.raw_data.get("path", "")).resolve())
+        if candidate_path:
+            unique_local.setdefault(candidate_path, candidate)
+
+    if unique_local and intervals:
+        v_start = min(s for s, _, _, _ in intervals)
+        v_end = max(e for _, e, _, _ in intervals)
+        local_decision, all_local_ranked = rank_and_evaluate_candidates(
+            list(unique_local.values()), v_start, v_end, video_gps_point=video_gps_point,
+        )
+        if all_local_ranked and local_decision != "NO_MATCH":
+            force_selection = local_decision == "NEEDS_SELECTION" or any(
+                confidence not in ("exact", "estimated")
+                for _, _, _, confidence in intervals
+            )
+            selected_pair = None
+            if force_selection:
+                chosen = on_needs_selection(all_local_ranked) if on_needs_selection else None
+                selected_pair = next(
+                    ((c, score) for c, score in all_local_ranked
+                     if chosen is not None and c.activity_id == getattr(chosen, "activity_id", None)),
+                    None,
+                )
+                if selected_pair is None:
+                    on_status(
+                        "Wymaga wyboru aktywności",
+                        "Dopasowanie jest niejednoznaczne lub czas filmu ma niską wiarygodność. Wybierz aktywność ręcznie.",
+                        None,
+                    )
+                    return None
+            else:
+                selected_pair = all_local_ranked[0]
+
+            matched_local = Path(selected_pair[0].raw_data["path"])
+            diag = {"status": "selected" if force_selection else "matched",
+                    "score": selected_pair[1], "ranked": all_local_ranked}
+            on_status(f"Znaleziono dopasowaną aktywność: {matched_local.name}", f"Znaleziono dopasowaną aktywność: {matched_local.name}", str(matched_local))
+            print(f"[AutoPreflight] Local telemetry matched: {matched_local.name} (score: {diag.get('score', 0)})", flush=True)
+            return matched_local
+
+    # Without a usable video date, time-only remote searches are not safe.
+    # Do not search an arbitrary current/recent window or associate by filename.
+    if not intervals:
+        on_status(
+            "Brak wiarygodnego czasu filmu",
+            "Nie można bezpiecznie dopasować aktywności bez czasu nagrania. Wybierz FIT/GPX ręcznie.",
+            None,
+        )
+        return None
+
+    low_confidence_time = any(confidence not in ("exact", "estimated") for _, _, _, confidence in intervals)
 
     # 3. Local search miss -> Check Remote Provider
     source = str(config.get("auto_activity_source", "none") or "none").lower()
@@ -372,8 +501,12 @@ def run_auto_telemetry_preflight(
     # Check remote cache before any remote network call
     cached = remote_cache.find_cached_video_telemetry(video_paths)
     if cached is not None:
-        _prov, _act_id, cached_path = cached
-        on_status(f"Znaleziono dopasowaną aktywność: {cached_path.name}", f"Znaleziono dopasowaną aktywność: {cached_path.name}", str(cached_path))
+        provider_name, _act_id, cached_path = cached
+        provider_label = {"garmin": "Garmin Connect", "strava": "Strava"}.get(
+            str(provider_name).lower(), "aktywność online",
+        )
+        message = f"Znaleziono dopasowaną aktywność {provider_label}: {cached_path.name}"
+        on_status(f"{message} ✓", message, str(cached_path))
         print(f"[AutoPreflight] Remote cache hit: {cached_path.name}", flush=True)
         return cached_path
 
@@ -410,8 +543,6 @@ def run_auto_telemetry_preflight(
 
         v_start = min(s for s, _, _, _ in intervals)
         v_end = max(e for _, e, _, _ in intervals)
-        v_dur = sum(d for _, _, d, _ in intervals)
-
         try:
             on_status("Wyszukiwanie aktywności w Garmin Connect...", "Wyszukiwanie aktywności w Garmin Connect...", None)
             window_start = v_start - timedelta(hours=2)
@@ -454,11 +585,14 @@ def run_auto_telemetry_preflight(
                 
             best_cand = None
             best_score = 0.0
-            if decision == "NEEDS_SELECTION":
+            if decision == "NEEDS_SELECTION" or low_confidence_time:
                 if on_needs_selection:
                     best_cand = on_needs_selection(ranked)
                 if not best_cand:
                     on_status("Nie znaleziono pasującego pliku FIT/GPX.", "Znaleziono kilka aktywności (dopasowanie niejednoznaczne). Wybierz ręcznie.", None)
+                    return None
+                if not any(c.activity_id == best_cand.activity_id for c, _ in ranked):
+                    on_status("Wymaga wyboru aktywności", "Wybrana aktywność nie należy do aktualnych wyników.", None)
                     return None
                 for c, s in ranked:
                     if c.activity_id == getattr(best_cand, "activity_id", None):
@@ -556,11 +690,23 @@ def run_auto_telemetry_preflight(
                 video_gps_point=video_gps_point,
             )
 
-            if not ranked:
+            if not ranked or decision == "NO_MATCH":
                 on_status("Strava: brak pasującej aktywności", "Strava: brak pasującej aktywności.", None)
                 return None
 
-            best_cand, best_score = ranked[0]
+            if decision == "NEEDS_SELECTION" or low_confidence_time:
+                best_cand = on_needs_selection(ranked) if on_needs_selection else None
+                if best_cand is None:
+                    on_status("Wymaga wyboru aktywności", "Dopasowanie Strava jest niejednoznaczne; niczego nie pobrano.", None)
+                    return None
+                pair = next(((candidate, score) for candidate, score in ranked
+                             if candidate.activity_id == best_cand.activity_id), None)
+                if pair is None:
+                    on_status("Wymaga wyboru aktywności", "Wybrana aktywność nie należy do aktualnych wyników.", None)
+                    return None
+                best_cand, best_score = pair
+            else:
+                best_cand, best_score = ranked[0]
             if is_cancelled():
                 return None
 

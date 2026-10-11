@@ -171,8 +171,15 @@ class TestTimestampQuality:
             timestamp_reliable=False, timestamp_detail="no gps",
         )
         monkeypatch.setattr("src.multifile._resolve_from_gpmf", lambda *a, **k: no_gps)
-        monkeypatch.setattr("src.multifile.resolve_clip_absolute_start",
-                            lambda *a, **k: datetime(2026, 8, 23, 10, 35, 1))
+        monkeypatch.setattr(
+            "src.multifile._resolve_container_timestamp",
+            lambda *a, **k: ClipTimestampResolution(
+                absolute_start_dt=datetime(2026, 8, 23, 10, 35, 1),
+                timestamp_source=TIMESTAMP_SOURCE_CREATION_TIME,
+                timestamp_reliable=True, timestamp_detail="tagged creation_time",
+                timestamp_quality="estimated",
+            ),
+        )
         res = resolve_clip_timestamp("C:/videos/q.MP4", use_cache=False, duration_s=60.0)
         assert res.timestamp_quality == "estimated"
         assert res.timestamp_source == TIMESTAMP_SOURCE_CREATION_TIME
@@ -238,8 +245,15 @@ class TestResolverPriority:
         )
         monkeypatch.setattr("src.multifile._resolve_from_gpmf",
                             lambda *a, **k: no_gps)
-        monkeypatch.setattr("src.multifile.resolve_clip_absolute_start",
-                            lambda *a, **k: datetime(2026, 8, 23, 10, 35, 1))
+        monkeypatch.setattr(
+            "src.multifile._resolve_container_timestamp",
+            lambda *a, **k: ClipTimestampResolution(
+                absolute_start_dt=datetime(2026, 8, 23, 10, 35, 1),
+                timestamp_source=TIMESTAMP_SOURCE_CREATION_TIME,
+                timestamp_reliable=True, timestamp_detail="tagged creation_time",
+                timestamp_quality="estimated",
+            ),
+        )
         res = resolve_clip_timestamp("C:/videos/t7.MP4", use_cache=False,
                                      duration_s=60.0)
         assert res.timestamp_source == TIMESTAMP_SOURCE_CREATION_TIME
@@ -253,8 +267,10 @@ class TestResolverPriority:
         )
         monkeypatch.setattr("src.multifile._resolve_from_gpmf",
                             lambda *a, **k: no_gps)
-        monkeypatch.setattr("src.multifile.resolve_clip_absolute_start",
-                            lambda *a, **k: None)
+        monkeypatch.setattr(
+            "src.multifile._resolve_container_timestamp",
+            lambda *a, **k: ClipTimestampResolution(timestamp_source="unknown"),
+        )
         # must not crash
         res = resolve_clip_timestamp("C:/videos/t8.MP4", use_cache=False,
                                      duration_s=60.0)

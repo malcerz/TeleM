@@ -150,7 +150,9 @@ def test_local_file_priority_over_remote(qapp, tmp_path):
     local_fit = tmp_path / "vid.fit"
     local_fit.write_bytes(b"local_fit")
 
-    remote_fit = tmp_path / "remote_cached.fit"
+    remote_cache_dir = tmp_path / "remote-cache"
+    remote_cache_dir.mkdir()
+    remote_fit = remote_cache_dir / "remote_cached.fit"
     remote_fit.write_bytes(b"remote_fit")
 
     # Seed remote cache

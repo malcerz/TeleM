@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal, QMetaObject, Q_ARG, Q_RETURN_ARG, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QPushButton,
     QLabel, QHBoxLayout, QFileDialog, QMessageBox, QComboBox, QProgressBar,
@@ -378,6 +378,7 @@ class LoadTab(QWidget):
     # Wynik asynchronicznego wyszukiwania AutoFIT
     sig_autofit_matched = Signal(str, int)  # (fit_path, gen)
     sig_autofit_status = Signal(str, str, int, str)  # (field_status, row_status, gen, tooltip)
+    sig_activity_selection_request = Signal(object, object, int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -896,7 +897,9 @@ class LoadTab(QWidget):
                     video_paths=paths,
                     config=cfg,
                     on_status=status_cb,
-                    on_needs_selection=lambda ranked: QMetaObject.invokeMethod(self, "_prompt_activity_selection", Qt.BlockingQueuedConnection, Q_RETURN_ARG(object), Q_ARG(object, ranked)),
+                    on_needs_selection=lambda ranked: self._request_activity_selection(
+                        ranked, request_gen, cancel_ev,
+                    ),
                     cancel_event=cancel_ev,
                 )
                 if res_path is not None and not cancel_ev.is_set() and request_gen == self._autofit_gen and not self._user_selected_telemetry:
@@ -923,11 +926,33 @@ class LoadTab(QWidget):
             start_local = cand.start_dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
             items.append(f"{start_local} | {cand.sport_type} | {cand.duration_s//60} min | ID: {cand.activity_id}")
             
-        item, ok = QInputDialog.getItem(self, "Wybierz aktywnosc", "Wybierz pasujaca aktywnosc z Garmin Connect:", items, 0, False)
+        item, ok = QInputDialog.getItem(
+            self, "Wybierz aktywność",
+            "Wybierz pasującą aktywność lub lokalny plik FIT/GPX:", items, 0, False,
+        )
         if ok and item:
             idx = items.index(item)
             return candidates[idx][0]
         return None
+
+    def _request_activity_selection(self, candidates, request_gen: int, cancel_event: threading.Event):
+        """Ask on the GUI thread and return the selection to the worker safely."""
+        completed = threading.Event()
+        result: dict[str, object] = {}
+        self.sig_activity_selection_request.emit(candidates, (completed, result), request_gen)
+        while not completed.wait(0.1):
+            if cancel_event.is_set() or request_gen != self._autofit_gen:
+                return None
+        return result.get("candidate")
+
+    @Slot(object, object, int)
+    def _show_activity_selection_request(self, candidates, response, request_gen: int) -> None:
+        completed, result = response
+        try:
+            if request_gen == self._autofit_gen and not self._user_selected_telemetry:
+                result["candidate"] = self._prompt_activity_selection(candidates)
+        finally:
+            completed.set()
 
 
     def _on_autofit_status(self, field_st: str, row_st: str, gen: int, tooltip: str) -> None:
@@ -1130,6 +1155,7 @@ class LoadTab(QWidget):
         self.signals.sig_remote_telemetry_status.connect(self._on_remote_telemetry_status)
         self.signals.sig_settings_changed.connect(self._on_settings_changed)
         self.sig_autofit_status.connect(self._on_autofit_status)
+        self.sig_activity_selection_request.connect(self._show_activity_selection_request)
         self.sig_file_info_ready.connect(self._on_file_info_ready)
         self.sig_file_info_error.connect(self._on_file_info_error)
         self.sig_card_info_ready.connect(self._on_card_info_ready)

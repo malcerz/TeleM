@@ -67,25 +67,39 @@ def detect_camera_telemetry(path: Path | str, ffprobe_exe: str) -> str | None:
 
 
 def _parser_module() -> Any:
-    if str(DJI_RUNTIME) not in sys.path:
-        sys.path.insert(0, str(DJI_RUNTIME))
-    package = DJI_RUNTIME / "telemetry_parser"
     suffixes = importlib.machinery.EXTENSION_SUFFIXES
-    compatible = any(any(package.glob(f"telemetry_parser{suffix}")) for suffix in suffixes)
-    if not compatible:
-        raise RuntimeError(
-            f"DJI telemetry parser is unavailable for Python {sys.version_info.major}.{sys.version_info.minor}; "
-            f"build the pinned runtime in {DJI_RUNTIME}"
-        )
-    try:
-        module = importlib.import_module("telemetry_parser")
-        if not Path(module.__file__).resolve().is_relative_to(DJI_RUNTIME.resolve()):
-            raise RuntimeError("DJI telemetry parser was loaded outside the bundled runtime")
-        return module
-    except ImportError as exc:
-        raise RuntimeError(
-            f"DJI telemetry parser is unavailable for Python {sys.version_info.major}.{sys.version_info.minor}: {exc}"
-        ) from exc
+    runtime_candidates = [
+        DJI_RUNTIME,
+        Path(__file__).resolve().parents[1] / "runtime" / "telemetry_parser",
+    ]
+    checked: set[Path] = set()
+    import_errors: list[str] = []
+    for runtime in runtime_candidates:
+        runtime = runtime.resolve()
+        if runtime in checked:
+            continue
+        checked.add(runtime)
+        package = runtime / "telemetry_parser"
+        compatible = any(any(package.glob(f"telemetry_parser{suffix}")) for suffix in suffixes)
+        if not compatible:
+            continue
+        if str(runtime) not in sys.path:
+            sys.path.insert(0, str(runtime))
+        try:
+            module = importlib.import_module("telemetry_parser")
+            module_path = Path(module.__file__).resolve()
+            if not module_path.is_relative_to(runtime):
+                raise RuntimeError("DJI telemetry parser was loaded outside the bundled runtime")
+            return module
+        except (ImportError, RuntimeError) as exc:
+            import_errors.append(str(exc))
+            sys.modules.pop("telemetry_parser", None)
+
+    detail = f": {'; '.join(import_errors)}" if import_errors else ""
+    raise RuntimeError(
+        f"DJI telemetry parser is unavailable for Python {sys.version_info.major}.{sys.version_info.minor}; "
+        f"checked: {', '.join(str(path) for path in checked)}{detail}"
+    )
 
 
 _default_parser_module = _parser_module
@@ -134,6 +148,10 @@ def _read_cache(source: Path) -> dict[str, Any] | None:
                 "quaternion": archive["quaternion"],
                 "camera": meta.get("camera"), "model": meta.get("model"),
                 "camera_metadata": meta.get("camera_metadata") or {},
+                "schema_name": meta.get("schema_name") or meta.get("dji_schema"),
+                "schema": meta.get("dji_schema") or meta.get("schema_name"),
+                "channels": meta.get("channels") or [],
+                "has_useful_telemetry": meta.get("has_useful_telemetry"),
                 "cache_hit": True,
             }
     except (OSError, ValueError, KeyError, TypeError):
@@ -147,6 +165,10 @@ def _write_cache(source: Path, data: dict[str, Any], cache_path: Path | None = N
         **_identity(source),
         "camera": data["camera"], "model": data["model"],
         "camera_metadata": data["camera_metadata"],
+        "schema_name": data.get("schema_name"),
+        "dji_schema": data.get("schema") or data.get("schema_name"),
+        "channels": data.get("channels", []),
+        "has_useful_telemetry": data.get("has_useful_telemetry"),
     }
     temporary = path.with_name(f"dji_imu_{os.getpid()}_{time.time_ns()}.tmp.npz")
     try:
@@ -160,6 +182,104 @@ def _write_cache(source: Path, data: dict[str, Any], cache_path: Path | None = N
         return path
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _write_capability_cache(source: Path | str, schema: str) -> Path:
+    """Cache a capability result in the normal, source-identity-bound DJI cache.
+
+    ``dvtm_ac103`` is the Action 2 metadata-only protocol used by the bundled
+    parser; it carries camera metadata but no normalized IMU samples. Unknown
+    schemas are never cached as negative, since that could discard useful data.
+    """
+    source_path = Path(source)
+    normalized = str(schema or "").strip().lower().removesuffix(".proto")
+    if normalized != "dvtm_ac103":
+        raise ValueError(f"Cannot cache negative DJI capability for unknown schema: {schema!r}")
+    return _write_cache(source_path, {
+        "gyro": np.empty((0, 4), dtype=np.float64),
+        "accel": np.empty((0, 4), dtype=np.float64),
+        "quaternion": np.empty((0, 5), dtype=np.float64),
+        "camera": "DJI", "model": None, "camera_metadata": {"proto": "dvtm_ac103.proto"},
+        "schema_name": normalized, "schema": normalized,
+        "channels": [], "has_useful_telemetry": False,
+    })
+
+
+def probe_dji_telemetry_capabilities(source: Path | str, ffprobe_exe: str = "ffprobe") -> dict[str, Any]:
+    """Lightly inspect MP4 stream metadata and cache only known no-IMU schemas.
+
+    The probe does not parse camera payloads. A known metadata-only DJI schema
+    can safely skip the expensive native parser; unknown DJMD remains unknown
+    and is parsed normally so FIT and possible camera channels are preserved.
+    """
+    path = Path(source)
+    cached = _read_cache(path) if path.is_file() else None
+    if cached is not None and cached.get("has_useful_telemetry") is not None:
+        return {
+            "is_dji": cached.get("camera") == "DJI",
+            "schema": cached.get("schema_name"),
+            "has_useful_telemetry": bool(cached["has_useful_telemetry"]),
+            "channels": list(cached.get("channels") or []), "cache_hit": True,
+        }
+
+    result = {"is_dji": False, "schema": None, "has_useful_telemetry": None,
+              "channels": [], "cache_hit": False}
+    try:
+        proc = subprocess.run(
+            [ffprobe_exe, "-v", "error", "-show_entries",
+             "stream=index,codec_type,codec_tag_string:stream_tags",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=2.0, check=False,
+        )
+        if proc.returncode != 0:
+            return result
+        streams = json.loads(proc.stdout or "{}").get("streams", [])
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+        return result
+
+    tags_all: list[str] = []
+    is_dji = False
+    for stream in streams:
+        tags = stream.get("tags") or {}
+        values = [str(value) for value in tags.values()]
+        tags_all.extend(values)
+        codec_tag = str(stream.get("codec_tag_string", "")).lower()
+        handler = str(tags.get("handler_name", "")).lower()
+        if codec_tag == "djmd" or (stream.get("codec_type") == "data" and
+                                   ("cam meta" in handler or "dji meta" in handler)):
+            is_dji = True
+    # DJI stores the protobuf schema name in the early MP4 metadata payload,
+    # not in ffprobe's stream tags. Read only a bounded header window; this is
+    # cheap even for multi-gigabyte clips and does not invoke the native parser.
+    if is_dji:
+        try:
+            with path.open("rb") as source_file:
+                header = source_file.read(2 * 1024 * 1024).lower()
+            if b"dvtm_ac103" in header:
+                schema = "dvtm_ac103"
+        except OSError:
+            pass
+    else:
+        schema = None
+    # A tag may contain a schema name on cameras which expose it directly.
+    for value in tags_all:
+        lower = value.lower()
+        if "dvtm_ac103" in lower:
+            schema = "dvtm_ac103"
+            break
+    result["is_dji"] = is_dji or schema is not None
+    result["schema"] = schema
+    if schema == "dvtm_ac103":
+        # This protocol is metadata-only in the parser contract. No motion
+        # channel is inferred for other DJI cameras or unknown schemas.
+        result["has_useful_telemetry"] = False
+        result["channels"] = []
+        if path.is_file():
+            try:
+                _write_capability_cache(path, schema)
+            except (OSError, ValueError):
+                pass
+    return result
 
 
 def _quaternions(groups: list[Any]) -> np.ndarray:
@@ -221,14 +341,26 @@ def _parse(source: Path) -> dict[str, Any]:
             metadata = (group.get("Default") or {}).get("Metadata") or {}
             if metadata:
                 break
+    header = metadata.get("clip_meta_header") or {}
+    schema_name = str(header.get("proto_file_name") or "").removesuffix(".proto") or None
+    quaternion_rows = _quaternions(groups)
+    channels = [
+        name for name, rows in (
+            ("gyro", gyro_rows), ("accel", accel_rows),
+            ("quaternion", quaternion_rows),
+        ) if len(rows) > 0
+    ]
     conv_ms = (time.perf_counter() - t0_conv) * 1000.0
 
     return {
         "gyro": np.asarray(gyro_rows, dtype=np.float64).reshape(-1, 4),
         "accel": np.asarray(accel_rows, dtype=np.float64).reshape(-1, 4),
-        "quaternion": _quaternions(groups),
+        "quaternion": quaternion_rows,
         "camera": parser.camera, "model": parser.model,
         "camera_metadata": metadata, "cache_hit": False,
+        "schema_name": schema_name,
+        "channels": channels,
+        "has_useful_telemetry": bool(channels),
         "_timings_ms": {
             "parser_init_ms": init_ms,
             "telemetry_ms": telem_ms,
@@ -408,6 +540,17 @@ def load_dji_telemetry(
     data = _read_cache(source)
     cache_hit = (data is not None)
     if data is None:
+        # Metadata-only DJI schemas need no native parser pass. Unknown schemas
+        # remain conservative and continue through the worker/parser path.
+        try:
+            capability = probe_dji_telemetry_capabilities(source)
+            if capability.get("has_useful_telemetry") is False:
+                data = _read_cache(source)
+                cache_hit = data is not None
+        except Exception:
+            data = None
+
+    if data is None:
         # Determine whether to use external worker process
         if use_worker is None:
             use_worker = (_parser_module is _default_parser_module)
@@ -444,6 +587,7 @@ def load_dji_telemetry(
         ],
         "camera_metadata": data["camera_metadata"],
         "camera": data["camera"], "model": data["model"],
+        "has_useful_telemetry": data.get("has_useful_telemetry"),
         "cache_hit": data["cache_hit"],
         "elapsed_s": time.perf_counter() - started,
     }

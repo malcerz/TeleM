@@ -68,11 +68,21 @@ def _parse_fps(rate_text: Optional[str], default_fps: float = 30.0) -> float:
 
 
 def _parse_creation_time(text: Optional[str]) -> Optional[datetime]:
-    """Parse an ffprobe ``creation_time`` tag into naive-UTC datetime."""
+    """Parse a container date to naive UTC without assuming naive dates are UTC.
+
+    MP4 metadata with an explicit offset is authoritative about its timezone.
+    Naive timestamps are interpreted in the host's local timezone only as a
+    best-effort hint; callers must keep their confidence low.
+    """
     if not text:
         return None
     try:
-        dt = datetime.fromisoformat(str(text).strip().replace("Z", "+00:00"))
+        value = str(text).strip()
+        if value.endswith(("Z", "z")):
+            value = value[:-1] + "+00:00"
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.astimezone()
         return _as_naive_utc(dt)
     except (TypeError, ValueError):
         return None
@@ -89,6 +99,9 @@ def _parse_creation_time(text: Optional[str]) -> Optional[datetime]:
 TIMESTAMP_SOURCE_GPMF_GPS9 = "gpmf_gps9"
 TIMESTAMP_SOURCE_GPMF_GPSU = "gpmf_gpsu"
 TIMESTAMP_SOURCE_CREATION_TIME = "container_creation_time"
+TIMESTAMP_SOURCE_CREATION_TIME_LOCAL = "container_creation_time_local"
+TIMESTAMP_SOURCE_CAMERA_METADATA = "camera_metadata_time"
+TIMESTAMP_SOURCE_FILE_MTIME = "filesystem_mtime_hint"
 TIMESTAMP_SOURCE_CONTINUOUS_FALLBACK = "continuous_fallback"
 TIMESTAMP_SOURCE_UNKNOWN = "unknown"
 
@@ -137,7 +150,7 @@ class ClipTimestampResolution:
 # In-memory cache: once a clip's timestamp is resolved it is reused within the
 # process (avoids re-extracting GPMF of multi-GB files on rebuilds).  The key
 # includes the clip duration because the STMP file-local decision depends on it.
-_TIME_RESOLUTION_CACHE: dict[tuple[str, Optional[float]], ClipTimestampResolution] = {}
+_TIME_RESOLUTION_CACHE: dict[tuple[str, Optional[float], int | None, int | None], ClipTimestampResolution] = {}
 
 
 def clear_time_resolution_cache() -> None:
@@ -147,11 +160,17 @@ def clear_time_resolution_cache() -> None:
 
 def _resolution_cache_key(
     path: Path | str, duration_s: Optional[float]
-) -> tuple[str, Optional[float]]:
-    key = str(Path(path).resolve())
+) -> tuple[str, Optional[float], int | None, int | None]:
+    source = Path(path)
+    key = str(source.resolve())
+    try:
+        stat = source.stat()
+        fingerprint = (int(stat.st_size), int(stat.st_mtime_ns))
+    except OSError:
+        fingerprint = (None, None)
     if duration_s is None:
-        return (key, None)
-    return (key, round(float(duration_s), 6))
+        return (key, None, *fingerprint)
+    return (key, round(float(duration_s), 6), *fingerprint)
 
 
 def _to_number(value: Any) -> Optional[float]:
@@ -363,7 +382,7 @@ def _resolve_from_gpmf(
 
 
 # ── Central AppData cache for resolved clip timestamps ────────────────────────
-TELEM_TIME_CACHE_VERSION = 1
+TELEM_TIME_CACHE_VERSION = 2
 
 
 def _telem_time_cache_paths(video_path: Path | str) -> tuple[Path, Path]:
@@ -400,6 +419,7 @@ def _write_telem_time_cache(
             "timestamp_source": res.timestamp_source,
             "timestamp_reliable": bool(res.timestamp_reliable),
             "timestamp_detail": res.timestamp_detail or "",
+            "timestamp_quality": res.timestamp_quality,
         }
         import tempfile
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -465,14 +485,9 @@ def _load_valid_telem_time_cache(
             timestamp_source=data.get("timestamp_source", TIMESTAMP_SOURCE_UNKNOWN),
             timestamp_reliable=bool(data.get("timestamp_reliable", False)),
             timestamp_detail=detail,
-            # Version-1 caches predate the explicit quality field.  Preserve
-            # their proven GPMF reliability instead of silently relabelling
-            # them as continuous/fallback timestamps.
             timestamp_quality=data.get(
                 "timestamp_quality",
-                TIMESTAMP_QUALITY_EXACT
-                if data.get("timestamp_source") in _GPMF_RELIABLE_SOURCES
-                else TIMESTAMP_QUALITY_ESTIMATED,
+                TIMESTAMP_QUALITY_FALLBACK,
             ),
         )
     except Exception:
@@ -514,7 +529,7 @@ def resolve_clip_timestamp(
         try:
             from src.telemetry_processed_cache import read_processed_cache, PROCESSED_CACHE_SUFFIX
             proc = read_processed_cache(Path(path))
-            if proc is not None and proc.get("start_dt_utc") is not None:
+            if proc is not None and _is_plausible_absolute_time(proc.get("start_dt_utc")):
                 start_dt = proc["start_dt_utc"]
                 suffix = proc.get("_cache_suffix", PROCESSED_CACHE_SUFFIX)
                 res = ClipTimestampResolution(
@@ -531,26 +546,35 @@ def resolve_clip_timestamp(
             pass
 
     res = _resolve_from_gpmf(path, ffmpeg_exe, ffprobe_exe, duration_s=duration_s)
-    if res.timestamp_source in _GPMF_RELIABLE_SOURCES:
+    if res.timestamp_source in _GPMF_RELIABLE_SOURCES and _is_plausible_absolute_time(res.absolute_start_dt):
         if use_cache:
             _TIME_RESOLUTION_CACHE[key] = res
             _write_telem_time_cache(path, res, duration_s=duration_s)
         return res
 
-    # GPMF unavailable / no GPS time -> creation_time fallback (estimated).
-    ct = resolve_clip_absolute_start(path, ffprobe_exe)
-    if ct is not None:
-        res = ClipTimestampResolution(
-            absolute_start_dt=ct,
-            timestamp_source=TIMESTAMP_SOURCE_CREATION_TIME,
-            timestamp_reliable=True,
-            timestamp_detail=f"creation_time={_fmt_iso(ct)} (GPMF: {res.timestamp_source})",
-            timestamp_quality=TIMESTAMP_QUALITY_ESTIMATED,
+    # No valid absolute GPS time: use explicit container metadata when present.
+    # Naive metadata is interpreted in local time but stays low-confidence.
+    metadata_res = _resolve_container_timestamp(path, ffprobe_exe)
+    if metadata_res.absolute_start_dt is not None:
+        metadata_res.timestamp_detail = (
+            f"{metadata_res.timestamp_detail}; GPMF={res.timestamp_source}"
         )
         if use_cache:
-            _TIME_RESOLUTION_CACHE[key] = res
-            _write_telem_time_cache(path, res, duration_s=duration_s)
-        return res
+            _TIME_RESOLUTION_CACHE[key] = metadata_res
+            _write_telem_time_cache(path, metadata_res, duration_s=duration_s)
+        return metadata_res
+
+    # Last-resort timestamp hint. It may reflect copy/download time, so it can
+    # produce suggestions only; AutoFIT must require user confirmation.
+    mtime_res = _resolve_filesystem_mtime(path)
+    if mtime_res.absolute_start_dt is not None:
+        mtime_res.timestamp_detail = (
+            f"{mtime_res.timestamp_detail}; no trustworthy GPMF/MP4 timestamp"
+        )
+        if use_cache:
+            _TIME_RESOLUTION_CACHE[key] = mtime_res
+            _write_telem_time_cache(path, mtime_res, duration_s=duration_s)
+        return mtime_res
 
     if use_cache:
         _TIME_RESOLUTION_CACHE[key] = res
@@ -1107,23 +1131,118 @@ def resolve_clip_absolute_start(
     fallback; a later stage upgrades clip starts to each clip's own GPMF GPS
     anchor (which is more accurate for GoPro chapter files).
     """
+    return _resolve_container_timestamp(path, ffprobe_exe).absolute_start_dt
+
+
+def _is_plausible_absolute_time(value: Optional[datetime]) -> bool:
+    if value is None:
+        return False
+    dt = _as_naive_utc(value)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return dt is not None and dt.year >= 2000 and dt <= now + timedelta(days=1)
+
+
+def _resolve_container_timestamp(
+    path: Path | str, ffprobe_exe: str = "ffprobe"
+) -> ClipTimestampResolution:
+    """Resolve known MP4 date tags while retaining timezone provenance."""
     cmd = [
         ffprobe_exe, "-v", "error",
-        "-show_entries", "format_tags=creation_time",
+        "-show_entries", "format_tags:stream_tags",
         "-of", "json", str(path),
     ]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True)
     except Exception:
-        return None
-    if p.returncode != 0:
-        return None
+        p = None
+    if p is not None and p.returncode == 0:
+        try:
+            data = json.loads(p.stdout or "{}")
+        except (json.JSONDecodeError, ValueError, TypeError):
+            data = {}
+        tag_sources: list[tuple[str, Any]] = []
+        format_tags = data.get("format", {}).get("tags", {}) or {}
+        tag_sources.extend((f"format:{key}", value) for key, value in format_tags.items())
+        for idx, stream in enumerate(data.get("streams", []) or []):
+            tags = (stream.get("tags") or {})
+            tag_sources.extend((f"stream[{idx}]:{key}", value) for key, value in tags.items())
+        date_keys = {
+            "creation_time", "com.apple.quicktime.creationdate", "date",
+            "recording_date", "date_recorded",
+        }
+        candidates: list[tuple[datetime, bool, str]] = []
+        for label, value in tag_sources:
+            if label.rsplit(":", 1)[-1].lower() not in date_keys:
+                continue
+            raw = str(value or "").strip()
+            if not raw:
+                continue
+            try:
+                parse_value = raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw
+                parsed = datetime.fromisoformat(parse_value)
+                has_offset = parsed.tzinfo is not None
+                if not has_offset:
+                    parsed = parsed.astimezone()
+                utc = _as_naive_utc(parsed)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if _is_plausible_absolute_time(utc):
+                candidates.append((utc, has_offset, f"{label}={raw}"))
+
+        # Prefer explicit timezone metadata over a naive camera-local date.
+        candidates.sort(key=lambda row: not row[1])
+        if candidates:
+            value, has_offset, detail = candidates[0]
+            source = (
+                TIMESTAMP_SOURCE_CREATION_TIME
+                if detail.lower().endswith("creation_time") or ":creation_time=" in detail.lower()
+                else TIMESTAMP_SOURCE_CAMERA_METADATA
+            )
+            quality = TIMESTAMP_QUALITY_ESTIMATED if has_offset else TIMESTAMP_QUALITY_FALLBACK
+            reliable = bool(has_offset)
+            try:
+                mtime = datetime.fromtimestamp(Path(path).stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+                if abs((mtime - value).total_seconds()) > 48 * 3600:
+                    quality = TIMESTAMP_QUALITY_FALLBACK
+                    reliable = False
+                    detail += f"; filesystem mtime differs by {abs((mtime-value).total_seconds())/3600:.1f}h"
+            except (OSError, OverflowError, ValueError):
+                pass
+            if not has_offset:
+                detail += "; naive timestamp interpreted as host local time; confirmation required"
+                source = TIMESTAMP_SOURCE_CREATION_TIME_LOCAL if "creation_time" in detail.lower() else TIMESTAMP_SOURCE_CAMERA_METADATA
+            return ClipTimestampResolution(
+                absolute_start_dt=value,
+                timestamp_source=source,
+                timestamp_reliable=reliable,
+                timestamp_detail=detail,
+                timestamp_quality=quality,
+            )
+
+    return ClipTimestampResolution(
+        timestamp_source=TIMESTAMP_SOURCE_UNKNOWN,
+        timestamp_reliable=False,
+        timestamp_detail="No plausible absolute date in recognized MP4 metadata",
+        timestamp_quality=TIMESTAMP_QUALITY_FALLBACK,
+    )
+
+
+def _resolve_filesystem_mtime(path: Path | str) -> ClipTimestampResolution:
     try:
-        data = json.loads(p.stdout or "{}")
-        ct = data.get("format", {}).get("tags", {}).get("creation_time")
-    except (json.JSONDecodeError, ValueError):
-        return None
-    return _parse_creation_time(ct)
+        stamp = datetime.fromtimestamp(Path(path).stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+    except (OSError, OverflowError, ValueError):
+        stamp = None
+    if not _is_plausible_absolute_time(stamp):
+        return ClipTimestampResolution(
+            timestamp_detail="Filesystem modification time is missing or implausible",
+        )
+    return ClipTimestampResolution(
+        absolute_start_dt=stamp,
+        timestamp_source=TIMESTAMP_SOURCE_FILE_MTIME,
+        timestamp_reliable=False,
+        timestamp_detail=f"filesystem mtime hint={_fmt_iso(stamp)}; low confidence",
+        timestamp_quality=TIMESTAMP_QUALITY_FALLBACK,
+    )
 
 
 def probe_clip_time_interval(
@@ -1161,7 +1280,11 @@ def probe_clip_time_interval(
 
     if dur_s > 0.0:
         end_dt = start_dt + timedelta(seconds=dur_s)
-        confidence = "exact" if res.timestamp_quality == TIMESTAMP_QUALITY_EXACT else "estimated"
+        confidence = (
+            "exact" if res.timestamp_quality == TIMESTAMP_QUALITY_EXACT
+            else "estimated" if res.timestamp_quality == TIMESTAMP_QUALITY_ESTIMATED
+            else "degraded"
+        )
         return start_dt, end_dt, dur_s, confidence
     else:
         # Fallback only when duration absolutely cannot be established
