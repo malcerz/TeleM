@@ -1,4 +1,4 @@
-﻿import os
+import os
 import shutil
 import subprocess
 import json
@@ -26,7 +26,7 @@ def get_git_hash(src_dir):
 
 def sync_and_manifest():
     src_dir = r'C:\_DEV\BikeRideHUD-main-new'
-    dst_dir = r'C:\_DEV\BikeRideHUD-portable'
+    dst_dir = r'C:\_DEV\SportCamHUD-portable' if os.path.exists(r'C:\_DEV\SportCamHUD-portable') else r'C:\_DEV\BikeRideHUD-portable'
     
     current_hash = get_git_hash(src_dir)
     print(f"Current git hash: {current_hash}")

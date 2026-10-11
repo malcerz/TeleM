@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import hashlib
 import sys
@@ -14,7 +14,7 @@ def get_file_hash(filepath):
         return None
 
 def check_parity():
-    portable_dir = r'C:\_DEV\BikeRideHUD-portable'
+    portable_dir = r'C:\_DEV\SportCamHUD-portable' if os.path.exists(r'C:\_DEV\SportCamHUD-portable') else r'C:\_DEV\BikeRideHUD-portable'
     main_dir = r'C:\_DEV\BikeRideHUD-main-new'
     manifest_path = os.path.join(portable_dir, 'runtime_manifest.json')
     
