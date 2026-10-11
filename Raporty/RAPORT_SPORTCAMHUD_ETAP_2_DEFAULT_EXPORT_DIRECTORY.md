@@ -53,6 +53,7 @@ Po zmianach, w `APPDATA`/`LOCALAPPDATA` odizolowanym przez fixture:
 - `tests/test_default_export_dir_settings.py`: **13 passed**.
 - `compileall` dla zmienionych modułów: **PASS**.
 - `ruff check src/export_paths.py`: **PASS**.
+- `ruff check` dla całego zestawu zmodyfikowanych modułów: **FAIL** — wykrył 90 uwag w dużych, istniejących plikach (m.in. kolejność importów, długość linii i wcześniejsze duplikaty metod). Nie uruchamiano masowego autofixu poza zakresem zadania.
 - `git diff --check`: **PASS** przed commitem.
 - Dodatkowy `tests/test_gui_logic_degree_export_settings_cleanup.py` nie zebrał testów: importuje nieistniejący `get_arial_fallback_font` z `src.indicators.helpers`. To niezależny błąd kolekcji; modułu poza zakresem nie zmieniano.
 
