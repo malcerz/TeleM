@@ -763,10 +763,12 @@ class RenderMixin:
 
         info = ffprobe_stream_info(ffprobe_exe, self.video_path)
         streams = info.get("streams", [])
-        fps_stream = parse_fps(
-            streams[0].get("avg_frame_rate")
-            or streams[0].get("r_frame_rate")
-        ) if streams else 30.0
+        fps_stream_text = (
+            streams[0].get("r_frame_rate")
+            or streams[0].get("avg_frame_rate")
+        ) if streams else None
+        fps_stream = parse_fps(fps_stream_text) if streams else 30.0
+        target_fps = options.get("target_fps") or fps_stream_text or fps_stream
         src_w = int(streams[0].get("width", 1920)) if streams else 1920
         src_h = int(streams[0].get("height", 1080)) if streams else 1080
 
@@ -1077,6 +1079,7 @@ codec=options.get("intel_codec", "av1"),
                     "encoder": str(options.get("encoder", "")),
                     "render_mode": str(options.get("render_mode", "")),
                     "resolution": str(options.get("resolution", "")),
+                    "target_fps": str(target_fps),
                     "nvidia_backend": str(options.get("nvidia_backend", "")),
                     "nvidia_codec": str(options.get("nvidia_codec", "")),
                     "nvidia_quality": str(options.get("nvidia_quality", "")),
@@ -1277,6 +1280,7 @@ codec=options.get("intel_codec", "av1"),
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
+                    target_fps=target_fps,
                     enable_compression_analysis=bool(options.get("compression_analysis", True)),
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
@@ -1299,6 +1303,7 @@ codec=options.get("intel_codec", "av1"),
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
+                    target_fps=target_fps,
                     enable_compression_analysis=bool(options.get("compression_analysis", True)),
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),

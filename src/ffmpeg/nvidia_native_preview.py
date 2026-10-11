@@ -26,15 +26,17 @@ from src.ffmpeg.nvidia_native_exporter import (
     build_canonical_indicators,
     build_map_indicator_desc,
     preload_sqlite_tiles_to_native,
+    parse_rational_fps,
 )
 
 
 class NvidiaNativePreviewRenderer:
     """Renderer for native D3D11 HUD & Map preview frames."""
 
-    def __init__(self, layout: dict, telemetry: Any = None) -> None:
+    def __init__(self, layout: dict, telemetry: Any = None, target_fps: Any = None) -> None:
         self.layout = layout
         self.telemetry = telemetry
+        self.target_fps = target_fps
         self.dll = load_native_pipeline()
         self.handle: Optional[int] = None
         self._buf = bytearray(3840 * 2160 * 4)
@@ -71,11 +73,12 @@ class NvidiaNativePreviewRenderer:
             compression_csv_path="",
         )
 
+        fps_num, fps_den = parse_rational_fps(self.target_fps)
         cfg = TelemNvencConfig(
             width=3840,
             height=2160,
-            fps_num=30000,
-            fps_den=1001,
+            fps_num=fps_num,
+            fps_den=fps_den,
             ring_size=4,
             bit_depth=10,
             preset_p1_to_p7=1,

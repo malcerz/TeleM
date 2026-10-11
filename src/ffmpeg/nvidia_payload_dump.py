@@ -167,6 +167,7 @@ def dump_canonical_payload(
     codec: str = "HEVC",
     quality_profile: str = "Fast",
     video_bitrate: str | float = "40M",
+    target_fps: float | str | tuple[int, int] | None = None,
     enable_compression_analysis: bool = False,
     compression_csv_path: Optional[Path | str] = None,
     max_frames: Optional[int] = None,
@@ -306,6 +307,7 @@ def dump_canonical_payload(
             k: v for k, v in profile_spec.items() if isinstance(v, (int, float, str, bool))
         },
         "video_bitrate": str(video_bitrate),
+        "target_fps": str(target_fps) if target_fps is not None else None,
         "enable_compression_analysis": bool(enable_compression_analysis),
         "compression_csv_path": str(compression_csv_path) if compression_csv_path else None,
         "max_frames": max_frames,

@@ -2,7 +2,7 @@
 
 Executes single-pass live MP4 export with hardware D3D11VA decode,
 Direct2D / DirectWrite HUD, native GPU map rotation, P010 VideoProcessor,
-NVENC HEVC/AV1 encoding, PacedAudioFeeder (AAC stream copy), and live MP4 muxer.
+NVENC HEVC/AV1 encoding, single-pass live audio stream copy, and live MP4 muxer.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import json
 import sqlite3
 import ctypes
 from ctypes import wintypes
+from fractions import Fraction
 import subprocess
 import threading
 import uuid
@@ -55,8 +56,6 @@ from src.process_lifecycle import RenderProcessRegistry
 
 
 kernel32 = ctypes.windll.kernel32
-CACHE_DIR = Path("scratch/audio_cache")
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def parse_color_hex(hex_str: Optional[str], default: int = 0xFFFFFFFF) -> int:
@@ -801,158 +800,155 @@ def preload_sqlite_tiles_to_native(dll: ctypes.CDLL, handle: Any, zoom: int, sty
         return 0
 
 
-def get_cached_clip_adts(clip_path: str) -> bytes:
-    """Extract AAC audio bitstream to ADTS format, cached on disk."""
-    src = Path(clip_path).resolve()
-    cache_file = CACHE_DIR / f"{src.stem}_audio.adts"
-    if cache_file.exists() and cache_file.stat().st_size > 0:
-        return cache_file.read_bytes()
+def parse_rational_fps(fps_val: Any) -> tuple[int, int]:
+    """Parse FPS value (string fraction, float, int, tuple) into exact (fps_num, fps_den).
 
-    cmd = ["ffmpeg", "-v", "error", "-i", str(src), "-map", "0:a", "-c:a", "copy", "-f", "adts", "-"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out_data, err_data = proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"Failed to demux audio from {src}: {err_data.decode(errors='ignore')}")
-    cache_file.write_bytes(out_data)
-    return out_data
+    Guarantees positive numerator and denominator, precise rational mapping for standard
+    NTSC rates (23.976, 29.97, 59.94, 119.88), integer frame rates, and Fraction fallback.
+    """
+    if fps_val is None:
+        return 30000, 1001
 
-
-def parse_adts_packets(data: bytes) -> List[bytes]:
-    idx = 0
-    packets = []
-    n = len(data)
-    while idx + 7 <= n:
-        if data[idx] == 0xFF and (data[idx+1] & 0xF0) == 0xF0:
-            frame_len = ((data[idx+3] & 0x03) << 11) | (data[idx+4] << 3) | ((data[idx+5] & 0xE0) >> 5)
-            if frame_len <= 7 or idx + frame_len > n:
-                break
-            packets.append(data[idx:idx+frame_len])
-            idx += frame_len
-        else:
-            idx += 1
-    return packets
-
-
-class PacedAudioFeeder:
-    """Dual-channel live audio pipe feeder for smooth audio/video muxing."""
-    def __init__(self, pipe_name: str, packets: List[bytes], lead_s: float = 1.0):
-        self.pipe_name = pipe_name
-        self.packets = packets
-        self.total_pkts = len(packets)
-        self.lead_s = lead_s
-        self.cur_pkt_idx = 0
-        self.video_time_s = 0.0
-        self.stop_requested = False
-        self.finished = False
-        self.error: Optional[str] = None
-        self.bytes_sent = 0
-        self.pkts_sent = 0
-        self.h_pipe = None
-        self.thread: Optional[threading.Thread] = None
-
-    def update_video_time(self, v_time_s: float) -> None:
-        self.video_time_s = v_time_s
-
-    def stop(self) -> None:
-        self.stop_requested = True
-
-    def start(self) -> None:
-        self.h_pipe = kernel32.CreateNamedPipeW(
-            self.pipe_name,
-            0x00000003,  # PIPE_ACCESS_DUPLEX
-            0x00000000,  # byte mode
-            1,           # 1 instance
-            1024 * 1024, # 1 MB buffer
-            1024 * 1024, # 1 MB buffer
-            0, None
-        )
-        if self.h_pipe in (-1, 0, None):
-            raise RuntimeError(f"CreateNamedPipeW failed: {kernel32.GetLastError()}")
-        self.thread = threading.Thread(target=self._worker, daemon=True, name="PacedAudioFeeder")
-        self.thread.start()
-
-    def _worker(self) -> None:
+    if isinstance(fps_val, (tuple, list)) and len(fps_val) >= 2:
         try:
-            kernel32.ConnectNamedPipe(self.h_pipe, None)
-            bytes_w = wintypes.DWORD()
+            num, den = int(fps_val[0]), int(fps_val[1])
+            if num > 0 and den > 0:
+                return num, den
+        except (ValueError, TypeError):
+            pass
+        return 30000, 1001
 
-            while not self.stop_requested and self.cur_pkt_idx < self.total_pkts:
-                audio_time_s = self.pkts_sent * (1024.0 / 48000.0)
-                lead = audio_time_s - self.video_time_s
+    if isinstance(fps_val, str):
+        val = fps_val.strip()
+        if not val or val in ("0/0", "0"):
+            return 30000, 1001
+        if "/" in val:
+            parts = val.split("/")
+            try:
+                num, den = int(parts[0]), int(parts[1])
+                if num > 0 and den > 0:
+                    return num, den
+            except ValueError:
+                pass
+        try:
+            fps_float = float(val)
+        except ValueError:
+            return 30000, 1001
+    elif isinstance(fps_val, (int, float)):
+        fps_float = float(fps_val)
+    else:
+        return 30000, 1001
 
-                if lead > self.lead_s:
-                    time.sleep(0.01)
-                    continue
+    if fps_float <= 0.0:
+        return 30000, 1001
 
-                batch = bytearray()
-                batch_pkts = 0
-                while self.cur_pkt_idx < self.total_pkts and batch_pkts < 10:
-                    batch.extend(self.packets[self.cur_pkt_idx])
-                    self.cur_pkt_idx += 1
-                    batch_pkts += 1
+    # Exact checks for standard NTSC rates
+    if abs(fps_float - 29.97002997) < 0.005 or abs(fps_float - 29.97) < 0.005:
+        return 30000, 1001
+    if abs(fps_float - 59.94005994) < 0.005 or abs(fps_float - 59.94) < 0.005:
+        return 60000, 1001
+    if abs(fps_float - 23.976023976) < 0.005 or abs(fps_float - 23.976) < 0.005:
+        return 24000, 1001
+    if abs(fps_float - 119.88011988) < 0.01 or abs(fps_float - 119.88) < 0.01:
+        return 120000, 1001
 
-                if batch:
-                    buf = (ctypes.c_char * len(batch)).from_buffer(batch)
-                    res = kernel32.WriteFile(self.h_pipe, buf, len(batch), ctypes.byref(bytes_w), None)
-                    if not res:
-                        break
-                    self.bytes_sent += bytes_w.value
-                    self.pkts_sent += batch_pkts
+    # Integer rates (24, 25, 30, 48, 50, 60, 100, 120, etc.)
+    if abs(fps_float - round(fps_float)) < 1e-4:
+        return int(round(fps_float)), 1
 
-            kernel32.FlushFileBuffers(self.h_pipe)
-            kernel32.DisconnectNamedPipe(self.h_pipe)
-        except Exception as ex:
-            self.error = str(ex)
-        finally:
-            if self.h_pipe:
-                kernel32.CloseHandle(self.h_pipe)
-                self.h_pipe = None
-            self.finished = True
-
-    def join(self, timeout: float = 5.0) -> None:
-        if self.thread:
-            self.thread.join(timeout)
+    frac = Fraction(str(fps_float)).limit_denominator(100100)
+    if frac.numerator <= 0 or frac.denominator <= 0:
+        return 30000, 1001
+    return frac.numerator, frac.denominator
 
 
-def build_streaming_audio_slice(
+def _probe_clip_audio_stream(ffprobe_exe: str, clip_path: Path | str) -> bool:
+    """Check if the given media file contains at least one audio stream."""
+    try:
+        cmd = [
+            ffprobe_exe, "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=codec_name",
+            "-of", "json",
+            str(clip_path),
+        ]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if out.returncode == 0:
+            data = json.loads(out.stdout or "{}")
+            return len(data.get("streams", [])) > 0
+    except Exception:
+        pass
+    return False
+
+
+def _nvidia_audio_concat_entries(
     clips_desc: List[TelemVideoClipDesc],
-    start_frame: int,
-    frame_count: int,
+    video_timeline: Any = None,
+    start_frame: int = 0,
+    export_frames: int = 0,
     fps_num: int = 30000,
     fps_den: int = 1001,
-    progress_cb: Optional[Callable[[int, int, str], None]] = None,
-) -> List[bytes]:
+) -> list[str]:
+    """Generate entries for the live FFmpeg audio concat demuxer plan without pre-extraction."""
+    entries: list[str] = []
     fps = fps_num / float(fps_den)
-    selected_packets: List[bytes] = []
-    total_clips = len(clips_desc)
 
-    for c_idx, clip in enumerate(clips_desc):
-        if progress_cb:
-            progress_cb(c_idx, total_clips, f"Klip {c_idx+1}/{total_clips}")
-        clip_global_start_f = clip.global_start_frame
-        clip_global_end_f = clip.global_start_frame + clip.frame_count
+    vt_clips = list(getattr(video_timeline, "clips", ()) or ())
+    if vt_clips:
+        for clip in vt_clips:
+            clip_path = clip.path
+            entries.append("file '" + str(clip_path).replace("'", "'\\''") + "'\n")
+            local_start = float(getattr(clip, "local_start_s", 0.0) or 0.0)
+            if local_start > 0.0:
+                entries.append(f"inpoint {local_start:.9f}\n")
+            local_end = float(getattr(clip, "local_end_s", clip.duration_s))
+            source_duration = float(getattr(clip, "source_duration_s", 0.0) or 0.0)
+            if source_duration <= 0.0 or local_end < source_duration - 1e-6:
+                entries.append(f"outpoint {local_end:.9f}\n")
+    else:
+        req_end_frame = start_frame + export_frames
+        for clip in clips_desc:
+            clip_global_start_f = clip.global_start_frame
+            clip_global_end_f = clip.global_start_frame + clip.frame_count
 
-        overlap_start_f = max(start_frame, clip_global_start_f)
-        overlap_end_f = min(start_frame + frame_count, clip_global_end_f)
+            overlap_start_f = max(start_frame, clip_global_start_f)
+            overlap_end_f = min(req_end_frame, clip_global_end_f)
 
-        if overlap_start_f < overlap_end_f:
-            local_start_s = (overlap_start_f - clip_global_start_f) / fps
-            local_end_s = (overlap_end_f - clip_global_start_f) / fps
-            local_dur_s = local_end_s - local_start_s
+            if overlap_start_f < overlap_end_f:
+                local_start_s = (overlap_start_f - clip_global_start_f) / fps
+                local_end_s = (overlap_end_f - clip_global_start_f) / fps
+                entries.append("file '" + str(clip.path).replace("'", "'\\''") + "'\n")
+                if local_start_s > 1e-6:
+                    entries.append(f"inpoint {local_start_s:.9f}\n")
+                if local_end_s < clip.duration_sec - 1e-6:
+                    entries.append(f"outpoint {local_end_s:.9f}\n")
 
-            adts_data = get_cached_clip_adts(clip.path)
-            clip_pkts = parse_adts_packets(adts_data)
+    return entries
 
-            start_pkt_idx = int(round(local_start_s * 48000.0 / 1024.0))
-            pkt_count = int(round(local_dur_s * 48000.0 / 1024.0))
 
-            clip_slice = clip_pkts[start_pkt_idx : start_pkt_idx + pkt_count]
-            selected_packets.extend(clip_slice)
-
-        if progress_cb:
-            progress_cb(c_idx + 1, total_clips, f"Klip {c_idx+1}/{total_clips}")
-
-    return selected_packets
+def _write_nvidia_audio_concat_plan(
+    path: str | Path,
+    clips_desc: List[TelemVideoClipDesc],
+    video_timeline: Any = None,
+    start_frame: int = 0,
+    export_frames: int = 0,
+    fps_num: int = 30000,
+    fps_den: int = 1001,
+) -> Path:
+    """Write tiny text concat plan for FFmpeg -f concat live audio muxing."""
+    plan = Path(path)
+    with plan.open("w", encoding="utf-8", newline="\n") as concat_file:
+        concat_file.writelines(
+            _nvidia_audio_concat_entries(
+                clips_desc=clips_desc,
+                video_timeline=video_timeline,
+                start_frame=start_frame,
+                export_frames=export_frames,
+                fps_num=fps_num,
+                fps_den=fps_den,
+            )
+        )
+    return plan
 
 
 def export_nvidia_native_d3d11(
@@ -966,6 +962,7 @@ def export_nvidia_native_d3d11(
     codec: str = "HEVC",
     quality_profile: str = "Quality",
     video_bitrate: str | float = "40M",
+    target_fps: float | str | tuple[int, int] | None = None,
     enable_compression_analysis: bool = True,
     compression_csv_path: Optional[Path | str] = None,
     progress_cb: Optional[Callable[[int, str], None]] = None,
@@ -1008,6 +1005,7 @@ def export_nvidia_native_d3d11(
                 codec=codec,
                 quality_profile=quality_profile,
                 video_bitrate=video_bitrate,
+                target_fps=target_fps,
                 enable_compression_analysis=enable_compression_analysis,
                 compression_csv_path=compression_csv_path,
                 max_frames=max_frames,
@@ -1061,40 +1059,85 @@ def export_nvidia_native_d3d11(
     if output_tmp_path.exists():
         output_tmp_path.unlink()
 
-    # 2. Build Video Sequence Descriptors
-    clips_desc: List[TelemVideoClipDesc] = []
-    fps_num = 30000
-    fps_den = 1001
-    fps = fps_num / float(fps_den)
-
-    global_frame_cursor = 0
-    global_time_cursor = 0.0
-
+    # 2. Build Video Sequence Descriptors and Resolve FPS
     from src.video_helpers import ffprobe_stream_info, find_executable
     ffprobe_exe = find_executable("ffprobe") or "ffprobe"
 
+    resolved_target_fps_num: Optional[int] = None
+    resolved_target_fps_den: Optional[int] = None
+    if target_fps is not None:
+        resolved_target_fps_num, resolved_target_fps_den = parse_rational_fps(target_fps)
+
+    probed_clips_info = []
     for file_item in input_files:
         p = Path(getattr(file_item, "path", file_item)).resolve()
         nb_frames = getattr(file_item, "frame_count", 0) or 0
         dur_s = float(getattr(file_item, "duration_sec", 0.0) or getattr(file_item, "duration", 0.0) or 0.0)
 
-        if nb_frames <= 0 or dur_s <= 0:
-            info = ffprobe_stream_info(ffprobe_exe, p)
-            streams = info.get("streams", [])
-            v_stream = streams[0] if streams else {}
-            if nb_frames <= 0:
-                nb_frames = int(v_stream.get("nb_frames", 0) or 0)
-            if dur_s <= 0:
-                dur_s = float(v_stream.get("duration", 0.0) or info.get("format", {}).get("duration", 0.0) or 0.0)
-            if nb_frames <= 0 and dur_s > 0:
-                nb_frames = int(round(dur_s * fps))
+        info = ffprobe_stream_info(ffprobe_exe, p)
+        streams = info.get("streams", [])
+        v_stream = streams[0] if streams else {}
+
+        src_r_rate = v_stream.get("r_frame_rate") or v_stream.get("avg_frame_rate")
+        clip_fps_num, clip_fps_den = parse_rational_fps(src_r_rate)
+        clip_fps = clip_fps_num / float(clip_fps_den)
+
+        if nb_frames <= 0:
+            nb_frames = int(v_stream.get("nb_frames", 0) or 0)
+        if dur_s <= 0:
+            dur_s = float(v_stream.get("duration", 0.0) or info.get("format", {}).get("duration", 0.0) or 0.0)
+        if nb_frames <= 0 and dur_s > 0:
+            nb_frames = int(round(dur_s * clip_fps))
+
+        probed_clips_info.append({
+            "path": p,
+            "nb_frames": nb_frames,
+            "dur_s": dur_s,
+            "clip_fps_num": clip_fps_num,
+            "clip_fps_den": clip_fps_den,
+            "clip_fps": clip_fps,
+        })
+
+    if resolved_target_fps_num is None or resolved_target_fps_den is None:
+        if probed_clips_info:
+            resolved_target_fps_num = probed_clips_info[0]["clip_fps_num"]
+            resolved_target_fps_den = probed_clips_info[0]["clip_fps_den"]
+        else:
+            resolved_target_fps_num = 30000
+            resolved_target_fps_den = 1001
+
+    target_fps_num = resolved_target_fps_num
+    target_fps_den = resolved_target_fps_den
+    effective_target_fps = target_fps_num / float(target_fps_den)
+
+    # Validate against mixed frame rates: native C++ D3D11 decoder reads 1:1 frames without temporal resampler
+    for c_info in probed_clips_info:
+        clip_fps = c_info["clip_fps"]
+        if abs(clip_fps - effective_target_fps) > 0.05:
+            raise RuntimeError(
+                f"NVIDIA Native D3D11 nie obsługuje jeszcze resamplingu klatek pomiędzy różnymi wartościami FPS "
+                f"(klip '{c_info['path'].name}': źródło {clip_fps:.3f} FPS [{c_info['clip_fps_num']}/{c_info['clip_fps_den']}], "
+                f"docelowo {effective_target_fps:.3f} FPS [{target_fps_num}/{target_fps_den}]). "
+                f"Użyj materiałów o zgodnym klatkażu."
+            )
+
+    clips_desc: List[TelemVideoClipDesc] = []
+    global_frame_cursor = 0
+    global_time_cursor = 0.0
+
+    for c_info in probed_clips_info:
+        p = c_info["path"]
+        nb_frames = c_info["nb_frames"]
+        dur_s = c_info["dur_s"]
+        clip_num = c_info["clip_fps_num"]
+        clip_den = c_info["clip_fps_den"]
 
         clip_desc = TelemVideoClipDesc(
             path=str(p),
             frame_count=nb_frames,
-            duration_sec=dur_s if dur_s > 0 else (nb_frames * fps_den / float(fps_num)),
-            fps_num=fps_num,
-            fps_den=fps_den,
+            duration_sec=dur_s if dur_s > 0 else (nb_frames * clip_den / float(clip_num)),
+            fps_num=clip_num,
+            fps_den=clip_den,
             global_start_frame=global_frame_cursor,
             global_start_time=global_time_cursor,
         )
@@ -1111,8 +1154,7 @@ def export_nvidia_native_d3d11(
     prep_tracker = HudPrepProgressTracker(
         phases=[
             ("indicators", "Wskaźniki i layout", 0.01),
-            ("telemetry_states", "Telemetria klatek", 0.94),
-            ("audio_slice", "Przygotowanie audio", 0.03),
+            ("telemetry_states", "Telemetria klatek", 0.97),
             ("native_setup", "Zasoby GPU i mapa", 0.02),
         ],
         callback=on_render_progress,
@@ -1144,16 +1186,18 @@ def export_nvidia_native_d3d11(
         telemetry=telemetry,
         video_timeline=video_timeline,
         export_frames=export_frames,
-        fps=fps,
+        fps=effective_target_fps,
         prep_tracker=prep_tracker,
         chunk_size=500,
     )
     prep_tracker.complete_phase("telemetry_states")
 
+    chart_step = max(1, int(round(effective_target_fps)))
     chart_samples_dict = {
-        "cadence": [st.cadence_rpm for st in states[::30]],
-        "heart_rate": [st.heart_rate_bpm for st in states[::30]],
+        "cadence": [st.cadence_rpm for st in states[::chart_step]],
+        "heart_rate": [st.heart_rate_bpm for st in states[::chart_step]],
     }
+    track = getattr(telemetry, "track_samples", None)
     route_points = [(p[0], p[1], p[2]) for p in track] if track else []
 
     if os.environ.get("TELEM_PAYLOAD_BISECT_MODE") in ("exact_good330", "clean_child_exact_good330"):
@@ -1179,22 +1223,42 @@ def export_nvidia_native_d3d11(
         else:
             print("[EXACT GOOD330 CHECK] VERIFIED: All counts match EXACT GOOD330 specification!", flush=True)
 
-    # 4. Audio Feeder Setup
-    prep_tracker.start_phase("audio_slice", items_total=len(clips_desc) or 1)
-    audio_packets = build_streaming_audio_slice(
-        clips_desc, start_frame, export_frames, fps_num, fps_den,
-        progress_cb=lambda done, tot, det: prep_tracker.update(done, tot, detail=det),
-    )
-    has_audio = len(audio_packets) > 0
-    audio_feeder = None
-    pipe_audio_name = None
+    # 4. Resolve Live Audio Inputs directly from original source MP4(s)
+    has_audio = any(_probe_clip_audio_stream(ffprobe_exe, clip.path) for clip in clips_desc)
+    audio_concat_path: Optional[Path] = None
+    audio_args: list[str] = []
 
     if has_audio:
-        pipe_token = uuid.uuid4().hex[:8]
-        pipe_audio_name = rf"\\.\pipe\telem_audio_{os.getpid()}_{pipe_token}"
-        audio_feeder = PacedAudioFeeder(pipe_audio_name, audio_packets, lead_s=1.0)
-        audio_feeder.start()
-    prep_tracker.complete_phase("audio_slice")
+        vt_clips = list(getattr(video_timeline, "clips", ()) or ())
+        use_concat_plan = (len(clips_desc) > 1) or (len(vt_clips) > 1)
+
+        if use_concat_plan:
+            audio_concat_path = output_tmp_path.with_name(f"{output_tmp_path.stem}.audio.concat.txt")
+            _write_nvidia_audio_concat_plan(
+                audio_concat_path,
+                clips_desc=clips_desc,
+                video_timeline=video_timeline,
+                start_frame=start_frame,
+                export_frames=export_frames,
+                fps_num=target_fps_num,
+                fps_den=target_fps_den,
+            )
+            audio_args = [
+                "-copyts", "-avoid_negative_ts", "make_zero",
+                "-f", "concat", "-safe", "0", "-i", str(audio_concat_path),
+            ]
+        else:
+            single_path = str(clips_desc[0].path)
+            single_local_start = 0.0
+            if vt_clips:
+                single_local_start = float(getattr(vt_clips[0], "local_start_s", 0.0) or 0.0)
+            elif start_frame > 0:
+                single_local_start = start_frame * target_fps_den / float(target_fps_num)
+
+            if single_local_start > 1e-6:
+                audio_args = ["-ss", f"{single_local_start:.6f}", "-i", single_path]
+            else:
+                audio_args = ["-i", single_path]
 
     # 5. Video Pipe & Live FFmpeg MP4 Muxer
     prep_tracker.start_phase("native_setup", items_total=1)
@@ -1204,8 +1268,6 @@ def export_nvidia_native_d3d11(
     h_write_v = wintypes.HANDLE()
     res_p = kernel32.CreatePipe(ctypes.byref(h_read_v), ctypes.byref(h_write_v), None, MAX_VIDEO_BACKLOG_BYTES)
     if not res_p:
-        if audio_feeder:
-            audio_feeder.stop()
         raise RuntimeError(f"CreatePipe failed with error {kernel32.GetLastError()}")
 
     kernel32.SetHandleInformation(h_read_v, 0x00000001, 1)
@@ -1214,31 +1276,43 @@ def export_nvidia_native_d3d11(
 
     v_fmt = spec["ffmpeg_fmt"]
     v_tag = spec["vtag"]
-
-    cmd_mux = [
-        "ffmpeg", "-y",
-        "-f", v_fmt, "-r", "30000/1001", "-i", "-",
-    ]
-    if has_audio and pipe_audio_name:
-        cmd_mux.extend(["-f", "aac", "-i", pipe_audio_name])
+    duration_s = export_frames * target_fps_den / float(target_fps_num)
 
     from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
-    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(
-        inline_gpmf_plan, 2 if has_audio and pipe_audio_name else 1,
-    )
-    cmd_mux.extend(gpmf_inputs)
-    cmd_mux.extend(["-map", "0:v"])
-    if has_audio and pipe_audio_name:
-        cmd_mux.extend(["-map", "1:a", "-c:a", "copy"])
-    cmd_mux.extend(gpmf_maps)
 
-    cmd_mux.extend([
-        "-c:v", "copy",
-        "-tag:v", v_tag,
-        "-f", "mp4",
-        "-progress", "pipe:1",
-        str(output_tmp_path),
-    ])
+    if has_audio:
+        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
+        cmd_mux = [
+            "ffmpeg", "-y",
+            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}", "-i", "-",
+            *audio_args,
+            *gpmf_inputs,
+            "-map", "0:v", "-map", "1:a?",
+            *gpmf_maps,
+            "-t", f"{duration_s:.6f}",
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "-tag:v", v_tag,
+            "-f", "mp4",
+            "-progress", "pipe:1",
+            str(output_tmp_path),
+        ]
+    else:
+        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1)
+        cmd_mux = [
+            "ffmpeg", "-y",
+            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}", "-i", "-",
+            *gpmf_inputs,
+            "-map", "0:v",
+            *gpmf_maps,
+            "-t", f"{duration_s:.6f}",
+            "-c:v", "copy",
+            "-an",
+            "-tag:v", v_tag,
+            "-f", "mp4",
+            "-progress", "pipe:1",
+            str(output_tmp_path),
+        ]
 
     proc_mux = subprocess.Popen(
         cmd_mux,
@@ -1285,8 +1359,6 @@ def export_nvidia_native_d3d11(
     handle = dll.telem_nvenc_create()
     if not handle:
         proc_mux.kill()
-        if audio_feeder:
-            audio_feeder.stop()
         raise RuntimeError("telem_nvenc_create failed")
 
     target_bps = int(bitrate_mbps * 1_000_000)
@@ -1316,8 +1388,8 @@ def export_nvidia_native_d3d11(
     cfg = TelemNvencConfig(
         width=3840,
         height=2160,
-        fps_num=fps_num,
-        fps_den=fps_den,
+        fps_num=target_fps_num,
+        fps_den=target_fps_den,
         ring_size=0,
         bit_depth=10,
         preset_p1_to_p7=p_info["preset_num"],
@@ -1395,6 +1467,7 @@ def export_nvidia_native_d3d11(
                 "height": int(cfg.height),
                 "fps_num": int(cfg.fps_num),
                 "fps_den": int(cfg.fps_den),
+                "target_fps": float(effective_target_fps),
                 "ring_size_requested": int(cfg.ring_size),
                 "ring_size_effective_native_minimum": max(64, int(cfg.ring_size)),
                 "bit_depth": int(cfg.bit_depth),
@@ -1436,16 +1509,12 @@ def export_nvidia_native_d3d11(
     if not dll.telem_nvenc_configure(handle, ctypes.byref(cfg)):
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
-        if audio_feeder:
-            audio_feeder.stop()
         raise RuntimeError(f"Configure failed for profile {profile_name}")
 
     c_clips = (TelemVideoClipDesc * len(clips_desc))(*clips_desc)
     if not dll.telem_nvenc_set_video_sequence(handle, c_clips, len(clips_desc)):
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
-        if audio_feeder:
-            audio_feeder.stop()
         raise RuntimeError("SetVideoSequence failed")
 
     # Preload map & tiles
@@ -1480,8 +1549,6 @@ def export_nvidia_native_d3d11(
     if not dll.telem_nvenc_start_export(handle, c_output_arg, start_frame, export_frames, 1):
         dll.telem_nvenc_destroy(handle)
         proc_mux.kill()
-        if audio_feeder:
-            audio_feeder.stop()
         raise RuntimeError("StartExport failed")
 
     prep_tracker.finish()
@@ -1511,10 +1578,7 @@ def export_nvidia_native_d3d11(
 
             dll.telem_nvenc_get_progress(handle, ctypes.byref(progress))
             cur_completed = progress.completed_frames
-            cur_video_time_s = cur_completed * fps_den / float(fps_num)
-
-            if audio_feeder:
-                audio_feeder.update_video_time(cur_video_time_s)
+            cur_video_time_s = cur_completed * target_fps_den / float(target_fps_num)
 
             hud_state: Dict[str, Any] = {
                 "phase": "render",
@@ -1600,9 +1664,11 @@ def export_nvidia_native_d3d11(
             dll.telem_nvenc_wait_completion(handle, 1000)
 
     finally:
-        if audio_feeder:
-            audio_feeder.stop()
-            audio_feeder.join(timeout=3.0)
+        if audio_concat_path is not None and audio_concat_path.exists():
+            try:
+                audio_concat_path.unlink()
+            except Exception:
+                pass
 
         # Close video pipe write handle so FFmpeg sees EOF on video
         if h_write_v.value:
