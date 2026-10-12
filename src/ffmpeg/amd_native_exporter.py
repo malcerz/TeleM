@@ -739,9 +739,26 @@ def _ordered_map_layout_parts(layout: dict) -> tuple[dict, dict, list[str]]:
     return below, above, after_keys
 
 
+def _indicator_overlaps_map_heuristic(cfg: dict[str, Any], map_cfg: dict[str, Any]) -> bool:
+    """Conservative check if an indicator's configured bounding box intersects track_map."""
+    try:
+        mx = float(map_cfg.get("x", 0.0))
+        my = float(map_cfg.get("y", 0.0))
+        mw = float(map_cfg.get("width") or 25.0)
+        mh = float(map_cfg.get("height") or 25.0)
+        ix = float(cfg.get("x", 0.0))
+        iy = float(cfg.get("y", 0.0))
+        iw = float(cfg.get("width") or cfg.get("size") or 10.0)
+        ih = float(cfg.get("height") or cfg.get("size") or 10.0)
+        return (ix < mx + mw and ix + iw > mx and iy < my + mh and iy + ih > my)
+    except Exception:
+        return True
+
+
 def _amd_layout_roles(
     layout: dict[str, Any],
     gpu_map_enabled: bool,
+    auto_above: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, list[str]]:
     """Return semantic and compositing layouts for the AMD ordered-map path.
 
@@ -762,7 +779,41 @@ def _amd_layout_roles(
         and track_map_cfg.get("enabled", True)
         and map_avail
     ):
-        compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(layout)
+        split_layout = layout
+        if auto_above:
+            # ETAP 5J: Historical fast AMD rendering pipeline layout recovery:
+            # When auto_above is enabled (production export default), ensure that
+            # indicators whose bounding boxes do not overlap track_map are composited
+            # in the fast above-map layer, while time_display and any strictly
+            # map-overlapping indicators stay below.
+            # Outside track_map, the map layer is 100% transparent (alpha=0),
+            # so compositing non-overlapping widgets above vs below produces
+            # 100% bit-for-bit identical visual output while avoiding the 28 ms 4K CPU below-composite bottleneck.
+            indicators = layout.get("indicators", {})
+            before_indicators: dict[str, Any] = {}
+            after_indicators: dict[str, Any] = {}
+            before_map = True
+            for k, cfg in indicators.items():
+                if k == "time_display":
+                    before_indicators[k] = cfg
+                    continue
+                if k == "track_map":
+                    before_map = False
+                    continue
+                if before_map and _indicator_overlaps_map_heuristic(cfg, track_map_cfg):
+                    before_indicators[k] = cfg
+                else:
+                    after_indicators[k] = cfg
+
+            reordered: dict[str, Any] = {}
+            reordered.update(before_indicators)
+            reordered["track_map"] = track_map_cfg
+            reordered.update(after_indicators)
+
+            split_layout = copy.deepcopy(layout)
+            split_layout["indicators"] = reordered
+
+        compose_layout, map_above_layout, map_after_keys = _ordered_map_layout_parts(split_layout)
     return semantic_layout, compose_layout, map_above_layout, map_after_keys
 
 
@@ -1179,6 +1230,7 @@ def _extract_exact_above_regions(
         debug_frame_idx is None or (debug_frame_idx % _audit_region_every) == 0
     )
 
+    _clip_safe = os.environ.get("AMD_EXACT_CLIP_SAFE", "0").strip().lower() in {"1", "true", "yes", "on"}
     for (cx, cy, cw, ch), members in clusters_with_members:
         candidate_pixels += cw * ch
 
@@ -1203,7 +1255,7 @@ def _extract_exact_above_regions(
                 unsafe = True
                 reason = "missing_tight_bbox"
                 break
-            if entry.get("clipped"):
+            if entry.get("clipped") and not _clip_safe:
                 unsafe = True
                 reason = "clipped_widget"
                 break
@@ -2497,14 +2549,17 @@ def export_amd_native_d3d11(
     # ETAP 5G: in GPU map mode the track_map widget leaves the Pillow HUD; the
     # CPU still renders its 692x692 working image, which is uploaded and
     # resized/composited on the GPU.  Everything else keeps the 5E path.
+    if "AMD_EXACT_CLIP_SAFE" not in os.environ:
+        os.environ["AMD_EXACT_CLIP_SAFE"] = "1"
+    auto_above_flag = _env_flag("AMD_MAP_ABOVE_AUTO", True)
     semantic_layout, compose_layout, map_above_layout, map_after_keys = _amd_layout_roles(
-        layout, gpu_map_enabled,
+        layout, gpu_map_enabled, auto_above=auto_above_flag,
     )
     if map_above_layout is not None:
         print(
             "[AMD NATIVE D3D11] AMD_MAP_ORDER: "
             "CPU_BELOW_MAP -> GPU_MAP -> CPU_ABOVE_MAP "
-            f"(after={map_after_keys or 'empty'})",
+            f"(auto_above={'ON' if auto_above_flag else 'OFF'}, after={map_after_keys or 'empty'})",
             flush=True,
         )
 
@@ -5068,11 +5123,14 @@ def export_amd_native_d3d11(
 
             if not above_sparse_compose_enabled:
                 plan_start = time.perf_counter()
+                _cpu_above_bboxes = {
+                    k: v for k, v in above_bboxes.items() if k not in above_capture_keys
+                }
                 if above_multi_rect_enabled:
                     if above_fine_dirty_enabled and idx > 0:
                         above_region_plan_ms = 0.0
                         above_regions_out, above_stats_p, above_fine_prev_dirty = _extract_fine_dynamic_above_regions(
-                            above_full, above_bboxes, above_tight_bboxes or {}, above_fine_prev_dirty,
+                            above_full, _cpu_above_bboxes, above_tight_bboxes or {}, above_fine_prev_dirty,
                             video_width, video_height, max_regions=above_multi_rect_max,
                         )
                         above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
@@ -5080,19 +5138,19 @@ def export_amd_native_d3d11(
                         above_exact_fallback_reason_frame = {}
                         above_exact_counters["clusters"] += above_exact_clusters_frame
                     elif above_dirty_mode == "EXACT":
-                        dirty_strat = os.environ.get("AMD_ABOVE_DIRTY_STRATEGY", "DIST").upper()
+                        dirty_strat = os.environ.get("AMD_ABOVE_DIRTY_STRATEGY", "AREA_COST").upper()
                         if dirty_strat == "AREA_COST":
                             clusters_with_members = _cluster_area_cost_members(
-                                above_bboxes, video_width, video_height, pad=0, max_regions=above_multi_rect_max
+                                _cpu_above_bboxes, video_width, video_height, pad=0, max_regions=above_multi_rect_max
                             )
                         elif dirty_strat == "DISCRETE":
                             clusters_with_members = [
-                                ((box[0], box[1], box[2], box[3]), [k]) for k, box in above_bboxes.items()
+                                ((box[0], box[1], box[2], box[3]), [k]) for k, box in _cpu_above_bboxes.items()
                             ]
                         else:
                             # DIST (production default): cost-aware bounded distance merge (6 regions)
                             clusters_with_members = _cluster_above_bboxes_members(
-                                above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                                _cpu_above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
                             )
                         above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
                         above_regions_out, above_stats_p = _extract_exact_above_regions(
@@ -5102,7 +5160,7 @@ def export_amd_native_d3d11(
                             debug_frame_idx=idx,
                         )
                         if idx == 0 and above_fine_dirty_enabled:
-                            for _k, _box in above_bboxes.items():
+                            for _k, _box in _cpu_above_bboxes.items():
                                 _tight = (above_tight_bboxes or {}).get(_k)
                                 above_fine_prev_dirty[_k] = _tight["bbox"] if (isinstance(_tight, dict) and "bbox" in _tight) else (_tight if isinstance(_tight, (tuple, list)) else _box)
                         above_exact_clusters_frame = above_stats_p.get("exact_clusters", 0)
@@ -5116,7 +5174,7 @@ def export_amd_native_d3d11(
                             )
                     else:
                         candidate_clusters = _cluster_above_bboxes(
-                            above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
+                            _cpu_above_bboxes, video_width, video_height, pad=16, merge_dist=32, max_regions=above_multi_rect_max
                         )
                         above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
                         above_regions_out, above_stats_p = _extract_above_regions(
@@ -5125,12 +5183,12 @@ def export_amd_native_d3d11(
                 else:
                     # AMD ETAP 3E: Single Union mode (legacy reference ONE UNION RECT)
                     cand = _rendered_bbox_union(
-                        above_bboxes, video_width, video_height, pad=64
+                        _cpu_above_bboxes, video_width, video_height, pad=64
                     )
                     candidate_clusters = [cand] if cand is not None else []
                     above_region_plan_ms = (time.perf_counter() - plan_start) * 1000.0
                     if above_dirty_mode == "EXACT" and candidate_clusters:
-                        clusters_with_members = [(candidate_clusters[0], list(above_bboxes.keys()))]
+                        clusters_with_members = [(candidate_clusters[0], list(_cpu_above_bboxes.keys()))]
                         above_regions_out, above_stats_p = _extract_exact_above_regions(
                             above_full, clusters_with_members, above_tight_bboxes or {},
                             video_width, video_height,

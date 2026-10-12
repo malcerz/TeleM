@@ -357,10 +357,18 @@ class WidgetRenderCache:
 _CURRENT_CACHE: Optional[WidgetRenderCache] = None
 
 
+def _default_widget_cache_enabled() -> bool:
+    import os
+    val = os.environ.get("AMD_CPU_WIDGET_CACHE", "1").strip().lower()
+    return val not in {"0", "false", "no", "off"}
+
+
 def get_widget_cache(enabled: Optional[bool] = None) -> WidgetRenderCache:
     global _CURRENT_CACHE
     if _CURRENT_CACHE is None:
-        _CURRENT_CACHE = WidgetRenderCache(enabled=enabled if enabled is not None else False)
+        _CURRENT_CACHE = WidgetRenderCache(
+            enabled=enabled if enabled is not None else _default_widget_cache_enabled()
+        )
     elif enabled is not None:
         _CURRENT_CACHE.enabled = enabled
     return _CURRENT_CACHE
@@ -368,5 +376,7 @@ def get_widget_cache(enabled: Optional[bool] = None) -> WidgetRenderCache:
 
 def reset_widget_cache(enabled: Optional[bool] = None) -> WidgetRenderCache:
     global _CURRENT_CACHE
-    _CURRENT_CACHE = WidgetRenderCache(enabled=enabled if enabled is not None else False)
+    _CURRENT_CACHE = WidgetRenderCache(
+        enabled=enabled if enabled is not None else _default_widget_cache_enabled()
+    )
     return _CURRENT_CACHE
