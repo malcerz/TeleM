@@ -205,7 +205,7 @@ def apply_indicator_effects(
                 breakdown[f"{profile_key}.shadow"] = 0.0
                 breakdown[f"{profile_key}.outline"] = 0.0
                 breakdown[f"{profile_key}.lookup"] = 0.0
-            return cached_full.copy()
+            return cached_full
         cache_key = (dynamic_key, image.size, cfg_sig)
         use_sub = False
         bx0 = by0 = 0

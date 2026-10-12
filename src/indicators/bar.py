@@ -2120,9 +2120,7 @@ def _render_bar_indicator(
                        fraction=normalized_fraction, formatted_val=formatted_text,
                        cache='HIT' if cached is not None else 'MISS')
     if cached is not None:
-        cached_out = cached.copy()
-        cached_out._dynamic_key = getattr(cached, "_dynamic_key", None)
-        return cached_out, px_x, px_y, None
+        return cached, px_x, px_y, None
 
     style = str(cfg.get("bar_style", cfg.get("style", "ruler"))).strip().lower()
     # Legacy ``slope``/``grade``/``vertical_slope`` is NOT a separate style
@@ -2240,7 +2238,6 @@ def _render_bar_indicator(
         c_cached = img.copy()
         c_cached._dynamic_key = dyn_k
         _BAR_INDICATOR_CACHE[cache_key] = c_cached
-        out_img = img.copy()
-        out_img._dynamic_key = dyn_k
-        return out_img, px_x, px_y, None
+        img._dynamic_key = dyn_k
+        return img, px_x, px_y, None
     return None, px_x, px_y, None

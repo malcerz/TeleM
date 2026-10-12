@@ -2654,7 +2654,7 @@ def export_amd_native_d3d11(
     pipeline_mode_resolved = os.getenv("AMD_CPU_GPU_PIPELINE", "ASYNC").upper()
     if pipeline_mode_resolved not in ("ASYNC", "SYNC"):
         pipeline_mode_resolved = "ASYNC"
-    q_depth_resolved = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2"))) if pipeline_mode_resolved == "ASYNC" else 0
+    q_depth_resolved = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "3"))) if pipeline_mode_resolved == "ASYNC" else 0
     vp_state_env = os.getenv("AMD_VP_STATE_MODE", "REFERENCE").upper()
     vp_pool_env = os.getenv("AMD_VP_POOL_SIZE", "8")
     amf_query_env = os.getenv("AMD_AMF_QUERY_MODE", "REFERENCE").upper()
@@ -6670,7 +6670,7 @@ def export_amd_native_d3d11(
     # Main Execution Switch: ASYNC (Producer-Consumer) vs SYNC (Diagnostic)
     try:
         if pipeline_mode == "ASYNC":
-            q_depth = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "2")))
+            q_depth = max(1, int(os.getenv("AMD_QUEUE_DEPTH", "3")))
             frame_queue: queue.Queue = queue.Queue(maxsize=q_depth)
             queue_truth.configure(q_depth)
             cancel_evt = cancel_event if cancel_event is not None else threading.Event()

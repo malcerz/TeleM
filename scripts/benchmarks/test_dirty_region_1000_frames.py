@@ -202,7 +202,7 @@ def run_1000_frames_dirty_region_test():
     print(f"Speed: {stats['fps_simulated']:.1f} FPS ({elapsed:.2f} s for 1000 frames)")
     print("=" * 60)
 
-    out_file = Path(r"C:\_DEV\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\dirty_region_1000_frames_report.json")
+    out_file = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r"C:\_DEV\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\dirty_region_1000_frames_report.json")
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2)

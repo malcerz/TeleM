@@ -551,7 +551,7 @@ def _render_gauge_indicator(
     ):
         last_dyn_info = _GAUGE_CANVAS_STATE["last_state"][2]
         record_gauge_dynamic_info(key, **last_dyn_info)
-        return _GAUGE_CANVAS_STATE["canvas"].copy(), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+        return _GAUGE_CANVAS_STATE["canvas"], s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
 
     # ── Dynamic elements: regional restore or full canvas init ──
     if (
@@ -890,4 +890,4 @@ def _render_gauge_indicator(
         return img_out, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     if not draw_needle:
         _GAUGE_RASTER_CACHE[gauge_raster_key] = (img.copy(), dynamic_info)
-    return img.copy(), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
