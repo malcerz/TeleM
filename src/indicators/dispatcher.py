@@ -185,7 +185,7 @@ def render_value_indicator(*args, **kwargs):
         return result
     width = kwargs.get("canvas_w", args[0] if args else 0)
     height = kwargs.get("canvas_h", args[1] if len(args) > 1 else 0)
-    styled = apply_indicator_effects(image, cfg, min(width, height))
+    styled = apply_indicator_effects(image, cfg, min(width, height), profile_key=str(key))
     if cfg.get("form", "text") == "text":
         pad = (styled.width - image.width) // 2
         x -= pad

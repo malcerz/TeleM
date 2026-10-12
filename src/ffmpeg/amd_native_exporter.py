@@ -7640,6 +7640,27 @@ def export_amd_native_d3d11(
     print(f"Render FPS: {render_fps:.3f}", flush=True)
     print(f"Effective FPS: {effective_fps:.3f}", flush=True)
 
+    cache_diagnostics = None
+    if _env_flag("TELEM_EFFECTS_CACHE_PROFILE", False):
+        try:
+            from src.indicators.effects import get_effects_cache_stats
+            from src.indicators.gauge import get_compass_cache_stats
+            from src.indicators.chart import get_dynamic_layer_cache_stats
+            from src.indicators.text import get_text_cache_stats
+
+            cache_diagnostics = {
+                "effects": get_effects_cache_stats(),
+                "compass_rose": get_compass_cache_stats(),
+                "chart_dynamic": get_dynamic_layer_cache_stats(),
+                "text_indicator": get_text_cache_stats(),
+                "profiler_overhead_note": (
+                    "TELEM_EFFECTS_CACHE_PROFILE and AMD_OVERLAY_PROFILE are diagnostic-only; "
+                    "do not compare this run's FPS with unprofiled A/B runs."
+                ),
+            }
+        except Exception as exc:
+            cache_diagnostics = {"error": f"cache diagnostics unavailable: {type(exc).__name__}: {exc}"}
+
     profile = {
         "schema_version": 1,
         "benchmark": {
@@ -8112,6 +8133,7 @@ def export_amd_native_d3d11(
             }
             if audit_allocs_enabled else None
         ),
+        "cache_diagnostics": cache_diagnostics,
         "timings": timing_summaries,
         "finalization": finalization_summary,
         "mux_pump": {

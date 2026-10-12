@@ -370,7 +370,12 @@ def compose_overlay(
         if td:
             from src.indicators.effects import apply_indicator_effects
             original_width = td.width
-            td = apply_indicator_effects(td, layout["indicators"]["time_display"], min(canvas_w, canvas_h))
+            td = apply_indicator_effects(
+                td,
+                layout["indicators"]["time_display"],
+                min(canvas_w, canvas_h),
+                profile_key="time_display",
+            )
             effect_pad = (td.width - original_width) // 2
             tdx -= effect_pad
             tdy -= effect_pad
