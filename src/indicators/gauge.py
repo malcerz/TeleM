@@ -210,7 +210,7 @@ def _render_compass_indicator(
                 heading = None
         except (TypeError, ValueError):
             heading = None
-    rotate_rose = str(cfg.get("compass_rotation_mode", "needle")).strip().lower() == "rose"
+    rotate_rose = str(cfg.get("compass_motion_mode") or cfg.get("compass_rotation_mode", "needle")).strip().lower() == "rose"
     rose_heading = round(heading, 1) if rotate_rose and heading is not None else 0.0
 
     def screen_angle(degrees: float) -> float:

@@ -1378,3 +1378,149 @@ def resolve_field_from_sources(
     return resolve_samples_from_sources(
         logical_field, source, gpmf=gpmf, fit_data=fit_data, gpx=gpx
     )
+
+
+def resolve_indicator_source_metadata(
+    indicator_key: str,
+    ind_cfg: Mapping[str, Any] | None = None,
+    telemetry: Any = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Resolve and return source metadata for an indicator, logging provenance."""
+    key = str(indicator_key or "").strip()
+    cfg = dict(ind_cfg) if ind_cfg else {}
+    is_dji = bool(
+        getattr(telemetry, "is_dji", False)
+        or getattr(telemetry, "channel_provenance", None)
+        or getattr(telemetry, "quaternion_samples", None)
+        or kwargs.get("is_dji")
+    )
+
+    if key.startswith("fit_"):
+        provider = "FIT"
+        source_kind = "external"
+        channel = key[4:-5] if key.endswith("_text") else key[4:]
+        field = channel
+        derived_from = None
+    elif key.startswith("gpx_") or key in ("hr_text", "cad_text", "power_text", "atemp_text", "battery_text"):
+        provider = "GPX"
+        source_kind = "external"
+        channel = key
+        field = channel
+        derived_from = None
+    elif key == "compass":
+        raw_src = cfg.get("source")
+        src = str(raw_src or "").strip().lower()
+        if not src or src == "auto":
+            # auto fallback: 1. FIT -> 2. GoPro GPMF -> 3. GPX
+            fit_d = getattr(telemetry, "fit_data", None)
+            fit_track = getattr(telemetry, "fit_gps_track", None)
+            has_fit_heading = isinstance(fit_d, (dict, Mapping)) and any(bool(fit_d.get(k)) for k in ("heading", "true_heading", "magnetic_heading", "course", "bearing"))
+            has_fit_track = bool(fit_track and len(fit_track) >= 2)
+            has_gpmf = bool(getattr(telemetry, "heading_samples", None) or getattr(telemetry, "gps_track", None))
+            has_gpx = bool(getattr(telemetry, "gpx_heading_samples", None) or getattr(telemetry, "gpx_gps_track", None))
+
+            if has_fit_heading or has_fit_track:
+                src = "fit"
+            elif has_gpmf:
+                src = "gpmf"
+            elif has_gpx:
+                src = "gpx"
+            else:
+                src = "fit"
+
+        if src == "fit":
+            provider = "FIT"
+            prov_type = str(getattr(telemetry, "fit_heading_provenance", "") or "")
+            is_derived = "derived" in prov_type.lower() or "gps" in prov_type.lower()
+            if not prov_type:
+                fit_d = getattr(telemetry, "fit_data", {}) or {}
+                if any(bool(fit_d.get(k)) for k in ("heading", "true_heading", "magnetic_heading", "course", "bearing")):
+                    is_derived = False
+                elif getattr(telemetry, "fit_gps_track", None):
+                    is_derived = True
+
+            if is_derived:
+                source_kind = "derived"
+                field = "gps_bearing"
+                channel = "heading"
+                derived_from = "fit_gps_track"
+            else:
+                source_kind = "native"
+                channel = "heading"
+                matched_field = "heading"
+                for cand in ("true_heading", "magnetic_heading", "course", "bearing", "heading"):
+                    if cand in prov_type:
+                        matched_field = cand
+                        break
+                    elif getattr(telemetry, "fit_data", None) and getattr(telemetry, "fit_data", {}).get(cand):
+                        matched_field = cand
+                        break
+                field = matched_field
+                derived_from = None
+        elif src == "gpmf":
+            provider = "GoPro"
+            source_kind = "direct"
+            channel = "heading"
+            field = "heading"
+            derived_from = "gps_track" if getattr(telemetry, "gps_track", None) else None
+        elif src == "gpx":
+            provider = "GPX"
+            source_kind = "derived" if getattr(telemetry, "gpx_gps_track", None) else "external"
+            channel = "heading"
+            field = "heading"
+            derived_from = "gps_track"
+        else:
+            provider = src.upper()
+            source_kind = "external"
+            channel = "heading"
+            field = "heading"
+            derived_from = None
+    elif is_dji:
+        provider = "DJI"
+        if key == "lean_indicator":
+            source_kind = "derived"
+            channel = "angular_velocity"
+            field = channel
+            derived_from = "quaternion"
+        elif "derived_angular_velocity" in key or "derived" in key:
+            source_kind = "derived"
+            channel = "angular_velocity"
+            field = channel
+            derived_from = "quaternion"
+        else:
+            source_kind = "direct"
+            channel = key
+            field = channel
+            derived_from = None
+    else:
+        provider = "GoPro"
+        source_kind = "direct"
+        channel = key
+        field = channel
+        derived_from = None
+
+    meta = {
+        "key": key,
+        "provider": provider,
+        "source_kind": source_kind,
+        "channel": channel,
+        "field": field if "field" in locals() else channel,
+    }
+    if derived_from:
+        meta["derived_from"] = derived_from
+
+    lines = [
+        "[INDICATOR SOURCE]",
+        f"key={meta['key']}",
+        f"provider={meta['provider']}",
+        f"source_kind={meta['source_kind']}",
+        f"channel={meta['channel']}",
+        f"field={meta['field']}",
+    ]
+    if derived_from:
+        lines.append(f"derived_from={derived_from}")
+    print("\n".join(lines), flush=True)
+
+    return meta
+

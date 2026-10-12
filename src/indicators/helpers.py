@@ -640,3 +640,178 @@ def apply_map_pitch(img, raw_pitch: Any):
         )
     except Exception:
         return img
+
+
+def get_arial_fallback_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Zwraca font Arial o wskazanym rozmiarze ze standardowego systemowego resolvera."""
+    return load_font("arial", max(8, int(size)))
+
+
+def split_text_degree_chunks(
+    text: str,
+    main_font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+) -> list[tuple[str, ImageFont.FreeTypeFont | ImageFont.ImageFont]]:
+    """Dzieli tekst na segmenty, podstawiając font Arial dla symbolu stopni '°'.
+
+    Zachowuje font główny (np. cyfrowy) dla wszystkich pozostałych znaków (w tym cyfr).
+    """
+    if not text:
+        return []
+    if "°" not in text:
+        return [(text, main_font)]
+
+    font_size = getattr(main_font, "size", 16)
+    arial_font = get_arial_fallback_font(font_size)
+
+    chunks: list[tuple[str, Any]] = []
+    current_buf: list[str] = []
+    for ch in text:
+        if ch == "°":
+            if current_buf:
+                chunks.append(("".join(current_buf), main_font))
+                current_buf = []
+            chunks.append(("°", arial_font))
+        else:
+            current_buf.append(ch)
+    if current_buf:
+        chunks.append(("".join(current_buf), main_font))
+    return chunks
+
+
+def measure_text_with_degree_fallback(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    stroke_width: int = 0,
+) -> tuple[float, float, tuple[float, float, float, float]]:
+    """Mierzy łączną szerokość advance, wysokość oraz bounding box tekstu z uwzględnieniem fallbacku Arial dla '°'.
+
+    Zwraca: (total_advance_width, total_height, (left, top, right, bottom))
+    """
+    text_str = str(text or "")
+    if not text_str:
+        return 0.0, 0.0, (0.0, 0.0, 0.0, 0.0)
+
+    chunks = split_text_degree_chunks(text_str, font)
+    if not chunks:
+        return 0.0, 0.0, (0.0, 0.0, 0.0, 0.0)
+
+    if len(chunks) == 1 and chunks[0][1] is font:
+        bbox = draw.textbbox((0, 0), text_str, font=font, stroke_width=int(stroke_width))
+        length = draw.textlength(text_str, font=font)
+        w = max(length, bbox[2] - bbox[0])
+        h = bbox[3] - bbox[1]
+        return float(w), float(h), (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+
+    curr_x = 0.0
+    min_x = float("inf")
+    min_y = float("inf")
+    max_x = float("-inf")
+    max_y = float("-inf")
+
+    for chunk_text, chunk_font in chunks:
+        c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=chunk_font, stroke_width=int(stroke_width))
+        c_len = draw.textlength(chunk_text, font=chunk_font)
+        min_x = min(min_x, c_bbox[0])
+        min_y = min(min_y, c_bbox[1])
+        max_x = max(max_x, c_bbox[2], curr_x + c_len)
+        max_y = max(max_y, c_bbox[3])
+        curr_x += c_len
+
+    total_w = max(curr_x, max_x - min_x)
+    total_h = max_y - min_y
+    return float(total_w), float(total_h), (float(min_x), float(min_y), float(max_x), float(max_y))
+
+
+def draw_text_with_degree_fallback(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[float, float],
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    fill: Any = None,
+    stroke_width: int = 0,
+    stroke_fill: Any = None,
+    anchor: str | None = None,
+) -> tuple[float, float, float, float]:
+    """Rysuje tekst z automatycznym fallbackiem fontu Arial dla znaku stopni '°'.
+
+    Zachowuje font główny dla pozostałych znaków (w tym cyfr).
+    Zwraca rzeczywisty bounding box wyrenderowanego tekstu: (left, top, right, bottom).
+    """
+    text_str = str(text or "")
+    if not text_str:
+        return (float(xy[0]), float(xy[1]), float(xy[0]), float(xy[1]))
+
+    if "°" not in text_str:
+        kwargs: dict[str, Any] = {"font": font, "fill": fill}
+        if stroke_width > 0:
+            kwargs["stroke_width"] = int(stroke_width)
+            if stroke_fill is not None:
+                kwargs["stroke_fill"] = stroke_fill
+        if anchor is not None:
+            kwargs["anchor"] = anchor
+        draw.text(xy, text_str, **kwargs)
+        try:
+            bbox = draw.textbbox(xy, text_str, font=font, anchor=anchor, stroke_width=int(stroke_width))
+        except TypeError:
+            bbox = draw.textbbox(xy, text_str, font=font, stroke_width=int(stroke_width))
+        return (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+
+    chunks = split_text_degree_chunks(text_str, font)
+
+    chunk_metrics = []
+    curr_x = 0.0
+    min_y = float("inf")
+    max_y = float("-inf")
+    for chunk_text, chunk_font in chunks:
+        c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=chunk_font, stroke_width=int(stroke_width))
+        c_len = draw.textlength(chunk_text, font=chunk_font)
+        min_y = min(min_y, c_bbox[1])
+        max_y = max(max_y, c_bbox[3])
+        chunk_metrics.append((chunk_text, chunk_font, curr_x, c_len, c_bbox))
+        curr_x += c_len
+
+    total_w = curr_x
+    total_h = max_y - min_y if max_y > min_y else 0.0
+
+    ox, oy = float(xy[0]), float(xy[1])
+    anchor_str = str(anchor or "la").lower()
+
+    if "m" in anchor_str or "c" in anchor_str:
+        shift_x = -total_w / 2.0
+    elif "r" in anchor_str:
+        shift_x = -total_w
+    else:
+        shift_x = 0.0
+
+    if "m" in anchor_str:
+        shift_y = -(min_y + max_y) / 2.0
+    elif "b" in anchor_str or "d" in anchor_str:
+        shift_y = -max_y
+    else:
+        shift_y = -min_y if min_y != float("inf") else 0.0
+
+    drawn_boxes = []
+    for chunk_text, chunk_font, c_offset_x, _, _ in chunk_metrics:
+        pos = (ox + shift_x + c_offset_x, oy + shift_y)
+        kwargs = {"font": chunk_font, "fill": fill}
+        if stroke_width > 0:
+            kwargs["stroke_width"] = int(stroke_width)
+            if stroke_fill is not None:
+                kwargs["stroke_fill"] = stroke_fill
+        draw.text(pos, chunk_text, **kwargs)
+        try:
+            b = draw.textbbox(pos, chunk_text, font=chunk_font, stroke_width=int(stroke_width))
+            drawn_boxes.append(b)
+        except Exception:
+            pass
+
+    if drawn_boxes:
+        return (
+            min(b[0] for b in drawn_boxes),
+            min(b[1] for b in drawn_boxes),
+            max(b[2] for b in drawn_boxes),
+            max(b[3] for b in drawn_boxes),
+        )
+    return (ox, oy, ox + total_w, oy + total_h)
+
