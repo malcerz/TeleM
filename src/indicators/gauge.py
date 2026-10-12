@@ -10,10 +10,12 @@ import time
 from typing import Any
 
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageChops, ImageFilter
 except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
+    ImageChops = None  # type: ignore
+    ImageFilter = None  # type: ignore
 
 from src.indicators.helpers import (
     FONT_CACHE,
@@ -403,11 +405,32 @@ def _render_gauge_indicator(
     mid_len_factor = (maj_len_factor + min_len_factor) / 2.0
     mid_thick_factor = (maj_thick_factor + min_thick_factor) / 2.0
 
-    # ── Static background: tick marks + numbers (cached) ──
+    # Style parameters (Shadow & Outline)
+    shadow_enabled = bool(cfg.get("shadow_enabled", False))
+    shadow_distance = float(cfg.get("shadow_distance", 2.0))
+    shadow_length = float(cfg.get("shadow_length", 0.0))
+    shadow_fade_raw = float(cfg.get("shadow_fade", 1.0))
+    shadow_fade = (shadow_fade_raw / 100.0) if shadow_fade_raw > 1.0 else max(0.0, min(1.0, shadow_fade_raw))
+    shadow_opacity_raw = float(cfg.get("shadow_opacity", 0.6))
+    shadow_opacity = (shadow_opacity_raw / 100.0) if shadow_opacity_raw > 1.0 else max(0.0, min(1.0, shadow_opacity_raw))
+    shadow_blur = float(cfg.get("shadow_blur", 2.0))
+    shadow_color = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
+    shadow_angle = float(cfg.get("shadow_angle", 45.0))
+
+    outline_enabled = bool(cfg.get("outline_enabled", False))
+    outline_width = float(cfg.get("outline_width", 1.0))
+    outline_color = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
+    outline_opacity_raw = float(cfg.get("outline_opacity", 0.8))
+    outline_opacity = (outline_opacity_raw / 100.0) if outline_opacity_raw > 1.0 else max(0.0, min(1.0, outline_opacity_raw))
+    outline_rgba = (*outline_color, int(round(outline_opacity * 255)))
+
+    # ── Static background: tick marks + numbers + dial shadow (cached) ──
     bg_key = _static_cache_key(
-        "gauge_bg", img_size, start_deg, sweep_deg,
+        "gauge_bg_v4", img_size, start_deg, sweep_deg,
         display_min, display_max, ticks, thickness, ss, gauge_fs, gauge_font_path, outline,
         pixel_profile, maj_len_raw, maj_thick_raw, min_len_raw, min_thick_raw,
+        shadow_enabled, shadow_distance, shadow_length, shadow_fade, shadow_opacity, shadow_blur, shadow_color, shadow_angle,
+        outline_enabled, outline_width, outline_color, outline_opacity,
     )
     bg = _STATIC_CACHE.get(bg_key)
     if bg is None:
@@ -430,9 +453,15 @@ def _render_gauge_indicator(
                 txt_tick = f"{tick_val:.0f}"
                 text_radius = radius - tick_len - (radius * 0.16)
                 tx, ty = cx + cos_a * text_radius, cy + sin_a * text_radius
-                draw.text((tx, ty), txt_tick, font=gauge_font,
-                    fill=(255, 255, 255, 240), stroke_width=ss,
-                    stroke_fill=(0, 0, 0, 255), anchor="mm")
+                if outline_enabled and outline_width > 0:
+                    txt_stroke_w = min(max(1, int(round(gauge_fs * 0.28))), int(round(outline_width * ss)))
+                    draw.text((tx, ty), txt_tick, font=gauge_font,
+                        fill=(255, 255, 255, 240), stroke_width=txt_stroke_w,
+                        stroke_fill=outline_rgba, anchor="mm")
+                else:
+                    draw.text((tx, ty), txt_tick, font=gauge_font,
+                        fill=(255, 255, 255, 240), stroke_width=ss,
+                        stroke_fill=(0, 0, 0, 255), anchor="mm")
             elif sub_ticks_count % 2 == 0 and i % (sub_ticks_count // 2) == 0:
                 # Średnia kreska pośrodku (np. 5)
                 if pixel_profile:
@@ -455,21 +484,66 @@ def _render_gauge_indicator(
             x1, y1 = cx + cos_a * r_in, cy + sin_a * r_in
             x2, y2 = cx + cos_a * r_out, cy + sin_a * r_out
             pdx, pdy = -sin_a, cos_a
-            hw = tick_width / 2
-            draw.polygon([
+            hw = tick_width / 2.0
+            tick_poly = [
                 (x1 + pdx * hw, y1 + pdy * hw),
                 (x1 - pdx * hw, y1 - pdy * hw),
                 (x2 - pdx * hw, y2 - pdy * hw),
                 (x2 + pdx * hw, y2 + pdy * hw),
-            ], fill=(240, 240, 240, 255))
+            ]
+            if outline_enabled and outline_width > 0:
+                ow = outline_width * ss
+                hw_out = hw + ow
+                x1_out, y1_out = x1 - cos_a * ow, y1 - sin_a * ow
+                x2_out, y2_out = x2 + cos_a * ow, y2 + sin_a * ow
+                outer_tick_poly = [
+                    (x1_out + pdx * hw_out, y1_out + pdy * hw_out),
+                    (x1_out - pdx * hw_out, y1_out - pdy * hw_out),
+                    (x2_out - pdx * hw_out, y2_out - pdy * hw_out),
+                    (x2_out + pdx * hw_out, y2_out + pdy * hw_out),
+                ]
+                draw.polygon(outer_tick_poly, fill=outline_rgba)
+            draw.polygon(tick_poly, fill=(240, 240, 240, 255))
 
-        # Static shadow
-        shadow_offset = max(2 * ss, int(radius * 0.025))
-        alpha = bg.split()[3].point(lambda x: int(x * 0.35))
-        shadow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
-        shadow.paste(bg, (shadow_offset, shadow_offset))
-        shadow.putalpha(alpha)
-        bg = Image.alpha_composite(shadow, bg)
+        # Static dial drop-shadow (ticks, numbers, dial elements)
+        if shadow_enabled and shadow_opacity > 0.0:
+            s_dist = int(round(shadow_distance * ss))
+            s_len = int(round(shadow_length * ss))
+            alpha = bg.getchannel("A")
+            if shadow_blur > 0 and ImageFilter is not None:
+                alpha = alpha.filter(ImageFilter.GaussianBlur(radius=max(0.5, shadow_blur * ss)))
+            s_rad = math.radians(shadow_angle)
+            cos_sa = math.cos(s_rad)
+            sin_sa = math.sin(s_rad)
+            if s_len <= 0:
+                cur_alpha = alpha.point(lambda x: int(round(x * shadow_opacity)))
+                shadow = Image.new("RGBA", bg.size, (*shadow_color, 0))
+                shadow.putalpha(cur_alpha)
+                comp = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+                off_x = int(round(s_dist * cos_sa)) if shadow_angle != 45.0 else s_dist
+                off_y = int(round(s_dist * sin_sa)) if shadow_angle != 45.0 else s_dist
+                comp.paste(shadow, (off_x, off_y), shadow)
+                comp.alpha_composite(bg)
+                bg = comp
+            else:
+                steps = max(1, min(30, s_len))
+                trail_alpha = Image.new("L", bg.size, 0)
+                for k in range(steps + 1):
+                    fraction = k / steps
+                    w = shadow_opacity * max(0.0, 1.0 - shadow_fade * fraction)
+                    cur_alpha = alpha.point(lambda a, w=w: int(round(a * w)))
+                    reach = s_dist + fraction * s_len
+                    off_x = int(round(reach * cos_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    off_y = int(round(reach * sin_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    shifted = Image.new("L", bg.size, 0)
+                    shifted.paste(cur_alpha, (off_x, off_y))
+                    trail_alpha = ImageChops.lighter(trail_alpha, shifted)
+                shadow = Image.new("RGBA", bg.size, (*shadow_color, 0))
+                shadow.putalpha(trail_alpha)
+                comp = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+                comp.alpha_composite(shadow)
+                comp.alpha_composite(bg)
+                bg = comp
         if ss > 1:
             bg = bg.resize((out_gauge_size, out_gauge_size), Image.LANCZOS)
         _STATIC_CACHE[bg_key] = bg
@@ -860,6 +934,11 @@ def _render_gauge_indicator(
         bool(compose_5q_optimized()),
         float(cfg.get("opacity", 1.0)),
         int(cfg.get("rotation", 0)) % 360,
+        bool(shadow_enabled), float(shadow_distance), float(shadow_length),
+        float(shadow_fade), float(shadow_opacity), float(shadow_blur),
+        tuple(shadow_color), float(shadow_angle),
+        bool(outline_enabled), float(outline_width), tuple(outline_color),
+        float(outline_opacity),
     )
     dynamic_info = {
         "kind": "speed",
