@@ -2120,7 +2120,9 @@ def _render_bar_indicator(
                        fraction=normalized_fraction, formatted_val=formatted_text,
                        cache='HIT' if cached is not None else 'MISS')
     if cached is not None:
-        return cached.copy(), px_x, px_y, None
+        cached_out = cached.copy()
+        cached_out._dynamic_key = getattr(cached, "_dynamic_key", None)
+        return cached_out, px_x, px_y, None
 
     style = str(cfg.get("bar_style", cfg.get("style", "ruler"))).strip().lower()
     # Legacy ``slope``/``grade``/``vertical_slope`` is NOT a separate style
@@ -2234,5 +2236,11 @@ def _render_bar_indicator(
     # compositor from drawing the legacy out-of-raster value/range labels a
     # second time.
     if img is not None:
-        _BAR_INDICATOR_CACHE[cache_key] = img.copy()
-    return (img.copy() if img is not None else None), px_x, px_y, None
+        dyn_k = getattr(img, "_dynamic_key", None)
+        c_cached = img.copy()
+        c_cached._dynamic_key = dyn_k
+        _BAR_INDICATOR_CACHE[cache_key] = c_cached
+        out_img = img.copy()
+        out_img._dynamic_key = dyn_k
+        return out_img, px_x, px_y, None
+    return None, px_x, px_y, None

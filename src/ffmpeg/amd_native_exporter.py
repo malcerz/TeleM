@@ -138,23 +138,45 @@ def _pillow_rgba_row_table(image: Any) -> Optional[Any]:
 
     Bypasses per-row/per-slice PIL C allocations by reading the internal
     Imaging row table directly. Borrowed only while image reference is held.
+    Includes strict header layout validation and pointer sanity verification.
     """
     if image is None or getattr(image, "mode", None) != "RGBA":
         return None
     try:
-        core = image.im
-        capsule = core.ptr
+        core = getattr(image, "im", None)
+        if core is None:
+            return None
+        capsule = getattr(core, "ptr", None)
+        if capsule is None:
+            return None
         cap_name = _PY_CAPSULE_GET_NAME(capsule)
         raw_ptr = _PY_CAPSULE_GET_POINTER(capsule, cap_name)
         if not raw_ptr:
             return None
+        width = int(image.size[0])
         height = int(image.size[1])
-        if height <= 0:
+        if width <= 0 or height <= 0:
             return None
+        # Verify Pillow ImagingMemoryInstance struct layout:
+        # offset 16 = xsize (int32), offset 20 = ysize (int32)
+        core_xsize = ctypes.c_int.from_address(int(raw_ptr) + 16).value
+        core_ysize = ctypes.c_int.from_address(int(raw_ptr) + 20).value
+        if core_xsize != width or core_ysize != height:
+            return None
+        # offset 40 = image32 (pointer to array of row pointers)
         row_table_addr = ctypes.c_void_p.from_address(int(raw_ptr) + 40).value
         if not row_table_addr:
             return None
-        return (ctypes.c_void_p * height).from_address(row_table_addr)
+        table = (ctypes.c_void_p * height).from_address(row_table_addr)
+        r0 = table[0]
+        r_last = table[height - 1]
+        if not r0 or not r_last:
+            return None
+        if height > 1:
+            r1 = table[1]
+            if not r1 or (r1 < r0 + width * 4):
+                return None
+        return table
     except Exception:
         return None
 
@@ -391,6 +413,7 @@ class PreparedFrame:
 
     # ── ETAP 5D: Ring buffer staging pointer for zero-copy dirty rect transfer
     hud_backing_ptr: Optional[Any] = None
+    hud_ring_slot: int = 0
 
 
 _AMD_HUD_MODES = {"CPU_REFERENCE": 0, "GPU_HUD": 1}
@@ -4090,6 +4113,13 @@ def export_amd_native_d3d11(
     hud_backing_addresses = [
         ctypes.addressof(b) for b in hud_backing_ring
     ]
+    # ETAP 5E: Explicit slot lease tracking events to prevent race condition
+    # where producer overwrites a ring slot currently in-flight with GPU upload.
+    hud_slot_ready_events = [
+        threading.Event() for _ in range(hud_ring_size)
+    ] if hud_backing_ring else []
+    for _ev in hud_slot_ready_events:
+        _ev.set()
     hud_backing = hud_backing_ring[0] if hud_backing_ring else None
     hud_backing_view = (
         np.ctypeslib.as_array(hud_backing).reshape((video_height, video_width, 4))
@@ -5695,6 +5725,9 @@ def export_amd_native_d3d11(
             buffer_prep_start = time.perf_counter()
             clamped_bboxes = dict(_bboxes)
             target_slot = idx % hud_ring_size if hud_backing_ring else 0
+            if hud_slot_ready_events and target_slot < len(hud_slot_ready_events):
+                hud_slot_ready_events[target_slot].wait()
+                hud_slot_ready_events[target_slot].clear()
             target_buf = hud_backing_ring[target_slot] if hud_backing_ring else None
             target_addr = hud_backing_addresses[target_slot] if hud_backing_addresses else 0
             stride = video_width * 4
@@ -5916,6 +5949,7 @@ def export_amd_native_d3d11(
             lean_active=lean_gpu_enabled,
             lean_transform=lean_transform_info,
             hud_backing_ptr=hud_backing_ptr,
+            hud_ring_slot=target_slot,
         )
 
     last_uploaded_map_source_key = None
@@ -5950,7 +5984,7 @@ def export_amd_native_d3d11(
             {_boundary_offset - 2, _boundary_offset - 1, _boundary_offset, _boundary_offset + 1, _boundary_offset + 2}
         )
 
-    def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
+    def _consume_prepared_frame_impl(prepared: PreparedFrame) -> bool:
         nonlocal native_clip_idx, pending_seek_target_100ns, seek_discarded_frames
         nonlocal decoded_frames_python, hud_frames, successful_hud_updates, successful_video_updates
         nonlocal map_uploaded_bytes_total, map_gpu_frames, gauge_gpu_frames, gauge_uploaded_bytes_total
@@ -6413,6 +6447,9 @@ def export_amd_native_d3d11(
                     native_rect_ptr, native_rect_count, 1 if prepared.full_hud_upload else 0,
                 )
                 last_hud_call_ms = (time.perf_counter() - update_hud_start) * 1000.0
+                if getattr(prepared, "hud_backing_ptr", None) is not None and hud_slot_ready_events:
+                    hud_slot_ready_events[prepared.hud_ring_slot].set()
+                    prepared.hud_backing_ptr = None
             timing_samples["update_hud"].append(last_hud_call_ms)
             if not hud_update_ok:
                 print(f"[AMD NATIVE D3D11] ERROR: telem_amd_update_hud failed on frame {prepared.frame_idx}", flush=True)
@@ -6615,6 +6652,14 @@ def export_amd_native_d3d11(
             )
         return True
 
+    def _consume_prepared_frame(prepared: PreparedFrame) -> bool:
+        try:
+            return _consume_prepared_frame_impl(prepared)
+        finally:
+            if getattr(prepared, "hud_backing_ptr", None) is not None and hud_slot_ready_events:
+                hud_slot_ready_events[prepared.hud_ring_slot].set()
+                prepared.hud_backing_ptr = None
+
     # GUI phase-report: HUD preparation finished, frame rendering begins.
     progress_tracker.hud_complete_report()
 
@@ -6697,6 +6742,9 @@ def export_amd_native_d3d11(
                     consumed_count += 1
             finally:
                 producer_stop_event.set()
+                if hud_slot_ready_events:
+                    for _ev in hud_slot_ready_events:
+                        _ev.set()
                 prod_thread.join(timeout=2.0)
                 if prod_thread.is_alive():
                     print("[AMD NATIVE D3D11] WARNING: producer thread did not exit within 2.0s.", flush=True)
