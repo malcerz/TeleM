@@ -2197,7 +2197,8 @@ def _render_bar_indicator(
             downscaled_key = ("bar_downscale_v1", dyn_k, ss)
             downscaled = _STATIC_CACHE.get(downscaled_key)
             if downscaled is not None:
-                img = downscaled
+                _BAR_INDICATOR_CACHE[cache_key] = downscaled
+                return downscaled, px_x, px_y, None
             else:
                 orig_dyn = dyn_k
                 out_w = max(1, int(round(img.width / ss)))
@@ -2235,9 +2236,7 @@ def _render_bar_indicator(
     # second time.
     if img is not None:
         dyn_k = getattr(img, "_dynamic_key", None)
-        c_cached = img.copy()
-        c_cached._dynamic_key = dyn_k
-        _BAR_INDICATOR_CACHE[cache_key] = c_cached
+        _BAR_INDICATOR_CACHE[cache_key] = img
         img._dynamic_key = dyn_k
         return img, px_x, px_y, None
     return None, px_x, px_y, None

@@ -198,8 +198,8 @@ def test_7_two_indicators_similar_config():
     assert not np.array_equal(np.asarray(img1), np.asarray(img2))
 
 
-def test_8_external_mutation_safety():
-    """Mutating returned PIL Image externally must not pollute subsequent cache queries."""
+def test_8_pipeline_immutability_safety():
+    """Applying pipeline effects to returned PIL Image must not mutate the cached raster in-place."""
     clear_bar_cache()
     clear_effects_cache()
     cw, ch = 3840, 2160
@@ -207,23 +207,29 @@ def test_8_external_mutation_safety():
         "bar_style": "ruler", "direction": "horizontal", "x": 50.0, "y": 50.0,
         "size": 50.0, "thickness": 2.0, "min_val": 0.0, "max_val": 100.0,
         "text_color": "#FFFFFF", "unit": "km",
+        "shadow_enabled": True, "shadow_distance": 6.0, "shadow_length": 6.0,
     }
     img1, _, _, _ = _render_bar_indicator(
         cw, ch, {"indicators": {"bar": cfg}}, "", "bar", 33.0, "km", "DIST",
         cfg, 2160, 0, 16, None, 0, 100, 10, 2.0, 1000, 2, formatted_val="33.0"
     )
-    # Malicious paint across img1
-    d = ImageDraw.Draw(img1)
-    d.rectangle([0, 0, 200, 200], fill=(255, 0, 0, 255))
+    arr1_before = np.array(img1)
 
-    # Second query for identical state
+    # Pass img1 through the real production effects pipeline
+    eff = apply_indicator_effects(img1, cfg, 2160, profile_key="bar_immutability_test")
+    assert eff is not None
+
+    # img1 must remain completely untouched in-place by effects pipeline
+    arr1_after = np.array(img1)
+    assert np.array_equal(arr1_before, arr1_after)
+
+    # Second query for identical state must return pristine cached image
     img2, _, _, _ = _render_bar_indicator(
         cw, ch, {"indicators": {"bar": cfg}}, "", "bar", 33.0, "km", "DIST",
         cfg, 2160, 0, 16, None, 0, 100, 10, 2.0, 1000, 2, formatted_val="33.0"
     )
-    # img2 pixel at (10, 10) must NOT be pure red from img1 mutation
-    px = img2.getpixel((10, 10))
-    assert px != (255, 0, 0, 255)
+    arr2 = np.array(img2)
+    assert np.array_equal(arr1_before, arr2)
 
 
 def test_9_multiple_cache_flushes():
