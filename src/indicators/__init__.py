@@ -60,7 +60,7 @@ from .rotated_paste import rotated_paste
 # Per-form renderers
 from .text import _render_text_indicator
 from .bar import _render_bar_indicator
-from .gauge import _render_gauge_indicator
+from .gauge import _render_gauge_indicator, resolve_gauge_needle_width_px
 from .chart import _render_chart_indicator
 from .segment_bar import _render_segment_bar_indicator
 from .static_map import _render_static_map_indicator

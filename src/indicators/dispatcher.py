@@ -180,6 +180,8 @@ def render_value_indicator(*args, **kwargs):
     layout = kwargs.get("layout", args[2] if len(args) > 2 else {})
     key = kwargs.get("key", args[4] if len(args) > 4 else "")
     cfg = kwargs.get("cfg_override") or layout.get("indicators", {}).get(key, {})
+    if cfg.get("form") in ("gauge", "compass"):
+        return result
     from src.indicators.effects import effects_enabled, apply_indicator_effects
     if image is None or not effects_enabled(cfg):
         return result
@@ -190,8 +192,4 @@ def render_value_indicator(*args, **kwargs):
         pad = (styled.width - image.width) // 2
         x -= pad
         y -= pad
-    if cfg.get("form") == "gauge" and key in ("speed_text", "speed_visual"):
-        from src.indicators.gauge import record_gauge_dynamic_info
-        # The existing FULL_TILE path carries the entire effect support.
-        record_gauge_dynamic_info(key, kind="effects", supported=False)
     return styled, x, y, extra

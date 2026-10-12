@@ -18,7 +18,7 @@ from PIL import Image
 
 from src.indicators.helpers import _BoundedStaticCache, parse_hex_color
 
-_EFFECT_CACHE = _BoundedStaticCache(max_entries=128)
+_EFFECT_CACHE = _BoundedStaticCache(max_entries=1024)
 _LUT_CACHE: dict[float, np.ndarray] = {}
 _PROFILE_EFFECT_CACHE = os.environ.get("TELEM_EFFECTS_CACHE_PROFILE", "0").strip().lower() in {"1", "true", "yes", "on"}
 _EFFECT_PROFILE: dict[str, dict[str, float]] = defaultdict(dict)
@@ -31,19 +31,20 @@ def _profile_add(key: str, field: str, value: float = 1.0) -> None:
     row[field] = row.get(field, 0.0) + float(value)
 
 
+_CACHED_BYTES: int = 0
+
+
 def clear_effects_cache() -> None:
     """Clear all cached effect rasters."""
+    global _CACHED_BYTES
     _EFFECT_CACHE.clear()
+    _CACHED_BYTES = 0
 
 
 def get_effects_cache_stats() -> dict[str, Any]:
     """Return cache statistics for diagnostics."""
     stats: dict[str, Any] = _EFFECT_CACHE.stats()
-    stats["cached_rgba_bytes_estimate"] = sum(
-        int(layer.width) * int(layer.height) * 4
-        for layer, _pad in _EFFECT_CACHE.values()
-        if isinstance(layer, Image.Image)
-    )
+    stats["cached_rgba_bytes_estimate"] = _CACHED_BYTES
     stats["profile_enabled"] = _PROFILE_EFFECT_CACHE
     if _PROFILE_EFFECT_CACHE:
         stats["profile_by_widget"] = {key: dict(value) for key, value in _EFFECT_PROFILE.items()}
@@ -213,18 +214,47 @@ def apply_indicator_effects(
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "alpha_scan_ms", (time.perf_counter_ns() - alpha_scan_start_ns) / 1_000_000.0)
 
-    if _PROFILE_EFFECT_CACHE:
-        payload_start_ns = time.perf_counter_ns()
-        hash_payload = src_alpha.tobytes()
-        _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
-        hash_start_ns = time.perf_counter_ns()
-        content_hash = blake2b(hash_payload, digest_size=16).digest()
-        _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
-        _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
-        del hash_payload
+    bbox = image.getchannel("A").getbbox()
+    if bbox is None:
+        if _PROFILE_EFFECT_CACHE:
+            _profile_add(widget_key, "empty_alpha_returns")
+            _profile_add(widget_key, "total_ms", (time.perf_counter_ns() - profile_start_ns) / 1_000_000.0)
+        return image
+
+    bx0, by0, bx1, by1 = bbox
+    sub_w = bx1 - bx0
+    sub_h = by1 - by0
+    use_sub = (sub_w * sub_h < image.width * image.height * 0.90)
+
+    if use_sub:
+        sub_alpha = src_alpha[by0:by1, bx0:bx1]
+        bbox_tag = (bx0, by0, bx1, by1)
+        if _PROFILE_EFFECT_CACHE:
+            payload_start_ns = time.perf_counter_ns()
+            hash_payload = sub_alpha.tobytes()
+            _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
+            hash_start_ns = time.perf_counter_ns()
+            content_hash = blake2b(hash_payload, digest_size=16).digest()
+            _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
+            _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
+            del hash_payload
+        else:
+            content_hash = blake2b(sub_alpha.tobytes(), digest_size=16).digest()
+        cache_key = (content_hash, bbox_tag, image.size, cfg_sig)
     else:
-        content_hash = blake2b(src_alpha.tobytes(), digest_size=16).digest()
-    cache_key = (content_hash, image.size, cfg_sig)
+        if _PROFILE_EFFECT_CACHE:
+            payload_start_ns = time.perf_counter_ns()
+            hash_payload = src_alpha.tobytes()
+            _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
+            hash_start_ns = time.perf_counter_ns()
+            content_hash = blake2b(hash_payload, digest_size=16).digest()
+            _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
+            _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
+            del hash_payload
+        else:
+            content_hash = blake2b(src_alpha.tobytes(), digest_size=16).digest()
+        cache_key = (content_hash, image.size, cfg_sig)
+
     lookup_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
     cached = _EFFECT_CACHE.get(cache_key)
     if _PROFILE_EFFECT_CACHE:
@@ -259,19 +289,31 @@ def apply_indicator_effects(
     H = image.height + 2 * pad
     size = (W, H)
 
-    mask = np.zeros((H, W), dtype=np.uint8)
-    mask[pad:pad + image.height, pad:pad + image.width] = src_alpha
-    result = Image.new("RGBA", size, (0, 0, 0, 0))
+    if use_sub:
+        mask_W = sub_w + 2 * pad
+        mask_H = sub_h + 2 * pad
+        mask_size = (mask_W, mask_H)
+        mask = np.zeros((mask_H, mask_W), dtype=np.uint8)
+        mask[pad:pad + sub_h, pad:pad + sub_w] = sub_alpha
+        target_res = Image.new("RGBA", mask_size, (0, 0, 0, 0))
+    else:
+        mask_W = W
+        mask_H = H
+        mask_size = size
+        mask = np.zeros((H, W), dtype=np.uint8)
+        mask[pad:pad + image.height, pad:pad + image.width] = src_alpha
+        target_res = Image.new("RGBA", size, (0, 0, 0, 0))
+
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "temporary_mask_bytes_estimate", mask.nbytes)
-        _profile_add(widget_key, "rgba_allocation_bytes_estimate", W * H * 4)
+        _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
 
     # Vectorized shadow layer
     if shadow_enabled and (distance > 0.0 or length > 0.0) and shad_opacity > 0.0:
         angle_rad = math.radians(shadow_angle)
         cos_a = math.cos(angle_rad)
         sin_a = math.sin(angle_rad)
-        trail = np.zeros((H, W), dtype=np.uint8)
+        trail = np.zeros((mask_H, mask_W), dtype=np.uint8)
         if _PROFILE_EFFECT_CACHE:
             _profile_add(widget_key, "temporary_mask_bytes_estimate", trail.nbytes)
         steps = max(1, int(math.ceil(length)))
@@ -284,13 +326,13 @@ def apply_indicator_effects(
             if weight <= 0.0:
                 continue
             src_x0 = max(0, -dx)
-            src_x1 = min(W, W - dx)
+            src_x1 = min(mask_W, mask_W - dx)
             src_y0 = max(0, -dy)
-            src_y1 = min(H, H - dy)
+            src_y1 = min(mask_H, mask_H - dy)
             dst_x0 = max(0, dx)
-            dst_x1 = min(W, W + dx)
+            dst_x1 = min(mask_W, mask_W + dx)
             dst_y0 = max(0, dy)
-            dst_y1 = min(H, H + dy)
+            dst_y1 = min(mask_H, mask_H + dy)
             if src_x1 > src_x0 and src_y1 > src_y0:
                 lut = _get_lut(weight)
                 sub = lut[mask[src_y0:src_y1, src_x0:src_x1]]
@@ -298,11 +340,11 @@ def apply_indicator_effects(
         if shad_opacity < 1.0:
             trail = _get_lut(shad_opacity)[trail]
         if np.any(trail):
-            tile = Image.new("RGBA", size, (*shadow_color[:3], 0))
+            tile = Image.new("RGBA", mask_size, (*shadow_color[:3], 0))
             if _PROFILE_EFFECT_CACHE:
-                _profile_add(widget_key, "rgba_allocation_bytes_estimate", W * H * 4)
+                _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
             tile.putalpha(Image.fromarray(trail, mode="L"))
-            result.alpha_composite(tile)
+            target_res.alpha_composite(tile)
 
     # Vectorized outline layer
     if width > 0 and outline_enabled and out_opacity > 0.0:
@@ -324,13 +366,27 @@ def apply_indicator_effects(
         if out_opacity < 1.0:
             out_alpha = _get_lut(out_opacity)[out_alpha]
         if np.any(out_alpha):
-            tile = Image.new("RGBA", size, (*outline_color[:3], 0))
+            tile = Image.new("RGBA", mask_size, (*outline_color[:3], 0))
             if _PROFILE_EFFECT_CACHE:
-                _profile_add(widget_key, "rgba_allocation_bytes_estimate", W * H * 4)
+                _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
             tile.putalpha(Image.fromarray(out_alpha, mode="L"))
-            result.alpha_composite(tile)
+            target_res.alpha_composite(tile)
 
+    if use_sub:
+        result = Image.new("RGBA", size, (0, 0, 0, 0))
+        result.paste(target_res, (bx0, by0))
+    else:
+        result = target_res
+
+    global _CACHED_BYTES
+    entry_bytes = W * H * 4
+    _CACHED_BYTES += entry_bytes
     _EFFECT_CACHE[cache_key] = (result, pad)
+    while _CACHED_BYTES > 64 * 1024 * 1024 and len(_EFFECT_CACHE) > 1:
+        popped_k, popped_val = _EFFECT_CACHE.popitem(last=False)
+        if isinstance(popped_val, tuple) and isinstance(popped_val[0], Image.Image):
+            _CACHED_BYTES -= popped_val[0].width * popped_val[0].height * 4
+
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "miss_render_ms", (time.perf_counter_ns() - miss_start_ns) / 1_000_000.0)
         _profile_add(widget_key, "cached_layer_bytes_estimate", W * H * 4)

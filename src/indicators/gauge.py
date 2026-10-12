@@ -67,6 +67,31 @@ def clear_gauge_cache() -> None:
         FONT_CACHE.clear()
     from src.indicators.effects import clear_effects_cache
     clear_effects_cache()
+def resolve_gauge_needle_width_px(
+    logical_width: float | int,
+    min_dim: int,
+    pixel_profile: bool = False,
+    reference_min_dim: float = 540.0,
+) -> int:
+    """Resolve logical gauge needle width to rendered pixels based on canvas min_dim.
+
+    Maintains preview/final resolution parity (needle width / gauge diameter ratio).
+    """
+    try:
+        w_val = float(logical_width)
+    except (TypeError, ValueError):
+        w_val = 4.0
+    w_val = max(1.0, w_val)
+
+    base_factor = 1.8 if pixel_profile else 1.5
+    base_width = w_val * base_factor
+
+    ref_dim = max(1.0, float(reference_min_dim))
+    render_scale = max(0.1, float(min_dim) / ref_dim)
+
+    return max(2, int(round(base_width * render_scale)))
+
+
 # ── ETAP 2C: renderer-reported dynamic-support info for AUTO regions ──────────
 # Keyed by indicator key. Updated by EVERY _render_gauge_indicator call so the
 # AMD native exporter can derive ghost-free AUTO upload rectangles from the
@@ -285,7 +310,7 @@ def _render_compass_indicator(
 def _render_gauge_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
-    formatted_val=None,
+    formatted_val=None, **kwargs,
 ):
     """Render a gauge-form indicator (background cached)."""
     if cfg.get("gauge_style") == "compass" or cfg.get("gauge_mode") == "compass":
@@ -432,7 +457,7 @@ def _render_gauge_indicator(
     needle_len_rel = cfg.get("needle_length", 1.1)
     needle_r_out = max(2, int(radius * needle_len_rel / ss))
     needle_r_in = max(1, int(radius * 0.05))
-    needle_width_px = max(2, int(cfg.get("needle_width", 4) * (1.8 if pixel_profile else 1.5)))
+    needle_width_px = resolve_gauge_needle_width_px(cfg.get("needle_width", 4), min_dim, pixel_profile=pixel_profile)
     needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
     needle_fill = (needle_rgb[0], needle_rgb[1], needle_rgb[2], 255)
     needle_sig = (needle_width_px, needle_len_rel, needle_fill)
@@ -507,6 +532,7 @@ def _render_gauge_indicator(
     base_y = _cy + math.sin(ang) * needle_r_in
 
     # ── Antialiased rendering: local supersampled patch for needle ──
+    _needle_support = None
     if draw_needle:
         _n_hw = needle_width_px / 2.0
         p1 = (base_x + pdx * _n_hw, base_y + pdy * _n_hw)
@@ -514,32 +540,72 @@ def _render_gauge_indicator(
         p3 = (tip_x, tip_y)
         pts = [p1, p2, p3]
 
-        pad = 4
-        min_x = min(p[0] for p in pts)
-        max_x = max(p[0] for p in pts)
-        min_y = min(p[1] for p in pts)
-        max_y = max(p[1] for p in pts)
-        bx0 = max(0, int(math.floor(min_x)) - pad)
-        by0 = max(0, int(math.floor(min_y)) - pad)
-        bx1 = min(img.width, int(math.ceil(max_x)) + pad)
-        by1 = min(img.height, int(math.ceil(max_y)) + pad)
+        n_outline_enabled = bool(cfg.get("outline_enabled", False))
+        n_shadow_enabled = bool(cfg.get("shadow_enabled", False))
+        n_out_w = float(cfg.get("outline_width", 2.0)) if n_outline_enabled else 0.0
+        s_dist = float(cfg.get("shadow_distance", 3.0)) if n_shadow_enabled else 0.0
+        s_len = float(cfg.get("shadow_length", 0.0)) if n_shadow_enabled else 0.0
+        s_reach = s_dist + s_len
+        s_angle = float(cfg.get("shadow_angle", 45.0))
+        s_rad = math.radians(s_angle)
+
+        all_x = [p[0] for p in pts]
+        all_y = [p[1] for p in pts]
+        if n_shadow_enabled and s_reach > 0.0:
+            all_x.extend([p[0] + math.cos(s_rad) * s_reach for p in pts])
+            all_y.extend([p[1] + math.sin(s_rad) * s_reach for p in pts])
+
+        _n_margin = 6.0 + (s_reach if n_shadow_enabled else 0.0) + (n_out_w * 2.0 if n_outline_enabled else 0.0)
+        bx0 = max(0, int(math.floor(min(all_x) - _n_margin)))
+        by0 = max(0, int(math.floor(min(all_y) - _n_margin)))
+        bx1 = min(img.width, int(math.ceil(max(all_x) + _n_margin)))
+        by1 = min(img.height, int(math.ceil(max(all_y) + _n_margin)))
         bw, bh = bx1 - bx0, by1 - by0
+
+        _needle_support = (float(bx0), float(by0), float(bx1), float(by1))
 
         if bw > 0 and bh > 0:
             scale = 2
-            mask_buf = Image.new("L", (bw * scale, bh * scale), 0)
-            draw_mask = ImageDraw.Draw(mask_buf)
-            local_poly = [
-                ((p[0] - bx0) * scale, (p[1] - by0) * scale) for p in pts
-            ]
-            draw_mask.polygon(local_poly, fill=255)
+            patch = Image.new("RGBA", (bw * scale, bh * scale), (0, 0, 0, 0))
+            d = ImageDraw.Draw(patch)
+            local_poly = [((p[0] - bx0) * scale, (p[1] - by0) * scale) for p in pts]
 
-            alpha_mask = mask_buf.resize((bw, bh), Image.LANCZOS)
-            solid_color = Image.new("RGBA", (bw, bh), needle_fill[:3] + (255,))
-            solid_color.putalpha(alpha_mask)
+            # Needle shadow
+            if n_shadow_enabled:
+                shad_op_raw = float(cfg.get("shadow_opacity", 0.7))
+                shad_op = (shad_op_raw / 100.0) if shad_op_raw > 1.0 else max(0.0, min(1.0, shad_op_raw))
+                shad_fade_raw = float(cfg.get("shadow_fade", 1.0))
+                shad_fade = (shad_fade_raw / 100.0) if shad_fade_raw > 1.0 else max(0.0, min(1.0, shad_fade_raw))
+                s_col = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
+                if shad_op > 0.0:
+                    steps = max(1, int(round(s_len))) if s_len > 0.0 else 0
+                    for step in range(steps, -1, -1):
+                        fraction = (step / steps) if s_len > 0.0 else 0.0
+                        reach = s_dist + s_len * fraction
+                        step_dx = math.cos(s_rad) * reach * scale
+                        step_dy = math.sin(s_rad) * reach * scale
+                        weight = max(0.0, 1.0 - shad_fade * fraction) * shad_op
+                        step_alpha = int(round(weight * 255))
+                        if step_alpha > 0:
+                            poly_step = [(px + step_dx, py + step_dy) for px, py in local_poly]
+                            d.polygon(poly_step, fill=(*s_col[:3], step_alpha))
 
+            # Needle outline
+            if n_outline_enabled and n_out_w > 0.0:
+                out_op_raw = float(cfg.get("outline_opacity", 1.0))
+                out_op = (out_op_raw / 100.0) if out_op_raw > 1.0 else max(0.0, min(1.0, out_op_raw))
+                out_col = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
+                out_alpha = int(round(out_op * 255))
+                if out_alpha > 0:
+                    stroke_w = max(1, int(round(n_out_w * scale)))
+                    d.line(local_poly + [local_poly[0]], fill=(*out_col[:3], out_alpha), width=stroke_w * 2, joint="curve")
+
+            # Needle core
+            d.polygon(local_poly, fill=needle_fill[:3] + (255,))
+
+            patch_down = patch.resize((bw, bh), Image.LANCZOS)
             target_crop = img.crop((bx0, by0, bx1, by1))
-            target_crop.alpha_composite(solid_color)
+            target_crop.alpha_composite(patch_down)
             img.paste(target_crop, (bx0, by0))
 
     # Marker (center dot cap) config with dedicated AA
@@ -646,12 +712,11 @@ def _render_gauge_indicator(
     # these bboxes: needle triangle sweep band ∪ composited value-text box,
     # each unioned with the previous frame's supports so moved elements are
     # erased by fresh crop bytes instead of ghosting over stale art.
-    _needle_support = None
-    if draw_needle:
+    if draw_needle and _needle_support is None:
         _n_hw = needle_width_px / 2.0
         _nvx = (base_x + pdx * _n_hw, base_x - pdx * _n_hw, tip_x)
         _nvy = (base_y + pdy * _n_hw, base_y - pdy * _n_hw, tip_y)
-        _n_margin = 4.0  # margin covering local AA filter padding
+        _n_margin = 6.0 + (s_reach if bool(cfg.get("shadow_enabled", False)) else 0.0) + (float(cfg.get("outline_width", 2.0)) * 2.0 if bool(cfg.get("outline_enabled", False)) else 0.0)
         _needle_support = (
             min(_nvx) - _n_margin, min(_nvy) - _n_margin,
             max(_nvx) + _n_margin, max(_nvy) + _n_margin)
