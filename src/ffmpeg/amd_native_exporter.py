@@ -4104,9 +4104,13 @@ def export_amd_native_d3d11(
     successful_hud_updates = 0
     successful_video_updates = 0
     hud_frame_bytes = video_width * video_height * 4
-    # ETAP 5D: Ring buffer of staging buffers to eliminate per-frame PIL crop/tobytes
-    # and consumer np.copyto allocations. Depth 3 safely decouples producer and consumer.
-    hud_ring_size = 3
+    # ETAP 5F MEMORY & ABI SAFETY GATE:
+    # Reading internal Pillow ImagingMemoryInstance via private struct offsets (offset 40)
+    # is non-standard across different Pillow builds. By default in production, use the
+    # 100% safe, supported public Pillow API path (crop().tobytes() with consumer-owned staging).
+    # The direct row-table ring buffer path is gated behind AMD_DIRECT_ROW_TABLE=1 for opt-in benchmarking.
+    direct_row_table_enabled = (os.getenv("AMD_DIRECT_ROW_TABLE", "0").strip() == "1")
+    hud_ring_size = 3 if direct_row_table_enabled else 1
     hud_backing_ring = [
         (c_uint8 * hud_frame_bytes)() for _ in range(hud_ring_size)
     ] if hud_work_enabled and native_hud_mode == "GPU_HUD" else []
@@ -4117,7 +4121,7 @@ def export_amd_native_d3d11(
     # where producer overwrites a ring slot currently in-flight with GPU upload.
     hud_slot_ready_events = [
         threading.Event() for _ in range(hud_ring_size)
-    ] if hud_backing_ring else []
+    ] if (hud_backing_ring and direct_row_table_enabled) else []
     for _ev in hud_slot_ready_events:
         _ev.set()
     hud_backing = hud_backing_ring[0] if hud_backing_ring else None
@@ -5724,14 +5728,14 @@ def export_amd_native_d3d11(
         else:
             buffer_prep_start = time.perf_counter()
             clamped_bboxes = dict(_bboxes)
-            target_slot = idx % hud_ring_size if hud_backing_ring else 0
+            target_slot = (idx % hud_ring_size) if (hud_backing_ring and direct_row_table_enabled) else 0
             if hud_slot_ready_events and target_slot < len(hud_slot_ready_events):
                 hud_slot_ready_events[target_slot].wait()
                 hud_slot_ready_events[target_slot].clear()
-            target_buf = hud_backing_ring[target_slot] if hud_backing_ring else None
-            target_addr = hud_backing_addresses[target_slot] if hud_backing_addresses else 0
+            target_buf = hud_backing_ring[target_slot] if (hud_backing_ring and direct_row_table_enabled) else None
+            target_addr = hud_backing_addresses[target_slot] if (hud_backing_addresses and direct_row_table_enabled) else 0
             stride = video_width * 4
-            row_table = _pillow_rgba_row_table(composed_img) if target_addr else None
+            row_table = _pillow_rgba_row_table(composed_img) if (target_addr and direct_row_table_enabled) else None
 
             if full_upload:
                 if target_addr and row_table is not None:
