@@ -201,7 +201,7 @@ Wynikowy strumień wideo i audio jest w **100.000% identyczny bit-do-bita z Etap
 ## 9. WERYFIKACJA INTEGRALNOŚCI MULTIMEDIALNEJ (FFPROBE)
 
 Analiza wyjściowego kontenera za pomocą `ffprobe`:
-- **Strumień wideo:** HEVC (Main), 1920×1080, 29.97 fps, czas trwania 100.100 s, bitrate 33.91 Mbps.
+- **Strumień wideo:** HEVC (Main), 3840×2160, 29.97 fps, czas trwania 100.100 s, bitrate 34.17 Mbps (*sprostowanie Etapu 5F: w pierwotnej wersji raportu omyłkowo wpisano 1920×1080 z szablonu, podczas gdy rzeczywisty plik na dysku od początku posiadał 3840×2160 UHD*).
 - **Strumień audio:** AAC (LC), 48000 Hz, stereo, fltp, czas trwania 100.117 s, bitrate 253.2 kbps.
 - **Single Live Mux:** Brak opóźnień między ścieżkami, brak utraconych ramek, pełna synchronizacja A/V.
 
