@@ -259,7 +259,15 @@ def composite_final(
             if not hasattr(overlay, "getbbox"):
                 ab = None
             elif _plain_paste_safe(overlay, cache_key):
-                ab = overlay.getbbox()
+                bb = getattr(overlay, "_bbox", ...)
+                if bb is not ...:
+                    ab = bb
+                else:
+                    ab = overlay.getbbox()
+                    try:
+                        overlay._bbox = ab
+                    except Exception:
+                        pass
             elif hasattr(overlay, "getchannel"):
                 ab = overlay.getchannel("A").getbbox()
             else:
@@ -290,7 +298,11 @@ def composite_final(
     # NV-PERF-3: Cache bbox on overlay to avoid repeated getbbox scans across layers
     bbox = getattr(overlay, "_bbox", ...)
     if bbox is ...:
-        bbox = overlay.getbbox()
+        ab = getattr(overlay, "_alpha_bbox", ...)
+        if ab is not ... and _plain_paste_safe(overlay, cache_key):
+            bbox = ab
+        else:
+            bbox = overlay.getbbox()
         try:
             overlay._bbox = bbox
         except Exception:

@@ -133,6 +133,32 @@ def _pillow_rgba_contiguous_pointer(image: Any) -> Optional[tuple[int, int]]:
         return None
 
 
+def _pillow_rgba_row_table(image: Any) -> Optional[Any]:
+    """Return a ctypes array of row pointers for an RGBA Pillow image, or None.
+
+    Bypasses per-row/per-slice PIL C allocations by reading the internal
+    Imaging row table directly. Borrowed only while image reference is held.
+    """
+    if image is None or getattr(image, "mode", None) != "RGBA":
+        return None
+    try:
+        core = image.im
+        capsule = core.ptr
+        cap_name = _PY_CAPSULE_GET_NAME(capsule)
+        raw_ptr = _PY_CAPSULE_GET_POINTER(capsule, cap_name)
+        if not raw_ptr:
+            return None
+        height = int(image.size[1])
+        if height <= 0:
+            return None
+        row_table_addr = ctypes.c_void_p.from_address(int(raw_ptr) + 40).value
+        if not row_table_addr:
+            return None
+        return (ctypes.c_void_p * height).from_address(row_table_addr)
+    except Exception:
+        return None
+
+
 def _create_amd_local_scratch_dir(output_file: str | Path) -> Path:
     """Compatibility helper retained for older tests/tools.
 
@@ -362,6 +388,9 @@ class PreparedFrame:
     # ── ETAP 2G: GPU lean indicator dynamic transform payload ──────────
     lean_active: bool = False
     lean_transform: Optional[tuple[float, float, float, float, float, int, int, int, int]] = None
+
+    # ── ETAP 5D: Ring buffer staging pointer for zero-copy dirty rect transfer
+    hud_backing_ptr: Optional[Any] = None
 
 
 _AMD_HUD_MODES = {"CPU_REFERENCE": 0, "GPU_HUD": 1}
@@ -4052,12 +4081,21 @@ def export_amd_native_d3d11(
     successful_hud_updates = 0
     successful_video_updates = 0
     hud_frame_bytes = video_width * video_height * 4
-    hud_backing = (c_uint8 * hud_frame_bytes)() if hud_work_enabled and native_hud_mode == "GPU_HUD" else None
+    # ETAP 5D: Ring buffer of staging buffers to eliminate per-frame PIL crop/tobytes
+    # and consumer np.copyto allocations. Depth 3 safely decouples producer and consumer.
+    hud_ring_size = 3
+    hud_backing_ring = [
+        (c_uint8 * hud_frame_bytes)() for _ in range(hud_ring_size)
+    ] if hud_work_enabled and native_hud_mode == "GPU_HUD" else []
+    hud_backing_addresses = [
+        ctypes.addressof(b) for b in hud_backing_ring
+    ]
+    hud_backing = hud_backing_ring[0] if hud_backing_ring else None
     hud_backing_view = (
         np.ctypeslib.as_array(hud_backing).reshape((video_height, video_width, 4))
         if hud_backing is not None else None
     )
-    hud_backing_address = ctypes.addressof(hud_backing) if hud_backing is not None else 0
+    hud_backing_address = hud_backing_addresses[0] if hud_backing_addresses else 0
     hud_pointer_observations: list[int] = []
     dirty_rect_counts: list[int] = []
     requested_upload_bytes: list[int] = []
@@ -5640,6 +5678,7 @@ def export_amd_native_d3d11(
         # HUD Below dirty rects & backing
         dirty_rect_slices = []
         hud_backing_array = None
+        hud_backing_ptr = None
         rgba_bytes_reference = None
         dirty_rects = []
         full_upload = hud_upload_mode == "FULL" or idx == 0
@@ -5655,10 +5694,23 @@ def export_amd_native_d3d11(
         else:
             buffer_prep_start = time.perf_counter()
             clamped_bboxes = dict(_bboxes)
+            target_slot = idx % hud_ring_size if hud_backing_ring else 0
+            target_buf = hud_backing_ring[target_slot] if hud_backing_ring else None
+            target_addr = hud_backing_addresses[target_slot] if hud_backing_addresses else 0
+            stride = video_width * 4
+            row_table = _pillow_rgba_row_table(composed_img) if target_addr else None
+
             if full_upload:
-                hud_backing_array = np.array(composed_img, dtype=np.uint8, copy=True)
+                if target_addr and row_table is not None:
+                    for y in range(video_height):
+                        ctypes.memmove(target_addr + y * stride, row_table[y], stride)
+                    hud_backing_ptr = target_buf
+                    hud_backing_array = None
+                    intermediate_bytes = 0
+                else:
+                    hud_backing_array = np.array(composed_img, dtype=np.uint8, copy=True)
+                    intermediate_bytes = hud_frame_bytes
                 dirty_rects = []
-                intermediate_bytes = hud_frame_bytes
                 persistent_copy_bytes = hud_frame_bytes
                 upload_bytes = hud_frame_bytes
                 rect_count = 1
@@ -5728,12 +5780,24 @@ def export_amd_native_d3d11(
                         clipped_dirty_rects.append(_cr)
                 dirty_rects = clipped_dirty_rects
                 dirty_rect_slices = []
-                for rx, ry, rw, rh in dirty_rects:
-                    slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
-                    slice_bytes = slice_img.tobytes("raw", "RGBA")
-                    dirty_rect_slices.append((rx, ry, rw, rh, slice_bytes))
-                    upload_bytes += rw * rh * 4
-                intermediate_bytes = upload_bytes
+                if target_addr and row_table is not None:
+                    # ETAP 5D: Zero-copy direct memmove from Pillow row table into ring staging buffer
+                    for rx, ry, rw, rh in dirty_rects:
+                        row_bytes = rw * 4
+                        for r in range(rh):
+                            src_row = row_table[ry + r] + rx * 4
+                            dst_row = target_addr + (ry + r) * stride + rx * 4
+                            ctypes.memmove(dst_row, src_row, row_bytes)
+                        upload_bytes += rw * rh * 4
+                    hud_backing_ptr = target_buf
+                    intermediate_bytes = 0
+                else:
+                    for rx, ry, rw, rh in dirty_rects:
+                        slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
+                        slice_bytes = slice_img.tobytes("raw", "RGBA")
+                        dirty_rect_slices.append((rx, ry, rw, rh, slice_bytes))
+                        upload_bytes += rw * rh * 4
+                    intermediate_bytes = upload_bytes
                 persistent_copy_bytes = upload_bytes
                 rect_count = len(dirty_rects)
             t_samples_p["PIL/buffer preparation"] = (time.perf_counter() - buffer_prep_start) * 1000.0
@@ -5851,6 +5915,7 @@ def export_amd_native_d3d11(
             after_map_chart_captures=after_map_chart_captures_frame,
             lean_active=lean_gpu_enabled,
             lean_transform=lean_transform_info,
+            hud_backing_ptr=hud_backing_ptr,
         )
 
     last_uploaded_map_source_key = None
@@ -6315,21 +6380,22 @@ def export_amd_native_d3d11(
             else:
                 assert hud_backing is not None and hud_backing_view is not None
                 if prepared.full_hud_upload:
-                    assert prepared.hud_backing_array is not None
-                    np.copyto(hud_backing_view, prepared.hud_backing_array)
+                    if prepared.hud_backing_array is not None:
+                        np.copyto(hud_backing_view, prepared.hud_backing_array)
                     native_rect_ptr = None
                     native_rect_count = 0
                 else:
-                    for entry in prepared.dirty_rect_slices:
-                        if len(entry) == 8:
-                            x, y, rect_w, rect_h, _, src_ptr_int, c_stride, _ = entry
-                            dst_base = hud_backing_address + y * c_stride + x * 4
-                            for r in range(rect_h):
-                                ctypes.memmove(dst_base + r * c_stride, src_ptr_int + r * c_stride, rect_w * 4)
-                        else:
-                            x, y, rect_w, rect_h, r_bytes = entry[:5]
-                            r_arr = np.frombuffer(r_bytes, dtype=np.uint8).reshape(rect_h, rect_w, 4)
-                            np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], r_arr)
+                    if prepared.dirty_rect_slices and not getattr(prepared, "hud_backing_ptr", None):
+                        for entry in prepared.dirty_rect_slices:
+                            if len(entry) == 8:
+                                x, y, rect_w, rect_h, _, src_ptr_int, c_stride, _ = entry
+                                dst_base = hud_backing_address + y * c_stride + x * 4
+                                for r in range(rect_h):
+                                    ctypes.memmove(dst_base + r * c_stride, src_ptr_int + r * c_stride, rect_w * 4)
+                            else:
+                                x, y, rect_w, rect_h, r_bytes = entry[:5]
+                                r_arr = np.frombuffer(r_bytes, dtype=np.uint8).reshape(rect_h, rect_w, 4)
+                                np.copyto(hud_backing_view[y:y + rect_h, x:x + rect_w], r_arr)
                     if prepared.dirty_rects:
                         native_rects = (_HUDDirtyRect * len(prepared.dirty_rects))(
                             *(_HUDDirtyRect(*rect) for rect in prepared.dirty_rects)
@@ -6339,10 +6405,11 @@ def export_amd_native_d3d11(
                     else:
                         native_rect_ptr = None
                         native_rect_count = 0
-                hud_pointer_observations.append(hud_backing_address)
+                active_hud_backing = prepared.hud_backing_ptr if getattr(prepared, "hud_backing_ptr", None) is not None else hud_backing
+                hud_pointer_observations.append(ctypes.addressof(active_hud_backing) if active_hud_backing is not None else hud_backing_address)
                 update_hud_start = time.perf_counter()
                 hud_update_ok = native_dll.telem_amd_update_hud_regions(
-                    h_context, hud_backing, video_width, video_height, video_width * 4,
+                    h_context, active_hud_backing, video_width, video_height, video_width * 4,
                     native_rect_ptr, native_rect_count, 1 if prepared.full_hud_upload else 0,
                 )
                 last_hud_call_ms = (time.perf_counter() - update_hud_start) * 1000.0

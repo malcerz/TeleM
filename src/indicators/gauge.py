@@ -163,6 +163,24 @@ def _gauge_ticks(display_min: float, raw_max: float, ticks: int) -> tuple:
             sub_ticks_count, total_ticks)
 
 
+def resolve_compass_mode(cfg: dict | None) -> str:
+    """Deterministyczna rezolucja trybu kompasu z obsug wstecznej kompatybilnoci.
+
+    Polityka pierwszestwa:
+    1. Jeli podano 'compass_rotation_mode' (wspczesne GUI i nowe layouty), ma ono priorytet.
+    2. Jeli brak 'compass_rotation_mode', pobierane jest 'compass_motion_mode' (historyczne layouty z 1-6 X).
+    3. Warto domylna: 'needle'.
+    Dozwolone wartoci kanoniczne: 'needle' oraz 'rose'.
+    """
+    if not cfg:
+        return "needle"
+    raw = cfg.get("compass_rotation_mode")
+    if raw is None or str(raw).strip() == "":
+        raw = cfg.get("compass_motion_mode")
+    val = str(raw or "needle").strip().lower()
+    return val if val in ("needle", "rose") else "needle"
+
+
 def _render_compass_indicator(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
@@ -210,7 +228,7 @@ def _render_compass_indicator(
                 heading = None
         except (TypeError, ValueError):
             heading = None
-    rotate_rose = str(cfg.get("compass_motion_mode") or cfg.get("compass_rotation_mode", "needle")).strip().lower() == "rose"
+    rotate_rose = (resolve_compass_mode(cfg) == "rose")
     rose_heading = round(heading, 1) if rotate_rose and heading is not None else 0.0
 
     def screen_angle(degrees: float) -> float:
