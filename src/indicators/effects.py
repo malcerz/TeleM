@@ -124,6 +124,7 @@ def apply_indicator_effects(
     min_dim: int,
     *,
     profile_key: str | None = None,
+    breakdown: Optional[dict[str, float]] = None,
 ) -> Image.Image | None:
     """Apply alpha-based outline and distance-faded shadow to an indicator raster."""
     if image is None or not effects_enabled(cfg):
@@ -194,6 +195,22 @@ def apply_indicator_effects(
     )
     widget_key = profile_key or "unattributed"
     profile_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
+
+    dynamic_key = getattr(image, "_dynamic_key", None)
+    if dynamic_key is not None:
+        full_dyn_key = ("effects_full_dyn", dynamic_key, image.size, cfg_sig)
+        cached_full = _EFFECT_CACHE.get(full_dyn_key)
+        if cached_full is not None:
+            if breakdown is not None and profile_key:
+                breakdown[f"{profile_key}.shadow"] = 0.0
+                breakdown[f"{profile_key}.outline"] = 0.0
+                breakdown[f"{profile_key}.lookup"] = 0.0
+            return cached_full.copy()
+        cache_key = (dynamic_key, image.size, cfg_sig)
+        use_sub = False
+        bx0 = by0 = 0
+        sub_w, sub_h = image.size
+
     alpha_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
     src_alpha = np.array(image.getchannel("A"), dtype=np.uint8)
     if _PROFILE_EFFECT_CACHE:
@@ -221,46 +238,52 @@ def apply_indicator_effects(
             _profile_add(widget_key, "total_ms", (time.perf_counter_ns() - profile_start_ns) / 1_000_000.0)
         return image
 
-    bx0, by0, bx1, by1 = bbox
-    sub_w = bx1 - bx0
-    sub_h = by1 - by0
-    use_sub = (sub_w * sub_h < image.width * image.height * 0.90)
+    if dynamic_key is None:
+        bx0, by0, bx1, by1 = bbox
+        sub_w = bx1 - bx0
+        sub_h = by1 - by0
+        use_sub = (sub_w * sub_h < image.width * image.height * 0.90)
 
-    if use_sub:
-        sub_alpha = src_alpha[by0:by1, bx0:bx1]
-        bbox_tag = (bx0, by0, bx1, by1)
-        if _PROFILE_EFFECT_CACHE:
-            payload_start_ns = time.perf_counter_ns()
-            hash_payload = sub_alpha.tobytes()
-            _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
-            hash_start_ns = time.perf_counter_ns()
-            content_hash = blake2b(hash_payload, digest_size=16).digest()
-            _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
-            _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
-            del hash_payload
+        if use_sub:
+            sub_alpha = src_alpha[by0:by1, bx0:bx1]
+            bbox_tag = (bx0, by0, bx1, by1)
+            if _PROFILE_EFFECT_CACHE:
+                payload_start_ns = time.perf_counter_ns()
+                hash_payload = sub_alpha.tobytes()
+                _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
+                hash_start_ns = time.perf_counter_ns()
+                content_hash = blake2b(hash_payload, digest_size=16).digest()
+                _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
+                _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
+                del hash_payload
+            else:
+                content_hash = blake2b(sub_alpha.tobytes(), digest_size=16).digest()
+            cache_key = (content_hash, bbox_tag, image.size, cfg_sig)
         else:
-            content_hash = blake2b(sub_alpha.tobytes(), digest_size=16).digest()
-        cache_key = (content_hash, bbox_tag, image.size, cfg_sig)
-    else:
-        if _PROFILE_EFFECT_CACHE:
-            payload_start_ns = time.perf_counter_ns()
-            hash_payload = src_alpha.tobytes()
-            _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
-            hash_start_ns = time.perf_counter_ns()
-            content_hash = blake2b(hash_payload, digest_size=16).digest()
-            _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
-            _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
-            del hash_payload
-        else:
-            content_hash = blake2b(src_alpha.tobytes(), digest_size=16).digest()
-        cache_key = (content_hash, image.size, cfg_sig)
+            if _PROFILE_EFFECT_CACHE:
+                payload_start_ns = time.perf_counter_ns()
+                hash_payload = src_alpha.tobytes()
+                _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
+                hash_start_ns = time.perf_counter_ns()
+                content_hash = blake2b(hash_payload, digest_size=16).digest()
+                _profile_add(widget_key, "blake2b_ms", (time.perf_counter_ns() - hash_start_ns) / 1_000_000.0)
+                _profile_add(widget_key, "hash_input_bytes", len(hash_payload))
+                del hash_payload
+            else:
+                content_hash = blake2b(src_alpha.tobytes(), digest_size=16).digest()
+            cache_key = (content_hash, image.size, cfg_sig)
 
-    lookup_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
+    lookup_start_ns = time.perf_counter_ns() if (_PROFILE_EFFECT_CACHE or breakdown is not None) else 0
     cached = _EFFECT_CACHE.get(cache_key)
+    if breakdown is not None and profile_key:
+        breakdown[f"{profile_key}.lookup"] = (time.perf_counter_ns() - lookup_start_ns) / 1_000_000.0
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "cache_lookup_ms", (time.perf_counter_ns() - lookup_start_ns) / 1_000_000.0)
     if cached is not None:
         effect_layer, pad = cached
+        if breakdown is not None and profile_key:
+            breakdown[f"{profile_key}.shadow"] = 0.0
+            breakdown[f"{profile_key}.outline"] = 0.0
         copy_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
         result = effect_layer.copy()
         if _PROFILE_EFFECT_CACHE:
@@ -280,7 +303,7 @@ def apply_indicator_effects(
 
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "cache_misses")
-    miss_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
+    miss_start_ns = time.perf_counter_ns() if (_PROFILE_EFFECT_CACHE or breakdown is not None) else 0
 
     # Compute bounds and padding
     raw_pad = max(width, (distance + length) if shadow_enabled else 0.0)
@@ -295,19 +318,21 @@ def apply_indicator_effects(
         mask_size = (mask_W, mask_H)
         mask = np.zeros((mask_H, mask_W), dtype=np.uint8)
         mask[pad:pad + sub_h, pad:pad + sub_w] = sub_alpha
-        target_res = Image.new("RGBA", mask_size, (0, 0, 0, 0))
     else:
         mask_W = W
         mask_H = H
         mask_size = size
         mask = np.zeros((H, W), dtype=np.uint8)
         mask[pad:pad + image.height, pad:pad + image.width] = src_alpha
-        target_res = Image.new("RGBA", size, (0, 0, 0, 0))
+
+    target_res = None
+    has_layer = False
 
     if _PROFILE_EFFECT_CACHE:
         _profile_add(widget_key, "temporary_mask_bytes_estimate", mask.nbytes)
         _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
 
+    t_shad0 = time.perf_counter_ns() if breakdown is not None else 0
     # Vectorized shadow layer
     if shadow_enabled and (distance > 0.0 or length > 0.0) and shad_opacity > 0.0:
         angle_rad = math.radians(shadow_angle)
@@ -335,17 +360,21 @@ def apply_indicator_effects(
             dst_y1 = min(mask_H, mask_H + dy)
             if src_x1 > src_x0 and src_y1 > src_y0:
                 lut = _get_lut(weight)
-                sub = lut[mask[src_y0:src_y1, src_x0:src_x1]]
-                np.maximum(trail[dst_y0:dst_y1, dst_x0:dst_x1], sub, out=trail[dst_y0:dst_y1, dst_x0:dst_x1])
+                sub = cv2.LUT(mask[src_y0:src_y1, src_x0:src_x1], lut)
+                cv2.max(trail[dst_y0:dst_y1, dst_x0:dst_x1], sub, dst=trail[dst_y0:dst_y1, dst_x0:dst_x1])
         if shad_opacity < 1.0:
-            trail = _get_lut(shad_opacity)[trail]
+            trail = cv2.LUT(trail, _get_lut(shad_opacity))
         if np.any(trail):
             tile = Image.new("RGBA", mask_size, (*shadow_color[:3], 0))
             if _PROFILE_EFFECT_CACHE:
                 _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
             tile.putalpha(Image.fromarray(trail, mode="L"))
-            target_res.alpha_composite(tile)
+            target_res = tile
+            has_layer = True
+    if breakdown is not None and profile_key:
+        breakdown[f"{profile_key}.shadow"] = (time.perf_counter_ns() - t_shad0) / 1_000_000.0
 
+    t_out0 = time.perf_counter_ns() if breakdown is not None else 0
     # Vectorized outline layer
     if width > 0 and outline_enabled and out_opacity > 0.0:
         if out_fade <= 0.0:
@@ -360,17 +389,26 @@ def apply_indicator_effects(
                 weight = 1.0 - out_fade * (radius / (width + 1.0))
                 if weight > 0.0:
                     lut = _get_lut(weight)
-                    weighted = lut[cur]
-                    np.maximum(expanded, weighted, out=expanded)
+                    weighted = cv2.LUT(cur, lut)
+                    cv2.max(expanded, weighted, dst=expanded)
         out_alpha = cv2.subtract(expanded, mask)
         if out_opacity < 1.0:
-            out_alpha = _get_lut(out_opacity)[out_alpha]
+            out_alpha = cv2.LUT(out_alpha, _get_lut(out_opacity))
         if np.any(out_alpha):
             tile = Image.new("RGBA", mask_size, (*outline_color[:3], 0))
             if _PROFILE_EFFECT_CACHE:
                 _profile_add(widget_key, "rgba_allocation_bytes_estimate", mask_W * mask_H * 4)
             tile.putalpha(Image.fromarray(out_alpha, mode="L"))
-            target_res.alpha_composite(tile)
+            if has_layer and target_res is not None:
+                target_res.alpha_composite(tile)
+            else:
+                target_res = tile
+                has_layer = True
+    if breakdown is not None and profile_key:
+        breakdown[f"{profile_key}.outline"] = (time.perf_counter_ns() - t_out0) / 1_000_000.0
+
+    if target_res is None:
+        target_res = Image.new("RGBA", mask_size, (0, 0, 0, 0))
 
     if use_sub:
         result = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -404,4 +442,6 @@ def apply_indicator_effects(
             (time.perf_counter_ns() - composite_start_ns) / 1_000_000.0,
         )
         _profile_add(widget_key, "total_ms", (time.perf_counter_ns() - profile_start_ns) / 1_000_000.0)
+    if dynamic_key is not None:
+        _EFFECT_CACHE[full_dyn_key] = output
     return output

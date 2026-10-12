@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 import math
+import time
 from typing import Any
 
 try:
@@ -61,6 +62,7 @@ def clear_gauge_cache() -> None:
     _GAUGE_CANVAS_STATE["bg_key"] = None
     _GAUGE_CANVAS_STATE["needle_sig"] = None
     _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = []
+    _GAUGE_CANVAS_STATE["last_state"] = None
     if _STATIC_CACHE is not None:
         _STATIC_CACHE.clear()
     if FONT_CACHE is not None:
@@ -313,6 +315,7 @@ def _render_gauge_indicator(
     formatted_val=None, **kwargs,
 ):
     """Render a gauge-form indicator (background cached)."""
+    breakdown = kwargs.get("breakdown")
     if cfg.get("gauge_style") == "compass" or cfg.get("gauge_mode") == "compass":
         # ETAP 2C: a compass dial is fully dynamic (rotating ring, heading
         # text) — no stable static/dynamic pixel split exists, so AUTO region
@@ -460,7 +463,21 @@ def _render_gauge_indicator(
     needle_width_px = resolve_gauge_needle_width_px(cfg.get("needle_width", 4), min_dim, pixel_profile=pixel_profile)
     needle_rgb = parse_hex_color(cfg.get("needle_color", "#DC3232")) or (220, 50, 50)
     needle_fill = (needle_rgb[0], needle_rgb[1], needle_rgb[2], 255)
-    needle_sig = (needle_width_px, needle_len_rel, needle_fill)
+    needle_sig = (
+        key,
+        needle_width_px,
+        needle_len_rel,
+        needle_fill,
+        bool(cfg.get("show_marker", False)),
+        int(cfg.get("marker_size", 0)),
+        str(cfg.get("marker_color", "#333333")),
+        bool(cfg.get("show_value", True)),
+        str(cfg.get("text_color", "#FFFFFF")),
+        float(cfg.get("text_offset_x", 0.0)),
+        float(cfg.get("text_offset_y", 0.0)),
+        bool(cfg.get("shadow_enabled", False)),
+        bool(cfg.get("outline_enabled", False)),
+    )
 
     # ── ETAP 4G: Discrete dynamic raster state memoization ──
     draw_needle = False
@@ -481,6 +498,15 @@ def _render_gauge_indicator(
         float(needle_len_rel),
         int(needle_width_px),
         needle_fill,
+        bool(cfg.get("show_marker", False)),
+        int(cfg.get("marker_size", 0)),
+        str(cfg.get("marker_color", "#333333")),
+        bool(cfg.get("show_value", True)),
+        str(cfg.get("text_color", "#FFFFFF")),
+        float(cfg.get("text_offset_x", 0.0)),
+        float(cfg.get("text_offset_y", 0.0)),
+        bool(cfg.get("shadow_enabled", False)),
+        bool(cfg.get("outline_enabled", False)),
     ) if draw_needle else None
 
     gauge_raster_key = _static_cache_key(
@@ -496,6 +522,18 @@ def _render_gauge_indicator(
         img, dynamic_info = cached_gauge
         record_gauge_dynamic_info(key, **dynamic_info)
         return img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+
+    if (
+        _GAUGE_CANVAS_STATE["canvas"] is not None
+        and _GAUGE_CANVAS_STATE["bg_key"] == bg_key
+        and _GAUGE_CANVAS_STATE.get("needle_sig") == needle_sig
+        and _GAUGE_CANVAS_STATE.get("last_state") is not None
+        and _GAUGE_CANVAS_STATE["last_state"][0] == needle_state_key
+        and _GAUGE_CANVAS_STATE["last_state"][1] == txt_main
+    ):
+        last_dyn_info = _GAUGE_CANVAS_STATE["last_state"][2]
+        record_gauge_dynamic_info(key, **last_dyn_info)
+        return _GAUGE_CANVAS_STATE["canvas"].copy(), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
 
     # ── Dynamic elements: regional restore or full canvas init ──
     if (
@@ -565,48 +603,114 @@ def _render_gauge_indicator(
         _needle_support = (float(bx0), float(by0), float(bx1), float(by1))
 
         if bw > 0 and bh > 0:
+            t_needle0 = time.perf_counter_ns() if breakdown is not None else 0
             scale = 2
-            patch = Image.new("RGBA", (bw * scale, bh * scale), (0, 0, 0, 0))
-            d = ImageDraw.Draw(patch)
-            local_poly = [((p[0] - bx0) * scale, (p[1] - by0) * scale) for p in pts]
+            _needle_patch_key = (
+                "gauge_needle_patch", frac, bw, bh, scale,
+                needle_fill, n_shadow_enabled, s_dist, s_len, s_angle,
+                n_outline_enabled, n_out_w
+            )
+            patch_down = _STATIC_CACHE.get(_needle_patch_key)
+            if patch_down is None:
+                try:
+                    import cv2
+                    import numpy as np
 
-            # Needle shadow
-            if n_shadow_enabled:
-                shad_op_raw = float(cfg.get("shadow_opacity", 0.7))
-                shad_op = (shad_op_raw / 100.0) if shad_op_raw > 1.0 else max(0.0, min(1.0, shad_op_raw))
-                shad_fade_raw = float(cfg.get("shadow_fade", 1.0))
-                shad_fade = (shad_fade_raw / 100.0) if shad_fade_raw > 1.0 else max(0.0, min(1.0, shad_fade_raw))
-                s_col = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
-                if shad_op > 0.0:
-                    steps = max(1, int(round(s_len))) if s_len > 0.0 else 0
-                    for step in range(steps, -1, -1):
-                        fraction = (step / steps) if s_len > 0.0 else 0.0
-                        reach = s_dist + s_len * fraction
-                        step_dx = math.cos(s_rad) * reach * scale
-                        step_dy = math.sin(s_rad) * reach * scale
-                        weight = max(0.0, 1.0 - shad_fade * fraction) * shad_op
-                        step_alpha = int(round(weight * 255))
-                        if step_alpha > 0:
-                            poly_step = [(px + step_dx, py + step_dy) for px, py in local_poly]
-                            d.polygon(poly_step, fill=(*s_col[:3], step_alpha))
+                    shift = 4
+                    scale_sub = 1 << shift
+                    s_rad = math.radians(s_angle)
+                    sub_poly = np.array([[[int(round((p[0] - bx0) * scale_sub)), int(round((p[1] - by0) * scale_sub))] for p in pts]], dtype=np.int32)
+                    patch_cv = np.zeros((bh, bw, 4), dtype=np.uint8)
 
-            # Needle outline
-            if n_outline_enabled and n_out_w > 0.0:
-                out_op_raw = float(cfg.get("outline_opacity", 1.0))
-                out_op = (out_op_raw / 100.0) if out_op_raw > 1.0 else max(0.0, min(1.0, out_op_raw))
-                out_col = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
-                out_alpha = int(round(out_op * 255))
-                if out_alpha > 0:
-                    stroke_w = max(1, int(round(n_out_w * scale)))
-                    d.line(local_poly + [local_poly[0]], fill=(*out_col[:3], out_alpha), width=stroke_w * 2, joint="curve")
+                    # Needle shadow
+                    t_g_shad0 = time.perf_counter_ns() if breakdown is not None else 0
+                    if n_shadow_enabled:
+                        shad_op_raw = float(cfg.get("shadow_opacity", 0.7))
+                        shad_op = (shad_op_raw / 100.0) if shad_op_raw > 1.0 else max(0.0, min(1.0, shad_op_raw))
+                        shad_fade_raw = float(cfg.get("shadow_fade", 1.0))
+                        shad_fade = (shad_fade_raw / 100.0) if shad_fade_raw > 1.0 else max(0.0, min(1.0, shad_fade_raw))
+                        s_col = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
+                        if shad_op > 0.0:
+                            steps = max(1, int(round(s_len))) if s_len > 0.0 else 0
+                            for step in range(steps, -1, -1):
+                                fraction = (step / steps) if s_len > 0.0 else 0.0
+                                reach = s_dist + s_len * fraction
+                                step_dx = int(round(math.cos(s_rad) * reach * scale_sub))
+                                step_dy = int(round(math.sin(s_rad) * reach * scale_sub))
+                                weight = max(0.0, 1.0 - shad_fade * fraction) * shad_op
+                                step_alpha = int(round(weight * 255))
+                                if step_alpha > 0:
+                                    cv2.fillPoly(patch_cv, sub_poly + [step_dx, step_dy], (*s_col[:3], step_alpha), lineType=cv2.LINE_AA, shift=shift)
+                    if breakdown is not None and key:
+                        breakdown[f"{key}.shadow"] = (time.perf_counter_ns() - t_g_shad0) / 1_000_000.0
 
-            # Needle core
-            d.polygon(local_poly, fill=needle_fill[:3] + (255,))
+                    # Needle outline
+                    t_g_out0 = time.perf_counter_ns() if breakdown is not None else 0
+                    if n_outline_enabled and n_out_w > 0.0:
+                        out_op_raw = float(cfg.get("outline_opacity", 1.0))
+                        out_op = (out_op_raw / 100.0) if out_op_raw > 1.0 else max(0.0, min(1.0, out_op_raw))
+                        out_col = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
+                        out_alpha = int(round(out_op * 255))
+                        if out_alpha > 0:
+                            stroke_w = max(1, int(round(n_out_w)))
+                            cv2.polylines(patch_cv, sub_poly, True, (*out_col[:3], out_alpha), thickness=stroke_w * 2, lineType=cv2.LINE_AA, shift=shift)
+                    if breakdown is not None and key:
+                        breakdown[f"{key}.outline"] = (time.perf_counter_ns() - t_g_out0) / 1_000_000.0
 
-            patch_down = patch.resize((bw, bh), Image.LANCZOS)
-            target_crop = img.crop((bx0, by0, bx1, by1))
-            target_crop.alpha_composite(patch_down)
-            img.paste(target_crop, (bx0, by0))
+                    # Needle core
+                    cv2.fillPoly(patch_cv, sub_poly, (*needle_fill[:3], 255), lineType=cv2.LINE_AA, shift=shift)
+                    patch_down = Image.fromarray(patch_cv)
+                except Exception:
+                    patch = Image.new("RGBA", (bw * scale, bh * scale), (0, 0, 0, 0))
+                    d = ImageDraw.Draw(patch)
+                    local_poly = [((p[0] - bx0) * scale, (p[1] - by0) * scale) for p in pts]
+
+                    # Needle shadow
+                    t_g_shad0 = time.perf_counter_ns() if breakdown is not None else 0
+                    if n_shadow_enabled:
+                        shad_op_raw = float(cfg.get("shadow_opacity", 0.7))
+                        shad_op = (shad_op_raw / 100.0) if shad_op_raw > 1.0 else max(0.0, min(1.0, shad_op_raw))
+                        shad_fade_raw = float(cfg.get("shadow_fade", 1.0))
+                        shad_fade = (shad_fade_raw / 100.0) if shad_fade_raw > 1.0 else max(0.0, min(1.0, shad_fade_raw))
+                        s_col = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
+                        if shad_op > 0.0:
+                            steps = max(1, int(round(s_len))) if s_len > 0.0 else 0
+                            for step in range(steps, -1, -1):
+                                fraction = (step / steps) if s_len > 0.0 else 0.0
+                                reach = s_dist + s_len * fraction
+                                step_dx = math.cos(s_rad) * reach * scale
+                                step_dy = math.sin(s_rad) * reach * scale
+                                weight = max(0.0, 1.0 - shad_fade * fraction) * shad_op
+                                step_alpha = int(round(weight * 255))
+                                if step_alpha > 0:
+                                    poly_step = [(px + step_dx, py + step_dy) for px, py in local_poly]
+                                    d.polygon(poly_step, fill=(*s_col[:3], step_alpha))
+                    if breakdown is not None and key:
+                        breakdown[f"{key}.shadow"] = (time.perf_counter_ns() - t_g_shad0) / 1_000_000.0
+
+                    # Needle outline
+                    t_g_out0 = time.perf_counter_ns() if breakdown is not None else 0
+                    if n_outline_enabled and n_out_w > 0.0:
+                        out_op_raw = float(cfg.get("outline_opacity", 1.0))
+                        out_op = (out_op_raw / 100.0) if out_op_raw > 1.0 else max(0.0, min(1.0, out_op_raw))
+                        out_col = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
+                        out_alpha = int(round(out_op * 255))
+                        if out_alpha > 0:
+                            stroke_w = max(1, int(round(n_out_w * scale)))
+                            d.line(local_poly + [local_poly[0]], fill=(*out_col[:3], out_alpha), width=stroke_w * 2, joint="curve")
+                    if breakdown is not None and key:
+                        breakdown[f"{key}.outline"] = (time.perf_counter_ns() - t_g_out0) / 1_000_000.0
+
+                    # Needle core
+                    d.polygon(local_poly, fill=needle_fill[:3] + (255,))
+
+                    patch_down = patch.resize((bw, bh), Image.LANCZOS)
+
+                _STATIC_CACHE[_needle_patch_key] = patch_down
+
+            img.alpha_composite(patch_down, (bx0, by0))
+            if breakdown is not None and key:
+                breakdown[f"{key}.needle_ms"] = (time.perf_counter_ns() - t_needle0) / 1_000_000.0
 
     # Marker (center dot cap) config with dedicated AA
     show_marker = bool(cfg.get("show_marker", False))
@@ -625,21 +729,23 @@ def _render_gauge_indicator(
 
         if m_bw > 0 and m_bh > 0:
             m_scale = 4
-            m_buf = Image.new("RGBA", (m_bw * m_scale, m_bh * m_scale), (0, 0, 0, 0))
-            d_m = ImageDraw.Draw(m_buf)
             marker_color = parse_hex_color(cfg.get("marker_color", "#333333")) or (51, 51, 51)
             marker_fill = (marker_color[0], marker_color[1], marker_color[2], 255)
             mc_x = (_cx - m_bx0) * m_scale
             mc_y = (_cy - m_by0) * m_scale
-            mr = r * m_scale
-            d_m.ellipse([
-                mc_x - mr, mc_y - mr,
-                mc_x + mr, mc_y + mr
-            ], fill=marker_fill, outline=(120, 120, 120, 255), width=m_scale)
-            m_patch = m_buf.resize((m_bw, m_bh), Image.LANCZOS)
-            m_crop = img.crop((m_bx0, m_by0, m_bx1, m_by1))
-            m_crop.alpha_composite(m_patch)
-            img.paste(m_crop, (m_bx0, m_by0))
+            m_key = ("gauge_marker_patch", m_bw, m_bh, r, marker_fill, m_scale, mc_x, mc_y)
+            m_patch = _STATIC_CACHE.get(m_key)
+            if m_patch is None:
+                m_buf = Image.new("RGBA", (m_bw * m_scale, m_bh * m_scale), (0, 0, 0, 0))
+                d_m = ImageDraw.Draw(m_buf)
+                mr = r * m_scale
+                d_m.ellipse([
+                    mc_x - mr, mc_y - mr,
+                    mc_x + mr, mc_y + mr
+                ], fill=marker_fill, outline=(120, 120, 120, 255), width=m_scale)
+                m_patch = m_buf.resize((m_bw, m_bh), Image.LANCZOS)
+                _STATIC_CACHE[m_key] = m_patch
+            img.alpha_composite(m_patch, (m_bx0, m_by0))
 
     # Center text — always the current value, honouring show_value/show_units
     # (formatted_val is built by the compositor from those flags).
@@ -755,12 +861,15 @@ def _render_gauge_indicator(
         m_r = max(1, marker_size)
         dirty_boxes.append((float(_cx - m_r - 4), float(_cy - m_r - 4), float(_cx + m_r + 4), float(_cy + m_r + 4)))
     _GAUGE_CANVAS_STATE["prev_dirty_boxes"] = dirty_boxes
+    _GAUGE_CANVAS_STATE["last_state"] = (needle_state_key, txt_main, dynamic_info)
 
     record_gauge_dynamic_info(key, **dynamic_info)
-    img_out = img.copy()
     gauge_opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     if gauge_opacity < 1.0:
+        img_out = img.copy()
         alpha = img_out.getchannel("A").point(lambda a: int(round(a * gauge_opacity)))
         img_out.putalpha(alpha)
-    _GAUGE_RASTER_CACHE[gauge_raster_key] = (img_out, dynamic_info)
-    return img_out, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+        return img_out, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
+    if not draw_needle:
+        _GAUGE_RASTER_CACHE[gauge_raster_key] = (img.copy(), dynamic_info)
+    return img.copy(), s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None

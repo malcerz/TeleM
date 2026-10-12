@@ -103,3 +103,61 @@ Potwierdzono i naprawiono błąd poprawności cache’u efektów. Nie zidentyfik
 
 **Pełny hash zweryfikowanego commita kodu/testu:** `70b3a6e19a32c4df0b1eccee4ce958e00afab215`
 
+## 11. Uzupełnienie: rzeczywiste nagrania DJI Action 2 / Osmo Action 6
+
+**Data sprawdzenia:** 2026-10-11. To uzupełnienie używa materiałów wskazanych przez użytkownika spoza kanonicznego zbioru benchmarkowego. Wyników tych nie użyto do porównania FPS z historycznym GoPro ani jako AMD A/B.
+
+### Inwentaryzacja MP4 i identyfikacja modeli
+
+Pliki odczytano metadanymi `ffprobe` (`-probesize 100M -analyzeduration 5,000,000`); nie dekodowano ani nie zapisywano źródeł. Model wynika z metadanych enkodera/kamery, nie z nazwy pliku.
+
+| Kamera z metadanych | MP4 | Timestamp `creation_time` (UTC) | Czas / FPS / wideo | Strumienie danych |
+|---|---|---|---|---|
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0010.MP4` | 2026-10-05 12:53:30Z | 172.843 s; 3840×2160 HEVC; 30000/1001 (29.97) | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0011.MP4` | 2026-10-05 13:22:26Z | 328.128 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0012.MP4` | 2026-10-05 13:27:57Z | 328.095 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0013.MP4` | 2026-10-05 13:33:25Z | 328.128 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0014.MP4` | 2026-10-05 13:38:53Z | 328.171 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Action 2 | `F:\GoPro\2026-10-05\DJI_0015.MP4` | 2026-10-05 13:44:21Z | 242.411 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi; AAC; GPS nieobecny; brak próbek IMU |
+| DJI Osmo Action 6 | `D:\Comparator\DJI_20261005062901_0004_D.MP4` | 2026-10-05 04:29:02Z | 1504.789 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi + tmcd; AAC; GPS nieobecny; parser nie zwrócił próbek IMU |
+| DJI Osmo Action 6 | `D:\Comparator\DJI_20261006062240_0005_D.MP4` | 2026-10-06 04:22:41Z | 1883.648 s; 3840×2160 HEVC; 29.97 FPS | DJMD + dbgi + tmcd; AAC; GPS nieobecny; parser nie zwrócił próbek IMU |
+
+W `D:\Comparator` sprawdzono także `GX010344.MP4` i `GX010345.MP4`: metadane firmware `H26.02.02.02.00` identyfikują GoPro HERO13 Black, a pliki zawierają strumień GPMF. `xxx.mp4` nie zawiera metadanych pozwalających ustalić model ani strumieni danych GPS/GPMF/DJMD. Nie są to nagrania DJI i nie włączono ich do poniższej tabeli AutoFIT.
+
+### Rzeczywiste nagrania — AutoFIT i SmartSync
+
+FIT-y znaleziono w istniejącym cache Garmin i dopasowanie potwierdzał także jego istniejący `video_index.json` (powiązanie aktywności z materiałem/ciągiem klipów). Do izolowanego cache testowego skopiowano wyłącznie te trzy powiązane FIT-y; źródłowy cache pozostał nietknięty. Dla Action 2 zachowano kolejność wszystkich sześciu plików. Nie wybierano aktywności na podstawie samej zbieżności dat.
+
+| Kamera | MP4 | Timestamp | GPS | IMU | Dopasowany FIT | AutoFIT | SmartSync | Status |
+|---|---|---|---|---|---|---|---|---|
+| DJI Action 2 | `DJI_0010.MP4` (172.843 s, 29.97 FPS) | 2026-10-05 12:53:30Z | brak | brak próbek | `24614281884.fit` (cache Garmin; indeks: sekwencja 6 klipów) | PASS — dopasowanie lokalne | BLOCKED — `NO_SPATIAL_MATCH` | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Action 2 | `DJI_0011.MP4` (328.128 s, 29.97 FPS) | 2026-10-05 13:22:26Z | brak | brak próbek | `24614281884.fit` (ta sama sekwencja) | PASS — w teście listy 6 klipów | BLOCKED — sekwencja bez walidacji przestrzennej | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Action 2 | `DJI_0012.MP4` (328.095 s, 29.97 FPS) | 2026-10-05 13:27:57Z | brak | brak próbek | `24614281884.fit` (ta sama sekwencja) | PASS — w teście listy 6 klipów | BLOCKED — sekwencja bez walidacji przestrzennej | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Action 2 | `DJI_0013.MP4` (328.128 s, 29.97 FPS) | 2026-10-05 13:33:25Z | brak | brak próbek | `24614281884.fit` (ta sama sekwencja) | PASS — w teście listy 6 klipów | BLOCKED — sekwencja bez walidacji przestrzennej | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Action 2 | `DJI_0014.MP4` (328.171 s, 29.97 FPS) | 2026-10-05 13:38:53Z | brak | brak próbek | `24614281884.fit` (ta sama sekwencja) | PASS — w teście listy 6 klipów | BLOCKED — sekwencja bez walidacji przestrzennej | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Action 2 | `DJI_0015.MP4` (242.411 s, 29.97 FPS) | 2026-10-05 13:44:21Z | brak | brak próbek | `24614281884.fit` (ta sama sekwencja) | PASS — w teście listy 6 klipów | BLOCKED — sekwencja bez walidacji przestrzennej | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Osmo Action 6 | `DJI_20261005062901_0004_D.MP4` (1504.789 s, 29.97 FPS) | 2026-10-05 04:29:02Z | brak | brak próbek | `24609739177.fit` (cache Garmin; powiązanie w indeksie) | PASS — dopasowanie lokalne | BLOCKED — `NO_SPATIAL_MATCH` | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+| DJI Osmo Action 6 | `DJI_20261006062240_0005_D.MP4` (1883.648 s, 29.97 FPS) | 2026-10-06 04:22:41Z | brak | brak próbek | `24621925414.fit` (cache Garmin; powiązanie w indeksie) | PASS — dopasowanie lokalne | BLOCKED — `NO_SPATIAL_MATCH` | Rzeczywisty materiał; sync przestrzenny niepotwierdzony |
+
+AutoFIT dla Action 2 dostał uporządkowaną listę wszystkich sześciu plików. Integracyjny harness SmartSync przyjmuje pojedynczy argument `--video`, dlatego dla Action 2 sprawdzono tylko reprezentatywny pierwszy plik; pełna walidacja SmartSync całej sekwencji jest **NOT TESTED**. W sprawdzonych przebiegach synchronizacji zwrócono `NO_SPATIAL_MATCH` i brak jawnej walidacji pliku `VALID`. Zgodność okien czasu MP4/FIT ani wynik AutoFIT nie dowodzą dokładnego offsetu SmartSync.
+
+### Parser DJI — rzeczywiste próbki
+
+- **Action 2:** capability probe rozpoznał model oraz schemat `dvtm_ac103`, ale podał `has_useful_telemetry=false` i pustą listę kanałów. Parser zwrócił 0 próbek gyro, accelerometer i quaternion. DJMD jest obecne, lecz w tych klipach obsługiwana ścieżka nie dostarcza użytecznej telemetrii ruchu.
+- **Action 6:** capability probe kończy się błędem `UnboundLocalError` w nieobsługiwanej gałęzi schematu. Główny loader przeszedł następnie rzeczywistą ścieżką fallback/worker i sparsował oba pliki. Zwrócił model `OsmoAction6` oraz metadane kamery, m.in. status EIS, współczynniki dystorsji i deklarowane `imu_sampling_rate`, ale 0 próbek gyro, accelerometer i quaternion. Zatem odczytano metadane kamery, nie telemetrię ruchu. Błąd capability probe pozostaje do naprawy w oddzielnym zadaniu.
+- Dla wszystkich klipów aplikacyjny wybór GPS wskazywał brak śladu kamery/GPMF; aktywność FIT była dostępnym źródłem śladu. To umożliwiło AutoFIT, ale nie dostarczyło ruchu z kamery do niezależnej walidacji przestrzennej.
+
+### Rzeczywiste a syntetyczne wyniki harnessu
+
+**Rzeczywiste:** metadane ośmiu DJI MP4, identyfikacja modeli, próby parsera, AutoFIT integracyjny dla sześcioklipowej listy Action 2 i dwóch klipów Action 6, oraz ścisła próba SmartSync dla reprezentatywnego Action 2 i obu Action 6. Testy działały z `LOCALAPPDATA`, `APPDATA` i `TELEM_CACHE_ROOT` skierowanymi do tymczasowego cache. Konfiguracja źródła aktywności była `none`; nie wykonywano pobierania z sieci. Źródłowe MP4, istniejący cache Garmin i audio pozostały nietknięte. Nie tworzono plików audio, ADTS ani remuxów.
+
+**Syntetyczne/jednostkowe:** `tests/test_autofit_no_gps_recovery.py`, `tests/test_auto_telemetry_preflight_suite.py`, `tests/test_dji_action2_capability_probe.py` i `tests/test_dji_telemetry.py` — **32 passed, 1 skipped**. Pokrywają stan komunikatów AutoFIT, brak GPS, wybór/Needs_selection oraz ścieżki parsera na przypadkach testowych. Testy offscreen potwierdzają callbacki i stan kontrolek, ale ich wizualna czytelność na ekranie jest **NOT TESTED**. W rzeczywistych przebiegach powyżej AutoFIT zwrócił konkretny lokalny match; `Needs_selection` nie wystąpił, bo dopasowania nie były niejednoznaczne.
+
+**Poza zakresem / NOT TESTED:** pixelowa zgodność preview z finalnym renderem i eksport na tych materiałach, czytelność na jasnym tle w GUI, pełna przestrzenna walidacja sekwencji Action 2 oraz odczyt danych GPS GPMF z dodatkowych plików GoPro. Nie wykonano benchmarku FPS. Te materiały DJI nie są porównywalne z historycznym GoPro workloadem i nie zmieniają werdyktu wydajności ETAPU 4.
+
+### Zmodyfikowane pliki i Git
+
+W tym uzupełnieniu zmieniono wyłącznie niniejszy raport. Kod, konfiguracje rendererów AMD/Intel/NVIDIA, układ użytkownika i źródła danych pozostały bez zmian. Przed edycją: gałąź `fix/gui-freeze-hud-composite`, HEAD `896775653782e56e18e71dc4e0f1aa33712746ca`; istniejące zmiany użytkownika to `M def_layout.json` i nieśledzony `Raporty/RAPORT_SPORTCAMHUD_FULL_REGRESSION_AUDIT_20261011.md`. Nie dodawano ich do tego zadania, nie tworzono commita ani nie wykonywano push.
+
+**Werdykt uzupełnienia:** AutoFIT z lokalnie powiązanymi FIT-ami **PASS** na obu modelach. Właściwa telemetria ruchu DJI **niedostępna** w badanych plikach. SmartSync **BLOCKED / NO_SPATIAL_MATCH**; dokładna synchronizacja **NOT PROVEN**. Testy syntetyczne i rzeczywiste są rozdzielone powyżej.
+

@@ -540,6 +540,7 @@ def _render_ruler(
     dynamic_key = _static_cache_key("ruler_h_dyn", static_key, value is None, marker_x, value_text, value_offset_x, value_offset_y)
     cached_dyn = _STATIC_CACHE.get(dynamic_key)
     if cached_dyn is not None:
+        cached_dyn._dynamic_key = dynamic_key
         return cached_dyn
 
     base_data = _STATIC_CACHE.get(static_key)
@@ -685,6 +686,7 @@ def _render_ruler(
                 bounds=(raster_w, height), anchor="ma",
             )
 
+    img._dynamic_key = dynamic_key
     _STATIC_CACHE[dynamic_key] = img
     return img
 
@@ -900,6 +902,7 @@ def _render_ruler_vertical(
     dynamic_key = _static_cache_key("ruler_v_dyn", static_key, missing, marker_y, value_text)
     cached_dyn = _STATIC_CACHE.get(dynamic_key)
     if cached_dyn is not None:
+        cached_dyn._dynamic_key = dynamic_key
         return cached_dyn
 
     base_data = _STATIC_CACHE.get(static_key)
@@ -1046,6 +1049,7 @@ def _render_ruler_vertical(
             bounds=(raster_w, raster_h), anchor="lm",
         )
 
+    img._dynamic_key = dynamic_key
     _STATIC_CACHE[dynamic_key] = img
     return img
 
@@ -2116,7 +2120,7 @@ def _render_bar_indicator(
                        fraction=normalized_fraction, formatted_val=formatted_text,
                        cache='HIT' if cached is not None else 'MISS')
     if cached is not None:
-        return cached, px_x, px_y, None
+        return cached.copy(), px_x, px_y, None
 
     style = str(cfg.get("bar_style", cfg.get("style", "ruler"))).strip().lower()
     # Legacy ``slope``/``grade``/``vertical_slope`` is NOT a separate style
@@ -2187,15 +2191,48 @@ def _render_bar_indicator(
         )
 
     ss = max(1, int(ss))
-    if ss > 1:
-        img = img.resize(
-            (max(1, int(round(img.width / ss))), max(1, int(round(img.height / ss)))),
-            Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
-        )
+    if ss > 1 and img is not None:
+        dyn_k = getattr(img, "_dynamic_key", None)
+        if dyn_k is not None:
+            downscaled_key = ("bar_downscale_v1", dyn_k, ss)
+            downscaled = _STATIC_CACHE.get(downscaled_key)
+            if downscaled is not None:
+                img = downscaled
+            else:
+                orig_dyn = dyn_k
+                out_w = max(1, int(round(img.width / ss)))
+                out_h = max(1, int(round(img.height / ss)))
+                try:
+                    import cv2
+                    import numpy as np
+                    arr = np.asarray(img)
+                    resized = cv2.resize(arr, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+                    img = Image.fromarray(resized)
+                except Exception:
+                    img = img.resize(
+                        (out_w, out_h),
+                        Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
+                    )
+                img._dynamic_key = orig_dyn
+                _STATIC_CACHE[downscaled_key] = img
+        else:
+            out_w = max(1, int(round(img.width / ss)))
+            out_h = max(1, int(round(img.height / ss)))
+            try:
+                import cv2
+                import numpy as np
+                arr = np.asarray(img)
+                resized = cv2.resize(arr, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+                img = Image.fromarray(resized)
+            except Exception:
+                img = img.resize(
+                    (out_w, out_h),
+                    Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
+                )
 
     # All annotations are local to the raster.  Returning ``None`` prevents the
     # compositor from drawing the legacy out-of-raster value/range labels a
     # second time.
     if img is not None:
-        _BAR_INDICATOR_CACHE[cache_key] = img
-    return img, px_x, px_y, None
+        _BAR_INDICATOR_CACHE[cache_key] = img.copy()
+    return (img.copy() if img is not None else None), px_x, px_y, None

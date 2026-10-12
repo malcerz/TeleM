@@ -652,6 +652,7 @@ def compose_overlay(
                     split_chart_keys=split_chart_keys,
                     map_heading=map_heading,
                     async_map=async_map,
+                    breakdown=breakdown,
                 )
             if breakdown is not None:
                 dt = (time.perf_counter_ns() - t_ind0) / 1_000_000.0

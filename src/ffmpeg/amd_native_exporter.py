@@ -4702,6 +4702,7 @@ def export_amd_native_d3d11(
         if gauge_gpu_active:
             capture_keys.add(gauge_layout_key)
             
+        _compose_breakdown: dict[str, float] = {}
         compose_start = time.perf_counter()
         composed_img = compose_overlay(
             canvas_w=video_width,
@@ -4714,10 +4715,13 @@ def export_amd_native_d3d11(
             split_chart_keys=(gpu_chart_keys if gpu_charts_split else None),
             reuse_canvas="below",
             _production_accounting_role="below",
+            breakdown=_compose_breakdown,
             **frame_kwargs
         )
         compose_elapsed_ms = (time.perf_counter() - compose_start) * 1000.0
         t_samples_p["compose_overlay"] = compose_elapsed_ms
+        for _bk, _bv in _compose_breakdown.items():
+            t_samples_p[f"widget.{_bk}"] = _bv
         _producer_stage("below_map_compose")
 
         # ETAP 2A DIAGNOSTIC (temporary, env-gated): dump compose ground truth
@@ -4850,6 +4854,7 @@ def export_amd_native_d3d11(
                         target_image=tile,
                         coordinate_origin=(cx, cy),
                         reuse_canvas=False,
+                        breakdown=_compose_breakdown,
                         **frame_kwargs,
                     )
                     rects = []
@@ -4922,9 +4927,13 @@ def export_amd_native_d3d11(
                     split_chart_keys=above_split_keys,
                     reuse_canvas=above_reuse,
                     _production_accounting_role="above",
+                    breakdown=_compose_breakdown,
                     **frame_kwargs,
                 )
                 above_compose_ms = (time.perf_counter() - above_compose_start) * 1000.0
+
+            for _bk, _bv in _compose_breakdown.items():
+                t_samples_p[f"widget.{_bk}"] = _bv
 
             if os.environ.get("AMD_PRODUCTION_ACCOUNTING", "0").strip().lower() in {"1", "true", "yes", "on"}:
                 record_production_accounting("above.compose_total", above_compose_ms)
@@ -4938,11 +4947,11 @@ def export_amd_native_d3d11(
                 # (compositor.py skips the CPU paste), so the gauge bbox lives
                 # in above_gpu_capture[key]["bbox"] — fall back to above_bboxes
                 # only if capture did not happen for any reason.
-                _g_cap_above = above_gpu_capture.get(gauge_layout_key)
+                _g_cap_above = above_gpu_capture.get(gauge_layout_key) or gpu_capture.get(gauge_layout_key)
                 if _g_cap_above is not None and "bbox" in _g_cap_above:
                     _g_bbox_above = _g_cap_above["bbox"]
                 else:
-                    _g_bbox_above = above_bboxes.get(gauge_layout_key)
+                    _g_bbox_above = above_bboxes.get(gauge_layout_key) or _bboxes.get(gauge_layout_key)
                 _after_chart_bboxes = {
                     k: above_bboxes[k]
                     for k in (gpu_chart_keys_after_map or set())
@@ -4959,8 +4968,9 @@ def export_amd_native_d3d11(
                 )
                 if not gauge_gpu_active:
                     # Fallback: gauge stays in CPU above_compose; remove from
-                    # above_capture_keys so it renders on CPU from the next frame.
+                    # capture keys so it renders on CPU from the next frame.
                     above_capture_keys.discard(gauge_layout_key)
+                    capture_keys.discard(gauge_layout_key)
 
             # ── ETAP 2E: one-shot GPU activation summary (frame 0) ─────────
             if idx == 0:
@@ -5249,9 +5259,7 @@ def export_amd_native_d3d11(
         # (the map moves underneath the erased gauge tile bbox).
         gauge_clear_only_frame = False
         if gauge_gpu_active:
-            # ETAP 2A: gauge is captured from map_above_layout (above_gpu_capture).
-            # above_gpu_capture is only populated when map_above_layout is not None.
-            _gauge_source = above_gpu_capture if (after_map_gauge_gpu and map_above_layout is not None) else gpu_capture
+            _gauge_source = above_gpu_capture if (gauge_layout_key in above_gpu_capture) else gpu_capture
             gauge_cap = _gauge_source.get(gauge_layout_key)
             if gauge_cap is not None and "image" in gauge_cap:
                 gauge_img = gauge_cap["image"]
@@ -5646,6 +5654,7 @@ def export_amd_native_d3d11(
             t_samples_p["PIL tobytes"] = (time.perf_counter() - tb_start) * 1000.0
         else:
             buffer_prep_start = time.perf_counter()
+            clamped_bboxes = dict(_bboxes)
             if full_upload:
                 hud_backing_array = np.array(composed_img, dtype=np.uint8, copy=True)
                 dirty_rects = []
@@ -5655,13 +5664,31 @@ def export_amd_native_d3d11(
                 rect_count = 1
             else:
                 bbox_start = time.perf_counter()
+                if idx > 0 and (idx % max(1, gauge_full_refresh_n) != 0):
+                    for _gk in list(clamped_bboxes.keys()):
+                        _ginfo = get_gauge_dynamic_info(_gk)
+                        if _ginfo and _ginfo.get("supported"):
+                            _nb, _tb = _ginfo.get("needle_bbox"), _ginfo.get("text_bbox")
+                            _sboxes = [_b for _b in [_nb, _tb] if _b is not None]
+                            if _sboxes:
+                                _orig_box = clamped_bboxes[_gk]
+                                _sx0 = min(_b[0] for _b in _sboxes)
+                                _sy0 = min(_b[1] for _b in _sboxes)
+                                _sx1 = max(_b[2] for _b in _sboxes)
+                                _sy1 = max(_b[3] for _b in _sboxes)
+                                clamped_bboxes[_gk] = (
+                                    _orig_box[0] + int(_sx0),
+                                    _orig_box[1] + int(_sy0),
+                                    int(_sx1 - _sx0),
+                                    int(_sy1 - _sy0),
+                                )
                 dirty_rects = _dirty_rects_from_bboxes(
-                    previous_bboxes_holder[0], _bboxes,
+                    previous_bboxes_holder[0], clamped_bboxes,
                     video_width, video_height, dirty_max_rects,
                 )
                 if after_map_chart_gpu and "dist_visual" in _bboxes:
-                    dv_rect = _bboxes["dist_visual"]
-                    if dv_rect not in dirty_rects:
+                    dv_rect = _clip_rect(_bboxes["dist_visual"], video_width, video_height, pad=0)
+                    if dv_rect is not None and dv_rect not in dirty_rects:
                         dirty_rects.append(dv_rect)
                 # ETAP 2A FIX: the AFTER-MAP GPU gauge erases the previous
                 # frame's FULL gauge tile bbox on the persistent HUD canvas
@@ -5688,12 +5715,18 @@ def export_amd_native_d3d11(
                         ey1 = max(t[1] + t[3] for t in _tiles)
                         for wx, wy, ww, wh in _bboxes.values():
                             if wx < ex1 and wy < ey1 and ex0 < wx + ww and ey0 < wy + wh:
-                                wr = (wx, wy, ww, wh)
-                                if wr not in dirty_rects:
+                                wr = _clip_rect((wx, wy, ww, wh), video_width, video_height, pad=0)
+                                if wr is not None and wr not in dirty_rects:
                                     dirty_rects.append(wr)
                     if gauge_tile_bbox is not None:
                         previous_gauge_tile_holder[0] = gauge_tile_bbox
                 t_samples_p["HUD dirty bbox"] = (time.perf_counter() - bbox_start) * 1000.0
+                clipped_dirty_rects = []
+                for _r in dirty_rects:
+                    _cr = _clip_rect(_r, video_width, video_height, pad=0)
+                    if _cr is not None and _cr not in clipped_dirty_rects:
+                        clipped_dirty_rects.append(_cr)
+                dirty_rects = clipped_dirty_rects
                 dirty_rect_slices = []
                 for rx, ry, rw, rh in dirty_rects:
                     slice_img = composed_img.crop((rx, ry, rx + rw, ry + rh))
@@ -5704,7 +5737,7 @@ def export_amd_native_d3d11(
                 persistent_copy_bytes = upload_bytes
                 rect_count = len(dirty_rects)
             t_samples_p["PIL/buffer preparation"] = (time.perf_counter() - buffer_prep_start) * 1000.0
-            previous_bboxes_holder[0] = dict(_bboxes)
+            previous_bboxes_holder[0] = dict(clamped_bboxes)
 
         if audit_allocs_enabled:
             t_samples_p["producer_alloc_blocks"] = float(sys.getallocatedblocks() - _aud_blocks0)
