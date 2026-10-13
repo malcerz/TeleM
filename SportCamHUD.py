@@ -45,6 +45,9 @@ from src.telemetry_extract import (  # noqa: E402
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     from src.gui.qt.application import main
 
     main()

@@ -178,6 +178,14 @@ class RenderMixin:
             queue = options.get("_export_queue")
             if job_id and queue is not None:
                 queue.notify_render_done(job_id, success=False, error_message="Najpierw wybierz plik wideo.")
+            from src.render_progress import RenderProgressState
+            fail_state = RenderProgressState(
+                generation_id=int(options.get("_render_generation_id", 0) or 0),
+                state="failed",
+                failed=True,
+                status_text="Błąd: brak pliku wideo",
+            )
+            self.signals.sig_render_state.emit(fail_state)
             return
 
         # Zapisz stan roboczy layoutu w sesji AppData (nigdy obok filmu).

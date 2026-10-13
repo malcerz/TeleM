@@ -2305,7 +2305,11 @@ class RenderTab(QWidget):
 
     def _build_options_from_gui(self) -> dict:
         """Zbierz bieżące opcje renderowania z kontrolek GUI."""
-        return {
+        ctrl = getattr(self, "_controller", None)
+        sources = [str(p) for p in (getattr(ctrl, "video_paths", None) or [])] if ctrl is not None else []
+        if not sources and ctrl is not None and getattr(ctrl, "video_path", None):
+            sources = [str(ctrl.video_path)]
+        opts = {
             "encoder": self.cmb_encoder.currentText(),
             "render_mode": self.cmb_render_mode.currentData() or "gpu",
             "resolution": self.cmb_resolution.currentText(),
@@ -2330,6 +2334,10 @@ class RenderTab(QWidget):
             "preserve_original_gpmf": self.chk_original_gpmf.isChecked(),
             "_gui_hud_preview_checkbox": self.chk_hud_preview.isChecked(),
         }
+        if sources:
+            opts["video_paths"] = sources
+            opts["video_path"] = sources[0]
+        return opts
 
     def _on_render(self) -> None:
         try:
@@ -2340,6 +2348,16 @@ class RenderTab(QWidget):
         except Exception:
             pass
         if self._rendering or self._cancelling:
+            return
+        ctrl = getattr(self, "_controller", None)
+        sources = list(getattr(ctrl, "video_paths", None) or []) if ctrl is not None else []
+        if not sources and ctrl is not None and getattr(ctrl, "video_path", None):
+            sources = [str(ctrl.video_path)]
+        if not sources:
+            QMessageBox.warning(self, "Eksport", "Brak wczytanego pliku wideo. Wczytaj wideo przed rozpoczęciem eksportu.")
+            return
+        if ctrl is not None and getattr(ctrl, "_preview_telemetry_loading", False):
+            QMessageBox.information(self, "Eksport", "Trwa wczytywanie telemetrii w tle. Poczekaj na zakończenie analizy.")
             return
         options = self._build_options_from_gui()
         raw_output = str(options.get("output") or "output_h265.mp4")
