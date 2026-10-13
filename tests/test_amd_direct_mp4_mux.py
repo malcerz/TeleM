@@ -364,16 +364,15 @@ def test_direct_mp4_mux_with_range_start_offset(tmp_path, monkeypatch):
     mux_cmds = [c for c in captured_cmds if "-f" in c and "hevc" in c]
     assert len(mux_cmds) == 1
     cmd = mux_cmds[0]
-    # Single-pass default: uses concat demuxer plan with timestamp anchoring
-    assert "-copyts" in cmd
-    assert "-avoid_negative_ts" in cmd
-    assert "make_zero" in cmd
-    assert "-f" in cmd
-    concat_idx = cmd.index("concat")
-    assert cmd[concat_idx - 1] == "-f"
-    assert "-safe" in cmd
-    # Full source MP4 is NOT passed directly as -i input #1
-    assert str(in_mp4) not in cmd
+    # Single-pass single-file: uses direct audio input with -ss and -thread_queue_size
+    # to avoid reading video packets sequentially through concat demuxer over USB.
+    assert "-ss" in cmd
+    ss_idx = cmd.index("-ss")
+    assert cmd[ss_idx + 1] == "120.000000"
+    assert cmd[ss_idx + 2] == "-i"
+    assert cmd[ss_idx + 3] == str(in_mp4)
+    assert "-thread_queue_size" in cmd
+    assert "concat" not in cmd
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,12 @@ def qapp():
     yield app
 
 
+@pytest.fixture(autouse=True)
+def mock_qmessagebox(monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+
+
 def test_render_progress_state_scope_is_global_not_cellvar():
     """Verify that RenderProgressState is not trapped in co_cellvars / co_varnames."""
     code = RenderMixin._on_render_requested.__code__

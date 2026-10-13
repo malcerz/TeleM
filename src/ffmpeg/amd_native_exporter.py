@@ -3392,8 +3392,8 @@ def export_amd_native_d3d11(
             else:
                 target_live_out = output_part_str
                 resolved_single_audio = input_file_str
-                audio_args: list[str] = ["-i", str(resolved_single_audio)]
-                if single_pass_av_mux:
+                audio_concat_path = None
+                if is_multi_file and single_pass_av_mux:
                     audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
                     clip0_local_start = 0.0
                     if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
@@ -3421,17 +3421,34 @@ def export_amd_native_d3d11(
                         # ``-t`` applies to the effective timeline rather
                         # than discarding the first ~N seconds.
                         "-copyts", "-avoid_negative_ts", "make_zero",
-                        "-f", "concat", "-safe", "0", "-i", str(audio_concat_path)
+                        "-f", "concat", "-safe", "0",
+                        "-thread_queue_size", "512",
+                        "-i", str(audio_concat_path)
                     ]
                     clip_count_info = getattr(video_timeline, "clip_count", 1) if video_timeline else 1
                     print(
-                        f"[AMD SINGLE-PASS A/V MUX] audio plan={audio_concat_path} "
+                        f"[AMD SINGLE-PASS A/V MUX] multi-file audio plan={audio_concat_path} "
                         f"clips={clip_count_info}", flush=True,
                     )
-                elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
-                    clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
+                else:
+                    clip0_local_start = 0.0
+                    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+                        clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
                     if clip0_local_start > 0.0:
-                        audio_args = ["-ss", f"{clip0_local_start:.6f}", "-i", str(resolved_single_audio)]
+                        audio_args = [
+                            "-thread_queue_size", "512",
+                            "-ss", f"{clip0_local_start:.6f}",
+                            "-i", str(resolved_single_audio)
+                        ]
+                    else:
+                        audio_args = [
+                            "-thread_queue_size", "512",
+                            "-i", str(resolved_single_audio)
+                        ]
+                    print(
+                        f"[AMD SINGLE-PASS A/V MUX] single-file direct audio={resolved_single_audio} "
+                        f"offset={clip0_local_start:.6f}s", flush=True,
+                    )
 
                 if os.getenv("AMD_DIRECT_MUX_NO_AUDIO", "0").strip() == "1":
                     from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
@@ -3440,6 +3457,7 @@ def export_amd_native_d3d11(
                         ffmpeg_exe, "-y",
                         "-f", video_raw_fmt,
                         "-r", f"{fps_num}/{fps_den}",
+                        "-thread_queue_size", "512",
                         "-i", "-",
                         *gpmf_inputs,
                         "-map", "0:v",
@@ -3457,6 +3475,7 @@ def export_amd_native_d3d11(
                         ffmpeg_exe, "-y",
                         "-f", video_raw_fmt,
                         "-r", f"{fps_num}/{fps_den}",
+                        "-thread_queue_size", "512",
                         "-i", "-",
                         *audio_args,
                         *gpmf_inputs,
@@ -7239,6 +7258,11 @@ def export_amd_native_d3d11(
             if kernel32.GetProcessTimes(h_proc_diag, ctypes.byref(c_t), ctypes.byref(e_t), ctypes.byref(k_t), ctypes.byref(u_t)):
                 prev_proc_cpu_time = k_t.to_100ns() + u_t.to_100ns()
 
+        last_activity_time = t_wait_start
+        last_known_read_b = entry_proc_read_b
+        last_known_write_b = entry_proc_write_b
+        last_known_size = prev_size
+
         while True:
             rc = proc_mux.poll()
             now = time.perf_counter()
@@ -7252,6 +7276,10 @@ def export_amd_native_d3d11(
                     cur_size = os.path.getsize(live_target)
             except OSError:
                 cur_size = 0
+
+            if cur_size > last_known_size:
+                last_known_size = cur_size
+                last_activity_time = now
 
             if now - t_last_diag >= 2.0:
                 dt_diag = now - t_last_diag
@@ -7271,6 +7299,12 @@ def export_amd_native_d3d11(
                         cur_write_b = io_cur.WriteTransferCount
                         delta_read_mb = (cur_read_b - entry_proc_read_b) / (1024.0 * 1024.0)
                         delta_write_mb = (cur_write_b - entry_proc_write_b) / (1024.0 * 1024.0)
+                        if cur_read_b > last_known_read_b:
+                            last_known_read_b = cur_read_b
+                            last_activity_time = now
+                        if cur_write_b > last_known_write_b:
+                            last_known_write_b = cur_write_b
+                            last_activity_time = now
                     c_t, e_t, k_t, u_t = _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME(), _WIN32_FILETIME()
                     if kernel32.GetProcessTimes(h_proc_diag, ctypes.byref(c_t), ctypes.byref(e_t), ctypes.byref(k_t), ctypes.byref(u_t)):
                         cur_cpu_ns = (k_t.to_100ns() + u_t.to_100ns()) * 100 # ns
@@ -7296,19 +7330,19 @@ def export_amd_native_d3d11(
                 )
                 t_last_diag = now
 
+            stall_s = now - last_activity_time
+            is_stalled = (rc is None) and (stall_s > 10.0)
+
             dt = now - prev_time
             if dt >= 0.2:
                 write_speed = (cur_size - prev_size) / (1024.0 * 1024.0) / dt if (dt > 0 and cur_size >= prev_size) else 0.0
-                if cur_size > prev_size:
-                    last_growth_time = now
                 prev_size = cur_size
                 prev_time = now
 
-                stall_s = now - last_growth_time
-                is_stalled = (rc is None) and (stall_s > 10.0)
-
+                elapsed_wait = now - t_wait_start
+                status_text = f"Finalizacja: zapis MP4 ({elapsed_wait:.0f}s)" if elapsed_wait >= 2.0 else "Finalizacja: zapis MP4"
                 progress_tracker.finalize(
-                    "Finalizacja: zapis MP4",
+                    status_text,
                     0.0,
                     progress_mode="indeterminate",
                     global_pct=94.0,
@@ -7321,9 +7355,14 @@ def export_amd_native_d3d11(
             if rc is not None:
                 break
 
-            if now - t_wait_start > adaptive_wait:
+            # Progress-aware watchdog: never terminate an actively reading/writing muxer.
+            # Only trigger on genuine stall (no read/write progress for stall_timeout)
+            # or hard ceiling safety limit (hard_max_wait).
+            stall_timeout = max(0.1, float(os.getenv("AMD_MUX_STALL_TIMEOUT", "45.0")))
+            hard_max_wait = max(600.0, duration_s * 2.0)
+            if (stall_s > stall_timeout) or (now - t_wait_start > hard_max_wait):
                 print(
-                    f"[AMD NATIVE D3D11] WARNING: Live muxer did not exit within {adaptive_wait:.1f}s, terminating...",
+                    f"[AMD NATIVE D3D11] WARNING: Live muxer watchdog triggered (elapsed={now - t_wait_start:.1f}s, stall={stall_s:.1f}s), terminating...",
                     flush=True,
                 )
                 proc_mux.kill()
