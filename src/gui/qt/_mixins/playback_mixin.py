@@ -66,6 +66,18 @@ class PlaybackMixin:
                     wid=str(int(self.mpv_widget.winId())),
                     **opts,
                 )
+                @self.mpv_player.property_observer("seekable")
+                def _on_mpv_seekable(_name, value):
+                    if value and getattr(self, "_mpv_pending_seek_s", None) is not None:
+                        target = self._mpv_pending_seek_s
+                        self._mpv_pending_seek_s = None
+                        self._source_transition_in_progress = False
+                        try:
+                            self.mpv_player.seek(target, reference="absolute+exact")
+                            if not getattr(self, "_playing", False):
+                                self.mpv_player.pause = True
+                        except Exception:
+                            pass
                 label = _vendor_label(vendor)
                 print(f"[Controller] MPV zinicjalizowany pomyślnie (GPU: {label}, "
                       f"hwdec={opts.get('hwdec','auto')})")
@@ -190,26 +202,33 @@ class PlaybackMixin:
                     self._mpv_pending_seek_s = target_local
                 else:
                     try:
+                        if hasattr(self.mpv_player, "wait_for_property"):
+                            try:
+                                self.mpv_player.wait_for_property("seekable", lambda v: v is True, timeout=0.1)
+                            except Exception:
+                                pass
                         self.mpv_player.seek(target_local, reference="absolute+exact")
                         if not self._playing:
                             self.mpv_player.pause = True
                     except Exception as e:
+                        self._mpv_pending_seek_s = target_local
                         print(f"[MPV Seek Error] {e}")
             else:
                 try:
                     if hasattr(self.mpv_player, "wait_for_property"):
                         try:
-                            self.mpv_player.wait_for_property("seekable", lambda v: v is True, timeout=0.5)
+                            self.mpv_player.wait_for_property("seekable", lambda v: v is True, timeout=0.2)
                         except Exception:
                             pass
                     self.mpv_player.seek(target_local, reference="absolute+exact")
                     if not self._playing:
                         self.mpv_player.pause = True
-                except Exception as e:
-                    print(f"[MPV Switch Seek Error] {e}")
-                finally:
                     self._source_transition_in_progress = False
                     self._mpv_pending_seek_s = None
+                except Exception as e:
+                    self._mpv_pending_seek_s = target_local
+                    self._source_transition_in_progress = True
+                    print(f"[MPV Switch Seek Error] {e}")
             self._render_preview(seconds)
             return
 

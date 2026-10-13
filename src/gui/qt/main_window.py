@@ -177,6 +177,9 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_controller") and self._controller:
                 if hasattr(self._controller, "refresh_preview_geometry_and_hud"):
                     self._controller.refresh_preview_geometry_and_hud()
+        else:
+            if hasattr(self, "preview") and self.preview and hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():
+                self.preview.hud_overlay.hide()
 
 
     def _connect_controller_signals(self) -> None:

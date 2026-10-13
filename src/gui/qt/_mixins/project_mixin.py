@@ -605,6 +605,9 @@ class ProjectMixin:
                     )
 
                 if self.is_using_mpv():
+                    self._source_transition_in_progress = True
+                    self._expected_source_path = str(candidate_video_path)
+                    self._mpv_pending_seek_s = 0.0
                     self.mpv_player.play(str(candidate_video_path))
                     self.mpv_player.pause = True
 
