@@ -172,81 +172,96 @@ class RenderMixin:
         if options.get("layout"):
             import copy
             self.layout = copy.deepcopy(options["layout"])
-        if not self.video_path:
-            self.signals.sig_error.emit("Najpierw wybierz plik wideo.")
-            job_id = options.get("_queue_job_id")
-            queue = options.get("_export_queue")
-            if job_id and queue is not None:
-                queue.notify_render_done(job_id, success=False, error_message="Najpierw wybierz plik wideo.")
-            from src.render_progress import RenderProgressState
+        if not self.video_path or not self.video_path.exists():
+            msg = "Najpierw wybierz plik wideo." if not self.video_path else f"Plik wideo nie istnieje:\n{self.video_path}"
             fail_state = RenderProgressState(
                 generation_id=int(options.get("_render_generation_id", 0) or 0),
                 state="failed",
                 failed=True,
-                status_text="Błąd: brak pliku wideo",
             )
             self.signals.sig_render_state.emit(fail_state)
+            self.signals.sig_error.emit(msg)
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_done(job_id, success=False, error_message=msg)
             return
-
-        # Zapisz stan roboczy layoutu w sesji AppData (nigdy obok filmu).
-        if hasattr(self, "_save_session_layout"):
-            self._save_session_layout()
-
-        encoder = str(options.get("encoder", "auto")).strip().lower()
-        if encoder == "auto":
-            try:
-                from src.ffmpeg import detect_best_encoder
-                encoder = detect_best_encoder().lower()
-            except Exception:
-                pass
-
-        if encoder in ("nv", "nvidia"):
-            codec = str(options.get("nvidia_codec", "HEVC"))
-            if "264" in codec or "AVC" in codec:
-                from src.gui.qt.mp4_inspector import inspect_mp4
-                from PySide6.QtWidgets import QMessageBox
-                import sys
-                try:
-                    info = inspect_mp4(self.video_path)
-                    color = info.get("color", {})
-                    vid = info.get("video", {})
-                    if color.get("is_hdr") or "10le" in vid.get("pix_fmt", "") or "hlg" in str(color).lower() or "bt2020" in str(color).lower():
-                        if "-test" not in sys.argv:
-                            QMessageBox.information(
-                                self,
-                                "Eksport SDR H.264",
-                                "H.264 zostanie wyeksportowany jako SDR 8-bit.\nHEVC lub AV1 zachowują 10-bit HDR/HLG."
-                            )
-                except Exception:
-                    pass
 
         generation_id = int(options.get("_render_generation_id", 0) or 0)
         if generation_id <= 0:
             generation_id = next_render_generation_id()
-        # Every export owns a new event.  A previous worker may still be
-        # draining while its terminal Qt signal is queued, so clearing a
-        # process-wide event is not sufficient isolation.
-        self._begin_render_cancel_session(generation_id)
-        self.render_process_holder = {}
-        self._render_generation_counter = max(
-            int(getattr(self, "_render_generation_counter", 0)), generation_id
-        )
-        self._active_render_generation_id = generation_id
-        self._last_export_qp = None
-        self._last_export_qp_generation_id = generation_id
-        self._render_session_start = time.monotonic()
-        self._render_primary_error = ""
-        self._render_cleanup_errors = []
-        self._render_latest_state = RenderProgressState(
-            generation_id=generation_id, state="running",
-        )
 
-        def emit_initial_state() -> None:
-            signal = getattr(self.signals, "sig_render_state", None)
-            if signal is not None:
-                signal.emit(self._render_latest_state)
+        try:
+            # Zapisz stan roboczy layoutu w sesji AppData (nigdy obok filmu).
+            if hasattr(self, "_save_session_layout"):
+                self._save_session_layout()
 
-        emit_initial_state()
+            encoder = str(options.get("encoder", "auto")).strip().lower()
+            if encoder == "auto":
+                try:
+                    encoder = detect_best_encoder().lower()
+                except Exception:
+                    pass
+
+            if encoder in ("nv", "nvidia"):
+                codec = str(options.get("nvidia_codec", "HEVC"))
+                if "264" in codec or "AVC" in codec:
+                    from src.gui.qt.mp4_inspector import inspect_mp4
+                    from PySide6.QtWidgets import QMessageBox
+                    import sys
+                    try:
+                        info = inspect_mp4(self.video_path)
+                        color = info.get("color", {})
+                        vid = info.get("video", {})
+                        if color.get("is_hdr") or "10le" in vid.get("pix_fmt", "") or "hlg" in str(color).lower() or "bt2020" in str(color).lower():
+                            if "-test" not in sys.argv:
+                                QMessageBox.information(
+                                    self,
+                                    "Eksport SDR H.264",
+                                    "H.264 zostanie wyeksportowany jako SDR 8-bit.\nHEVC lub AV1 zachowują 10-bit HDR/HLG."
+                                )
+                    except Exception:
+                        pass
+
+            # Every export owns a new event.  A previous worker may still be
+            # draining while its terminal Qt signal is queued, so clearing a
+            # process-wide event is not sufficient isolation.
+            self._begin_render_cancel_session(generation_id)
+            self.render_process_holder = {}
+            self._render_generation_counter = max(
+                int(getattr(self, "_render_generation_counter", 0)), generation_id
+            )
+            self._active_render_generation_id = generation_id
+            self._last_export_qp = None
+            self._last_export_qp_generation_id = generation_id
+            self._render_session_start = time.monotonic()
+            self._render_primary_error = ""
+            self._render_cleanup_errors = []
+            self._render_latest_state = RenderProgressState(
+                generation_id=generation_id, state="running",
+            )
+
+            def emit_initial_state() -> None:
+                signal = getattr(self.signals, "sig_render_state", None)
+                if signal is not None:
+                    signal.emit(self._render_latest_state)
+
+            emit_initial_state()
+        except Exception as setup_exc:
+            traceback.print_exc()
+            msg = f"Błąd przygotowania renderingu: {setup_exc}"
+            fail_state = RenderProgressState(
+                generation_id=generation_id,
+                state="failed",
+                failed=True,
+            )
+            self.signals.sig_render_state.emit(fail_state)
+            self.signals.sig_error.emit(msg)
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_done(job_id, success=False, error_message=msg)
+            return
 
         self._first_frame_emitted = False
 
@@ -791,10 +806,26 @@ class RenderMixin:
                     plan.cleanup()
                 print("[PROC] render thread exit", flush=True)
 
-        self.render_worker_thread = threading.Thread(
-            target=worker, daemon=False, name="TeleM-RenderWorker",
-        )
-        self.render_worker_thread.start()
+        try:
+            self.render_worker_thread = threading.Thread(
+                target=worker, daemon=False, name="TeleM-RenderWorker",
+            )
+            self.render_worker_thread.start()
+        except Exception as thread_exc:
+            traceback.print_exc()
+            msg = f"Nie można uruchomić wątku renderingu: {thread_exc}"
+            fail_state = RenderProgressState(
+                generation_id=generation_id,
+                state="failed",
+                failed=True,
+            )
+            self.signals.sig_render_state.emit(fail_state)
+            self.signals.sig_error.emit(msg)
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_done(job_id, success=False, error_message=msg)
+            return
 
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""

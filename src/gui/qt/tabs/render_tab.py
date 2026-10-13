@@ -2356,6 +2356,10 @@ class RenderTab(QWidget):
         if not sources:
             QMessageBox.warning(self, "Eksport", "Brak wczytanego pliku wideo. Wczytaj wideo przed rozpoczęciem eksportu.")
             return
+        if not all(Path(p).is_file() for p in sources):
+            missing = [p for p in sources if not Path(p).is_file()]
+            QMessageBox.warning(self, "Eksport", f"Wskazany plik wideo nie istnieje:\n{missing[0]}")
+            return
         if ctrl is not None and getattr(ctrl, "_preview_telemetry_loading", False):
             QMessageBox.information(self, "Eksport", "Trwa wczytywanie telemetrii w tle. Poczekaj na zakończenie analizy.")
             return
