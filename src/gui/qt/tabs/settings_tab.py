@@ -301,9 +301,15 @@ class SettingsTab(QWidget):
         if self._garmin_busy:
             return
         try:
+            import PySide6.QtWebEngineWidgets  # noqa: F401
+            import PySide6.QtWebEngineCore  # noqa: F401
+        except ImportError as exc:
+            self._update_garmin_status(f"Status: Brak Qt WebEngine ({exc}). Zainstaluj pełny pakiet PySide6.", "#ff5555")
+            return
+        try:
             from src.gui.qt.garmin_login import GarminLoginDialog
-        except ImportError:
-            self._update_garmin_status("Status: Brak Qt WebEngine. Zainstaluj pełny pakiet PySide6.", "#ff5555")
+        except Exception as exc:
+            self._update_garmin_status(f"Status: Błąd modułu logowania Garmin ({exc}).", "#ff5555")
             return
         self._set_garmin_busy(True)
         self.lbl_garmin_status.setText("Status: Oczekiwanie na logowanie na stronie Garmin…")
