@@ -60,26 +60,70 @@ def test_both_compass_modes_render_and_cache_independently():
     assert abs(points[:, 1].mean() - 120) < 3
 
 
-def test_rose_cardinals_follow_course_and_remain_upright(monkeypatch):
+def test_rose_final_raster_rotates_cardinals_and_keeps_needle_fixed(monkeypatch):
+    """Observe final pixels, using asymmetric colored glyph fiducials, no OCR."""
+    import math
+    import numpy as np
     from PIL import ImageDraw
     from tests.test_compass_rendering import _compass_cfg
     from src.indicators.gauge import _render_gauge_indicator, clear_gauge_cache, clear_compass_cache
-    calls = []
+    colors = {
+        "N": ((240, 20, 30), (130, 10, 20)),
+        "E": ((20, 240, 30), (10, 130, 20)),
+        "S": ((20, 30, 240), (10, 20, 130)),
+        "W": ((240, 20, 240), (130, 10, 130)),
+    }
     original = ImageDraw.ImageDraw.text
-    def capture(self, xy, text, *args, **kwargs):
-        if text in ("N", "E", "S", "W"):
-            calls.append((text, xy))
-        return original(self, xy, text, *args, **kwargs)
-    monkeypatch.setattr(ImageDraw.ImageDraw, "text", capture)
-    for heading in (0, 90, 180, 270, 359, 1):
+    def glyph_marker(draw, xy, text, *args, **kwargs):
+        if text not in colors:
+            return original(draw, xy, text, *args, **kwargs)
+        x, y = xy
+        # Two unequal/off-axis marks encode both identity and glyph orientation.
+        # Offset from the centerline keeps the stationary needle from hiding N.
+        head, tail = colors[text]
+        draw.rectangle((x + 7, y - 4, x + 13, y + 2), fill=(*head, 255))
+        draw.rectangle((x + 19, y + 8, x + 23, y + 12), fill=(*tail, 255))
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", glyph_marker)
+    cfg = _compass_cfg(
+        compass_rotation_mode="rose", compass_show_heading=False,
+        compass_needle_color="#FFFFFF", compass_ring_color="#808080",
+        compass_tick_color="#606060", shadow_enabled=False,
+    )
+    def render(heading):
         clear_gauge_cache()
         clear_compass_cache()
-        cfg = _compass_cfg(compass_rotation_mode="rose", compass_show_heading=False)
-        _render_gauge_indicator(1920,1080,{},"","compass",heading,"","",cfg,1080,1,18,None,0,360,0,10,100,1)
-        positions = dict(calls[-4:])
-        if heading in (0,90,180,270):
-            top = min(positions, key=lambda cardinal: positions[cardinal][1])
-            assert top == {0:"N",90:"E",180:"S",270:"W"}[heading]
+        image = _render_gauge_indicator(
+            1920, 1080, {}, "", "compass", heading, "", "", cfg,
+            1080, 0, 18, None, 0, 360, 0, 10, 100, 1,
+        )[0]
+        return np.asarray(image).copy()
+    def point(frame, rgb):
+        mask = np.all(frame[:, :, :3] == rgb, axis=2) & (frame[:, :, 3] == 255)
+        ys, xs = np.where(mask)
+        assert len(xs) >= 3, "Final raster lost a cardinal fiducial"
+        return np.array([xs.mean(), ys.mean()])
+    base = render(0)
+    center = np.array([(base.shape[1] - 1) / 2, (base.shape[0] - 1) / 2])
+    needle = np.all(base[:, :, :3] == 255, axis=2) & (base[:, :, 3] == 255)
+    assert needle.sum() > 20
+    for heading in (0, 30, 90, 180, 270, 359, 1, 360):
+        frame = render(heading)
+        theta = math.radians(heading)
+        rotation = np.array([[math.cos(theta), math.sin(theta)],
+                             [-math.sin(theta), math.cos(theta)]])
+        for cardinal, (head, tail) in colors.items():
+            for rgb in (head, tail):
+                expected = center + rotation @ (point(base, rgb) - center)
+                assert np.linalg.norm(point(frame, rgb) - expected) < 1.1
+            # The asymmetric glyph axis rotates with the dial, never upright.
+            expected_axis = rotation @ (point(base, tail) - point(base, head))
+            assert np.linalg.norm((point(frame, tail) - point(frame, head)) - expected_axis) < 1.1
+        actual_needle = np.all(frame[:, :, :3] == 255, axis=2) & (frame[:, :, 3] == 255)
+        assert np.array_equal(actual_needle, needle)
+    assert np.array_equal(render(360), base)
+    # Symmetric small steps around wrap have the same geometric displacement.
+    n_minus, n_zero, n_plus = [point(render(h), colors["N"][0]) for h in (359, 0, 1)]
+    assert abs(np.linalg.norm(n_minus - n_zero) - np.linalg.norm(n_plus - n_zero)) < 1.1
 
 
 def test_compass_preview_final_surface_parity_on_bright_background():
