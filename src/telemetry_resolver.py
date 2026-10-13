@@ -1339,6 +1339,21 @@ def resolve_samples_from_sources(
             fit_data=fit_data,
             gpx_track=list(getattr(gpx, "gpx_track_samples", []) or []),
         )
+    if source in ("auto", "default", ""):
+        if logical_field in ("heading", "compass"):
+            candidates = ("fit", "gpmf", "gpx")
+        elif logical_field in ("hr", "heart_rate", "cad", "cadence", "power", "battery", "battery_soc"):
+            candidates = ("fit", "gpx")
+        elif logical_field in ("iso", "exposure"):
+            candidates = ("gpmf",)
+        else:
+            candidates = ("fit", "gpmf", "gpx")
+        for cand in candidates:
+            res = resolve_samples_from_sources(logical_field, cand, gpmf=gpmf, fit_data=fit_data, gpx=gpx)
+            if res:
+                return res
+        return []
+
     if source == "gpmf":
         attr = _GPMF_ATTRS.get(logical_field)
         return (getattr(gpmf, attr, []) or []) if attr else []

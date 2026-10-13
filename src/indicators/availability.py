@@ -400,7 +400,9 @@ def indicator_data_available(
     elif field_name in ("dist", "distance", "track"):
         # For distance, FIT cumulative is preferred canonical, followed by GPMF, then GPX
         candidates = ("fit", "gpmf", "gpx")
-    elif field_name in ("speed", "alt", "temp", "atemp", "temperature", "heading", "compass", "slope"):
+    elif field_name in ("heading", "compass"):
+        candidates = ("fit", "gpmf", "gpx")
+    elif field_name in ("speed", "alt", "temp", "atemp", "temperature", "slope"):
         candidates = ("gpmf", "fit", "gpx")
     else:
         candidates = ("fit", "gpmf", "gpx", "camera")

@@ -884,7 +884,7 @@ def _effects_fields():
             FieldSchema(
                 prefix + "_fade", "float", label + ": zanikanie [%]", tab="Efekty",
                 min_val=0.0, max_val=100.0, step=1.0,
-                default=100.0 if prefix == "shadow" else 0.0,
+                default=1.0 if prefix == "shadow" else 0.0,
             ),
         ]
     fields += [

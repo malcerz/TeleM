@@ -53,8 +53,11 @@ def clear_compass_cache() -> None:
     _COMPASS_INDICATOR_CACHE.clear()
     _COMPASS_INDICATOR_CACHE.hits = 0
     _COMPASS_INDICATOR_CACHE.misses = 0
-    from src.indicators.effects import clear_effects_cache
-    clear_effects_cache()
+    try:
+        from src.indicators.effects import clear_effects_cache
+        clear_effects_cache()
+    except ImportError:
+        pass
 
 
 def clear_gauge_cache() -> None:
@@ -69,8 +72,11 @@ def clear_gauge_cache() -> None:
         _STATIC_CACHE.clear()
     if FONT_CACHE is not None:
         FONT_CACHE.clear()
-    from src.indicators.effects import clear_effects_cache
-    clear_effects_cache()
+    try:
+        from src.indicators.effects import clear_effects_cache
+        clear_effects_cache()
+    except ImportError:
+        pass
 def resolve_gauge_needle_width_px(
     logical_width: float | int,
     min_dim: int,
@@ -188,12 +194,13 @@ def _render_compass_indicator(
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
-    """Render the selected course-up rose or north-up rotating needle."""
+    """Render the selected course-up rose or north-up rotating needle with original dial and needle shadows."""
     ss = max(1, ss)
     radius = int(round(size_px * ss))
     img_size = int(round(radius * 2.4))
     cx = cy = img_size // 2
     ring_r = int(round(radius * 0.95))
+    out_size = max(1, int(round(img_size / ss)))
 
     heading_key = round(float(value), 1) if (value is not None and not bool(cfg.get("_compass_missing", False))) else None
     cfg_sig = tuple(sorted((str(k), str(v)) for k, v in cfg.items() if not str(k).startswith("_")))
@@ -221,6 +228,33 @@ def _render_compass_indicator(
     major_len = max(4, int(round(radius * (0.14 if pixel_profile else 0.10))))
     minor_len = max(2, int(round(radius * (0.065 if pixel_profile else 0.055))))
 
+    # Shadow parameters
+    shadow_enabled = bool(cfg.get("shadow_enabled", False))
+    s_dist_raw = cfg.get("shadow_distance", 3.0)
+    shadow_distance = float(s_dist_raw) if s_dist_raw is not None else 3.0
+    s_len_raw = cfg.get("shadow_length", 0.0)
+    shadow_length = float(s_len_raw) if s_len_raw is not None else 0.0
+    s_fade_raw = cfg.get("shadow_fade", 1.0)
+    s_fade_val = float(s_fade_raw) if s_fade_raw is not None else 1.0
+    shadow_fade = (s_fade_val / 100.0) if s_fade_val > 1.0 else max(0.0, min(1.0, s_fade_val))
+    s_op_raw = cfg.get("shadow_opacity", 0.7)
+    s_op_val = float(s_op_raw) if s_op_raw is not None else 0.7
+    shadow_opacity = (s_op_val / 100.0) if s_op_val > 1.0 else max(0.0, min(1.0, s_op_val))
+    s_blur_raw = cfg.get("shadow_blur", 2.0)
+    shadow_blur = float(s_blur_raw) if s_blur_raw is not None else 2.0
+    shadow_color = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
+    shadow_angle = float(cfg.get("shadow_angle", 45.0))
+
+    # Outline parameters
+    outline_enabled = bool(cfg.get("outline_enabled", False))
+    out_w_raw = cfg.get("outline_width", 2.0)
+    outline_width = float(out_w_raw) if out_w_raw is not None else 2.0
+    outline_color = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
+    out_op_raw = cfg.get("outline_opacity", 1.0)
+    out_op_val = float(out_op_raw) if out_op_raw is not None else 1.0
+    outline_opacity = (out_op_val / 100.0) if out_op_val > 1.0 else max(0.0, min(1.0, out_op_val))
+    outline_rgba = (*outline_color, int(round(outline_opacity * 255)))
+
     missing = bool(cfg.get("_compass_missing", False)) or value is None
     heading = None
     if not missing:
@@ -237,20 +271,43 @@ def _render_compass_indicator(
         # PIL's 0° points east; geographic 0° must point up.
         return math.radians(float(degrees) - 90.0)
 
-    static_key = _static_cache_key(
-        "compass_static_v1", img_size, radius, ring_r, font_path, fs, outline,
-        ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
-        tick_degrees, major_degrees, pixel_profile,
-        bool(cfg.get("compass_show_cardinals", True)), rose_heading,
-    )
+    compass_show_cardinals = bool(cfg.get("compass_show_cardinals", True))
+
+    if rotate_rose:
+        static_key = _static_cache_key(
+            "compass_rose_v4", out_size, img_size, radius, ring_r, font_path, fs, ss,
+            ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
+            tick_degrees, major_degrees, pixel_profile, compass_show_cardinals,
+            shadow_enabled, shadow_distance, shadow_length, shadow_fade, shadow_opacity, shadow_blur, shadow_color,
+            outline_enabled, outline_width, outline_color, outline_opacity, rose_heading,
+        )
+    else:
+        static_key = _static_cache_key(
+            "compass_static_v4", out_size, img_size, radius, ring_r, font_path, fs, ss,
+            ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
+            tick_degrees, major_degrees, pixel_profile, compass_show_cardinals,
+            shadow_enabled, shadow_distance, shadow_length, shadow_fade, shadow_opacity, shadow_blur, shadow_color,
+            outline_enabled, outline_width, outline_color, outline_opacity,
+        )
+
     img = _STATIC_CACHE.get(static_key)
     if img is None:
-        img = Image.new("RGBA", (img_size, img_size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        draw.ellipse(
+        dial_buf = Image.new("RGBA", (img_size, img_size), (0, 0, 0, 0))
+        draw_dial = ImageDraw.Draw(dial_buf)
+
+        # Outer ring
+        if outline_enabled and outline_width > 0:
+            ow_ring = max(1, int(round(outline_width * ss)))
+            draw_dial.ellipse(
+                (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
+                outline=outline_rgba, width=ring_width + 2 * ow_ring,
+            )
+        draw_dial.ellipse(
             (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
             outline=(*ring_rgb, 235), width=ring_width,
         )
+
+        # Ticks
         for degrees in range(0, 360, tick_degrees):
             angle = screen_angle(degrees - rose_heading)
             major = degrees % major_degrees == 0
@@ -261,50 +318,174 @@ def _render_compass_indicator(
             y1 = cy + math.sin(angle) * inner
             x2 = cx + math.cos(angle) * outer
             y2 = cy + math.sin(angle) * outer
+            t_width = major_width if major else tick_width
             if pixel_profile:
-                width = max(1, int(round((tick_width * (1.35 if major else 0.75)))))
-                draw.line((round(x1), round(y1), round(x2), round(y2)),
-                          fill=(*tick_rgb, 245), width=width)
-            else:
-                draw.line((x1, y1, x2, y2), fill=(*tick_rgb, 245), width=major_width if major else tick_width)
+                t_width = max(1, int(round((tick_width * (1.35 if major else 0.75)))))
 
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            pdx = -sin_a
+            pdy = cos_a
+            hw = t_width / 2.0
+            tick_poly = [
+                (x1 + pdx * hw, y1 + pdy * hw),
+                (x1 - pdx * hw, y1 - pdy * hw),
+                (x2 - pdx * hw, y2 - pdy * hw),
+                (x2 + pdx * hw, y2 + pdy * hw),
+            ]
+            if outline_enabled and outline_width > 0:
+                ow = outline_width * ss
+                hw_out = hw + ow
+                x1_out, y1_out = x1 - cos_a * ow, y1 - sin_a * ow
+                x2_out, y2_out = x2 + cos_a * ow, y2 + sin_a * ow
+                outer_tick_poly = [
+                    (x1_out + pdx * hw_out, y1_out + pdy * hw_out),
+                    (x1_out - pdx * hw_out, y1_out - pdy * hw_out),
+                    (x2_out - pdx * hw_out, y2_out - pdy * hw_out),
+                    (x2_out + pdx * hw_out, y2_out + pdy * hw_out),
+                ]
+                draw_dial.polygon(outer_tick_poly, fill=outline_rgba)
+            draw_dial.polygon(tick_poly, fill=(*tick_rgb, 245))
+
+        # Cardinals N, E, S, W
         compass_font = load_font(font_path, max(8, int(round(fs * ss))))
-        if cfg.get("compass_show_cardinals", True):
+        if compass_show_cardinals:
             label_radius = ring_r - int(round(radius * 0.22))
+            c_stroke_w = max(1, int(round(outline_width * ss))) if outline_enabled and outline_width > 0 else max(1, outline * ss // 2)
+            c_stroke_fill = outline_rgba if outline_enabled and outline_width > 0 else (0, 0, 0, 230)
             for degrees, text in ((0, "N"), (90, "E"), (180, "S"), (270, "W")):
                 angle = screen_angle(degrees - rose_heading)
                 tx = cx + math.cos(angle) * label_radius
                 ty = cy + math.sin(angle) * label_radius
-                draw.text((tx, ty), text, font=compass_font, anchor="mm",
-                          fill=(*cardinal_rgb, 255), stroke_width=max(1, outline * ss // 2),
-                          stroke_fill=(0, 0, 0, 230))
-        _STATIC_CACHE[static_key] = img
+                c_fill = (*cardinal_rgb, 255)
+                draw_dial.text((tx, ty), text, font=compass_font, anchor="mm",
+                               fill=c_fill, stroke_width=c_stroke_w, stroke_fill=c_stroke_fill)
+
+        # Dial Drop-Shadow (ticks, ring, cardinals)
+        if shadow_enabled and shadow_opacity > 0.0:
+            s_dist = int(round(shadow_distance * ss))
+            s_len = int(round(shadow_length * ss))
+            alpha = dial_buf.getchannel("A")
+            if shadow_blur > 0 and ImageFilter is not None:
+                alpha = alpha.filter(ImageFilter.GaussianBlur(radius=max(0.5, shadow_blur * ss)))
+            s_rad = math.radians(shadow_angle)
+            cos_sa = math.cos(s_rad)
+            sin_sa = math.sin(s_rad)
+            if s_len <= 0:
+                cur_alpha = alpha.point(lambda x: int(round(x * shadow_opacity)))
+                shadow = Image.new("RGBA", dial_buf.size, (*shadow_color, 0))
+                shadow.putalpha(cur_alpha)
+                comp = Image.new("RGBA", dial_buf.size, (0, 0, 0, 0))
+                off_x = int(round(s_dist * cos_sa)) if shadow_angle != 45.0 else s_dist
+                off_y = int(round(s_dist * sin_sa)) if shadow_angle != 45.0 else s_dist
+                comp.paste(shadow, (off_x, off_y), shadow)
+                comp.alpha_composite(dial_buf)
+                dial_buf = comp
+            else:
+                steps = max(1, min(30, s_len))
+                trail_alpha = Image.new("L", dial_buf.size, 0)
+                for k in range(steps + 1):
+                    fraction = k / steps
+                    w = shadow_opacity * max(0.0, 1.0 - shadow_fade * fraction)
+                    cur_alpha = alpha.point(lambda a, w=w: int(round(a * w)))
+                    reach = s_dist + fraction * s_len
+                    off_x = int(round(reach * cos_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    off_y = int(round(reach * sin_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    shifted = Image.new("L", dial_buf.size, 0)
+                    shifted.paste(cur_alpha, (off_x, off_y))
+                    trail_alpha = ImageChops.lighter(trail_alpha, shifted)
+                shadow = Image.new("RGBA", dial_buf.size, (*shadow_color, 0))
+                shadow.putalpha(trail_alpha)
+                comp = Image.new("RGBA", dial_buf.size, (0, 0, 0, 0))
+                comp.alpha_composite(shadow)
+                comp.alpha_composite(dial_buf)
+                dial_buf = comp
+
+        if ss > 1:
+            dial_buf = dial_buf.resize((out_size, out_size), Image.LANCZOS)
+        _STATIC_CACHE[static_key] = dial_buf
+        img = dial_buf
 
     img = img.copy()
     draw = ImageDraw.Draw(img)
 
-    if heading is not None:
-        angle = screen_angle(0.0 if rotate_rose else heading)
-        needle_tip = int(round(ring_r * float(cfg.get("compass_needle_length", 0.62))))
-        needle_base = max(2, int(round(ring_r * 0.08)))
-        px = -math.sin(angle)
-        py = math.cos(angle)
-        tip_x = cx + math.cos(angle) * needle_tip
-        tip_y = cy + math.sin(angle) * needle_tip
-        base_x = cx + math.cos(angle) * needle_base
-        base_y = cy + math.sin(angle) * needle_base
-        half_width = max(2, int(round(float(cfg.get("compass_needle_width", 3.0)) * ss)))
-        draw.polygon([
+    # Coordinates in output space
+    _cx = out_size // 2
+    _cy = out_size // 2
+    ring_r_out = int(round(ring_r / ss))
+
+    # Dynamic needle
+    needle_angle = screen_angle(0.0 if rotate_rose else heading) if heading is not None else None
+    if needle_angle is not None:
+        needle_tip = int(round(ring_r_out * float(cfg.get("compass_needle_length", 0.62))))
+        needle_base = max(2, int(round(ring_r_out * 0.08)))
+        px = -math.sin(needle_angle)
+        py = math.cos(needle_angle)
+        tip_x = _cx + math.cos(needle_angle) * needle_tip
+        tip_y = _cy + math.sin(needle_angle) * needle_tip
+        base_x = _cx + math.cos(needle_angle) * needle_base
+        base_y = _cy + math.sin(needle_angle) * needle_base
+        half_width = max(1.5, float(cfg.get("compass_needle_width", 3.0)))
+        marker_radius = max(2, int(round(float(cfg.get("compass_marker_size", 4.0)))))
+        pts = [
             (base_x + px * half_width, base_y + py * half_width),
             (base_x - px * half_width, base_y - py * half_width),
             (tip_x, tip_y),
-        ], fill=(*needle_rgb, 255))
-        marker_radius = max(2, int(round(float(cfg.get("compass_marker_size", 4.0)) * ss)))
-        draw.ellipse((cx - marker_radius, cy - marker_radius,
-                      cx + marker_radius, cy + marker_radius),
-                     fill=(*needle_rgb, 255), outline=(*ring_rgb, 255),
-                     width=max(1, ss))
+        ]
 
+        # Needle shadow
+        if shadow_enabled and shadow_opacity > 0.0:
+            s_dist_out = shadow_distance
+            s_len_out = shadow_length
+            s_rad = math.radians(shadow_angle)
+            cos_sa = math.cos(s_rad)
+            sin_sa = math.sin(s_rad)
+            if s_len_out <= 0:
+                off_x = int(round(s_dist_out * cos_sa)) if shadow_angle != 45.0 else int(round(s_dist_out))
+                off_y = int(round(s_dist_out * sin_sa)) if shadow_angle != 45.0 else int(round(s_dist_out))
+                shad_a = int(round(shadow_opacity * 255))
+                if shad_a > 0:
+                    draw.polygon([(p[0] + off_x, p[1] + off_y) for p in pts], fill=(*shadow_color, shad_a))
+                    draw.ellipse((_cx + off_x - marker_radius, _cy + off_y - marker_radius,
+                                  _cx + off_x + marker_radius, _cy + off_y + marker_radius),
+                                 fill=(*shadow_color, shad_a))
+            else:
+                steps = max(1, min(30, int(round(s_len_out))))
+                for step in range(steps, -1, -1):
+                    frac = step / steps
+                    reach = s_dist_out + s_len_out * frac
+                    off_x = int(round(reach * cos_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    off_y = int(round(reach * sin_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    w = shadow_opacity * max(0.0, 1.0 - shadow_fade * frac)
+                    shad_a = int(round(w * 255))
+                    if shad_a > 0:
+                        draw.polygon([(p[0] + off_x, p[1] + off_y) for p in pts], fill=(*shadow_color, shad_a))
+                        draw.ellipse((_cx + off_x - marker_radius, _cy + off_y - marker_radius,
+                                      _cx + off_x + marker_radius, _cy + off_y + marker_radius),
+                                     fill=(*shadow_color, shad_a))
+
+        # Needle outline
+        if outline_enabled and outline_width > 0:
+            ow = outline_width
+            hw_out = half_width + ow
+            out_pts = [
+                (base_x + px * hw_out, base_y + py * hw_out),
+                (base_x - px * hw_out, base_y - py * hw_out),
+                (tip_x + math.cos(needle_angle) * ow, tip_y + math.sin(needle_angle) * ow),
+            ]
+            draw.polygon(out_pts, fill=outline_rgba)
+            draw.ellipse((_cx - marker_radius - ow, _cy - marker_radius - ow,
+                          _cx + marker_radius + ow, _cy + marker_radius + ow),
+                         fill=outline_rgba)
+
+        # Needle core
+        draw.polygon(pts, fill=(*needle_rgb, 255))
+        draw.ellipse((_cx - marker_radius, _cy - marker_radius,
+                      _cx + marker_radius, _cy + marker_radius),
+                     fill=(*needle_rgb, 255), outline=(*ring_rgb, 255),
+                     width=1)
+
+    # Dynamic Heading Text
     if cfg.get("compass_show_heading", cfg.get("show_value", True)):
         if heading is not None:
             fmt = str(cfg.get("compass_heading_format", "03d")).strip()
@@ -312,13 +493,41 @@ def _render_compass_indicator(
             heading_text = formatted_val if formatted_val is not None else f"{h_str}°"
         else:
             heading_text = formatted_val if formatted_val is not None else "--°"
-        heading_font = load_font(font_path, max(8, int(round(fs * 0.78 * ss))))
-        draw.text((cx, cy + int(round(radius * 0.34))), heading_text,
-                  font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
-                  stroke_width=max(1, outline * ss // 2), stroke_fill=(0, 0, 0, 230))
+        heading_font = load_font(font_path, max(8, int(round(fs * 0.78))))
+        tx = _cx
+        ty = _cy + int(round(ring_r_out * 0.36))
 
-    if ss > 1:
-        img = img.resize((max(1, int(round(img_size / ss))), max(1, int(round(img_size / ss)))), Image.LANCZOS)
+        if shadow_enabled and shadow_opacity > 0.0:
+            s_dist_out = shadow_distance
+            s_len_out = shadow_length
+            s_rad = math.radians(shadow_angle)
+            cos_sa = math.cos(s_rad)
+            sin_sa = math.sin(s_rad)
+            if s_len_out <= 0:
+                off_x = int(round(s_dist_out * cos_sa)) if shadow_angle != 45.0 else int(round(s_dist_out))
+                off_y = int(round(s_dist_out * sin_sa)) if shadow_angle != 45.0 else int(round(s_dist_out))
+                shad_a = int(round(shadow_opacity * 255))
+                if shad_a > 0:
+                    draw.text((tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
+                              fill=(*shadow_color, shad_a))
+            else:
+                steps = max(1, min(30, int(round(s_len_out))))
+                for step in range(steps, -1, -1):
+                    frac = step / steps
+                    reach = s_dist_out + s_len_out * frac
+                    off_x = int(round(reach * cos_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    off_y = int(round(reach * sin_sa)) if shadow_angle != 45.0 else int(round(reach))
+                    w = shadow_opacity * max(0.0, 1.0 - shadow_fade * frac)
+                    shad_a = int(round(w * 255))
+                    if shad_a > 0:
+                        draw.text((tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
+                                  fill=(*shadow_color, shad_a))
+
+        t_stroke_w = max(1, int(round(outline_width))) if outline_enabled and outline_width > 0 else max(1, outline // 2)
+        t_stroke_fill = outline_rgba if outline_enabled and outline_width > 0 else (0, 0, 0, 230)
+        draw.text((tx, ty), heading_text, font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
+                  stroke_width=t_stroke_w, stroke_fill=t_stroke_fill)
+
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     if opacity < 1.0:
         alpha = img.getchannel("A").point(lambda a: int(round(a * opacity)))

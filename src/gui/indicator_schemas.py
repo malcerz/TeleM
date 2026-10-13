@@ -59,6 +59,8 @@ def get_value_schema() -> list[tuple]:
         ("needle_length", "float", 0.1, 2.0, 0.05),
         ("needle_width", "int", 2, 20, 1),
         ("needle_color", "color", None, None, None),
+        ("shadow_length", "float", 0.0, 50.0, 0.5),
+        ("shadow_fade", "float", 0.0, 1.0, 0.05),
     ]
 
 
