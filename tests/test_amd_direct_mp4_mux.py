@@ -28,6 +28,63 @@ from src.ffmpeg.amd_native_exporter import (
 from src.ffmpeg.gpmf_export import InlineGpmfPlan
 
 
+@pytest.fixture(autouse=True)
+def isolated_mux_platform(monkeypatch, request):
+    """Unit mocks must never open OS named pipes or probe dummy media."""
+    if request.node.name == "test_direct_mp4_mux_lifecycle_multi_file":
+        return  # separate legacy fixture owns its platform mocks
+    import ctypes
+    kernel = MagicMock()
+    kernel.CreateNamedPipeW.return_value = 123
+    kernel.ConnectNamedPipe.return_value = 1
+    kernel.ReadFile.return_value = 0
+    kernel.GetLastError.return_value = 109  # clean pipe EOF
+    kernel.OpenProcess.return_value = 0
+    monkeypatch.setattr(ctypes.windll, "kernel32", kernel)
+    monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda *args: {
+        "streams": [{"codec_type": "video", "nb_frames": "30"}, {"codec_type": "audio"}]
+    })
+
+
+def install_mux_popen(monkeypatch, fake_popen):
+    """Only the live mux process may create its output .part.
+
+    Capability probes use subprocess.run too; routing those to the mux mock
+    creates a stale partial output before the exporter even reaches preflight.
+    """
+    real_popen = subprocess.Popen
+    def dispatch(cmd, *args, **kwargs):
+        if kwargs.get("stdin") == subprocess.PIPE and any(fmt in cmd for fmt in ("hevc", "h264", "obu")):
+            return fake_popen(cmd, *args, **kwargs)
+        return real_popen(cmd, *args, **kwargs)
+    monkeypatch.setattr(subprocess, "Popen", dispatch)
+
+
+def test_preexisting_partial_is_preserved_before_native_create(tmp_path, monkeypatch):
+    """An old partial output must never be overwritten by a fresh mux."""
+    from src.ffmpeg.render_errors import MuxError
+    dll = MagicMock()
+    dll.telem_amd_get_abi_version.return_value = AMD_NATIVE_ABI_VERSION
+    dll.telem_amd_get_build_info.return_value = b"ABI 9"
+    monkeypatch.setattr("ctypes.CDLL", lambda *args, **kwargs: dll)
+    output = tmp_path / "protected.mp4"
+    partial = tmp_path / "protected.mp4.part"
+    partial.write_bytes(b"previous recoverable export")
+    with pytest.raises(MuxError) as raised:
+        export_amd_native_d3d11(
+            ffmpeg_exe="ffmpeg", input_files=[str(tmp_path / "source.mp4")],
+            output_file=str(output), duration_s=1.0, video_width=1920,
+            video_height=1080, start_dt_utc=None, tz_offset_hours=0.0,
+            speed_samples=[], track_samples=[], alt_samples=[], font_path="",
+            layout={}, field_samples={},
+        )
+    assert raised.value.code == "PARTIAL_OUTPUT_EXISTS"
+    assert raised.value.stage == "preflight_output"
+    assert partial.read_bytes() == b"previous recoverable export"
+    assert not output.exists()
+    dll.telem_amd_create.assert_not_called()
+
+
 def test_canonical_audio_plan_uses_effective_source_local_ranges(tmp_path):
     """The live A/V mux receives the same retained clip bounds as native video."""
     from types import SimpleNamespace
@@ -148,9 +205,6 @@ def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch, with_gpmf):
     created_targets = []
     def fake_create(in_p, out_p, w, h, fn, fd):
         created_targets.append(out_p)
-        if out_p.startswith(r"\\.\pipe"):
-            with open(out_p + ".h265", "wb") as f:
-                f.write(b"fake hevc packets")
         return 12345
     mock_dll.telem_amd_create.side_effect = fake_create
 
@@ -171,7 +225,7 @@ def test_direct_mp4_mux_lifecycle_single_file(tmp_path, monkeypatch, with_gpmf):
         Path(part_file).write_bytes(b"dummy valid mp4 container content")
         return mock_proc
 
-    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    install_mux_popen(monkeypatch, fake_popen)
     monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda exe, path: {
         "streams": [{"codec_type": "video", "nb_frames": "30"}, {"codec_type": "audio"}]
     })
@@ -247,9 +301,6 @@ def test_direct_mp4_mux_with_range_start_offset(tmp_path, monkeypatch):
     mock_dll.telem_amd_close.return_value = 1
 
     def fake_create(in_p, out_p, w, h, fn, fd):
-        if out_p.startswith(r"\\.\pipe"):
-            with open(out_p + ".h265", "wb") as f:
-                f.write(b"fake hevc packets")
         return 12345
     mock_dll.telem_amd_create.side_effect = fake_create
 
@@ -268,7 +319,7 @@ def test_direct_mp4_mux_with_range_start_offset(tmp_path, monkeypatch):
         Path(part_file).write_bytes(b"dummy valid mp4")
         return mock_proc
 
-    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    install_mux_popen(monkeypatch, fake_popen)
     monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda exe, path: {
         "streams": [{"codec_type": "video", "nb_frames": "60"}, {"codec_type": "audio"}]
     })
@@ -280,10 +331,13 @@ def test_direct_mp4_mux_with_range_start_offset(tmp_path, monkeypatch):
     mock_clip.local_end_s = 180.0
     mock_clip.duration_s = 60.0
     mock_clip.source_duration_s = 600.0
+    mock_clip.global_start_s = 0.0
+    mock_clip.global_end_s = 60.0
 
     mock_timeline = MagicMock()
     mock_timeline.clip_count = 1
     mock_timeline.clips = [mock_clip]
+    mock_timeline.project_duration_s = 60.0
     mock_timeline.output_frame_counts.return_value = [1800]
     mock_timeline.frame_to_activity_elapsed.return_value = 0.0
     mock_timeline.frame_to_clip.return_value = (0, 0.0)
@@ -355,9 +409,6 @@ def test_direct_mp4_mux_single_file_legacy_fallback_ss_offset(tmp_path, monkeypa
     mock_dll.telem_amd_close.return_value = 1
 
     def fake_create(in_p, out_p, w, h, fn, fd):
-        if out_p.startswith(r"\\.\pipe"):
-            with open(out_p + ".h265", "wb") as f:
-                f.write(b"fake hevc packets")
         return 12345
     mock_dll.telem_amd_create.side_effect = fake_create
 
@@ -376,7 +427,7 @@ def test_direct_mp4_mux_single_file_legacy_fallback_ss_offset(tmp_path, monkeypa
         Path(part_file).write_bytes(b"dummy valid mp4")
         return mock_proc
 
-    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    install_mux_popen(monkeypatch, fake_popen)
     monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda exe, path: {
         "streams": [{"codec_type": "video", "nb_frames": "60"}, {"codec_type": "audio"}]
     })
@@ -387,10 +438,13 @@ def test_direct_mp4_mux_single_file_legacy_fallback_ss_offset(tmp_path, monkeypa
     mock_clip.local_end_s = 180.0
     mock_clip.duration_s = 60.0
     mock_clip.source_duration_s = 600.0
+    mock_clip.global_start_s = 0.0
+    mock_clip.global_end_s = 60.0
 
     mock_timeline = MagicMock()
     mock_timeline.clip_count = 1
     mock_timeline.clips = [mock_clip]
+    mock_timeline.project_duration_s = 60.0
     mock_timeline.output_frame_counts.return_value = [1800]
     mock_timeline.frame_to_activity_elapsed.return_value = 0.0
     mock_timeline.frame_to_clip.return_value = (0, 0.0)
@@ -457,9 +511,6 @@ def test_direct_mp4_mux_failure_propagation(tmp_path, monkeypatch):
     mock_dll.telem_amd_close.return_value = 1
 
     def fake_create(in_p, out_p, w, h, fn, fd):
-        if out_p.startswith(r"\\.\pipe"):
-            with open(out_p + ".h265", "wb") as f:
-                f.write(b"fake hevc packets")
         return 12345
     mock_dll.telem_amd_create.side_effect = fake_create
 
@@ -477,31 +528,35 @@ def test_direct_mp4_mux_failure_propagation(tmp_path, monkeypatch):
         Path(part_file).write_bytes(b"broken partial content")
         return mock_proc
 
-    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    install_mux_popen(monkeypatch, fake_popen)
 
-    res = export_amd_native_d3d11(
-        ffmpeg_exe="ffmpeg",
-        input_files=[str(in_mp4)],
-        output_file=str(out_mp4),
-        duration_s=1.0,
-        video_width=1920,
-        video_height=1080,
-        start_dt_utc=None,
-        tz_offset_hours=0.0,
-        speed_samples=[],
-        track_samples=[],
-        alt_samples=[],
-        font_path="",
-        layout={},
-        field_samples={},
-    )
+    from src.ffmpeg.render_errors import MuxError
+    with pytest.raises(MuxError) as raised:
+        export_amd_native_d3d11(
+            ffmpeg_exe="ffmpeg",
+            input_files=[str(in_mp4)],
+            output_file=str(out_mp4),
+            duration_s=1.0,
+            video_width=1920,
+            video_height=1080,
+            start_dt_utc=None,
+            tz_offset_hours=0.0,
+            speed_samples=[],
+            track_samples=[],
+            alt_samples=[],
+            font_path="",
+            layout={},
+            field_samples={},
+        )
 
-    # Must propagate failure (False)
-    assert res is False
+    # Typed errors carry recovery context and bypass software fallback.
+    assert raised.value.code == "FFMPEG_EXIT_1"
+    assert raised.value.stage == "live_mux"
     # Original target file must remain intact
     assert out_mp4.read_bytes() == b"ORIGINAL VALID CONTENT - DO NOT DESTROY"
-    # Temporary .part must be cleaned up
-    assert not (tmp_path / "protected_target.mp4.part").exists()
+    # Failed mux preserves its partial artifact for recovery; explicit user
+    # cancellation has a separate cleanup contract.
+    assert (tmp_path / "protected_target.mp4.part").read_bytes() == b"broken partial content"
 
 
 # ---------------------------------------------------------------------------
@@ -534,9 +589,6 @@ def test_direct_mp4_mux_user_cancellation(tmp_path, monkeypatch):
     mock_dll.telem_amd_close.return_value = 1
 
     def fake_create(in_p, out_p, w, h, fn, fd):
-        if out_p.startswith(r"\\.\pipe"):
-            with open(out_p + ".h265", "wb") as f:
-                f.write(b"fake hevc packets")
         return 12345
     mock_dll.telem_amd_create.side_effect = fake_create
 
@@ -552,7 +604,7 @@ def test_direct_mp4_mux_user_cancellation(tmp_path, monkeypatch):
         Path(part_file).write_bytes(b"partial video while cancelling")
         return mock_proc
 
-    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    install_mux_popen(monkeypatch, fake_popen)
 
     cancel_ev = threading.Event()
     cancel_ev.set()  # Pre-set cancel event

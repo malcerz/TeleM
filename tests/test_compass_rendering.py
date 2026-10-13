@@ -195,7 +195,7 @@ def test_compass_gui_schema_exposes_common_and_compass_specific_controls():
     names = {field.name for field in compass_indicator_fields()}
     for name in (
         "x", "y", "size", "rotation", "opacity", "font_size",
-        "field", "source", "gauge_style", "compass_tick_degrees",
+        "source", "form", "compass_rotation_mode", "compass_tick_degrees",
         "compass_tick_color", "compass_needle_color", "compass_cardinal_color",
         "compass_show_heading",
     ):

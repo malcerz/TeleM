@@ -141,7 +141,7 @@ def test_etap2a_fix_exporter_runs_clears_before_hud_upload():
     exporter = (
         ROOT / "src" / "ffmpeg" / "amd_native_exporter.py"
     ).read_text(encoding="utf-8")
-    consumer = exporter[exporter.index("def _consume_prepared_frame("):]
+    consumer = exporter[exporter.index("def _consume_prepared_frame_impl("):]
     clears_call = consumer.index("telem_amd_run_early_clears(h_context)")
     hud_call = consumer.index("telem_amd_update_hud_regions(", clears_call)
     process_call = consumer.index("telem_amd_process_frame(", hud_call)
@@ -166,7 +166,7 @@ def test_etap2a_fix_force_reuploads_below_widgets_under_erase_region():
     ).read_text(encoding="utf-8")
     builder = exporter[
         exporter.index("def _prepare_frame_cpu("):
-        exporter.index("def _consume_prepared_frame(")
+        exporter.index("def _consume_prepared_frame_impl(")
     ]
     marker = "# ETAP 2A FIX: the AFTER-MAP GPU gauge erases the previous"
     force_idx = builder.index(marker)

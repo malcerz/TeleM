@@ -183,11 +183,11 @@ def test_render_tab_controls_integration(qapp):
     # Restoring quality
     rt.set_amd_encoder_quality("QUALITY")
     assert rt.cmb_amd_quality.currentData() == "QUALITY"
-    assert rt.cmb_amd_quality.currentText() == "Quality"
+    assert rt.cmb_amd_quality.currentText() == "Jakość"
 
     rt.set_amd_encoder_quality("FAST")
     assert rt.cmb_amd_quality.currentData() == "FAST"
-    assert rt.cmb_amd_quality.currentText() == "Fast"
+    assert rt.cmb_amd_quality.currentText() == "Szybki"
 
     # Bitrate
     rt.edit_bitrate.setValue(20)
@@ -235,11 +235,14 @@ def test_output_dialog_prefill_logic(qapp, monkeypatch):
     assert captured_paths[-1] == abs_path
     assert rt._last_output_dir == r"C:\Videos"
 
-    # 2. Filename only after previous dir was set
+    # Filename-only uses the configured global export directory, not the
+    # directory remembered by the previous dialog (see export_paths policy).
+    from pathlib import Path
+    monkeypatch.setattr(rt, "resolve_default_export_dir", lambda: Path(r"C:\Exports"))
     rt.edit_output.setText("NextRide.mp4")
     rt._select_output()
-    assert captured_paths[-1] == os.path.join(r"C:\Videos", "NextRide.mp4")
-    assert rt._last_output_dir == r"C:\Videos"
+    assert captured_paths[-1] == os.path.join(r"C:\Exports", "NextRide.mp4")
+    assert rt._last_output_dir == r"C:\Exports"
 
 
 def test_amd_encoder_resolution_gate(qapp, monkeypatch):

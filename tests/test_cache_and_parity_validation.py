@@ -68,10 +68,14 @@ def test_2_value_change_repeating_previous_key():
         cw, ch, {"indicators": {"g": cfg}}, "", "g", 10.0, "km/h", "Speed",
         cfg, 1080, 0, 16, None, 0, 100, 10, 1.0, 200, 1, formatted_val="10.0"
     )
+    # Gauge returns its reusable canvas. Snapshot each frame at consumption
+    # time, before the next render mutates that canvas.
+    img_10_a = img_10_a.copy()
     img_90, _, _, _ = _render_gauge_indicator(
         cw, ch, {"indicators": {"g": cfg}}, "", "g", 90.0, "km/h", "Speed",
         cfg, 1080, 0, 16, None, 0, 100, 10, 1.0, 200, 1, formatted_val="90.0"
     )
+    img_90 = img_90.copy()
     img_10_b, _, _, _ = _render_gauge_indicator(
         cw, ch, {"indicators": {"g": cfg}}, "", "g", 10.0, "km/h", "Speed",
         cfg, 1080, 0, 16, None, 0, 100, 10, 1.0, 200, 1, formatted_val="10.0"

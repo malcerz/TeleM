@@ -60,7 +60,7 @@ def _render(cfg, value, canvas=(1280, 720), formatted=None):
     return _render_bar_indicator(
         w, h, {"global": {}, "indicators": {"probe": cfg}}, "",
         "probe", value, cfg.get("unit", ""), cfg.get("label", "TEST"), cfg,
-        min(w, h), 2, max(8, round(20.0 / 100.0 * h)), None,
+        min(w, h), 2, max(8, round(float(cfg.get("font_size", 1.2)) / 100.0 * h)), None,
         float(cfg["min_val"]), float(cfg["max_val"]),
         int(cfg.get("ticks", 0)), int(cfg.get("thickness", 2)),
         round(cfg.get("size", 20.0) / 100.0 * w), 1,

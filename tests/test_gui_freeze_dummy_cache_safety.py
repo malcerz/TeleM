@@ -142,11 +142,14 @@ def test_complete_cache_after_prewarm(tmp_path):
     th = RenderPreparationService._prewarm_thread
     if th is not None:
         th.join(timeout=10.0)
+        assert not th.is_alive(), "Prewarm did not finish"
 
     cache_key = RenderPreparationService.compute_cache_key(
         video_paths=options["video_paths"],
         total_frames=total_frames,
         target_fps=fps,
+        start_dt_utc=base_dt,
+        layout=layout,
     )
 
     ready_cache = RenderPreparationService.get_ready_cache_nonblocking(cache_key, base_cache_dir=tmp_path)
