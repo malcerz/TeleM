@@ -277,17 +277,21 @@ class WidgetRenderCache:
     def clear(self) -> None:
         self.instances.clear()
 
-    def get_or_render(
+    def _get_or_render_impl(
         self,
         instance_key: str,
         renderer_type: str,
         compute_sig_fn: Callable[[], tuple],
         render_fn: Callable[[], tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]],
         raw_value: Any = None,
+        *,
+        _borrowed: bool = False,
     ) -> tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]:
-        """Look up cached raster by signature or render and store if missing/changed."""
+        """Internal ownership-aware lookup; borrowed producers must be read-only."""
+        from src.indicators.raster_ownership import owned_render_result
         if not self.enabled or renderer_type not in self.supported_renderers:
-            return render_fn()
+            result = render_fn()
+            return result if _borrowed else owned_render_result(result)
 
         t_look0 = time.perf_counter_ns()
         sig = compute_sig_fn()
@@ -308,7 +312,7 @@ class WidgetRenderCache:
         if inst.last_signature is not None and inst.last_signature == sig and inst.last_result is not None:
             inst.stats.hits += 1
             inst.stats.lookup_ns_total += time.perf_counter_ns() - t_look0
-            return inst.last_result
+            return inst.last_result if _borrowed else owned_render_result(inst.last_result)
 
         # Cache Miss (visual state changed or first render)
         inst.stats.misses += 1
@@ -320,8 +324,25 @@ class WidgetRenderCache:
         inst.stats.render_ns_total += time.perf_counter_ns() - t_rend0
 
         inst.last_signature = sig
-        inst.last_result = result
-        return result
+        inst.last_result = result if _borrowed else owned_render_result(result)
+        return inst.last_result if _borrowed else owned_render_result(inst.last_result)
+
+    def get_or_render(
+        self, instance_key, renderer_type, compute_sig_fn, render_fn, raw_value=None,
+    ):
+        """Public owned result; both producer input and caller output are isolated."""
+        return self._get_or_render_impl(
+            instance_key, renderer_type, compute_sig_fn, render_fn, raw_value,
+        )
+
+    def get_or_render_borrowed(self, *args, **kwargs):
+        """Internal read-only result for audited immutable raster producers.
+
+        Producer inputs and returned images/metadata must never be modified.
+        Hold the returned tuple until consumption finishes. Public consumers
+        must use get_or_render instead. Session enable policy is unchanged.
+        """
+        return self._get_or_render_impl(*args, **kwargs, _borrowed=True)
 
     def get_stats(self) -> dict[str, Any]:
         total_hits = sum(i.stats.hits for i in self.instances.values())

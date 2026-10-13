@@ -15,7 +15,7 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
-from src.indicators.bar import _render_bar_indicator
+from src.indicators.bar import _render_bar_indicator, _render_bar_indicator_borrowed
 from src.indicators.chart import _render_chart_indicator
 from src.indicators.gauge import _render_gauge_indicator
 from src.indicators.helpers import load_font, s
@@ -48,6 +48,7 @@ def _render_value_indicator(
     split_chart_keys: Optional[set[str]] = None,
     map_heading: Optional[float] = None,
     async_map: bool = False,
+    _borrowed_bar: bool = False,
     **kwargs: Any,
 ) -> tuple[Optional[Image.Image], int, int, Optional[dict[str, Any]]]:
     """Render a single telemetry indicator – dispatcher to per-form helpers."""
@@ -102,6 +103,7 @@ def _render_value_indicator(
     if form == "text":
         return _render_text_indicator(**_kwargs, formatted_val=formatted_val)
     elif form in ("bar", "segment_bar"):
+        render_bar = _render_bar_indicator_borrowed if _borrowed_bar else _render_bar_indicator
         if form == "segment_bar" and "bar_style" not in cfg:
             cfg["bar_style"] = "segments"
         style = str(cfg.get("bar_style", "ruler")).strip().lower()
@@ -127,14 +129,15 @@ def _render_value_indicator(
                     font_path=font_path,
                     key=key,
                 )
-            return cache.get_or_render(
+            cache_render = cache.get_or_render_borrowed if _borrowed_bar else cache.get_or_render
+            return cache_render(
                 instance_key=key,
                 renderer_type=renderer_type,
                 compute_sig_fn=_sig_fn,
-                render_fn=lambda: _render_bar_indicator(**_kwargs, formatted_val=formatted_val),
+                render_fn=lambda: render_bar(**_kwargs, formatted_val=formatted_val),
                 raw_value=value,
             )
-        return _render_bar_indicator(**_kwargs, formatted_val=formatted_val)
+        return render_bar(**_kwargs, formatted_val=formatted_val)
     elif form in ("gauge", "compass"):
         if form == "compass" and "gauge_style" not in cfg:
             cfg["gauge_style"] = "compass"
@@ -175,11 +178,17 @@ def _render_value_indicator(
 
 
 @wraps(_render_value_indicator)
-def render_value_indicator(*args, **kwargs):
-    """Apply the shared effects after the canonical per-form renderer."""
+def render_value_indicator_borrowed(*args, **kwargs):
+    """Internal compositor access: Bar/effects/cache outputs are read-only.
+
+    Effects read their source alpha and compose into separate destinations;
+    rotated_paste modifies only the HUD destination. Never expose these tiles
+    to callers that may edit them.
+    """
     breakdown = kwargs.get("breakdown")
     key = kwargs.get("key", args[4] if len(args) > 4 else "")
     t_base0 = time.perf_counter_ns() if breakdown is not None else 0
+    kwargs["_borrowed_bar"] = True
     result = _render_value_indicator(*args, **kwargs)
     if breakdown is not None and key:
         t_base_ms = (time.perf_counter_ns() - t_base0) / 1_000_000.0
@@ -187,7 +196,7 @@ def render_value_indicator(*args, **kwargs):
 
     image, x, y, extra = result
     layout = kwargs.get("layout", args[2] if len(args) > 2 else {})
-    cfg = kwargs.get("cfg_override") or layout.get("indicators", {}).get(key, {})
+    cfg = kwargs.get("cfg_override", args[8] if len(args) > 8 else None) or layout.get("indicators", {}).get(key, {})
     if cfg.get("form") in ("gauge", "compass"):
         return result
     from src.indicators.effects import effects_enabled, apply_indicator_effects
@@ -205,3 +214,16 @@ def render_value_indicator(*args, **kwargs):
         x -= pad
         y -= pad
     return styled, x, y, extra
+
+
+@wraps(_render_value_indicator)
+def render_value_indicator(*args, **kwargs):
+    """Public dispatcher: caller-owned Bar tile including its effects."""
+    result = render_value_indicator_borrowed(*args, **kwargs)
+    key = kwargs.get("key", args[4] if len(args) > 4 else "")
+    layout = kwargs.get("layout", args[2] if len(args) > 2 else {})
+    cfg = kwargs.get("cfg_override", args[8] if len(args) > 8 else None) or layout.get("indicators", {}).get(key, {})
+    if cfg.get("form", "text") in {"bar", "segment_bar", "SUWAK"}:
+        from src.indicators.raster_ownership import owned_render_result
+        return owned_render_result(result)
+    return result

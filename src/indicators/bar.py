@@ -2014,12 +2014,15 @@ def clear_bar_cache() -> None:
         _STATIC_CACHE.clear()
 
 
-def _render_bar_indicator(
+def _render_bar_indicator_borrowed(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
     formatted_val=None,
 ):
-    """Render a TeleM bar indicator.
+    """Render a read-only cache-owned Bar tile for audited internal consumers.
+
+    Never mutate the returned image. Cache eviction does not invalidate a
+    retained Python reference; rendering later values does not edit this tile.
 
     Supported configuration keys (all optional):
 
@@ -2231,3 +2234,17 @@ def _render_bar_indicator(
         img._dynamic_key = dyn_k
         return img, px_x, px_y, None
     return None, px_x, px_y, None
+
+
+def _render_bar_indicator(
+    canvas_w, canvas_h, layout, font_path, key, value, unit, label,
+    cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
+    formatted_val=None,
+):
+    """Return a caller-owned Bar tile; edits never change a cached raster."""
+    from src.indicators.raster_ownership import owned_render_result
+    return owned_render_result(_render_bar_indicator_borrowed(
+        canvas_w, canvas_h, layout, font_path, key, value, unit, label,
+        cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness,
+        size_px, ss, formatted_val=formatted_val,
+    ))

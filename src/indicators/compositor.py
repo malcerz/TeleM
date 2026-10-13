@@ -19,7 +19,7 @@ except ImportError:
 
 from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
-from src.indicators.dispatcher import render_value_indicator
+from src.indicators.dispatcher import render_value_indicator_borrowed as render_value_indicator
 from src.indicators.helpers import (
     indicator_font_path, load_font, s, parse_hex_color,
     resolve_indicator_font_path,
