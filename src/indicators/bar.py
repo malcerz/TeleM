@@ -1061,15 +1061,6 @@ _SEG_ACTIVE_CACHE = _BoundedStaticCache(max_entries=128)
 _SEG_ICON_CACHE = _BoundedStaticCache(max_entries=16)
 
 
-def clear_bar_cache() -> None:
-    """Clear all segment and ruler static/dynamic caches."""
-    _SEG_BASE_CACHE.clear()
-    _SEG_ACTIVE_CACHE.clear()
-    _SEG_ICON_CACHE.clear()
-    if _STATIC_CACHE is not None:
-        _STATIC_CACHE.clear()
-
-
 def _get_seg_icon(icon_name: str | None, icon_size: int) -> Optional[Image.Image]:
     if not icon_name or icon_name == "none":
         return None
