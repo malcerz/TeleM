@@ -300,6 +300,69 @@ def resolve_local_fit(
     return result if return_diagnostics else result[0]
 
 
+def format_activity_filename(candidate: Any, ext: str) -> str:
+    """Zwróć nazwę pliku w formacie YYYY-MM-DD_HH-MM-SS.ext odpowiadającą rzeczywistemu czasowi startu aktywności."""
+    raw = getattr(candidate, "raw_data", {}) or {}
+    local_str = raw.get("startTimeLocal") or raw.get("start_date_local")
+    if local_str:
+        s = str(local_str).replace("T", " ").replace("Z", "").strip()
+        try:
+            dt = datetime.fromisoformat(s)
+            return dt.strftime("%Y-%m-%d_%H-%M-%S") + ext
+        except Exception:
+            pass
+    start_dt = getattr(candidate, "start_dt", None)
+    if start_dt is not None:
+        return start_dt.strftime("%Y-%m-%d_%H-%M-%S") + ext
+    return datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ext
+
+
+def persist_downloaded_telemetry(
+    downloaded_file: Path,
+    candidate: Any,
+    video_paths: list[Path | str],
+) -> Path:
+    """Trwale zapisz pobrany plik FIT/GPX w folderze źródłowego wideo jako YYYY-MM-DD_HH-MM-SS."""
+    if not video_paths:
+        return downloaded_file
+    video_dir = Path(video_paths[0]).parent
+    if not video_dir.exists():
+        return downloaded_file
+
+    ext = downloaded_file.suffix.lower() or (".fit" if getattr(candidate, "provider", "") == "garmin" else ".gpx")
+    target_name = format_activity_filename(candidate, ext)
+    target_path = video_dir / target_name
+
+    try:
+        if target_path.resolve() == downloaded_file.resolve():
+            return target_path
+    except Exception:
+        pass
+
+    if target_path.exists():
+        try:
+            # Bezpieczna logika: jeśli plik o tej nazwie już istnieje i ma ten sam rozmiar, zachowaj go bez niszczenia
+            if target_path.stat().st_size == downloaded_file.stat().st_size and target_path.stat().st_size > 0:
+                print(f"[AutoPreflight] Plik docelowy {target_path.name} już istnieje i jest zgodny rozmiarowo.", flush=True)
+                return target_path
+            # Jeżeli plik o tej nazwie istnieje i różni się treścią, uniknij zniszczenia danych dodając id aktywności
+            act_id = getattr(candidate, "activity_id", "")
+            target_path = video_dir / f"{target_path.stem}_{act_id}{ext}"
+            if target_path.exists() and target_path.stat().st_size == downloaded_file.stat().st_size:
+                return target_path
+        except Exception:
+            pass
+
+    import shutil
+    try:
+        shutil.copy2(downloaded_file, target_path)
+        print(f"[AutoPreflight] Zapisano trwale plik telemetrii obok wideo: {target_path}", flush=True)
+        return target_path
+    except Exception as exc:
+        print(f"[AutoPreflight] Błąd zapisu telemetrii obok wideo ({target_path}): {exc}", flush=True)
+        return downloaded_file
+
+
 def run_auto_telemetry_preflight(
     video_paths: list[Path | str],
     config: dict[str, Any],
@@ -367,38 +430,9 @@ def run_auto_telemetry_preflight(
     if is_cancelled():
         return None
 
-    # 2. Local search in configured and video folders
+    # 2. Local search strictly in source MP4 directory (non-recursive, no AppData, no external paths)
     parent_dir = Path(video_paths[0]).parent
-    
     search_dirs = [parent_dir]
-    
-    cfg_tel_dir = config.get("telemetry_dir")
-    if cfg_tel_dir:
-        p = Path(cfg_tel_dir)
-        if p.exists() and p.is_dir() and p not in search_dirs:
-            search_dirs.append(p)
-
-    # Previously downloaded provider activities are valid local candidates too;
-    # rank them by the same timestamp rules rather than requiring an old
-    # video-to-cache association to exist.
-    for provider_name in ("garmin", "strava"):
-        try:
-            cached_dir = remote_cache.get_provider_cache_dir(provider_name)
-        except Exception:
-            continue
-        if cached_dir.is_dir() and cached_dir not in search_dirs:
-            search_dirs.append(cached_dir)
-            
-    import psutil
-    for part in psutil.disk_partitions(all=False):
-        if 'cdrom' in part.opts or part.fstype == '':
-            continue
-        p1 = Path(part.mountpoint) / "Garmin" / "Activities"
-        if p1.exists() and p1.is_dir() and p1 not in search_dirs:
-            search_dirs.append(p1)
-        p2 = Path(part.mountpoint) / "Garmin" / "Activity"
-        if p2.exists() and p2.is_dir() and p2 not in search_dirs:
-            search_dirs.append(p2)
             
     local_ranked: list[tuple[ActivityCandidate, float]] = []
     for search_dir in search_dirs:
@@ -611,11 +645,13 @@ def run_auto_telemetry_preflight(
             if is_cancelled():
                 return None
 
+            persisted_file = persist_downloaded_telemetry(downloaded_file, best_cand, video_paths)
+
             remote_cache.save_cached_video_telemetry(
                 video_paths,
                 "garmin",
                 best_cand.activity_id,
-                downloaded_file,
+                persisted_file,
                 metadata={
                     "name": best_cand.name,
                     "sport_type": best_cand.sport_type,
@@ -624,9 +660,9 @@ def run_auto_telemetry_preflight(
                     "start_dt": best_cand.start_dt.isoformat(),
                 },
             )
-            on_status(f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", f"Znaleziono dopasowaną aktywność: {downloaded_file.name}", str(downloaded_file))
-            print(f"[AutoPreflight] Garmin FIT downloaded successfully: {downloaded_file.name}", flush=True)
-            return downloaded_file
+            on_status(f"Znaleziono dopasowaną aktywność: {persisted_file.name}", f"Znaleziono dopasowaną aktywność: {persisted_file.name}", str(persisted_file))
+            print(f"[AutoPreflight] Garmin FIT downloaded successfully: {persisted_file.name}", flush=True)
+            return persisted_file
 
         except Exception as exc:
             err_str = str(exc).lower()
@@ -719,11 +755,13 @@ def run_auto_telemetry_preflight(
             if is_cancelled():
                 return None
 
+            persisted_file = persist_downloaded_telemetry(downloaded_file, best_cand, video_paths)
+
             remote_cache.save_cached_video_telemetry(
                 video_paths,
                 "strava",
                 best_cand.activity_id,
-                downloaded_file,
+                persisted_file,
                 metadata={
                     "name": best_cand.name,
                     "sport_type": best_cand.sport_type,
@@ -733,9 +771,9 @@ def run_auto_telemetry_preflight(
                 },
             )
 
-            on_status("Strava GPX gotowy ✓", f"Gotowe — {downloaded_file.name}", str(downloaded_file))
-            print(f"[AutoPreflight] Strava GPX created successfully: {downloaded_file.name}", flush=True)
-            return downloaded_file
+            on_status("Strava GPX gotowy ✓", f"Gotowe — {persisted_file.name}", str(persisted_file))
+            print(f"[AutoPreflight] Strava GPX created successfully: {persisted_file.name}", flush=True)
+            return persisted_file
 
         except Exception as exc:
             err_str = str(exc).lower()

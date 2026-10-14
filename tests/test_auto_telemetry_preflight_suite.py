@@ -234,8 +234,8 @@ def test_garmin_starts_after_local_miss(qapp, tmp_path):
         tab.set_video_paths([str(video)], start_search=True)
         assert _wait_for_condition(lambda: bool(tab._fit_path))
 
-        assert tab._fit_path == str(downloaded_fit.resolve())
-        assert "555666.fit" in tab.btn_telemetry.text()
+        assert tab._fit_path == str((tmp_path / "2026-10-02_08-00-00.fit").resolve())
+        assert "2026-10-02_08-00-00.fit" in tab.btn_telemetry.text()
         assert tab.btn_telemetry.text().endswith("✓")
     tab.close()
 
@@ -276,7 +276,7 @@ def test_strava_starts_after_local_miss(qapp, tmp_path):
         tab.set_video_paths([str(video)], start_search=True)
         assert _wait_for_condition(lambda: bool(tab._gpx_path))
 
-        assert tab._gpx_path == str(downloaded_gpx.resolve())
+        assert tab._gpx_path == str((tmp_path / "2026-10-02_08-00-00.gpx").resolve())
         assert tab.btn_telemetry.text().endswith("✓")
     tab.close()
 
@@ -407,7 +407,7 @@ def test_multifile_one_search(qapp, tmp_path):
             provider_override=provider_mock,
         )
 
-        assert result == downloaded
+        assert result == tmp_path / "2026-10-02_08-00-00.fit"
         # Exactly one query for the entire multi-file project timeline
         assert provider_mock.list_activities.call_count == 1
 
@@ -462,3 +462,92 @@ def test_load_does_not_duplicate_search(qapp, tmp_path):
         [str(video)], "", "C:/already/found.fit"
     )
     tab.close()
+
+
+# ---------------------------------------------------------------------------
+# 14. ETAP 5S: test_local_search_strictly_source_dir
+# ---------------------------------------------------------------------------
+def test_etap_5s_local_search_strictly_source_dir(tmp_path):
+    video_dir = tmp_path / "videos"
+    video_dir.mkdir()
+    video = video_dir / "clip.mp4"
+    video.write_bytes(b"mp4_data")
+
+    now = datetime(2026, 10, 2, 8, 0, tzinfo=timezone.utc)
+    interval = (now, now + timedelta(minutes=30), 1800.0, "exact")
+
+    # 1. Candidate in parent directory — MUST NOT be matched
+    parent_fit = tmp_path / "parent.fit"
+    parent_fit.write_bytes(b"fit_parent")
+
+    # 2. Candidate in subfolder — MUST NOT be matched
+    sub_dir = video_dir / "subfolder"
+    sub_dir.mkdir()
+    sub_fit = sub_dir / "sub.fit"
+    sub_fit.write_bytes(b"fit_sub")
+
+    with patch("src.multifile.probe_clip_time_interval", return_value=interval), \
+         patch("src.integrations.auto_telemetry_preflight.probe_fit_time_range", return_value=(now, now + timedelta(minutes=30), 1800.0)):
+        res = run_auto_telemetry_preflight(
+            video_paths=[video],
+            config={"auto_activity_source": "none"},
+            on_status=lambda *args: None,
+        )
+        assert res is None, f"Expected None, got {res} (subfolder or parent was scanned!)"
+
+        # 3. Candidate placed directly in video_dir — MUST be matched
+        exact_fit = video_dir / "exact.fit"
+        exact_fit.write_bytes(b"fit_exact")
+        res2 = run_auto_telemetry_preflight(
+            video_paths=[video],
+            config={"auto_activity_source": "none"},
+            on_status=lambda *args: None,
+        )
+        assert res2 is not None
+        assert res2.resolve() == exact_fit.resolve()
+
+
+# ---------------------------------------------------------------------------
+# 15. ETAP 5S: test_persist_downloaded_telemetry_datetime_naming
+# ---------------------------------------------------------------------------
+def test_etap_5s_persist_downloaded_telemetry_datetime_naming(tmp_path):
+    from src.integrations.auto_telemetry_preflight import persist_downloaded_telemetry
+
+    video_dir = tmp_path / "gopro"
+    video_dir.mkdir()
+    video = video_dir / "GX010001.MP4"
+    video.write_bytes(b"video")
+
+    downloaded = tmp_path / "raw_download.fit"
+    downloaded.write_bytes(b"FIT_PAYLOAD_12345")
+
+    now = datetime(2026, 10, 7, 14, 30, 15, tzinfo=timezone.utc)
+    cand = ActivityCandidate(
+        activity_id="99887766",
+        provider="garmin",
+        name="Ride",
+        sport_type="cycling",
+        start_dt=now,
+        end_dt=now + timedelta(minutes=45),
+        duration_s=2700.0,
+        raw_data={"startTimeLocal": "2026-10-07 14:30:15"},
+    )
+
+    persisted = persist_downloaded_telemetry(downloaded, cand, [video])
+    assert persisted.exists()
+    assert persisted.parent == video_dir
+    assert persisted.name == "2026-10-07_14-30-15.fit"
+    assert persisted.read_bytes() == b"FIT_PAYLOAD_12345"
+
+    # Repeat with matching file: safe preservation without error
+    persisted_again = persist_downloaded_telemetry(downloaded, cand, [video])
+    assert persisted_again == persisted
+
+    # Existing different file: safe collision handling without overwriting
+    different_download = tmp_path / "different.fit"
+    different_download.write_bytes(b"DIFFERENT_FIT_CONTENT")
+    persisted_diff = persist_downloaded_telemetry(different_download, cand, [video])
+    assert persisted_diff.exists()
+    assert "99887766" in persisted_diff.name
+    assert persisted.read_bytes() == b"FIT_PAYLOAD_12345"  # Original preserved!
+
