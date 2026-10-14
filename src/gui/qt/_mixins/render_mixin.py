@@ -363,18 +363,45 @@ class RenderMixin:
                 )
 
                 comp_txt = ""
-                qp_val = None
+                cur_qp_val = None
+                avg_qp_val = None
+                is_cqp = False
                 if isinstance(hud_state, dict):
-                    for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
+                    for k in ("current_qp", "quant_current", "qp_last"):
                         v = hud_state.get(k)
                         if v is not None:
                             try:
                                 fv = float(v)
-                                if fv > 0:
-                                    qp_val = fv
+                                if fv >= 0:
+                                    cur_qp_val = fv
                                     break
                             except (ValueError, TypeError):
                                 pass
+                    for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
+                        v = hud_state.get(k)
+                        if v is not None:
+                            try:
+                                fv = float(v)
+                                if fv >= 0:
+                                    avg_qp_val = fv
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                    if cur_qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
+                        try:
+                            fv = float(hud_state["qp"])
+                            if fv >= 0:
+                                cur_qp_val = fv
+                        except (ValueError, TypeError):
+                            pass
+                    is_cqp = bool(
+                        hud_state.get("is_cqp")
+                        or (
+                            hud_state.get("quant_min") is not None
+                            and hud_state.get("quant_min") == hud_state.get("quant_max")
+                            and hud_state.get("quant_samples", 0) > 1
+                        )
+                    )
                     if "compression_text" in hud_state and hud_state["compression_text"]:
                         comp_txt = str(hud_state["compression_text"])
                     elif hud_state.get("compression_active"):
@@ -390,8 +417,12 @@ class RenderMixin:
                             comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
                         except (ValueError, TypeError):
                             comp_txt = f"QP avg: {hud_state['qp_avg']}"
-                if qp_val is None and getattr(latest, "qp", None) is not None:
-                    qp_val = latest.qp
+                if cur_qp_val is None and getattr(latest, "qp", None) is not None:
+                    cur_qp_val = latest.qp
+                if avg_qp_val is None and getattr(latest, "avg_qp", None) is not None:
+                    avg_qp_val = latest.avg_qp
+                if not is_cqp and getattr(latest, "is_cqp", False):
+                    is_cqp = latest.is_cqp
 
                 # Remember only an encoder average from this render generation.
                 # The completed stats dictionary should remain canonical, but a
@@ -430,7 +461,9 @@ class RenderMixin:
                     fps_instant=effective_fps,
                     fps_average=effective_fps,
                     compression_text=comp_txt or getattr(latest, "compression_text", ""),
-                    qp=qp_val,
+                    qp=cur_qp_val,
+                    avg_qp=avg_qp_val,
+                    is_cqp=is_cqp,
                     is_av1=bool(hud_state.get("is_av1", getattr(latest, "is_av1", False))) if isinstance(hud_state, dict) else getattr(latest, "is_av1", False),
                     quant_metric=str(hud_state.get("quant_metric", getattr(latest, "quant_metric", ""))) if isinstance(hud_state, dict) else getattr(latest, "quant_metric", ""),
                 )
@@ -1772,6 +1805,14 @@ codec=options.get("intel_codec", "av1"),
                 intel_stats = get_last_intel_export_stats()
                 if intel_stats:
                     ret_stats.update(intel_stats)
+            except Exception:
+                pass
+        elif encoder in ("amd", "amd_native"):
+            try:
+                from src.ffmpeg.amd_native_exporter import get_last_amd_export_stats
+                amd_stats = get_last_amd_export_stats()
+                if amd_stats:
+                    ret_stats.update(amd_stats)
             except Exception:
                 pass
         return ret_stats

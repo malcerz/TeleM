@@ -204,3 +204,81 @@ def test_qp_fix_does_not_invoke_post_export_qp_analyzer():
         stats = {"avg_qp": 28.0, "generation_id": 1}
         res = resolve_render_avg_qp(stats, generation_id=1)
         assert res == 28.0
+
+
+def test_qp_formatting_constant_vs_dynamic():
+    """Verify that constant QP is clearly indicated as avg/target, not frozen instantaneous."""
+    from src.render_progress import RenderProgressState, format_render_progress_status
+
+    # Case A: Constant QP mode (e.g. AMD HEVC CQP 28)
+    snap_cqp = RenderProgressState(
+        generation_id=1,
+        state="rendering",
+        frame=50,
+        total_frames=100,
+        fps=36.0,
+        elapsed_s=1.5,
+        qp=28.0,
+        avg_qp=28.0,
+        is_cqp=True,
+    )
+    status_cqp = format_render_progress_status(snap_cqp)
+    assert "QP avg: 28.0" in status_cqp
+    assert "QP: 28.0" not in status_cqp, "Constant QP must clearly indicate avg, not frozen instantaneous"
+
+    # Case B: Dynamic QP with instantaneous and average
+    snap_dyn = RenderProgressState(
+        generation_id=1,
+        state="rendering",
+        frame=50,
+        total_frames=100,
+        fps=36.0,
+        elapsed_s=1.5,
+        qp=24.0,
+        avg_qp=27.2,
+        is_cqp=False,
+    )
+    status_dyn = format_render_progress_status(snap_dyn)
+    assert "QP: 24 (avg: 27.2)" in status_dyn
+
+    # Case C: Only average QP available
+    snap_avg_only = RenderProgressState(
+        generation_id=1,
+        state="rendering",
+        frame=50,
+        total_frames=100,
+        fps=36.0,
+        elapsed_s=1.5,
+        qp=None,
+        avg_qp=28.0,
+        is_cqp=False,
+    )
+    status_avg = format_render_progress_status(snap_avg_only)
+    assert "QP avg: 28.0" in status_avg
+
+
+def test_qp_per_frame_tracker_emits_current_and_avg():
+    """Verify that RenderProgressTracker emits both current_qp and avg_qp."""
+    emitted = []
+
+    def on_prog(f, total, el, fps, hud_state):
+        emitted.append(hud_state)
+
+    tracker = RenderProgressTracker(total_frames=100, target_fps=30.0, callback=on_prog)
+    tracker.frame(
+        completed=1,
+        elapsed=0.033,
+        fps=30.0,
+        current_qp=26.0,
+        avg_qp=27.5,
+        qp_avg=27.5,
+        is_cqp=False,
+        compression_text="QP: 26 (avg: 27.5)",
+    )
+
+    assert len(emitted) > 0
+    state = emitted[-1]
+    assert state.get("current_qp") == 26.0
+    assert state.get("avg_qp") == 27.5
+    assert state.get("is_cqp") is False
+

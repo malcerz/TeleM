@@ -2614,8 +2614,8 @@ class RenderTab(QWidget):
             completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
             total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
             qp_val = getattr(snapshot, "qp", None)
-            if qp_val is None:
-                qp_val = getattr(snapshot, "avg_qp", None)
+            avg_qp_val = getattr(snapshot, "avg_qp", None)
+            is_cqp_val = getattr(snapshot, "is_cqp", False)
             is_av1_snap = getattr(snapshot, "is_av1", False)
             quant_metric_snap = getattr(snapshot, "quant_metric", "")
             self._set_stats(
@@ -2624,6 +2624,8 @@ class RenderTab(QWidget):
                 item_label=item_label,
                 is_indeterminate=is_indeterminate,
                 qp=qp_val,
+                avg_qp=avg_qp_val,
+                is_cqp=is_cqp_val,
                 global_pct=snapshot.global_percent,
                 is_av1=is_av1_snap,
                 quant_metric=quant_metric_snap,
@@ -2696,27 +2698,44 @@ class RenderTab(QWidget):
             return
 
         qp_val = None
+        avg_qp_val = None
+        is_cqp = False
         if isinstance(hud_state, dict):
-            if hud_state.get("quant_samples", 0) > 0:
-                for k in ("quant_avg", "quant_current", "mean_qp", "avg_qp", "current_qp"):
-                    v = hud_state.get(k)
-                    if v is not None:
-                        try:
-                            qp_val = float(v)
+            for k in ("current_qp", "quant_current", "qp_last"):
+                v = hud_state.get(k)
+                if v is not None:
+                    try:
+                        fv = float(v)
+                        if fv >= 0:
+                            qp_val = fv
                             break
-                        except (ValueError, TypeError):
-                            pass
-            if qp_val is None:
-                for k in ("mean_qp", "avg_qp", "qp_avg", "qp", "current_qp"):
-                    v = hud_state.get(k)
-                    if v is not None:
-                        try:
-                            fv = float(v)
-                            if fv >= 0:
-                                qp_val = fv
-                                break
-                        except (ValueError, TypeError):
-                            pass
+                    except (ValueError, TypeError):
+                        pass
+            for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
+                v = hud_state.get(k)
+                if v is not None:
+                    try:
+                        fv = float(v)
+                        if fv >= 0:
+                            avg_qp_val = fv
+                            break
+                    except (ValueError, TypeError):
+                        pass
+            if qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
+                try:
+                    fv = float(hud_state["qp"])
+                    if fv >= 0:
+                        qp_val = fv
+                except (ValueError, TypeError):
+                    pass
+            is_cqp = bool(
+                hud_state.get("is_cqp")
+                or (
+                    hud_state.get("quant_min") is not None
+                    and hud_state.get("quant_min") == hud_state.get("quant_max")
+                    and hud_state.get("quant_samples", 0) > 1
+                )
+            )
 
         if hud_state is not None and isinstance(hud_state, dict) and "global_pct" in hud_state:
             overall = max(self._render_target, float(hud_state.get("global_pct", 0.0)))
@@ -2732,7 +2751,15 @@ class RenderTab(QWidget):
                 item_label = "HUD"
             is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
             quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
-            self._set_stats(completed, total, elapsed, fps, status, item_label=item_label, qp=qp_val, is_av1=is_av1_hud, quant_metric=quant_m_hud)
+            self._set_stats(
+                completed, total, elapsed, fps, status,
+                item_label=item_label,
+                qp=qp_val,
+                avg_qp=avg_qp_val,
+                is_cqp=is_cqp,
+                is_av1=is_av1_hud,
+                quant_metric=quant_m_hud,
+            )
             if phase == "render" and "ts" in hud_state and self.chk_hud_preview.isChecked():
                 self._hud_ts = hud_state.get("ts")
                 now = time.monotonic()
@@ -2858,7 +2885,8 @@ class RenderTab(QWidget):
     def _set_stats(self, completed: int, total: int, elapsed: float, fps: float,
                    status: str, final_eta: str | None = None,
                    item_label: str = "Frame", is_indeterminate: bool = False,
-                   qp: float | None = None, global_pct: float | None = None,
+                   qp: float | None = None, avg_qp: float | None = None,
+                   is_cqp: bool = False, global_pct: float | None = None,
                    is_av1: bool = False, quant_metric: str = "") -> None:
         total = max(total, 0)
         if not is_indeterminate and total and completed >= 0:
@@ -2883,13 +2911,30 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if (elapsed is not None and 0 < elapsed <= 3600000) else "--:--"
         fps_txt = f"{fps:.1f}" if (fps > 0.05 and not is_indeterminate) else "--"
-        qp_str = f"{qp:.1f}" if (qp is not None and qp >= 0 and not is_indeterminate) else "--"
         q_label = "Q" if (is_av1 or quant_metric == "base_q_idx") else "QP"
+        if is_indeterminate:
+            qp_txt = f"{q_label}: --"
+        elif is_cqp:
+            if avg_qp is not None:
+                qp_txt = f"{q_label} avg: {avg_qp:.1f}"
+            elif qp is not None:
+                qp_txt = f"{q_label} (target): {int(round(qp))}"
+            else:
+                qp_txt = f"{q_label}: --"
+        elif qp is not None:
+            if avg_qp is not None and abs(qp - avg_qp) > 0.05:
+                qp_txt = f"{q_label}: {qp:.0f} (avg: {avg_qp:.1f})"
+            else:
+                qp_txt = f"{q_label}: {qp:.1f}"
+        elif avg_qp is not None:
+            qp_txt = f"{q_label} avg: {avg_qp:.1f}"
+        else:
+            qp_txt = f"{q_label}: --"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
             f"{item_label}: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
-            f"   |   {q_label}: {qp_str}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+            f"   |   {qp_txt}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
             f"   |   {status}"
         )
 

@@ -81,6 +81,14 @@ from src.render_progress import RenderCancelReason, render_cancel_log_message
 print = render_print
 AMD_NATIVE_ABI_VERSION = 9
 
+_last_amd_export_stats: dict[str, Any] = {}
+
+
+def get_last_amd_export_stats() -> dict[str, Any]:
+    """Return a copy of the most recent AMD hardware export statistics."""
+    global _last_amd_export_stats
+    return dict(_last_amd_export_stats)
+
 
 # Pillow's ``ImagingCore.ptr`` is a PyCapsule.  Keep the C-API prototypes in
 # one place so the map upload path can borrow the existing RGBA storage rather
@@ -2130,6 +2138,8 @@ def export_amd_native_d3d11(
     sync_offset_s: float = 0.0,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
+    global _last_amd_export_stats
+    _last_amd_export_stats = {}
     print(f"AMD_EXPORTER_CACHE_KEY={cache_key}", flush=True)
     if active_process_holder is None:
         active_process_holder = {}
@@ -6729,7 +6739,20 @@ def export_amd_native_d3d11(
                     byref(qp_supp_val),
                 )
 
-            qp_txt = f"QP avg: {qp_avg_val.value:.1f}" if qp_samples_val.value > 0 else "QP avg: N/A"
+            has_qp = qp_samples_val.value > 0
+            cur_qp = float(qp_last_val.value) if (has_qp and qp_last_val.value >= 0) else None
+            avg_qp = float(qp_avg_val.value) if has_qp else None
+            is_cqp = bool(has_qp and qp_min_val.value == qp_max_val.value)
+            if has_qp:
+                if is_cqp:
+                    qp_txt = f"QP avg: {avg_qp:.1f}"
+                elif cur_qp is not None and abs(cur_qp - avg_qp) > 0.05:
+                    qp_txt = f"QP: {cur_qp:.0f} (avg: {avg_qp:.1f})"
+                else:
+                    qp_txt = f"QP avg: {avg_qp:.1f}"
+            else:
+                qp_txt = "QP avg: N/A"
+
             stats_str = (
                 f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | "
                 f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
@@ -6740,7 +6763,15 @@ def export_amd_native_d3d11(
                 prepared.frame_idx + 1,
                 elapsed,
                 fps,
-                qp_avg=qp_avg_val.value if qp_samples_val.value > 0 else None,
+                current_qp=cur_qp,
+                avg_qp=avg_qp,
+                qp_avg=avg_qp,
+                quant_current=cur_qp,
+                quant_avg=avg_qp,
+                quant_min=int(qp_min_val.value) if has_qp else None,
+                quant_max=int(qp_max_val.value) if has_qp else None,
+                quant_samples=int(qp_samples_val.value),
+                is_cqp=is_cqp,
                 compression_text=qp_txt,
             )
         return True
@@ -8581,6 +8612,28 @@ def export_amd_native_d3d11(
         ]
         subprocess.run(cmd_thumb, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print("[CHECKPOINT] Saved F_final_mp4.png", flush=True)
+
+    _last_amd_export_stats = {
+        "codec": codec,
+        "is_av1": False,
+        "quant_metric": "QP",
+        "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+        "qp_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+        "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+        "qp_min": int(c_qp_min.value) if 'c_qp_min' in locals() and c_qp_samples.value > 0 else None,
+        "qp_max": int(c_qp_max.value) if 'c_qp_max' in locals() and c_qp_samples.value > 0 else None,
+        "qp_last": int(c_qp_last.value) if 'c_qp_last' in locals() and c_qp_samples.value > 0 else None,
+        "qp_samples": int(c_qp_samples.value) if 'c_qp_samples' in locals() else 0,
+        "amf_stats": {
+            "input_full": int(c_input_full.value) if 'c_input_full' in locals() else 0,
+            "retries": int(c_retries.value) if 'c_retries' in locals() else 0,
+            "dropped": int(c_dropped.value) if 'c_dropped' in locals() else 0,
+            "submitted": int(c_sub.value) if 'c_sub' in locals() else 0,
+            "received": int(c_rec.value) if 'c_rec' in locals() else 0,
+            "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+            "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+        },
+    }
 
     progress_tracker.complete(time.time() - start_time)
     progress_dispatcher.stop()

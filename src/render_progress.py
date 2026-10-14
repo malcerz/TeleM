@@ -91,6 +91,7 @@ class RenderProgressState:
     prep_label: str = ""
     qp: float | None = None
     avg_qp: float | None = None
+    is_cqp: bool = False
     is_av1: bool = False
     quant_metric: str = ""
     quant_min: int | None = None
@@ -159,10 +160,27 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         pct_val = snapshot.global_percent if (snapshot.global_percent is not None and snapshot.global_percent > 0) else snapshot.percent
         pct = f"{pct_val:.1f}%" if (snapshot.total_frames or pct_val > 0) else "--"
         fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
-        qp_val = getattr(snapshot, "qp", None)
-        if qp_val is None:
-            qp_val = getattr(snapshot, "avg_qp", None)
-        qp_str = f"{qp_val:.1f}" if (qp_val is not None and qp_val > 0) else "--"
+        q_label = "Q" if (getattr(snapshot, "is_av1", False) or getattr(snapshot, "quant_metric", "") == "base_q_idx") else "QP"
+        cur_qp = getattr(snapshot, "qp", None)
+        avg_qp = getattr(snapshot, "avg_qp", None)
+        is_cqp = getattr(snapshot, "is_cqp", False)
+
+        if is_cqp:
+            if avg_qp is not None:
+                qp_str = f"{q_label} avg: {avg_qp:.1f}"
+            elif cur_qp is not None:
+                qp_str = f"{q_label} (target): {int(round(cur_qp))}"
+            else:
+                qp_str = f"{q_label}: --"
+        elif cur_qp is not None:
+            if avg_qp is not None and abs(cur_qp - avg_qp) > 0.05:
+                qp_str = f"{q_label}: {cur_qp:.0f} (avg: {avg_qp:.1f})"
+            else:
+                qp_str = f"{q_label}: {cur_qp:.1f}"
+        elif avg_qp is not None:
+            qp_str = f"{q_label} avg: {avg_qp:.1f}"
+        else:
+            qp_str = f"{q_label}: --"
 
     if snapshot.eta_s is None or not (0 <= snapshot.eta_s <= 3600000):
         eta_txt = "--:--"
@@ -181,8 +199,9 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
     else:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
+    qp_field = qp_str if (qp_str.startswith("QP") or qp_str.startswith("Q ")) else f"QP: {qp_str}"
     return (
-        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   QP: {qp_str}   |   Czas: {elapsed_txt} "
+        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   {qp_field}   |   Czas: {elapsed_txt} "
         f"  |   ETA: {eta_txt}   |   {status}"
     )
 
