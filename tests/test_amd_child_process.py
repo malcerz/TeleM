@@ -16,6 +16,7 @@ from src.ffmpeg.amd_child_process import (
     _ChildStdioRedirect,
     _ChildIpcEmitter,
     _ParentIpcReader,
+    _child_handle_diagnostics_enabled,
     inspect_render_job_pickle,
     run_amd_render_child,
 )
@@ -269,3 +270,13 @@ def test_child_bootstrap_exception_is_relayed_via_ipc(tmp_path, monkeypatch):
     assert "phase=entry" in diagnostic_text
     assert "phase=before_restore" in diagnostic_text
     assert "fd1=" in diagnostic_text and "fd2=" in diagnostic_text
+
+
+def test_child_handle_diagnostics_enabled_by_default(monkeypatch):
+    monkeypatch.delenv("AMD_CHILD_HANDLE_DIAGNOSTICS", raising=False)
+    assert _child_handle_diagnostics_enabled() is True
+    monkeypatch.setenv("AMD_CHILD_HANDLE_DIAGNOSTICS", "0")
+    assert _child_handle_diagnostics_enabled() is False
+    monkeypatch.setenv("AMD_CHILD_HANDLE_DIAGNOSTICS", "1")
+    assert _child_handle_diagnostics_enabled() is True
+

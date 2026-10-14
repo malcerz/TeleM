@@ -3511,6 +3511,7 @@ def export_amd_native_d3d11(
             mux_mode_str = "single_pass_av" if single_pass_av_mux else "stage_a_then_c"
             print(f"[AMD DIRECT MUX] mode={mode_str} clips={clip_count_str} video=pipe audio={audio_mode_str} output=.part", flush=True)
             print(f"[AMD DIRECT MUX] topology={mux_mode_str}", flush=True)
+            print(f"[AMD DIRECT MUX FFMPEG] pid={proc_mux.pid} command={' '.join(cmd_live_mux)}", flush=True)
             print(f"[AMD NATIVE D3D11] DIRECT MP4 MUX:      ENABLED (live streaming -> {Path(output_part_str).name})", flush=True)
 
             def _mux_stderr_reader():

@@ -177,8 +177,8 @@ def _windows_fd_info(fd: int) -> dict[str, Any]:
 
 
 def _child_handle_diagnostics_enabled() -> bool:
-    value = os.environ.get("AMD_CHILD_HANDLE_DIAGNOSTICS", "")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    value = os.environ.get("AMD_CHILD_HANDLE_DIAGNOSTICS", "1")
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _write_diagnostic_line(path: Path, text: str) -> None:
@@ -701,9 +701,17 @@ def _child_entry(
             )
         os.environ["TELEM_AMD_CHILD_PROCESS"] = "1"
         generation_id = int(render_kwargs.get("generation_id", 0) or 0)
+        job_id = str(render_kwargs.get("job_id") or "")
         print(f"[AMD CHILD START] child_pid={os.getpid()}", flush=True)
         print(
-            f"[AMD CHILD JOB RESTORED] generation={generation_id}",
+            f"[AMD CHILD JOB RESTORED] generation={generation_id} job_id={job_id} worker_pid={os.getpid()} parent_pid={parent_pid}",
+            flush=True,
+        )
+        print(
+            f"[AMD CHILD CONFIG] inputs={render_kwargs.get('video_paths')} "
+            f"output={render_kwargs.get('output_file')} "
+            f"encoder={render_kwargs.get('encoder')} "
+            f"profile={render_kwargs.get('profile')}",
             flush=True,
         )
         emitter.send({
@@ -769,11 +777,19 @@ def _child_entry(
         print(f"[AMD CHILD RENDER START] generation={generation_id}", flush=True)
         result = stream_overlay_to_ffmpeg(**child_kwargs)
         if cancel.event.is_set():
+            print(
+                f"[AMD CHILD CANCELLED] status=cancelled child_pid={os.getpid()} reason={cancel.reason_value()}",
+                flush=True,
+            )
             emitter.send({
                 "kind": "cancelled",
                 "reason": cancel.reason_value(),
             }, critical=True)
         else:
+            print(
+                f"[AMD CHILD COMPLETE] status=complete child_pid={os.getpid()}",
+                flush=True,
+            )
             emitter.send({
                 "kind": "complete",
                 "result": result,
@@ -781,6 +797,10 @@ def _child_entry(
                 "diagnostics_path": str(log_path),
             }, critical=True)
     except BaseException as exc:
+        print(
+            f"[AMD CHILD ERROR] status=error child_pid={os.getpid()} phase={child_phase} error={exc}",
+            flush=True,
+        )
         details = traceback.format_exc()
         try:
             from src.ffmpeg.render_errors import coerce_render_error
@@ -1117,17 +1137,13 @@ def run_amd_render_child(
             raise RuntimeError(
                 "AMD child reported COMPLETE but final output is missing or empty"
             )
-        if not _child_handle_diagnostics_enabled():
-            try:
-                diagnostics_path.unlink()
-            except OSError:
-                pass
         return {
             "child_pid": process.pid,
             "result": terminal.get("result"),
             "output": str(output),
             "child_exitcode": process.exitcode,
             "child_startup_ms": child_startup_ms,
+            "diagnostics_path": str(diagnostics_path),
         }
     if terminal is not None and terminal.get("kind") == "complete":
         raise RuntimeError(
@@ -1135,16 +1151,13 @@ def run_amd_render_child(
             f"code {process.exitcode} (pid={process.pid})"
         )
     if terminal is not None and terminal.get("kind") == "cancelled":
-        try:
-            diagnostics_path.unlink()
-        except OSError:
-            pass
         return {
             "cancelled": True,
             "reason": terminal.get("reason", "INTERNAL_STOP"),
             "child_pid": process.pid,
             "child_exitcode": process.exitcode,
             "child_startup_ms": child_startup_ms,
+            "diagnostics_path": str(diagnostics_path),
         }
 
     tail = _tail(diagnostics_path)
