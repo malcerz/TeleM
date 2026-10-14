@@ -35,6 +35,15 @@ struct AMFEncoderStats {
     AMF_RESULT result = AMF_OK;
 };
 
+struct AMFEncoderQPStats {
+    uint64_t samples = 0;
+    double sum = 0.0;
+    int64_t minQp = -1;
+    int64_t maxQp = -1;
+    int64_t lastQp = -1;
+    bool supported = false;
+};
+
 class D3D11AMFEncoder {
 public:
     D3D11AMFEncoder();
@@ -78,6 +87,7 @@ public:
     void SetQualityPreset(AMFQualityPreset preset) { m_qualityPreset = preset; }
     bool IsAVC() const { return m_codecType == AMFCodecType::AVC; }
     bool IsAV1() const { return m_codecType == AMFCodecType::AV1; }
+    const AMFEncoderQPStats& GetQPStats() const { return m_qpStats; }
 
 private:
     HMODULE m_hAMFRT = nullptr;
@@ -93,4 +103,5 @@ private:
     AMFCodecType m_codecType = AMFCodecType::HEVC;
     AMFQualityPreset m_qualityPreset = AMFQualityPreset::FAST;
     uint64_t m_bitrateBps = 0;
+    AMFEncoderQPStats m_qpStats;
 };

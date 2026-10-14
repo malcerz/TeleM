@@ -16,6 +16,7 @@ void D3D11AMFEncoder::Shutdown() {
         FreeLibrary(m_hAMFRT);
         m_hAMFRT = nullptr;
     }
+    m_qpStats = {};
 }
 
 D3D11AMFEncoder::~D3D11AMFEncoder() {
@@ -32,6 +33,7 @@ bool D3D11AMFEncoder::Initialize(
     AMFQualityPreset qualityPreset,
     uint64_t bitrateBps
 ) {
+    m_qpStats = {};
     m_device = pDevice;
     m_width = width;
     m_height = height;
@@ -224,21 +226,35 @@ bool D3D11AMFEncoder::Initialize(
         }
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET, hevcPreset);
 
-        // Preserve exact existing HEVC rate control behavior
-        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_CONSTANT_QP);
-        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QP_I, 28);
-        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QP_P, 28);
+        // Rate control: PEAK_CONSTRAINED_VBR based on target bitrate from GUI slider
+        uint64_t targetBitrate = m_bitrateBps;
+        if (targetBitrate == 0) {
+            targetBitrate = 40000000ULL; // 40 Mbps default if unspecified
+        }
+        uint64_t peakBitrate = static_cast<uint64_t>(targetBitrate * 1.5);
+        if (peakBitrate < targetBitrate) {
+            peakBitrate = targetBitrate;
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, static_cast<amf_int64>(targetBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_PEAK_BITRATE, static_cast<amf_int64>(peakBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_VBV_BUFFER_SIZE, static_cast<amf_int64>(targetBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INITIAL_VBV_BUFFER_FULLNESS, static_cast<amf_int64>(64));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true);
+
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMFConstructSize(width, height));
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
 
         res = m_encoder->Init(amf::AMF_SURFACE_NV12, width, height);
         if (res != AMF_OK) {
-            std::cerr << "[AMF] Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
+            std::cerr << "[AMF] HEVC VBR Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
             return false;
         }
 
         std::cout << "[AMF] HEVC Hardware Encoder initialized successfully (" 
                   << width << "x" << height << " preset=" << presetName 
+                  << " rc=VBR target=" << targetBitrate << " peak=" << peakBitrate
                   << " raw_amf_preset=" << hevcPreset << ")." << std::endl;
     }
     return true;
@@ -334,6 +350,24 @@ bool D3D11AMFEncoder::QueryPacket(
             } else {
                 pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE, &dataType);
                 outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR);
+
+                int64_t avgQp = -1;
+                int64_t frameQp = -1;
+                if (pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_AVERAGE_QP, &avgQp) == AMF_OK && avgQp > 0) {
+                    m_qpStats.supported = true;
+                    m_qpStats.samples++;
+                    m_qpStats.sum += static_cast<double>(avgQp);
+                    m_qpStats.lastQp = avgQp;
+                    if (m_qpStats.minQp < 0 || avgQp < m_qpStats.minQp) m_qpStats.minQp = avgQp;
+                    if (m_qpStats.maxQp < 0 || avgQp > m_qpStats.maxQp) m_qpStats.maxQp = avgQp;
+                } else if (pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_FRAME_QP, &frameQp) == AMF_OK && frameQp > 0) {
+                    m_qpStats.supported = true;
+                    m_qpStats.samples++;
+                    m_qpStats.sum += static_cast<double>(frameQp);
+                    m_qpStats.lastQp = frameQp;
+                    if (m_qpStats.minQp < 0 || frameQp < m_qpStats.minQp) m_qpStats.minQp = frameQp;
+                    if (m_qpStats.maxQp < 0 || frameQp > m_qpStats.maxQp) m_qpStats.maxQp = frameQp;
+                }
             }
 
             return true;

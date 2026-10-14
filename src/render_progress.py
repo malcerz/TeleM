@@ -164,14 +164,17 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         cur_qp = getattr(snapshot, "qp", None)
         avg_qp = getattr(snapshot, "avg_qp", None)
         is_cqp = getattr(snapshot, "is_cqp", False)
+        comp_txt = getattr(snapshot, "compression_text", "")
 
-        if is_cqp:
+        if comp_txt:
+            qp_str = comp_txt
+        elif is_cqp:
             if avg_qp is not None:
                 qp_str = f"{q_label} avg: {avg_qp:.1f}"
             elif cur_qp is not None:
                 qp_str = f"{q_label} (target): {int(round(cur_qp))}"
             else:
-                qp_str = f"{q_label}: --"
+                qp_str = f"{q_label} avg: N/A"
         elif cur_qp is not None:
             if avg_qp is not None and abs(cur_qp - avg_qp) > 0.05:
                 qp_str = f"{q_label}: {cur_qp:.0f} (avg: {avg_qp:.1f})"
@@ -180,7 +183,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         elif avg_qp is not None:
             qp_str = f"{q_label} avg: {avg_qp:.1f}"
         else:
-            qp_str = f"{q_label}: --"
+            qp_str = f"{q_label} avg: N/A"
 
     if snapshot.eta_s is None or not (0 <= snapshot.eta_s <= 3600000):
         eta_txt = "--:--"

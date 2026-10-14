@@ -1680,6 +1680,9 @@ TELEM_EXPORT void* telem_amd_create(
             bitrateBps = 0;
         }
     }
+    if (bitrateBps <= 0) {
+        bitrateBps = 40000000LL; // 40 Mbps default VBR target
+    }
 
     // Pre-configure codec on encoder so InitializeEncodedOutput creates the correct extension (.h264 vs .h265)
     ctx->amfEncoder.SetCodecType(codecType);
@@ -3599,6 +3602,40 @@ TELEM_EXPORT int telem_amd_get_encoder_preset(void* handle) {
     if (!handle) return -1;
     TelemAMDContext* ctx = (TelemAMDContext*)handle;
     return static_cast<int>(ctx->amfEncoder.GetQualityPreset());
+}
+
+TELEM_EXPORT void telem_amd_get_encoder_qp_stats(
+    void* handle,
+    double* outAvgQp,
+    int64_t* outMinQp,
+    int64_t* outMaxQp,
+    uint64_t* outSamples,
+    int64_t* outLastQp,
+    int* outSupported
+) {
+    if (!handle) {
+        if (outSamples) *outSamples = 0;
+        if (outSupported) *outSupported = 0;
+        if (outLastQp) *outLastQp = 0;
+        if (outMinQp) *outMinQp = 0;
+        if (outMaxQp) *outMaxQp = 0;
+        if (outAvgQp) *outAvgQp = 0.0;
+        return;
+    }
+    auto* ctx = static_cast<TelemAMDContext*>(handle);
+    const auto& stats = ctx->amfEncoder.GetQPStats();
+    if (outSamples) *outSamples = stats.samples;
+    if (outSupported) *outSupported = stats.supported ? 1 : 0;
+    if (outLastQp) *outLastQp = stats.lastQp;
+    if (outMinQp) *outMinQp = stats.minQp;
+    if (outMaxQp) *outMaxQp = stats.maxQp;
+    if (outAvgQp) {
+        if (stats.samples > 0) {
+            *outAvgQp = stats.sum / static_cast<double>(stats.samples);
+        } else {
+            *outAvgQp = 0.0;
+        }
+    }
 }
 
 struct TelemAMDCapsReport {

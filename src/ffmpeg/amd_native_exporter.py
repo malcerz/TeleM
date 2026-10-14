@@ -2105,7 +2105,7 @@ def export_amd_native_d3d11(
     video_bitrate: str = "",
     codec: str = "hevc_amf",
     quality: str = "speed",
-    rc: str = "cqp",
+    rc: str = "vbr",
     qp_p: int = 28,
     qp_i: int = 28,
     max_distance_m: Optional[float] = None,
@@ -2851,11 +2851,14 @@ def export_amd_native_d3d11(
                 amd_bitrate_bps = int(vb_clean)
         except Exception:
             amd_bitrate_bps = 0
-    os.environ["AMD_NATIVE_BITRATE"] = str(amd_bitrate_bps) if amd_bitrate_bps > 0 else ""
+    if amd_bitrate_bps <= 0:
+        amd_bitrate_bps = 40_000_000
+    os.environ["AMD_NATIVE_BITRATE"] = str(amd_bitrate_bps)
+    peak_bitrate_bps = int(amd_bitrate_bps * 1.5)
 
     # Required export start logs:
     component_name = "AMFVideoEncoderHW_AV1" if is_av1 else ("AMFVideoEncoderHW_AVC" if is_h264 else "AMFVideoEncoderHW_HEVC")
-    print(f"[AMD ENCODER] codec={amd_codec_name} quality={amd_quality_name} component={component_name} input_surface=NV12 bit_depth=8 live_mux=yes", flush=True)
+    print(f"[AMD ENCODER] codec={amd_codec_name} quality={amd_quality_name} component={component_name} input_surface=NV12 bit_depth=8 rc=VBR target_bitrate={amd_bitrate_bps} peak_bitrate={peak_bitrate_bps} live_mux=yes", flush=True)
 
     # Function Signatures
     native_dll.telem_amd_create.restype = c_void_p
@@ -6742,11 +6745,9 @@ def export_amd_native_d3d11(
             has_qp = qp_samples_val.value > 0
             cur_qp = float(qp_last_val.value) if (has_qp and qp_last_val.value >= 0) else None
             avg_qp = float(qp_avg_val.value) if has_qp else None
-            is_cqp = bool(has_qp and qp_min_val.value == qp_max_val.value)
+            is_cqp = False
             if has_qp:
-                if is_cqp:
-                    qp_txt = f"QP avg: {avg_qp:.1f}"
-                elif cur_qp is not None and abs(cur_qp - avg_qp) > 0.05:
+                if cur_qp is not None and abs(cur_qp - avg_qp) > 0.05:
                     qp_txt = f"QP: {cur_qp:.0f} (avg: {avg_qp:.1f})"
                 else:
                     qp_txt = f"QP avg: {avg_qp:.1f}"
@@ -6755,7 +6756,7 @@ def export_amd_native_d3d11(
 
             stats_str = (
                 f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | "
-                f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+                f"{fps:.1f} FPS | RC: VBR | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             )
             if progress_cb:
                 progress_dispatcher.submit(progress_cb, pct, stats_str)
@@ -7160,6 +7161,10 @@ def export_amd_native_d3d11(
                 byref(c_qp_last),
                 byref(c_qp_supp),
             )
+            if c_qp_samples.value > 0:
+                print(f"[AMD ENCODER] Hardware QP stats: avg={c_qp_avg.value:.1f} min={c_qp_min.value} max={c_qp_max.value} samples={c_qp_samples.value}", flush=True)
+            else:
+                print("[AMD ENCODER] Note: Hardware QP statistics feedback is not supported by current AMF driver/hardware (QP avg: N/A)", flush=True)
 
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         print("[ENCODER CLOSE BEGIN]", flush=True)
