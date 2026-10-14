@@ -59,7 +59,7 @@ from src.render_progress import (
     format_render_progress_status,
     next_render_generation_id,
 )
-from src.gui.export_queue import ExportJob, ExportQueue
+from src.gui.export_queue import ExportJob, ExportQueue, ENABLE_YOUTUBE_UPLOAD_UI
 
 
 EXPORT_PREVIEW_DIM_ALPHA = 24
@@ -730,7 +730,7 @@ class RenderTab(QWidget):
     # ═════════════════════════════════════════════════════════════════════
 
     def _build_queue_panel(self) -> QGroupBox:
-        """Zbuduj panel kolejki eksportu z listą jobów i opcjami YouTube."""
+        """Zbuduj panel kolejki eksportu z listą jobów."""
         group = QGroupBox("Kolejka eksportu")
         group.setStyleSheet(
             "QGroupBox { font-size: 12px; font-weight: bold; margin-top: 6px; }"
@@ -742,8 +742,12 @@ class RenderTab(QWidget):
 
         # ── Lista jobów ──────────────────────────────────────────────────
         self.queue_list = QListWidget()
-        self.queue_list.setMaximumHeight(180)
-        self.queue_list.setMinimumHeight(60)
+        if ENABLE_YOUTUBE_UPLOAD_UI:
+            self.queue_list.setMaximumHeight(180)
+            self.queue_list.setMinimumHeight(60)
+        else:
+            self.queue_list.setMaximumHeight(260)
+            self.queue_list.setMinimumHeight(80)
         self.queue_list.setAlternatingRowColors(True)
         self.queue_list.setStyleSheet(
             "QListWidget { font-size: 11px; }"
@@ -762,47 +766,53 @@ class RenderTab(QWidget):
         shortcut_del.setContext(Qt.ShortcutContext.WidgetShortcut)
         shortcut_del.activated.connect(self._on_queue_remove)
 
-        # ── Opcje YouTube per-job ────────────────────────────────────────
-        yt_frame = QFrame()
-        yt_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        yt_frame.setStyleSheet("QFrame { background: #f5f5f5; border-radius: 4px; }")
-        yt_layout = QFormLayout(yt_frame)
-        yt_layout.setContentsMargins(6, 4, 6, 4)
-        yt_layout.setSpacing(4)
+        if ENABLE_YOUTUBE_UPLOAD_UI:
+            # ── Opcje YouTube per-job ────────────────────────────────────────
+            yt_frame = QFrame()
+            yt_frame.setFrameShape(QFrame.Shape.StyledPanel)
+            yt_frame.setStyleSheet("QFrame { background: #f5f5f5; border-radius: 4px; }")
+            yt_layout = QFormLayout(yt_frame)
+            yt_layout.setContentsMargins(6, 4, 6, 4)
+            yt_layout.setSpacing(4)
 
-        self.chk_yt_enabled = QCheckBox("Upload YouTube po renderze")
-        self.chk_yt_enabled.setChecked(False)
-        self.chk_yt_enabled.setToolTip(
-            "Wymaga: pip install google-api-python-client google-auth-oauthlib\n"
-            "Credentiale: %APPDATA%\\SportCamHUD\\youtube_client_secret.json"
-        )
-        yt_layout.addRow(self.chk_yt_enabled)
+            self.chk_yt_enabled = QCheckBox("Upload YouTube po renderze")
+            self.chk_yt_enabled.setChecked(False)
+            self.chk_yt_enabled.setToolTip(
+                "Wymaga: pip install google-api-python-client google-auth-oauthlib\n"
+                "Credentiale: %APPDATA%\\SportCamHUD\\youtube_client_secret.json"
+            )
+            yt_layout.addRow(self.chk_yt_enabled)
 
-        self.edit_yt_title = QLineEdit()
-        self.edit_yt_title.setPlaceholderText("(domyślnie: nazwa pliku)")
-        self.edit_yt_title.setEnabled(False)
-        yt_layout.addRow("Tytuł YT:", self.edit_yt_title)
+            self.edit_yt_title = QLineEdit()
+            self.edit_yt_title.setPlaceholderText("(domyślnie: nazwa pliku)")
+            self.edit_yt_title.setEnabled(False)
+            yt_layout.addRow("Tytuł YT:", self.edit_yt_title)
 
-        self.cmb_yt_privacy = QComboBox()
-        self.cmb_yt_privacy.addItem("Prywatny (private)", "private")
-        self.cmb_yt_privacy.addItem("Niewidoczny (unlisted)", "unlisted")
-        self.cmb_yt_privacy.addItem("Publiczny (public)", "public")
-        self.cmb_yt_privacy.setEnabled(False)
-        yt_layout.addRow("Prywatność:", self.cmb_yt_privacy)
+            self.cmb_yt_privacy = QComboBox()
+            self.cmb_yt_privacy.addItem("Prywatny (private)", "private")
+            self.cmb_yt_privacy.addItem("Niewidoczny (unlisted)", "unlisted")
+            self.cmb_yt_privacy.addItem("Publiczny (public)", "public")
+            self.cmb_yt_privacy.setEnabled(False)
+            yt_layout.addRow("Prywatność:", self.cmb_yt_privacy)
 
-        self.edit_yt_desc = QLineEdit()
-        self.edit_yt_desc.setPlaceholderText("(opcjonalny opis)")
-        self.edit_yt_desc.setEnabled(False)
-        yt_layout.addRow("Opis:", self.edit_yt_desc)
+            self.edit_yt_desc = QLineEdit()
+            self.edit_yt_desc.setPlaceholderText("(opcjonalny opis)")
+            self.edit_yt_desc.setEnabled(False)
+            yt_layout.addRow("Opis:", self.edit_yt_desc)
 
-        def _toggle_yt(state: int) -> None:
-            on = self.chk_yt_enabled.isChecked()
-            self.edit_yt_title.setEnabled(on)
-            self.cmb_yt_privacy.setEnabled(on)
-            self.edit_yt_desc.setEnabled(on)
+            def _toggle_yt(state: int) -> None:
+                on = self.chk_yt_enabled.isChecked()
+                self.edit_yt_title.setEnabled(on)
+                self.cmb_yt_privacy.setEnabled(on)
+                self.edit_yt_desc.setEnabled(on)
 
-        self.chk_yt_enabled.stateChanged.connect(_toggle_yt)
-        vbox.addWidget(yt_frame)
+            self.chk_yt_enabled.stateChanged.connect(_toggle_yt)
+            vbox.addWidget(yt_frame)
+        else:
+            self.chk_yt_enabled = None
+            self.edit_yt_title = None
+            self.cmb_yt_privacy = None
+            self.edit_yt_desc = None
 
         # ── Przyciski kontrolne ──────────────────────────────────────────
         btn_row = QHBoxLayout()
@@ -1626,7 +1636,10 @@ class RenderTab(QWidget):
 
         output = self.edit_output.text().strip() or "output_h265.mp4"
         try:
-            output_path = self._resolve_gui_export_path(output, video_paths)
+            if hasattr(self, "_resolve_gui_export_path"):
+                output_path = self._resolve_gui_export_path(output, video_paths)
+            else:
+                output_path = Path(output)
         except RuntimeError as exc:
             QMessageBox.warning(self, "Kolejka", str(exc))
             return
@@ -1639,6 +1652,19 @@ class RenderTab(QWidget):
             source = Path(video_paths[0]).expanduser()
             options["_fallback_output_path"] = str(source.parent / raw_output)
 
+        yt_enabled = False
+        yt_title = ""
+        yt_privacy = "private"
+        yt_description = ""
+        if getattr(self, "chk_yt_enabled", None) is not None:
+            yt_enabled = bool(self.chk_yt_enabled.isChecked())
+        if getattr(self, "edit_yt_title", None) is not None:
+            yt_title = self.edit_yt_title.text().strip()
+        if getattr(self, "cmb_yt_privacy", None) is not None:
+            yt_privacy = self.cmb_yt_privacy.currentData() or "private"
+        if getattr(self, "edit_yt_desc", None) is not None:
+            yt_description = self.edit_yt_desc.text().strip()
+
         job = ExportJob(
             video_paths=video_paths,
             fit_path=fit_path,
@@ -1646,10 +1672,10 @@ class RenderTab(QWidget):
             layout=layout_snap,
             options=options,
             output_path=output,
-            yt_enabled=self.chk_yt_enabled.isChecked(),
-            yt_title=self.edit_yt_title.text().strip(),
-            yt_privacy=self.cmb_yt_privacy.currentData() or "private",
-            yt_description=self.edit_yt_desc.text().strip(),
+            yt_enabled=yt_enabled,
+            yt_title=yt_title,
+            yt_privacy=yt_privacy,
+            yt_description=yt_description,
         )
         q.add_job(job)
         # ExportQueue may select a collision-safe suffix. Keep execution and

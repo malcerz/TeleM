@@ -33,6 +33,11 @@ from src.export_paths import requires_deferred_validation
 
 log = logging.getLogger(__name__)
 
+# Feature flags for YouTube upload
+ENABLE_YOUTUBE_UPLOAD_UI: bool = False
+ENABLE_YOUTUBE_UPLOAD: bool = False
+YOUTUBE_UPLOAD_FEATURE_ENABLED: bool = False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tracing & Diagnostics
@@ -661,7 +666,7 @@ class ExportQueue:
             job.render_progress = 1.0
             if output_path:
                 job.output_path = output_path
-            if job.yt_enabled:
+            if job.yt_enabled and ENABLE_YOUTUBE_UPLOAD:
                 job.upload_status = "waiting"
         elif cancelled:
             job.render_status = "cancelled"
@@ -808,6 +813,8 @@ class ExportQueue:
                 self._wake_scheduler()
 
     def _try_start_upload(self) -> None:
+        if not ENABLE_YOUTUBE_UPLOAD:
+            return
         with self._lock:
             if self._active_upload_id is not None:
                 return  # upload już trwa
@@ -872,6 +879,8 @@ class ExportQueue:
 
     def _next_waiting_upload(self) -> Optional[ExportJob]:
         """Zwraca pierwszy job z upload_status=='waiting' (wywołuj pod lockiem)."""
+        if not ENABLE_YOUTUBE_UPLOAD:
+            return None
         for j in self._jobs:
             if j.upload_status == "waiting":
                 return j
