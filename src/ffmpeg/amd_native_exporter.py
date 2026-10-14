@@ -4442,7 +4442,18 @@ def export_amd_native_d3d11(
     if telemetry_mode == "PRECOMPUTED":
         from src.render_preparation import RenderPreparationService
         _pre_t0 = time.perf_counter()
+        _compass_samples = None
+        if field_samples:
+            _compass_samples = field_samples.get("heading_samples") or field_samples.get("gpx_heading_samples")
+        if not _compass_samples and gps_track and len(gps_track) >= 2:
+            try:
+                from src.telemetry_heading import derive_heading_samples
+                _compass_samples = derive_heading_samples(gps_track, speed_samples)
+            except Exception:
+                pass
         telemetry_cache = RenderPreparationService.get_or_build(
+            compass_heading_samples=_compass_samples,
+            field_samples=field_samples,
             cache_key=cache_key,
             video_paths=input_files,
             fit_path=fit_path,
@@ -5937,6 +5948,8 @@ def export_amd_native_d3d11(
                 _lval = frame_kwargs["indicator_values"][lean_key]
             elif "indicator_values" in frame_kwargs and "lean_indicator" in frame_kwargs["indicator_values"]:
                 _lval = frame_kwargs["indicator_values"]["lean_indicator"]
+            elif lean_key in frame_kwargs.get("extra_indicators", {}):
+                _lval = frame_kwargs["extra_indicators"][lean_key][0]
             elif "lean_indicator" in frame_kwargs.get("extra_indicators", {}):
                 _lval = frame_kwargs["extra_indicators"]["lean_indicator"][0]
             _min_dim = min(video_width, video_height)

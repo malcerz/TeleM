@@ -193,7 +193,8 @@ def _vectorize_heading(
     if not ordered:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
-    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt, _ in ordered], dtype=np.float64)
+    ref_dt_naive = ref_dt.replace(tzinfo=None) if ref_dt.tzinfo is not None else ref_dt
+    sample_ts = np.array([(dt - ref_dt_naive).total_seconds() for dt, _ in ordered], dtype=np.float64)
     indices = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
 
     out = np.full(len(target_ts_arr), np.nan, dtype=np.float32)
@@ -236,7 +237,8 @@ def _vectorize_lean_roll(
     if sample_ts is None or sample_vals is None or len(sample_ts) != len(timeline):
         sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in timeline]
         sample_vals = np.array([float(s[1]) for s in timeline], dtype=np.float64)
-        sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+        ref_dt_naive = ref_dt.replace(tzinfo=None) if ref_dt.tzinfo is not None else ref_dt
+        sample_ts = np.array([(dt - ref_dt_naive).total_seconds() for dt in sample_dts], dtype=np.float64)
         try:
             timeline._sample_ts = sample_ts
             timeline._sample_vals = sample_vals
@@ -756,6 +758,22 @@ class RenderPreparationService:
                 compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
                 if compass_source == "fit":
                     compass_samples = fit.get("heading") or []
+            if not compass_samples:
+                from src.ffmpeg.worker_cache import WORKER_CACHE
+                fs_h = kwargs.get("field_samples") or WORKER_CACHE.get("field_samples", {}) or {}
+                compass_samples = (
+                    (fit.get("heading") if isinstance(fit, dict) else None)
+                    or fs_h.get("heading_samples")
+                    or fs_h.get("gpx_heading_samples")
+                )
+                if not compass_samples and gps_track and len(gps_track) >= 2:
+                    try:
+                        from src.telemetry_heading import derive_heading_samples
+                        compass_samples = derive_heading_samples(gps_track, speed_samples)
+                    except Exception:
+                        pass
+                if not compass_samples:
+                    compass_samples = heading_samples
             columns["heading_compass"] = _vectorize_heading(
                 compass_samples or [], target_ts_arr, ref_dt, preserve_missing=True,
             )
@@ -834,6 +852,11 @@ class RenderPreparationService:
             columns[f"dyn_{key}"] = _vectorize_step(samples, target_ts_arr, ref_dt)
 
         # 11. Lean Fields
+        fs_in = kwargs.get("field_samples")
+        if fs_in:
+            from src.ffmpeg.worker_cache import WORKER_CACHE
+            WORKER_CACHE["field_samples"] = fs_in
+        lean_timelines_in = kwargs.get("lean_timelines") or {}
         for key in lean_keys:
             lcfg = indicators.get(key, {})
             lsrc = str(lcfg.get("source", "gyro")).strip().lower()
@@ -846,12 +869,39 @@ class RenderPreparationService:
                 if axis not in ("x", "y", "z"):
                     axis = "x"
                 smooth_s = float(lcfg.get("lean_smoothing_s", 0.0) or 0.0)
-                timeline = []
-                try:
-                    from src.ffmpeg.worker_cache import _worker_lean_roll
-                    timeline = _worker_lean_roll(axis, smooth_s)
-                except Exception:
-                    timeline = []
+                timeline = lean_timelines_in.get(key)
+                if not timeline:
+                    try:
+                        from src.ffmpeg.worker_cache import _worker_lean_roll
+                        timeline = _worker_lean_roll(axis, smooth_s)
+                    except Exception:
+                        timeline = []
+                if not timeline:
+                    telem_obj = kwargs.get("telemetry")
+                    if telem_obj and hasattr(telem_obj, "_get_lean_roll_samples"):
+                        try:
+                            timeline = telem_obj._get_lean_roll_samples(axis, smooth_s)
+                        except Exception:
+                            timeline = []
+                if not timeline:
+                    from src.ffmpeg.worker_cache import WORKER_CACHE
+                    fs_cur = fs_in or WORKER_CACHE.get("field_samples", {}) or {}
+                    if fs_cur.get("accel_x_samples") and fs_cur.get("gyro_x_samples"):
+                        try:
+                            from src.telemetry_imu import compute_roll_timeline, merge_axis_samples, smooth_roll_samples
+                            accel = merge_axis_samples(
+                                fs_cur.get("accel_x_samples", []), fs_cur.get("accel_y_samples", []),
+                                fs_cur.get("accel_z_samples", []),
+                            )
+                            gyro = merge_axis_samples(
+                                fs_cur.get("gyro_x_samples", []), fs_cur.get("gyro_y_samples", []),
+                                fs_cur.get("gyro_z_samples", []),
+                            )
+                            timeline = compute_roll_timeline(accel=accel, gyro=gyro, roll_axis=axis)
+                            if smooth_s > 0.0:
+                                timeline = smooth_roll_samples(timeline, smooth_s)
+                        except Exception:
+                            timeline = []
                 columns[f"lean_{key}"] = _vectorize_lean_roll(timeline, target_ts_arr, ref_dt, sync_s=sync_s)
 
         # 12. Indicator values mapping
@@ -1121,13 +1171,17 @@ class RenderPreparationService:
         # Check disk cache
         if m_path.exists():
             try:
-                t0_load = time.perf_counter()
-                cache = RenderTelemetryCache.load(m_path, mmap=True)
+                with m_path.open("r", encoding="utf-8") as f:
+                    manifest_data = json.load(f)
                 has_layout_charts = any(
                     isinstance(cfg, dict) and cfg.get("form") == "chart" and cfg.get("enabled", True)
                     for cfg in layout.get("indicators", {}).values()
                 )
-                if cache.frames >= total_frames and (not has_layout_charts or bool(cache.static.chart_data)):
+                m_frames = int(manifest_data.get("frames", 0))
+                m_chart_data = bool(manifest_data.get("static", {}).get("chart_data"))
+                if m_frames >= total_frames and (not has_layout_charts or m_chart_data):
+                    t0_load = time.perf_counter()
+                    cache = RenderTelemetryCache.load(m_path, mmap=True)
                     t_load_ms = (time.perf_counter() - t0_load) * 1000.0
                     print(
                         f"[RENDER PREP] HIT (disk memmap) key={cache_key[:12]} "
@@ -1135,7 +1189,7 @@ class RenderPreparationService:
                         flush=True,
                     )
                     return cache
-                elif has_layout_charts and not cache.static.chart_data:
+                elif has_layout_charts and not m_chart_data:
                     print(f"[RENDER PREP] Outdated disk cache {cache_key[:12]} missing chart_data. Rebuilding with charts...", flush=True)
             except Exception as exc:
                 print(f"[RENDER PREP] Corrupted disk cache {m_path}: {exc}. Rebuilding...", flush=True)
@@ -1346,6 +1400,44 @@ class RenderPreparationService:
         except Exception:
             pass
 
+        field_samples = options.get("field_samples") if isinstance(options, dict) else None
+        if not field_samples and telemetry is not None:
+            field_samples = {
+                "speed_samples": speed_s,
+                "track_samples": track_s,
+                "alt_samples": alt_s,
+                "heading_samples": getattr(telemetry, "heading_samples", None),
+                "gpx_heading_samples": getattr(telemetry, "gpx_heading_samples", None),
+                "slope_samples": getattr(telemetry, "slope_samples", None),
+                "gpx_slope_samples": getattr(telemetry, "gpx_slope_samples", None),
+                "iso_samples": getattr(telemetry, "iso_samples", None),
+                "exposure_samples": getattr(telemetry, "exposure_samples", None),
+                "temperature_samples": getattr(telemetry, "temperature_samples", None),
+                "accel_x_samples": getattr(telemetry, "accel_x_samples", None),
+                "accel_y_samples": getattr(telemetry, "accel_y_samples", None),
+                "accel_z_samples": getattr(telemetry, "accel_z_samples", None),
+                "accel_magnitude_samples": getattr(telemetry, "accel_magnitude_samples", None),
+                "gyro_x_samples": getattr(telemetry, "gyro_x_samples", None),
+                "gyro_y_samples": getattr(telemetry, "gyro_y_samples", None),
+                "gyro_z_samples": getattr(telemetry, "gyro_z_samples", None),
+                "gyro_magnitude_samples": getattr(telemetry, "gyro_magnitude_samples", None),
+            }
+
+        lean_timelines = {}
+        if telemetry is not None and hasattr(telemetry, "_get_lean_roll_samples"):
+            for k, cfg in (layout or {}).get("indicators", {}).items():
+                if isinstance(cfg, dict) and (cfg.get("form") == "lean" or k == "lean_indicator"):
+                    axis = str(cfg.get("axis", "x")).strip().lower()
+                    if axis not in ("x", "y", "z"):
+                        axis = "x"
+                    smooth_s = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
+                    try:
+                        tl = telemetry._get_lean_roll_samples(axis, smooth_s)
+                        if tl:
+                            lean_timelines[k] = tl
+                    except Exception:
+                        pass
+
         compass_cfg = layout.get("indicators", {}).get("compass", {})
         compass_samples = None
         if compass_cfg.get("enabled", True) and compass_cfg:
@@ -1358,8 +1450,19 @@ class RenderPreparationService:
             else:
                 attr = "gpx_heading_samples" if source == "gpx" else "heading_samples"
                 compass_samples = getattr(telemetry, attr, []) or []
+            if not compass_samples and telemetry is not None:
+                compass_samples = getattr(telemetry, "heading_samples", None)
+            if not compass_samples and getattr(telemetry, "gps_track", None) and len(telemetry.gps_track) >= 2:
+                try:
+                    from src.telemetry_heading import derive_heading_samples
+                    compass_samples = derive_heading_samples(telemetry.gps_track, speed_s)
+                except Exception:
+                    pass
         return cls.get_or_build(
             compass_heading_samples=compass_samples,
+            field_samples=field_samples,
+            lean_timelines=lean_timelines,
+            telemetry=telemetry,
             layout=layout,
             base_dt=base_dt,
             tz_offset_hours=2.0,

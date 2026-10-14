@@ -527,7 +527,16 @@ class RenderTelemetryCache:
                 arr = np.array(arr)
             fn = f"{col_name}.npy"
             p = ch_dir / fn
-            np.save(p, arr)
+            try:
+                np.save(p, arr)
+            except OSError:
+                import gc
+                gc.collect()
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                np.save(p, arr)
             channel_files[col_name] = f"channels/{fn}"
 
         # Fast single-file archive for ultra-fast single-call load
