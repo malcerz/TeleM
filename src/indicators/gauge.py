@@ -32,7 +32,9 @@ from src.indicators.helpers import (
     _STATIC_CACHE,
     _static_cache_key,
     compose_5q_optimized,
+    draw_text_with_graphic_degree,
     load_font,
+    measure_text_with_graphic_degree,
     parse_hex_color,
     resolve_indicator_font_path,
     s,
@@ -769,8 +771,10 @@ def _render_compass_indicator(
                 off_y = int(round(s_dist_out * sin_sa)) if shadow_angle != 45.0 else int(round(s_dist_out))
                 shad_a = int(round(shadow_opacity * 255))
                 if shad_a > 0:
-                    draw.text((tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
-                              fill=(*shadow_color, shad_a))
+                    draw_text_with_graphic_degree(
+                        draw, (tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
+                        fill=(*shadow_color, shad_a)
+                    )
             else:
                 steps = max(1, min(30, int(round(s_len_out))))
                 for step in range(steps, -1, -1):
@@ -781,13 +785,17 @@ def _render_compass_indicator(
                     w = shadow_opacity * max(0.0, 1.0 - shadow_fade * frac)
                     shad_a = int(round(w * 255))
                     if shad_a > 0:
-                        draw.text((tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
-                                  fill=(*shadow_color, shad_a))
+                        draw_text_with_graphic_degree(
+                            draw, (tx + off_x, ty + off_y), heading_text, font=heading_font, anchor="mm",
+                            fill=(*shadow_color, shad_a)
+                        )
 
         t_stroke_w = max(1, int(round(outline_width))) if outline_enabled and outline_width > 0 else max(1, outline // 2)
         t_stroke_fill = outline_rgba if outline_enabled and outline_width > 0 else (0, 0, 0, 230)
-        draw.text((tx, ty), heading_text, font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
-                  stroke_width=t_stroke_w, stroke_fill=t_stroke_fill)
+        draw_text_with_graphic_degree(
+            draw, (tx, ty), heading_text, font=heading_font, anchor="mm", fill=(*heading_rgb, 255),
+            stroke_width=t_stroke_w, stroke_fill=t_stroke_fill
+        )
 
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     if opacity < 1.0:
@@ -1318,7 +1326,7 @@ def _render_gauge_indicator(
         txt_main = formatted_val if formatted_val is not None else (f"{value:.1f}" if value is not None else "--")
         if txt_main:
             text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
-            tw = draw.textbbox((0, 0), txt_main, font=_c_font)[2]
+            tw = int(round(measure_text_with_graphic_degree(draw, txt_main, _c_font)[0]))
             ox = int(round(cfg.get("text_offset_x", 0.0) * out_gauge_size))
             oy = int(round(cfg.get("text_offset_y", 0.0) * out_gauge_size))
             px = _cx - tw // 2 + ox
@@ -1333,20 +1341,21 @@ def _render_gauge_indicator(
                 cached = _STATIC_CACHE.get(text_key)
                 if cached is None:
                     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
-                    sl, st, sr, sb = probe.textbbox(
-                        (0, 0), txt_main, font=_c_font,
+                    _, _, (sl, st, sr, sb) = measure_text_with_graphic_degree(
+                        probe, txt_main, _c_font,
                         stroke_width=max(1, outline),
                     )
                     tile = Image.new(
-                        "RGBA", (max(1, sr - sl), max(1, sb - st)), (0, 0, 0, 0)
+                        "RGBA", (max(1, int(math.ceil(sr - sl))), max(1, int(math.ceil(sb - st)))), (0, 0, 0, 0)
                     )
                     tdraw = ImageDraw.Draw(tile)
-                    tdraw.text(
-                        (-sl, -st), txt_main, font=_c_font,
+                    draw_text_with_graphic_degree(
+                        tdraw, (-sl, -st), txt_main, font=_c_font,
                         fill=(text_color[0], text_color[1], text_color[2], 255),
                         stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
+                        anchor="la",
                     )
-                    cached = (tile, sl, st)
+                    cached = (tile, int(round(sl)), int(round(st)))
                     _STATIC_CACHE[text_key] = cached
                 tile, sl, st = cached
                 img.alpha_composite(tile, (px + sl, py + st))
@@ -1357,21 +1366,22 @@ def _render_gauge_indicator(
                     float(px + sl + tile.width),
                     float(py + st + tile.height))
             else:
-                draw.text(
-                    (px, py), txt_main, font=_c_font,
+                draw_text_with_graphic_degree(
+                    draw, (px, py), txt_main, font=_c_font,
                     fill=(text_color[0], text_color[1], text_color[2], 255),
                     stroke_width=max(1, outline), stroke_fill=(0, 0, 0, 255),
+                    anchor="la",
                 )
                 # ETAP 2C: dynamic support measured with the same metrics PIL
                 # used to rasterize the text above (probe-only cost; this
                 # non-cached path runs on CPU-reference builds only).
                 _tb_probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-                _tb = _tb_probe.textbbox(
-                    (px, py), txt_main, font=_c_font,
+                _, _, _tb = measure_text_with_graphic_degree(
+                    _tb_probe, txt_main, _c_font,
                     stroke_width=max(1, outline))
                 _text_support = (
-                    float(_tb[0]), float(_tb[1]),
-                    float(_tb[2]), float(_tb[3]))
+                    float(px + _tb[0]), float(py + _tb[1]),
+                    float(px + _tb[2]), float(py + _tb[3]))
 
     # ── ETAP 2C: report dynamic-support geometry to the AMD exporter ──────
     # Purely informational (never affects pixels). The exporter derives AUTO

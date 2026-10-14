@@ -13,7 +13,15 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.helpers import load_font, parse_hex_color, _STATIC_CACHE, _static_cache_key
+import math
+from src.indicators.helpers import (
+    _STATIC_CACHE,
+    _static_cache_key,
+    draw_text_with_graphic_degree,
+    load_font,
+    measure_text_with_graphic_degree,
+    parse_hex_color,
+)
 
 
 def render_custom_text(
@@ -56,11 +64,15 @@ def render_custom_text(
     # Measure text via a tiny temp image (avoids (canvas_w × font_size) allocation)
     _tmp = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     _draw = ImageDraw.Draw(_tmp)
-    bbox = _draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
+    w_m, h_m, bbox = measure_text_with_graphic_degree(_draw, text, font, stroke_width=stroke_width)
+    tw = int(math.ceil(w_m))
+    th = int(math.ceil(h_m))
     overlay = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    draw.text((4, 4), text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=(0, 0, 0, 200))
+    draw_text_with_graphic_degree(
+        draw, (4, 4), text, font=font, fill=fill_color,
+        stroke_width=stroke_width, stroke_fill=(0, 0, 0, 200),
+        anchor="la",
+    )
     _STATIC_CACHE[cache_key] = overlay
     return overlay, px, py

@@ -21,8 +21,13 @@ from src.indicators.chart import ChartSplit
 from src.indicators.custom_text import render_custom_text
 from src.indicators.dispatcher import render_value_indicator_borrowed as render_value_indicator
 from src.indicators.helpers import (
-    indicator_font_path, load_font, s, parse_hex_color,
+    draw_text_with_graphic_degree,
+    indicator_font_path,
+    load_font,
+    measure_text_with_graphic_degree,
+    parse_hex_color,
     resolve_indicator_font_path,
+    s,
 )
 from src.indicators.rotated_paste import rotated_paste
 from src.indicators.time_display import render_time_display
@@ -774,9 +779,9 @@ def compose_overlay(
                     outline = max(1, fs // 12)
                     if extra and extra.get("show_value") and key != "dist_visual":
                         text = extra["value_text"]
-                        bbox = draw.textbbox((0, 0), text, font=font)
-                        text_w = bbox[2] - bbox[0]
-                        text_h = bbox[3] - bbox[1]
+                        w_m, h_m, bbox = measure_text_with_graphic_degree(draw, text, font)
+                        text_w = w_m
+                        text_h = h_m
                         ox = int(round(cfg.get("text_offset_x", 0.0) * canvas_w))
                         oy = int(round(cfg.get("text_offset_y", 0.0) * canvas_h))
                         if rotation == 90:
@@ -786,16 +791,17 @@ def compose_overlay(
                             text_x = int(center_x + extra["dot_x"] - res.width // 2 - text_w / 2 + ox - origin_x)
                             text_y = int(center_y + extra["dot_y"] - res.height // 2 - text_h - 8 + oy - origin_y)
                         text_color = parse_hex_color(cfg.get("text_color", "#FFFFFF")) or (255, 255, 255)
-                        draw.text(
+                        actual_bbox = draw_text_with_graphic_degree(
+                            draw,
                             (text_x, text_y),
                             text,
                             font=font,
                             fill=(text_color[0], text_color[1], text_color[2], 255),
                             stroke_width=outline,
                             stroke_fill=(0, 0, 0, 255),
+                            anchor="la",
                         )
                         # ETAP 10R FIX: extend tight and loose bboxes to include standalone text
-                        actual_bbox = draw.textbbox((text_x, text_y), text, font=font, stroke_width=outline)
                         bx, by = actual_bbox[0] + origin_x - 2, actual_bbox[1] + origin_y - 2
                         bw, bh = actual_bbox[2] - actual_bbox[0] + 4, actual_bbox[3] - actual_bbox[1] + 4
                         if _bboxes is not None and key in _bboxes:

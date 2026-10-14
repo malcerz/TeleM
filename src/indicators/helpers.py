@@ -643,25 +643,69 @@ def apply_map_pitch(img, raw_pitch: Any):
 
 
 def get_arial_fallback_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Zwraca font Arial o wskazanym rozmiarze ze standardowego systemowego resolvera."""
+    """Legacy helper: returns Arial font (kept for backwards compatibility; degree rendering now uses vector graphics)."""
     return load_font("arial", max(8, int(size)))
+
+
+def get_graphic_degree_metrics(
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    stroke_width: int = 0,
+) -> dict[str, float]:
+    """Calculate geometric metrics for drawing the vector degree ring next to text.
+
+    Dimensions are proportional to the font's digit cap-height and stroke width.
+    """
+    sw = max(0, int(stroke_width))
+    try:
+        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+        ref_box = probe.textbbox((0, 0), "0", font=font, anchor="la")
+        cap_top = float(ref_box[1])
+        cap_bottom = float(ref_box[3])
+        cap_h = max(8.0, cap_bottom - cap_top)
+    except Exception:
+        size = float(getattr(font, "size", 16))
+        cap_h = max(8.0, size * 0.72)
+        cap_top = size * 0.28
+        cap_bottom = cap_top + cap_h
+
+    # Degree circle diameter: ~28% of digit cap-height
+    diameter = max(3.0, round(cap_h * 0.28))
+    # Line thickness of the degree ring: ~22% of diameter, minimum 1 px
+    thickness = max(1, int(round(diameter * 0.22)))
+    # Advance padding around the circle
+    gap_before = max(1.0, round(cap_h * 0.08))
+    gap_after = max(1.0, round(cap_h * 0.06))
+    advance = gap_before + diameter + gap_after
+    # Vertical placement: superscript aligned with upper portion of digit cap-height
+    deg_top = cap_top + round(cap_h * 0.04)
+
+    return {
+        "cap_h": cap_h,
+        "cap_top": cap_top,
+        "diameter": float(diameter),
+        "thickness": float(thickness),
+        "gap_before": float(gap_before),
+        "gap_after": float(gap_after),
+        "advance": float(advance),
+        "deg_top": float(deg_top),
+        "sw": float(sw),
+    }
 
 
 def split_text_degree_chunks(
     text: str,
     main_font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-) -> list[tuple[str, ImageFont.FreeTypeFont | ImageFont.ImageFont]]:
-    """Dzieli tekst na segmenty, podstawiając font Arial dla symbolu stopni '°'.
+) -> list[tuple[str, Any]]:
+    """Dzieli tekst na segmenty tekstu oraz znaki stopnia '°'.
 
-    Zachowuje font główny (np. cyfrowy) dla wszystkich pozostałych znaków (w tym cyfr).
+    Dla segmentów tekstowych zwraca (tekst, main_font).
+    Dla symbolu stopnia '°' zwraca ('°', None), co oznacza rysowanie
+    graficznego kółka stopnia bez użycia żadnego glifu fontowego.
     """
     if not text:
         return []
     if "°" not in text:
         return [(text, main_font)]
-
-    font_size = getattr(main_font, "size", 16)
-    arial_font = get_arial_fallback_font(font_size)
 
     chunks: list[tuple[str, Any]] = []
     current_buf: list[str] = []
@@ -670,7 +714,7 @@ def split_text_degree_chunks(
             if current_buf:
                 chunks.append(("".join(current_buf), main_font))
                 current_buf = []
-            chunks.append(("°", arial_font))
+            chunks.append(("°", None))
         else:
             current_buf.append(ch)
     if current_buf:
@@ -678,30 +722,74 @@ def split_text_degree_chunks(
     return chunks
 
 
-def measure_text_with_degree_fallback(
+def draw_graphic_degree_symbol(
+    draw: ImageDraw.ImageDraw,
+    rect: tuple[float, float, float, float],
+    thickness: int = 1,
+    fill: Any = None,
+    stroke_width: int = 0,
+    stroke_fill: Any = None,
+) -> tuple[float, float, float, float]:
+    """Rysuje graficzne, wektorowe kółko stopnia (okrąg/ring) niezależnie od fontu.
+
+    Obsługuje obrys (stroke_width, stroke_fill) oraz kolor wypełnienia/linii znaku.
+    Zwraca rzeczywisty bounding box wyrenderowanego kółka z uwzględnieniem obrysu.
+    """
+    x0, y0, x1, y1 = rect
+    sw = max(0, int(stroke_width))
+    th = max(1, int(thickness))
+    fill_col = fill if fill is not None else (255, 255, 255, 255)
+
+    # 1. Stroke / outline pass (outer ring contour)
+    if sw > 0 and stroke_fill is not None:
+        s_th = max(1, min(int(round(th + 2 * sw)), int(round((x1 - x0) + 2 * sw))))
+        draw.ellipse(
+            [int(round(x0 - sw)), int(round(y0 - sw)), int(round(x1 + sw)), int(round(y1 + sw))],
+            fill=None,
+            outline=stroke_fill,
+            width=s_th,
+        )
+
+    # 2. Main inner ring pass
+    r_th = max(1, min(th, int(round(x1 - x0))))
+    draw.ellipse(
+        [int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1))],
+        fill=None,
+        outline=fill_col,
+        width=r_th,
+    )
+
+    return (float(x0 - sw), float(y0 - sw), float(x1 + sw), float(y1 + sw))
+
+
+def measure_text_with_graphic_degree(
     draw: ImageDraw.ImageDraw,
     text: str,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     stroke_width: int = 0,
+    anchor: str | None = None,
 ) -> tuple[float, float, tuple[float, float, float, float]]:
-    """Mierzy łączną szerokość advance, wysokość oraz bounding box tekstu z uwzględnieniem fallbacku Arial dla '°'.
+    """Mierzy łączną szerokość advance, wysokość oraz bounding box tekstu z graficznym symbolem '°'.
 
-    Zwraca: (total_advance_width, total_height, (left, top, right, bottom))
+    Zwraca: (total_advance_width, total_height, (min_x, min_y, max_x, max_y))
     """
     text_str = str(text or "")
     if not text_str:
         return 0.0, 0.0, (0.0, 0.0, 0.0, 0.0)
 
+    if "°" not in text_str:
+        kwargs: dict[str, Any] = {"font": font, "stroke_width": int(stroke_width)}
+        if anchor is not None:
+            kwargs["anchor"] = anchor
+        bbox = draw.textbbox((0, 0), text_str, **kwargs)
+        length = draw.textlength(text_str, font=font)
+        w = max(length, bbox[2] - bbox[0])
+        h = max(0.0, bbox[3] - bbox[1])
+        return float(w), float(h), (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+
     chunks = split_text_degree_chunks(text_str, font)
     if not chunks:
         return 0.0, 0.0, (0.0, 0.0, 0.0, 0.0)
-
-    if len(chunks) == 1 and chunks[0][1] is font:
-        bbox = draw.textbbox((0, 0), text_str, font=font, stroke_width=int(stroke_width))
-        length = draw.textlength(text_str, font=font)
-        w = max(length, bbox[2] - bbox[0])
-        h = bbox[3] - bbox[1]
-        return float(w), float(h), (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
 
     curr_x = 0.0
     min_x = float("inf")
@@ -709,9 +797,21 @@ def measure_text_with_degree_fallback(
     max_x = float("-inf")
     max_y = float("-inf")
 
-    for chunk_text, chunk_font in chunks:
-        c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=chunk_font, stroke_width=int(stroke_width))
-        c_len = draw.textlength(chunk_text, font=chunk_font)
+    m = get_graphic_degree_metrics(font, stroke_width=stroke_width)
+    sw = m["sw"]
+
+    for chunk_text, _ in chunks:
+        if chunk_text == "°":
+            x0 = curr_x + m["gap_before"]
+            y0 = m["deg_top"]
+            x1 = x0 + m["diameter"]
+            y1 = y0 + m["diameter"]
+            c_bbox = (x0 - sw, y0 - sw, x1 + sw, y1 + sw)
+            c_len = m["advance"]
+        else:
+            c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=font, stroke_width=int(stroke_width), anchor="la")
+            c_len = draw.textlength(chunk_text, font=font)
+
         min_x = min(min_x, c_bbox[0])
         min_y = min(min_y, c_bbox[1])
         max_x = max(max_x, c_bbox[2], curr_x + c_len)
@@ -719,11 +819,28 @@ def measure_text_with_degree_fallback(
         curr_x += c_len
 
     total_w = max(curr_x, max_x - min_x)
-    total_h = max_y - min_y
+    total_h = max_y - min_y if max_y > min_y else 0.0
+
+    if anchor is not None:
+        anchor_str = str(anchor).lower()
+        ax = anchor_str[0] if anchor_str else "l"
+        ay = anchor_str[1] if len(anchor_str) > 1 else "a"
+        shift_x = 0.0 if ax == "l" else (-total_w / 2.0 if ax in ("m", "c") else -total_w)
+        shift_y = (
+            0.0
+            if ay == "a"
+            else (-min_y if ay == "t" else (-(min_y + max_y) / 2.0 if ay in ("m", "c") else -max_y))
+        )
+        return (
+            float(total_w),
+            float(total_h),
+            (float(min_x + shift_x), float(min_y + shift_y), float(max_x + shift_x), float(max_y + shift_y)),
+        )
+
     return float(total_w), float(total_h), (float(min_x), float(min_y), float(max_x), float(max_y))
 
 
-def draw_text_with_degree_fallback(
+def draw_text_with_graphic_degree(
     draw: ImageDraw.ImageDraw,
     xy: tuple[float, float],
     text: str,
@@ -733,9 +850,10 @@ def draw_text_with_degree_fallback(
     stroke_fill: Any = None,
     anchor: str | None = None,
 ) -> tuple[float, float, float, float]:
-    """Rysuje tekst z automatycznym fallbackiem fontu Arial dla znaku stopni '°'.
+    """Rysuje tekst z graficznym symbolem '°' renderowanym jako wektorowy okrąg.
 
-    Zachowuje font główny dla pozostałych znaków (w tym cyfr).
+    Zachowuje wybrany font dla wszystkich znaków poza stopniem, gwarantując
+    idealne renderowanie symbolu stopni niezależnie od rodziny i metryk fontu.
     Zwraca rzeczywisty bounding box wyrenderowanego tekstu: (left, top, right, bottom).
     """
     text_str = str(text or "")
@@ -758,17 +876,34 @@ def draw_text_with_degree_fallback(
         return (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
 
     chunks = split_text_degree_chunks(text_str, font)
-
     chunk_metrics = []
     curr_x = 0.0
+    min_x = float("inf")
     min_y = float("inf")
+    max_x = float("-inf")
     max_y = float("-inf")
-    for chunk_text, chunk_font in chunks:
-        c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=chunk_font, stroke_width=int(stroke_width))
-        c_len = draw.textlength(chunk_text, font=chunk_font)
+
+    m = get_graphic_degree_metrics(font, stroke_width=stroke_width)
+    sw = m["sw"]
+
+    for chunk_text, _ in chunks:
+        if chunk_text == "°":
+            x0 = curr_x + m["gap_before"]
+            y0 = m["deg_top"]
+            x1 = x0 + m["diameter"]
+            y1 = y0 + m["diameter"]
+            c_bbox = (x0 - sw, y0 - sw, x1 + sw, y1 + sw)
+            c_len = m["advance"]
+            chunk_metrics.append(("°", None, curr_x, c_len, c_bbox, m))
+        else:
+            c_bbox = draw.textbbox((curr_x, 0), chunk_text, font=font, stroke_width=int(stroke_width), anchor="la")
+            c_len = draw.textlength(chunk_text, font=font)
+            chunk_metrics.append((chunk_text, font, curr_x, c_len, c_bbox, None))
+
+        min_x = min(min_x, c_bbox[0])
         min_y = min(min_y, c_bbox[1])
+        max_x = max(max_x, c_bbox[2], curr_x + c_len)
         max_y = max(max_y, c_bbox[3])
-        chunk_metrics.append((chunk_text, chunk_font, curr_x, c_len, c_bbox))
         curr_x += c_len
 
     total_w = curr_x
@@ -777,34 +912,60 @@ def draw_text_with_degree_fallback(
     ox, oy = float(xy[0]), float(xy[1])
     anchor_str = str(anchor or "la").lower()
 
-    if "m" in anchor_str or "c" in anchor_str:
+    ax = anchor_str[0] if anchor_str else "l"
+    ay = anchor_str[1] if len(anchor_str) > 1 else "a"
+
+    if ax == "l":
+        shift_x = 0.0
+    elif ax in ("m", "c"):
         shift_x = -total_w / 2.0
-    elif "r" in anchor_str:
+    elif ax == "r":
         shift_x = -total_w
     else:
         shift_x = 0.0
 
-    if "m" in anchor_str:
+    if ay == "a":
+        shift_y = 0.0
+    elif ay == "t":
+        shift_y = -min_y
+    elif ay in ("m", "c"):
         shift_y = -(min_y + max_y) / 2.0
-    elif "b" in anchor_str or "d" in anchor_str:
+    elif ay in ("b", "d"):
         shift_y = -max_y
     else:
-        shift_y = -min_y if min_y != float("inf") else 0.0
+        shift_y = 0.0
 
     drawn_boxes = []
-    for chunk_text, chunk_font, c_offset_x, _, _ in chunk_metrics:
-        pos = (ox + shift_x + c_offset_x, oy + shift_y)
-        kwargs = {"font": chunk_font, "fill": fill}
-        if stroke_width > 0:
-            kwargs["stroke_width"] = int(stroke_width)
-            if stroke_fill is not None:
-                kwargs["stroke_fill"] = stroke_fill
-        draw.text(pos, chunk_text, **kwargs)
-        try:
-            b = draw.textbbox(pos, chunk_text, font=chunk_font, stroke_width=int(stroke_width))
+    for c_text, c_font, c_offset_x, _, _, c_m in chunk_metrics:
+        if c_text == "°":
+            x0 = ox + shift_x + c_offset_x + c_m["gap_before"]
+            y0 = oy + shift_y + c_m["deg_top"]
+            x1 = x0 + c_m["diameter"]
+            y1 = y0 + c_m["diameter"]
+            b = draw_graphic_degree_symbol(
+                draw,
+                (x0, y0, x1, y1),
+                thickness=int(c_m["thickness"]),
+                fill=fill,
+                stroke_width=int(c_m["sw"]),
+                stroke_fill=stroke_fill,
+            )
             drawn_boxes.append(b)
-        except Exception:
-            pass
+        else:
+            pos = (ox + shift_x + c_offset_x, oy + shift_y)
+            kwargs = {"font": c_font, "fill": fill, "anchor": "la"}
+            if stroke_width > 0:
+                kwargs["stroke_width"] = int(stroke_width)
+                if stroke_fill is not None:
+                    kwargs["stroke_fill"] = stroke_fill
+            try:
+                draw.text(pos, c_text, **kwargs)
+                b = draw.textbbox(pos, c_text, font=c_font, stroke_width=int(stroke_width), anchor="la")
+            except TypeError:
+                kwargs.pop("anchor", None)
+                draw.text(pos, c_text, **kwargs)
+                b = draw.textbbox(pos, c_text, font=c_font, stroke_width=int(stroke_width))
+            drawn_boxes.append(b)
 
     if drawn_boxes:
         return (
@@ -814,4 +975,10 @@ def draw_text_with_degree_fallback(
             max(b[3] for b in drawn_boxes),
         )
     return (ox, oy, ox + total_w, oy + total_h)
+
+
+# Compatibility aliases
+measure_text_with_degree_fallback = measure_text_with_graphic_degree
+draw_text_with_degree_fallback = draw_text_with_graphic_degree
+
 

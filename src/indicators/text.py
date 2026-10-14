@@ -7,7 +7,15 @@ except ImportError:
     Image = None  # type: ignore
     ImageDraw = None  # type: ignore
 
-from src.indicators.helpers import s, parse_hex_color, load_font, _BoundedStaticCache, _static_cache_key
+from src.indicators.helpers import (
+    _BoundedStaticCache,
+    _static_cache_key,
+    draw_text_with_graphic_degree,
+    load_font,
+    measure_text_with_graphic_degree,
+    parse_hex_color,
+    s,
+)
 from src.indicators.icons import render_icon
 
 # Dedicated bounded cache for text indicator rasters (ETAP 3C)
@@ -84,7 +92,12 @@ def _render_text_indicator(
 
     pad = outline_int + 4
     canvas_h = max(int(text_h + pad * 2), int((icon.height if icon else 0) + pad * 2), int(fs_int * 2))
-    txt_w = int(font.getlength(txt) + outline_int * 6 + (icon.width + gap if icon else 0) + 10)
+    if "°" in txt:
+        probe_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+        raw_w = measure_text_with_graphic_degree(probe_draw, txt, font, stroke_width=outline_int)[0]
+    else:
+        raw_w = font.getlength(txt)
+    txt_w = int(raw_w + outline_int * 6 + (icon.width + gap if icon else 0) + 10)
 
     tmp = Image.new("RGBA", (txt_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(tmp)
@@ -100,10 +113,12 @@ def _render_text_indicator(
     else:
         text_x = outline_int
 
-    draw.text(
+    draw_text_with_graphic_degree(
+        draw,
         (text_x, text_y), txt, font=font,
         fill=(text_color[0], text_color[1], text_color[2], 255),
         stroke_width=outline_int, stroke_fill=(0, 0, 0, 255),
+        anchor="la",
     )
     bbox = tmp.getbbox()
     if not bbox:

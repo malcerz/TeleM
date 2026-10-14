@@ -33,8 +33,8 @@ def test_degree_symbol_arial_fallback():
     assert chunks[0][0] == "25"
     assert chunks[0][1] == main_font
     assert chunks[1][0] == "°"
-    # Symbol stopnia ma mieć font z Arial resolvera
-    assert chunks[1][1] is not None
+    # Symbol stopnia ma miec None jako font (rysowany graficznie, bez fontu fallback)
+    assert chunks[1][1] is None
     assert chunks[2][0] == "C"
     assert chunks[2][1] == main_font
 

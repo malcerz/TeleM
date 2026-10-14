@@ -36,7 +36,9 @@ from src.indicators.helpers import (
     _BoundedStaticCache,
     _STATIC_CACHE,
     _static_cache_key,
+    draw_text_with_graphic_degree,
     load_font,
+    measure_text_with_graphic_degree,
     parse_hex_color,
     s,
 )
@@ -153,7 +155,11 @@ def _gradient_colour(stops: Iterable[Any], position: float) -> tuple[int, int, i
 
 
 def _text_size(draw: ImageDraw.ImageDraw, text: str, font, stroke: int = 0) -> tuple[int, int, tuple[int, int, int, int]]:
-    box = draw.textbbox((0, 0), str(text), font=font, stroke_width=max(0, stroke))
+    text_str = str(text or "")
+    if "°" in text_str:
+        w, h, box = measure_text_with_graphic_degree(draw, text_str, font, stroke_width=max(0, stroke))
+        return int(round(w)), int(round(h)), (int(round(box[0])), int(round(box[1])), int(round(box[2])), int(round(box[3])))
+    box = draw.textbbox((0, 0), text_str, font=font, stroke_width=max(0, stroke))
     return max(0, box[2] - box[0]), max(0, box[3] - box[1]), box
 
 
@@ -169,18 +175,19 @@ def _draw_text_bounded(
     bounds: tuple[int, int],
     anchor: str = "la",
 ) -> None:
-    """Draw text but clamp its real glyph bbox inside ``bounds``.
-
-    Pillow anchors are convenient, but TrueType ascent/descent + stroke can
-    still cross the raster edge.  We first ask Pillow for the actual bbox at the
-    requested anchor and translate the origin just enough to keep it contained.
-    """
+    """Draw text but clamp its real glyph bbox inside ``bounds``."""
+    text_str = str(text or "")
+    if not text_str:
+        return
     x, y = float(xy[0]), float(xy[1])
-    try:
-        box = draw.textbbox((x, y), str(text), font=font, anchor=anchor, stroke_width=stroke_width)
-    except TypeError:  # old Pillow fallback
-        box = draw.textbbox((x, y), str(text), font=font, stroke_width=stroke_width)
-        anchor = None  # type: ignore[assignment]
+    if "°" in text_str:
+        _, _, box = measure_text_with_graphic_degree(draw, text_str, font, stroke_width=stroke_width, anchor=anchor)
+    else:
+        try:
+            box = draw.textbbox((x, y), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
+        except TypeError:  # old Pillow fallback
+            box = draw.textbbox((x, y), text_str, font=font, stroke_width=stroke_width)
+            anchor = None  # type: ignore[assignment]
 
     w, h = bounds
     dx = 0.0
@@ -194,10 +201,16 @@ def _draw_text_bounded(
     elif box[3] > h:
         dy = h - box[3]
 
-    kwargs = dict(font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
-    if anchor is not None:
-        kwargs["anchor"] = anchor
-    draw.text((x + dx, y + dy), str(text), **kwargs)
+    if "°" in text_str:
+        draw_text_with_graphic_degree(
+            draw, (x + dx, y + dy), text_str, font=font, fill=fill,
+            stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor
+        )
+    else:
+        kwargs = dict(font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+        if anchor is not None:
+            kwargs["anchor"] = anchor
+        draw.text((x + dx, y + dy), text_str, **kwargs)
 
 
 def _line_with_shadow(draw, xy, *, fill, width: int, shadow: bool = True) -> None:
@@ -246,19 +259,31 @@ def _draw_text_bounded_cached(
     if tile_data is None:
         dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
         d_dum = ImageDraw.Draw(dummy)
-        try:
-            box = d_dum.textbbox((0, 0), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
-        except TypeError:
-            box = d_dum.textbbox((0, 0), text_str, font=font, stroke_width=stroke_width)
-        tw = max(1, box[2] - box[0])
-        th = max(1, box[3] - box[1])
-        tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
-        d_tile = ImageDraw.Draw(tile)
-        try:
-            d_tile.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor)
-        except TypeError:
-            d_tile.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
-        tile_data = (tile, box[0], box[1], box[2], box[3], tw, th)
+        if "°" in text_str:
+            _, _, box = measure_text_with_graphic_degree(d_dum, text_str, font=font, stroke_width=stroke_width, anchor=anchor)
+            tw = max(1, int(ceil(box[2] - box[0])))
+            th = max(1, int(ceil(box[3] - box[1])))
+            tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+            d_tile = ImageDraw.Draw(tile)
+            draw_text_with_graphic_degree(
+                d_tile, (-box[0], -box[1]), text_str, font=font, fill=fill,
+                stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor
+            )
+            tile_data = (tile, box[0], box[1], box[2], box[3], tw, th)
+        else:
+            try:
+                box = d_dum.textbbox((0, 0), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
+            except TypeError:
+                box = d_dum.textbbox((0, 0), text_str, font=font, stroke_width=stroke_width)
+            tw = max(1, box[2] - box[0])
+            th = max(1, box[3] - box[1])
+            tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+            d_tile = ImageDraw.Draw(tile)
+            try:
+                d_tile.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor)
+            except TypeError:
+                d_tile.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+            tile_data = (tile, box[0], box[1], box[2], box[3], tw, th)
         _TEXT_TILE_CACHE[tile_key] = tile_data
 
     tile, b0, b1, b2, b3, tw, th = tile_data

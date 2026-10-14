@@ -34,7 +34,9 @@ from PIL import Image, ImageDraw
 from src.indicators.helpers import (
     _BoundedStaticCache,
     _static_cache_key,
+    draw_text_with_graphic_degree,
     load_font,
+    measure_text_with_graphic_degree,
     parse_hex_color,
     s,
 )
@@ -596,17 +598,27 @@ def get_lean_gpu_transform_info(
 # ── Small text helpers (mirror bar.py so lean.py stays self-contained) ─────
 
 def _text_size(draw: ImageDraw.ImageDraw, text: str, font, stroke: int = 0) -> tuple[int, int, tuple[int, int, int, int]]:
-    box = draw.textbbox((0, 0), str(text), font=font, stroke_width=max(0, stroke))
+    text_str = str(text or "")
+    if "°" in text_str:
+        w, h, box = measure_text_with_graphic_degree(draw, text_str, font, stroke_width=max(0, stroke))
+        return int(round(w)), int(round(h)), (int(round(box[0])), int(round(box[1])), int(round(box[2])), int(round(box[3])))
+    box = draw.textbbox((0, 0), text_str, font=font, stroke_width=max(0, stroke))
     return max(0, box[2] - box[0]), max(0, box[3] - box[1]), box
 
 
 def _draw_text_bounded(draw, xy, text, *, font, fill, stroke_width, stroke_fill, bounds, anchor="ma") -> None:
+    text_str = str(text or "")
+    if not text_str:
+        return
     x, y = float(xy[0]), float(xy[1])
-    try:
-        box = draw.textbbox((x, y), str(text), font=font, anchor=anchor, stroke_width=stroke_width)
-    except TypeError:
-        box = draw.textbbox((x, y), str(text), font=font, stroke_width=stroke_width)
-        anchor = None
+    if "°" in text_str:
+        _, _, box = measure_text_with_graphic_degree(draw, text_str, font, stroke_width=stroke_width, anchor=anchor)
+    else:
+        try:
+            box = draw.textbbox((x, y), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
+        except TypeError:
+            box = draw.textbbox((x, y), text_str, font=font, stroke_width=stroke_width)
+            anchor = None
     w, h = bounds
     dx = 0.0
     dy = 0.0
@@ -618,10 +630,16 @@ def _draw_text_bounded(draw, xy, text, *, font, fill, stroke_width, stroke_fill,
         dy = -box[1]
     elif box[3] > h:
         dy = h - box[3]
-    kwargs = dict(font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
-    if anchor is not None:
-        kwargs["anchor"] = anchor
-    draw.text((x + dx, y + dy), str(text), **kwargs)
+    if "°" in text_str:
+        draw_text_with_graphic_degree(
+            draw, (x + dx, y + dy), text_str, font=font, fill=fill,
+            stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor
+        )
+    else:
+        kwargs = dict(font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+        if anchor is not None:
+            kwargs["anchor"] = anchor
+        draw.text((x + dx, y + dy), text_str, **kwargs)
 
 
 _TEXT_TILE_CACHE = _BoundedStaticCache(max_entries=128)
@@ -637,19 +655,31 @@ def _draw_text_bounded_cached(target_img, xy, text, *, font, font_path, fill, st
     if tile_data is None:
         dummy = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
         dd = ImageDraw.Draw(dummy)
-        try:
-            box = dd.textbbox((0, 0), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
-        except TypeError:
-            box = dd.textbbox((0, 0), text_str, font=font, stroke_width=stroke_width)
-        tw = max(1, box[2] - box[0])
-        th = max(1, box[3] - box[1])
-        tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
-        td = ImageDraw.Draw(tile)
-        try:
-            td.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor)
-        except TypeError:
-            td.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
-        tile_data = (tile, box[0], box[1], box[2], box[3])
+        if "°" in text_str:
+            _, _, box = measure_text_with_graphic_degree(dd, text_str, font=font, stroke_width=stroke_width, anchor=anchor)
+            tw = max(1, int(math.ceil(box[2] - box[0])))
+            th = max(1, int(math.ceil(box[3] - box[1])))
+            tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+            td = ImageDraw.Draw(tile)
+            draw_text_with_graphic_degree(
+                td, (-box[0], -box[1]), text_str, font=font, fill=fill,
+                stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor
+            )
+            tile_data = (tile, box[0], box[1], box[2], box[3])
+        else:
+            try:
+                box = dd.textbbox((0, 0), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
+            except TypeError:
+                box = dd.textbbox((0, 0), text_str, font=font, stroke_width=stroke_width)
+            tw = max(1, box[2] - box[0])
+            th = max(1, box[3] - box[1])
+            tile = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+            td = ImageDraw.Draw(tile)
+            try:
+                td.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill, anchor=anchor)
+            except TypeError:
+                td.text((-box[0], -box[1]), text_str, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+            tile_data = (tile, box[0], box[1], box[2], box[3])
         _TEXT_TILE_CACHE[tile_key] = tile_data
 
     tile, b0, b1, b2, b3 = tile_data
