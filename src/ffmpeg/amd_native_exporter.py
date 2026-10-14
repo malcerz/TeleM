@@ -3415,12 +3415,10 @@ def export_amd_native_d3d11(
                             f"AMD single-pass audio plan write failed: {exc}"
                         ) from exc
                     audio_args = [
-                        # Concat demuxer inpoint seeks can retain the source
-                        # packet timestamp (notably on clip-2 fragments).
-                        # Shift the copied stream back to zero so the global
-                        # ``-t`` applies to the effective timeline rather
-                        # than discarding the first ~N seconds.
-                        "-copyts", "-avoid_negative_ts", "make_zero",
+                        # Direct live mux without -copyts: ensures stdin HEVC
+                        # receives synthesized monotonic DTS from demuxer, enabling
+                        # live interleaved muxing during rendering and preventing
+                        # massive backlog/stalls during finalization.
                         "-f", "concat", "-safe", "0",
                         "-thread_queue_size", "512",
                         "-i", str(audio_concat_path)

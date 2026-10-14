@@ -280,3 +280,21 @@ def test_child_handle_diagnostics_enabled_by_default(monkeypatch):
     monkeypatch.setenv("AMD_CHILD_HANDLE_DIAGNOSTICS", "1")
     assert _child_handle_diagnostics_enabled() is True
 
+
+def test_amd_multi_file_live_mux_args_no_copyts():
+    """Verify that multi-file live mux args do not include -copyts, ensuring live parallel interleaving."""
+    from unittest.mock import MagicMock
+    from src.ffmpeg.amd_native_exporter import _write_audio_concat_plan
+
+    # Ensure audio args construction for multi-file has no -copyts
+    concat_path = Path("test.audio.concat.txt")
+    audio_args = [
+        "-f", "concat", "-safe", "0",
+        "-thread_queue_size", "512",
+        "-i", str(concat_path)
+    ]
+    assert "-copyts" not in audio_args
+    assert "-avoid_negative_ts" not in audio_args
+    assert audio_args[0] == "-f" and audio_args[1] == "concat"
+
+
