@@ -291,13 +291,71 @@ def resolve_local_fit(
     if not paths:
         result = (None, {"status": "no_video"})
         return result if return_diagnostics else None
-    search_dir = Path(directory) if directory is not None else paths[0].parent
-    result = scan_and_match_local_telemetry(
-        paths, intervals, search_dir, on_status=on_status,
-        video_gps_point=video_gps_point,
-        on_needs_selection=on_needs_selection,
-    )
-    return result if return_diagnostics else result[0]
+    if directory is not None:
+        search_dirs = [Path(directory)]
+    else:
+        search_dirs = []
+        seen_dirs: set[str] = set()
+        for p in paths:
+            p_dir = p.parent
+            try:
+                r_key = str(p_dir.resolve()).lower()
+            except Exception:
+                r_key = str(p_dir).lower()
+            if r_key not in seen_dirs and p_dir.is_dir():
+                seen_dirs.add(r_key)
+                search_dirs.append(p_dir)
+        if not search_dirs and paths:
+            search_dirs = [paths[0].parent]
+
+    if len(search_dirs) == 1:
+        result = scan_and_match_local_telemetry(
+            paths, intervals, search_dirs[0], on_status=on_status,
+            video_gps_point=video_gps_point,
+            on_needs_selection=on_needs_selection,
+        )
+        return result if return_diagnostics else result[0]
+
+    # Multiple distinct directories: collect candidates from each directory
+    all_ranked: list[tuple[ActivityCandidate, float]] = []
+    seen_cand_paths: set[str] = set()
+    for s_dir in search_dirs:
+        _m_path, m_diag = scan_and_match_local_telemetry(
+            paths, intervals, s_dir, on_status=on_status,
+            video_gps_point=video_gps_point,
+            on_needs_selection=None,
+        )
+        for cand, score in (m_diag.get("ranked") or []):
+            cp = str(Path(cand.raw_data.get("path", "")).resolve())
+            if cp not in seen_cand_paths:
+                seen_cand_paths.add(cp)
+                all_ranked.append((cand, score))
+
+    if not all_ranked:
+        res = (None, {"status": "no_match", "reason": "No local candidates met criteria across video directories"})
+        return res if return_diagnostics else None
+
+    v_start = min(s for s, _, _, _ in intervals) if intervals else None
+    v_end = max(e for _, e, _, _ in intervals) if intervals else None
+    if v_start and v_end:
+        from src.integrations.activity_matcher import rank_and_evaluate_candidates
+        decision, final_ranked = rank_and_evaluate_candidates(
+            [c for c, _ in all_ranked], v_start, v_end, video_gps_point=video_gps_point
+        )
+        if final_ranked and decision != "NO_MATCH":
+            if decision == "NEEDS_SELECTION" and on_needs_selection:
+                sel = on_needs_selection(final_ranked)
+                if sel is not None:
+                    sp = Path(sel.raw_data.get("path", ""))
+                    res = (sp, {"status": "selected", "ranked": final_ranked})
+                    return res if return_diagnostics else sp
+            best_cand, best_score = final_ranked[0]
+            bp = Path(best_cand.raw_data["path"])
+            res = (bp, {"status": "matched", "path": bp, "score": best_score, "ranked": final_ranked})
+            return res if return_diagnostics else bp
+
+    res = (None, {"status": "no_match"})
+    return res if return_diagnostics else None
 
 
 def format_activity_filename(candidate: Any, ext: str) -> str:
@@ -315,6 +373,30 @@ def format_activity_filename(candidate: Any, ext: str) -> str:
     if start_dt is not None:
         return start_dt.strftime("%Y-%m-%d_%H-%M-%S") + ext
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ext
+
+
+def _compute_file_sha256(path: Path | str) -> str:
+    """Compute SHA-256 hash of a file."""
+    import hashlib
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _files_content_identical(path1: Path | str, path2: Path | str) -> bool:
+    """Check if two files have identical byte content using size check + SHA-256."""
+    try:
+        p1 = Path(path1)
+        p2 = Path(path2)
+        if p1.resolve() == p2.resolve():
+            return True
+        if p1.stat().st_size != p2.stat().st_size:
+            return False
+        return _compute_file_sha256(p1) == _compute_file_sha256(p2)
+    except Exception:
+        return False
 
 
 def persist_downloaded_telemetry(
@@ -341,17 +423,25 @@ def persist_downloaded_telemetry(
 
     if target_path.exists():
         try:
-            # Bezpieczna logika: jeśli plik o tej nazwie już istnieje i ma ten sam rozmiar, zachowaj go bez niszczenia
-            if target_path.stat().st_size == downloaded_file.stat().st_size and target_path.stat().st_size > 0:
-                print(f"[AutoPreflight] Plik docelowy {target_path.name} już istnieje i jest zgodny rozmiarowo.", flush=True)
+            # Bezpieczna weryfikacja zawartości: SHA-256 zamiast samego rozmiaru
+            if _files_content_identical(target_path, downloaded_file):
+                print(f"[AutoPreflight] Plik docelowy {target_path.name} już istnieje i ma identyczną treść.", flush=True)
                 return target_path
-            # Jeżeli plik o tej nazwie istnieje i różni się treścią, uniknij zniszczenia danych dodając id aktywności
-            act_id = getattr(candidate, "activity_id", "")
-            target_path = video_dir / f"{target_path.stem}_{act_id}{ext}"
-            if target_path.exists() and target_path.stat().st_size == downloaded_file.stat().st_size:
-                return target_path
-        except Exception:
-            pass
+
+            # Jeżeli plik o tej nazwie istnieje i różni się zawartością, NIGDY go nie zastępuj!
+            act_id = getattr(candidate, "activity_id", "") or "download"
+            clean_act_id = "".join(c for c in str(act_id) if c.isalnum() or c in ("-", "_"))
+            candidate_target = video_dir / f"{target_path.stem}_{clean_act_id}{ext}"
+            counter = 1
+            while candidate_target.exists():
+                if _files_content_identical(candidate_target, downloaded_file):
+                    print(f"[AutoPreflight] Plik docelowy {candidate_target.name} już istnieje i ma identyczną treść.", flush=True)
+                    return candidate_target
+                candidate_target = video_dir / f"{target_path.stem}_{clean_act_id}_{counter}{ext}"
+                counter += 1
+            target_path = candidate_target
+        except Exception as exc:
+            print(f"[AutoPreflight] Błąd podczas sprawdzania kolizji: {exc}", flush=True)
 
     import shutil
     try:
@@ -430,9 +520,20 @@ def run_auto_telemetry_preflight(
     if is_cancelled():
         return None
 
-    # 2. Local search strictly in source MP4 directory (non-recursive, no AppData, no external paths)
-    parent_dir = Path(video_paths[0]).parent
-    search_dirs = [parent_dir]
+    # 2. Local search strictly in source MP4 directories of each video (non-recursive, no AppData, no external paths)
+    search_dirs: list[Path] = []
+    seen_dirs: set[str] = set()
+    for vp in video_paths:
+        p_dir = Path(vp).parent
+        try:
+            r_key = str(p_dir.resolve()).lower()
+        except Exception:
+            r_key = str(p_dir).lower()
+        if r_key not in seen_dirs and p_dir.is_dir():
+            seen_dirs.add(r_key)
+            search_dirs.append(p_dir)
+    if not search_dirs and video_paths:
+        search_dirs = [Path(video_paths[0]).parent]
             
     local_ranked: list[tuple[ActivityCandidate, float]] = []
     for search_dir in search_dirs:

@@ -68,6 +68,17 @@ def _file_fingerprint(path: Union[Path, str, None]) -> str:
         return f"{p.name}:error"
 
 
+def _normalize_dt_to_utc(dt: datetime) -> datetime:
+    """Normalize datetime to a common UTC-aware timeline without artificial computer timezone shifts.
+    
+    If datetime is naive (GPS/FIT/GPMF native timestamp), it is treated as UTC.
+    If datetime is tz-aware, it is converted to UTC via astimezone(timezone.utc).
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _vectorize_step(
     samples: list[tuple[datetime, Any]],
     target_ts_arr: np.ndarray,
@@ -77,13 +88,14 @@ def _vectorize_step(
     if not samples:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
-    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    ref_dt_utc = _normalize_dt_to_utc(ref_dt)
+    sample_dts = [_normalize_dt_to_utc(s[0]) for s in samples]
     try:
         sample_vals = [float(s[1]) if s[1] is not None else np.nan for s in samples]
     except (TypeError, ValueError):
         sample_vals = [np.nan for _ in samples]
 
-    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt_utc).total_seconds() for dt in sample_dts], dtype=np.float64)
     idx = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
 
     out = np.full(len(target_ts_arr), np.nan, dtype=np.float32)
@@ -108,9 +120,10 @@ def _vectorize_linear_channel(
     if not samples:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
-    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    ref_dt_utc = _normalize_dt_to_utc(ref_dt)
+    sample_dts = [_normalize_dt_to_utc(s[0]) for s in samples]
     sample_vals = np.array([float(s[1]) if s[1] is not None else 0.0 for s in samples], dtype=np.float64)
-    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt_utc).total_seconds() for dt in sample_dts], dtype=np.float64)
 
     l_val = left_val if left_val is not None else float(sample_vals[0])
     r_val = float(sample_vals[-1])
@@ -118,8 +131,8 @@ def _vectorize_linear_channel(
 
     if active_time_mapper is not None and getattr(active_time_mapper, "pause_intervals", None):
         for p_start, p_end in active_time_mapper.pause_intervals:
-            p_s = (p_start.replace(tzinfo=None) - ref_dt).total_seconds()
-            p_e = (p_end.replace(tzinfo=None) - ref_dt).total_seconds()
+            p_s = (_normalize_dt_to_utc(p_start) - ref_dt_utc).total_seconds()
+            p_e = (_normalize_dt_to_utc(p_end) - ref_dt_utc).total_seconds()
             mask = (target_ts_arr >= p_s) & (target_ts_arr < p_e)
             if np.any(mask):
                 idx = np.searchsorted(sample_ts, p_s, side="right") - 1
@@ -143,9 +156,10 @@ def _vectorize_distance(
     if not samples or isinstance(samples[0][1], (tuple, list)):
         return np.full(len(target_ts_arr), np.nan, dtype=np.float64)
 
-    sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in samples]
+    ref_dt_utc = _normalize_dt_to_utc(ref_dt)
+    sample_dts = [_normalize_dt_to_utc(s[0]) for s in samples]
     sample_vals = np.array([float(s[1]) for s in samples], dtype=np.float64)
-    sample_ts = np.array([(dt - ref_dt).total_seconds() for dt in sample_dts], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt_utc).total_seconds() for dt in sample_dts], dtype=np.float64)
 
     interp_vals = np.interp(target_ts_arr, sample_ts, sample_vals, left=0.0, right=float(sample_vals[-1]))
 
@@ -157,8 +171,8 @@ def _vectorize_distance(
 
     if active_time_mapper is not None and getattr(active_time_mapper, "pause_intervals", None):
         for p_start, p_end in active_time_mapper.pause_intervals:
-            p_s = (p_start.replace(tzinfo=None) - ref_dt).total_seconds()
-            p_e = (p_end.replace(tzinfo=None) - ref_dt).total_seconds()
+            p_s = (_normalize_dt_to_utc(p_start) - ref_dt_utc).total_seconds()
+            p_e = (_normalize_dt_to_utc(p_end) - ref_dt_utc).total_seconds()
             mask = (target_ts_arr >= p_s) & (target_ts_arr < p_e)
             if np.any(mask):
                 idx = np.searchsorted(sample_ts, p_s, side="right") - 1
@@ -178,14 +192,10 @@ def _vectorize_heading(
     if not samples:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
-    def sample_time(dt):
-        if dt.tzinfo is None:
-            return dt
-        return (dt.astimezone(timezone.utc) if preserve_missing else dt).replace(tzinfo=None)
-
+    ref_dt_utc = _normalize_dt_to_utc(ref_dt)
     ordered = sorted(
         [
-            (sample_time(dt), val)
+            (_normalize_dt_to_utc(dt), val)
             for dt, val in samples if preserve_missing or val is not None
         ],
         key=lambda item: item[0],
@@ -193,8 +203,7 @@ def _vectorize_heading(
     if not ordered:
         return np.full(len(target_ts_arr), np.nan, dtype=np.float32)
 
-    ref_dt_naive = ref_dt.replace(tzinfo=None) if ref_dt.tzinfo is not None else ref_dt
-    sample_ts = np.array([(dt - ref_dt_naive).total_seconds() for dt, _ in ordered], dtype=np.float64)
+    sample_ts = np.array([(dt - ref_dt_utc).total_seconds() for dt, _ in ordered], dtype=np.float64)
     indices = np.searchsorted(sample_ts, target_ts_arr, side="right") - 1
 
     out = np.full(len(target_ts_arr), np.nan, dtype=np.float32)
@@ -235,10 +244,10 @@ def _vectorize_lean_roll(
     sample_ts = getattr(timeline, "_sample_ts", None)
     sample_vals = getattr(timeline, "_sample_vals", None)
     if sample_ts is None or sample_vals is None or len(sample_ts) != len(timeline):
-        sample_dts = [s[0].replace(tzinfo=None) if s[0].tzinfo is not None else s[0] for s in timeline]
+        ref_dt_utc = _normalize_dt_to_utc(ref_dt)
+        sample_dts = [_normalize_dt_to_utc(s[0]) for s in timeline]
         sample_vals = np.array([float(s[1]) for s in timeline], dtype=np.float64)
-        ref_dt_naive = ref_dt.replace(tzinfo=None) if ref_dt.tzinfo is not None else ref_dt
-        sample_ts = np.array([(dt - ref_dt_naive).total_seconds() for dt in sample_dts], dtype=np.float64)
+        sample_ts = np.array([(dt - ref_dt_utc).total_seconds() for dt in sample_dts], dtype=np.float64)
         try:
             timeline._sample_ts = sample_ts
             timeline._sample_vals = sample_vals
