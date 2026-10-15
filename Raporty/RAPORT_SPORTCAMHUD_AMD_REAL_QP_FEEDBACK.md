@@ -1,4 +1,4 @@
-﻿# RAPORT â€” SportCamHUD: rzeczywisty odczyt QP z AMD AMF (HEVC VBR)
+# RAPORT â€” SportCamHUD: rzeczywisty odczyt QP z AMD AMF (HEVC VBR)
 
 Data: 2026-10-15. GaĹ‚Ä…Ĺş: `fix/gui-freeze-hud-composite`. HEAD poczÄ…tkowy: `f14e45f`.
 
