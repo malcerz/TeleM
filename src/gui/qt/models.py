@@ -409,7 +409,7 @@ def text_indicator_fields() -> list[FieldSchema]:
     """Text: one canonical size control in the header + Text settings."""
     return (
         _header_fields(text_size=True) + _form_field()
-        + _text_tab_fields(include_font_size=False)
+        + _text_tab_fields(include_font_size=False, with_distance=True)
     ) + _effects_fields()
 
 
