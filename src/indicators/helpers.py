@@ -418,37 +418,63 @@ def compose_5q_optimized() -> bool:
     return _COMPOSE_5Q
 
 
-_MAP_MASK_CACHE: dict[tuple[int, int], Image.Image] = {}
+from functools import lru_cache
 
 
-def apply_map_shape(img, shape: str):
-    """Apply the configured map shape to a rendered map image.
+@lru_cache(maxsize=32)
+def _map_style_layers(size, shape, radius, width, color):
+    """Cached destination-space coverage and border; borrowed, read-only images."""
+    from PIL import ImageChops, ImageDraw
 
-    - ``"round"`` (or ``"circle"``) → circular crop (alpha mask).
-    - anything else → square (the map is already rendered square).
+    w, h = size
+    aa = 4
+    radius = min(max(0., radius), min(w, h) / 2.)
+    width = min(max(0., width), min(w, h) / 2.)
+    def coverage(inset):
+        mask = Image.new("L", (w * aa, h * aa), 0)
+        box = (inset * aa, inset * aa, (w - inset) * aa - 1, (h - inset) * aa - 1)
+        if box[2] < box[0] or box[3] < box[1]:
+            return mask.resize(size, Image.Resampling.LANCZOS)
+        draw = ImageDraw.Draw(mask)
+        if shape in ("round", "circle"):
+            draw.ellipse(box, fill=255)
+        elif shape == "rounded":
+            draw.rounded_rectangle(box, radius=max(0., radius - inset) * aa, fill=255)
+        else:
+            draw.rectangle(box, fill=255)
+        return mask.resize(size, Image.Resampling.LANCZOS)
+    outer = coverage(0)
+    ring = ImageChops.subtract(outer, coverage(width)) if width else Image.new("L", size, 0)
+    border = Image.new("RGBA", size, color)
+    border.putalpha(ring.point(lambda p: p * color[3] // 255))
+    # R = outer coverage, G = border coverage; public bytes API for native upload.
+    texture = Image.merge("RGBA", (outer, ring, Image.new("L", size, 0), Image.new("L", size, 255)))
+    return outer, border, texture.tobytes(), color
 
-    Returns the (possibly modified) image.
-    """
+
+def map_style_layers(size, shape="square", corner_radius=16., border_width=0., border_color="#FFFFFF", scale=1.):
+    """Resolve persisted shape names; dimensions are logical pixels at 1080p."""
+    from PIL import ImageColor
+    shape = str(shape).lower()
+    if shape not in ("round", "circle", "rounded") and float(border_width or 0) <= 0:
+        return None
+    color = ImageColor.getcolor(str(border_color or "#FFFFFF"), "RGBA")
+    return _map_style_layers(tuple(size), shape, float(corner_radius or 0) * scale,
+                             float(border_width or 0) * scale, color)
+
+
+def apply_map_shape(img, shape: str, corner_radius=16., border_width=0., border_color="#FFFFFF", scale=1.):
+    """Style the final viewport, after rotation/resize, without mutating its source."""
     if img is None:
         return img
-    if str(shape).lower() not in ("round", "circle"):
+    layers = map_style_layers(img.size, shape, corner_radius, border_width, border_color, scale)
+    if layers is None:
         return img
-    try:
-        from PIL import ImageDraw
-
-        w, h = img.size
-        mask_key = (w, h)
-        mask = _MAP_MASK_CACHE.get(mask_key)
-        if mask is None:
-            mask = Image.new("L", (w, h), 0)
-            d = ImageDraw.Draw(mask)
-            d.ellipse((0, 0, w - 1, h - 1), fill=255)
-            _MAP_MASK_CACHE[mask_key] = mask
-        img = img.copy()
-        img.putalpha(mask)
-    except Exception:
-        pass
-    return img
+    from PIL import ImageChops
+    outer, border, _, _ = layers
+    styled = img.convert("RGBA").copy()
+    styled.putalpha(ImageChops.multiply(styled.getchannel("A"), outer))
+    return Image.alpha_composite(styled, border)
 
 
 def apply_map_opacity(img, raw_opacity: Any):

@@ -113,6 +113,8 @@ public:
     bool UpdateMapTexture(
         UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
         size_t* uploadedBytes, bool* textureCreated);
+    bool UpdateMapStyle(UINT width, UINT height, const uint8_t* rgba, UINT stride, const float* color);
+    void BindMapStyle(bool marker = false);
     void SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH);
     void SetMapFilter(int filter);
     void SetMapGpuEnabled(bool enabled);
@@ -465,6 +467,11 @@ private:
     ID3D11UnorderedAccessView* m_hudUAV = nullptr;
 
     // ETAP 5G — GPU-resident map resize + composite
+    ID3D11Texture2D* m_mapStyleTexture = nullptr;
+    ID3D11ShaderResourceView* m_mapStyleSRV = nullptr;
+    ID3D11Buffer* m_mapStyleCB = nullptr;
+    ID3D11Buffer* m_mapMarkerStyleCB = nullptr;
+    UINT m_mapStyleW = 0, m_mapStyleH = 0;
     ID3D11Texture2D* m_mapTexture = nullptr;
     ID3D11ShaderResourceView* m_mapShaderView = nullptr;
     ID3D11Texture2D* m_mapResampleTexture = nullptr;

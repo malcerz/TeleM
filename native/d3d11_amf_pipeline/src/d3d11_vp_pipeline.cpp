@@ -1926,6 +1926,24 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
     if (FAILED(hr)) return false;
 
     const char* blendSource = R"(
+
+        Texture2D<float4> MapStyle : register(t1);
+        cbuffer MapStyleCB : register(b1) {
+            uint styleEnabled; uint styleX; uint styleY; uint stylePad;
+            float4 borderColor;
+        };
+        float4 ApplyMapStyle(float4 src, uint2 pos) {
+            if (styleEnabled == 0) return src;
+            float2 cov = round(saturate(MapStyle.Load(int3(pos + uint2(styleX, styleY), 0)).rg) * 255.0);
+            src = round(saturate(src) * 255.0);
+            src.a = floor(src.a * cov.r / 255.0 + 0.0001);
+            if (styleEnabled == 2) return src / 255.0; // marker: clip only
+            float ba = floor(cov.g * borderColor.a + 0.0001);
+            float invA = (255.0 - ba) / 255.0;
+            float outA = ba + src.a * invA;
+            float3 rgb = outA > 0.0 ? round((round(borderColor.rgb * 255.0) * ba + src.rgb * src.a * invA) / outA) : 0.0;
+            return float4(rgb, round(outA)) / 255.0;
+        }
         Texture2D<float4> MapResample : register(t0);
         RWTexture2D<float4> HUDCanvas : register(u0);
         cbuffer BlendCB : register(b0) {
@@ -1937,7 +1955,7 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
         void CSMain(uint3 tid : SV_DispatchThreadID) {
             if (tid.x >= mapW || tid.y >= mapH) return;
             uint2 canvasPos = uint2(dstX + tid.x, dstY + tid.y);
-            float4 srcF = saturate(MapResample.Load(int3(tid.xy, 0)));
+            float4 srcF = ApplyMapStyle(saturate(MapResample.Load(int3(tid.xy, 0))), tid.xy);
             uint4 src = (uint4)round(srcF * 255.0);
             if (src.a == 0) return;
             uint4 dst = (uint4)round(saturate(HUDCanvas.Load(int3(canvasPos, 0))) * 255.0);
@@ -1980,6 +1998,24 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
     // ETAP 5D: Fused Single-Pass Map Resample + In-Place HUD Blend
     auto compileFused = [&](int numX, int numY, ID3D11ComputeShader** outShader) -> bool {
         std::string src = R"(
+
+        Texture2D<float4> MapStyle : register(t1);
+        cbuffer MapStyleCB : register(b1) {
+            uint styleEnabled; uint styleX; uint styleY; uint stylePad;
+            float4 borderColor;
+        };
+        float4 ApplyMapStyle(float4 src, uint2 pos) {
+            if (styleEnabled == 0) return src;
+            float2 cov = round(saturate(MapStyle.Load(int3(pos + uint2(styleX, styleY), 0)).rg) * 255.0);
+            src = round(saturate(src) * 255.0);
+            src.a = floor(src.a * cov.r / 255.0 + 0.0001);
+            if (styleEnabled == 2) return src / 255.0; // marker: clip only
+            float ba = floor(cov.g * borderColor.a + 0.0001);
+            float invA = (255.0 - ba) / 255.0;
+            float outA = ba + src.a * invA;
+            float3 rgb = outA > 0.0 ? round((round(borderColor.rgb * 255.0) * ba + src.rgb * src.a * invA) / outA) : 0.0;
+            return float4(rgb, round(outA)) / 255.0;
+        }
             Texture2D<float4> MapTexture : register(t0);
             RWTexture2D<float4> HUDCanvas : register(u0);
             cbuffer MapFusedCB : register(b0) {
@@ -2068,6 +2104,7 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
                     srcF = saturate(srcF);
                 }
 
+                srcF = ApplyMapStyle(srcF, tid.xy);
                 uint2 canvasPos = uint2(dstX + tid.x, dstY + tid.y);
                 uint4 src = (uint4)round(srcF * 255.0);
                 if (src.a == 0) return;
@@ -2246,6 +2283,39 @@ void D3D11VideoProcessorPipeline::SetMapDumpPath(const char* path) {
     }
 }
 
+bool D3D11VideoProcessorPipeline::UpdateMapStyle(
+    UINT width, UINT height, const uint8_t* rgba, UINT stride, const float* color) {
+    if (!rgba || !color || width != m_mapOutW || height != m_mapOutH ||
+        !width || !height || stride < width * 4 || !m_device || !m_context) return false;
+    if (!m_mapStyleTexture || m_mapStyleW != width || m_mapStyleH != height) {
+        if (m_mapStyleSRV) { m_mapStyleSRV->Release(); m_mapStyleSRV = nullptr; }
+        if (m_mapStyleTexture) { m_mapStyleTexture->Release(); m_mapStyleTexture = nullptr; }
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width; desc.Height = height; desc.MipLevels = 1; desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        if (FAILED(m_device->CreateTexture2D(&desc, nullptr, &m_mapStyleTexture))) return false;
+        if (FAILED(m_device->CreateShaderResourceView(m_mapStyleTexture, nullptr, &m_mapStyleSRV))) return false;
+        m_mapStyleW = width; m_mapStyleH = height;
+    }
+    struct StyleCB { UINT enabled, x, y, pad; float color[4]; } cb = {1, 0, 0, 0, {color[0], color[1], color[2], color[3]}};
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(cb); desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    if (!m_mapStyleCB && FAILED(m_device->CreateBuffer(&desc, nullptr, &m_mapStyleCB))) return false;
+    if (!m_mapMarkerStyleCB && FAILED(m_device->CreateBuffer(&desc, nullptr, &m_mapMarkerStyleCB))) return false;
+    m_context->UpdateSubresource(m_mapStyleCB, 0, nullptr, &cb, 0, 0);
+    cb.enabled = 2; cb.x = m_mapMarkerDstX; cb.y = m_mapMarkerDstY;
+    m_context->UpdateSubresource(m_mapMarkerStyleCB, 0, nullptr, &cb, 0, 0);
+    m_context->UpdateSubresource(m_mapStyleTexture, 0, nullptr, rgba, stride, 0);
+    return true;
+}
+
+void D3D11VideoProcessorPipeline::BindMapStyle(bool marker) {
+    ID3D11Buffer* cb = marker ? m_mapMarkerStyleCB : m_mapStyleCB;
+    m_context->CSSetConstantBuffers(1, 1, &cb);
+    m_context->CSSetShaderResources(1, 1, &m_mapStyleSRV);
+}
+
 void D3D11VideoProcessorPipeline::SetMapGeometry(UINT dstX, UINT dstY, UINT srcW, UINT srcH, UINT outW, UINT outH) {
     m_mapDstX = dstX;
     m_mapDstY = dstY;
@@ -2366,6 +2436,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
             m_mapDstX, m_mapDstY, m_mapOutW, m_mapOutH };
         m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &blendCB, 0, 0);
         m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+        BindMapStyle();
         ID3D11Buffer* blendCBs[1] = { m_mapBlendCB };
         m_context->CSSetConstantBuffers(0, 1, blendCBs);
         ID3D11ShaderResourceView* blendSRV = m_mapShaderView;
@@ -2387,6 +2458,8 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
             m_context->Flush();
         }
         m_mapResampleMs = std::chrono::duration<double, std::milli>(blendEnd - blendStart).count();
+        ID3D11ShaderResourceView* noStyle = nullptr;
+        m_context->CSSetShaderResources(1, 1, &noStyle);
         return true;
     }
 
@@ -2414,6 +2487,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
 
         ID3D11ComputeShader* activeShader = (use8x8 && m_mapFused8x8Shader) ? m_mapFused8x8Shader : m_mapFusedShader;
         m_context->CSSetShader(activeShader, nullptr, 0);
+        BindMapStyle();
         ID3D11Buffer* fusedCBs[1] = { m_mapFusedCB };
         m_context->CSSetConstantBuffers(0, 1, fusedCBs);
         ID3D11ShaderResourceView* mapSRV = m_mapShaderView;
@@ -2441,6 +2515,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
             };
             m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &markerBlendCB, 0, 0);
             m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+            BindMapStyle(true);
             ID3D11Buffer* blendCBs[1] = { m_mapBlendCB };
             m_context->CSSetConstantBuffers(0, 1, blendCBs);
             ID3D11ShaderResourceView* markerSRV = m_mapMarkerSRV;
@@ -2459,6 +2534,8 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
             m_context->Flush();
         }
         m_mapResampleMs = dur;
+        ID3D11ShaderResourceView* noStyle = nullptr;
+        m_context->CSSetShaderResources(1, 1, &noStyle);
         return true;
     }
 
@@ -2527,6 +2604,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         m_mapDstX, m_mapDstY, m_mapOutW, m_mapOutH };
     m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &blendCB, 0, 0);
     m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+        BindMapStyle();
     ID3D11Buffer* blendCBs[1] = { m_mapBlendCB };
     m_context->CSSetConstantBuffers(0, 1, blendCBs);
     ID3D11ShaderResourceView* blendSRV = m_mapResampleSRV;
@@ -2546,6 +2624,7 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         };
         m_context->UpdateSubresource(m_mapBlendCB, 0, nullptr, &markerBlendCB, 0, 0);
         m_context->CSSetShader(m_mapBlendShader, nullptr, 0);
+        BindMapStyle(true);
         m_context->CSSetConstantBuffers(0, 1, blendCBs);
         ID3D11ShaderResourceView* markerSRV = m_mapMarkerSRV;
         m_context->CSSetShaderResources(0, 1, &markerSRV);
@@ -2570,6 +2649,8 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
     }
 
     m_mapResampleMs = (outResampleMs ? *outResampleMs : 0.0) + (outBlendMs ? *outBlendMs : 0.0);
+    ID3D11ShaderResourceView* noStyle = nullptr;
+    m_context->CSSetShaderResources(1, 1, &noStyle);
     return true;
 }
 
@@ -2604,6 +2685,11 @@ bool D3D11VideoProcessorPipeline::GetMapResampleReadback(uint8_t* outRGBA, UINT 
 }
 
 void D3D11VideoProcessorPipeline::ReleaseMapResources() {
+    if (m_mapStyleSRV) { m_mapStyleSRV->Release(); m_mapStyleSRV = nullptr; }
+    if (m_mapStyleTexture) { m_mapStyleTexture->Release(); m_mapStyleTexture = nullptr; }
+    if (m_mapStyleCB) { m_mapStyleCB->Release(); m_mapStyleCB = nullptr; }
+    if (m_mapMarkerStyleCB) { m_mapMarkerStyleCB->Release(); m_mapMarkerStyleCB = nullptr; }
+    m_mapStyleW = m_mapStyleH = 0;
     ReleaseMapMarkerResources();
     if (m_mapResampleShader) { m_mapResampleShader->Release(); m_mapResampleShader = nullptr; }
     if (m_mapBlendShader) { m_mapBlendShader->Release(); m_mapBlendShader = nullptr; }

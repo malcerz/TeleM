@@ -144,6 +144,7 @@ def render_map_working_image(
     target_dt=None,
     current_position=None,
     map_heading=None,
+    apply_style=True,
 ):
     """Render the map working image (692x692 for 4K) WITHOUT the final Pillow
     LANCZOS resize, using the same render plan/renderer semantics as the
@@ -242,7 +243,10 @@ def render_map_working_image(
                 draw_marker=draw_marker,
             )
         renderer._is_first_render = False
-        map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        if apply_style:
+            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
+                                      cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
+                                      cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         rx = s(cfg["x"], canvas_w)
@@ -412,8 +416,6 @@ def render_map_unrotated_working_image(
             draw_marker=draw_marker,
             heading=(0.0 if map_heading is not None else None),
         )
-        if angle == 0.0:
-            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         renderer._is_first_render = False
@@ -660,7 +662,9 @@ def _render_moving_map_indicator(
                 )
             if map_img.size != (map_w, map_h):
                 map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
-            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+            map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
+                                  cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
+                                  cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
             map_img = apply_map_opacity(map_img, cfg.get("opacity"))
             map_img = apply_map_pitch(map_img, cfg.get("pitch"))
             return map_img, _pos_xy[0], _pos_xy[1], None
@@ -756,7 +760,9 @@ def _render_moving_map_indicator(
         if map_img.size != (map_w, map_h):
             map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
-        map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"))
+        map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
+                                  cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
+                                  cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         map_tuple = (map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None)

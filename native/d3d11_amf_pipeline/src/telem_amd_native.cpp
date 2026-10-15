@@ -733,6 +733,15 @@ TELEM_EXPORT int telem_amd_set_map_geometry(
     return 1;
 }
 
+// 5W: optional additive API; existing signatures and ABI remain unchanged.
+TELEM_EXPORT int telem_amd_update_map_style(
+    void* handle, const uint8_t* rgba, UINT width, UINT height, UINT stride,
+    float r, float g, float b, float a) {
+    if (!handle) return 0;
+    const float color[4] = {r, g, b, a};
+    return ((TelemAMDContext*)handle)->vpPipeline.UpdateMapStyle(width, height, rgba, stride, color) ? 1 : 0;
+}
+
 TELEM_EXPORT int telem_amd_update_map(
     void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
     UINT64* outUploadedBytes, int* outTextureCreated) {

@@ -3015,6 +3015,13 @@ def export_amd_native_d3d11(
         c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint,
     ]
 
+    has_map_style = hasattr(native_dll, "telem_amd_update_map_style")
+    if has_map_style:
+        native_dll.telem_amd_update_map_style.restype = c_int
+        native_dll.telem_amd_update_map_style.argtypes = [
+            c_void_p, c_void_p, c_uint, c_uint, c_uint, c_float, c_float, c_float, c_float,
+        ]
+
     native_dll.telem_amd_update_map.restype = c_int
     native_dll.telem_amd_update_map.argtypes = [
         c_void_p, c_void_p, c_uint, c_uint, c_uint,
@@ -5830,7 +5837,7 @@ def export_amd_native_d3d11(
                 map_img, map_dst = render_map_working_image(
                     video_width, video_height, layout, "track_map",
                     gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
-                    map_heading=frame_kwargs.get("map_heading"),
+                    map_heading=frame_kwargs.get("map_heading"), apply_style=False,
                 )
             if map_img is not None and map_dst is not None:
                 last_map_img_out = map_img
@@ -6516,6 +6523,24 @@ def export_amd_native_d3d11(
             native_dll.telem_amd_set_map_geometry(
                 h_context, dst_x, dst_y, src_w, src_h, out_w, out_h,
             )
+            from src.indicators.helpers import map_style_layers, apply_map_opacity
+            style = map_style_layers(
+                (out_w, out_h), map_cfg.get("map_shape", "square"),
+                map_cfg.get("map_corner_radius", 16), map_cfg.get("map_border_width", 0),
+                map_cfg.get("map_border_color", "#FFFFFF"), min(video_width, video_height) / 1080.,
+            )
+            if style is not None:
+                if not has_map_style:
+                    raise RuntimeError("AMD DLL nie obsługuje kształtu/ramki mapy. Wymagana DLL z API map_style (5W).")
+                _, _, style_bytes, color = style
+                # Same global opacity for content and border, without per-frame masks.
+                border_alpha = apply_map_opacity(Image.new("RGBA", (1, 1), color), map_cfg.get("opacity")).getpixel((0, 0))[3]
+                if not native_dll.telem_amd_update_map_style(
+                    h_context, style_bytes, out_w, out_h, out_w * 4,
+                    color[0] / 255., color[1] / 255., color[2] / 255., border_alpha / 255.,
+                ):
+                    raise RuntimeError("AMD: nie udało się przesłać statycznego stylu mapy GPU.")
+                print(f"[AMD MAP STYLE] size={out_w}x{out_h} shape={map_cfg.get('map_shape', 'square')} uploads=1 bytes={len(style_bytes)}", flush=True)
         if prepared.map_data is not None:
             if len(prepared.map_data) == 7:
                 _, mw, mh, mdst, m_ptr_int, m_stride, _ = prepared.map_data
