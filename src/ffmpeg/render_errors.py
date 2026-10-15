@@ -114,6 +114,9 @@ class RenderError(RuntimeError):
             )
         if location and location not in message:
             message += f"\nLokalizacja: {location}"
+        log_path = str(self.details.get("diagnostics_path") or "")
+        if log_path and log_path not in message:
+            message += f"\nLog: {log_path}"
         if self.recommended_action:
             message += f"\nCo możesz zrobić: {self.recommended_action}"
         if self.partial_output_state not in ("", "unknown"):
@@ -370,6 +373,16 @@ def coerce_render_error(
             code="CHILD_PROCESS_ERROR",
             user_message="Proces renderujący zakończył się nieoczekiwanie.",
             partial_output_possible=True,
+            **context,
+        )
+    if "live a/v mux setup failed" in lower:
+        # The mux was refused before FFmpeg started, so there is no exit code;
+        # the reason itself is what the user needs to see.
+        reason = message.split("setup failed:", 1)[-1].strip() or message
+        return MuxError(
+            code="LIVE_MUX_SETUP_FAILED",
+            user_message=f"Nie udało się uruchomić zapisu wideo z dźwiękiem: {reason}",
+            recommended_action="Sprawdź log eksportu. Po usunięciu przyczyny eksport można uruchomić ponownie.",
             **context,
         )
     if any(token in lower for token in ("mux", "ffmpeg exited", "ffmpeg process", "mp4")):
@@ -780,6 +793,20 @@ def classify_mux_error(
         )
 
     # 5. Domyślny błąd procesu FFmpeg
+    if returncode is None:
+        # No exit code means FFmpeg did not report one (often it never
+        # started); show the reason instead of "kod None".
+        reason = (stderr_tail or "").strip().splitlines()
+        return MuxError(
+            code="MUX_FAILED",
+            user_message="Zapis wideo nie powiódł się: " + (reason[0][:300] if reason else "nieznana przyczyna."),
+            technical_message=f"Mux failed without FFmpeg exit code. Details: {stderr_tail[-400:].strip() if stderr_tail else 'none'}",
+            frame=frame_idx,
+            job_id=job_id,
+            backend=backend,
+            ffmpeg_return_code=returncode,
+            stderr_tail=stderr_tail,
+        )
     return MuxError(
         code=f"FFMPEG_EXIT_{returncode}",
         user_message=f"Proces zapisu wideo zakończył się błędem (kod {returncode}).",

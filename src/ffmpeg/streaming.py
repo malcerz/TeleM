@@ -1431,7 +1431,14 @@ def stream_overlay_to_ffmpeg(
                 )
             if cancel_event is not None and cancel_event.is_set():
                 return 0
-            print("[STREAM AMD] Native AMD_NATIVE_D3D11 export returned False. Falling back to software exporter...", flush=True)
+            raise AMDNativeFinalizationError(
+                "AMD native export failed; software/audio re-encoding fallback is forbidden"
+            )
+        else:
+            from src.ffmpeg.amd_native_exporter import AMDNativeFinalizationError
+            raise AMDNativeFinalizationError(
+                "AMD Single Live Mux is unavailable; software/audio re-encoding fallback is forbidden"
+            )
 
     if encoder == "nv" and not is_no_hud:
         # ETAP 5B.5: keep the persisted/user layout unchanged and snap only the

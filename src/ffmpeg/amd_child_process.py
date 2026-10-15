@@ -894,6 +894,8 @@ def _error_from_child_message(
             backend="AMD_NATIVE_D3D11",
         )
         error.technical_message = f"{error_type}: {text} (phase={phase})"
+    if message.get("diagnostics_path"):
+        error.details.setdefault("diagnostics_path", str(message["diagnostics_path"]))
     error.technical_message = (
         (error.technical_message or "")
         + f"\nphase={message.get('phase', error.stage)} "

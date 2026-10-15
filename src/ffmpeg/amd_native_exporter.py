@@ -235,6 +235,16 @@ class AMDNativeFinalizationError(RuntimeError):
     """Final MP4 storage/mux failure; callers must not silently software-fallback."""
 
 
+def _require_amd_audio_copy(audio: Any) -> None:
+    """Reject a shared helper's encoder/filter configuration before spawning."""
+    if audio.mode not in {"none", "copy", "aac_pipe_copy"} or (
+        audio.has_audio and audio.codec_args != ["-c:a", "copy"]
+    ) or "-filter_complex" in audio.map_args:
+        raise AMDNativeFinalizationError(
+            "AMD audio must copy original packets; audio re-encoding is forbidden"
+        )
+
+
 def _audio_concat_entries(
     video_timeline: Any = None,
     default_input_file: str | Path | None = None,
@@ -3311,10 +3321,17 @@ def export_amd_native_d3d11(
     # The previous full-size Stage A -> Stage C copy remains available only
     # as an explicit diagnostic/recovery mode.
     single_pass_av_mux = _env_flag("AMD_SINGLE_PASS_AV_MUX", True)
+    if amf_mode not in ("SUBMIT_NO_MUX", "BYPASS") and (
+        not direct_mux_enabled or not single_pass_av_mux
+    ):
+        raise AMDNativeFinalizationError(
+            "AMD requires Single Live Mux with original audio copy; file/remux fallback is forbidden"
+        )
     if inline_gpmf_plan is not None and inline_gpmf_plan.enabled and is_multi_file and not single_pass_av_mux:
         raise AMDNativeFinalizationError("Inline GPMF requires the single-pass AMD A/V mux")
     direct_mux_completed = False
     audio_concat_path: Optional[Path] = None
+    audio_feeder: Any = None
 
     proc_mux: subprocess.Popen | None = None
     h_pipe: Any = None
@@ -3382,9 +3399,9 @@ def export_amd_native_d3d11(
             None,
         )
         if h_pipe == -1 or h_pipe == 0:
-            print(f"[AMD NATIVE D3D11] WARNING: Failed to create Named Pipe ({kernel32.GetLastError()}), falling back to file mux.", flush=True)
-            direct_mux_enabled = False
-            h_pipe = None
+            raise AMDNativeFinalizationError(
+                f"Cannot create AMD video pipe ({kernel32.GetLastError()}); file mux fallback is forbidden"
+            )
         else:
             if is_multi_file and not single_pass_av_mux:
                 stage_video_str = output_part_str + ".temp_video.mp4"
@@ -3404,100 +3421,95 @@ def export_amd_native_d3d11(
                 ]
             else:
                 target_live_out = output_part_str
-                resolved_single_audio = input_file_str
-                audio_concat_path = None
-                if is_multi_file and single_pass_av_mux:
-                    audio_concat_path = Path(output_file_str).with_suffix(".audio.concat.txt")
-                    clip0_local_start = 0.0
-                    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
-                        clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
-                    try:
-                        _write_audio_concat_plan(
-                            audio_concat_path,
-                            video_timeline=video_timeline,
-                            default_input_file=input_file_str,
-                            duration_s=duration_s,
-                            local_start_s=clip0_local_start,
-                            audio_source_resolver=None,
-                        )
-                    except OSError as exc:
-                        # A storage failure while creating the tiny plan is a
-                        # finalization failure too: do not silently switch to
-                        # software finalization and recreate a full-size copy.
-                        raise AMDNativeFinalizationError(
-                            f"AMD single-pass audio plan write failed: {exc}"
-                        ) from exc
-                    audio_args = [
-                        # Direct live mux without -copyts: ensures stdin HEVC
-                        # receives synthesized monotonic DTS from demuxer, enabling
-                        # live interleaved muxing during rendering and preventing
-                        # massive backlog/stalls during finalization.
-                        "-f", "concat", "-safe", "0",
-                        "-thread_queue_size", "512",
-                        "-i", str(audio_concat_path)
-                    ]
-                    clip_count_info = getattr(video_timeline, "clip_count", 1) if video_timeline else 1
-                    print(
-                        f"[AMD SINGLE-PASS A/V MUX] multi-file audio plan={audio_concat_path} "
-                        f"clips={clip_count_info}", flush=True,
-                    )
-                else:
-                    clip0_local_start = 0.0
-                    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
-                        clip0_local_start = float(getattr(video_timeline.clips[0], "local_start_s", 0.0) or 0.0)
-                    if clip0_local_start > 0.0:
-                        audio_args = [
-                            "-thread_queue_size", "512",
-                            "-ss", f"{clip0_local_start:.6f}",
-                            "-i", str(resolved_single_audio)
-                        ]
-                    else:
-                        audio_args = [
-                            "-thread_queue_size", "512",
-                            "-i", str(resolved_single_audio)
-                        ]
-                    print(
-                        f"[AMD SINGLE-PASS A/V MUX] single-file direct audio={resolved_single_audio} "
-                        f"offset={clip0_local_start:.6f}s", flush=True,
-                    )
+                # Single-pass live A/V mux for one or many clips: audio is
+                # read straight from the source MP4s while video streams in.
+                from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
+                from src.ffmpeg.live_mux_common import (
+                    AudioSegment,
+                    LiveAudioInputs,
+                    LiveMuxConfigError,
+                    audio_segments_from_timeline,
+                    raw_video_timestamp_args,
+                )
+                from src.ffmpeg.mp4_audio_feed import AacPipeFeeder, plan_aac_feed
 
+                audio_concat_path = None
                 if os.getenv("AMD_DIRECT_MUX_NO_AUDIO", "0").strip() == "1":
-                    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
-                    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1)
-                    cmd_live_mux = [
-                        ffmpeg_exe, "-y",
-                        "-f", video_raw_fmt,
-                        "-r", f"{fps_num}/{fps_den}",
-                        "-thread_queue_size", "512",
-                        "-i", "-",
-                        *gpmf_inputs,
-                        "-map", "0:v",
-                        *gpmf_maps,
-                        "-t", f"{duration_s:.6f}",
-                        "-c:v", "copy",
-                        "-an",
-                        "-f", "mp4",
-                        target_live_out,
+                    audio_segments: list[AudioSegment] = []
+                elif video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+                    audio_segments = audio_segments_from_timeline(video_timeline)
+                    # The same frame-limited retained ranges drive video and
+                    # audio, including TELEM_MAX_FRAMES and pause removal.
+                    audio_segments = [
+                        AudioSegment(segment.path, segment.start_s, count / target_fps)
+                        for segment, count in zip(audio_segments, per_clip_requested_frames)
+                        if count > 0
                     ]
                 else:
-                    from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
-                    gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
-                    cmd_live_mux = [
-                        ffmpeg_exe, "-y",
-                        "-f", video_raw_fmt,
-                        "-r", f"{fps_num}/{fps_den}",
-                        "-thread_queue_size", "512",
-                        "-i", "-",
-                        *audio_args,
-                        *gpmf_inputs,
-                        "-map", "0:v", "-map", "1:a?",
-                        *gpmf_maps,
-                        "-t", f"{duration_s:.6f}",
-                        "-c:v", "copy",
-                        "-c:a", "copy",
-                        "-f", "mp4",
-                        target_live_out,
-                    ]
+                    audio_segments = [AudioSegment(path=input_file_str, duration_s=duration_s)]
+                try:
+                    # Explicit failure instead of an untimed video input (audio
+                    # read only after the video) or an ffprobe error mistaken
+                    # for "this clip has no audio".
+                    video_ts_args = raw_video_timestamp_args(
+                        ffmpeg_exe, video_raw_fmt, fps_num, fps_den, required=True
+                    )
+                    if audio_segments:
+                        # One or many ranges: original AAC packets of every clip are
+                        # read straight from the MP4 sample tables (no video
+                        # bytes) and piped into this same mux as one stream,
+                        # stream-copied.  No concat demuxer, no re-encode.
+                        aac_plan = plan_aac_feed(audio_segments)
+                        for plan_line in aac_plan.report_lines():
+                            print(f"[AMD AAC PLAN] {plan_line}", flush=True)
+                        if aac_plan.has_audio:
+                            audio_pipe_name = rf"\\.\pipe\telem_amf_audio_{os.getpid()}_{pipe_token}.aac"
+                            audio_feeder = AacPipeFeeder(aac_plan, audio_pipe_name)
+                            live_audio = LiveAudioInputs(
+                                input_args=["-thread_queue_size", "512", "-f", "aac", "-i", audio_pipe_name],
+                                map_args=["-map", "1:a:0"],
+                                codec_args=["-c:a", "copy"],
+                                input_count=1,
+                                mode="aac_pipe_copy",
+                            )
+                        else:
+                            live_audio = LiveAudioInputs()
+                    else:
+                        live_audio = LiveAudioInputs()
+                    _require_amd_audio_copy(live_audio)
+                except (LiveMuxConfigError, AMDNativeFinalizationError) as exc:
+                    if audio_feeder is not None:
+                        audio_feeder.close()
+                        audio_feeder = None
+                    kernel32.CloseHandle(h_pipe)
+                    h_pipe = None
+                    raise AMDNativeFinalizationError(f"AMD live A/V mux setup failed: {exc}") from exc
+                print(
+                    f"[AMD SINGLE-PASS A/V MUX] audio={live_audio.mode} "
+                    f"segments={len(audio_segments)} video_ts={'setts' if video_ts_args else 'none'}",
+                    flush=True,
+                )
+                gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(
+                    inline_gpmf_plan, 1 + live_audio.input_count
+                )
+                cmd_live_mux = [
+                    ffmpeg_exe, "-y",
+                    "-f", video_raw_fmt,
+                    "-r", f"{fps_num}/{fps_den}",
+                    *video_ts_args,
+                    "-thread_queue_size", "512",
+                    "-i", "-",
+                    *live_audio.input_args,
+                    *gpmf_inputs,
+                    "-map", "0:v",
+                    *live_audio.map_args,
+                    *gpmf_maps,
+                    "-t", f"{duration_s:.6f}",
+                    "-c", "copy",
+                    *([] if live_audio.has_audio else ["-an"]),
+                    "-f", "mp4",
+                    target_live_out,
+                ]
             try:
                 proc_mux = subprocess.Popen(
                     cmd_live_mux,
@@ -3506,11 +3518,18 @@ def export_amd_native_d3d11(
                     stderr=subprocess.PIPE,
                 )
             except Exception as e:
-                print(f"[AMD NATIVE D3D11] WARNING: Failed to launch FFmpeg live muxer ({e}), falling back to file mux.", flush=True)
-                direct_mux_enabled = False
                 kernel32.CloseHandle(h_pipe)
                 h_pipe = None
                 proc_mux = None
+                if audio_feeder is not None:
+                    audio_feeder.close()
+                    audio_feeder = None
+                raise AMDNativeFinalizationError(
+                    f"Cannot launch AMD Single Live Mux: {e}; file mux fallback is forbidden"
+                ) from e
+            else:
+                if audio_feeder is not None:
+                    audio_feeder.start()
 
         if direct_mux_enabled and proc_mux is not None and h_pipe is not None:
             native_out_target = pipe_base
@@ -3518,7 +3537,7 @@ def export_amd_native_d3d11(
                 active_process_holder["process"] = proc_mux
             mode_str = "multi" if is_multi_file else "single"
             clip_count_str = str(getattr(video_timeline, "clip_count", 1) if video_timeline else 1)
-            audio_mode_str = "concat" if (is_multi_file or audio_concat_path is not None) else "source"
+            audio_mode_str = live_audio.mode if single_pass_av_mux or not is_multi_file else "stage_c"
             mux_mode_str = "single_pass_av" if single_pass_av_mux else "stage_a_then_c"
             print(f"[AMD DIRECT MUX] mode={mode_str} clips={clip_count_str} video=pipe audio={audio_mode_str} output=.part", flush=True)
             print(f"[AMD DIRECT MUX] topology={mux_mode_str}", flush=True)
@@ -3875,7 +3894,7 @@ def export_amd_native_d3d11(
     def _abort_direct_mux(
         *, preserve_stage_a: bool = True, preserve_partial_output: bool = True
     ) -> None:
-        nonlocal proc_mux, h_pipe, audio_concat_path
+        nonlocal proc_mux, h_pipe, audio_concat_path, audio_feeder
         dispatcher = progress_dispatcher_holder[0]
         if dispatcher is not None:
             dispatcher.stop()
@@ -3890,6 +3909,9 @@ def export_amd_native_d3d11(
                 proc_mux.wait(timeout=2.0)
             except Exception:
                 pass
+        if audio_feeder is not None:
+            audio_feeder.close()
+            audio_feeder = None
         if h_pipe is not None and h_pipe != -1 and h_pipe != 0:
             try:
                 GENERIC_WRITE = 0x40000000
@@ -7426,6 +7448,16 @@ def export_amd_native_d3d11(
             stderr_thread.join(timeout=5.0)
         if active_process_holder is not None and active_process_holder.get("process") is proc_mux:
             active_process_holder["process"] = None
+        if audio_feeder is not None:
+            audio_feeder.close()
+            print(
+                f"[AMD AAC FEED] bytes={audio_feeder.bytes_written} "
+                f"completed={audio_feeder.completed} error={audio_feeder.error}",
+                flush=True,
+            )
+            if not mux_pump_error and (audio_feeder.error is not None or not audio_feeder.completed):
+                mux_pump_error = f"audio feed incomplete: {audio_feeder.error or 'pipe ended before all AAC packets'}"
+            audio_feeder = None
 
         raw_stderr = b"".join(mux_stderr_lines)
         logical_stderr = _filter_logical_stderr(raw_stderr, max_lines=200)

@@ -5,7 +5,7 @@ Verifies:
 2. Range-seek offsets use direct -ss -i with thread_queue_size.
 3. No intermediate audio files (.audio.concat.txt, .m4a, .aac, .adts, audio_cache, temp_video.mp4) for single-file.
 4. Exactly one live muxer process is spawned.
-5. Multi-file retains concat plan with thread_queue_size.
+5. Multi-file audio is one stream-copied AAC pipe fed from the MP4 sample tables.
 6. Finalization watchdog does not kill active FFmpeg while I/O is progressing.
 7. Finalization watchdog terminates on genuine stall.
 8. Cancellation immediately terminates the muxer.
@@ -28,6 +28,57 @@ from src.ffmpeg.amd_native_exporter import (
 from tests.test_amd_direct_mp4_mux import install_mux_popen
 
 
+@pytest.mark.parametrize("mode,codecs,maps", [
+    ("concat_filter", ["-c:a", "aac"], ["-map", "[aout]"]),
+    ("copy", ["-c:a", "aac"], ["-map", "1:a"]),
+    ("copy", ["-c:a", "copy"], ["-filter_complex", "anull"]),
+])
+def test_amd_rejects_reencoding_helper_configuration(mode, codecs, maps):
+    from src.ffmpeg.amd_native_exporter import _require_amd_audio_copy, AMDNativeFinalizationError
+    from src.ffmpeg.live_mux_common import LiveAudioInputs
+    with pytest.raises(AMDNativeFinalizationError, match="re-encoding is forbidden"):
+        _require_amd_audio_copy(LiveAudioInputs(mode=mode, codec_args=codecs, map_args=maps))
+
+
+@pytest.mark.parametrize("flag", ["AMD_DIRECT_MUX", "AMD_SINGLE_PASS_AV_MUX"])
+def test_amd_disabled_live_mux_fails_without_file_fallback(tmp_path, monkeypatch, flag):
+    from src.ffmpeg.amd_native_exporter import AMDNativeFinalizationError
+    dll = _setup_mock_dll(monkeypatch)
+    monkeypatch.setenv(flag, "0")
+    with pytest.raises(AMDNativeFinalizationError, match="fallback is forbidden"):
+        export_amd_native_d3d11(
+            ffmpeg_exe="ffmpeg", input_files=[str(tmp_path / "source.mp4")],
+            output_file=str(tmp_path / "out.mp4"), duration_s=1, video_width=1280, video_height=720,
+            start_dt_utc=None, tz_offset_hours=0, speed_samples=[], track_samples=[], alt_samples=[],
+            font_path="", layout={}, field_samples={},
+        )
+    dll.telem_amd_create.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["timestamps", "video_pipe", "spawn"])
+def test_amd_setup_failure_never_uses_another_mux(tmp_path, monkeypatch, failure):
+    import ctypes
+    from src.ffmpeg.amd_native_exporter import AMDNativeFinalizationError
+    dll = _setup_mock_dll(monkeypatch)
+    if failure == "timestamps":
+        monkeypatch.setattr("src.ffmpeg.live_mux_common.ffmpeg_supports_input_bsf", lambda *args: False)
+    elif failure == "video_pipe":
+        ctypes.windll.kernel32.CreateNamedPipeW.return_value = 0
+    else:
+        def failed_mux(*args, **kwargs):
+            raise OSError("mux launch rejected")
+        install_mux_popen(monkeypatch, failed_mux)
+    with pytest.raises(AMDNativeFinalizationError):
+        export_amd_native_d3d11(
+            ffmpeg_exe="ffmpeg", input_files=[str(tmp_path / "source.mp4")],
+            output_file=str(tmp_path / "out.mp4"), duration_s=1, video_width=1280, video_height=720,
+            start_dt_utc=None, tz_offset_hours=0, speed_samples=[], track_samples=[], alt_samples=[],
+            font_path="", layout={}, field_samples={},
+        )
+    dll.telem_amd_create.assert_not_called()
+    assert not list(tmp_path.glob("*.h265"))
+
+
 @pytest.fixture(autouse=True)
 def isolated_platform(monkeypatch):
     import ctypes
@@ -41,6 +92,16 @@ def isolated_platform(monkeypatch):
     monkeypatch.setattr("src.ffmpeg.amd_native_exporter._probe_video_summary", lambda *args: {
         "streams": [{"codec_type": "video", "nb_frames": "30"}, {"codec_type": "audio"}]
     })
+    monkeypatch.setattr("src.ffmpeg.live_mux_common.ffmpeg_supports_input_bsf", lambda *args: True)
+    plans = []
+    def plan(segments):
+        plans.append(list(segments))
+        return MagicMock(has_audio=True)
+    monkeypatch.setattr("src.ffmpeg.mp4_audio_feed.plan_aac_feed", plan)
+    monkeypatch.setattr("src.ffmpeg.mp4_audio_feed.AacPipeFeeder", lambda *args: MagicMock(
+        error=None, completed=True, bytes_written=0
+    ))
+    return plans
 
 
 def _setup_mock_dll(monkeypatch):
@@ -70,8 +131,8 @@ def _setup_mock_dll(monkeypatch):
     return mock_dll
 
 
-def test_single_file_direct_audio_demux_starts_with_thread_queue(tmp_path, monkeypatch):
-    """Single-file direct live mux must pass direct -i input with thread_queue_size 512."""
+def test_single_file_audio_pipe_starts_with_thread_queue(tmp_path, monkeypatch):
+    """Single-file mux receives exact source packets through the same AAC pipe."""
     _setup_mock_dll(monkeypatch)
     out_mp4 = tmp_path / "out_direct.mp4"
     in_mp4 = tmp_path / "in_direct.mp4"
@@ -117,17 +178,17 @@ def test_single_file_direct_audio_demux_starts_with_thread_queue(tmp_path, monke
     assert cmd[in0_idx - 1] == "-i"
     assert cmd[in0_idx - 2] == "512"
     assert cmd[in0_idx - 3] == "-thread_queue_size"
-    # Input 1: -thread_queue_size 512 -i <in_mp4>
-    in1_idx = cmd.index(str(in_mp4))
+    assert str(in_mp4) not in cmd
+    in1_idx = next(i for i, arg in enumerate(cmd) if str(arg).startswith(r"\\.\pipe\telem_amf_audio_"))
     assert cmd[in1_idx - 1] == "-i"
-    assert cmd[in1_idx - 2] == "512"
-    assert cmd[in1_idx - 3] == "-thread_queue_size"
+    assert cmd[in1_idx - 2] == "aac"
+    assert cmd[cmd.index("-c") + 1] == "copy"
     # No concat demuxer used for single file
     assert "concat" not in cmd
     assert not (tmp_path / "out_direct.audio.concat.txt").exists()
 
 
-def test_single_file_range_offset_uses_direct_ss_and_thread_queue(tmp_path, monkeypatch):
+def test_single_file_range_offset_selects_original_packets(tmp_path, monkeypatch, isolated_platform):
     """Single clip with cut/offset must pass -thread_queue_size 512 -ss <offset> -i <file>."""
     _setup_mock_dll(monkeypatch)
     out_mp4 = tmp_path / "out_offset.mp4"
@@ -187,18 +248,51 @@ def test_single_file_range_offset_uses_direct_ss_and_thread_queue(tmp_path, monk
     mux_cmds = [c for c in captured_cmds if "-f" in c and "hevc" in c]
     assert len(mux_cmds) == 1
     cmd = mux_cmds[0]
-    assert "-ss" in cmd
-    ss_idx = cmd.index("-ss")
-    assert cmd[ss_idx + 1] == "45.500000"
-    assert cmd[ss_idx + 2] == "-i"
-    assert cmd[ss_idx + 3] == str(in_mp4)
+    assert "-ss" not in cmd
+    assert isolated_platform[0][0].start_s == 45.5
+    assert cmd[cmd.index("-c") + 1] == "copy"
     assert "-thread_queue_size" in cmd
     assert "concat" not in cmd
 
 
-def test_multi_file_boundaries_retain_concat_plan_with_thread_queue(tmp_path, monkeypatch):
-    """Multi-file exports must still use .audio.concat.txt plan with -thread_queue_size."""
+def test_multi_file_audio_is_one_copied_aac_pipe(tmp_path, monkeypatch):
+    """Multi-file audio is the original AAC packets, piped and stream-copied.
+
+    No concat demuxer (it reads every video packet), no concat filter (it
+    re-encodes): one ``-f aac`` pipe input fed from the MP4 sample tables.
+    """
     _setup_mock_dll(monkeypatch)
+    monkeypatch.setattr("src.ffmpeg.live_mux_common.ffmpeg_supports_input_bsf", lambda *args: True)
+    feeders = []
+
+    class FakePlan:
+        has_audio = True
+
+        def report_lines(self):
+            return []
+
+    class FakeFeeder:
+        def __init__(self, plan, pipe_name):
+            self.pipe_name = pipe_name
+            self.started = False
+            self.closed = False
+            self.error = None
+            self.bytes_written = 0
+            self.completed = True
+            feeders.append(self)
+
+        def start(self):
+            self.started = True
+
+        def close(self, timeout=5.0):
+            self.closed = True
+
+    planned = []
+    monkeypatch.setattr(
+        "src.ffmpeg.mp4_audio_feed.plan_aac_feed",
+        lambda segments: planned.append(list(segments)) or FakePlan(),
+    )
+    monkeypatch.setattr("src.ffmpeg.mp4_audio_feed.AacPipeFeeder", FakeFeeder)
     out_mp4 = tmp_path / "out_multi.mp4"
     in_mp4_1 = tmp_path / "clip1.mp4"
     in_mp4_2 = tmp_path / "clip2.mp4"
@@ -249,12 +343,17 @@ def test_multi_file_boundaries_retain_concat_plan_with_thread_queue(tmp_path, mo
     mux_cmds = [c for c in captured_cmds if "-f" in c and "hevc" in c]
     assert len(mux_cmds) == 1
     cmd = mux_cmds[0]
-    assert "-f" in cmd
-    concat_idx = cmd.index("concat")
-    assert cmd[concat_idx - 1] == "-f"
-    assert "-thread_queue_size" in cmd
-    tq_idx = cmd.index("-thread_queue_size")
-    assert cmd[tq_idx + 1] == "512"
+    assert "concat" not in cmd
+    assert "-filter_complex" not in cmd
+    assert str(in_mp4_1) not in cmd and str(in_mp4_2) not in cmd
+    assert len(feeders) == 1 and feeders[0].started and feeders[0].closed
+    pipe_idx = cmd.index(feeders[0].pipe_name)
+    assert cmd[pipe_idx - 3:pipe_idx] == ["-f", "aac", "-i"]
+    assert cmd[cmd.index("1:a:0") - 1] == "-map"
+    assert cmd[cmd.index("-c") + 1] == "copy"
+    assert "-bsf:v" in cmd
+    assert [segment.path for segment in planned[0]] == [str(in_mp4_1), str(in_mp4_2)]
+    assert not (tmp_path / "out_multi.audio.concat.txt").exists()
 
 
 def test_no_intermediate_or_split_audio_files_created(tmp_path, monkeypatch):
