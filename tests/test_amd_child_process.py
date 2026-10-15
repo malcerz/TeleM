@@ -255,6 +255,7 @@ def test_child_bootstrap_exception_is_relayed_via_ipc(tmp_path, monkeypatch):
             cancel_reason_provider=None,
             active_process_holder=holder,
             generation_id=903,
+            export_log_path=tmp_path / "never-created-bootstrap.log",
         )
     except RuntimeError as exc:
         error_text = str(exc)
@@ -264,9 +265,11 @@ def test_child_bootstrap_exception_is_relayed_via_ipc(tmp_path, monkeypatch):
     else:
         raise AssertionError("bootstrap exception was not relayed")
     assert holder.get("process") is None
-    logs = list((tmp_path / "scratch").glob("amd_child_*.log"))
-    assert logs
-    diagnostic_text = logs[0].read_text(encoding="utf-8")
+    # Export log beside the output MP4 (same base name); no scratch directory.
+    assert not (tmp_path / "scratch").exists()
+    log = tmp_path / "never-created-bootstrap.log"
+    assert log.is_file()
+    diagnostic_text = log.read_text(encoding="utf-8")
     assert "phase=entry" in diagnostic_text
     assert "phase=before_restore" in diagnostic_text
     assert "fd1=" in diagnostic_text and "fd2=" in diagnostic_text

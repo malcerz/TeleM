@@ -1632,6 +1632,9 @@ class RenderTab(QWidget):
             self._ensure_range_applied()
             options["_amd_cut_regions"] = copy.deepcopy(list(getattr(ctrl, "_cut_regions", [])))
         options.pop("output", None)
+        # Stan „Zapisuj log eksportu AMD” zamrażany w chwili dodania zadania.
+        if ctrl is not None and hasattr(ctrl, "amd_export_logging_enabled"):
+            options["amd_export_logging_enabled"] = bool(ctrl.amd_export_logging_enabled)
         # Snapshot ścieżek
         video_paths = [str(p) for p in (getattr(ctrl, "video_paths", None) or [])]
         if not video_paths:

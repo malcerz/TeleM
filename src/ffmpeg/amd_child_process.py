@@ -553,10 +553,10 @@ class AMDChildProcessHandle:
 
     stdin = None
 
-    def __init__(self, process: mp.Process, conn: Any, log_path: Path) -> None:
+    def __init__(self, process: mp.Process, conn: Any, log_path: Optional[Path]) -> None:
         self._process = process
         self._conn = conn
-        self.log_path = Path(log_path)
+        self.log_path = Path(log_path) if log_path else None
         self.pid = process.pid
         self._cancel_sent = False
 
@@ -585,7 +585,9 @@ class AMDChildProcessHandle:
             pass
 
 
-def _tail(path: Path, limit: int = 12000) -> str:
+def _tail(path: Optional[Path], limit: int = 12000) -> str:
+    if path is None:
+        return ""
     try:
         data = path.read_bytes()
     except OSError:
@@ -661,7 +663,9 @@ def _child_entry(
     if parent_pid is None:
         parent_pid = int(render_kwargs.get("_parent_pid") or os.getppid())
 
-    log_path = Path(diagnostics_path)
+    # Empty diagnostics_path = "Zapisuj log eksportu AMD" OFF: no file is
+    # created; stdio still goes to an open sink (os.devnull).
+    log_path: Optional[Path] = Path(diagnostics_path) if diagnostics_path else None
     emitter = _ChildIpcEmitter(conn)
     # Start IPC before any filesystem/stdio setup so bootstrap failures always
     # have a primary error channel independent of stderr.
@@ -673,7 +677,7 @@ def _child_entry(
     stdio_guard: Optional[_ChildStdioRedirect] = None
     child_phase = "bootstrap/startup"
     try:
-        if _child_handle_diagnostics_enabled():
+        if log_path is not None and _child_handle_diagnostics_enabled():
             _write_diagnostic_line(
                 log_path,
                 f"[AMD CHILD HANDLE] phase=entry pid={os.getpid()} "
@@ -681,17 +685,17 @@ def _child_entry(
                 f"stderr={_stream_snapshot('stderr', sys.stderr)} "
                 f"fd1={_windows_fd_info(1)} fd2={_windows_fd_info(2)}",
             )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_file = log_path.open(
-            "a" if _child_handle_diagnostics_enabled() else "w",
-            encoding="utf-8",
-            buffering=1,
-        )
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            # Always append: one file keeps the history of every export attempt.
+            log_file = log_path.open("a", encoding="utf-8", buffering=1)
+        else:
+            log_file = open(os.devnull, "w", encoding="utf-8", buffering=1)
         # Redirect both Python and native C stdio.  Native DLL diagnostics
         # remain available after an access violation even without WER output.
         stdio_guard = _ChildStdioRedirect(log_file)
         stdio_guard.redirect()
-        if _child_handle_diagnostics_enabled():
+        if log_path is not None and _child_handle_diagnostics_enabled():
             _write_diagnostic_line(
                 log_path,
                 f"[AMD CHILD HANDLE] phase=after_redirect pid={os.getpid()} "
@@ -703,6 +707,7 @@ def _child_entry(
         generation_id = int(render_kwargs.get("generation_id", 0) or 0)
         job_id = str(render_kwargs.get("job_id") or "")
         print(f"[AMD CHILD START] child_pid={os.getpid()}", flush=True)
+        print(f"[AMD EXPORT LOG] child_pid={os.getpid()} log={log_path}", flush=True)
         print(
             f"[AMD CHILD JOB RESTORED] generation={generation_id} job_id={job_id} worker_pid={os.getpid()} parent_pid={parent_pid}",
             flush=True,
@@ -723,6 +728,17 @@ def _child_entry(
         cancel.start()
         watchdog.start()
 
+        progress_log_state = {"last": 0.0}
+
+        def log_progress(text: str) -> None:
+            # Lightweight encode progress in the export log: at most every 10 s.
+            if log_path is None:
+                return
+            now = time.monotonic()
+            if now - progress_log_state["last"] >= 10.0:
+                progress_log_state["last"] = now
+                print(f"[AMD EXPORT PROGRESS] {text}", flush=True)
+
         def progress_cb(value: Any, text: Any) -> None:
             emitter.send({
                 "kind": "progress_text",
@@ -737,6 +753,10 @@ def _child_entry(
             fps: Any,
             hud_state: Any,
         ) -> None:
+            log_progress(
+                f"frame={int(completed or 0)}/{int(total or 0)} "
+                f"elapsed={float(elapsed or 0.0):.1f}s fps={float(fps or 0.0):.2f}"
+            )
             emitter.send({
                 "kind": "progress",
                 "completed": int(completed or 0),
@@ -794,7 +814,7 @@ def _child_entry(
                 "kind": "complete",
                 "result": result,
                 "output": str(render_kwargs.get("output_file") or ""),
-                "diagnostics_path": str(log_path),
+                "diagnostics_path": str(log_path) if log_path is not None else "",
             }, critical=True)
     except BaseException as exc:
         print(
@@ -802,6 +822,7 @@ def _child_entry(
             flush=True,
         )
         details = traceback.format_exc()
+        print(f"[AMD CHILD TRACEBACK]\n{details}", flush=True)
         try:
             from src.ffmpeg.render_errors import coerce_render_error
 
@@ -824,7 +845,7 @@ def _child_entry(
             "error": str(exc) or "<empty message>",
             "error_payload": typed_payload,
             "traceback": details,
-            "diagnostics_path": str(log_path),
+            "diagnostics_path": str(log_path) if log_path is not None else "",
         }, critical=True)
     finally:
         if preview_session is not None:
@@ -834,7 +855,7 @@ def _child_entry(
                 pass
         watchdog.close()
         cancel.close()
-        if _child_handle_diagnostics_enabled():
+        if log_path is not None and _child_handle_diagnostics_enabled():
             _write_diagnostic_line(
                 log_path,
                 f"[AMD CHILD HANDLE] phase=before_restore pid={os.getpid()} "
@@ -922,15 +943,18 @@ def run_amd_render_child(
     cancel_reason_provider: Optional[Callable[[], Any]],
     active_process_holder: dict[str, Any],
     generation_id: int,
+    export_log_path: Optional[str | Path] = None,
 ) -> dict[str, Any]:
-    """Run one AMD export in a fresh child and relay bounded state to GUI."""
+    """Run one AMD export in a fresh child and relay bounded state to GUI.
+
+    ``export_log_path`` is the AMD export log beside the output MP4 (same base
+    name, ``.log``); ``None`` means logging is disabled and no file is created.
+    """
 
     ctx = mp.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=True)
     output = Path(str(render_kwargs.get("output_file") or "output.mp4"))
-    diagnostics_path = output.parent / "scratch" / (
-        f"amd_child_{int(generation_id)}_{int(time.time() * 1000)}.log"
-    )
+    diagnostics_path: Optional[Path] = Path(export_log_path) if export_log_path else None
     inspect_render_job_pickle(render_kwargs)
     print(
         f"[AMD CHILD SPAWN] parent_pid={os.getpid()} generation={generation_id}",
@@ -941,7 +965,8 @@ def run_amd_render_child(
         target=_child_entry,
         args=(
             dict(render_kwargs), preview_config, child_conn,
-            str(diagnostics_path), spawn_started_at, os.getpid(),
+            str(diagnostics_path) if diagnostics_path is not None else "",
+            spawn_started_at, os.getpid(),
         ),
         name=f"TeleM-AMD-Render-{generation_id}",
     )
@@ -956,7 +981,8 @@ def run_amd_render_child(
     active_process_holder["process"] = handle
     active_process_holder["child_pid"] = process.pid
     active_process_holder["child_generation_id"] = int(generation_id)
-    active_process_holder["child_diagnostics_path"] = str(diagnostics_path)
+    if diagnostics_path is not None:
+        active_process_holder["child_diagnostics_path"] = str(diagnostics_path)
 
     terminal: Optional[dict[str, Any]] = None
     cancel_sent_at: Optional[float] = None
@@ -1120,6 +1146,9 @@ def run_amd_render_child(
         if tail:
             detail += f"\n[AMD CHILD DIAGNOSTICS: {diagnostics_path}]\n{tail}"
         from src.ffmpeg.render_errors import ChildProcessError
+        lifecycle_details = {"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"}
+        if diagnostics_path is not None:
+            lifecycle_details["diagnostics_path"] = str(diagnostics_path)
         raise ChildProcessError(
             code="CHILD_LIFECYCLE_ERROR",
             user_message="Proces renderujący zakończył się nieoczekiwanie.",
@@ -1127,7 +1156,7 @@ def run_amd_render_child(
             stage="child_process",
             output_path=str(output),
             partial_output_possible=True,
-            details={"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"},
+            details=lifecycle_details,
         )
 
     if (
@@ -1145,7 +1174,7 @@ def run_amd_render_child(
             "output": str(output),
             "child_exitcode": process.exitcode,
             "child_startup_ms": child_startup_ms,
-            "diagnostics_path": str(diagnostics_path),
+            "diagnostics_path": str(diagnostics_path) if diagnostics_path is not None else "",
         }
     if terminal is not None and terminal.get("kind") == "complete":
         raise RuntimeError(
@@ -1159,7 +1188,7 @@ def run_amd_render_child(
             "child_pid": process.pid,
             "child_exitcode": process.exitcode,
             "child_startup_ms": child_startup_ms,
-            "diagnostics_path": str(diagnostics_path),
+            "diagnostics_path": str(diagnostics_path) if diagnostics_path is not None else "",
         }
 
     tail = _tail(diagnostics_path)
@@ -1196,6 +1225,9 @@ def run_amd_render_child(
     if tail:
         detail += f"\n[AMD CHILD DIAGNOSTICS: {diagnostics_path}]\n{tail}"
     from src.ffmpeg.render_errors import ChildProcessError
+    no_terminal_details = {"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"}
+    if diagnostics_path is not None:
+        no_terminal_details["diagnostics_path"] = str(diagnostics_path)
     raise ChildProcessError(
         code="CHILD_NO_TERMINAL_RESULT",
         user_message="Proces renderujący zakończył się bez wyniku końcowego.",
@@ -1203,5 +1235,5 @@ def run_amd_render_child(
         stage="child_process",
         output_path=str(output),
         partial_output_possible=True,
-        details={"exitcode": process.exitcode, "terminal_kind": terminal.get("kind") if terminal else "missing"},
+        details=no_terminal_details,
     )

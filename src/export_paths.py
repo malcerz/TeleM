@@ -77,6 +77,12 @@ def load_startup_preset(base_dir: Path | None = None) -> str:
     return ""
 
 
+def load_amd_export_logging_enabled() -> bool:
+    """Global 'Zapisuj log eksportu AMD' value (default ON)."""
+    value = load_app_preferences().get("amd_export_logging_enabled")
+    return value if isinstance(value, bool) else True
+
+
 def save_default_export_dir(value: str) -> None:
     """Persist only this global preference; never write it into a layout."""
     update_app_preferences({"default_export_dir": str(value or "")})

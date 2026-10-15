@@ -125,7 +125,7 @@ class SettingsTab(QWidget):
         self.btn_save_settings.setMinimumHeight(32)
         self.btn_save_settings.setToolTip(
             "Zapisuje wszystkie ustawienia z tej zakładki (startowy preset, "
-            "folder eksportu, język, motyw, pomijanie pauz, "
+            "folder eksportu, język, motyw, pomijanie pauz, log eksportu AMD, "
             "czcionkę, obramowanie). "
             "Zostaną przywrócone po ponownym uruchomieniu."
         )
@@ -181,6 +181,16 @@ class SettingsTab(QWidget):
         btn_ffmpeg.clicked.connect(lambda: self._browse_file(self.edit_ffmpeg, "ffmpeg"))
         row_ffmpeg.addWidget(btn_ffmpeg)
         perf_form.addRow("Ścieżka ffmpeg:", row_ffmpeg)
+
+        self.chk_amd_export_logging = QCheckBox("Zapisuj log eksportu AMD")
+        self.chk_amd_export_logging.setChecked(True)
+        self.chk_amd_export_logging.setToolTip(
+            "Log eksportu AMD zapisywany obok wynikowego MP4 (ta sama nazwa, rozszerzenie .log)."
+        )
+        self.chk_amd_export_logging.toggled.connect(
+            lambda v: self.signals.sig_settings_changed.emit("amd_export_logging_enabled", v)
+        )
+        perf_form.addRow(self.chk_amd_export_logging)
 
         vbox.addWidget(perf_group)
 
@@ -460,6 +470,7 @@ class SettingsTab(QWidget):
     def _load_app_preferences_into_form(self) -> None:
         """Odtwórz zapisane ustawienia globalne bez emitowania sygnałów zmian."""
         from src.export_paths import (
+            load_amd_export_logging_enabled,
             load_app_preferences,
             load_charts_skip_pauses,
             load_startup_preset,
@@ -469,6 +480,9 @@ class SettingsTab(QWidget):
         self.chk_skip_pauses.blockSignals(True)
         self.chk_skip_pauses.setChecked(load_charts_skip_pauses(self.base_dir))
         self.chk_skip_pauses.blockSignals(False)
+        self.chk_amd_export_logging.blockSignals(True)
+        self.chk_amd_export_logging.setChecked(load_amd_export_logging_enabled())
+        self.chk_amd_export_logging.blockSignals(False)
         self.edit_startup_preset.setText(load_startup_preset(self.base_dir))
         for combo, key in ((self.cmb_lang, "ui_language"), (self.cmb_theme, "ui_theme")):
             value = prefs.get(key)
@@ -487,6 +501,7 @@ class SettingsTab(QWidget):
         try:
             update_app_preferences({
                 "charts_skip_pauses": bool(self.chk_skip_pauses.isChecked()),
+                "amd_export_logging_enabled": bool(self.chk_amd_export_logging.isChecked()),
                 "startup_preset": startup_preset,
                 "ui_language": self.cmb_lang.currentText(),
                 "ui_theme": self.cmb_theme.currentText(),
@@ -500,6 +515,7 @@ class SettingsTab(QWidget):
         self.signals.sig_settings_changed.emit("startup_preset", startup_preset)
         print(
             f"[Settings] Zapisano ustawienia: skip_pauses={self.chk_skip_pauses.isChecked()} "
+            f"amd_export_logging={self.chk_amd_export_logging.isChecked()} "
             f"startup_preset={startup_preset!r} "
             f"export_dir={self.edit_default_export_dir.text().strip()!r}",
             flush=True,
