@@ -33,3 +33,5 @@ scratch/*
 !scratch/.gitkeep
 
 /cache/
+# Portable release staging (tools/build_portable_release.py)
+/dist/

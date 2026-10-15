@@ -1,296 +1,332 @@
-"""SportCamHUD Canonical Production Portable Release Packager.
+"""SportCamHUD portable release packager (ETAP 5Y).
 
-Builds an isolated, minimal production portable directory using a strict ALLOWLIST.
-Excludes all development, test, scratch, native source, debug, and backup materials.
-Enforces hard denylist and cryptographic hash verification.
+Builds a self-contained portable folder from:
+  * application code and the distribution layout template exported from a
+    git commit (default: HEAD) — uncommitted work-in-progress never leaks in;
+  * an explicit allowlist of runtime binaries and untracked assets from the
+    working tree, each verified (pinned SHA-256 where the release depends on
+    an exact build);
+  * optionally (default on) a bundled CPython runtime with exactly the
+    dependency closure of the app's requirements, so the folder runs on a
+    machine without Python.
+
+The target must not exist (or be empty).  A manifest with commit, versions,
+SHA-256 of the key binaries and the full file list is written to
+``portable_manifest.json``; ``THIRD_PARTY_NOTICES.txt`` lists redistributed
+components and their licences.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata as md
+import io
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
+import tarfile
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-EXPECTED_INTEL_DLL_SHA256 = "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b"
-OLD_FORBIDDEN_INTEL_SHA256 = "41658018ae4979071837dfef4e412c40a855771266380cf84595a66bf89c0cca"
-EXPECTED_AMD_DLL_SHA256 = "90be5af56bb56a73cdc161a0508b0d6a2c71987be44a565712c37aa5b5d66647"
+REPO = Path(__file__).resolve().parents[1]
 
-DENYLIST_DIR_NAMES = {
-    "raporty", "tests", "scratch", "video", ".git", ".github",
-    "build", "native", "__pycache__", ".pytest_cache", ".mypy_cache",
-    ".vscode", "debug", "benchmarks", "mpv-dev", "include", "third_party"
+# Pinned production native builds (verified before copy).
+EXPECTED_SHA256 = {
+    # AMD Native D3D11/AMF, ABI 9, with real QP feedback + map style (ETAP 5W).
+    "runtime/amd/bin/telem_amd_native.dll": "5ad042bb8f61db32af52df2a3ea1fdd77c40b253866ce28724c6fe01e4a3c0df",
+    "runtime/intel/bin/telem_intel_native.dll": "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b",
+}
+FORBIDDEN_SHA256 = {
+    "41658018ae4979071837dfef4e412c40a855771266380cf84595a66bf89c0cca",  # old Intel non-quantizer DLL
+    "380f86b044ab61eefb60c0e1d6fd386dcfe0e95d9c12dac756a93bf8e71ea50b",  # AMD DLL before QP feedback
+    "6c43f398fbb1421c6dbb21928309f996e9967afea8040c2d42af6c72ba7f29ca",  # AMD DLL before map style
 }
 
-DENYLIST_EXTENSIONS = {
-    ".pdb", ".obj", ".exp", ".lib", ".ilk", ".map", ".log",
-    ".tmp", ".bak", ".old", ".7z", ".rar", ".zip",
-}
+# Code/templates taken from the git commit.
+COMMIT_PATHS = [
+    "SportCamHUD.py", "TeleMGP.py", "telemetry_fit.py", "telemetry_gpx.py",
+    "pyproject.toml", "README.md", "Start_SportCamHUD.cmd", "def_layout.json",
+    "presets", "src",
+]
+# Inside src/native only the prebuilt GPMF parser is runtime; sources are not shipped.
+COMMIT_SRC_NATIVE_KEEP = {"src/native/gpmf/telem_gpmf_native.pyd"}
+COMMIT_EXCLUDE_DIRS = {"__pycache__", "bikeridehud.egg-info"}
 
-DENYLIST_EXACT_NAMES = {
-    "ffplay.exe", "ltcdump.exe", "download_mpv.py", "mpv_test.py",
-    "patch_controller.py", "run_real_gui_export_interactive.py",
-    "test_fps.py", "test_player_mpv.py", "test_rotation_behavior.py",
-    "build_native_gpmf.py", "telem_intel_native.dll.pre_quant_candidate",
-    ".coverage"
-}
+# Untracked runtime files from the working tree: (source, destination).
+WORKTREE_FILES = [
+    ("libmpv-2.dll", "libmpv-2.dll"),
+    ("wzor/rower_ico.png", "wzor/rower_ico.png"),
+    ("runtime/common/ffmpeg/ffmpeg.exe", "runtime/common/ffmpeg/ffmpeg.exe"),
+    ("runtime/common/ffmpeg/ffprobe.exe", "runtime/common/ffmpeg/ffprobe.exe"),
+    ("runtime/amd/bin/telem_amd_native.dll", "runtime/amd/bin/telem_amd_native.dll"),
+    ("runtime/intel/bin/telem_intel_native.dll", "runtime/intel/bin/telem_intel_native.dll"),
+    *[(f"runtime/intel/bin/{n}", f"runtime/intel/bin/{n}") for n in (
+        "avcodec-63.dll", "avdevice-63.dll", "avfilter-12.dll", "avformat-63.dll",
+        "avutil-61.dll", "swresample-7.dll", "swscale-10.dll")],
+    *[(f"runtime/telemetry_parser/{n}", f"runtime/common/telemetry/telemetry_parser/{n}") for n in (
+        "LICENSE-APACHE", "LICENSE-MIT", "README.md",
+        "telemetry_parser/__init__.py", "telemetry_parser/telemetry_parser.cp314-win_amd64.pyd")],
+]
+WORKTREE_DIRS = [("src/assets/icons/png", "src/assets/icons/png", "*.png")]
+
+# The AMD DLL is an MSVC build (MSVCP140/VCRUNTIME140/_1); ship them app-locally
+# from the Visual Studio redistributable folder (redistributable per the VS
+# licence) so the DLL loads without a separately installed VC++ redist.
+VC_REDIST_DLLS = ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+
+APP_REQUIREMENTS = ["PySide6", "numpy", "Pillow", "opencv-python", "fitparse", "orjson",
+                    "python-mpv", "pyopencl", "requests", "garminconnect"]
+PY_EXCLUDE_DIRS = {"__pycache__", "test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip",
+                   "tcl", "Doc", "include", "libs", "Scripts", "site-packages"}
+
+DENYLIST_EXTENSIONS = {".pdb", ".obj", ".exp", ".lib", ".ilk", ".map", ".log", ".tmp", ".bak", ".7z", ".rar"}
+DENYLIST_PATTERNS = (".bak_", ".pre_quant_candidate", ".golden-", ".fresh-backup")
 
 
-def compute_sha256(file_path: Path | str) -> str:
+def sha256(path: Path) -> str:
     h = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(1048576):
+    with open(path, "rb") as f:
+        while chunk := f.read(1 << 20):
             h.update(chunk)
     return h.hexdigest()
 
 
-def categorize_file(rel_path: str) -> str:
-    norm = rel_path.replace("\\", "/").lower()
-    if norm.startswith("runtime/common/"):
-        return "COMMON_RUNTIME"
-    if norm.startswith("runtime/amd/"):
-        return "AMD_RUNTIME"
-    if norm.startswith("runtime/intel/"):
-        return "INTEL_RUNTIME"
-    if norm.startswith("runtime/nvidia/"):
-        return "NVIDIA_RUNTIME"
-    if norm.startswith("runtime/"):
-        return "RUNTIME_MANIFEST"
-    if norm.endswith(".py"):
-        return "PYTHON"
-    if norm.startswith("src/assets/") or norm.startswith("presets/") or norm.startswith("wzor/") or norm == "def_layout.json":
-        return "ASSET"
-    if norm.startswith("license") or "readme" in norm:
-        return "LICENSE"
-    if norm.endswith(".cmd") or norm.endswith(".toml") or norm.endswith(".json"):
-        return "CONFIG"
-    if norm == "libmpv-2.dll":
-        return "COMMON_RUNTIME"
-    return "UNKNOWN"
+def git(*args: str) -> bytes:
+    return subprocess.check_output(["git", *args], cwd=REPO)
 
 
-def build_portable(source_dir: Path, target_dir: Path) -> Dict[str, Any]:
-    print(f"[PACKAGER] Source directory: {source_dir}")
-    print(f"[PACKAGER] Target directory: {target_dir}")
+def export_commit(commit: str, target: Path) -> str:
+    full = git("rev-parse", commit).decode().strip()
+    data = git("archive", "--format=tar", full, *COMMIT_PATHS)
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        for m in tar.getmembers():
+            if not m.isfile():
+                continue
+            parts = Path(m.name).parts
+            if any(p in COMMIT_EXCLUDE_DIRS for p in parts):
+                continue
+            if m.name.startswith("src/native/") and m.name not in COMMIT_SRC_NATIVE_KEEP:
+                continue
+            dst = target / m.name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(tar.extractfile(m).read())
+    return full
 
-    # Safety Gate 1: target directory must not exist or be empty
-    if target_dir.exists():
-        entries = os.listdir(target_dir)
-        if entries:
-            raise RuntimeError(
-                f"SAFETY STOP: Target directory {target_dir} already exists and is non-empty ({len(entries)} items). Aborting."
-            )
-    target_dir.mkdir(parents=True, exist_ok=True)
 
-    copied_files: List[Tuple[Path, str]] = []
+def copy_checked(src_rel: str, dst_rel: str, target: Path) -> None:
+    src = REPO / src_rel
+    if not src.is_file():
+        raise RuntimeError(f"Missing required runtime file: {src}")
+    digest = sha256(src)
+    expected = EXPECTED_SHA256.get(src_rel)
+    if expected and digest != expected:
+        raise RuntimeError(f"SHA-256 mismatch for {src_rel}: {digest} (expected {expected})")
+    if digest in FORBIDDEN_SHA256:
+        raise RuntimeError(f"Refusing superseded binary {src_rel} ({digest})")
+    dst = target / dst_rel
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
 
-    # 1. Top-Level Allowlist
-    top_level_allowed = [
-        "SportCamHUD.py",
-        "TeleMGP.py",
-        "Start_SportCamHUD.cmd",
-        "def_layout.json",
-        "telemetry_fit.py",
-        "telemetry_gpx.py",
-        "libmpv-2.dll",
-        "pyproject.toml",
-        "README.md",
-    ]
-    for name in top_level_allowed:
-        src_f = source_dir / name
-        if not src_f.is_file():
-            raise RuntimeError(f"Missing required top-level file: {src_f}")
-        dst_f = target_dir / name
-        shutil.copy2(src_f, dst_f)
-        copied_files.append((dst_f, name))
 
-    # 2. Presets Directory
-    presets_src = source_dir / "presets"
-    presets_dst = target_dir / "presets"
-    presets_dst.mkdir(parents=True, exist_ok=True)
-    for p_file in presets_src.glob("*.json"):
-        dst_f = presets_dst / p_file.name
-        shutil.copy2(p_file, dst_f)
-        copied_files.append((dst_f, f"presets/{p_file.name}"))
+def find_vc_redist() -> Path:
+    roots = [Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
+             Path(os.environ.get("ProgramFiles", r"C:\Program Files"))]
+    cands = []
+    for root in roots:
+        cands += sorted(root.glob("Microsoft Visual Studio/*/*/VC/Redist/MSVC/*/x64/Microsoft.VC14*.CRT"))
+    if not cands:
+        raise RuntimeError("Visual C++ redistributable folder (Microsoft.VC14x.CRT) not found")
+    return cands[-1]
 
-    # 3. Wzor Directory
-    wzor_src = source_dir / "wzor"
-    wzor_dst = target_dir / "wzor"
-    wzor_dst.mkdir(parents=True, exist_ok=True)
-    bike_ico = wzor_src / "rower_ico.png"
-    if bike_ico.exists():
-        shutil.copy2(bike_ico, wzor_dst / "rower_ico.png")
-        copied_files.append((wzor_dst / "rower_ico.png", "wzor/rower_ico.png"))
 
-    # 4. Production src/ package (excluding native source, pycache)
-    src_src = source_dir / "src"
-    for root, dirs, files in os.walk(src_src):
-        rel_root = os.path.relpath(root, source_dir)
-        norm_rel = rel_root.replace("\\", "/")
-        if "src/native" in norm_rel or "__pycache__" in norm_rel:
+def dist_closure(roots: list[str]) -> list[md.Distribution]:
+    seen: dict[str, Any] = {}
+    stack = list(roots)
+    while stack:
+        name = stack.pop()
+        key = re.sub(r"[-_.]+", "-", name).lower()
+        if key in seen:
             continue
-        dst_dir = target_dir / rel_root
-        dst_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            dist = md.distribution(name)
+        except md.PackageNotFoundError:
+            seen[key] = None
+            continue
+        seen[key] = dist
+        for req in dist.requires or []:
+            if "extra ==" in req:
+                continue
+            m = re.match(r"\s*([A-Za-z0-9_.\-]+)", req)
+            if m:
+                marker = req.split(";", 1)[1] if ";" in req else ""
+                if any(s in marker for s in ('sys_platform != "win32"', 'platform_system == "Linux"',
+                                             'platform_system == "Darwin"', 'python_version < "3.1')):
+                    continue
+                stack.append(m.group(1))
+    missing = [k for k, v in seen.items() if v is None]
+    for k in missing:
+        if k in {re.sub(r"[-_.]+", "-", r).lower() for r in roots}:
+            raise RuntimeError(f"Required package not installed: {k}")
+    return [v for v in seen.values() if v is not None]
+
+
+def bundle_python(target: Path) -> dict[str, Any]:
+    base = Path(sys.base_prefix)
+    py_dst = target / "python"
+    for root, dirs, files in os.walk(base):
+        rel = Path(root).relative_to(base)
+        dirs[:] = [d for d in dirs if d not in PY_EXCLUDE_DIRS]
         for f in files:
-            src_file = Path(root) / f
-            dst_file = dst_dir / f
-            shutil.copy2(src_file, dst_file)
-            rel_file = os.path.relpath(dst_file, target_dir).replace("\\", "/")
-            copied_files.append((dst_file, rel_file))
-
-    # 5. Production runtime/ directory
-    runtime_explicit_files = [
-        # Common
-        ("runtime/common/ffmpeg/ffmpeg.exe", "runtime/common/ffmpeg/ffmpeg.exe"),
-        ("runtime/common/ffmpeg/ffprobe.exe", "runtime/common/ffmpeg/ffprobe.exe"),
-        ("runtime/common/licenses/README.txt", "runtime/common/licenses/README.txt"),
-        ("runtime/common/telemetry/telemetry_parser/LICENSE-APACHE", "runtime/common/telemetry/telemetry_parser/LICENSE-APACHE"),
-        ("runtime/common/telemetry/telemetry_parser/LICENSE-MIT", "runtime/common/telemetry/telemetry_parser/LICENSE-MIT"),
-        ("runtime/common/telemetry/telemetry_parser/README.md", "runtime/common/telemetry/telemetry_parser/README.md"),
-        ("runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd", "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd"),
-        ("runtime/common/telemetry/telemetry_parser/telemetry_parser/__init__.py", "runtime/common/telemetry/telemetry_parser/telemetry_parser/__init__.py"),
-        # AMD
-        ("runtime/amd/bin/telem_amd_native.dll", "runtime/amd/bin/telem_amd_native.dll"),
-        ("runtime/amd/bin/libwinpthread-1.dll", "runtime/amd/bin/libwinpthread-1.dll"),
-        ("runtime/amd/licenses/README.txt", "runtime/amd/licenses/README.txt"),
-        # Intel
-        ("runtime/intel/bin/telem_intel_native.dll", "runtime/intel/bin/telem_intel_native.dll"),
-        ("runtime/intel/bin/avcodec-63.dll", "runtime/intel/bin/avcodec-63.dll"),
-        ("runtime/intel/bin/avdevice-63.dll", "runtime/intel/bin/avdevice-63.dll"),
-        ("runtime/intel/bin/avfilter-12.dll", "runtime/intel/bin/avfilter-12.dll"),
-        ("runtime/intel/bin/avformat-63.dll", "runtime/intel/bin/avformat-63.dll"),
-        ("runtime/intel/bin/avutil-61.dll", "runtime/intel/bin/avutil-61.dll"),
-        ("runtime/intel/bin/swresample-7.dll", "runtime/intel/bin/swresample-7.dll"),
-        ("runtime/intel/bin/swscale-10.dll", "runtime/intel/bin/swscale-10.dll"),
-        ("runtime/intel/licenses/README.txt", "runtime/intel/licenses/README.txt"),
-        # NVIDIA
-        ("runtime/nvidia/bin/README.txt", "runtime/nvidia/bin/README.txt"),
-        ("runtime/nvidia/licenses/README.txt", "runtime/nvidia/licenses/README.txt"),
-    ]
-
-    for rel_src, rel_dst in runtime_explicit_files:
-        src_path = source_dir / rel_src
-        dst_path = target_dir / rel_dst
-        dst_path.parent.mkdir(parents=True, exist_ok=True)
-        if not src_path.is_file():
-            raise RuntimeError(f"Missing required runtime file: {src_path}")
-        shutil.copy2(src_path, dst_path)
-        copied_files.append((dst_path, rel_dst))
-
-    # 6. Verify Critical Binary Hashes
-    intel_dll = target_dir / "runtime" / "intel" / "bin" / "telem_intel_native.dll"
-    h_intel = compute_sha256(intel_dll)
-    if h_intel.lower() != EXPECTED_INTEL_DLL_SHA256.lower():
-        raise RuntimeError(
-            f"INTEL DLL HASH MISMATCH!\nExpected: {EXPECTED_INTEL_DLL_SHA256}\nFound:    {h_intel}"
-        )
-    if h_intel.lower() == OLD_FORBIDDEN_INTEL_SHA256.lower():
-        raise RuntimeError("FATAL: Old non-quantizer Intel DLL was accidentally copied!")
-
-    amd_dll = target_dir / "runtime" / "amd" / "bin" / "telem_amd_native.dll"
-    h_amd = compute_sha256(amd_dll)
-    if h_amd.lower() != EXPECTED_AMD_DLL_SHA256.lower():
-        raise RuntimeError(
-            f"AMD DLL HASH MISMATCH!\nExpected: {EXPECTED_AMD_DLL_SHA256}\nFound:    {h_amd}"
-        )
-
-    # 7. Generate Manifest (Phase 23)
-    manifest_entries = []
-    for f_path, rel_str in copied_files:
-        sz = f_path.stat().st_size
-        sha = compute_sha256(f_path)
-        cat = categorize_file(rel_str)
-        manifest_entries.append({
-            "relative_path": rel_str,
-            "size": sz,
-            "sha256": sha,
-            "category": cat,
-        })
-
-    # Sort manifest deterministically
-    manifest_entries.sort(key=lambda x: x["relative_path"])
-    manifest_path = target_dir / "runtime" / "portable_manifest.json"
-    manifest_payload = {
-        "$schema": "bikeridehud_portable_manifest_v2",
-        "description": "Deterministic manifest of production SportCamHUD portable runtime files.",
-        "file_count": len(manifest_entries) + 1,  # +1 for the manifest itself
-        "files": manifest_entries,
-    }
-    with open(manifest_path, "w", encoding="utf-8") as mf:
-        json.dump(manifest_payload, mf, indent=2)
-
-    # Add manifest to manifest list self-check
-    manifest_sz = manifest_path.stat().st_size
-    manifest_sha = compute_sha256(manifest_path)
-    manifest_payload["files"].append({
-        "relative_path": "runtime/portable_manifest.json",
-        "size": manifest_sz,
-        "sha256": manifest_sha,
-        "category": "RUNTIME_MANIFEST",
-    })
-    manifest_payload["files"].sort(key=lambda x: x["relative_path"])
-    with open(manifest_path, "w", encoding="utf-8") as mf:
-        json.dump(manifest_payload, mf, indent=2)
-
-    # 8. Hard Denylist Safety Gate (Phase 14)
-    violations = []
-    total_target_files = 0
-    total_target_bytes = 0
-
-    for root, dirs, files in os.walk(target_dir):
-        rel_root = os.path.relpath(root, target_dir).replace("\\", "/").lower()
-        root_parts = rel_root.split("/")
-        for d in dirs:
-            if d.lower() in DENYLIST_DIR_NAMES:
-                violations.append(f"Forbidden directory: {os.path.join(rel_root, d)}")
-        for f in files:
-            total_target_files += 1
-            f_path = Path(root) / f
-            sz = f_path.stat().st_size
-            total_target_bytes += sz
-            f_lower = f.lower()
-            ext = os.path.splitext(f_lower)[1]
-            if ext in DENYLIST_EXTENSIONS:
-                violations.append(f"Forbidden extension: {os.path.join(rel_root, f)}")
-            if f_lower in DENYLIST_EXACT_NAMES:
-                violations.append(f"Forbidden exact file: {os.path.join(rel_root, f)}")
-            for part in [".pre_quant_candidate", ".fresh-backup", ".golden-"]:
-                if part in f_lower:
-                    violations.append(f"Forbidden pattern '{part}': {os.path.join(rel_root, f)}")
-
-    if violations:
-        shutil.rmtree(target_dir, ignore_errors=True)
-        raise RuntimeError(f"HARD DENYLIST VIOLATIONS DETECTED:\n" + "\n".join(violations))
-
-    print(f"[PACKAGER] Successfully packaged {total_target_files} files, {total_target_bytes} bytes.")
-    print(f"[PACKAGER] Intel DLL SHA256: {h_intel} (MATCH=YES)")
-    print(f"[PACKAGER] AMD DLL SHA256:   {h_amd} (MATCH=YES)")
-    print(f"[PACKAGER] Denylist check passed: 0 violations.")
-
+            if f.endswith((".pyc", ".pdb")):
+                continue
+            src = Path(root) / f
+            dst = py_dst / rel / f
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    site = py_dst / "Lib" / "site-packages"
+    dists = dist_closure(APP_REQUIREMENTS)
+    for dist in dists:
+        for f in dist.files or []:
+            src = Path(dist.locate_file(f))
+            if not src.is_file() or "__pycache__" in f.parts or src.suffix == ".pyc":
+                continue
+            dst = site / f
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
     return {
-        "file_count": total_target_files,
-        "total_bytes": total_target_bytes,
-        "intel_sha256": h_intel,
-        "amd_sha256": h_amd,
-        "manifest_path": str(manifest_path),
+        "python_version": sys.version.split()[0],
+        "python_source": str(base),
+        "packages": {d.metadata["Name"]: d.version for d in sorted(dists, key=lambda d: d.metadata["Name"].lower())},
     }
+
+
+LAUNCHER = r"""@echo off
+setlocal
+pushd "%~dp0"
+rem Portable runtime first (isolated: -s no user site, -E no PYTHON* env), then system Python.
+if exist "python\python.exe" (
+    "python\python.exe" -s -E "SportCamHUD.py" %*
+) else (
+    python "SportCamHUD.py" %*
+)
+set "APP_EXIT_CODE=%ERRORLEVEL%"
+if not "%APP_EXIT_CODE%"=="0" (
+    echo SportCamHUD exited with code %APP_EXIT_CODE%.
+    echo Startup output is shown above. Press any key to close this window.
+    pause >nul
+)
+popd
+exit /b %APP_EXIT_CODE%
+"""
+
+NOTICES = """SportCamHUD portable — third-party components
+
+FFmpeg (runtime/common/ffmpeg/ffmpeg.exe, ffprobe.exe): gyan.dev "full_build",
+  configured with --enable-gpl --enable-version3 -> GPLv3. Redistribution must
+  be accompanied by an offer of the corresponding source
+  (https://www.gyan.dev/ffmpeg/builds/ and https://ffmpeg.org/download.html).
+FFmpeg shared libraries for the Intel backend (runtime/intel/bin/av*.dll, sw*.dll):
+  FFmpeg project, licence per their build configuration (LGPL/GPL); source at ffmpeg.org.
+libmpv (libmpv-2.dll): mpv project, GPLv2+/LGPLv2.1+ depending on build; source at mpv.io.
+Python (python/): Python Software Foundation License.
+PySide6 / Qt 6 (python/Lib/site-packages/PySide6, shiboken6): LGPLv3 (dynamically
+  linked, unmodified); Qt sources at https://download.qt.io/.
+numpy (BSD), Pillow (MIT-CMU), opencv-python (Apache 2.0, bundled FFmpeg LGPL),
+  fitparse (MIT), orjson (Apache 2.0/MIT), python-mpv (GPLv2+/LGPLv2.1+), pyopencl (MIT),
+  requests/urllib3/idna/certifi/charset-normalizer (Apache 2.0/MIT/BSD/MPL-2.0),
+  garminconnect and dependencies: see each package's dist-info in python/Lib/site-packages.
+telemetry_parser (runtime/common/telemetry/telemetry_parser): MIT OR Apache-2.0.
+Microsoft Visual C++ runtime (msvcp140.dll, vcruntime140*.dll in runtime/amd/bin):
+  Visual Studio redistributable files (Microsoft.VC14x.CRT).
+Fonts: none are shipped. Missing glyphs fall back to Windows system fonts (Segoe UI / Arial).
+"""
+
+
+def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
+    if target.exists() and any(target.iterdir()):
+        raise RuntimeError(f"SAFETY STOP: target {target} exists and is not empty")
+    target.mkdir(parents=True, exist_ok=True)
+
+    full_commit = export_commit(commit, target)
+    for src_rel, dst_rel in WORKTREE_FILES:
+        copy_checked(src_rel, dst_rel, target)
+    for src_rel, dst_rel, pattern in WORKTREE_DIRS:
+        src_dir = REPO / src_rel
+        files = sorted(src_dir.glob(pattern))
+        if not files:
+            raise RuntimeError(f"Missing assets: {src_dir}/{pattern}")
+        for f in files:
+            copy_checked(f"{src_rel}/{f.name}", f"{dst_rel}/{f.name}", target)
+    vc = find_vc_redist()
+    for name in VC_REDIST_DLLS:
+        shutil.copy2(vc / name, target / "runtime/amd/bin" / name)
+
+    (target / "Start_SportCamHUD.cmd").write_text(LAUNCHER.replace("\n", "\r\n"), encoding="ascii")
+    (target / "THIRD_PARTY_NOTICES.txt").write_text(NOTICES, encoding="utf-8")
+    app_version = re.search(r"APP_VERSION\s*=\s*'([^']+)'", (target / "src/version.py").read_text()).group(1)
+    (target / "build_meta.json").write_text(json.dumps({"commit": full_commit[:7]}), encoding="utf-8")
+
+    py_info = bundle_python(target) if with_python else {"python_version": None, "packages": {}}
+
+    violations = []
+    for p in target.rglob("*"):
+        if p.is_file():
+            rel = p.relative_to(target).as_posix()
+            if p.suffix.lower() in DENYLIST_EXTENSIONS and not rel.startswith("python/"):
+                violations.append(rel)
+            if any(s in p.name for s in DENYLIST_PATTERNS):
+                violations.append(rel)
+    if violations:
+        raise RuntimeError("Denylist violations:\n" + "\n".join(violations))
+
+    key_files = [
+        "runtime/amd/bin/telem_amd_native.dll", "runtime/intel/bin/telem_intel_native.dll",
+        "runtime/common/ffmpeg/ffmpeg.exe", "runtime/common/ffmpeg/ffprobe.exe", "libmpv-2.dll",
+        "src/native/gpmf/telem_gpmf_native.pyd",
+        "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd",
+        *[f"runtime/amd/bin/{n}" for n in VC_REDIST_DLLS],
+    ]
+    files = []
+    total = 0
+    for p in sorted(target.rglob("*")):
+        if p.is_file():
+            size = p.stat().st_size
+            total += size
+            rel = p.relative_to(target).as_posix()
+            entry = {"path": rel, "size": size}
+            if not rel.startswith("python/"):
+                entry["sha256"] = sha256(p)
+            files.append(entry)
+    manifest = {
+        "schema": "sportcamhud_portable_manifest_v3",
+        "source_commit": full_commit,
+        "app_version": app_version,
+        "python": py_info,
+        "key_sha256": {k: sha256(target / k) for k in key_files},
+        "native_modules": ["src/native/gpmf/telem_gpmf_native.pyd",
+                           "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd"],
+        "vc_redist_source": str(vc),
+        "file_count": len(files) + 1,
+        "total_bytes": total,
+        "files": files,
+    }
+    (target / "portable_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return {"target": str(target), "commit": full_commit, "files": len(files) + 1,
+            "total_mb": round(total / 1e6, 1), "app_version": app_version,
+            "python": py_info.get("python_version")}
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SportCamHUD Clean Portable Release Packager")
-    parser.add_argument("--source", default=r"C:\_DEV\SportCamHUD-portable", help="Source directory")
-    parser.add_argument("--target", default=r"C:\_DEV\SportCamHUD-portable-clean", help="Target clean directory")
-    args = parser.parse_args()
-
-    source_dir = Path(args.source).resolve()
-    target_dir = Path(args.target).resolve()
-
-    res = build_portable(source_dir, target_dir)
-    print(json.dumps(res, indent=2))
+    ap = argparse.ArgumentParser(description="SportCamHUD portable release packager")
+    ap.add_argument("--commit", default="HEAD")
+    ap.add_argument("--target", default=str(REPO / "dist" / "portable-stage"))
+    ap.add_argument("--no-python", action="store_true", help="do not bundle the Python runtime")
+    args = ap.parse_args()
+    print(json.dumps(build(args.commit, Path(args.target).resolve(), not args.no_python), indent=2))
 
 
 if __name__ == "__main__":
