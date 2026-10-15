@@ -51,6 +51,7 @@ CHART_COLOR_RULES: list[tuple[str, tuple[int, int, int]]] = [
     ("alt",   (50, 200, 50)),
     ("dist",  (50, 150, 255)),
     ("power", (255, 200, 50)),
+    ("curvpower", (255, 200, 50)),  # 5X: was matched by "power" as a mid-token substring
     ("hr",    (255, 50, 150)),
     ("battery", (50, 255, 50)),
 ]
@@ -73,11 +74,37 @@ HARDCODED_KEYS: frozenset[str] = frozenset({
 # ── Indicator key → data-field helpers ─────────────────────────────────────
 # These are used by _get_indicator_range() in controller.py
 
+# ETAP 5X: rule patterns match only from the start of an ``_``-separated token
+# (``alt`` → ``enhanced_altitude``, ``cad`` → ``cadence``), never from the
+# middle of one.  Short abbreviations listed here must equal a whole token,
+# so ``hr`` matches ``hr_text`` / ``fit_hr`` but not ``fit_hrv`` or
+# ``threshold``.
+WHOLE_TOKEN_PATTERNS: frozenset[str] = frozenset({"hr"})
+
+
+def key_matches_pattern(key_lower: str, pattern: str) -> bool:
+    """True when ``pattern`` starts at a token boundary of ``key_lower``."""
+    start = 0
+    while True:
+        idx = key_lower.find(pattern, start)
+        if idx < 0:
+            return False
+        if idx == 0 or key_lower[idx - 1] == "_":
+            end = idx + len(pattern)
+            if pattern not in WHOLE_TOKEN_PATTERNS or end == len(key_lower) or key_lower[end] == "_":
+                return True
+        start = idx + 1
+
+
 def get_form_for_key(key: str) -> tuple[str, dict]:
-    """Return (form, kwargs_override) for the given indicator key."""
+    """Return (form, kwargs_override) for the given indicator key.
+
+    Used only for defaults of a newly created indicator; a ``form`` stored in
+    the layout always wins at render time.
+    """
     key_lower = key.lower()
     for pattern, form, size in DEFAULT_FORM_RULES:
-        if pattern in key_lower:
+        if key_matches_pattern(key_lower, pattern):
             overrides: dict = {"form": form, "size": size}
             if pattern in ("battery", "solar", "gopro_battery"):
                 overrides["bar_style"] = "segments"
@@ -92,6 +119,6 @@ def get_chart_color(key: str) -> tuple[int, int, int]:
     """Return the line colour for a chart indicator."""
     key_lower = key.lower()
     for pattern, color in CHART_COLOR_RULES:
-        if pattern in key_lower:
+        if key_matches_pattern(key_lower, pattern):
             return color
     return (200, 200, 200)
