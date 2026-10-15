@@ -192,9 +192,11 @@ class AppController(
         self._load_startup_preset()
         # Globalne „Pomiń pauzy aktywności” (profil użytkownika) ma pierwszeństwo
         # przed wartością z layoutu projektu/presetu.
-        from src.export_paths import load_charts_skip_pauses
+        from src.export_paths import load_charts_skip_pauses, load_startup_preset
         self.charts_skip_pauses: bool = load_charts_skip_pauses(self.base_dir)
         self._apply_global_chart_preferences()
+        # Startowy preset — profil użytkownika (app_preferences.json).
+        self._startup_preset_path = load_startup_preset(self.base_dir)
 
         # ── Narzędzia ──────────────────────────────────────────────────
         self.ffprobe_path = find_local_tool(self.base_dir, ["ffprobe.exe", "ffprobe"]) or "ffprobe"

@@ -48,10 +48,14 @@ def test_default_export_dir_setting_visible_in_general(qapp, tmp_path, monkeypat
     tab.btn_export_dir.click()
     assert tab.edit_default_export_dir.text() == str(chosen_dir)
 
-    # Clear immediately persists automatic source-folder mode.
+    # Clear only empties the form; the green "Zapisz ustawienia" persists
+    # automatic source-folder mode (its export-dir step is called directly
+    # here so no layout save runs).
     tab.btn_clear_export_dir.click()
     assert tab.edit_default_export_dir.text() == ""
     from src.export_paths import load_default_export_dir
+    assert load_default_export_dir() is None
+    assert tab._save_default_export_dir(show_message=False) is True
     assert load_default_export_dir() == ""
 
 

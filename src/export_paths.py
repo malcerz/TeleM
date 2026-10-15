@@ -57,6 +57,26 @@ def load_charts_skip_pauses(base_dir: Path | None = None) -> bool:
     return False
 
 
+def load_startup_preset(base_dir: Path | None = None) -> str:
+    """Saved 'Startowy preset' path.
+
+    The user profile preference wins; without it the legacy ``_startup_preset``
+    from def_layout.json is used (read-only), then "".
+    """
+    value = load_app_preferences().get("startup_preset")
+    if isinstance(value, str):
+        return value
+    if base_dir is not None:
+        try:
+            data = json.loads((Path(base_dir) / "def_layout.json").read_text(encoding="utf-8"))
+            legacy = data.get("_startup_preset")
+            if isinstance(legacy, str):
+                return legacy
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    return ""
+
+
 def save_default_export_dir(value: str) -> None:
     """Persist only this global preference; never write it into a layout."""
     update_app_preferences({"default_export_dir": str(value or "")})

@@ -991,6 +991,26 @@ class RenderTab(QWidget):
                     job.job_id, success=False, error_message="Render start rejected (busy)"
                 )
 
+    def _restore_controller_global_preferences(self) -> None:
+        """Po zadaniu z kolejki: layout kontrolera jest kopią snapshotu zadania —
+        nałóż z powrotem globalne „Pomiń pauzy” i odśwież podgląd.
+        Snapshot zadania (job.layout) nie jest modyfikowany."""
+        ctrl = self._controller
+        if ctrl is None or not hasattr(ctrl, "_apply_global_chart_preferences"):
+            return
+        try:
+            layout = getattr(ctrl, "layout", None)
+            before = layout.get("charts_skip_pauses") if isinstance(layout, dict) else None
+            ctrl._apply_global_chart_preferences()
+            after = layout.get("charts_skip_pauses") if isinstance(layout, dict) else None
+            if before != after:
+                print(f"[RenderTab] Render end: charts_skip_pauses {before} -> {after} (global)", flush=True)
+                ctrl._chart_data_cache = None
+                if hasattr(ctrl, "_render_preview"):
+                    QTimer.singleShot(0, ctrl._render_preview)
+        except Exception as exc:
+            print(f"[RenderTab] Restore global preferences failed: {exc}", flush=True)
+
     def _restore_job_snapshot_onto_controller(self, job: ExportJob) -> None:
         """Przywróć stan layoutu i wideo na kontrolerze z zamrożonego snapshotu."""
         ctrl = self._controller
@@ -3124,6 +3144,9 @@ class RenderTab(QWidget):
         self._cancelling = False
         active_q_job = getattr(self, "_active_queue_job_id", None)
         self._active_queue_job_id = None
+        # Po zadaniu (także z kolejki: sukces/błąd/anulowanie) kontroler wraca do
+        # globalnego „Pomiń pauzy”; następne zadanie przywróci własny snapshot.
+        self._restore_controller_global_preferences()
         if active_q_job and self._export_queue:
             is_success = bool(self._render_state and self._render_state.completed and not self._render_state.failed)
             elapsed = (

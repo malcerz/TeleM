@@ -328,20 +328,10 @@ class PresetMixin:
             self._chart_data_cache = None
             self._render_preview()
         elif name == "startup_preset":
+            # Trwały zapis robi zielony „Zapisz ustawienia” (app_preferences.json);
+            # tutaj wyłącznie stan w pamięci, bez zapisu def_layout.json.
             self._startup_preset_path = str(value) if value else ""
             self.layout["_startup_preset"] = self._startup_preset_path
-            # Zapisz tylko _startup_preset w def_layout.json (nie nadpisuj całości)
-            try:
-                def_layout = self.base_dir / "def_layout.json"
-                if def_layout.exists():
-                    data = json.loads(def_layout.read_text(encoding="utf-8"))
-                else:
-                    data = {}
-                data["_startup_preset"] = self._startup_preset_path
-                with open(def_layout, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-            except Exception:
-                pass
         elif name in ("auto_activity_source", "garmin_username", "strava_client_id"):
             self.layout.setdefault("integrations", {})[name] = str(value)
             self._layout_dirty = True

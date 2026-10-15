@@ -65,9 +65,7 @@ class SettingsTab(QWidget):
         self.edit_startup_preset = QLineEdit("")
         self.edit_startup_preset.setMinimumHeight(28)
         self.edit_startup_preset.setPlaceholderText("(domyślny def_layout.json)")
-        self.edit_startup_preset.textChanged.connect(
-            lambda txt: self.signals.sig_settings_changed.emit("startup_preset", txt)
-        )
+        # Trwały zapis wyłącznie zielonym „Zapisz ustawienia”.
         row_preset.addWidget(self.edit_startup_preset)
         btn_preset = QPushButton("Wybierz")
         btn_preset.setMinimumHeight(28)
@@ -126,8 +124,9 @@ class SettingsTab(QWidget):
         self.btn_save_settings = QPushButton("Zapisz ustawienia")
         self.btn_save_settings.setMinimumHeight(32)
         self.btn_save_settings.setToolTip(
-            "Zapisuje wszystkie ustawienia z tej zakładki (folder eksportu, "
-            "język, motyw, pomijanie pauz, czcionkę, obramowanie). "
+            "Zapisuje wszystkie ustawienia z tej zakładki (startowy preset, "
+            "folder eksportu, język, motyw, pomijanie pauz, "
+            "czcionkę, obramowanie). "
             "Zostaną przywrócone po ponownym uruchomieniu."
         )
         self.btn_save_settings.setStyleSheet(
@@ -460,12 +459,17 @@ class SettingsTab(QWidget):
 
     def _load_app_preferences_into_form(self) -> None:
         """Odtwórz zapisane ustawienia globalne bez emitowania sygnałów zmian."""
-        from src.export_paths import load_app_preferences, load_charts_skip_pauses
+        from src.export_paths import (
+            load_app_preferences,
+            load_charts_skip_pauses,
+            load_startup_preset,
+        )
 
         prefs = load_app_preferences()
         self.chk_skip_pauses.blockSignals(True)
         self.chk_skip_pauses.setChecked(load_charts_skip_pauses(self.base_dir))
         self.chk_skip_pauses.blockSignals(False)
+        self.edit_startup_preset.setText(load_startup_preset(self.base_dir))
         for combo, key in ((self.cmb_lang, "ui_language"), (self.cmb_theme, "ui_theme")):
             value = prefs.get(key)
             if isinstance(value, str) and value:
@@ -479,9 +483,11 @@ class SettingsTab(QWidget):
 
         if not self._save_default_export_dir(show_message=False):
             return
+        startup_preset = self.edit_startup_preset.text().strip()
         try:
             update_app_preferences({
                 "charts_skip_pauses": bool(self.chk_skip_pauses.isChecked()),
+                "startup_preset": startup_preset,
                 "ui_language": self.cmb_lang.currentText(),
                 "ui_theme": self.cmb_theme.currentText(),
             })
@@ -489,8 +495,12 @@ class SettingsTab(QWidget):
             QMessageBox.warning(self, "Zapisz ustawienia", f"Nie można zapisać ustawień:\n{exc}")
             return
         self.signals.sig_save_global_settings.emit()
+        # Po zapisie layoutu (który zeruje _startup_preset w def_layout.json)
+        # przekaż kontrolerowi zapisaną wartość startowego presetu.
+        self.signals.sig_settings_changed.emit("startup_preset", startup_preset)
         print(
             f"[Settings] Zapisano ustawienia: skip_pauses={self.chk_skip_pauses.isChecked()} "
+            f"startup_preset={startup_preset!r} "
             f"export_dir={self.edit_default_export_dir.text().strip()!r}",
             flush=True,
         )
@@ -524,14 +534,8 @@ class SettingsTab(QWidget):
         return True
 
     def _clear_default_export_dir(self) -> None:
-        """Immediately persist automatic source-folder mode."""
-        from src.export_paths import save_default_export_dir
-
+        """Czyści tylko pole formularza; trwały zapis po „Zapisz ustawienia”."""
         self.edit_default_export_dir.clear()
-        try:
-            save_default_export_dir("")
-        except OSError as exc:
-            QMessageBox.warning(self, "Domyślny folder eksportu", f"Nie można zapisać ustawienia:\n{exc}")
 
     def _restore_garmin_if_selected(self) -> None:
         if self.cmb_auto_source.currentData() == "garmin":
