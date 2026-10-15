@@ -33,6 +33,7 @@ from PIL import Image, ImageDraw
 
 from src.indicators.helpers import (
     _BoundedStaticCache,
+    config_decimals,
     _static_cache_key,
     draw_text_with_graphic_degree,
     load_font,
@@ -327,7 +328,7 @@ def _render_lean_indicator(
     show_reference = bool(cfg.get("show_reference", True))
     show_ticks = bool(cfg.get("show_ticks", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
-    decimals = max(0, int(cfg.get("decimals", 0)))
+    decimals = config_decimals(cfg, 0)
     max_angle = abs(float(cfg.get("max_angle", 30.0)))
     angle = lean_angle(value, cfg)
     missing = value is None
@@ -511,7 +512,7 @@ def get_lean_gpu_transform_info(
     show_label = bool(cfg.get("show_label", True))
     show_value = bool(cfg.get("show_value", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
-    decimals = max(0, int(cfg.get("decimals", 0)))
+    decimals = config_decimals(cfg, 0)
     angle = lean_angle(value, cfg)
     missing = value is None
 

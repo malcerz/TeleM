@@ -34,6 +34,7 @@ except ImportError:  # pragma: no cover - TeleM requires Pillow at runtime
 
 from src.indicators.helpers import (
     _BoundedStaticCache,
+    config_decimals,
     _STATIC_CACHE,
     _static_cache_key,
     draw_text_with_graphic_degree,
@@ -463,7 +464,7 @@ def _render_ruler(
     range_units = bool(cfg.get("range_units", True))
     title_with_unit = bool(cfg.get("title_with_unit", True))
     uppercase_title = bool(cfg.get("uppercase_title", True))
-    decimals = int(cfg.get("decimals", 0))
+    decimals = config_decimals(cfg, 0)
     is_percent_scale = (
         unit == "%"
         or "battery" in str(label or "").lower()
@@ -761,7 +762,7 @@ def _render_ruler_vertical(
         cfg, val_min, val_max, ticks,
     )
 
-    decimals = max(0, int(cfg.get("decimals", 1)))
+    decimals = config_decimals(cfg, 1)
     show_label = bool(cfg.get("show_label", True))
     show_value = bool(cfg.get("show_value", True))
     show_range = bool(cfg.get("show_range_labels", True))
@@ -1654,7 +1655,7 @@ def _render_segments(
         or "solar" in str(cfg.get("field", "")).lower()
         or "battery" in str(cfg.get("field", "")).lower()
     )
-    decimals = max(0, int(cfg.get("decimals", 0 if is_pct_field else 1)))
+    decimals = config_decimals(cfg, 0 if is_pct_field else 1)
     range_decimals = _resolve_range_decimals(
         cfg, decimals, val_min, val_max, percent_scale=is_pct_field,
     )
@@ -2104,7 +2105,7 @@ def _render_bar_indicator_borrowed(
     if formatted_val is not None:
         formatted_text = str(formatted_val)
     elif value is not None:
-        decimals = int(cfg.get("decimals", 0 if is_pct else 1))
+        decimals = config_decimals(cfg, 0 if is_pct else 1)
         num_str = _fmt_number(display_value, decimals)
         show_units = bool(cfg.get("show_units", True))
         if show_units and unit:

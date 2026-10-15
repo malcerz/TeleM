@@ -422,6 +422,19 @@ def resolve_presentation_precision(
     cfg = config if isinstance(config, Mapping) else {}
     if (field and is_integer_only_field(field, cfg)) or (cfg and is_integer_only_field(str(cfg.get("field", "")), cfg)):
         return 0
+    return configured_precision(cfg, default)
+
+
+def configured_precision(config: Mapping[str, Any] | None, default: int = 0) -> int:
+    """Configured display precision only (no field semantics), clamped 0..2.
+
+    Key precedence (ETAP 5X, single rule for every renderer): for ``form ==
+    "chart"`` ``decimal_places`` wins (the chart GUI edits it), for every other
+    form ``decimals`` wins (Text/Gauge/Bar/Lean GUIs edit it); the other key is
+    the legacy alias used when the canonical one is absent.  Unparsable values
+    fall back to ``default``.
+    """
+    cfg = config if isinstance(config, Mapping) else {}
     if cfg.get("form") == "chart":
         raw = cfg["decimal_places"] if "decimal_places" in cfg else cfg.get("decimals", default)
     else:

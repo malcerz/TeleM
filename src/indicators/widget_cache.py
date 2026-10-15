@@ -101,7 +101,8 @@ def compute_segment_bar_visual_signature(
         else:
             value_text = str(formatted_val)
     elif display_value is not None:
-        decimals = max(0, int(cfg.get("decimals", 0 if is_pct else 1)))
+        from src.indicators.helpers import config_decimals
+        decimals = config_decimals(cfg, 0 if is_pct else 1)
         num_str = f"{float(display_value):.{decimals}f}"
         if bool(cfg.get("value_show_unit", True)) and unit_for_value:
             value_text = f"{num_str} {unit_for_value}"

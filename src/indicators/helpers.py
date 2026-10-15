@@ -41,6 +41,17 @@ def resolve_decimal_places(cfg: dict[str, Any], default: int = 1, field: str | N
     return resolve_presentation_precision(cfg, default, field=field)
 
 
+def config_decimals(cfg: dict[str, Any], default: int = 1) -> int:
+    """Configured precision with the shared key precedence, without field semantics.
+
+    Used where a renderer formats its own numbers (range labels, fallback value
+    text); ``decimals``/``decimal_places`` precedence and the 0..2 clamp come
+    from ``telemetry_resolver.configured_precision``.
+    """
+    from src.telemetry_resolver import configured_precision
+    return configured_precision(cfg, default)
+
+
 def dim_preview_video(img, brightness: float = PREVIEW_VIDEO_BRIGHTNESS):
     """Dim only preview-video RGB channels and preserve alpha byte-for-byte."""
     if img is None:

@@ -43,8 +43,12 @@ except ImportError:
             from src.telemetry_resolver import resolve_presentation_precision
             return resolve_presentation_precision(cfg, default, field=field)
         except Exception:
-            val = cfg.get("decimals") if "decimals" in cfg else cfg.get("decimal_places")
-            return int(val) if val is not None else default
+            # Same precedence as telemetry_resolver.configured_precision for charts.
+            val = cfg.get("decimal_places") if "decimal_places" in cfg else cfg.get("decimals")
+            try:
+                return max(0, min(2, int(val))) if val is not None else default
+            except (TypeError, ValueError):
+                return default
 
 from src.indicators.registry import get_chart_color, HARDCODED_KEYS
 from src.indicators.profiling import get_overlay_profiler
