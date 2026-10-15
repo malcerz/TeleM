@@ -329,6 +329,9 @@ def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.I
 
     try:
         font = ImageFont.truetype(actual_path, size=int(size))
+        # ETAP 5X: substitute only glyphs the primary font lacks (Polish letters).
+        from src.indicators.font_fallback import with_glyph_fallback
+        font = with_glyph_fallback(font, actual_path, int(size))
     except Exception:
         try:
             font = ImageFont.load_default(size=int(size))
