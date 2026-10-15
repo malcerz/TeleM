@@ -4572,6 +4572,36 @@ def export_amd_native_d3d11(
             f"{telemetry_cache.memory_bytes / (1024.0 * 1024.0):.3f} MiB",
             flush=True,
         )
+        # ETAP 5X-L: the precompute derives indicator availability without the
+        # IMU arrays, so a gyro lean indicator was marked unavailable and the
+        # CPU HUD skipped its title/reference/ticks/value (only the GPU bike
+        # sprite remained).  Availability follows the lean values actually
+        # computed for this export; layouts that already carry
+        # _indicator_availability (GUI) are not overridden.
+        _tc_static = telemetry_cache.static
+        if (
+            _tc_static is not None
+            and _tc_static.lean_keys
+            and _tc_static.indicator_availability is not None
+            and "_indicator_availability" not in layout
+        ):
+            _n_frames = int(getattr(telemetry_cache, "frames", 0) or 0)
+            _probe_idx = sorted({int(i * (_n_frames - 1) / 255) for i in range(256)}) if _n_frames > 0 else []
+
+            def _lean_value_present(_lk: str) -> bool:
+                for _pi in _probe_idx:
+                    _entry = (telemetry_cache.lookup(_pi).get("extra_indicators") or {}).get(_lk)
+                    if isinstance(_entry, (tuple, list)) and _entry and _entry[0] is not None:
+                        return True
+                return False
+
+            for _lk in _tc_static.lean_keys:
+                if _tc_static.indicator_availability.get(_lk, True):
+                    continue
+                if _lean_value_present(_lk):
+                    _tc_static.indicator_availability = dict(_tc_static.indicator_availability)
+                    _tc_static.indicator_availability[_lk] = True
+                    print(f"[AMD NATIVE D3D11] lean availability from precomputed values: key={_lk} visible=True", flush=True)
         from src.ffmpeg.worker_cache import WORKER_CACHE
         if telemetry_cache.static and telemetry_cache.static.chart_data:
             WORKER_CACHE["_precomputed_chart_data"] = telemetry_cache.static.chart_data
