@@ -26,8 +26,44 @@ def load_default_export_dir() -> str | None:
         return None
 
 
+def load_app_preferences() -> dict:
+    """Return all saved user-level preferences (empty dict when none)."""
+    try:
+        data = json.loads(preferences_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def load_charts_skip_pauses(base_dir: Path | None = None) -> bool:
+    """Global 'Pomiń pauzy aktywności' value.
+
+    The user profile preference wins; without it the legacy value from
+    def_layout.json is used (read-only), then False.
+    """
+    value = load_app_preferences().get("charts_skip_pauses")
+    if isinstance(value, bool):
+        return value
+    if base_dir is not None:
+        try:
+            data = json.loads((Path(base_dir) / "def_layout.json").read_text(encoding="utf-8"))
+            legacy = data.get("charts_skip_pauses")
+            if legacy is None and isinstance(data.get("global"), dict):
+                legacy = data["global"].get("charts_skip_pauses")
+            if legacy is not None:
+                return bool(legacy)
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    return False
+
+
 def save_default_export_dir(value: str) -> None:
     """Persist only this global preference; never write it into a layout."""
+    update_app_preferences({"default_export_dir": str(value or "")})
+
+
+def update_app_preferences(values: dict) -> None:
+    """Atomically merge ``values`` into the user profile preferences file."""
     path = preferences_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     data: dict = {}
@@ -37,7 +73,7 @@ def save_default_export_dir(value: str) -> None:
             data = loaded
     except (OSError, ValueError, TypeError):
         pass
-    data["default_export_dir"] = str(value or "")
+    data.update(values)
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, prefix=".app_preferences_",
         suffix=".tmp", delete=False,

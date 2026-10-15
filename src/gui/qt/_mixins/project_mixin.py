@@ -660,6 +660,8 @@ class ProjectMixin:
                     else:
                         def_layout = self.base_dir / "def_layout.json"
                         self.layout = normalize_layout(def_layout, w, h)
+                if hasattr(self, "_apply_global_chart_preferences"):
+                    self._apply_global_chart_preferences()
                 render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
                 if render_tab is not None and hasattr(render_tab, "apply_export_settings"):
                     render_tab.apply_export_settings(self.layout.get("export_settings", {}))

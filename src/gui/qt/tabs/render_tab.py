@@ -1633,6 +1633,9 @@ class RenderTab(QWidget):
                 layout_snap = copy.deepcopy(ctrl.layout)
             except Exception:
                 pass
+        # Globalne „Pomiń pauzy” zamrażane w snapshocie w chwili dodania zadania.
+        if isinstance(layout_snap, dict) and hasattr(ctrl, "charts_skip_pauses"):
+            layout_snap["charts_skip_pauses"] = bool(ctrl.charts_skip_pauses)
 
         output = self.edit_output.text().strip() or "output_h265.mp4"
         try:

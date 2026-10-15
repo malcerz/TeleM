@@ -64,6 +64,7 @@ class PresetMixin:
                 raise ValueError("Nieprawidłowy format pliku")
             normalize_indicator_decimal_defaults(loaded)
             self.layout = loaded
+            self._apply_global_chart_preferences()
             self._user_preset_path = str(path)
             if self.layout_mgr:
                 self.layout_mgr.layout = self.layout
@@ -287,6 +288,11 @@ class PresetMixin:
         """Persystuje aktualny layout i globalne ustawienia do def_layout.json."""
         self._save_current_layout_to_default()
 
+    def _apply_global_chart_preferences(self) -> None:
+        """Nałóż globalne „Pomiń pauzy” na bieżący layout (po wczytaniu projektu/presetu)."""
+        if isinstance(getattr(self, "layout", None), dict) and hasattr(self, "charts_skip_pauses"):
+            self.layout["charts_skip_pauses"] = bool(self.charts_skip_pauses)
+
     def _on_save_global_settings(self) -> None:
         """Jawny zapis aktualnego całego layoutu (wszystkie wskaźniki, właściwości, fonty) do def_layout.json."""
         self._save_current_layout_to_default()
@@ -317,6 +323,7 @@ class PresetMixin:
             self.layout.setdefault("global", {})["text_outline"] = int(value)
             self._render_preview()
         elif name == "charts_skip_pauses":
+            self.charts_skip_pauses = bool(value)
             self.layout["charts_skip_pauses"] = bool(value)
             self._chart_data_cache = None
             self._render_preview()

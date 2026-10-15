@@ -536,6 +536,8 @@ class IndicatorMixin:
             "indicators": {},
             "custom_texts": [],
         }
+        if hasattr(self, "_apply_global_chart_preferences"):
+            self._apply_global_chart_preferences()
         if getattr(self, "layout_mgr", None) is not None:
             self.layout_mgr.layout = self.layout
 

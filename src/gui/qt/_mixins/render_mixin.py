@@ -172,6 +172,10 @@ class RenderMixin:
         if options.get("layout"):
             import copy
             self.layout = copy.deepcopy(options["layout"])
+        elif hasattr(self, "_apply_global_chart_preferences"):
+            # Eksport bezpośredni: layout kontrolera mógł zostać nadpisany
+            # snapshotem poprzedniego zadania z kolejki.
+            self._apply_global_chart_preferences()
         if not self.video_path or not self.video_path.exists():
             msg = "Najpierw wybierz plik wideo." if not self.video_path else f"Plik wideo nie istnieje:\n{self.video_path}"
             fail_state = RenderProgressState(

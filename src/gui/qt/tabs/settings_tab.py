@@ -95,10 +95,6 @@ class SettingsTab(QWidget):
         self.btn_clear_export_dir.clicked.connect(self._clear_default_export_dir)
         row_export_dir.addWidget(self.btn_clear_export_dir)
         form.addRow("Domyślny folder eksportu:", row_export_dir)
-        self.btn_save_export_dir = QPushButton("Zapisz folder eksportu")
-        self.btn_save_export_dir.setMinimumHeight(28)
-        self.btn_save_export_dir.clicked.connect(self._save_default_export_dir)
-        form.addRow(self.btn_save_export_dir)
 
         vbox.addWidget(general)
 
@@ -130,17 +126,16 @@ class SettingsTab(QWidget):
         self.btn_save_settings = QPushButton("Zapisz ustawienia")
         self.btn_save_settings.setMinimumHeight(32)
         self.btn_save_settings.setToolTip(
-            "Persystuje wybrany font i obramowanie do def_layout.json "
-            "(będą przywrócone po ponownym uruchomieniu)"
+            "Zapisuje wszystkie ustawienia z tej zakładki (folder eksportu, "
+            "język, motyw, pomijanie pauz, czcionkę, obramowanie). "
+            "Zostaną przywrócone po ponownym uruchomieniu."
         )
         self.btn_save_settings.setStyleSheet(
             "QPushButton { background-color: #2a5a2a; color: #aaffaa; "
             "font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #3a7a3a; }"
         )
-        self.btn_save_settings.clicked.connect(
-            lambda: self.signals.sig_save_global_settings.emit()
-        )
+        self.btn_save_settings.clicked.connect(self._on_save_settings_clicked)
         font_form.addRow(self.btn_save_settings)
 
         vbox.addWidget(font_group)
@@ -414,6 +409,7 @@ class SettingsTab(QWidget):
         if export_dir is None:
             export_dir = legacy_default_export_dir(base_dir=self.base_dir)
         self.edit_default_export_dir.setText(export_dir or "")
+        self._load_app_preferences_into_form()
 
         def_layout_path = self.base_dir / "def_layout.json"
         integrations: dict = {}
@@ -462,7 +458,44 @@ class SettingsTab(QWidget):
         if path:
             self.edit_default_export_dir.setText(path)
 
-    def _save_default_export_dir(self) -> None:
+    def _load_app_preferences_into_form(self) -> None:
+        """Odtwórz zapisane ustawienia globalne bez emitowania sygnałów zmian."""
+        from src.export_paths import load_app_preferences, load_charts_skip_pauses
+
+        prefs = load_app_preferences()
+        self.chk_skip_pauses.blockSignals(True)
+        self.chk_skip_pauses.setChecked(load_charts_skip_pauses(self.base_dir))
+        self.chk_skip_pauses.blockSignals(False)
+        for combo, key in ((self.cmb_lang, "ui_language"), (self.cmb_theme, "ui_theme")):
+            value = prefs.get(key)
+            if isinstance(value, str) and value:
+                idx = combo.findText(value)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+
+    def _on_save_settings_clicked(self) -> None:
+        """Zielony przycisk: jeden zapis wszystkich ustawień zakładki."""
+        from src.export_paths import update_app_preferences
+
+        if not self._save_default_export_dir(show_message=False):
+            return
+        try:
+            update_app_preferences({
+                "charts_skip_pauses": bool(self.chk_skip_pauses.isChecked()),
+                "ui_language": self.cmb_lang.currentText(),
+                "ui_theme": self.cmb_theme.currentText(),
+            })
+        except OSError as exc:
+            QMessageBox.warning(self, "Zapisz ustawienia", f"Nie można zapisać ustawień:\n{exc}")
+            return
+        self.signals.sig_save_global_settings.emit()
+        print(
+            f"[Settings] Zapisano ustawienia: skip_pauses={self.chk_skip_pauses.isChecked()} "
+            f"export_dir={self.edit_default_export_dir.text().strip()!r}",
+            flush=True,
+        )
+
+    def _save_default_export_dir(self, show_message: bool = True) -> bool:
         from src.export_paths import (
             is_export_dir_usable,
             requires_deferred_validation,
@@ -477,16 +510,18 @@ class SettingsTab(QWidget):
                 "Domyślny folder eksportu",
                 "Folder nie istnieje albo nie można w nim zapisywać. Wybierz istniejący, zapisywalny folder.",
             )
-            return
+            return False
         try:
             save_default_export_dir(value)
         except OSError as exc:
             QMessageBox.warning(self, "Domyślny folder eksportu", f"Nie można zapisać ustawienia:\n{exc}")
-            return
-        message = "Zapisano ustawienie katalogu eksportu. Folder zostanie sprawdzony podczas eksportu."
-        if not deferred:
-            message = "Zapisano ustawienie katalogu eksportu."
-        QMessageBox.information(self, "Domyślny folder eksportu", message)
+            return False
+        if show_message:
+            message = "Zapisano ustawienie katalogu eksportu. Folder zostanie sprawdzony podczas eksportu."
+            if not deferred:
+                message = "Zapisano ustawienie katalogu eksportu."
+            QMessageBox.information(self, "Domyślny folder eksportu", message)
+        return True
 
     def _clear_default_export_dir(self) -> None:
         """Immediately persist automatic source-folder mode."""
