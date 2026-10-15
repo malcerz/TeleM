@@ -35,6 +35,8 @@ struct AMFEncoderStats {
     AMF_RESULT result = AMF_OK;
 };
 
+// Series of per-frame AMF_VIDEO_ENCODER_HEVC_STATISTIC_AVERAGE_QP (average QP
+// of encoded CTBs in one picture); samples are real encoder outputs only.
 struct AMFEncoderQPStats {
     uint64_t samples = 0;
     double sum = 0.0;
@@ -42,6 +44,31 @@ struct AMFEncoderQPStats {
     int64_t maxQp = -1;
     int64_t lastQp = -1;
     bool supported = false;
+};
+
+// Raw HEVC statistics-feedback diagnostics (AMF_RESULT of every step).
+struct AMFEncoderQPFeedbackDiag {
+    int encoderSetResult = -1;        // SetProperty(STATISTICS_FEEDBACK) on encoder
+    int surfaceSetResult = -1;        // last SetProperty(STATISTICS_FEEDBACK) on input surface
+    uint64_t surfaceSetOk = 0;
+    uint64_t surfaceSetFail = 0;
+    uint64_t outputBuffers = 0;       // HEVC output buffers seen by QueryPacket
+    int lastFrameQpResult = -1;       // last GetProperty AMF_RESULT per statistic
+    int lastAvgQpResult = -1;
+    int lastMinQpResult = -1;
+    int lastMaxQpResult = -1;
+    uint64_t frameQpSamples = 0;
+    uint64_t avgQpSamples = 0;
+    uint64_t minQpSamples = 0;
+    uint64_t maxQpSamples = 0;
+    uint64_t intraSamples = 0;        // AVERAGE_QP samples on IDR/I outputs
+    uint64_t interSamples = 0;        // AVERAGE_QP samples on P/B outputs
+    int64_t lastFrameQp = -1;         // base (rate-control) QP of the last frame
+    int64_t lastAvgQp = -1;           // CTB average QP of the last frame
+    int64_t lastMinQp = -1;
+    int64_t lastMaxQp = -1;
+    int64_t lastPts = -1;
+    bool surfaceFlagEnabled = true;   // TELEM_AMD_QP_FEEDBACK_SURFACE=0 disables (A/B diagnosis)
 };
 
 class D3D11AMFEncoder {
@@ -88,6 +115,7 @@ public:
     bool IsAVC() const { return m_codecType == AMFCodecType::AVC; }
     bool IsAV1() const { return m_codecType == AMFCodecType::AV1; }
     const AMFEncoderQPStats& GetQPStats() const { return m_qpStats; }
+    const AMFEncoderQPFeedbackDiag& GetQPFeedbackDiag() const { return m_qpDiag; }
 
 private:
     HMODULE m_hAMFRT = nullptr;
@@ -104,4 +132,5 @@ private:
     AMFQualityPreset m_qualityPreset = AMFQualityPreset::FAST;
     uint64_t m_bitrateBps = 0;
     AMFEncoderQPStats m_qpStats;
+    AMFEncoderQPFeedbackDiag m_qpDiag;
 };

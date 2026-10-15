@@ -844,6 +844,36 @@ class _HUDDirtyRect(ctypes.Structure):
     ]
 
 
+class TelemAMDQPFeedbackDiag(ctypes.Structure):
+    """Mirror of TelemAMDQPFeedbackDiag (telem_amd_native.cpp): raw AMF HEVC
+    statistics-feedback AMF_RESULT values and per-statistic sample counts."""
+
+    _fields_ = [
+        ("encoder_set_result", ctypes.c_int32),
+        ("surface_set_result", ctypes.c_int32),
+        ("last_frame_qp_result", ctypes.c_int32),
+        ("last_avg_qp_result", ctypes.c_int32),
+        ("last_min_qp_result", ctypes.c_int32),
+        ("last_max_qp_result", ctypes.c_int32),
+        ("surface_flag_enabled", ctypes.c_int32),
+        ("reserved", ctypes.c_int32),
+        ("surface_set_ok", c_uint64),
+        ("surface_set_fail", c_uint64),
+        ("output_buffers", c_uint64),
+        ("frame_qp_samples", c_uint64),
+        ("avg_qp_samples", c_uint64),
+        ("min_qp_samples", c_uint64),
+        ("max_qp_samples", c_uint64),
+        ("intra_samples", c_uint64),
+        ("inter_samples", c_uint64),
+        ("last_frame_qp", ctypes.c_int64),
+        ("last_avg_qp", ctypes.c_int64),
+        ("last_min_qp", ctypes.c_int64),
+        ("last_max_qp", ctypes.c_int64),
+        ("last_pts", ctypes.c_int64),
+    ]
+
+
 def _clip_rect(
     rect: tuple[int, int, int, int], width: int, height: int, pad: int = 0
 ) -> tuple[int, int, int, int] | None:
@@ -2947,6 +2977,12 @@ def export_amd_native_d3d11(
             POINTER(c_uint64),
             POINTER(ctypes.c_int64),
             POINTER(c_int),
+        ]
+    if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
+        native_dll.telem_amd_get_encoder_qp_feedback_diag.restype = c_int
+        native_dll.telem_amd_get_encoder_qp_feedback_diag.argtypes = [
+            c_void_p,
+            POINTER(TelemAMDQPFeedbackDiag),
         ]
 
     native_dll.telem_amd_set_diagnostics.restype = c_int
@@ -7189,6 +7225,23 @@ def export_amd_native_d3d11(
                 print(f"[AMD ENCODER] Hardware QP stats: avg={c_qp_avg.value:.1f} min={c_qp_min.value} max={c_qp_max.value} samples={c_qp_samples.value}", flush=True)
             else:
                 print("[AMD ENCODER] Note: Hardware QP statistics feedback is not supported by current AMF driver/hardware (QP avg: N/A)", flush=True)
+        if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
+            qp_diag = TelemAMDQPFeedbackDiag()
+            if native_dll.telem_amd_get_encoder_qp_feedback_diag(h_context, byref(qp_diag)):
+                print(
+                    "[AMD ENCODER] QP feedback diag: "
+                    f"encoder_set={qp_diag.encoder_set_result} surface_flag={qp_diag.surface_flag_enabled} "
+                    f"surface_set={qp_diag.surface_set_result} ok={qp_diag.surface_set_ok} fail={qp_diag.surface_set_fail} "
+                    f"outputs={qp_diag.output_buffers} "
+                    f"get_results(frame/avg/min/max)={qp_diag.last_frame_qp_result}/{qp_diag.last_avg_qp_result}/"
+                    f"{qp_diag.last_min_qp_result}/{qp_diag.last_max_qp_result} "
+                    f"samples(frame/avg/min/max)={qp_diag.frame_qp_samples}/{qp_diag.avg_qp_samples}/"
+                    f"{qp_diag.min_qp_samples}/{qp_diag.max_qp_samples} "
+                    f"intra={qp_diag.intra_samples} inter={qp_diag.inter_samples} "
+                    f"last(frameQP/avgQP/minQP/maxQP)={qp_diag.last_frame_qp}/{qp_diag.last_avg_qp}/"
+                    f"{qp_diag.last_min_qp}/{qp_diag.last_max_qp}",
+                    flush=True,
+                )
 
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         print("[ENCODER CLOSE BEGIN]", flush=True)

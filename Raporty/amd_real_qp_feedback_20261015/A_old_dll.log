@@ -1,0 +1,383 @@
+[GPU CAPABILITIES]
+Adapter: AMD Radeon (TM) Graphics
+Vendor: AMD
+DeviceId: 0x15e7
+Driver: 31.0.21925.1001
+Encoder: AMF HEVC
+HEVC Main10: NO
+Max encode: 4096x4096
+Cache: HIT
+Probe: 56.77 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7' -> resolved='C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf'
+[Controller] Przywrócono font: 'Digital-7' -> 'C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf'
+[Controller] Akceleracja GPU aktywna: gfx90c
+[INTEL] Probing hardware QSV encoders with ffmpeg...
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 615, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 31952, "preview_generation_id": 0, "preview_stop_event": {"id": 2377683378864, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 743022592, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713894554432, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 205361152, "thread_count": 26}
+[Controller] MPV zinicjalizowany pomyślnie (GPU: AMD, hwdec=d3d11va,dxva2,auto)
+[ExportQueue] Initialized
+[BENCH] Loading project: GX020079.mp4 (mode=direct)
+[TMPC Native] raw_accl=20 raw_gyro=20 logical=20 first=37.570312 C last=37.605469 C
+[TELEMETRY CACHE] source=GX020079.mp4 key=GX020079_5343ca13de7e7ac7 status=MISS path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX020079_5343ca13de7e7ac7\gpmf_light.json (gpmf_light)
+[TELEMETRY CACHE] source=GX020079.mp4 key=GX020079_5343ca13de7e7ac7 status=STORED path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX020079_5343ca13de7e7ac7\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-08-05 04:28:05.020928+00:00..2026-08-05 04:28:42.758628+00:00
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'F:/_DEV/BikeRideHUD-amd/Video/GX020079.mp4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-08-05T04:28:04.000000Z
+    firmware        : H26.02.02.00.00
+  Duration: 00:00:37.74, start: 0.000000, bitrate: 48476 kb/s
+  Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 48029 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-08-05T04:28:04.000000Z
+        handler_name    : GoPro H.265
+        vendor_id       : [0][0][0][0]
+        encoder         : GoPro H.265 encoder
+        timecode        : 06:55:50;16
+      Side data:
+        displaymatrix: rotation of -180.00 degrees
+  Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-08-05T04:28:04.000000Z
+        handler_name    : GoPro AAC
+        vendor_id       : [0][0][0][0]
+        timecode        : 06:55:50;16
+  Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-08-05T04:28:04.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 06:55:50;16
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 172 kb/s (default)
+      Metadata:
+        creation_time   : 2026-08-05T04:28:04.000000Z
+        handler_name    : GoPro MET
+[ProjectLayout] Wczytano istniejący layout filmu z F:\_DEV\BikeRideHUD-amd\Video\GX020079.layout.json
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=58.3ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX020079.mp4
+[TMPC Native] raw_accl=38 raw_gyro=38 logical=38 first=37.570312 C last=37.662109 C
+[TELEMETRY CACHE] source=GX020079.mp4 key=GX020079_5343ca13de7e7ac7 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX020079_5343ca13de7e7ac7\telem_time.json (telem_time)
+[TMPC Telemetry] temperature_samples=38
+[TELEMETRY CACHE] source=GX020079.mp4 key=GX020079_5343ca13de7e7ac7 status=STORED path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX020079_5343ca13de7e7ac7\telemetry.npz
+[TMPC Cache] write_count=38
+[TMPC Cache] read_count=38
+[TELEMETRY CACHE] source=GX020079.mp4 key=GX020079_5343ca13de7e7ac7 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX020079_5343ca13de7e7ac7\telemetry.npz
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=358.61 thread=Thread-26 (bg_load)/31160 input_bytes=228675046 records=378
+[GPMF] parser=NATIVE file=GX020079.mp4
+[Telemetry Native] Extracted GX020079.mp4 in 291.4ms
+[GPMF LOAD]
+SOURCE=F:\_DEV\BikeRideHUD-amd\Video\GX020079.mp4
+CACHE_HIT=False
+NATIVE_MODULE_AVAILABLE=True
+NATIVE_PARSE_OK=True
+GPS_SAMPLES=378
+ACC_SAMPLES=7504
+GYRO_SAMPLES=7504
+ISO_SAMPLES=1131
+TEMP_SAMPLES=38
+NATIVE_CHANNELS_USED=speed_samples,alt_samples,track_samples,gps_track,accelerometer_samples,gyroscope_samples,iso_samples,exposure_samples,temperature_samples
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=True
+FALLBACK_REASON=none
+PARSE_MS=291.47
+CACHE_LOAD_MS=0.00
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=363.14 thread=Thread-26 (bg_load)/31160 input_bytes=228675046 records=0
+[TMPC Telemetry] temperature_samples=38
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[10139.56]
+normalized_final=10139.56
+session_total=10139.56
+match=True
+[MultiFile] project_duration=37.737700 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=37.7s
+[MultiFile] Clip 1/1
+  path=GX020079.mp4
+  global=0.000-37.738
+  absolute=2026-08-05T04:28:05.020-2026-08-05T04:28:42.758
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=resolved from native gpmf light metadata (2026-08-05 04:28:05.021)
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=True reason="source=fit (field=K1)"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=True reason="source=fit (field=K2)"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=False reason="field 'battery_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_x100_text visible=True reason="source=fit (field=battery_pct_x100)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=True reason="source=fit (field=passing_speed)"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=True reason="source=fit (field=passing_speedabs)"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=True reason="source=fit (field=radar_current)"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=1586
+[BENCH] Loaded custom benchmark layout: C:\_DEV\BikeRideHUD-main-new\def_layout.json
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=133421.382043s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=133421.382297s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-15 12:38:54.714 (1792060734.7141) thread=MainThread/31888 job_id= output_path=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4 input_videos=[] encoder=amd render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=133421.445005s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=62.708ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=133421.445493s
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[AMD EXPORT LOG] enabled=True path=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.log
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[RENDER PREP] HIT (disk memmap) key=ac331b08056f frames=1131 load_ms=125.56
+PARENT_CACHE_KEY=ac331b08056fd7bb8623103e692a7d59ad468a3ed811a3fa3c2e752c0c2ab07b
+[FFMPEG START] ts=2026-10-15 12:38:55.234 (1792060735.2345) thread=TeleM-RenderWorker/32072 job_id= output_path=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4 input_videos=['F:\\_DEV\\BikeRideHUD-amd\\Video\\GX020079.mp4'] encoder=amd mode=child
+[STARTUP TIMELINE] event='snapshot end' t=133421.966143s
+[STARTUP TIMELINE] stage='snapshot' duration=520.650ms notes=
+
+[AMD DIRECT JOB CONFIG]
+  encoder = amd
+  amd_codec = hevc
+  amd_decode_mode = gpu
+  amd_encoder_quality = FAST
+  bitrate = 40M
+  resolution = source
+  update_rate = Full
+  hud_resolution_scale = 1.0
+  rotation = auto
+  compression_analysis = False
+  preview_enabled = False
+  video_paths = ['F:\\_DEV\\BikeRideHUD-amd\\Video\\GX020079.mp4']
+  fit_path = F:\_DEV\BikeRideHUD-amd\Video\GX020079.fit
+  gpx_path = 
+  layout_sha256 = df267fa40ee190f752203b944a60c57480955b6b0393d74a1e873a781fc43de4
+DIRECT_CONFIG_SHA256=4e5a08718d34ca1258ab7548586b22441f1cbd068663615a8c864350bdbdeb14
+DIRECT_LAYOUT_SHA=df267fa40ee190f752203b944a60c57480955b6b0393d74a1e873a781fc43de4
+DIRECT_CHILD_CONFIG_HASH=9c79f7e66db4f8193d8d026dda6ca947b71135745887ef3a0c6fd3a81f56dfdf
+[PLAYER/PREVIEW STATE before spawn] mode=DIRECT
+  QMediaPlayer: PlaybackState.StoppedState
+  MPV: pause=True core_idle=True
+  Export Preview: export_preview_hevc=False
+  AMD Frame Tap: active=False
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_CHILD_SPAWN=NO
+[AMD CHILD JOB PICKLE] size_bytes=1761385 time_ms=56.579 parent_private_peak_delta_bytes=2297856 parent_private_retained_delta_bytes=528384
+[AMD CHILD JOB TYPES] {'cache_key': 'builtins.str', 'fit_path': 'pathlib.WindowsPath', 'gpx_path': 'builtins.NoneType', 'sync_offset_s': 'builtins.float', 'ffmpeg_exe': 'builtins.str', 'input_files': 'builtins.list', 'output_file': 'pathlib.WindowsPath', 'duration_s': 'builtins.float', 'start_dt_utc': 'datetime.datetime', 'video_timeline': 'src.multifile.VideoTimeline', 'inline_gpmf_plan': 'builtins.NoneType', 'tz_offset_hours': 'builtins.int', 'speed_samples': 'builtins.list', 'track_samples': 'builtins.list', 'alt_samples': 'builtins.list', 'font_path': 'builtins.str', 'layout': 'builtins.dict', 'field_samples': 'builtins.dict', 'target_fps': 'builtins.float', 'update_rate_step': 'builtins.int', 'max_distance_m': 'numpy.float64', 'workers': 'builtins.NoneType', 'iso_samples': 'builtins.list', 'exposure_samples': 'builtins.list', 'temperature_samples': 'builtins.list', 'gpx_speed_samples': 'builtins.list', 'gpx_track_samples': 'builtins.list', 'gpx_alt_samples': 'builtins.list', 'gpx_power_samples': 'builtins.list', 'gpx_atemp_samples': 'builtins.list', 'gpx_hr_samples': 'builtins.list', 'gpx_cad_samples': 'builtins.list', 'fit_data': 'telemetry_fit.FitDataset', 'gps_track': 'builtins.list', 'encoder': 'builtins.str', 'gpu': 'builtins.int', 'resolution_name': 'builtins.str', 'video_bitrate': 'builtins.str', 'rotation_degrees': 'builtins.int', 'container_rotation': 'builtins.int', 'overlay_w': 'builtins.int', 'overlay_h': 'builtins.int', 'render_w': 'builtins.int', 'render_h': 'builtins.int', 'hud_resolution_scale': 'builtins.float', 'amd_decode_mode': 'builtins.str', 'amd_codec': 'builtins.str', 'amd_encoder_quality': 'builtins.str', 'generation_id': 'builtins.int', 'nvidia_backend': 'builtins.str', 'nvidia_codec': 'builtins.str', 'nvidia_quality': 'builtins.str', 'enable_compression_analysis': 'builtins.bool', 'codec': 'builtins.str', 'encoder_profile': 'builtins.str', 'max_frames': 'builtins.NoneType'}
+[AMD CHILD JOB LAZY] [{'path': 'render_job.field_samples.accel_x_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.accel_y_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.accel_z_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.accel_magnitude_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.gyro_x_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.gyro_y_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.gyro_z_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}, {'path': 'render_job.field_samples.gyro_magnitude_samples', 'state': 'lazy', 'count': 7504, 'array_bytes': 120064}]
+[AMD CHILD SPAWN] parent_pid=31952 generation=1
+[PROC] job created handle=6996
+[PROC] assigned TeleM parent pid=31952 to job (in_prior_job=False)
+[PROC] assigned pid=32116
+[AMD CHILD JOB RESTORED] generation=1 child_pid=32116 startup_ms=567.372
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[MPV HW] Dekodowanie sprzętowe aktywne: d3d11va
+          interop=d3d11va, vo=gpu-next, gpu_ctx=d3d11, fmt=d3d11
+[FIRST FRAME] ts=2026-10-15 12:38:56.375 (1792060736.3754) thread=TeleM-RenderWorker/32072 job_id= output_path=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4 input_videos=['F:\\_DEV\\BikeRideHUD-amd\\Video\\GX020079.mp4'] frame=1/8
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[DIRECT PROGRESS] frame=0/8 fps=0.0 elapsed=1.2s
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=1.6s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=8.1s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=9.2s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=9.3s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=9.4s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=9.4s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=9.4s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=8.3s
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[AMD CHILD LIFECYCLE] event=terminal_received pid=32116 kind=complete
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+[AMD CHILD LIFECYCLE] event=ipc_eof pid=32116 error=EOFError: 
+[AMD CHILD LIFECYCLE] event=process_exit pid=32116 exitcode=0 terminal=complete
+[PROC] registry empty
+
+[AMD DIRECT STAGE TIMINGS]
+  producer_prepare    : avg=20.963 ms | median=18.971 ms
+  queue_wait          : avg= 0.000 ms | median= 0.000 ms
+  decode              : avg= 0.000 ms | median= 0.000 ms
+  VP_Blt              : avg= 0.000 ms | median= 0.000 ms
+  HUD_upload          : avg= 0.000 ms | median= 0.000 ms
+  GPU_copy            : avg= 0.000 ms | median= 0.000 ms
+  AMF_submit          : avg= 0.000 ms | median= 0.000 ms
+  AMF_query           : avg= 0.000 ms | median= 0.000 ms
+  frame_total         : avg= 0.000 ms | median= 0.000 ms
+DIRECT_NATIVE_FPS=36.50
+[PROC] render thread exit
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+
+[BENCH RESULT] mode=direct success=True frames=300 elapsed=11.9s fps=25.2
+  JOB1_FPS=25.16 (native=36.50269437334455)
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0
+D11VA / VCN)
+[RUNTIME]
+backend=amd
+app_root=C:\_DEV\BikeRideHUD-main-new
+vendor_runtime=C:\_DEV\BikeRideHUD-main-new\runtime\amd\bin
+native_dll=C:\Users\Malcerz\AppData\Local\Temp\claude\C---DEV-BikeRideHUD-main-new\91f91d81-8d76-4cfa-bf48-44ef5d3f966b\scratchpad\dll_old\telem_amd_native.dll
+sha256=380f86b044ab61eefb60c0e1d6fd386dcfe0e95d9c12dac756a93bf8e71ea50b
+[AMD ENCODER] codec=HEVC quality=FAST component=AMFVideoEncoderHW_HEVC input_surface=NV12 bit_depth=8 rc=VBR target_bitrate=40000000 peak_bitrate=60000000 live_mux=yes
+[AMD CHILD NATIVE INIT] telem_amd_create
+[AMD AAC PLAN] seg=1 src=GX020079.mp4 in=0.000000 video=[0.000000,10.010000) packets=0+469 first_src=0.000000 audio=[0.000000,10.005333) sync_ms=+0.000 end_residual_ms=-4.667
+[AMD SINGLE-PASS A/V MUX] audio=aac_pipe_copy segments=1 video_ts=setts
+[AMD DIRECT MUX] mode=single clips=1 video=pipe audio=aac_pipe_copy output=.part
+[AMD DIRECT MUX] topology=single_pass_av
+[AMD DIRECT MUX FFMPEG] pid=18560 command=C:\_DEV\BikeRideHUD-main-new\runtime\common\ffmpeg\ffmpeg.exe -y -f hevc -r 30000/1001 -bsf:v setts=ts=N*1001/30000/TB:duration=1001/30000/TB -thread_queue_size 512 -i - -thread_queue_size 512 -f aac -i \\.\pipe\telem_amf_audio_32116_7aafe170.aac -map 0:v -map 1:a:0 -t 10.010000 -c copy -f mp4 C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4.part
+[RENDER PREP] WARNING: Provided cache_key ac331b08056f does not match computed signature 60a21507e814! Using computed.
+[RENDER PREP] HIT (disk memmap) key=60a21507e814 frames=300 load_ms=255.20
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7.ttf
+renderer=_render_gauge_indicator
+[MEMORY FRAME 0 BEFORE VP BLT]
+  process_private_mb=1506.27
+  system_commit_mb=47029.64
+  GPU_dedicated_used_mb=369.49
+  GPU_shared_used_mb=0.00
+  decode_surface_count=11
+  decode_surface_bytes_total=273715200
+  postscale_surface_count=8
+  postscale_surface_bytes_total=99532800
+  encoder_surface_count=4
+  encoder_surface_bytes_total=49766400
+[AMD FIRST PACKET] frame=2 encoded_bytes=262144 pipe_write_ok=1 pump_read_bytes=262144 ffmpeg_stdin_bytes=262144 output_size=0
+[MAP CACHE AUDIT] PREFETCH required tiles = 145 | PREFETCH cached tiles = 145 | RENDER requested tiles = 145 | RENDER cache hits = 340 | RENDER cache misses = 0 | frames with miss = 0
+
+[FINALIZATION BEGIN]
+[AMD FINALIZATION DIAGNOSTICS: END OF FRAME LOOP] total_frames=300 decoded=300 vp=300 submitted=300 received_packets=298 pending_packets=2 queue_in_flight=2 max_in_flight=2
+[DRAIN BEGIN]
+[DRAIN END] elapsed_ms=46.53 ok=1
+[AMD ENCODER] Note: Hardware QP statistics feedback is not supported by current AMF driver/hardware (QP avg: N/A)
+[ENCODER CLOSE BEGIN]
+[ENCODER CLOSE END] elapsed_ms=67.78
+[PUMP JOIN BEGIN]
+[PUMP JOIN END] elapsed_ms=0.02
+[AMD FINALIZATION DIAGNOSTICS: ENTRY TO ZAPIS MP4]
+  timestamp=1792060745.670861
+  total_frames=300
+  part_size_bytes=49021103 (46.75 MB)
+  pump_thread_alive=False
+  mux_process_alive=False
+  proc_mux_pid=18560
+  stdin_open=False
+  received_packets=300/300
+  drain_ms=46.53
+  encoder_close_ms=67.78
+  pump_join_ms=0.02
+  output_drive=C:
+  output_path=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4.part
+  ffmpeg_cmd=C:\_DEV\BikeRideHUD-main-new\runtime\common\ffmpeg\ffmpeg.exe -y -f hevc -r 30000/1001 -bsf:v setts=ts=N*1001/30000/TB:duration=1001/30000/TB -thread_queue_size 512 -i - -thread_queue_size 512 -f aac -i \\.\pipe\telem_amf_audio_32116_7aafe170.aac -map 0:v -map 1:a:0 -t 10.010000 -c copy -f mp4 C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4.part
+[MUX WAIT BEGIN]
+[MUX WAIT END] elapsed_ms=1.17 rc=0
+[AMD AAC FEED] bytes=320071 completed=True error=None
+[AMD DIRECT MUX DIAGNOSTICS] ffmpeg_pid=18560 returncode=0 pump_exit_reason=pipe_closed_error_109 pipe_read_bytes=48694220 ffmpeg_stdin_bytes=48694220 chunks=615
+[AMD DIRECT MUX STDERR] ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+libavutil      61.  5.100 / 61.  5.100
+libavcodec     63.  8.101 / 63.  8.101
+libavformat    63.  6.100 / 63.  6.100
+libavdevice    63.  2.100 / 63.  2.100
+libavfilter    12.  3.101 / 12.  3.101
+libswscale     10.  2.100 / 10.  2.100
+libswresample   7.  2.100 /  7.  2.100
+[in#0/hevc @ 0000017e824d3e80] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, hevc, from 'fd:':
+Duration: N/A, bitrate: N/A
+Stream #0:0: Video: hevc (Main), yuv420p(tv, unknown/unknown/bt709), 3840x2160 [SAR 1:1 DAR 16:9], 29.97 fps, 29.97 tbr, 1200k tbn
+Input #1, aac, from '\\.\pipe\telem_amf_audio_32116_7aafe170.aac':
+Duration: N/A, bitrate: 256 kb/s
+Stream #1:0: Audio: aac (LC), 48000 Hz, stereo, fltp, 256 kb/s
+Stream mapping:
+Stream #0:0 -> #0:0 (copy)
+Stream #1:0 -> #0:1 (copy)
+Output #0, mp4, to 'C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4.part':
+Metadata:
+encoder         : Lavf63.6.100
+Stream #0:0: Video: hevc (Main) (hev1 / 0x31766568), yuv420p(tv, unknown/unknown/bt709), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 29.97 fps, 29.97 tbr, 30k tbn
+Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 256 kb/s
+[in#1/aac @ 0000017e845200c0] Error during demuxing: Invalid argument
+[out#0/mp4 @ 0000017e824f3940] video:47553KiB audio:313KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.013898%
+[FFPROBE BEGIN]
+[FFPROBE END] elapsed_ms=46.13
+[OS.REPLACE BEGIN]
+[OS.REPLACE END] elapsed_ms=0.81
+[FINALIZATION END]
+[AMD FINALIZATION SUMMARY TIMINGS] drain_ms=46.53 encoder_close_ms=67.78 pump_join_ms=0.02 mux_wait_ms=1.17 ffprobe_ms=46.13 replace_ms=0.81 final_size_mb=46.75 MB (49021103 bytes)
+=== RENDER COMPLETE ===
+Frames: 300
+HUD prepare: 1.613 s
+Video encode: 7.194 s
+Finalize: 0.002 s
+Total: 9.414 s
+Render FPS: 41.702
+Effective FPS: 31.868
+[AMD CHILD COMPLETE] status=complete child_pid=32116
+[AMD CHILD HANDLE] phase=before_restore pid=32116 stdout={'label': 'stdout', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 5, 'handle': {'fd': 5, 'fileno_valid': True, 'handle': 16, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} stderr={'label': 'stderr', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 6, 'handle': {'fd': 6, 'fileno_valid': True, 'handle': 1172, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} fd1={'fd': 1, 'fileno_valid': True, 'handle': 1168, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1} fd2={'fd': 2, 'fileno_valid': True, 'handle': 12, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}
+[AMD EXPORT LOG] session_end=2026-10-15 12:39:06 pid=31952 status=completed
+[AMD EXPORT LOG] detail=output=C:\_DEV\BikeRideHUD-main-new\Raporty\amd_real_qp_feedback_20261015\A_old_dll.mp4

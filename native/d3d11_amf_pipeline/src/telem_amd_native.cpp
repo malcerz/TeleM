@@ -3638,6 +3638,63 @@ TELEM_EXPORT void telem_amd_get_encoder_qp_stats(
     }
 }
 
+// Additive diagnostic export (ABI 9 unchanged): raw HEVC statistics-feedback
+// AMF_RESULT values and per-statistic sample counts. Layout mirrors
+// TelemAMDQPFeedbackDiag in amd_native_exporter.py.
+struct TelemAMDQPFeedbackDiag {
+    int32_t encoder_set_result;
+    int32_t surface_set_result;
+    int32_t last_frame_qp_result;
+    int32_t last_avg_qp_result;
+    int32_t last_min_qp_result;
+    int32_t last_max_qp_result;
+    int32_t surface_flag_enabled;
+    int32_t reserved;
+    uint64_t surface_set_ok;
+    uint64_t surface_set_fail;
+    uint64_t output_buffers;
+    uint64_t frame_qp_samples;
+    uint64_t avg_qp_samples;
+    uint64_t min_qp_samples;
+    uint64_t max_qp_samples;
+    uint64_t intra_samples;
+    uint64_t inter_samples;
+    int64_t last_frame_qp;
+    int64_t last_avg_qp;
+    int64_t last_min_qp;
+    int64_t last_max_qp;
+    int64_t last_pts;
+};
+
+TELEM_EXPORT int telem_amd_get_encoder_qp_feedback_diag(void* handle, TelemAMDQPFeedbackDiag* out) {
+    if (!handle || !out) return 0;
+    auto* ctx = static_cast<TelemAMDContext*>(handle);
+    const auto& d = ctx->amfEncoder.GetQPFeedbackDiag();
+    *out = {};
+    out->encoder_set_result = d.encoderSetResult;
+    out->surface_set_result = d.surfaceSetResult;
+    out->last_frame_qp_result = d.lastFrameQpResult;
+    out->last_avg_qp_result = d.lastAvgQpResult;
+    out->last_min_qp_result = d.lastMinQpResult;
+    out->last_max_qp_result = d.lastMaxQpResult;
+    out->surface_flag_enabled = d.surfaceFlagEnabled ? 1 : 0;
+    out->surface_set_ok = d.surfaceSetOk;
+    out->surface_set_fail = d.surfaceSetFail;
+    out->output_buffers = d.outputBuffers;
+    out->frame_qp_samples = d.frameQpSamples;
+    out->avg_qp_samples = d.avgQpSamples;
+    out->min_qp_samples = d.minQpSamples;
+    out->max_qp_samples = d.maxQpSamples;
+    out->intra_samples = d.intraSamples;
+    out->inter_samples = d.interSamples;
+    out->last_frame_qp = d.lastFrameQp;
+    out->last_avg_qp = d.lastAvgQp;
+    out->last_min_qp = d.lastMinQp;
+    out->last_max_qp = d.lastMaxQp;
+    out->last_pts = d.lastPts;
+    return 1;
+}
+
 struct TelemAMDCapsReport {
     int h264_available;
     int h264_8bit_available;

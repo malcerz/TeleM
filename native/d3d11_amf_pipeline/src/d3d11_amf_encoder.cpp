@@ -17,6 +17,7 @@ void D3D11AMFEncoder::Shutdown() {
         m_hAMFRT = nullptr;
     }
     m_qpStats = {};
+    m_qpDiag = {};
 }
 
 D3D11AMFEncoder::~D3D11AMFEncoder() {
@@ -34,6 +35,11 @@ bool D3D11AMFEncoder::Initialize(
     uint64_t bitrateBps
 ) {
     m_qpStats = {};
+    m_qpDiag = {};
+    {
+        const char* surfaceFlag = std::getenv("TELEM_AMD_QP_FEEDBACK_SURFACE");
+        m_qpDiag.surfaceFlagEnabled = !(surfaceFlag && std::strcmp(surfaceFlag, "0") == 0);
+    }
     m_device = pDevice;
     m_width = width;
     m_height = height;
@@ -241,7 +247,10 @@ bool D3D11AMFEncoder::Initialize(
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_PEAK_BITRATE, static_cast<amf_int64>(peakBitrate));
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_VBV_BUFFER_SIZE, static_cast<amf_int64>(targetBitrate));
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INITIAL_VBV_BUFFER_FULLNESS, static_cast<amf_int64>(64));
-        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true);
+        // Component-level request kept for compatibility; per AMF HEVC API the
+        // effective request is the per-frame flag set on the input surface.
+        m_qpDiag.encoderSetResult = static_cast<int>(
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true));
 
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMFConstructSize(width, height));
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
@@ -256,6 +265,10 @@ bool D3D11AMFEncoder::Initialize(
                   << width << "x" << height << " preset=" << presetName 
                   << " rc=VBR target=" << targetBitrate << " peak=" << peakBitrate
                   << " raw_amf_preset=" << hevcPreset << ")." << std::endl;
+        std::cout << "[AMF QP] statistics feedback: encoder SetProperty result="
+                  << m_qpDiag.encoderSetResult << " surface_flag="
+                  << (m_qpDiag.surfaceFlagEnabled ? "ON" : "OFF (TELEM_AMD_QP_FEEDBACK_SURFACE=0)")
+                  << std::endl;
     }
     return true;
 }
@@ -272,6 +285,17 @@ bool D3D11AMFEncoder::CreateSurface(ID3D11Texture2D* pNV12Texture, int64_t pts, 
         return false;
     }
     outSurface->SetPts(pts);
+    if (m_codecType == AMFCodecType::HEVC && m_qpDiag.surfaceFlagEnabled) {
+        // AMF HEVC API: statistics feedback is requested per input frame on the
+        // AMFSurface before SubmitInput (FFmpeg amfenc.c does the same).
+        const AMF_RESULT fbRes = outSurface->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true);
+        m_qpDiag.surfaceSetResult = static_cast<int>(fbRes);
+        if (fbRes == AMF_OK) {
+            m_qpDiag.surfaceSetOk++;
+        } else {
+            m_qpDiag.surfaceSetFail++;
+        }
+    }
     return true;
 }
 
@@ -351,22 +375,54 @@ bool D3D11AMFEncoder::QueryPacket(
                 pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE, &dataType);
                 outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR);
 
-                int64_t avgQp = -1;
+                m_qpDiag.outputBuffers++;
+                m_qpDiag.lastPts = outPts;
                 int64_t frameQp = -1;
-                if (pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_AVERAGE_QP, &avgQp) == AMF_OK && avgQp > 0) {
-                    m_qpStats.supported = true;
-                    m_qpStats.samples++;
-                    m_qpStats.sum += static_cast<double>(avgQp);
-                    m_qpStats.lastQp = avgQp;
-                    if (m_qpStats.minQp < 0 || avgQp < m_qpStats.minQp) m_qpStats.minQp = avgQp;
-                    if (m_qpStats.maxQp < 0 || avgQp > m_qpStats.maxQp) m_qpStats.maxQp = avgQp;
-                } else if (pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_FRAME_QP, &frameQp) == AMF_OK && frameQp > 0) {
-                    m_qpStats.supported = true;
-                    m_qpStats.samples++;
-                    m_qpStats.sum += static_cast<double>(frameQp);
-                    m_qpStats.lastQp = frameQp;
-                    if (m_qpStats.minQp < 0 || frameQp < m_qpStats.minQp) m_qpStats.minQp = frameQp;
-                    if (m_qpStats.maxQp < 0 || frameQp > m_qpStats.maxQp) m_qpStats.maxQp = frameQp;
+                int64_t avgQp = -1;
+                int64_t minQp = -1;
+                int64_t maxQp = -1;
+                const AMF_RESULT frameRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_FRAME_QP, &frameQp);
+                const AMF_RESULT avgRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_AVERAGE_QP, &avgQp);
+                const AMF_RESULT minRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_MIN_QP, &minQp);
+                const AMF_RESULT maxRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_MAX_QP, &maxQp);
+                m_qpDiag.lastFrameQpResult = static_cast<int>(frameRes);
+                m_qpDiag.lastAvgQpResult = static_cast<int>(avgRes);
+                m_qpDiag.lastMinQpResult = static_cast<int>(minRes);
+                m_qpDiag.lastMaxQpResult = static_cast<int>(maxRes);
+                if (frameRes == AMF_OK) { m_qpDiag.frameQpSamples++; m_qpDiag.lastFrameQp = frameQp; }
+                if (minRes == AMF_OK) { m_qpDiag.minQpSamples++; m_qpDiag.lastMinQp = minQp; }
+                if (maxRes == AMF_OK) { m_qpDiag.maxQpSamples++; m_qpDiag.lastMaxQp = maxQp; }
+                if (avgRes == AMF_OK) {
+                    m_qpDiag.avgQpSamples++;
+                    m_qpDiag.lastAvgQp = avgQp;
+                    if (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR ||
+                        dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_I) {
+                        m_qpDiag.intraSamples++;
+                    } else {
+                        m_qpDiag.interSamples++;
+                    }
+                    // HEVC QP range is 0..51; anything else is not a valid sample.
+                    if (avgQp >= 0 && avgQp <= 51) {
+                        m_qpStats.supported = true;
+                        m_qpStats.samples++;
+                        m_qpStats.sum += static_cast<double>(avgQp);
+                        m_qpStats.lastQp = avgQp;
+                        if (m_qpStats.minQp < 0 || avgQp < m_qpStats.minQp) m_qpStats.minQp = avgQp;
+                        if (m_qpStats.maxQp < 0 || avgQp > m_qpStats.maxQp) m_qpStats.maxQp = avgQp;
+                    }
+                }
+                static const bool s_qpTrace = [] {
+                    const char* v = std::getenv("TELEM_AMD_QP_TRACE");
+                    return v && std::strcmp(v, "1") == 0;
+                }();
+                if (s_qpTrace && m_qpDiag.outputBuffers <= 120) {
+                    std::cout << "[AMF QP TRACE] out=" << m_qpDiag.outputBuffers << " pts=" << outPts
+                              << " type=" << dataType
+                              << " frameQP=" << frameQp << "(r" << frameRes << ")"
+                              << " avgQP=" << avgQp << "(r" << avgRes << ")"
+                              << " minQP=" << minQp << "(r" << minRes << ")"
+                              << " maxQP=" << maxQp << "(r" << maxRes << ")"
+                              << " bytes=" << size << std::endl;
                 }
             }
 
