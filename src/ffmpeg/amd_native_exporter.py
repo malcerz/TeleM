@@ -6768,17 +6768,18 @@ def export_amd_native_d3d11(
             cur_qp = float(qp_last_val.value) if (has_qp and qp_last_val.value >= 0) else None
             avg_qp = float(qp_avg_val.value) if has_qp else None
             is_cqp = False
-            if has_qp:
-                if cur_qp is not None and abs(cur_qp - avg_qp) > 0.05:
-                    qp_txt = f"QP: {cur_qp:.0f} (avg: {avg_qp:.1f})"
-                else:
-                    qp_txt = f"QP avg: {avg_qp:.1f}"
+            # Jeden tekst statusu dla wszystkich elementów GUI; brak próbek
+            # QP ze sterownika AMF -> N/A (nigdy wartość zgadywana).
+            if has_qp and cur_qp is not None:
+                qp_txt = f"RC: VBR | QP: {cur_qp:.0f} | QP avg: {avg_qp:.1f}"
+            elif has_qp:
+                qp_txt = f"RC: VBR | QP avg: {avg_qp:.1f}"
             else:
-                qp_txt = "QP avg: N/A"
+                qp_txt = "RC: VBR | QP avg: N/A"
 
             stats_str = (
                 f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | "
-                f"{fps:.1f} FPS | RC: VBR | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+                f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             )
             if progress_cb:
                 progress_dispatcher.submit(progress_cb, pct, stats_str)
@@ -6795,6 +6796,7 @@ def export_amd_native_d3d11(
                 quant_max=int(qp_max_val.value) if has_qp else None,
                 quant_samples=int(qp_samples_val.value),
                 is_cqp=is_cqp,
+                rate_control="VBR",
                 compression_text=qp_txt,
             )
         return True

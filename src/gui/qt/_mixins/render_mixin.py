@@ -468,6 +468,7 @@ class RenderMixin:
                     qp=cur_qp_val,
                     avg_qp=avg_qp_val,
                     is_cqp=is_cqp,
+                    rate_control=str(hud_state.get("rate_control", getattr(latest, "rate_control", "")) or "") if isinstance(hud_state, dict) else getattr(latest, "rate_control", ""),
                     is_av1=bool(hud_state.get("is_av1", getattr(latest, "is_av1", False))) if isinstance(hud_state, dict) else getattr(latest, "is_av1", False),
                     quant_metric=str(hud_state.get("quant_metric", getattr(latest, "quant_metric", ""))) if isinstance(hud_state, dict) else getattr(latest, "quant_metric", ""),
                 )

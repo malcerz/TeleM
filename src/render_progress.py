@@ -93,6 +93,9 @@ class RenderProgressState:
     avg_qp: float | None = None
     is_cqp: bool = False
     is_av1: bool = False
+    # Tryb sterowania bitrate raportowany przez enkoder (np. "VBR"); gdy ustawiony,
+    # compression_text jest jedynym źródłem tekstu QP we wszystkich elementach GUI.
+    rate_control: str = ""
     quant_metric: str = ""
     quant_min: int | None = None
     quant_max: int | None = None
@@ -150,6 +153,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
         fps = "--"
+        qp_str = "--"
     elif snapshot.progress_mode == "indeterminate":
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = "--"
@@ -202,7 +206,7 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
     else:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
-    qp_field = qp_str if (qp_str.startswith("QP") or qp_str.startswith("Q ")) else f"QP: {qp_str}"
+    qp_field = qp_str if (qp_str.startswith(("QP", "Q ", "RC:"))) else f"QP: {qp_str}"
     return (
         f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   {qp_field}   |   Czas: {elapsed_txt} "
         f"  |   ETA: {eta_txt}   |   {status}"

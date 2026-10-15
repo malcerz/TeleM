@@ -2621,6 +2621,10 @@ class RenderTab(QWidget):
             is_cqp_val = getattr(snapshot, "is_cqp", False)
             is_av1_snap = getattr(snapshot, "is_av1", False)
             quant_metric_snap = getattr(snapshot, "quant_metric", "")
+            rate_text_snap = (
+                getattr(snapshot, "compression_text", "")
+                if getattr(snapshot, "rate_control", "") else ""
+            )
             self._set_stats(
                 completed_val, total_val, snapshot.elapsed_s,
                 snapshot.fps, status, final_eta=eta,
@@ -2632,6 +2636,7 @@ class RenderTab(QWidget):
                 global_pct=snapshot.global_percent,
                 is_av1=is_av1_snap,
                 quant_metric=quant_metric_snap,
+                rate_text=rate_text_snap,
             )
         comp_txt = getattr(snapshot, "compression_text", "")
         if comp_txt:
@@ -2754,6 +2759,10 @@ class RenderTab(QWidget):
                 item_label = "HUD"
             is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
             quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
+            rate_text_hud = (
+                str(hud_state.get("compression_text", "") or "")
+                if hud_state.get("rate_control") else ""
+            )
             self._set_stats(
                 completed, total, elapsed, fps, status,
                 item_label=item_label,
@@ -2762,6 +2771,7 @@ class RenderTab(QWidget):
                 is_cqp=is_cqp,
                 is_av1=is_av1_hud,
                 quant_metric=quant_m_hud,
+                rate_text=rate_text_hud,
             )
             if phase == "render" and "ts" in hud_state and self.chk_hud_preview.isChecked():
                 self._hud_ts = hud_state.get("ts")
@@ -2890,7 +2900,8 @@ class RenderTab(QWidget):
                    item_label: str = "Frame", is_indeterminate: bool = False,
                    qp: float | None = None, avg_qp: float | None = None,
                    is_cqp: bool = False, global_pct: float | None = None,
-                   is_av1: bool = False, quant_metric: str = "") -> None:
+                   is_av1: bool = False, quant_metric: str = "",
+                   rate_text: str = "") -> None:
         total = max(total, 0)
         if not is_indeterminate and total and completed >= 0:
             if global_pct is not None and global_pct > 0:
@@ -2917,6 +2928,9 @@ class RenderTab(QWidget):
         q_label = "Q" if (is_av1 or quant_metric == "base_q_idx") else "QP"
         if is_indeterminate:
             qp_txt = f"{q_label}: --"
+        elif rate_text:
+            # Enkoder z jawnym trybem RC (AMD VBR) — ten sam tekst co w linii kompresji.
+            qp_txt = rate_text
         elif is_cqp:
             if avg_qp is not None:
                 qp_txt = f"{q_label} avg: {avg_qp:.1f}"
