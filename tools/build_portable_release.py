@@ -19,6 +19,7 @@ components and their licences.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import importlib.metadata as md
 import io
@@ -36,14 +37,17 @@ REPO = Path(__file__).resolve().parents[1]
 
 # Pinned production native builds (verified before copy).
 EXPECTED_SHA256 = {
-    # AMD Native D3D11/AMF, ABI 9, with real QP feedback + map style (ETAP 5W).
-    "runtime/amd/bin/telem_amd_native.dll": "5ad042bb8f61db32af52df2a3ea1fdd77c40b253866ce28724c6fe01e4a3c0df",
+    # AMD Native D3D11/AMF, ABI 9: QP feedback, map style, HLG preserve (HEVC Main10) and
+    # HLG->SDR (ETAP 5Z.2), tone-mapped HLG export-preview tap (ETAP 5Z.4).
+    "runtime/amd/bin/telem_amd_native.dll": "e359d7784d2ff3d2b1aefb6cf56dc1ba3c38a67260fd8d87e27851ef0d55ee89",
     "runtime/intel/bin/telem_intel_native.dll": "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b",
 }
 FORBIDDEN_SHA256 = {
     "41658018ae4979071837dfef4e412c40a855771266380cf84595a66bf89c0cca",  # old Intel non-quantizer DLL
     "380f86b044ab61eefb60c0e1d6fd386dcfe0e95d9c12dac756a93bf8e71ea50b",  # AMD DLL before QP feedback
     "6c43f398fbb1421c6dbb21928309f996e9967afea8040c2d42af6c72ba7f29ca",  # AMD DLL before map style
+    "5ad042bb8f61db32af52df2a3ea1fdd77c40b253866ce28724c6fe01e4a3c0df",  # AMD DLL before HDR (ETAP 5Y)
+    "2ceb50cc4d85343237f9aaf6634c7a2d93bb8de1375388166533d71227e0761e",  # AMD DLL 5Z.2, untone-mapped HDR preview
 }
 
 # Code/templates taken from the git commit.
@@ -246,6 +250,35 @@ Fonts: none are shipped. Missing glyphs fall back to Windows system fonts (Segoe
 """
 
 
+AMD_ABI = 9
+AMD_REQUIRED_EXPORTS = (
+    "telem_amd_get_abi_version", "telem_amd_create", "telem_amd_process_frame", "telem_amd_update_map_style",
+    "telem_amd_get_encoder_qp_feedback_diag", "telem_amd_set_preview_tap", "telem_amd_poll_preview_tap",
+    "telem_amd_get_color_features", "telem_amd_get_color_pipeline", "telem_amd_probe_hevc_main10",
+)
+
+
+def verify_amd_dll(path: Path) -> dict[str, Any]:
+    """Load the staged AMD DLL (with its app-local MSVC runtime) and check ABI, exports and colour features."""
+    import ctypes
+    import os
+    handle = os.add_dll_directory(str(path.parent))
+    try:
+        dll = ctypes.CDLL(str(path))
+        dll.telem_amd_get_abi_version.restype = ctypes.c_uint
+        dll.telem_amd_get_build_info.restype = ctypes.c_char_p
+        missing = [n for n in AMD_REQUIRED_EXPORTS if not hasattr(dll, n)]
+        abi = int(dll.telem_amd_get_abi_version())
+        features = int(dll.telem_amd_get_color_features())
+        build_info = dll.telem_amd_get_build_info().decode("utf-8", "replace")
+    finally:
+        handle.close()
+    if abi != AMD_ABI or missing or features & 0x3 != 0x3:
+        raise RuntimeError(f"AMD DLL check failed: abi={abi} missing={missing} color_features=0x{features:x}")
+    return {"abi": abi, "color_features": features, "required_exports": list(AMD_REQUIRED_EXPORTS),
+            "build_info": build_info}
+
+
 def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
     if target.exists() and any(target.iterdir()):
         raise RuntimeError(f"SAFETY STOP: target {target} exists and is not empty")
@@ -269,6 +302,9 @@ def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
     (target / "THIRD_PARTY_NOTICES.txt").write_text(NOTICES, encoding="utf-8")
     app_version = re.search(r"APP_VERSION\s*=\s*'([^']+)'", (target / "src/version.py").read_text()).group(1)
     (target / "build_meta.json").write_text(json.dumps({"commit": full_commit[:7]}), encoding="utf-8")
+    amd_check = verify_amd_dll(target / "runtime/amd/bin/telem_amd_native.dll")
+    ffmpeg_version = subprocess.run([str(target / "runtime/common/ffmpeg/ffmpeg.exe"), "-hide_banner", "-version"],
+                                    capture_output=True, text=True).stdout.splitlines()[:1]
 
     py_info = bundle_python(target) if with_python else {"python_version": None, "packages": {}}
 
@@ -306,6 +342,10 @@ def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
         "source_commit": full_commit,
         "app_version": app_version,
         "python": py_info,
+        "build_date_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "amd_native": amd_check,
+        "ffmpeg_version": ffmpeg_version[0] if ffmpeg_version else None,
+        "binary_sources": {dst: str(REPO / src) for src, dst in WORKTREE_FILES},
         "key_sha256": {k: sha256(target / k) for k in key_files},
         "native_modules": ["src/native/gpmf/telem_gpmf_native.pyd",
                            "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd"],
