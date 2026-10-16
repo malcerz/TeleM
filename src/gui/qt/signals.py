@@ -71,6 +71,14 @@ class AppSignals(QObject):
     sig_amd_encoder_quality_restored = Signal(str)
     # (quality: str – 'FAST', 'BALANCED', 'QUALITY')
 
+    # ETAP 5Z.2: Kontroler → GUI: przywróć zapisany tryb HDR (po starcie)
+    sig_amd_hdr_mode_restored = Signal(str)
+    # (mode: str – 'preserve_hlg' lub 'tonemap_sdr')
+
+    # ETAP 5Z.2: Kontroler → GUI: klasyfikacja koloru wczytanych plików (HLG/SDR/PQ/...)
+    sig_source_color_ready = Signal(dict)
+    # (summary: dict – SourceColorSummary.to_dict())
+
     # Kontroler → GUI: wyliczona domyślna nazwa pliku eksportu
     sig_default_export_name_ready = Signal(str)
     # (filename: str)

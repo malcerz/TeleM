@@ -606,6 +606,10 @@ def main() -> None:
         parser.add_argument("--restore-prefetch", default="0")
         parser.add_argument("--preview-hud", action="store_true", default=False)
         parser.add_argument("--layout", default="")
+        # ETAP 5Z.2: HDR mode set through the GUI combo (preserve_hlg | tonemap_sdr);
+        # --queue-hdr-modes gives one mode per queued job (comma separated).
+        parser.add_argument("--hdr-mode", default="")
+        parser.add_argument("--queue-hdr-modes", default="")
         test_args, _ = parser.parse_known_args(sys.argv[1:])
 
         video_path = Path(test_args.video).resolve()
@@ -764,6 +768,11 @@ def main() -> None:
             rt.cmb_update_rate.setCurrentText("Full")
             rt.cmb_hud_resolution.setCurrentText("Auto")
             rt.edit_bitrate.setText(test_args.bitrate)
+            if test_args.hdr_mode:
+                rt.set_amd_hdr_mode(test_args.hdr_mode)
+            bench_result["hdr_mode_gui"] = rt.cmb_hdr_mode.currentData()
+            bench_result["hdr_selector_visible"] = bool(rt.widget_hdr_mode.isVisibleTo(rt))
+            bench_result["source_color"] = getattr(_controller, "source_color_summary", None)
             rt.chk_hud_preview.setChecked(bool(test_args.preview_hud))
             rt.chk_compression_analysis.setChecked(False)
             rt.edit_output.setText(str(out_path))
@@ -787,11 +796,21 @@ def main() -> None:
                         rt._export_queue.remove_job(old_j.job_id)
                 num_jobs = max(1, test_args.multi_jobs)
                 print(f"[BENCH] Adding {num_jobs} fresh job(s) to queue with identical settings and starting...", flush=True)
+                queue_modes = [m.strip() for m in test_args.queue_hdr_modes.split(",") if m.strip()]
+                bench_result["queue_hdr_modes"] = []
                 for j_idx in range(num_jobs):
                     if j_idx > 0:
                         j_out = out_path.parent / f"{out_path.stem}_job{j_idx + 1}{out_path.suffix}"
                         rt.edit_output.setText(str(j_out))
+                    if queue_modes:
+                        rt.set_amd_hdr_mode(queue_modes[j_idx % len(queue_modes)])
                     rt._on_add_to_queue()
+                    bench_result["queue_hdr_modes"].append(rt.cmb_hdr_mode.currentData())
+                if queue_modes and rt._export_queue is not None:
+                    # Change the GUI after queueing: frozen jobs must keep their own modes.
+                    rt.set_amd_hdr_mode("tonemap_sdr" if queue_modes[-1] == "preserve_hlg" else "preserve_hlg")
+                    bench_result["queue_job_modes_frozen"] = [
+                        j.options.get("amd_hdr_mode") for j in rt._export_queue.get_jobs()]
                 rt._on_queue_start()
             else:
                 print("[BENCH] Triggering direct render...", flush=True)
@@ -804,6 +823,7 @@ def main() -> None:
             btn = window._render_tab.btn_render
             if (
                 data_streams_ready_flag[0]
+                and getattr(_controller, "source_color_summary", None) is not None
                 and getattr(_controller, "video_paths", None)
                 and getattr(_controller, "video_duration_s", 0.0) > 0
                 and getattr(_controller, "layout", None)

@@ -271,6 +271,7 @@ class PresetMixin:
             saved.setdefault("global", {})["amd_codec"] = amd_codec_val
             amd_quality = getattr(self, "amd_encoder_quality", "FAST") or "FAST"
             saved.setdefault("global", {})["amd_encoder_quality"] = amd_quality
+            saved.setdefault("global", {})["amd_hdr_mode"] = getattr(self, "amd_hdr_mode", "preserve_hlg") or "preserve_hlg"
             saved.setdefault("global", {})["render_mode"] = getattr(self, "render_mode", "gpu") or "gpu"
             integrations_cfg = self.layout.get("integrations")
             if integrations_cfg:
@@ -307,6 +308,9 @@ class PresetMixin:
             self.amd_codec = str(value).lower()
         elif name == "amd_encoder_quality":
             self.amd_encoder_quality = str(value).upper()
+        elif name == "amd_hdr_mode":
+            from src.ffmpeg.hdr_color import normalize_hdr_mode
+            self.amd_hdr_mode = normalize_hdr_mode(value)
         elif name == "render_mode":
             self.render_mode = str(value).lower()
         elif name == "font":

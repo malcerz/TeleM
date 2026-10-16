@@ -174,6 +174,9 @@ class AppController(
         self.amd_codec: str = "hevc"
         # Preset jakości enkodera AMD: "FAST" (domyślny), "BALANCED", "QUALITY"
         self.amd_encoder_quality: str = "FAST"
+        # ETAP 5Z.2: tryb HDR eksportu AMD dla źródeł HLG (domyślnie: zachowaj HDR)
+        self.amd_hdr_mode: str = "preserve_hlg"
+        self.source_color_summary: Optional[dict] = None
         self.render_mode: str = "gpu"
 
         # ── Map background prefetch callbacks ──────────────────────────
@@ -385,9 +388,12 @@ class AppController(
                 self.amd_codec = (saved_codec or "hevc").lower()
                 saved_quality = self.layout.get("global", {}).get("amd_encoder_quality", "FAST")
                 self.amd_encoder_quality = (saved_quality or "FAST").upper()
+                from src.ffmpeg.hdr_color import normalize_hdr_mode
+                self.amd_hdr_mode = normalize_hdr_mode(self.layout.get("global", {}).get("amd_hdr_mode"))
                 self.render_mode = str(self.layout.get("global", {}).get("render_mode", "gpu") or "gpu").lower()
                 self.signals.sig_amd_decode_mode_restored.emit(self.amd_decode_mode)
                 self.signals.sig_amd_codec_restored.emit(self.amd_codec)
                 self.signals.sig_amd_encoder_quality_restored.emit(self.amd_encoder_quality)
+                self.signals.sig_amd_hdr_mode_restored.emit(self.amd_hdr_mode)
             except Exception as e:
                 print(f"[Controller] Błąd wczytywania def_layout.json: {e}", flush=True)

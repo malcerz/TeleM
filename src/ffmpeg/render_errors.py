@@ -326,6 +326,17 @@ def coerce_render_error(
         output_path=output_path,
         backend=backend,
     )
+    # ETAP 5Z.2: HDR/HLG handling refused before render — the reason is the message.
+    if type(exc).__name__ == "AMDHDRConfigError" or message.startswith("AMDHDRConfigError:"):
+        reason = message.split("AMDHDRConfigError:", 1)[-1].strip()
+        return RenderError(
+            code="HDR_MODE_UNAVAILABLE",
+            category="general",
+            user_message=reason,
+            recommended_action="Zmień „Tryb HDR” w zakładce Eksport i uruchom eksport ponownie.",
+            scope=ErrorScope.JOB_ONLY.value,
+            **context,
+        )
     if isinstance(exc, OSError):
         code = getattr(exc, "errno", None)
         winerror = getattr(exc, "winerror", None)

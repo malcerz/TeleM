@@ -1418,6 +1418,7 @@ def stream_overlay_to_ffmpeg(
                     amd_decode_mode=amd_decode_mode,
                     codec=kwargs.get("amd_codec", codec),
                     quality=kwargs.get("amd_encoder_quality", encoder_profile),
+                    amd_hdr_mode=kwargs.get("amd_hdr_mode"),
                 )
             except AMDNativeFinalizationError as exc:
                 # Storage/finalization failure is not a renderer capability

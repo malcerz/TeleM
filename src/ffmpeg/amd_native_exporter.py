@@ -235,6 +235,24 @@ class AMDNativeFinalizationError(RuntimeError):
     """Final MP4 storage/mux failure; callers must not silently software-fallback."""
 
 
+
+class AMDHDRConfigError(AMDNativeFinalizationError):
+    """HDR/HLG handling requested for this export cannot be honoured (raised before render)."""
+
+
+_MAIN10_PROBE_CACHE: dict[str, int] = {}
+
+
+def _probe_main10_cached(native_dll: Any, dll_path: str) -> Optional[bool]:
+    """Real HEVC Main10 encode probe of the loaded DLL, cached per process and DLL path."""
+    if not hasattr(native_dll, "telem_amd_probe_hevc_main10"):
+        return None
+    if dll_path not in _MAIN10_PROBE_CACHE:
+        native_dll.telem_amd_probe_hevc_main10.restype = c_int
+        native_dll.telem_amd_probe_hevc_main10.argtypes = []
+        _MAIN10_PROBE_CACHE[dll_path] = int(native_dll.telem_amd_probe_hevc_main10())
+    return _MAIN10_PROBE_CACHE[dll_path] == 1
+
 def _require_amd_audio_copy(audio: Any) -> None:
     """Reject a shared helper's encoder/filter configuration before spawning."""
     if audio.mode not in {"none", "copy", "aac_pipe_copy"} or (
@@ -2176,6 +2194,7 @@ def export_amd_native_d3d11(
     fit_path: Union[Path, str, None] = None,
     gpx_path: Union[Path, str, None] = None,
     sync_offset_s: float = 0.0,
+    amd_hdr_mode: Optional[str] = None,
 ) -> bool:
     """Execute production native AMD D3D11 + AMF video export pipeline via telem_amd_native.dll."""
     global _last_amd_export_stats
@@ -2898,7 +2917,43 @@ def export_amd_native_d3d11(
 
     # Required export start logs:
     component_name = "AMFVideoEncoderHW_AV1" if is_av1 else ("AMFVideoEncoderHW_AVC" if is_h264 else "AMFVideoEncoderHW_HEVC")
-    print(f"[AMD ENCODER] codec={amd_codec_name} quality={amd_quality_name} component={component_name} input_surface=NV12 bit_depth=8 rc=VBR target_bitrate={amd_bitrate_bps} peak_bitrate={peak_bitrate_bps} live_mux=yes", flush=True)
+
+    # ── ETAP 5Z.2: HDR/HLG classification and colour pipeline (before any render work) ──
+    from src.ffmpeg.hdr_color import (
+        HDRExportConfigError, PIPELINE_ENV, PIPELINE_HLG_PRESERVE, PIPELINE_SDR,
+        classify_sources, normalize_hdr_mode, resolve_native_pipeline,
+    )
+    color_summary = classify_sources([str(p) for p in input_files], ffmpeg_exe)
+    for _clip in color_summary.clips:
+        print(f"[AMD HDR] source {_clip.summary()} reason={_clip.reason}", flush=True)
+    dll_color_features = 0
+    if hasattr(native_dll, "telem_amd_get_color_features"):
+        native_dll.telem_amd_get_color_features.restype = c_int
+        native_dll.telem_amd_get_color_features.argtypes = []
+        _features_raw = native_dll.telem_amd_get_color_features()
+        dll_color_features = _features_raw if isinstance(_features_raw, int) else 0
+    hdr_mode_effective = normalize_hdr_mode(amd_hdr_mode) if color_summary.is_hlg else "n/a"
+    main10_supported: Optional[bool] = None
+    if color_summary.is_hlg and hdr_mode_effective == "preserve_hlg" and dll_color_features & 0x2:
+        main10_supported = _probe_main10_cached(native_dll, str(dll_path_obj))
+    try:
+        color_pipeline = resolve_native_pipeline(
+            color_summary, amd_hdr_mode, amd_codec_name, dll_color_features, main10_supported)
+    except HDRExportConfigError as exc:
+        print(f"[AMD HDR] ERROR: {exc}", flush=True)
+        raise AMDHDRConfigError(str(exc)) from exc
+    os.environ["AMD_NATIVE_COLOR_PIPELINE"] = PIPELINE_ENV[color_pipeline]
+    os.environ["AMD_NATIVE_SOURCE_RANGE"] = "FULL" if color_summary.full_range else "LIMITED"
+    print(
+        f"[AMD HDR] source_kind={color_summary.kind} hdr_mode={hdr_mode_effective} "
+        f"pipeline={PIPELINE_ENV[color_pipeline]} source_range="
+        f"{'FULL' if color_summary.full_range else ('LIMITED' if color_summary.full_range is False else 'n/a')} "
+        f"dll_color_features=0x{dll_color_features:x} main10_probe={main10_supported}",
+        flush=True,
+    )
+    _encoder_surface = "P010" if color_pipeline == PIPELINE_HLG_PRESERVE else "NV12"
+    _encoder_depth = 10 if color_pipeline == PIPELINE_HLG_PRESERVE else 8
+    print(f"[AMD ENCODER] codec={amd_codec_name} quality={amd_quality_name} component={component_name} input_surface={_encoder_surface} bit_depth={_encoder_depth} rc=VBR target_bitrate={amd_bitrate_bps} peak_bitrate={peak_bitrate_bps} live_mux=yes", flush=True)
 
     # Function Signatures
     native_dll.telem_amd_create.restype = c_void_p
@@ -3737,7 +3792,36 @@ def export_amd_native_d3d11(
         if h_pipe is not None:
             try: kernel32.CloseHandle(h_pipe)
             except Exception: pass
+        if color_pipeline != PIPELINE_SDR:
+            raise AMDHDRConfigError(
+                f"Biblioteka AMD odrzuciła tryb {PIPELINE_ENV[color_pipeline]} (telem_amd_create=NULL); "
+                "eksport HDR nie został rozpoczęty.")
         return False
+
+    # ETAP 5Z.2: never pretend HDR handling — confirm the pipeline the DLL applied.
+    # A DLL without the export (pre-5Z.2) can only run the SDR pipeline.
+    applied_pipeline: Optional[int] = PIPELINE_SDR
+    if hasattr(native_dll, "telem_amd_get_color_pipeline"):
+        native_dll.telem_amd_get_color_pipeline.restype = c_int
+        native_dll.telem_amd_get_color_pipeline.argtypes = [c_void_p]
+        _applied_raw = native_dll.telem_amd_get_color_pipeline(h_context)
+        applied_pipeline = _applied_raw if isinstance(_applied_raw, int) else None
+    print(f"[AMD HDR] native pipeline applied={PIPELINE_ENV.get(applied_pipeline, applied_pipeline)} "
+          f"requested={PIPELINE_ENV[color_pipeline]}", flush=True)
+    if applied_pipeline != color_pipeline and (color_pipeline != PIPELINE_SDR or applied_pipeline is not None):
+        try:
+            native_dll.telem_amd_close(h_context)
+        except Exception:
+            pass
+        if proc_mux is not None:
+            try: proc_mux.kill()
+            except Exception: pass
+        if h_pipe is not None:
+            try: kernel32.CloseHandle(h_pipe)
+            except Exception: pass
+        raise AMDHDRConfigError(
+            f"Biblioteka AMD zastosowała tryb {PIPELINE_ENV.get(applied_pipeline, applied_pipeline)} zamiast "
+            f"{PIPELINE_ENV[color_pipeline]}; eksport przerwano.")
 
     # Bind the native GPU frame tap after the render context exists.  This is
     # best-effort and never changes final-export success/failure semantics.

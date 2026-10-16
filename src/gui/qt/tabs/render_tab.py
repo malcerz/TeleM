@@ -370,6 +370,45 @@ class RenderTab(QWidget):
 
         self.cmb_amd_quality.currentIndexChanged.connect(_on_quality_changed)
         layout_amd.addRow("Profil encodera:", self.cmb_amd_quality)
+
+        # ── ETAP 5Z.2: Tryb HDR — aktywny tylko po wykryciu materiału HLG ──
+        from src.ffmpeg.hdr_color import (
+            DEFAULT_HDR_MODE, HDR_MODES, HDR_MODE_DESCRIPTIONS, HDR_MODE_LABELS,
+        )
+        self.widget_hdr_mode = QWidget()
+        hdr_box = QVBoxLayout(self.widget_hdr_mode)
+        hdr_box.setContentsMargins(0, 0, 0, 0)
+        hdr_box.setSpacing(4)
+        hdr_row = QHBoxLayout()
+        hdr_row.setContentsMargins(0, 0, 0, 0)
+        hdr_row.addWidget(QLabel("Tryb HDR:"))
+        self.cmb_hdr_mode = QComboBox()
+        for _mode in HDR_MODES:
+            self.cmb_hdr_mode.addItem(HDR_MODE_LABELS[_mode], _mode)
+            self.cmb_hdr_mode.setItemData(
+                self.cmb_hdr_mode.count() - 1, HDR_MODE_DESCRIPTIONS[_mode], Qt.ItemDataRole.ToolTipRole)
+        self.cmb_hdr_mode.setCurrentIndex(self.cmb_hdr_mode.findData(DEFAULT_HDR_MODE))
+        hdr_row.addWidget(self.cmb_hdr_mode, 1)
+        hdr_box.addLayout(hdr_row)
+        self.lbl_hdr_mode_desc = QLabel(HDR_MODE_DESCRIPTIONS[DEFAULT_HDR_MODE])
+        self.lbl_hdr_mode_desc.setWordWrap(True)
+        self.lbl_hdr_mode_desc.setStyleSheet("color: #888;")
+        hdr_box.addWidget(self.lbl_hdr_mode_desc)
+        self.widget_hdr_mode.setVisible(False)
+        self.lbl_hdr_source_info = QLabel("")
+        self.lbl_hdr_source_info.setWordWrap(True)
+        self.lbl_hdr_source_info.setStyleSheet("color: #d08000;")
+        self.lbl_hdr_source_info.setVisible(False)
+        self._source_color_summary: dict = {}
+
+        def _on_hdr_mode_changed(idx: int) -> None:
+            val = self.cmb_hdr_mode.itemData(idx) or DEFAULT_HDR_MODE
+            self.lbl_hdr_mode_desc.setText(HDR_MODE_DESCRIPTIONS.get(val, ""))
+            self.signals.sig_settings_changed.emit("amd_hdr_mode", val)
+
+        self.cmb_hdr_mode.currentIndexChanged.connect(_on_hdr_mode_changed)
+        layout_amd.addRow(self.widget_hdr_mode)
+        layout_amd.addRow(self.lbl_hdr_source_info)
         form.addRow(self.widget_amd_options)
 
         # ── NVIDIA Options (Stage 8L) ──────────────────────────────────
@@ -1891,6 +1930,8 @@ class RenderTab(QWidget):
         s.sig_amd_decode_mode_restored.connect(self._on_amd_decode_mode_restored)
         s.sig_amd_codec_restored.connect(self._on_amd_codec_restored)
         s.sig_amd_encoder_quality_restored.connect(self._on_amd_encoder_quality_restored)
+        s.sig_amd_hdr_mode_restored.connect(self._on_amd_hdr_mode_restored)
+        s.sig_source_color_ready.connect(self._on_source_color_ready)
         s.sig_default_export_name_ready.connect(self._on_default_export_name_ready)
         s.sig_video_info_ready.connect(self._on_video_info_ready)
 
@@ -2371,6 +2412,8 @@ class RenderTab(QWidget):
             "amd_decode_mode": self.cmb_amd_decode.currentData() or "gpu",
             "amd_codec": self.cmb_amd_codec.currentData() or "hevc",
             "amd_encoder_quality": self.cmb_amd_quality.currentData() or "BALANCED",
+            # ETAP 5Z.2: tryb HDR zamrażany w opcjach zadania (kolejka nie czyta ustawień globalnych).
+            "amd_hdr_mode": self.cmb_hdr_mode.currentData() or "preserve_hlg",
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
@@ -4070,6 +4113,43 @@ class RenderTab(QWidget):
         """Publiczna metoda ustawiająca preset jakości AMD w zakładce Renderowania."""
         self._on_amd_encoder_quality_restored(quality)
 
+    def _on_amd_hdr_mode_restored(self, mode: str) -> None:
+        """ETAP 5Z.2: przywraca zapisany tryb HDR (bez emitowania zmiany ustawień)."""
+        from src.ffmpeg.hdr_color import HDR_MODE_DESCRIPTIONS, normalize_hdr_mode
+        clean = normalize_hdr_mode(mode)
+        self.cmb_hdr_mode.blockSignals(True)
+        idx = self.cmb_hdr_mode.findData(clean)
+        self.cmb_hdr_mode.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_hdr_mode.blockSignals(False)
+        self.lbl_hdr_mode_desc.setText(HDR_MODE_DESCRIPTIONS.get(clean, ""))
+
+    def set_amd_hdr_mode(self, mode: str) -> None:
+        """Publiczna metoda ustawiająca tryb HDR (z propagacją do kontrolera)."""
+        from src.ffmpeg.hdr_color import normalize_hdr_mode
+        idx = self.cmb_hdr_mode.findData(normalize_hdr_mode(mode))
+        if idx >= 0:
+            self.cmb_hdr_mode.setCurrentIndex(idx)
+
+    def _on_source_color_ready(self, summary: dict) -> None:
+        """ETAP 5Z.2: pokaż wybór trybu HDR tylko dla HLG; dla PQ / niespójnych danych — informacja."""
+        self._source_color_summary = dict(summary or {})
+        kind = str(self._source_color_summary.get("kind") or "")
+        error = str(self._source_color_summary.get("error") or "")
+        is_hlg = kind == "hlg" and not error
+        self.widget_hdr_mode.setVisible(is_hlg)
+        if error and kind in ("hlg", "pq", "mixed", "ambiguous"):
+            self.lbl_hdr_source_info.setText(f"HDR: {error}")
+            self.lbl_hdr_source_info.setVisible(True)
+        elif is_hlg:
+            rng = "pełny zakres" if self._source_color_summary.get("full_range") else "zakres ograniczony"
+            self.lbl_hdr_source_info.setText(f"Wykryto materiał HLG HDR (BT.2020, 10-bit, {rng}).")
+            self.lbl_hdr_source_info.setVisible(True)
+        else:
+            self.lbl_hdr_source_info.setText("")
+            self.lbl_hdr_source_info.setVisible(False)
+        print(f"[HDR GUI] source kind={kind or '?'} hdr_selector={'VISIBLE' if is_hlg else 'HIDDEN'} "
+              f"mode={self.cmb_hdr_mode.currentData()}", flush=True)
+
     # ── Wymuszanie proporcji 16:9 i dopasowanie do ProjectTab ──────────
 
     def showEvent(self, event) -> None:
@@ -4160,3 +4240,5 @@ class RenderTab(QWidget):
             amd_q = settings.get("amd_encoder_quality")
             if amd_q:
                 self.set_amd_encoder_quality(str(amd_q))
+        if hasattr(self, "cmb_hdr_mode") and settings.get("amd_hdr_mode"):
+            self._on_amd_hdr_mode_restored(str(settings.get("amd_hdr_mode")))

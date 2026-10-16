@@ -639,6 +639,16 @@ class ProjectMixin:
                 self.signals.sig_video_info_ready.emit(
                     f"{w}x{h} @ {self.fps:.1f} fps, {total_dur:.1f}s"
                 )
+                # ETAP 5Z.2: klasyfikacja HDR/SDR każdego segmentu (HLG tylko z metadanych strumienia).
+                try:
+                    from src.ffmpeg.hdr_color import classify_sources
+                    color_summary = classify_sources([str(p) for p in self.video_paths], ffprobe_exe)
+                    self.source_color_summary = color_summary.to_dict()
+                    print(f"[HDR] source color kind={color_summary.kind} error={color_summary.error or '-'}", flush=True)
+                    self.signals.sig_source_color_ready.emit(self.source_color_summary)
+                except Exception as exc:
+                    self.source_color_summary = {"kind": "unknown", "error": f"Klasyfikacja koloru nieudana: {exc}", "clips": []}
+                    self.signals.sig_source_color_ready.emit(self.source_color_summary)
 
                 # Layout — priorytet:
                 proj_layout = Path(self.video_paths[0]).with_suffix(".layout.json")
