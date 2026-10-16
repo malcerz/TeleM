@@ -249,6 +249,10 @@ void D3D11VideoProcessorPipeline::ReleaseResources() {
     if (m_nv12FusedQuad32x8Shader) m_nv12FusedQuad32x8Shader->Release();
     if (m_nv12FusedQuad8x8OptShader) m_nv12FusedQuad8x8OptShader->Release();
     if (m_baseConvertShader) m_baseConvertShader->Release();
+    if (m_hlgBaseShader) { m_hlgBaseShader->Release(); m_hlgBaseShader = nullptr; }
+    if (m_hlgHudShader) { m_hlgHudShader->Release(); m_hlgHudShader = nullptr; }
+    if (m_hlgCB) { m_hlgCB->Release(); m_hlgCB = nullptr; }
+    if (m_hlgSampler) { m_hlgSampler->Release(); m_hlgSampler = nullptr; }
     if (m_p010PlaneShader) { m_p010PlaneShader->Release(); m_p010PlaneShader = nullptr; }
     for (auto* view : m_p010YUAVPool) if (view) view->Release();
     for (auto* view : m_p010UVUAVPool) if (view) view->Release();
@@ -742,7 +746,7 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
             hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_outputPool[i]);
             if (FAILED(hr)) { attemptOk = false; break; }
             m_poolTexturesCreated++;
-            if (!computeOnly8K && m_width <= 4096 && m_height <= 4096) {
+            if (!computeOnly8K && !IsHlgPipeline() && m_width <= 4096 && m_height <= 4096) {
                 hr = m_videoDevice->CreateVideoProcessorOutputView(
                     m_outputPool[i], m_videoEnumerator, &outViewDesc, &m_outputViewPool[i]);
                 if (FAILED(hr)) { attemptOk = false; break; }
@@ -797,6 +801,10 @@ bool D3D11VideoProcessorPipeline::SetupVideoProcessor(DXGI_FORMAT inputFormat, D
     }
     if (m_baseConvertCompute && !InitializeBaseConvertCompute()) {
         std::cerr << "[VP] P010->NV12 compute initialization failed." << std::endl;
+        return false;
+    }
+    if (IsHlgPipeline() && !InitializeHlgShaders()) {
+        std::cerr << "[VP] HLG shader initialization failed." << std::endl;
         return false;
     }
 
@@ -1038,6 +1046,345 @@ bool D3D11VideoProcessorPipeline::ConvertP010ToNV12Compute(
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// ETAP 5Z.2 — HLG colour pipelines (model validated in ETAP 5Z.1 probes).
+//
+// Common source stage: P010 decoder slice (R16 / R16G16 plane SRVs) sampled
+// bilinearly at the output pixel centre, honouring 180-degree rotation and
+// output scaling.  At 1:1 without scaling every sample lands on a texel
+// centre, so luma/chroma code values are read exactly.
+//
+// HLG_TO_SDR: BT.2100 HLG (Lw 1000 cd/m2, OOTF gamma 1.2) -> BT.2390 EETF on
+// max(R,G,B) in BT.709 linear, 1000 -> 203 cd/m2 (SDR reference white) ->
+// BT.2020->BT.709 -> BT.1886 inverse -> Y'CbCr BT.709 limited, 4x4 ordered
+// dither.  When the fused NV12 compositor will run afterwards it expands
+// nothing itself but maps its input full->limited exactly once; the shader
+// then writes the unique fused pre-image of the dithered limited code, so the
+// fused output equals the intended limited value (single quantisation).
+//
+// HLG_PRESERVE: source P010 codes copied unchanged (same range, same
+// transfer) into the P010 pool; the HUD pass converts the sRGB HUD to HLG.
+// ---------------------------------------------------------------------------
+static const char* kHlgCommonHlsl = R"(
+    Texture2DArray<float> InputY : register(t0);
+    Texture2DArray<float2> InputUV : register(t1);
+    SamplerState SamLinear : register(s0);
+    cbuffer HlgCB : register(b0) {
+        uint outW; uint outH; uint inW; uint inH;
+        uint arraySlice; uint rotate180; uint fullRange; uint fusedPreimage;
+        float hdrPeak; float sdrWhite; float hudWhite; float pad0;
+        float hdrPeakPq; float sdrWhitePq; float pad1; float pad2;   // PQ(hdrPeak), PQ(sdrWhite) from the CPU
+    };
+    float2 SrcUV(float2 p, float2 outDim) {
+        float2 uv = (p + 0.5f) / outDim;
+        return rotate180 != 0u ? (1.0f - uv) : uv;
+    }
+    float LoadYCode(float2 uv) {           // 10-bit code value
+        return InputY.SampleLevel(SamLinear, float3(uv, (float)arraySlice), 0) * (65535.0f / 64.0f);
+    }
+    float2 LoadUVCode(float2 uv) {
+        return InputUV.SampleLevel(SamLinear, float3(uv, (float)arraySlice), 0) * (65535.0f / 64.0f);
+    }
+)";
+
+static const char* kHlgToSdrHlsl = R"(
+    RWTexture2D<unorm float> OutputY : register(u0);
+    RWTexture2D<unorm float2> OutputUV : register(u1);
+    static const float A = 0.17883277f, B = 0.28466892f, C = 0.55991073f;
+    float3 HlgInvOetf(float3 e) {
+        return (e <= 0.5f) ? (e * e / 3.0f) : ((exp((e - C) / A) + B) / 12.0f);
+    }
+    float PqOetf(float nits) {
+        float y = pow(saturate(nits / 10000.0f), 0.1593017578125f);
+        return pow((0.8359375f + 18.8515625f * y) / (1.0f + 18.6875f * y), 78.84375f);
+    }
+    float PqEotf(float e) {
+        float p = pow(saturate(e), 1.0f / 78.84375f);
+        return 10000.0f * pow(max(p - 0.8359375f, 0.0f) / (18.8515625f - 18.6875f * p), 1.0f / 0.1593017578125f);
+    }
+    float Bt2390(float nits, float srcPeakPq, float dstPeakPq) {
+        float e1 = PqOetf(nits) / srcPeakPq;
+        float maxLum = dstPeakPq / srcPeakPq;
+        float ks = 1.5f * maxLum - 0.5f;
+        float e2 = e1;
+        if (e1 > ks) {
+            float t = (e1 - ks) / (1.0f - ks), t2 = t * t, t3 = t2 * t;
+            e2 = (2 * t3 - 3 * t2 + 1) * ks + (t3 - 2 * t2 + t) * (1.0f - ks) + (-2 * t3 + 3 * t2) * maxLum;
+        }
+        return PqEotf(e2 * srcPeakPq);
+    }
+    float3 ToSdr(float yCode, float2 cCode) {
+        float y = fullRange != 0u ? yCode / 1023.0f : (yCode - 64.0f) / 876.0f;
+        float2 c = fullRange != 0u ? (cCode - 512.0f) / 1023.0f : (cCode - 512.0f) / 896.0f;
+        float r = y + 1.4746f * c.y;
+        float b = y + 1.8814f * c.x;
+        float g = (y - 0.2627f * r - 0.0593f * b) / 0.6780f;
+        float3 s = HlgInvOetf(saturate(float3(r, g, b)));
+        float ys = dot(s, float3(0.2627f, 0.6780f, 0.0593f));
+        float3 lin = hdrPeak * pow(max(ys, 1e-6f), 0.2f) * s;       // cd/m2 (OOTF gamma 1.2)
+        float3 l709 = float3(dot(lin, float3( 1.6605f, -0.5876f, -0.0728f)),
+                             dot(lin, float3(-0.1246f,  1.1329f, -0.0083f)),
+                             dot(lin, float3(-0.0182f, -0.1006f,  1.1187f)));
+        l709 = max(l709, 0.0f);
+        float m = max(l709.r, max(l709.g, l709.b));
+        float mm = Bt2390(m, hdrPeakPq, sdrWhitePq);
+        l709 *= mm / max(m, 1e-6f);
+        return pow(saturate(l709 / sdrWhite), 1.0f / 2.4f);          // BT.1886 inverse
+    }
+    float Dither(uint2 p) {
+        static const float bayer[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+        return (bayer[(p.y & 3u) * 4u + (p.x & 3u)] + 0.5f) / 16.0f - 0.5f;
+    }
+    // Fused NV12 compositor maps Y: L = min(235, (219F+127)/255 + 16) and
+    // C: 128 + trunc((c*224 +/- 127)/255).  Return the smallest F producing L.
+    uint FusedPreY(uint L) {
+        int num = ((int)L - 16) * 255 - 127;
+        return num <= 0 ? 0u : (uint)min((num + 218) / 219, 255);
+    }
+    uint FusedPreC(uint Cd) {
+        int d = (int)Cd - 128;
+        int ad = abs(d);
+        int ac = ad == 0 ? 0 : (ad * 255 - 127 + 223) / 224;
+        return (uint)clamp(128 + (d < 0 ? -ac : ac), 0, 255);
+    }
+    [numthreads(8, 8, 1)]
+    void CSMain(uint3 id : SV_DispatchThreadID) {
+        uint2 c = id.xy;
+        if (c.x * 2u >= outW || c.y * 2u >= outH) return;
+        float2 outDim = float2(outW, outH);
+        float3 acc = 0;
+        [unroll] for (uint k = 0; k < 4u; ++k) {
+            uint2 p = c * 2u + uint2(k & 1u, k >> 1u);
+            float2 uv = SrcUV((float2)p, outDim);
+            float3 rgb = ToSdr(LoadYCode(uv), LoadUVCode(uv));
+            acc += rgb;
+            float y709 = dot(rgb, float3(0.2126f, 0.7152f, 0.0722f));
+            uint L = (uint)clamp(floor(16.0f + 219.0f * y709 + Dither(p) + 0.5f), 16.0f, 235.0f);
+            OutputY[p] = (fusedPreimage != 0u ? FusedPreY(L) : L) / 255.0f;
+        }
+        acc *= 0.25f;
+        float y709 = dot(acc, float3(0.2126f, 0.7152f, 0.0722f));
+        float2 cc = float2((acc.b - y709) / 1.8556f, (acc.r - y709) / 1.5748f);
+        float d = Dither(c);
+        uint u = (uint)clamp(floor(128.0f + 224.0f * cc.x + d + 0.5f), 16.0f, 240.0f);
+        uint v = (uint)clamp(floor(128.0f + 224.0f * cc.y + d + 0.5f), 16.0f, 240.0f);
+        OutputUV[c] = (fusedPreimage != 0u ? float2(FusedPreC(u), FusedPreC(v)) : float2(u, v)) / 255.0f;
+    }
+)";
+
+static const char* kHlgCopyHlsl = R"(
+    RWTexture2D<unorm float> OutputY : register(u0);
+    RWTexture2D<unorm float2> OutputUV : register(u1);
+    [numthreads(8, 8, 1)]
+    void CSMain(uint3 id : SV_DispatchThreadID) {
+        uint2 c = id.xy;
+        if (c.x * 2u >= outW || c.y * 2u >= outH) return;
+        float2 outDim = float2(outW, outH);
+        [unroll] for (uint k = 0; k < 4u; ++k) {
+            uint2 p = c * 2u + uint2(k & 1u, k >> 1u);
+            OutputY[p] = round(LoadYCode(SrcUV((float2)p, outDim))) * (64.0f / 65535.0f);
+        }
+        float2 uvc = SrcUV((float2)c, outDim * 0.5f);
+        OutputUV[c] = round(LoadUVCode(uvc)) * (64.0f / 65535.0f);
+    }
+)";
+
+// sRGB HUD canvas (straight alpha) over P010 HLG, in place.  The HUD RGB codes
+// are SDR display-referred values: they are decoded with the BT.1886 EOTF used
+// to display the SDR export (so the HUD keeps its SDR appearance), scaled so
+// HUD white = hudWhite cd/m2 (BT.2408 graphics white, 203), converted
+// BT.709->BT.2020, mapped through the inverse HLG OOTF (Lw = hdrPeak) and the
+// HLG OETF, then encoded as BT.2020 Y'CbCr in the source range.  Alpha is
+// applied to the encoded signal, exactly like the SDR NV12 compositor applies
+// it to encoded BT.709 values; pixels with alpha 0 are never written.
+static const char* kHlgHudHlsl = R"(
+    Texture2D<float4> HUDTexture : register(t2);
+    RWTexture2D<unorm float> OutputY : register(u0);
+    RWTexture2D<unorm float2> OutputUV : register(u1);
+    static const float A = 0.17883277f, B = 0.28466892f, C = 0.55991073f;
+    float3 HlgOetf(float3 e) {
+        return (e <= 1.0f / 12.0f) ? sqrt(3.0f * e) : (A * log(max(12.0f * e - B, 1e-6f)) + C);
+    }
+    float3 HudToHlgYCbCr(float3 srgbCode) {
+        float3 l709 = pow(saturate(srgbCode), 2.4f) * (hudWhite / hdrPeak);
+        float3 l2020 = float3(dot(l709, float3(0.6274f, 0.3293f, 0.0433f)),
+                              dot(l709, float3(0.0691f, 0.9195f, 0.0114f)),
+                              dot(l709, float3(0.0164f, 0.0880f, 0.8956f)));
+        float yd = dot(l2020, float3(0.2627f, 0.6780f, 0.0593f));
+        float3 e = l2020 * pow(max(yd, 1e-6f), (1.0f / 1.2f) - 1.0f);   // inverse OOTF (gamma 1.2)
+        float3 s = HlgOetf(saturate(e));
+        float y = dot(s, float3(0.2627f, 0.6780f, 0.0593f));
+        return float3(y, (s.b - y) / 1.8814f, (s.r - y) / 1.4746f);
+    }
+    float YCode(float y) { return fullRange != 0u ? y * 1023.0f : 64.0f + 876.0f * y; }
+    float CCode(float c) { return fullRange != 0u ? 512.0f + 1023.0f * c : 512.0f + 896.0f * c; }
+    [numthreads(8, 8, 1)]
+    void CSMain(uint3 id : SV_DispatchThreadID) {
+        uint2 c = id.xy;
+        if (c.x * 2u >= outW || c.y * 2u >= outH) return;
+        uint hudW, hudH;
+        HUDTexture.GetDimensions(hudW, hudH);
+        bool sameSize = (hudW == outW && hudH == outH);
+        [unroll] for (uint k = 0; k < 4u; ++k) {
+            uint2 p = c * 2u + uint2(k & 1u, k >> 1u);
+            uint2 hp = sameSize ? p : (p * uint2(hudW, hudH) / uint2(outW, outH));
+            float4 hud = HUDTexture.Load(int3(hp, 0));
+            uint a8 = (uint)round(saturate(hud.a) * 255.0f);
+            if (a8 != 0u) {
+                float a = a8 / 255.0f;
+                float3 ycc = HudToHlgYCbCr(hud.rgb);
+                float base = OutputY[p] * (65535.0f / 64.0f);
+                float outCode = a8 == 255u ? YCode(ycc.x) : YCode(ycc.x) * a + base * (1.0f - a);
+                OutputY[p] = round(clamp(outCode, 0.0f, 1023.0f)) * (64.0f / 65535.0f);
+            }
+            if (k == 0u && a8 != 0u) {
+                // Chroma follows the top-left pixel of the quad, as in the SDR compositor.
+                float a = a8 / 255.0f;
+                float3 ycc = HudToHlgYCbCr(hud.rgb);
+                float2 baseC = OutputUV[c] * (65535.0f / 64.0f);
+                float2 hudC = float2(CCode(ycc.y), CCode(ycc.z));
+                float2 outC = a8 == 255u ? hudC : hudC * a + baseC * (1.0f - a);
+                OutputUV[c] = round(clamp(outC, 0.0f, 1023.0f)) * (64.0f / 65535.0f);
+            }
+        }
+    }
+)";
+
+bool D3D11VideoProcessorPipeline::InitializeHlgShaders() {
+    if (!IsHlgPipeline()) return true;
+    if (!m_device) return false;
+    auto compile = [&](const std::string& src, const char* name, ID3D11ComputeShader** out) -> bool {
+        ID3DBlob* blob = nullptr;
+        ID3DBlob* errors = nullptr;
+        HRESULT hr = D3DCompile(src.c_str(), src.size(), name, nullptr, nullptr, "CSMain", "cs_5_0",
+                                D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &blob, &errors);
+        if (FAILED(hr)) {
+            std::cerr << "[HLG] shader " << name << " compile failed: "
+                      << (errors ? static_cast<const char*>(errors->GetBufferPointer()) : "?") << std::endl;
+            if (errors) errors->Release();
+            return false;
+        }
+        if (errors) errors->Release();
+        hr = m_device->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, out);
+        blob->Release();
+        return SUCCEEDED(hr);
+    };
+    const bool preserve = m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE;
+    if (!compile(std::string(kHlgCommonHlsl) + (preserve ? kHlgCopyHlsl : kHlgToSdrHlsl),
+                 preserve ? "etap5z2_hlg_copy" : "etap5z2_hlg_to_sdr", &m_hlgBaseShader)) return false;
+    if (preserve && !compile(std::string(kHlgCommonHlsl) + kHlgHudHlsl, "etap5z2_hlg_hud", &m_hlgHudShader)) return false;
+
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 64;
+    cbDesc.Usage = D3D11_USAGE_DEFAULT;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, &m_hlgCB))) return false;
+    D3D11_SAMPLER_DESC sd = {};
+    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.MaxLOD = D3D11_FLOAT32_MAX;
+    if (FAILED(m_device->CreateSamplerState(&sd, &m_hlgSampler))) return false;
+    std::cout << "[HLG] pipeline=" << (preserve ? "HLG_PRESERVE (P010 Main10)" : "HLG_TO_SDR (BT.2390 maxRGB)")
+              << " source_range=" << (m_sourceFullRange ? "FULL" : "LIMITED")
+              << " hdr_peak=1000 sdr_white=203 hud_white=203" << std::endl;
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::ConvertHlgBase(
+    ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, bool fusedWillNormalize, UINT frameIndex) {
+    if (!input || !m_hlgBaseShader || !m_hlgCB || !m_device3 || poolIndex >= m_poolSize ||
+        !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) return false;
+    if (m_streamRotation != 0 && m_streamRotation != 180) {
+        std::cerr << "[HLG] rotation " << m_streamRotation << " is not supported by the HLG pipeline" << std::endl;
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC desc = {};
+    input->GetDesc(&desc);
+    if (desc.Format != DXGI_FORMAT_P010) {
+        std::cerr << "[HLG] decoder surface is not P010 (format=" << desc.Format << ")" << std::endl;
+        return false;
+    }
+    if (!m_hlgInputLogged) {
+        m_hlgInputLogged = true;
+        std::cout << "[HLG] input " << desc.Width << "x" << desc.Height << " array=" << desc.ArraySize
+                  << " -> output " << m_width << "x" << m_height << " rotation=" << m_streamRotation
+                  << " fused_preimage=" << (fusedWillNormalize ? 1 : 0) << " frame=" << frameIndex << std::endl;
+    }
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 yDesc = {};
+    yDesc.Format = DXGI_FORMAT_R16_UNORM;
+    yDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    yDesc.Texture2DArray.MipLevels = 1;
+    yDesc.Texture2DArray.FirstArraySlice = arrayIndex;
+    yDesc.Texture2DArray.ArraySize = 1;
+    yDesc.Texture2DArray.PlaneSlice = 0;
+    D3D11_SHADER_RESOURCE_VIEW_DESC1 uvDesc = yDesc;
+    uvDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+    uvDesc.Texture2DArray.PlaneSlice = 1;
+    ID3D11ShaderResourceView1* yView = nullptr;
+    ID3D11ShaderResourceView1* uvView = nullptr;
+    HRESULT hr = m_device3->CreateShaderResourceView1(input, &yDesc, &yView);
+    if (SUCCEEDED(hr)) hr = m_device3->CreateShaderResourceView1(input, &uvDesc, &uvView);
+    if (FAILED(hr) || !yView || !uvView) {
+        std::cerr << "[HLG] P010 plane SRV creation failed: 0x" << std::hex << hr << std::dec << std::endl;
+        if (yView) yView->Release();
+        if (uvView) uvView->Release();
+        return false;
+    }
+    // SMPTE ST 2084 inverse EOTF for the constant BT.2390 anchors (computed once on the CPU).
+    const auto pq = [](double nits) {
+        const double y = std::pow(nits / 10000.0, 0.1593017578125);
+        return static_cast<float>(std::pow((0.8359375 + 18.8515625 * y) / (1.0 + 18.6875 * y), 78.84375));
+    };
+    struct { UINT outW, outH, inW, inH, slice, rot180, full, pre; float peak, white, hudWhite, pad;
+             float peakPq, whitePq, pad1, pad2; } cb = {
+        m_width, m_height, desc.Width, desc.Height, 0u, m_streamRotation == 180 ? 1u : 0u,
+        m_sourceFullRange ? 1u : 0u, fusedWillNormalize ? 1u : 0u, 1000.0f, 203.0f, 203.0f, 0.0f,
+        pq(1000.0), pq(203.0), 0.0f, 0.0f };
+    m_context->UpdateSubresource(m_hlgCB, 0, nullptr, &cb, 0, 0);
+    ID3D11ShaderResourceView* srvs[2] = { yView, uvView };
+    ID3D11UnorderedAccessView* uavs[2] = { m_outputYViews[poolIndex], m_outputUVViews[poolIndex] };
+    UINT counts[2] = { 0, 0 };
+    m_context->CSSetShader(m_hlgBaseShader, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, &m_hlgCB);
+    m_context->CSSetSamplers(0, 1, &m_hlgSampler);
+    m_context->CSSetShaderResources(0, 2, srvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, uavs, counts);
+    m_context->Dispatch((m_width / 2 + 7) / 8, (m_height / 2 + 7) / 8, 1);
+    ID3D11ShaderResourceView* nullSrvs[2] = { nullptr, nullptr };
+    ID3D11UnorderedAccessView* nullUavs[2] = { nullptr, nullptr };
+    ID3D11Buffer* nullCB = nullptr;
+    ID3D11SamplerState* nullSampler = nullptr;
+    m_context->CSSetShaderResources(0, 2, nullSrvs);
+    m_context->CSSetUnorderedAccessViews(0, 2, nullUavs, counts);
+    m_context->CSSetConstantBuffers(0, 1, &nullCB);
+    m_context->CSSetSamplers(0, 1, &nullSampler);
+    m_context->CSSetShader(nullptr, nullptr, 0);
+    yView->Release();
+    uvView->Release();
+    return true;
+}
+
+bool D3D11VideoProcessorPipeline::ComposeHUDHlgP010(UINT poolIndex) {
+    if (!m_hlgHudShader || !m_hlgCB || !m_hudShaderView || poolIndex >= m_poolSize ||
+        !m_outputYViews[poolIndex] || !m_outputUVViews[poolIndex]) return false;
+    // m_hlgCB still holds this frame's parameters from ConvertHlgBase.
+    m_context->CSSetShader(m_hlgHudShader, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, &m_hlgCB);
+    m_context->CSSetShaderResources(2, 1, &m_hudShaderView);
+    ID3D11UnorderedAccessView* uavs[2] = { m_outputYViews[poolIndex], m_outputUVViews[poolIndex] };
+    UINT counts[2] = { 0, 0 };
+    m_context->CSSetUnorderedAccessViews(0, 2, uavs, counts);
+    m_context->Dispatch((m_width / 2 + 7) / 8, (m_height / 2 + 7) / 8, 1);
+    ID3D11ShaderResourceView* nullSrv = nullptr;
+    ID3D11UnorderedAccessView* nullUavs[2] = { nullptr, nullptr };
+    ID3D11Buffer* nullCB = nullptr;
+    m_context->CSSetShaderResources(2, 1, &nullSrv);
+    m_context->CSSetUnorderedAccessViews(0, 2, nullUavs, counts);
+    m_context->CSSetConstantBuffers(0, 1, &nullCB);
+    m_context->CSSetShader(nullptr, nullptr, 0);
+    return true;
+}
+
 bool D3D11VideoProcessorPipeline::InitializeShaderScaler() {
     if (m_shaderScalerShader) return true;
     if (!m_device) return false;
@@ -1251,9 +1598,11 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
     HRESULT hr = m_device->QueryInterface(__uuidof(ID3D11Device3), (void**)&m_device3);
     if (FAILED(hr) || !m_device3) return false;
 
+    // ETAP 5Z.2: the HLG_PRESERVE pool is P010 (16-bit planes).
+    const bool p010Pool = m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE;
     for (UINT i = 0; i < m_poolSize; ++i) {
         D3D11_UNORDERED_ACCESS_VIEW_DESC1 yDesc = {};
-        yDesc.Format = DXGI_FORMAT_R8_UNORM;
+        yDesc.Format = p010Pool ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
         yDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
         yDesc.Texture2D.MipSlice = 0;
         yDesc.Texture2D.PlaneSlice = 0;
@@ -1264,7 +1613,7 @@ bool D3D11VideoProcessorPipeline::InitializeNV12ComputeCompositor() {
         m_poolViewsCreated++;
 
         D3D11_UNORDERED_ACCESS_VIEW_DESC1 uvDesc = {};
-        uvDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+        uvDesc.Format = p010Pool ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
         uvDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
         uvDesc.Texture2D.MipSlice = 0;
         uvDesc.Texture2D.PlaneSlice = 1;
@@ -4076,6 +4425,8 @@ bool D3D11VideoProcessorPipeline::SetStreamRotation(UINT degrees) {
     // compute-only diagnostic path is currently defined for the native 1:1
     // orientation; do not pretend that VP rotation was applied.
     if (m_cpuX265Path) return degrees == 0;
+    // ETAP 5Z.2: the HLG compute stages implement identity and 180 degrees only.
+    if (IsHlgPipeline() && degrees != 0 && degrees != 180) return false;
     if (!m_videoContext || !m_videoProcessor) return false;
 
     m_streamRotation = degrees;  // ETAP 5S: cache for the state signature.
@@ -4171,7 +4522,9 @@ bool D3D11VideoProcessorPipeline::ConfigurePreviewTap(UINT width, UINT height) {
     }
     UINT inputFlags = 0;
     UINT outputFlags = 0;
-    m_previewEnumerator->CheckVideoProcessorFormat(DXGI_FORMAT_NV12, &inputFlags);
+    const bool p010Final = m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE;
+    m_previewEnumerator->CheckVideoProcessorFormat(
+        p010Final ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12, &inputFlags);
     m_previewEnumerator->CheckVideoProcessorFormat(
         DXGI_FORMAT_B8G8R8A8_UNORM, &outputFlags);
     if (!(inputFlags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) ||
@@ -4186,6 +4539,23 @@ bool D3D11VideoProcessorPipeline::ConfigurePreviewTap(UINT width, UINT height) {
         return false;
     }
 
+    if (p010Final) {
+        // ETAP 5Z.2: HLG P010 final frames are previewed with the BT.2020 G2.2
+        // matrix/range only (no tone mapping).  The driver's GHLG VP modes
+        // crash in VideoProcessorBlt and must not be used.
+        ID3D11VideoContext1* vc1 = nullptr;
+        if (FAILED(m_videoContext->QueryInterface(__uuidof(ID3D11VideoContext1),
+                                                  reinterpret_cast<void**>(&vc1))) || !vc1) {
+            ReleasePreviewTap();
+            return false;
+        }
+        vc1->VideoProcessorSetStreamColorSpace1(m_previewProcessor, 0,
+            m_sourceFullRange ? DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P2020
+                              : DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P2020);
+        vc1->VideoProcessorSetOutputColorSpace1(m_previewProcessor,
+            DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+        vc1->Release();
+    } else {
     // Final renderer output is studio-range NV12; preview is full-range BGRA.
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE csIn = {};
     csIn.Usage = 0;
@@ -4199,6 +4569,7 @@ bool D3D11VideoProcessorPipeline::ConfigurePreviewTap(UINT width, UINT height) {
     csOut.YCbCr_Matrix = 0;
     m_videoContext->VideoProcessorSetOutputColorSpace(
         m_previewProcessor, &csOut);
+    }
 
     D3D11_TEXTURE2D_DESC outputDesc = {};
     outputDesc.Width = width;
@@ -4261,7 +4632,9 @@ bool D3D11VideoProcessorPipeline::SubmitPreviewTap(
     }
     D3D11_TEXTURE2D_DESC inputDesc = {};
     finalTexture->GetDesc(&inputDesc);
-    if (inputDesc.Format != DXGI_FORMAT_NV12) return false;
+    const DXGI_FORMAT expectedFinal = (m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE)
+        ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+    if (inputDesc.Format != expectedFinal) return false;
 
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
     inputViewDesc.FourCC = 0;
@@ -4409,7 +4782,7 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
     // Fall back to the shader-scaler only when explicitly requested or when
     // the input genuinely exceeds the configured VP capability.
     const UINT vpInputLimit = (m_vpConfiguredInputWidth > 0) ? m_vpConfiguredInputWidth : 4096u;
-    const bool useShaderScaler = m_cpuX265Path || m_baseConvertCompute ||
+    const bool useShaderScaler = m_cpuX265Path || m_baseConvertCompute || IsHlgPipeline() ||
         (inDesc.Width  > vpInputLimit) ||
         (inDesc.Height > vpInputLimit) ||
         (m_width       > vpInputLimit) ||
@@ -4447,10 +4820,30 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
         return true;
     }
 
+    // ETAP 5Z.2: the HLG base conversion records the same GPU timeline slots
+    // (FRAME_BEGIN / after base conversion) that the VP Blt records.
+    const bool tsOnEarly = m_gpuTsEnabled && m_gpuTsInitialized;
+    const UINT tsSlotEarly = frameIndex % GPU_TS_RING;
     if (useShaderScaler) {
         double computeMs = 0.0;
-        const bool converted = DownscaleCompute(
-            pP010Texture, arrayIndex, currentIdx, &computeMs);
+        bool converted = false;
+        if (IsHlgPipeline()) {
+            // ETAP 5Z.2: HLG never goes through VideoProcessorBlt (the driver's
+            // GHLG/G2084 VP modes crash; G22 modes do not tone map).
+            const bool fusedWillNormalize = m_colorPipeline == COLOR_PIPELINE_HLG_TO_SDR &&
+                enableHUD && m_hudShaderView && !m_gpuHudOff && GetFusedCompositorMode() == 1;
+            const auto tHlg = std::chrono::steady_clock::now();
+            if (tsOnEarly) {
+                m_context->Begin(m_tsDisjoint[tsSlotEarly]);
+                m_context->End(m_tsQueries[tsSlotEarly][0]);  // GPU_FRAME_BEGIN
+            }
+            converted = ConvertHlgBase(pP010Texture, arrayIndex, currentIdx, fusedWillNormalize, frameIndex);
+            if (tsOnEarly) m_context->End(m_tsQueries[tsSlotEarly][1]);  // after HLG base conversion
+            computeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tHlg).count();
+            if (!converted) std::cerr << "[HLG] base conversion failed" << std::endl;
+        } else {
+            converted = DownscaleCompute(pP010Texture, arrayIndex, currentIdx, &computeMs);
+        }
         if (!converted) {
             std::cerr << "[VP SHADER SCALE] 8K/Compute->NV12 downscale failed" << std::endl;
             return false;
@@ -4779,8 +5172,12 @@ bool D3D11VideoProcessorPipeline::ProcessFrame(
                                    outStats->above_flush_ms;
     }
     const auto tHud = std::chrono::steady_clock::now();
-    if (SUCCEEDED(hr) && composeHUD &&
-        !ComposeHUDDirectNV12(outTex, currentIdx)) { hr = E_FAIL; std::cerr << "[VP] HUD compositor FAILED" << std::endl; }
+    if (SUCCEEDED(hr) && composeHUD) {
+        const bool hudOk = (m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE)
+            ? ComposeHUDHlgP010(currentIdx)
+            : ComposeHUDDirectNV12(outTex, currentIdx);
+        if (!hudOk) { hr = E_FAIL; std::cerr << "[VP] HUD compositor FAILED" << std::endl; }
+    }
     if (tsOn) {
         m_context->End(m_tsQueries[tsSlot][6]);  // after HUD/NV12 compute
         m_context->End(m_tsQueries[tsSlot][7]);  // GPU_FRAME_END

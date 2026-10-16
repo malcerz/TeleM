@@ -110,6 +110,13 @@ public:
     amf::AMFContextPtr GetContext() const { return m_context; }
     AMFCodecType GetCodecType() const { return m_codecType; }
     void SetCodecType(AMFCodecType type) { m_codecType = type; }
+    // ETAP 5Z.2: colour pipeline (0 = SDR unchanged, 1 = HLG->SDR BT.709 tags,
+    // 2 = HLG preserve: HEVC Main10, P010 input, BT.2020/HLG VUI).  Set before Initialize().
+    void SetColorConfig(int pipeline, bool sourceFullRange) {
+        m_colorPipeline = pipeline;
+        m_colorFullRange = sourceFullRange;
+    }
+    int GetColorPipeline() const { return m_colorPipeline; }
     AMFQualityPreset GetQualityPreset() const { return m_qualityPreset; }
     void SetQualityPreset(AMFQualityPreset preset) { m_qualityPreset = preset; }
     bool IsAVC() const { return m_codecType == AMFCodecType::AVC; }
@@ -129,6 +136,8 @@ private:
     UINT m_width = 3840;
     UINT m_height = 2160;
     AMFCodecType m_codecType = AMFCodecType::HEVC;
+    int m_colorPipeline = 0;
+    bool m_colorFullRange = true;
     AMFQualityPreset m_qualityPreset = AMFQualityPreset::FAST;
     uint64_t m_bitrateBps = 0;
     AMFEncoderQPStats m_qpStats;

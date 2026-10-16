@@ -280,6 +280,9 @@ struct TelemAMDContext {
 
     // x265 GPU->CPU asynchronous staging readback
     bool isX265 = false;
+    // ETAP 5Z.2: colour pipeline actually applied (0 SDR, 1 HLG_TO_SDR, 2 HLG_PRESERVE).
+    int colorPipeline = 0;
+    bool colorSourceFullRange = true;
     static const int X265_RING_SIZE = 3;
     ID3D11Texture2D* pX265Staging[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
     ID3D11Query* pX265Query[X265_RING_SIZE] = { nullptr, nullptr, nullptr };
@@ -1778,6 +1781,44 @@ TELEM_EXPORT void* telem_amd_create(
     ctx->vpPipeline.SetBaseConvertMode(baseConvertCompute);
     std::cout << "[TELEM AMD DLL] AMD_BASE_CONVERT_MODE="
               << (baseConvertCompute ? "COMPUTE_P010_NV12" : "VP_REFERENCE") << std::endl;
+    // ETAP 5Z.2: HLG colour pipeline, requested by Python after it classified
+    // the source as HLG.  Absent/SDR keeps the unchanged production path.
+    {
+        const char* cpEnv = getenv("AMD_NATIVE_COLOR_PIPELINE");
+        const char* rangeEnv = getenv("AMD_NATIVE_SOURCE_RANGE");
+        int cp = 0;
+        if (cpEnv && _stricmp(cpEnv, "HLG_TO_SDR") == 0) cp = 1;
+        else if (cpEnv && _stricmp(cpEnv, "HLG_PRESERVE") == 0) cp = 2;
+        else if (cpEnv && cpEnv[0] && _stricmp(cpEnv, "SDR") != 0) {
+            std::cerr << "[TELEM AMD DLL] unknown AMD_NATIVE_COLOR_PIPELINE=" << cpEnv << std::endl;
+            DestroyPartialContext(ctx);
+            MFShutdown();
+            return nullptr;
+        }
+        const bool fullRange = !(rangeEnv && _stricmp(rangeEnv, "LIMITED") == 0);
+        if (cp != 0) {
+            const char* why = nullptr;
+            if (ctx->isX265) why = "CPU x265 path";
+            else if (baseConvertCompute) why = "AMD_BASE_CONVERT_MODE diagnostic";
+            else if (getenv("AMD_FUSED_COMPOSITOR") && atoi(getenv("AMD_FUSED_COMPOSITOR")) != 1) why = "non-fused compositor diagnostic";
+            else if (cp == 2 && codecType != AMFCodecType::HEVC) why = "HLG preserve requires HEVC";
+            else if (width > 4096u || height > 4096u) why = "output larger than 4096";
+            if (why) {
+                std::cerr << "[TELEM AMD DLL] AMD_NATIVE_COLOR_PIPELINE=" << cpEnv
+                          << " rejected: " << why << std::endl;
+                DestroyPartialContext(ctx);
+                MFShutdown();
+                return nullptr;
+            }
+        }
+        ctx->colorPipeline = cp;
+        ctx->colorSourceFullRange = fullRange;
+        ctx->vpPipeline.SetColorPipeline(cp, fullRange);
+        ctx->amfEncoder.SetColorConfig(cp, fullRange);
+        std::cout << "[TELEM AMD DLL] AMD_NATIVE_COLOR_PIPELINE="
+                  << (cp == 2 ? "HLG_PRESERVE" : (cp == 1 ? "HLG_TO_SDR" : "SDR"))
+                  << " AMD_NATIVE_SOURCE_RANGE=" << (fullRange ? "FULL" : "LIMITED") << std::endl;
+    }
     // ETAP 5V — debug-only pool lifecycle stats (AMD_POOL_LIFECYCLE_STATS=1).
     const char* plsEnv = getenv("AMD_POOL_LIFECYCLE_STATS");
     const bool poolLs = (plsEnv && plsEnv[0] == '1');
@@ -1892,7 +1933,8 @@ TELEM_EXPORT void* telem_amd_create(
             MFShutdown();
             return nullptr;
         }
-        if (!ctx->vpPipeline.SetupVideoProcessor(DXGI_FORMAT_P010, DXGI_FORMAT_NV12)) {
+        const DXGI_FORMAT finalFormat = (ctx->colorPipeline == 2) ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+        if (!ctx->vpPipeline.SetupVideoProcessor(DXGI_FORMAT_P010, finalFormat)) {
             std::cerr << "[TELEM AMD DLL] VP Setup failed!" << std::endl;
             DestroyPartialContext(ctx);
             MFShutdown();
@@ -2972,6 +3014,10 @@ TELEM_EXPORT int telem_amd_dump_checkpoint(
     wcstombs(mbsPng, out_png_path, 512);
 
     std::string stage(stage_name);
+    if (ctx->colorPipeline == 2 && stage != "01_base_input" && stage != "B_base_d3d11") {
+        std::cerr << "[CHECKPOINT] stage " << stage << " reads NV12; not available for HLG_PRESERVE (P010)" << std::endl;
+        return 0;
+    }
 
     if (stage == "01_base_input" || stage == "B_base_d3d11") {
         ID3D11Texture2D* pTex = ctx->pBaseP010Tex;
@@ -3286,7 +3332,11 @@ TELEM_EXPORT int telem_amd_close(void* handle) {
     // ETAP 5T — write the async GPU timestamp timeline (CSV).
     if (ctx->vpPipeline.IsGpuTimestampProfile()) {
         const auto& gtl = ctx->vpPipeline.GetGPUTimeline();
-        std::string gpuPath = ctx->outputPath + ".gpu_timeline.csv";
+        // ETAP 5Z.2: the live-mux output path is a named pipe; allow an explicit
+        // diagnostic CSV path (opt-in, only read when timestamps are enabled).
+        const char* timelinePathEnv = std::getenv("AMD_GPU_TIMELINE_PATH");
+        std::string gpuPath = (timelinePathEnv && timelinePathEnv[0])
+            ? std::string(timelinePathEnv) : ctx->outputPath + ".gpu_timeline.csv";
         std::ofstream gpu(gpuPath);
         if (gpu.is_open()) {
             gpu << "frame,ready,disjoint,freq,begin_ts,blt_ts,range_ts,charts_ts,"
@@ -3715,6 +3765,71 @@ struct TelemAMDCapsReport {
     int max_width;
     int max_height;
 };
+
+// ETAP 5Z.2 (additive, ABI 9 unchanged): colour pipeline introspection.
+// Bit 0 = HLG_TO_SDR, bit 1 = HLG_PRESERVE implemented by this DLL build.
+TELEM_EXPORT int telem_amd_get_color_features() {
+    return 0x3;
+}
+
+// Colour pipeline actually applied to this context (0 SDR, 1 HLG_TO_SDR, 2 HLG_PRESERVE).
+TELEM_EXPORT int telem_amd_get_color_pipeline(void* handle) {
+    if (!handle) return -1;
+    return static_cast<TelemAMDContext*>(handle)->colorPipeline;
+}
+
+// Real HEVC Main10 encode test with the production encoder class: Init with
+// AMF_SURFACE_P010 + Main10 + 10-bit, then encode frames until a packet is
+// produced.  CAP_MAX_PROFILE under-reports Main10 on Vega (ETAP 5Z.1), so the
+// capability API is deliberately not used.  1 = supported, 0 = not, -1 = error.
+TELEM_EXPORT int telem_amd_probe_hevc_main10() {
+    ID3D11Device* dev = nullptr;
+    ID3D11DeviceContext* dc = nullptr;
+    D3D_FEATURE_LEVEL fls[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+    D3D_FEATURE_LEVEL fl;
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+                                 fls, 2, D3D11_SDK_VERSION, &dev, &fl, &dc)) || !dev) {
+        return -1;
+    }
+    int result = 0;
+    {
+        D3D11AMFEncoder enc;
+        enc.SetCodecType(AMFCodecType::HEVC);
+        enc.SetColorConfig(2, true);
+        const UINT w = 1280, h = 720;
+        if (enc.Initialize(dev, w, h, 30000, 1001, AMFCodecType::HEVC, AMFQualityPreset::FAST, 8000000ULL)) {
+            D3D11_TEXTURE2D_DESC d = {};
+            d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1;
+            d.Format = DXGI_FORMAT_P010; d.SampleDesc.Count = 1;
+            d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+            ID3D11Texture2D* tex = nullptr;
+            if (SUCCEEDED(dev->CreateTexture2D(&d, nullptr, &tex)) && tex) {
+                std::vector<uint8_t> pkt;
+                int64_t pts = 0;
+                bool key = false;
+                int packets = 0;
+                for (int f = 0; f < 3; ++f) {
+                    for (int spin = 0; spin < 200 && !enc.SubmitTexture(tex, (int64_t)f * 333667); ++spin) {
+                        if (enc.QueryPacket(pkt, pts, key)) packets++;
+                        Sleep(1);
+                    }
+                }
+                enc.Flush();
+                for (int spin = 0; spin < 2000 && packets < 3; ++spin) {
+                    if (enc.QueryPacket(pkt, pts, key)) packets++;
+                    else Sleep(1);
+                }
+                result = packets > 0 ? 1 : 0;
+                tex->Release();
+            }
+        }
+        enc.Shutdown();
+    }
+    std::cout << "[AMF HDR PROBE] HEVC Main10 P010 encode " << (result == 1 ? "SUPPORTED" : "UNSUPPORTED") << std::endl;
+    dc->Release();
+    dev->Release();
+    return result;
+}
 
 TELEM_EXPORT int telem_amd_probe_capabilities(TelemAMDCapsReport* out_caps) {
     if (!out_caps) return 0;

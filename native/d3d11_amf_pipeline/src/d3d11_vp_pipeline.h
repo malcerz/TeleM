@@ -341,6 +341,18 @@ public:
     UINT GetProcessorRingSize() const { return m_processorRingSize; }
     void SetBaseConvertMode(bool compute) { m_baseConvertCompute = compute; }
     bool IsBaseConvertCompute() const { return m_baseConvertCompute; }
+    // ETAP 5Z.2: colour pipeline for HLG sources.  Must be set before
+    // Initialize().  SDR (0) keeps the unchanged production VP path;
+    // HLG_TO_SDR (1) replaces VideoProcessorBlt with the BT.2390 compute
+    // tone mapper into the NV12 pool; HLG_PRESERVE (2) keeps P010 HLG end to
+    // end (P010 pool, HLG HUD compositor, HEVC Main10).
+    enum : int { COLOR_PIPELINE_SDR = 0, COLOR_PIPELINE_HLG_TO_SDR = 1, COLOR_PIPELINE_HLG_PRESERVE = 2 };
+    void SetColorPipeline(int mode, bool sourceFullRange) {
+        m_colorPipeline = mode;
+        m_sourceFullRange = sourceFullRange;
+    }
+    int GetColorPipeline() const { return m_colorPipeline; }
+    bool IsHlgPipeline() const { return m_colorPipeline != COLOR_PIPELINE_SDR; }
     // CPU-x265 8K is a compute-only path.  It must not depend on the
     // VideoProcessor output view pool or call VideoProcessorBlt.
     void SetCpuX265Path(bool enabled) { m_cpuX265Path = enabled; }
@@ -426,6 +438,13 @@ private:
     ID3D11VideoProcessor* m_activeVideoProcessor = nullptr;
     UINT m_processorRingSize = 1;
     bool m_baseConvertCompute = false;
+    int m_colorPipeline = COLOR_PIPELINE_SDR;
+    bool m_sourceFullRange = true;
+    ID3D11ComputeShader* m_hlgBaseShader = nullptr;   // HLG->SDR tone map or P010 HLG copy
+    ID3D11ComputeShader* m_hlgHudShader = nullptr;    // sRGB HUD over P010 HLG (PRESERVE only)
+    ID3D11Buffer* m_hlgCB = nullptr;
+    ID3D11SamplerState* m_hlgSampler = nullptr;
+    bool m_hlgInputLogged = false;
     bool m_cpuX265Path = false;
     UINT m_traceFrameIndex = UINT_MAX;
     UINT m_vpConfiguredInputWidth = 0;  // InputWidth used for CreateVideoProcessorEnumerator.
@@ -733,6 +752,9 @@ private:
     int ReadEventForFrame(UINT64 frameIndex, bool local);
     void BeginVPCompletionMarker(UINT frameIndex);
     void EndLocalCompletionMarker(UINT frameIndex);
+    bool InitializeHlgShaders();
+    bool ConvertHlgBase(ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, bool fusedWillNormalize, UINT frameIndex);
+    bool ComposeHUDHlgP010(UINT poolIndex);
     bool InitializeBaseConvertCompute();
     bool ConvertP010ToNV12Compute(ID3D11Texture2D* input, UINT arrayIndex, UINT poolIndex, double* outMs);
     bool InitializeShaderScaler();

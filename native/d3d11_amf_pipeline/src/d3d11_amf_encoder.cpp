@@ -255,10 +255,53 @@ bool D3D11AMFEncoder::Initialize(
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMFConstructSize(width, height));
         m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
 
-        res = m_encoder->Init(amf::AMF_SURFACE_NV12, width, height);
+        // ETAP 5Z.2: colour signalling.  The SDR pipeline (0) sets nothing so
+        // its bitstream stays identical to the previous production build.
+        amf::AMF_SURFACE_FORMAT inputFormat = amf::AMF_SURFACE_NV12;
+        if (m_colorPipeline == 2) {
+            const amf_int64 profile = m_colorFullRange
+                ? AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_2020 : AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020;
+            const AMF_RESULT r1 = m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_PROFILE, AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10);
+            const AMF_RESULT r2 = m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, AMF_COLOR_BIT_DEPTH_10);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PROFILE, profile);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_ARIB_STD_B67);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT2020);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, profile);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_ARIB_STD_B67);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT2020);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, (amf_int64)(m_colorFullRange
+                ? AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_FULL : AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_STUDIO));
+            inputFormat = amf::AMF_SURFACE_P010;
+            std::cout << "[AMF HDR] HEVC Main10 HLG: profile_set=" << r1 << " bitdepth_set=" << r2
+                      << " primaries=BT2020 transfer=ARIB_STD_B67 matrix=BT2020NC range="
+                      << (m_colorFullRange ? "FULL" : "STUDIO") << std::endl;
+        } else if (m_colorPipeline == 1) {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, (amf_int64)AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_STUDIO);
+            std::cout << "[AMF HDR] HEVC Main SDR from HLG tone mapping: primaries=BT709 transfer=BT709 "
+                         "matrix=BT709 range=STUDIO" << std::endl;
+        }
+
+        res = m_encoder->Init(inputFormat, width, height);
         if (res != AMF_OK) {
-            std::cerr << "[AMF] HEVC VBR Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
+            std::cerr << "[AMF] HEVC VBR Encoder Init(" << (inputFormat == amf::AMF_SURFACE_P010 ? "AMF_SURFACE_P010" : "AMF_SURFACE_NV12")
+                      << ") failed: " << res << std::endl;
             return false;
+        }
+        if (m_colorPipeline == 2) {
+            amf_int64 profileGot = -1, depthGot = -1;
+            m_encoder->GetProperty(AMF_VIDEO_ENCODER_HEVC_PROFILE, &profileGot);
+            m_encoder->GetProperty(AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, &depthGot);
+            std::cout << "[AMF HDR] after Init: profile=" << profileGot << " color_bit_depth=" << depthGot << std::endl;
+            if (profileGot != AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10 || depthGot != AMF_COLOR_BIT_DEPTH_10) {
+                std::cerr << "[AMF HDR] encoder did not keep Main10/10-bit; refusing HDR export" << std::endl;
+                return false;
+            }
         }
 
         std::cout << "[AMF] HEVC Hardware Encoder initialized successfully (" 
