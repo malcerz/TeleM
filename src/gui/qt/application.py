@@ -610,9 +610,18 @@ def main() -> None:
         # --queue-hdr-modes gives one mode per queued job (comma separated).
         parser.add_argument("--hdr-mode", default="")
         parser.add_argument("--queue-hdr-modes", default="")
+        # ETAP 5Z.3 test-only lifecycle hooks.  They call the normal GUI cancel
+        # (_on_cancel) and the queue's requeue path; nothing touches the render loop.
+        parser.add_argument("--videos", default="", help="comma separated multi-file project (overrides --video)")
+        parser.add_argument("--cancel-after-frames", type=int, default=0)
+        parser.add_argument("--retry-after-cancel", action="store_true")
+        parser.add_argument("--retry-after-error", action="store_true")
+        parser.add_argument("--retry-dll", default="", help="TELEM_AMD_NATIVE_DLL used for the retry")
+        parser.add_argument("--retry-gui-hdr-mode", default="", help="GUI HDR mode set before the retry (job must keep its own)")
         test_args, _ = parser.parse_known_args(sys.argv[1:])
 
-        video_path = Path(test_args.video).resolve()
+        video_list = [Path(v.strip()).resolve() for v in test_args.videos.split(",") if v.strip()]
+        video_path = video_list[0] if video_list else Path(test_args.video).resolve()
         fit_path = Path(test_args.fit).resolve() if test_args.fit else None
         gpx_path = Path(test_args.gpx).resolve() if test_args.gpx else None
         out_path = Path(test_args.output).resolve()
@@ -659,6 +668,8 @@ def main() -> None:
         live_qp_samples = []
 
         def _on_render_finished_bench(stats, final_path):
+            if "events" in bench_result:
+                _event("render_finished", path=str(final_path), queue=_queue_statuses())
             t_finish[0] = time.perf_counter()
             elapsed = max(0.001, t_finish[0] - t_start[0])
             frames_done = int(stats.get("frames_rendered", stats.get("total_frames", test_args.frames or 0)) if isinstance(stats, dict) else (test_args.frames or 0))
@@ -699,7 +710,84 @@ def main() -> None:
                 Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2, default=str), encoding="utf-8")
             QTimer.singleShot(500, window.close)
 
+        lifecycle = {"cancel_sent": False, "retried": False}
+        bench_result["events"] = []
+
+        def _event(kind, **detail):
+            rec = {"t": round(time.perf_counter() - t_start[0], 3), "event": kind, **detail}
+            bench_result["events"].append(rec)
+            print(f"[BENCH LIFECYCLE] {json.dumps(rec, default=str)}", flush=True)
+
+        def _queue_statuses():
+            q = getattr(window._render_tab, "_export_queue", None)
+            if q is None:
+                return []
+            return [{"job_id": j.job_id[:8], "status": j.render_status, "hdr_mode": j.options.get("amd_hdr_mode"),
+                     "bitrate": j.options.get("bitrate"), "quality": j.options.get("amd_encoder_quality"),
+                     "error": (j.render_error or "")[:160]} for j in q.get_jobs()]
+
+        def _resource_snapshot(label):
+            snap = {"label": label}
+            try:
+                import psutil
+                snap["child_processes"] = [
+                    {"pid": c.pid, "name": c.name(), "status": c.status()}
+                    for c in psutil.Process().children(recursive=True)]
+            except Exception as exc:
+                snap["child_processes_error"] = str(exc)
+            try:
+                snap["telem_pipes"] = [p for p in os.listdir("\\\\.\\pipe\\") if p.startswith("telem_amf_")]
+            except Exception as exc:
+                snap["telem_pipes_error"] = str(exc)
+            snap["output_dir_files"] = sorted(
+                f"{p.name}:{p.stat().st_size}" for p in out_path.parent.glob(out_path.stem + "*") if p.is_file())
+            snap["queue"] = _queue_statuses()
+            return snap
+
+        def _do_retry(reason):
+            lifecycle["retried"] = True
+            rt = window._render_tab
+            if test_args.retry_dll:
+                os.environ["TELEM_AMD_NATIVE_DLL"] = test_args.retry_dll
+            if test_args.retry_gui_hdr_mode:
+                rt.set_amd_hdr_mode(test_args.retry_gui_hdr_mode)
+            q = getattr(rt, "_export_queue", None)
+            if test_args.mode == "queue" and q is not None:
+                ids = [j.job_id for j in q.get_jobs() if j.render_status not in ("queued", "done") and not j.is_active()]
+                _event("retry", reason=reason, requeue_ids=[i[:8] for i in ids], gui_hdr_mode=rt.cmb_hdr_mode.currentData(),
+                       dll=os.environ.get("TELEM_AMD_NATIVE_DLL", ""))
+                q.requeue_jobs(ids)
+                rt._refresh_queue_ui()
+                rt._on_queue_start()
+            else:
+                _event("retry", reason=reason, mode="direct", gui_hdr_mode=rt.cmb_hdr_mode.currentData())
+                t_start[0] = time.perf_counter()
+                rt._on_render()
+
+        def _on_render_stopped_bench():
+            _event("render_stopped", queue=_queue_statuses())
+
+            def _after_stop():
+                bench_result.setdefault("snapshots", []).append(_resource_snapshot("3s_after_stop"))
+                if test_args.retry_after_cancel and not lifecycle["retried"]:
+                    _do_retry("cancelled")
+                    return
+                bench_result["success"] = False
+                bench_result["cancelled"] = True
+                if test_args.result_json:
+                    Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2, default=str), encoding="utf-8")
+                QTimer.singleShot(500, window.close)
+            QTimer.singleShot(3000, _after_stop)
+
+        if test_args.cancel_after_frames > 0:
+            get_signals().sig_render_stopped.connect(_on_render_stopped_bench)
+
         def _on_render_error_bench(msg):
+            if test_args.retry_after_error and not lifecycle["retried"]:
+                _event("render_error", message=str(msg)[:300], queue=_queue_statuses())
+                bench_result.setdefault("snapshots", []).append(_resource_snapshot("at_error"))
+                QTimer.singleShot(3000, lambda: _do_retry("error"))
+                return
             t_finish[0] = time.perf_counter()
             elapsed = max(0.001, t_finish[0] - t_start[0])
             bench_result["success"] = False
@@ -749,6 +837,12 @@ def main() -> None:
                     live_qp_samples.append({"frame": done, "qp": qp_value, "text": compression_text})
             if done in (100, 300, 500, 1000, 2000, 3000) or done == 0 or done % 500 == 0 or (total and done >= total):
                 print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)
+            if (test_args.cancel_after_frames > 0 and not lifecycle["cancel_sent"] and not lifecycle["retried"]
+                    and done >= test_args.cancel_after_frames):
+                lifecycle["cancel_sent"] = True
+                _event("cancel_requested", frame=done, total=total)
+                bench_result.setdefault("snapshots", []).append(_resource_snapshot("before_cancel"))
+                QTimer.singleShot(0, window._render_tab._on_cancel)
 
         get_signals().sig_render_progress.connect(_progress_bench)
 
@@ -839,7 +933,7 @@ def main() -> None:
 
         print(f"[BENCH] Loading project: {video_path.name} (mode={test_args.mode})", flush=True)
         QTimer.singleShot(200, lambda: get_signals().sig_files_selected.emit(
-            [str(video_path)], "", str(fit_path) if fit_path else "",
+            [str(v) for v in (video_list or [video_path])], "", str(fit_path) if fit_path else "",
         ))
         QTimer.singleShot(400, _poll_ready_bench)
     elif "--test-intel-export" in sys.argv:
