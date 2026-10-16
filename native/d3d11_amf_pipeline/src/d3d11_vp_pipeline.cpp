@@ -251,6 +251,7 @@ void D3D11VideoProcessorPipeline::ReleaseResources() {
     if (m_baseConvertShader) m_baseConvertShader->Release();
     if (m_hlgBaseShader) { m_hlgBaseShader->Release(); m_hlgBaseShader = nullptr; }
     if (m_hlgHudShader) { m_hlgHudShader->Release(); m_hlgHudShader = nullptr; }
+    if (m_hlgPreviewShader) { m_hlgPreviewShader->Release(); m_hlgPreviewShader = nullptr; }
     if (m_hlgCB) { m_hlgCB->Release(); m_hlgCB = nullptr; }
     if (m_hlgSampler) { m_hlgSampler->Release(); m_hlgSampler = nullptr; }
     if (m_p010PlaneShader) { m_p010PlaneShader->Release(); m_p010PlaneShader = nullptr; }
@@ -1250,13 +1251,30 @@ static const char* kHlgHudHlsl = R"(
     }
 )";
 
+// ETAP 5Z.4: export-preview tap for HLG_PRESERVE.  Same HLG->SDR model as the
+// HLG_TO_SDR export (ToSdr: BT.2100 HLG, OOTF, BT.2390 max(RGB), 203 cd/m2,
+// BT.2020->BT.709, BT.1886), sampled from the final P010 frame (already rotated,
+// HUD already HLG-encoded).  Output channels are swizzled so the RGBA8 texture
+// holds B,G,R,A bytes, i.e. the BGRA layout the preview readback delivers.
+static const char* kHlgPreviewHlsl = R"(
+    RWTexture2D<unorm float4> PreviewOut : register(u2);
+    [numthreads(8, 8, 1)]
+    void CSPreview(uint3 id : SV_DispatchThreadID) {
+        if (id.x >= outW || id.y >= outH) return;
+        float2 uv = (float2(id.xy) + 0.5f) / float2(outW, outH);
+        float3 rgb = ToSdr(LoadYCode(uv), LoadUVCode(uv));
+        PreviewOut[id.xy] = float4(rgb.b, rgb.g, rgb.r, 1.0f);
+    }
+)";
+
 bool D3D11VideoProcessorPipeline::InitializeHlgShaders() {
     if (!IsHlgPipeline()) return true;
     if (!m_device) return false;
-    auto compile = [&](const std::string& src, const char* name, ID3D11ComputeShader** out) -> bool {
+    auto compile = [&](const std::string& src, const char* name, ID3D11ComputeShader** out,
+                       const char* entry = "CSMain") -> bool {
         ID3DBlob* blob = nullptr;
         ID3DBlob* errors = nullptr;
-        HRESULT hr = D3DCompile(src.c_str(), src.size(), name, nullptr, nullptr, "CSMain", "cs_5_0",
+        HRESULT hr = D3DCompile(src.c_str(), src.size(), name, nullptr, nullptr, entry, "cs_5_0",
                                 D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &blob, &errors);
         if (FAILED(hr)) {
             std::cerr << "[HLG] shader " << name << " compile failed: "
@@ -1273,6 +1291,8 @@ bool D3D11VideoProcessorPipeline::InitializeHlgShaders() {
     if (!compile(std::string(kHlgCommonHlsl) + (preserve ? kHlgCopyHlsl : kHlgToSdrHlsl),
                  preserve ? "etap5z2_hlg_copy" : "etap5z2_hlg_to_sdr", &m_hlgBaseShader)) return false;
     if (preserve && !compile(std::string(kHlgCommonHlsl) + kHlgHudHlsl, "etap5z2_hlg_hud", &m_hlgHudShader)) return false;
+    if (preserve && !compile(std::string(kHlgCommonHlsl) + kHlgToSdrHlsl + kHlgPreviewHlsl, "etap5z4_hlg_preview",
+                             &m_hlgPreviewShader, "CSPreview")) return false;
 
     D3D11_BUFFER_DESC cbDesc = {};
     cbDesc.ByteWidth = 64;
@@ -4467,6 +4487,10 @@ void D3D11VideoProcessorPipeline::ReleasePreviewTap() {
             m_previewOutputView[i]->Release();
             m_previewOutputView[i] = nullptr;
         }
+        if (m_previewOutputUav[i]) {
+            m_previewOutputUav[i]->Release();
+            m_previewOutputUav[i] = nullptr;
+        }
         if (m_previewOutputTexture[i]) {
             m_previewOutputTexture[i]->Release();
             m_previewOutputTexture[i] = nullptr;
@@ -4500,6 +4524,33 @@ bool D3D11VideoProcessorPipeline::ConfigurePreviewTap(UINT width, UINT height) {
     if (!m_device || !m_context || !m_videoDevice || !m_videoContext ||
         m_width == 0 || m_height == 0) {
         return false;
+    }
+    if (m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE) {
+        // ETAP 5Z.4: tone-mapped SDR preview of the HLG final frame (compute,
+        // no VideoProcessor: its GHLG modes crash and G22 modes do not tone map).
+        if (!m_hlgPreviewShader || !m_hlgCB || !m_hlgSampler) return false;
+        D3D11_TEXTURE2D_DESC od = {};
+        od.Width = width; od.Height = height; od.MipLevels = 1; od.ArraySize = 1;
+        od.Format = DXGI_FORMAT_R8G8B8A8_UNORM; od.SampleDesc.Count = 1;
+        od.Usage = D3D11_USAGE_DEFAULT; od.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+        D3D11_TEXTURE2D_DESC sd = od;
+        sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        D3D11_QUERY_DESC qd = {};
+        qd.Query = D3D11_QUERY_EVENT;
+        for (int i = 0; i < 2; ++i) {
+            if (FAILED(m_device->CreateTexture2D(&od, nullptr, &m_previewOutputTexture[i])) ||
+                FAILED(m_device->CreateUnorderedAccessView(m_previewOutputTexture[i], nullptr, &m_previewOutputUav[i])) ||
+                FAILED(m_device->CreateTexture2D(&sd, nullptr, &m_previewStagingTexture[i])) ||
+                FAILED(m_device->CreateQuery(&qd, &m_previewReadyQuery[i]))) {
+                ReleasePreviewTap();
+                return false;
+            }
+        }
+        m_previewTapWidth = width;
+        m_previewTapHeight = height;
+        m_previewTapConfigured = true;
+        std::cout << "[HLG PREVIEW TAP] compute HLG->SDR " << width << "x" << height << std::endl;
+        return true;
     }
 
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
@@ -4635,6 +4686,64 @@ bool D3D11VideoProcessorPipeline::SubmitPreviewTap(
     const DXGI_FORMAT expectedFinal = (m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE)
         ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
     if (inputDesc.Format != expectedFinal) return false;
+    if (m_colorPipeline == COLOR_PIPELINE_HLG_PRESERVE) {
+        if (!m_device3 || !m_previewOutputUav[m_previewNextSlot & 1u]) return false;
+        const UINT pslot = m_previewNextSlot & 1u;
+        D3D11_SHADER_RESOURCE_VIEW_DESC1 yDesc = {};
+        yDesc.Format = DXGI_FORMAT_R16_UNORM;
+        yDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+        yDesc.Texture2DArray.MipLevels = 1;
+        yDesc.Texture2DArray.ArraySize = 1;
+        D3D11_SHADER_RESOURCE_VIEW_DESC1 uvDesc = yDesc;
+        uvDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+        uvDesc.Texture2DArray.PlaneSlice = 1;
+        ID3D11ShaderResourceView1* yView = nullptr;
+        ID3D11ShaderResourceView1* uvView = nullptr;
+        HRESULT phr = m_device3->CreateShaderResourceView1(finalTexture, &yDesc, &yView);
+        if (SUCCEEDED(phr)) phr = m_device3->CreateShaderResourceView1(finalTexture, &uvDesc, &uvView);
+        if (FAILED(phr) || !yView || !uvView) {
+            if (yView) yView->Release();
+            if (uvView) uvView->Release();
+            return false;
+        }
+        const auto pq = [](double nits) {
+            const double y = std::pow(nits / 10000.0, 0.1593017578125);
+            return static_cast<float>(std::pow((0.8359375 + 18.8515625 * y) / (1.0 + 18.6875 * y), 78.84375));
+        };
+        // Final frame is already rotated; same anchors as the HLG_TO_SDR export.
+        struct { UINT outW, outH, inW, inH, slice, rot180, full, pre; float peak, white, hudWhite, pad;
+                 float peakPq, whitePq, pad1, pad2; } cb = {
+            m_previewTapWidth, m_previewTapHeight, inputDesc.Width, inputDesc.Height, 0u, 0u,
+            m_sourceFullRange ? 1u : 0u, 0u, 1000.0f, 203.0f, 203.0f, 0.0f, pq(1000.0), pq(203.0), 0.0f, 0.0f };
+        m_context->UpdateSubresource(m_hlgCB, 0, nullptr, &cb, 0, 0);
+        ID3D11ShaderResourceView* srvs[2] = { yView, uvView };
+        ID3D11UnorderedAccessView* uav = m_previewOutputUav[pslot];
+        UINT zero = 0;
+        m_context->CSSetShader(m_hlgPreviewShader, nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, &m_hlgCB);
+        m_context->CSSetSamplers(0, 1, &m_hlgSampler);
+        m_context->CSSetShaderResources(0, 2, srvs);
+        m_context->CSSetUnorderedAccessViews(2, 1, &uav, &zero);
+        m_context->Dispatch((m_previewTapWidth + 7) / 8, (m_previewTapHeight + 7) / 8, 1);
+        ID3D11ShaderResourceView* nullSrvs[2] = { nullptr, nullptr };
+        ID3D11UnorderedAccessView* nullUav = nullptr;
+        ID3D11Buffer* nullCB = nullptr;
+        ID3D11SamplerState* nullSampler = nullptr;
+        m_context->CSSetShaderResources(0, 2, nullSrvs);
+        m_context->CSSetUnorderedAccessViews(2, 1, &nullUav, &zero);
+        m_context->CSSetConstantBuffers(0, 1, &nullCB);
+        m_context->CSSetSamplers(0, 1, &nullSampler);
+        m_context->CSSetShader(nullptr, nullptr, 0);
+        yView->Release();
+        uvView->Release();
+        m_context->CopyResource(m_previewStagingTexture[pslot], m_previewOutputTexture[pslot]);
+        m_context->End(m_previewReadyQuery[pslot]);
+        m_previewCaptureInFlight = true;
+        m_previewInFlightSlot = pslot;
+        m_previewInFlightFrame = frameIndex;
+        m_previewNextSlot = (pslot + 1u) & 1u;
+        return true;
+    }
 
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
     inputViewDesc.FourCC = 0;

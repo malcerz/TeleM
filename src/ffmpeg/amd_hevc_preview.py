@@ -14,6 +14,7 @@ import threading
 import time
 import ctypes
 from collections import deque
+from pathlib import Path
 from typing import Callable, Optional
 
 
@@ -177,6 +178,15 @@ class AMDGPUNativeFrameTapPreview:
             self._updates += 1
             self._last_frame += 1
             callback = self.on_frame
+            dump_index = self._updates
+        dump_dir = os.environ.get("TELEM_EXPORT_PREVIEW_DUMP_DIR", "")
+        if dump_dir:
+            # Diagnostic only (ETAP 5Z.4 colour parity tests): raw BGRA frames as delivered to the GUI.
+            try:
+                Path(dump_dir).mkdir(parents=True, exist_ok=True)
+                (Path(dump_dir) / f"tap_{dump_index:04d}_{int(width)}x{int(height)}.bgra").write_bytes(bytes(raw))
+            except OSError:
+                pass
         if callback is not None:
             try:
                 callback(bytes(raw), int(width), int(height))

@@ -442,6 +442,8 @@ private:
     bool m_sourceFullRange = true;
     ID3D11ComputeShader* m_hlgBaseShader = nullptr;   // HLG->SDR tone map or P010 HLG copy
     ID3D11ComputeShader* m_hlgHudShader = nullptr;    // sRGB HUD over P010 HLG (PRESERVE only)
+    ID3D11ComputeShader* m_hlgPreviewShader = nullptr; // ETAP 5Z.4: HLG->SDR for the export preview tap (PRESERVE)
+    ID3D11UnorderedAccessView* m_previewOutputUav[2] = { nullptr, nullptr };
     ID3D11Buffer* m_hlgCB = nullptr;
     ID3D11SamplerState* m_hlgSampler = nullptr;
     bool m_hlgInputLogged = false;
