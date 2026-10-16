@@ -196,6 +196,16 @@ def build_mpv_options(vendor: str) -> dict[str, Any]:
     # The priority list ensures fallback to OpenGL if D3D11 is unavailable.
     base_opts: dict[str, Any] = {
         "keep_open": "yes",
+        # ETAP 5Z.4: HDR (HLG) presentation on an SDR display.  mpv's defaults
+        # (dynamic peak detection, auto gamut mapping, contrast recovery) look
+        # visibly darker/different from the export's static BT.2390 HLG->SDR
+        # (203 cd/m2 white).  These settings were measured as the closest
+        # libplacebo match to the export (centre MAE 19.4 -> ~6 on GX020079).
+        # They only act on HDR sources; SDR video is not tone mapped.
+        "tone_mapping": "bt.2390",
+        "hdr_compute_peak": "no",
+        "gamut_mapping_mode": "relative",
+        "hdr_contrast_recovery": "0",
     }
 
     if vendor == "cpu":
