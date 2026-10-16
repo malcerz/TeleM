@@ -106,11 +106,11 @@ def _render_static_map_indicator(
                 track_outline_width=max(0, int(cfg.get("track_outline_width", 0) or 0)),
                 track_outline_color=_parse_marker_color(cfg.get("track_outline_color", "#000000")),
             )
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
             map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
             return map_img, _pos_xy[0], _pos_xy[1], None
 
         _pc_key = ("static_precache", id(gps_track), zoom, map_style)
@@ -175,11 +175,11 @@ def _render_static_map_indicator(
             track_outline_color=_parse_marker_color(cfg.get("track_outline_color", "#000000")),
         )
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:
         return None, 0, 0, None

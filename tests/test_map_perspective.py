@@ -129,6 +129,12 @@ class TestRouteAndMarkerProjectiveParity:
         dy = (s * d * math.cos(theta)) / z
         expected_y = h - dy
         expected_x = w / 2.0  # exactly centered
+        # The tilted plane is scaled so its inscribed rectangle fills the map box
+        # (perspective inside the selected shape, no trapezoid outline).
+        from src.indicators.helpers import compute_map_pitch_quad
+        (x_tl, y_top), (x_tr, _), _, _ = compute_map_pitch_quad(w, h, pitch)
+        fill = lambda x, y: ((x - x_tl) * w / (x_tr - x_tl), (y - y_top) * h / (h - y_top))
+        expected_x, expected_y = fill(expected_x, expected_y)
 
         # Verify pixel at (round(expected_x), round(expected_y)) is white marker
         marker_px = pitched.getpixel((int(round(expected_x)), int(round(expected_y))))
@@ -144,6 +150,7 @@ class TestRouteAndMarkerProjectiveParity:
         # In source, x = y = 150. Distance from horizontal center = -100.
         # Scaled by d / z_far:
         x_far = (w / 2.0) - 100.0 * (d / z_far)
+        x_far, y_far = fill(x_far, y_far)
         far_px = pitched.getpixel((int(round(x_far)), int(round(y_far))))
         assert far_px[0] > 180 and far_px[1] < 100, f"Route pixel at far test point: {far_px}"
 

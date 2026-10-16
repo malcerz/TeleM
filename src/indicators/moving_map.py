@@ -243,12 +243,13 @@ def render_map_working_image(
                 draw_marker=draw_marker,
             )
         renderer._is_first_render = False
+        # Pitch first (fills the map box), then the selected shape/border on the final image.
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         if apply_style:
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                       cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                       cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         rx = s(cfg["x"], canvas_w)
         ry = s(cfg["y"], canvas_h)
         dst_bbox = (int(rx - map_w // 2), int(ry - map_w // 2), int(map_w), int(map_w))
@@ -662,11 +663,11 @@ def _render_moving_map_indicator(
                 )
             if map_img.size != (map_w, map_h):
                 map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
             map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
             return map_img, _pos_xy[0], _pos_xy[1], None
 
         if cache_key not in _cache:
@@ -760,11 +761,11 @@ def _render_moving_map_indicator(
         if map_img.size != (map_w, map_h):
             map_img = map_img.resize((map_w, map_h), Image.Resampling.LANCZOS)
         # Kształt mapy: kwadrat (domyślnie) lub okrąg — z zakładki Shape
+        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         map_tuple = (map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None)
         if os.environ.get("TELEM_MAP_FROZEN") == "1":
             if not hasattr(_render_moving_map_indicator, "_frozen_map_cache"):

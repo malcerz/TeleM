@@ -598,7 +598,15 @@ def _get_map_pitch_transforms(w: int, h: int, pitch_deg: float):
 
     quad = compute_map_pitch_quad(w, h, pitch_deg)
     src_pts = [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
-    dst_pts = quad
+    # The tilted map plane projects to a trapezoid.  The perspective acts on the
+    # content only: scale the trapezoid about the box so its largest inscribed
+    # axis-aligned rectangle (narrow far edge x full depth) fills the whole box.
+    # The map box therefore stays fully covered and the selected shape (square,
+    # rounded, circle) is applied to the final image without trapezoid corners.
+    (x_tl, y_top), (x_tr, _), _, _ = quad
+    sx = float(w) / max(1e-6, x_tr - x_tl)
+    sy = float(h) / max(1e-6, float(h) - y_top)
+    dst_pts = [((x - x_tl) * sx, (y - y_top) * sy) for x, y in quad]
 
     cv2_M = None
     pil_coeffs = None
@@ -630,7 +638,9 @@ def _get_map_pitch_transforms(w: int, h: int, pitch_deg: float):
 def apply_map_pitch(img, raw_pitch: Any):
     """Apply true 3D perspective pitch tilt (0..70 degrees) to a rendered map image.
 
-    Models the map as a flat 3D quadrilateral viewed at a pitch angle by a camera.
+    Models the map as a flat 3D plane viewed at a pitch angle by a camera.  The result
+    always covers the full map box (perspective inside, no trapezoid outline), so the
+    map shape/border must be applied AFTER this call.
     For pitch == 0, returns the exact legacy unwarped image without any overhead.
     """
     if img is None or raw_pitch is None:
@@ -664,8 +674,9 @@ def apply_map_pitch(img, raw_pitch: Any):
                     cv2_M,
                     (w, h),
                     flags=cv2.INTER_LINEAR,
-                    borderMode=cv2.BORDER_CONSTANT,
-                    borderValue=(0, 0, 0, 0),
+                    # The warped content covers the whole box; replicate the edge so
+                    # bilinear sampling never leaves a transparent outer row/column.
+                    borderMode=cv2.BORDER_REPLICATE,
                 )
                 return Image.fromarray(warped)
             except Exception:
