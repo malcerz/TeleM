@@ -62,6 +62,34 @@ def track_up_rotation_degrees(heading: float | None) -> float:
         return 0.0
     return float(heading) % 360.0
 
+
+def _rotate_track_up_viewport(image: Image.Image, angle: float, output: int) -> Image.Image:
+    """Pillow rotate(BICUBIC) + centre crop, omitting unused bottom/right overscan.
+
+    Use the same inverse affine matrix and 15-digit trig rounding as Pillow's
+    public rotate API. Keep the destination origin unchanged: translating it
+    can change floating-point rounding at interpolation boundaries. Reducing
+    only its extent preserves the exact samples, including translucent pixels.
+    """
+    offset = (image.width - output) // 2
+    angle %= 360.0
+    if angle in (0., 90., 180., 270.):
+        # Pillow uses exact copy/transpose for these angles (no interpolation).
+        return image.rotate(angle).crop((offset, offset, offset + output, offset + output))
+    radians = -math.radians(angle)
+    a = round(math.cos(radians), 15)
+    b = round(math.sin(radians), 15)
+    d, e = -b, a
+    cx, cy = image.width / 2., image.height / 2.
+    tx = (-a * cx - b * cy) + cx
+    ty = (-d * cx - e * cy) + cy
+    rotated = image.transform(
+        (offset + output, offset + output), Image.Transform.AFFINE, (a, b, tx, d, e, ty),
+        Image.Resampling.BICUBIC, fillcolor=(30, 30, 30, 255),
+    )
+    return rotated.crop((offset, offset, offset + output, offset + output))
+
+
 MAP_STYLES: dict[str, str] = {
     "light_all":       "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
     "light_nolabels":  "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
@@ -906,27 +934,23 @@ class MovingMapRenderer:
             download_missing=download_missing,
             heading=None,
         )
+        offset = (working - output) // 2
+        crop_box = (offset, offset, offset + output, offset + output)
         if os.environ.get("TELEM_MAP_BYPASS_ROTATE") == "1":
             rotated = north_up.copy()
+            rotated = rotated.crop(crop_box)
         else:
-            resampling = getattr(Image, "Resampling", Image)
-            rotated = north_up.rotate(
-                angle,
-                resample=resampling.BICUBIC,
-                expand=False,
-                fillcolor=(30, 30, 30, 255),
-            )
+            rotated = _rotate_track_up_viewport(north_up, angle, output)
         # Repaint the marker in output space so it remains directional-up.
         if draw_marker and self._mkr_style == "directional":
             d = ImageDraw.Draw(rotated)
-            c = working / 2.0
+            c = working / 2.0 - offset
             r = self._mkr_radius
             tip = (c, c - r * 1.8)
             left = (c - r * 0.65, c + r * 0.75)
             right = (c + r * 0.65, c + r * 0.75)
             d.polygon((tip, left, right), fill=self._mkr_color, outline=(0, 0, 0, 220))
-        offset = (working - output) // 2
-        return rotated.crop((offset, offset, offset + output, offset + output))
+        return rotated
 
     def _interp_pos(self, ts: float) -> tuple[float, float]:
         """Return interpolated (px_x, px_y) at timestamp *ts* (seconds from track start).
