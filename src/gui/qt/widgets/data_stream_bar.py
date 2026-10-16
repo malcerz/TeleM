@@ -94,7 +94,10 @@ class FlowLayout(QLayout):
 
         for item in self._items:
             widget = item.widget()
-            if widget and not widget.isVisible():
+            # Skip only widgets the code hid explicitly.  Tiles rebuilt while the bar is
+            # visible are not "visible" yet (Qt shows layout children with a queued
+            # call); skipping them left the last tile (Mapa) at Qt's default 640x480.
+            if widget and widget.isHidden() and widget.testAttribute(Qt.WA_WState_ExplicitShowHide):
                 continue
             hint = item.sizeHint()
             item_w = hint.width()
