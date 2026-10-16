@@ -33,10 +33,42 @@ def test_gopro_hlg_is_hlg_full_range():
 
 @pytest.mark.parametrize("override", [
     {"color_transfer": "bt709"},                                    # 10-bit BT.2020 without HLG transfer
-    {"color_transfer": None},
+    {"color_transfer": None},                                       # missing color_transfer
+    {"color_transfer": "unknown"},
 ])
-def test_ten_bit_or_bt2020_alone_is_not_hdr(override):
-    assert clip(GOPRO_HLG, **override).kind == "sdr10"
+def test_ten_bit_or_bt2020_alone_is_not_hdr_and_is_refused(override):
+    # ETAP 5Z.3: never HLG without the transfer, and never silently SDR either.
+    info = clip(GOPRO_HLG, **override)
+    assert info.kind == "ambiguous"
+    s = summarize_sources([info])
+    with pytest.raises(HDRExportConfigError, match="Nie można jednoznacznie ustalić formatu HDR"):
+        resolve_native_pipeline(s, HDR_MODE_PRESERVE, "HEVC", 0x3, True)
+
+
+def test_ten_bit_bt709_sdr_stays_sdr():
+    dji10 = {**SDR8, "pix_fmt": "yuv420p10le", "profile": "Main 10"}
+    info = clip(dji10)
+    assert info.kind == "sdr10"
+    assert resolve_native_pipeline(summarize_sources([info]), HDR_MODE_PRESERVE, "HEVC", 0x3, True) == PIPELINE_SDR
+
+
+def test_ten_bit_without_transfer_is_ambiguous():
+    info = clip({**SDR8, "pix_fmt": "yuv420p10le", "color_transfer": None, "color_primaries": None,
+                 "color_space": None})
+    assert info.kind == "ambiguous" and "brak pól" in info.reason
+
+
+def test_eight_bit_without_tags_keeps_historical_sdr():
+    info = clip({**SDR8, "color_transfer": None, "color_primaries": None, "color_space": None, "color_range": None})
+    assert info.kind == "sdr8"
+
+
+@pytest.mark.parametrize("pix_fmt", [None, "none", "unknown"])
+def test_unknown_bit_depth_is_unknown_and_refused(pix_fmt):
+    info = clip(GOPRO_HLG, pix_fmt=pix_fmt)
+    assert info.kind == "unknown"
+    with pytest.raises(HDRExportConfigError, match="Nie można jednoznacznie"):
+        resolve_native_pipeline(summarize_sources([info]), HDR_MODE_TONEMAP, "HEVC", 0x3, None)
 
 
 def test_sdr8():
@@ -89,10 +121,64 @@ def test_sdr_source_always_uses_unchanged_pipeline():
     assert resolve_native_pipeline(s, HDR_MODE_PRESERVE, "HEVC", 0, None) == PIPELINE_SDR
 
 
-def test_unreadable_colour_metadata_keeps_sdr_pipeline():
-    from src.ffmpeg.hdr_color import VideoColorInfo
-    s = summarize_sources([VideoColorInfo(path="x.mp4", kind="unknown", reason="ffprobe failed")])
-    assert resolve_native_pipeline(s, HDR_MODE_PRESERVE, "HEVC", 0, None) == PIPELINE_SDR
+def test_ffprobe_failure_is_not_sdr(monkeypatch):
+    """ffprobe error -> UNKNOWN -> export refused (fail-closed), with one retry."""
+    import subprocess
+    from src.ffmpeg import hdr_color
+    calls = []
+
+    class R:
+        returncode, stdout, stderr = 1, "", "Invalid data found when processing input"
+
+    monkeypatch.setattr(hdr_color.subprocess, "run", lambda *a, **k: calls.append(1) or R())
+    s = hdr_color.classify_sources(["broken.mp4"], "ffmpeg.exe")
+    assert len(calls) == 2                                   # one retry
+    assert s.kind == "unknown" and "Invalid data" in s.error
+    with pytest.raises(HDRExportConfigError, match="Nie można jednoznacznie"):
+        resolve_native_pipeline(s, HDR_MODE_PRESERVE, "HEVC", 0x3, True)
+
+
+def test_ffprobe_timeout_is_not_sdr(monkeypatch):
+    import subprocess
+    from src.ffmpeg import hdr_color
+
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="ffprobe", timeout=30)
+
+    monkeypatch.setattr(hdr_color.subprocess, "run", boom)
+    s = hdr_color.classify_sources(["slow.mp4"], "ffmpeg.exe")
+    assert s.kind == "unknown" and "TimeoutExpired" in s.error
+
+
+def test_ffprobe_failure_uses_existing_reliable_probe(monkeypatch):
+    from src.ffmpeg import hdr_color
+
+    class R:
+        returncode, stdout, stderr = 1, "", "boom"
+
+    monkeypatch.setattr(hdr_color.subprocess, "run", lambda *a, **k: R())
+    s = hdr_color.classify_sources(["a.mp4"], "ffmpeg.exe", {"a.mp4": (GOPRO_HLG, 180)})
+    assert s.is_hlg and "istniejący probe" in s.clips[0].reason
+
+
+def test_corrupted_file_real_ffprobe(tmp_path):
+    from src.ffmpeg import hdr_color
+    bad = tmp_path / "corrupt.mp4"
+    bad.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\xde\xad" * 4000)
+    ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
+    if not ffmpeg.with_name("ffprobe.exe").exists():
+        pytest.skip("ffprobe.exe not available")
+    s = hdr_color.classify_sources([str(bad)], str(ffmpeg))
+    assert s.kind == "unknown" and s.error.startswith("Nie można jednoznacznie")
+
+
+def test_two_segments_with_different_hdr_metadata_refused():
+    a = clip(GOPRO_HLG, "a.mp4")
+    b = clip(GOPRO_HLG, "b.mp4", color_transfer=None)          # second clip lost its transfer
+    s = summarize_sources([a, b])
+    assert s.error and s.kind == "ambiguous"
+    with pytest.raises(HDRExportConfigError):
+        resolve_native_pipeline(s, HDR_MODE_PRESERVE, "HEVC", 0x3, True)
 
 
 def test_hlg_pipelines_selected():

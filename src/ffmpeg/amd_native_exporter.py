@@ -2923,7 +2923,14 @@ def export_amd_native_d3d11(
         HDRExportConfigError, PIPELINE_ENV, PIPELINE_HLG_PRESERVE, PIPELINE_SDR,
         classify_sources, normalize_hdr_mode, resolve_native_pipeline,
     )
-    color_summary = classify_sources([str(p) for p in input_files], ffmpeg_exe)
+    # ETAP 5Z.3: the exporter's own complete probe of the first clip is a reliable
+    # fallback if the colour probe fails; an unreadable clip is refused, never SDR.
+    _fallback_streams = {}
+    for _stream in input_probe.get("streams", []):
+        if _stream.get("codec_type") == "video":
+            _fallback_streams[str(input_files[0])] = (_stream, source_rotation)
+            break
+    color_summary = classify_sources([str(p) for p in input_files], ffmpeg_exe, _fallback_streams)
     for _clip in color_summary.clips:
         print(f"[AMD HDR] source {_clip.summary()} reason={_clip.reason}", flush=True)
     dll_color_features = 0

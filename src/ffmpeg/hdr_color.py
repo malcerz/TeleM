@@ -42,6 +42,14 @@ KIND_PQ = "pq"
 KIND_AMBIGUOUS = "ambiguous"
 KIND_UNKNOWN = "unknown"
 
+# Message shown when the colour format cannot be established reliably (fail-closed).
+UNCERTAIN_HDR_MESSAGE = ("Nie można jednoznacznie ustalić formatu HDR nagrania. "
+                         "Eksport wstrzymany, aby uniknąć nieprawidłowych kolorów.")
+# SDR transfer characteristics (ffprobe names).  BT.2020 SDR transfers are not
+# accepted: they are wide-gamut, which the SDR pipeline does not convert.
+SDR_TRANSFERS = {"bt709", "smpte170m", "bt470bg", "bt470m", "smpte240m", "iec61966-2-1",
+                 "iec61966-2-4", "bt1361e", "gamma22", "gamma28"}
+
 # Native colour pipeline values (AMD_NATIVE_COLOR_PIPELINE / telem_amd_get_color_pipeline).
 PIPELINE_SDR = 0
 PIPELINE_HLG_TO_SDR = 1
@@ -117,6 +125,8 @@ def _bit_depth(pix_fmt: str, bits_raw: Any) -> int:
     except (TypeError, ValueError):
         pass
     pf = (pix_fmt or "").lower()
+    if pf in ("none", "unknown"):
+        return 0
     for depth in (16, 12, 10):
         if f"p{depth}" in pf or pf.startswith(f"p0{depth}") or f"{depth}le" in pf or f"{depth}be" in pf:
             return depth
@@ -142,7 +152,15 @@ def classify_stream(stream: dict[str, Any], path: str = "", rotation: int = 0) -
     info.rotation = int(rotation) % 360
 
     transfer = info.color_transfer
-    if transfer == "arib-std-b67":
+    missing = [name for name, value in (("color_transfer", transfer), ("color_primaries", info.color_primaries),
+                                        ("color_space", info.color_space), ("color_range", info.color_range))
+               if not value or value == "unknown"]
+    missing_txt = f" (brak pól: {', '.join(missing)})" if missing else ""
+    wide_gamut = info.color_primaries == "bt2020" or info.color_space.startswith("bt2020")
+    if not info.pix_fmt or info.bit_depth <= 0:
+        info.kind = KIND_UNKNOWN
+        info.reason = f"nieznana głębia bitowa (pix_fmt={info.pix_fmt or 'brak'}){missing_txt}"
+    elif transfer == "arib-std-b67":
         problems = []
         if info.bit_depth < 10:
             problems.append(f"głębia {info.bit_depth}-bit")
@@ -161,12 +179,19 @@ def classify_stream(stream: dict[str, Any], path: str = "", rotation: int = 0) -
     elif transfer == "smpte2084":
         info.kind = KIND_PQ
         info.reason = "color_transfer=smpte2084 (PQ/HDR10)"
-    elif not info.pix_fmt:
-        info.kind = KIND_UNKNOWN
-        info.reason = "brak strumienia wideo lub pix_fmt"
+    elif wide_gamut:
+        # BT.2020 without an HDR transfer: SDR wide-gamut or mislabelled HDR.  The SDR
+        # pipeline would read it as BT.709, so it is refused instead of guessed.
+        info.kind = KIND_AMBIGUOUS
+        info.reason = (f"BT.2020 bez transferu HDR (transfer={transfer or 'brak'}, primaries="
+                       f"{info.color_primaries or 'brak'}, macierz={info.color_space or 'brak'}){missing_txt}")
+    elif info.bit_depth >= 10 and transfer not in SDR_TRANSFERS:
+        info.kind = KIND_AMBIGUOUS
+        info.reason = f"{info.bit_depth}-bit bez rozpoznanego transferu (transfer={transfer or 'brak'}){missing_txt}"
     else:
+        # 8-bit without HDR signalling keeps the historical SDR classification.
         info.kind = KIND_SDR10 if info.bit_depth >= 10 else KIND_SDR8
-        info.reason = f"transfer={transfer or 'brak'} (nie HDR)"
+        info.reason = f"transfer={transfer or 'brak'} (SDR){missing_txt}"
     return info
 
 
@@ -179,7 +204,18 @@ def _ffprobe_path(ffmpeg_exe: Optional[str]) -> str:
     return name
 
 
-def probe_video_color(path: str | Path, ffmpeg_exe: Optional[str] = None, timeout: float = 30.0) -> VideoColorInfo:
+def probe_video_color(path: str | Path, ffmpeg_exe: Optional[str] = None, timeout: float = 30.0,
+                      attempts: int = 2) -> VideoColorInfo:
+    """ffprobe the first video stream; one retry on failure.  A failure is KIND_UNKNOWN, never SDR."""
+    info = VideoColorInfo(path=str(path), kind=KIND_UNKNOWN, reason="ffprobe: nie uruchomiono")
+    for _ in range(max(1, attempts)):
+        info = _probe_video_color_once(path, ffmpeg_exe, timeout)
+        if info.kind != KIND_UNKNOWN or not info.reason.startswith("ffprobe"):
+            return info
+    return info
+
+
+def _probe_video_color_once(path: str | Path, ffmpeg_exe: Optional[str], timeout: float) -> VideoColorInfo:
     cmd = [
         _ffprobe_path(ffmpeg_exe), "-v", "error", "-select_streams", "v:0", "-show_entries",
         "stream=codec_name,profile,pix_fmt,bits_per_raw_sample,width,height,avg_frame_rate,r_frame_rate,"
@@ -189,9 +225,12 @@ def probe_video_color(path: str | Path, ffmpeg_exe: Optional[str] = None, timeou
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        data = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
+        if result.returncode != 0:
+            return VideoColorInfo(path=str(path), kind=KIND_UNKNOWN,
+                                  reason=f"ffprobe: kod {result.returncode}: {(result.stderr or '').strip()[-200:]}")
+        data = json.loads(result.stdout or "{}")
     except Exception as exc:  # pragma: no cover - environment dependent
-        return VideoColorInfo(path=str(path), kind=KIND_UNKNOWN, reason=f"ffprobe: {exc}")
+        return VideoColorInfo(path=str(path), kind=KIND_UNKNOWN, reason=f"ffprobe: {type(exc).__name__}: {exc}")
     streams = data.get("streams") or []
     if not streams:
         return VideoColorInfo(path=str(path), kind=KIND_UNKNOWN, reason="ffprobe: brak strumienia wideo")
@@ -215,14 +254,15 @@ def summarize_sources(clips: Iterable[VideoColorInfo]) -> SourceColorSummary:
         return summary
     kinds = {c.kind for c in clips}
     names = lambda pred: ", ".join(Path(c.path).name for c in clips if pred(c))
+    if KIND_UNKNOWN in kinds:
+        bad = [c for c in clips if c.kind == KIND_UNKNOWN]
+        summary.kind = KIND_UNKNOWN
+        summary.error = f"{UNCERTAIN_HDR_MESSAGE} ({Path(bad[0].path).name}: {bad[0].reason})"
+        return summary
     if KIND_AMBIGUOUS in kinds:
         bad = [c for c in clips if c.kind == KIND_AMBIGUOUS]
         summary.kind = KIND_AMBIGUOUS
-        summary.error = f"Niejednoznaczne metadane koloru ({Path(bad[0].path).name}): {bad[0].reason}."
-        return summary
-    if KIND_UNKNOWN in kinds:
-        summary.kind = KIND_UNKNOWN
-        summary.error = f"Nie udało się odczytać parametrów koloru: {names(lambda c: c.kind == KIND_UNKNOWN)}."
+        summary.error = f"{UNCERTAIN_HDR_MESSAGE} ({Path(bad[0].path).name}: {bad[0].reason})"
         return summary
     if KIND_PQ in kinds:
         summary.kind = KIND_PQ
@@ -258,8 +298,24 @@ def summarize_sources(clips: Iterable[VideoColorInfo]) -> SourceColorSummary:
     return summary
 
 
-def classify_sources(paths: Iterable[str | Path], ffmpeg_exe: Optional[str] = None) -> SourceColorSummary:
-    return summarize_sources(probe_video_color(p, ffmpeg_exe) for p in paths)
+def classify_sources(
+    paths: Iterable[str | Path],
+    ffmpeg_exe: Optional[str] = None,
+    fallback_streams: Optional[dict[str, tuple[dict[str, Any], int]]] = None,
+) -> SourceColorSummary:
+    """Classify every segment.  When ffprobe fails for a file, an already existing,
+    complete probe of the same file (``fallback_streams[path] = (stream, rotation)``)
+    is used instead; otherwise the clip stays UNKNOWN and the export is refused."""
+    clips = []
+    for p in paths:
+        info = probe_video_color(p, ffmpeg_exe)
+        fallback = (fallback_streams or {}).get(str(p))
+        if info.kind == KIND_UNKNOWN and info.reason.startswith("ffprobe") and fallback:
+            alt = classify_stream(fallback[0], str(p), fallback[1])
+            alt.reason = f"{alt.reason} [źródło: istniejący probe eksportera; {info.reason}]"
+            info = alt
+        clips.append(info)
+    return summarize_sources(clips)
 
 
 class HDRExportConfigError(RuntimeError):
@@ -279,10 +335,6 @@ def resolve_native_pipeline(
     without the ETAP 5Z.2 exports).  ``main10_supported`` is the result of the
     real Main10 encode probe (None = not probed).
     """
-    if summary.kind == KIND_UNKNOWN:
-        # Colour metadata unreadable (no HDR evidence): keep the unchanged SDR
-        # pipeline exactly as before ETAP 5Z.2; decode errors surface later as usual.
-        return PIPELINE_SDR
     if summary.error:
         raise HDRExportConfigError(summary.error)
     if summary.kind != KIND_HLG:

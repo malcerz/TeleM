@@ -28,6 +28,18 @@ from src.ffmpeg.amd_native_exporter import (
 from tests.test_amd_direct_mp4_mux import install_mux_popen
 
 
+@pytest.fixture(autouse=True)
+def _confirmed_sdr_colour_probe(monkeypatch):
+    """ETAP 5Z.3: HDR classification is fail-closed (unreadable media is refused).
+    These lifecycle tests use fake media, so the colour probe reports confirmed SDR."""
+    from src.ffmpeg import hdr_color
+
+    monkeypatch.setattr(hdr_color, "probe_video_color", lambda path, *a, **k: hdr_color.classify_stream(
+        {"codec_name": "hevc", "pix_fmt": "yuv420p", "color_transfer": "bt709", "color_primaries": "bt709",
+         "color_space": "bt709", "color_range": "tv", "width": 3840, "height": 2160,
+         "avg_frame_rate": "30000/1001"}, str(path)))
+
+
 @pytest.mark.parametrize("mode,codecs,maps", [
     ("concat_filter", ["-c:a", "aac"], ["-map", "[aout]"]),
     ("copy", ["-c:a", "aac"], ["-map", "1:a"]),

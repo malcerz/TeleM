@@ -4137,12 +4137,15 @@ class RenderTab(QWidget):
         error = str(self._source_color_summary.get("error") or "")
         is_hlg = kind == "hlg" and not error
         self.widget_hdr_mode.setVisible(is_hlg)
-        if error and kind in ("hlg", "pq", "mixed", "ambiguous"):
+        if error and kind in ("hlg", "pq", "mixed", "ambiguous", "unknown"):
             self.lbl_hdr_source_info.setText(f"HDR: {error}")
             self.lbl_hdr_source_info.setVisible(True)
         elif is_hlg:
             rng = "pełny zakres" if self._source_color_summary.get("full_range") else "zakres ograniczony"
-            self.lbl_hdr_source_info.setText(f"Wykryto materiał HLG HDR (BT.2020, 10-bit, {rng}).")
+            self.lbl_hdr_source_info.setText(
+                f"Wykryto materiał HLG HDR (BT.2020, 10-bit, {rng}). "
+                "Podgląd w trakcie eksportu „Zachowaj HDR” pokazuje dane HLG bez mapowania tonów, "
+                "więc na monitorze SDR kolory i jasność mogą wyglądać inaczej niż na ekranie HDR.")
             self.lbl_hdr_source_info.setVisible(True)
         else:
             self.lbl_hdr_source_info.setText("")

@@ -29,6 +29,18 @@ from src.ffmpeg.gpmf_export import InlineGpmfPlan
 
 
 @pytest.fixture(autouse=True)
+def _confirmed_sdr_colour_probe(monkeypatch):
+    """ETAP 5Z.3: HDR classification is fail-closed (unreadable media is refused).
+    These lifecycle tests use fake media, so the colour probe reports confirmed SDR."""
+    from src.ffmpeg import hdr_color
+
+    monkeypatch.setattr(hdr_color, "probe_video_color", lambda path, *a, **k: hdr_color.classify_stream(
+        {"codec_name": "hevc", "pix_fmt": "yuv420p", "color_transfer": "bt709", "color_primaries": "bt709",
+         "color_space": "bt709", "color_range": "tv", "width": 3840, "height": 2160,
+         "avg_frame_rate": "30000/1001"}, str(path)))
+
+
+@pytest.fixture(autouse=True)
 def isolated_mux_platform(monkeypatch, request):
     """Unit mocks must never open OS named pipes or probe dummy media."""
     import ctypes
