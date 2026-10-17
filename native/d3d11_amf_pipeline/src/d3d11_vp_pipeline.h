@@ -122,6 +122,10 @@ public:
     bool GetMapRotateMode() const { return m_mapRotateEnabled; }
     void SetMapHeading(float headingDeg) { m_mapHeadingDeg = headingDeg; }
     float GetMapHeading() const { return m_mapHeadingDeg; }
+    void SetMapPitch(float pitchDeg, const float* invMatrix3x3 = nullptr);
+    bool GetMapPitchEnabled() const { return m_mapPitchEnabled; }
+    float GetMapPitchDeg() const { return m_mapPitchDeg; }
+    const float* GetMapPitchInvMatrix() const { return m_mapPitchInvM; }
     bool UpdateMapMarkerTexture(UINT width, UINT height, const uint8_t* rgbaData, UINT stride, UINT dstX, UINT dstY);
     void ReleaseMapMarkerResources();
     // ETAP 8U-B: Map GPU Path mode: 0 = DIRECT_AUTO (default), 1 = REFERENCE (two-pass), 2 = DIRECT_1TO1 (direct)
@@ -526,6 +530,9 @@ private:
     char m_mapDumpPath[512] = { 0 };
     bool m_mapRotateEnabled = false;
     float m_mapHeadingDeg = 0.0f;
+    bool m_mapPitchEnabled = false;
+    float m_mapPitchDeg = 0.0f;
+    float m_mapPitchInvM[9] = { 1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f };
     ID3D11Texture2D* m_mapMarkerTexture = nullptr;
     ID3D11ShaderResourceView* m_mapMarkerSRV = nullptr;
     UINT m_mapMarkerW = 0;

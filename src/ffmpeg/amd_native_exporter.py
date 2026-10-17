@@ -2603,14 +2603,17 @@ def export_amd_native_d3d11(
         )
 
     gpu_map_rotate_flag = _env_flag("AMD_GPU_MAP_ROTATE", True)
+    gpu_map_pitch_flag = _env_flag("AMD_NATIVE_MAP_GPU_PITCH", False)
     map_source_reuse_enabled = _env_flag("AMD_MAP_SOURCE_REUSE", False)
     map_cfg = layout.get("indicators", {}).get("track_map", {})
     is_track_up = str(map_cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
-    has_pitch = float(map_cfg.get("pitch", 0.0) or 0.0) > 0.001
-    gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up and not has_pitch
+    pitch_val = float(map_cfg.get("pitch", 0.0) or 0.0)
+    has_pitch = pitch_val > 0.001
+    gpu_map_pitch = False
+    gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up and (not has_pitch or gpu_map_pitch_flag)
     print(
-        f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} "
-        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}, pitch={map_cfg.get('pitch', 0.0)}) | "
+        f"[AMD NATIVE D3D11] AMD_GPU_MAP_ROTATE (initial): {1 if gpu_map_rotate else 0} "
+        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}, pitch={pitch_val}, gpu_pitch_flag={gpu_map_pitch_flag}) | "
         f"AMD_MAP_SOURCE_REUSE: {1 if map_source_reuse_enabled else 0}",
         flush=True,
     )
@@ -3134,6 +3137,49 @@ def export_amd_native_d3d11(
 
     native_dll.telem_amd_get_map_resample.restype = c_int
     native_dll.telem_amd_get_map_resample.argtypes = [c_void_p, POINTER(c_uint8), c_uint]
+
+    has_map_pitch = hasattr(native_dll, "telem_amd_set_map_pitch")
+    if has_map_pitch:
+        native_dll.telem_amd_set_map_pitch.restype = c_int
+        native_dll.telem_amd_set_map_pitch.argtypes = [c_void_p, c_float, POINTER(c_float)]
+    if hasattr(native_dll, "telem_amd_get_map_pitch_enabled"):
+        native_dll.telem_amd_get_map_pitch_enabled.restype = c_int
+        native_dll.telem_amd_get_map_pitch_enabled.argtypes = [c_void_p]
+    if hasattr(native_dll, "telem_amd_has_map_pitch"):
+        native_dll.telem_amd_has_map_pitch.restype = c_int
+        native_dll.telem_amd_has_map_pitch.argtypes = []
+
+    dll_pitch_supported = bool(has_map_pitch and (not hasattr(native_dll, "telem_amd_has_map_pitch") or native_dll.telem_amd_has_map_pitch() == 1))
+    pitch_fallback_reason = None
+    if has_pitch:
+        if not gpu_map_pitch_flag:
+            pitch_fallback_reason = "AMD_NATIVE_MAP_GPU_PITCH environment flag is OFF"
+            gpu_map_pitch = False
+        elif not dll_pitch_supported:
+            pitch_fallback_reason = "DLL capability check failed (telem_amd_set_map_pitch not exported)"
+            gpu_map_pitch = False
+        elif not gpu_map_enabled:
+            pitch_fallback_reason = "GPU map is disabled"
+            gpu_map_pitch = False
+        else:
+            gpu_map_pitch = True
+            pitch_fallback_reason = None
+    else:
+        gpu_map_pitch = False
+
+    if gpu_map_pitch:
+        gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up
+    else:
+        gpu_map_rotate = gpu_map_enabled and gpu_map_rotate_flag and is_track_up and not has_pitch
+
+    print(
+        f"[AMD NATIVE D3D11] GPU Map Pitch: requested={1 if gpu_map_pitch_flag else 0}, "
+        f"applied={1 if gpu_map_pitch else 0}, DLL features=(telem_amd_set_map_pitch={1 if dll_pitch_supported else 0}), "
+        f"fallback_reason={pitch_fallback_reason or 'NONE'} | "
+        f"AMD_GPU_MAP_ROTATE: {1 if gpu_map_rotate else 0} "
+        f"(flag={gpu_map_rotate_flag} [{'env' if 'AMD_GPU_MAP_ROTATE' in os.environ else 'default'}], track_up={is_track_up}, pitch={pitch_val})",
+        flush=True,
+    )
 
     # ── ETAP 5J / 5K — GPU chart compositing ───────────────────────────
     native_dll.telem_amd_set_chart_mode.restype = c_int
@@ -4135,13 +4181,41 @@ def export_amd_native_d3d11(
             marker_style = str(map_cfg.get("map_marker_style", "dot")).strip().lower()
             marker_color = _parse_marker_color(map_cfg.get("marker_color", "#FFFFFF"))
             marker_radius = max(1, int(round(float(map_cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"]))))
-            mkr_tile, mkr_rect = build_static_map_marker_tile(map_w_cfg, marker_radius, marker_style, marker_color)
-            if mkr_tile is not None:
-                mkr_bytes = mkr_tile.tobytes("raw", "RGBA")
-                mx, my, mw, mh = mkr_rect
-                native_dll.telem_amd_update_map_marker(h_context, mkr_bytes, mw, mh, mw * 4, mx, my)
+            if not gpu_map_pitch:
+                mkr_tile, mkr_rect = build_static_map_marker_tile(map_w_cfg, marker_radius, marker_style, marker_color)
+                if mkr_tile is not None:
+                    mkr_bytes = mkr_tile.tobytes("raw", "RGBA")
+                    mx, my, mw, mh = mkr_rect
+                    native_dll.telem_amd_update_map_marker(h_context, mkr_bytes, mw, mh, mw * 4, mx, my)
         else:
             native_dll.telem_amd_set_map_rotate_mode(h_context, 0)
+
+        if gpu_map_pitch:
+            raw_map_w_cfg = s(map_cfg.get("size", 0.1), video_width)
+            map_w_cfg = _quantize_map_val(int(raw_map_w_cfg), os.environ.get("AMD_MAP_ALIGN", "1"))
+            from src.indicators.helpers import _get_map_pitch_transforms
+            cv2_M, pil_coeffs, _ = _get_map_pitch_transforms(map_w_cfg, map_w_cfg, pitch_val)
+            if pil_coeffs is not None and len(pil_coeffs) >= 8:
+                inv_m = [
+                    float(pil_coeffs[0]), float(pil_coeffs[1]), float(pil_coeffs[2]),
+                    float(pil_coeffs[3]), float(pil_coeffs[4]), float(pil_coeffs[5]),
+                    float(pil_coeffs[6]), float(pil_coeffs[7]), 1.0,
+                ]
+                inv_arr = (c_float * 9)(*inv_m)
+                native_dll.telem_amd_set_map_pitch(h_context, c_float(pitch_val), inv_arr)
+            else:
+                native_dll.telem_amd_set_map_pitch(h_context, c_float(pitch_val), None)
+            print(
+                f"[AMD NATIVE D3D11] GPU Map Pitch configured: pitch={pitch_val:.1f} deg, "
+                f"dst_size={map_w_cfg}x{map_w_cfg}",
+                flush=True,
+            )
+        else:
+            if hasattr(native_dll, "telem_amd_set_map_pitch"):
+                native_dll.telem_amd_set_map_pitch(h_context, c_float(0.0), None)
+    else:
+        if hasattr(native_dll, "telem_amd_set_map_pitch"):
+            native_dll.telem_amd_set_map_pitch(h_context, c_float(0.0), None)
 
     # ── ETAP 5J / 5K: GPU chart compositing (0 = CPU_REFERENCE, 1 = GPU,
     # 2 = GPU_SPLIT) ───────────────────────────────────────────────────
@@ -5953,12 +6027,14 @@ def export_amd_native_d3d11(
                     video_width, video_height, layout, "track_map",
                     gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
                     map_heading=frame_kwargs.get("map_heading"),
+                    apply_pitch=(not gpu_map_pitch),
                 )
             else:
                 map_img, map_dst = render_map_working_image(
                     video_width, video_height, layout, "track_map",
                     gps_track, target_dt=c_dt, current_position=frame_kwargs.get("current_position"),
                     map_heading=frame_kwargs.get("map_heading"), apply_style=False,
+                    apply_pitch=(not gpu_map_pitch),
                 )
             if map_img is not None and map_dst is not None:
                 last_map_img_out = map_img
@@ -8376,7 +8452,12 @@ def export_amd_native_d3d11(
                 (map_uploaded_bytes_total / max(1, map_gpu_frames)) / (1024.0 * 1024.0)
                 if map_gpu_frames else 0.0
             ),
-            "map_cpu_upload_ms": _value_summary(map_upload_times) if map_upload_times else None,
+            "map_upload_ms": _value_summary(map_upload_times) if map_upload_times else None,
+            "map_gpu_pitch_requested": bool(gpu_map_pitch_flag),
+            "map_gpu_pitch_used": bool(gpu_map_pitch),
+            "map_gpu_pitch_degrees": pitch_val if gpu_map_pitch else 0.0,
+            "map_cpu_rotate_bypassed": bool(gpu_map_rotate and is_track_up),
+            "map_cpu_pitch_bypassed": bool(gpu_map_pitch and has_pitch),
             "map_ab_readback": map_ab_readback,
             "map_ab": (
                 {key: _value_summary(values) for key, values in map_ab_results.items()}

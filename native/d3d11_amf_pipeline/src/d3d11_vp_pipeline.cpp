@@ -2205,7 +2205,10 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
             uint srcW; uint srcH;
             uint dstW; uint dstH;
             uint filter; uint rotateEnabled;
-            float rotAngleRad; float pad;
+            float rotAngleRad; uint pitchEnabled;
+            float m00; float m01; float m02; float pad0;
+            float m10; float m11; float m12; float pad1;
+            float m20; float m21; float m22; float pad2;
         };
 
         float Sinc(float x) {
@@ -2227,19 +2230,32 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
         [numthreads(16, 16, 1)]
         void CSMain(uint3 tid : SV_DispatchThreadID) {
             if (tid.x >= dstW || tid.y >= dstH) return;
+            float u, v;
+            if (pitchEnabled != 0) {
+                float px = float(tid.x) + 0.5;
+                float py = float(tid.y) + 0.5;
+                float denom = m20 * px + m21 * py + m22;
+                float invDenom = abs(denom) > 1e-7 ? (1.0 / denom) : 1.0;
+                u = (m00 * px + m01 * py + m02) * invDenom;
+                v = (m10 * px + m11 * py + m12) * invDenom;
+            } else {
+                u = float(tid.x) + 0.5;
+                v = float(tid.y) + 0.5;
+            }
+
             float cx, cy;
             if (rotateEnabled != 0) {
-                float dx = (float(tid.x) + 0.5) - (float(dstW) * 0.5);
-                float dy = (float(tid.y) + 0.5) - (float(dstH) * 0.5);
+                float dx = u - (float(dstW) * 0.5);
+                float dy = v - (float(dstH) * 0.5);
                 float cosA = cos(rotAngleRad);
                 float sinA = sin(rotAngleRad);
-                cx = (float(srcW) * 0.5) + (cosA * dx + sinA * dy) - 0.5;
-                cy = (float(srcH) * 0.5) + (-sinA * dx + cosA * dy) - 0.5;
+                cx = (float(srcW) * 0.5) + (cosA * dx - sinA * dy) - 0.5;
+                cy = (float(srcH) * 0.5) + (sinA * dx + cosA * dy) - 0.5;
             } else {
                 float scaleX = float(srcW) / float(dstW);
                 float scaleY = float(srcH) / float(dstH);
-                cx = (tid.x + 0.5) * scaleX - 0.5;
-                cy = (tid.y + 0.5) * scaleY - 0.5;
+                cx = u * scaleX - 0.5;
+                cy = v * scaleY - 0.5;
             }
 
             int baseX, baseY, taps;
@@ -2258,16 +2274,21 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
                 else if (filter == 1) wy = CatmullRom(cy - iy);
                 else wy = Lanczos3(cy - iy);
                 if (abs(wy) < 1e-6) continue;
+                int clampIy = (pitchEnabled != 0) ? clamp(iy, 0, (int)srcH - 1) : iy;
+                if (pitchEnabled == 0 && (iy < 0 || iy >= (int)srcH)) continue;
+
                 for (int dx = 0; dx < taps; ++dx) {
                     int ix = baseX + dx;
-                    if (ix < 0 || ix >= (int)srcW || iy < 0 || iy >= (int)srcH) continue;
                     float wx;
                     if (filter == 0) wx = 1.0 - abs(cx - ix);
                     else if (filter == 1) wx = CatmullRom(cx - ix);
                     else wx = Lanczos3(cx - ix);
                     if (abs(wx) < 1e-6) continue;
+                    int clampIx = (pitchEnabled != 0) ? clamp(ix, 0, (int)srcW - 1) : ix;
+                    if (pitchEnabled == 0 && (ix < 0 || ix >= (int)srcW)) continue;
+
                     float w = wx * wy;
-                    float4 s = MapTexture.Load(int3(ix, iy, 0));
+                    float4 s = MapTexture.Load(int3(clampIx, clampIy, 0));
                     premulRgb += s.rgb * s.a * w;
                     alphaAcc += s.a * w;
                     wsum += w;
@@ -2354,7 +2375,7 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
     if (FAILED(hr)) return false;
 
     D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = 32;  // ResampleCB: 6 uint32 + 2 float
+    cbDesc.ByteWidth = 80;  // ResampleCB: 5 * 16 bytes (srcW..dstH, filter..pitchEnabled, m00..m22)
     cbDesc.Usage = D3D11_USAGE_DEFAULT;
     cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     hr = m_device->CreateBuffer(&cbDesc, nullptr, &m_mapResampleCB);
@@ -2392,8 +2413,11 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
                 uint dstW; uint dstH;
                 uint dstX; uint dstY;
                 uint filter; uint rotateEnabled;
-                float rotAngleRad; float pad0;
-                float pad1; float pad2;
+                float rotAngleRad; uint pitchEnabled;
+                float pad0; float pad1;
+                float m00; float m01; float m02; float pad2;
+                float m10; float m11; float m12; float pad3;
+                float m20; float m21; float m22; float pad4;
             };
 
             float Sinc(float x) {
@@ -2417,19 +2441,32 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
         src += R"(
             void CSMain(uint3 tid : SV_DispatchThreadID) {
                 if (tid.x >= dstW || tid.y >= dstH) return;
+                float u, v;
+                if (pitchEnabled != 0) {
+                    float px = float(tid.x) + 0.5;
+                    float py = float(tid.y) + 0.5;
+                    float denom = m20 * px + m21 * py + m22;
+                    float invDenom = abs(denom) > 1e-7 ? (1.0 / denom) : 1.0;
+                    u = (m00 * px + m01 * py + m02) * invDenom;
+                    v = (m10 * px + m11 * py + m12) * invDenom;
+                } else {
+                    u = float(tid.x) + 0.5;
+                    v = float(tid.y) + 0.5;
+                }
+
                 float cx, cy;
                 if (rotateEnabled != 0) {
-                    float dx = (float(tid.x) + 0.5) - (float(dstW) * 0.5);
-                    float dy = (float(tid.y) + 0.5) - (float(dstH) * 0.5);
+                    float dx = u - (float(dstW) * 0.5);
+                    float dy = v - (float(dstH) * 0.5);
                     float cosA = cos(rotAngleRad);
                     float sinA = sin(rotAngleRad);
-                    cx = (float(srcW) * 0.5) + (cosA * dx + sinA * dy) - 0.5;
-                    cy = (float(srcH) * 0.5) + (-sinA * dx + cosA * dy) - 0.5;
+                    cx = (float(srcW) * 0.5) + (cosA * dx - sinA * dy) - 0.5;
+                    cy = (float(srcH) * 0.5) + (sinA * dx + cosA * dy) - 0.5;
                 } else {
                     float scaleX = float(srcW) / float(dstW);
                     float scaleY = float(srcH) / float(dstH);
-                    cx = (tid.x + 0.5) * scaleX - 0.5;
-                    cy = (tid.y + 0.5) * scaleY - 0.5;
+                    cx = u * scaleX - 0.5;
+                    cy = v * scaleY - 0.5;
                 }
 
                 int baseX, baseY, taps;
@@ -2447,16 +2484,21 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
                     else if (filter == 1) wy = CatmullRom(cy - iy);
                     else wy = Lanczos3(cy - iy);
                     if (abs(wy) < 1e-6) continue;
+                    int clampIy = (pitchEnabled != 0) ? clamp(iy, 0, (int)srcH - 1) : iy;
+                    if (pitchEnabled == 0 && (iy < 0 || iy >= (int)srcH)) continue;
+
                     for (int dx = 0; dx < taps; ++dx) {
                         int ix = baseX + dx;
-                        if (ix < 0 || ix >= (int)srcW || iy < 0 || iy >= (int)srcH) continue;
                         float wx;
                         if (filter == 0) wx = 1.0 - abs(cx - ix);
                         else if (filter == 1) wx = CatmullRom(cx - ix);
                         else wx = Lanczos3(cx - ix);
                         if (abs(wx) < 1e-6) continue;
+                        int clampIx = (pitchEnabled != 0) ? clamp(ix, 0, (int)srcW - 1) : ix;
+                        if (pitchEnabled == 0 && (ix < 0 || ix >= (int)srcW)) continue;
+
                         float w = wx * wy;
-                        float4 s = MapTexture.Load(int3(ix, iy, 0));
+                        float4 s = MapTexture.Load(int3(clampIx, clampIy, 0));
                         premulRgb += s.rgb * s.a * w;
                         alphaAcc += s.a * w;
                         wsum += w;
@@ -2505,7 +2547,7 @@ bool D3D11VideoProcessorPipeline::InitializeMapCompositor() {
     if (!compileFused(16, 16, &m_mapFusedShader)) return false;
     if (!compileFused(8, 8, &m_mapFused8x8Shader)) return false;
 
-    cbDesc.ByteWidth = 48; // MapFusedCB: 8 uint32 + 4 float
+    cbDesc.ByteWidth = 96; // MapFusedCB: 6 * 16 bytes
     hr = m_device->CreateBuffer(&cbDesc, nullptr, &m_mapFusedCB);
     if (FAILED(hr)) return false;
 
@@ -2699,6 +2741,49 @@ void D3D11VideoProcessorPipeline::SetMapFilter(int filter) {
     m_mapFilter = filter;
 }
 
+void D3D11VideoProcessorPipeline::SetMapPitch(float pitchDeg, const float* invMatrix3x3) {
+    if (pitchDeg <= 0.001f) {
+        m_mapPitchEnabled = false;
+        m_mapPitchDeg = 0.0f;
+        std::memset(m_mapPitchInvM, 0, sizeof(m_mapPitchInvM));
+        m_mapPitchInvM[0] = 1.0f;
+        m_mapPitchInvM[4] = 1.0f;
+        m_mapPitchInvM[8] = 1.0f;
+        return;
+    }
+    m_mapPitchEnabled = true;
+    m_mapPitchDeg = pitchDeg;
+    if (invMatrix3x3) {
+        std::memcpy(m_mapPitchInvM, invMatrix3x3, sizeof(m_mapPitchInvM));
+    } else {
+        float w = (float)m_mapOutW;
+        float h = (float)m_mapOutH;
+        if (w <= 0.0f || h <= 0.0f) return;
+        float p = (std::min)(70.0f, (std::max)(0.0f, pitchDeg));
+        float d = 1.2f * (std::max)(w, h);
+        float theta = p * 3.14159265358979323846f / 180.0f;
+        float sin_t = std::sin(theta);
+        float cos_t = std::cos(theta);
+
+        float z_top = d + h * sin_t;
+        float w_top = w * (d / z_top);
+        float x_tl = (w - w_top) / 2.0f;
+        float x_tr = (w + w_top) / 2.0f;
+        float dy_top = (h * d * cos_t) / z_top;
+        float y_top = h - dy_top;
+
+        float sx = w / (std::max)(1e-6f, x_tr - x_tl);
+        float sy = h / (std::max)(1e-6f, h - y_top);
+
+        float m01 = (x_tl * sx) / h;
+        float m11 = sy;
+        float m21 = (sy - 1.0f) / h;
+        m_mapPitchInvM[0] = 1.0f; m_mapPitchInvM[1] = m01;  m_mapPitchInvM[2] = 0.0f;
+        m_mapPitchInvM[3] = 0.0f; m_mapPitchInvM[4] = m11;  m_mapPitchInvM[5] = 0.0f;
+        m_mapPitchInvM[6] = 0.0f; m_mapPitchInvM[7] = m21;  m_mapPitchInvM[8] = 1.0f;
+    }
+}
+
 bool D3D11VideoProcessorPipeline::UpdateMapTexture(
     UINT width, UINT height, const uint8_t* rgbaData, UINT stride,
     size_t* uploadedBytes, bool* textureCreated) {
@@ -2791,8 +2876,8 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         return true;  // nothing to do — not an error
     }
 
-    // ETAP 8U-B: Fast-path Direct 1:1 GPU Blend (only if GPU rotation is not active)
-    bool useDirect1to1 = (!m_mapRotateEnabled) &&
+    // ETAP 8U-B: Fast-path Direct 1:1 GPU Blend (only if GPU rotation and pitch are not active)
+    bool useDirect1to1 = (!m_mapRotateEnabled) && (!m_mapPitchEnabled) &&
                          ((m_mapGpuPath == 2) ||
                           (m_mapGpuPath == 0 && m_mapSrcW == m_mapOutW && m_mapSrcH == m_mapOutH));
     m_mapDirectUsed = useDirect1to1;
@@ -2840,14 +2925,29 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
         const auto fusedStart = std::chrono::high_resolution_clock::now();
         float rotRad = (m_mapRotateEnabled ? (m_mapHeadingDeg * 3.14159265358979323846f / 180.0f) : 0.0f);
 
-        struct {
+        struct MapFusedCBLayout {
             UINT srcW, srcH, dstW, dstH;
             UINT dstX, dstY, filter, rotateEnabled;
-            float rotAngleRad, pad0, pad1, pad2;
+            float rotAngleRad; UINT pitchEnabled; float pad0, pad1;
+            float m00, m01, m02, pad2;
+            float m10, m11, m12, pad3;
+            float m20, m21, m22, pad4;
         } fusedCB = {
             m_mapSrcW, m_mapSrcH, m_mapOutW, m_mapOutH,
             m_mapDstX, m_mapDstY, (UINT)m_mapFilter, m_mapRotateEnabled ? 1u : 0u,
-            rotRad, 0.0f, 0.0f, 0.0f
+            rotRad, m_mapPitchEnabled ? 1u : 0u, 0.0f, 0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[0] : 1.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[1] : 0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[2] : 0.0f,
+            0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[3] : 0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[4] : 1.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[5] : 0.0f,
+            0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[6] : 0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[7] : 0.0f,
+            m_mapPitchEnabled ? m_mapPitchInvM[8] : 1.0f,
+            0.0f
         };
         m_context->UpdateSubresource(m_mapFusedCB, 0, nullptr, &fusedCB, 0, 0);
 
@@ -2930,13 +3030,28 @@ bool D3D11VideoProcessorPipeline::ResampleAndBlendMap(
 
     // Pass 1: unrotated working image -> rotated Track-Up / resampled RGBA
     float rotRad = (m_mapRotateEnabled ? (m_mapHeadingDeg * 3.14159265358979323846f / 180.0f) : 0.0f);
-    struct {
-        UINT srcW, srcH, dstW, dstH, filter, rotateEnabled;
-        float rotAngleRad, pad;
+    struct ResampleCBLayout {
+        UINT srcW, srcH, dstW, dstH;
+        UINT filter, rotateEnabled; float rotAngleRad; UINT pitchEnabled;
+        float m00, m01, m02, pad0;
+        float m10, m11, m12, pad1;
+        float m20, m21, m22, pad2;
     } resampleCB = {
         m_mapSrcW, m_mapSrcH, m_mapOutW, m_mapOutH,
         (UINT)m_mapFilter, m_mapRotateEnabled ? 1u : 0u,
-        rotRad, 0.0f
+        rotRad, m_mapPitchEnabled ? 1u : 0u,
+        m_mapPitchEnabled ? m_mapPitchInvM[0] : 1.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[1] : 0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[2] : 0.0f,
+        0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[3] : 0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[4] : 1.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[5] : 0.0f,
+        0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[6] : 0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[7] : 0.0f,
+        m_mapPitchEnabled ? m_mapPitchInvM[8] : 1.0f,
+        0.0f
     };
     m_context->UpdateSubresource(m_mapResampleCB, 0, nullptr, &resampleCB, 0, 0);
     m_context->CSSetShader(m_mapResampleShader, nullptr, 0);

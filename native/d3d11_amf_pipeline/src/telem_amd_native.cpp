@@ -779,6 +779,23 @@ TELEM_EXPORT int telem_amd_set_map_heading(void* handle, float headingDeg) {
     return 1;
 }
 
+TELEM_EXPORT int telem_amd_set_map_pitch(void* handle, float pitchDeg, const float* invMatrix3x3) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    ctx->vpPipeline.SetMapPitch(pitchDeg, invMatrix3x3);
+    return 1;
+}
+
+TELEM_EXPORT int telem_amd_get_map_pitch_enabled(void* handle) {
+    if (!handle) return 0;
+    TelemAMDContext* ctx = (TelemAMDContext*)handle;
+    return ctx->vpPipeline.GetMapPitchEnabled() ? 1 : 0;
+}
+
+TELEM_EXPORT int telem_amd_has_map_pitch() {
+    return 1;
+}
+
 TELEM_EXPORT int telem_amd_update_map_marker(
     void* handle, const uint8_t* pRGBA, UINT width, UINT height, UINT stride,
     UINT dstX, UINT dstY) {

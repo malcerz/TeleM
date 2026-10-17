@@ -145,6 +145,7 @@ def render_map_working_image(
     current_position=None,
     map_heading=None,
     apply_style=True,
+    apply_pitch: bool = True,
 ):
     """Render the map working image (692x692 for 4K) WITHOUT the final Pillow
     LANCZOS resize, using the same render plan/renderer semantics as the
@@ -244,7 +245,8 @@ def render_map_working_image(
             )
         renderer._is_first_render = False
         # Pitch first (fills the map box), then the selected shape/border on the final image.
-        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
+        if apply_pitch:
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         if apply_style:
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                       cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
@@ -316,6 +318,7 @@ def render_map_unrotated_working_image(
     target_dt=None,
     current_position=None,
     map_heading=None,
+    apply_pitch: bool = True,
 ):
     """Render the UNROTATED working map image (e.g. 978x978 for 4K) on CPU for GPU Track-Up.
 
@@ -401,24 +404,31 @@ def render_map_unrotated_working_image(
         dl_missing = getattr(renderer, '_is_first_render', False) and is_map_network_allowed()
         draw_track = not bool(cfg.get("hide_track", False))
         angle = track_up_rotation_degrees(map_heading)
-        if angle == 0.0:
+        if angle == 0.0 and apply_pitch:
             render_w = map_w
             draw_marker = not bool(cfg.get("hide_marker", False))
             heading_val = 0.0
+            marker_heading = 0.0 if map_heading is not None else None
         else:
             render_w = working_size
-            draw_marker = not bool(cfg.get("hide_marker", False)) and marker_style != "directional"
-            heading_val = float(map_heading)
+            if not apply_pitch and marker_style == "directional":
+                draw_marker = not bool(cfg.get("hide_marker", False))
+                marker_heading = map_heading if map_heading is not None else 0.0
+            else:
+                draw_marker = not bool(cfg.get("hide_marker", False)) and marker_style != "directional"
+                marker_heading = 0.0 if map_heading is not None else None
+            heading_val = float(map_heading) if map_heading is not None else 0.0
 
         map_img = renderer.render(
             ts, render_w, render_w,
             download_missing=dl_missing,
             draw_track=draw_track,
             draw_marker=draw_marker,
-            heading=(0.0 if map_heading is not None else None),
+            heading=marker_heading,
         )
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-        map_img = apply_map_pitch(map_img, cfg.get("pitch"))
+        if apply_pitch:
+            map_img = apply_map_pitch(map_img, cfg.get("pitch"))
         renderer._is_first_render = False
         crop_key = getattr(renderer, "_last_crop_key", None)
         if map_img is not None and crop_key is not None:
