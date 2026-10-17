@@ -1,0 +1,834 @@
+[
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\effect_profile\\runs\\C_user_full_hud_01.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\effect_profile\\runs\\C_user_full_hud_01.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\effect_profile_final\\runs\\C_user_full_hud_01.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\effect_profile_final\\runs\\C_user_full_hud_01.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_01.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_01.mp4",
+    "size_bytes": 432318012,
+    "size_mb": 412.29,
+    "sha256": "814C503782F808FCF860B4B77EC9F6B87C86AEBE8A13D43FFA8AD84E501B5BF6",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_02.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_02.mp4",
+    "size_bytes": 432318012,
+    "size_mb": 412.29,
+    "sha256": "814C503782F808FCF860B4B77EC9F6B87C86AEBE8A13D43FFA8AD84E501B5BF6",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_03.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\A_effects_off_03.mp4",
+    "size_bytes": 432318012,
+    "size_mb": 412.29,
+    "sha256": "814C503782F808FCF860B4B77EC9F6B87C86AEBE8A13D43FFA8AD84E501B5BF6",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_01.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_01.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_02.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_02.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_03.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\B_effects_on_03.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_01.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_01.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_02.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_02.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_03.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\matrix\\runs\\C_user_full_hud_03.mp4",
+    "size_bytes": 426718196,
+    "size_mb": 406.95,
+    "sha256": "C032E8D23EEB2C6C4461A77246DF47BB38BB3FE70178612A4DF1EB9B9648B8F2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\runs\\smoke_full_user_hud.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4B_RESULTS_20261012\\runs\\smoke_full_user_hud.mp4",
+    "size_bytes": 46280297,
+    "size_mb": 44.14,
+    "sha256": "C2F117E3286F5D500C5D13E9A451696672C50F623329DC561D903140E02204C2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\A_all_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\A_all_with_effects_f300.mp4",
+    "size_bytes": 46352481,
+    "size_mb": 44.21,
+    "sha256": "7DF147632E3EC5671ECF9848B3EC6CCE38333AA08884A14F21EE816487FD4DC2",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\A_all_with_effects_f3000.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\A_all_with_effects_f3000.mp4",
+    "size_bytes": 427644249,
+    "size_mb": 407.83,
+    "sha256": "312BDCD85D54B53178A95ACB086C715BF45582947CD7E214A305CF2506284DC8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\B_all_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\B_all_no_effects_f300.mp4",
+    "size_bytes": 46617012,
+    "size_mb": 44.46,
+    "sha256": "49E40F3AA2D092E40A31D63C97CC87F45F95A778BDA32E67DC56022651F81C6E",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\B_all_no_effects_f3000.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\B_all_no_effects_f3000.mp4",
+    "size_bytes": 432238651,
+    "size_mb": 412.21,
+    "sha256": "47BA1025CFE4695E0118ABC41D8FBA94ACF4D77CA48E11D408DAF0C9D7B2ADDC",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f100.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f100.mp4",
+    "size_bytes": 13456463,
+    "size_mb": 12.83,
+    "sha256": "10F95CA9399151309105E9639CC1162B5343EDA995797305F9FBB64D19AF2820",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f300.mp4",
+    "size_bytes": 39491207,
+    "size_mb": 37.66,
+    "sha256": "632256841C8C2E4D1DCDCD5DAC237186D880EA4C5F7723189ABDC5C45FD137D7",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f3000.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\C_text_only_f3000.mp4",
+    "size_bytes": 375443185,
+    "size_mb": 358.05,
+    "sha256": "A4D3A989C71B6E4BFE1722E670DDA48FFDF06B4733BE6362FF445060473FF64E",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_alt_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_alt_text_no_effects_f300.mp4",
+    "size_bytes": 39216901,
+    "size_mb": 37.4,
+    "sha256": "E8B9C395E0A965996D238B48C9CFADD5E7D59D9827D837CA6E609C5C923D611A",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_compass_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_compass_no_effects_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_cadence_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_cadence_text_no_effects_f300.mp4",
+    "size_bytes": 39638831,
+    "size_mb": 37.8,
+    "sha256": "1B21E59FB758EBC32BD349D752913E3E6DD25562C37CD3AD6B4AF1600ED996CE",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_curVpower_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_curVpower_text_no_effects_f300.mp4",
+    "size_bytes": 39254492,
+    "size_mb": 37.44,
+    "sha256": "48626B698D957AFDB1D78653D19D4EDA83E496FF141E038C44F9D55E4058B280",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_distance_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_distance_text_no_effects_f300.mp4",
+    "size_bytes": 39080865,
+    "size_mb": 37.27,
+    "sha256": "4D98BA77B58FC3A9E58E390DDC3AA165F8E6DD2825B61AC82488F5DEC4EE2FC9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_garmin_battery_percent_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_garmin_battery_percent_text_no_effects_f300.mp4",
+    "size_bytes": 39044661,
+    "size_mb": 37.24,
+    "sha256": "389C30E24ACF5CD3D3DDFC461ED0BB3D8E5D846714EA2DAC239FC5C91EC004BC",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_heart_rate_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_heart_rate_text_no_effects_f300.mp4",
+    "size_bytes": 39976751,
+    "size_mb": 38.12,
+    "sha256": "94EACD2975E3BBC9843B1F9BC612DBE1E3E3FF8484EEAF6E8843B83500E610C6",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_solar_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_solar_text_no_effects_f300.mp4",
+    "size_bytes": 39078258,
+    "size_mb": 37.27,
+    "sha256": "436BA0DA2F564EFC065C45D62BEEDEE545BE3FAE6ADE884D489B3A7DFDE00BD8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_temperature_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_fit_temperature_text_no_effects_f300.mp4",
+    "size_bytes": 39596722,
+    "size_mb": 37.76,
+    "sha256": "4FC2C4AEAE3EB8F65AD633140B6F95C42C68B22A49340B4F10DFBCA9554AD2A0",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_lean_indicator_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_lean_indicator_no_effects_f300.mp4",
+    "size_bytes": 38954035,
+    "size_mb": 37.15,
+    "sha256": "88FE66AF614FFB87BEEE148FEC1BBB96259B3D8345C5D42B79C775BA2FC506C8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_speed_text_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_speed_text_no_effects_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_track_map_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\D_track_map_no_effects_f300.mp4",
+    "size_bytes": 41038539,
+    "size_mb": 39.14,
+    "sha256": "57289F9286F4AD2C0FFDD5FA55F057A241E5D05D132358B8CF848FA1BCAD7DEF",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_alt_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_alt_text_with_effects_f300.mp4",
+    "size_bytes": 39164162,
+    "size_mb": 37.35,
+    "sha256": "C149FBF71530353A14AB48B0D62238263AAA1FB7D1140FEBC02FAFEA70C640E1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_compass_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_compass_with_effects_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_cadence_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_cadence_text_with_effects_f300.mp4",
+    "size_bytes": 39493073,
+    "size_mb": 37.66,
+    "sha256": "4C2C70C0F77136E0205FBE929B430BE48B0D75710DCF692EB628E49D579F503C",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_curVpower_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_curVpower_text_with_effects_f300.mp4",
+    "size_bytes": 39167950,
+    "size_mb": 37.35,
+    "sha256": "3FCC5FB06B37D40FBD881FF5FBCB53EE9EF6DE04A561ED6783501A9E99F820DF",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_distance_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_distance_text_with_effects_f300.mp4",
+    "size_bytes": 39075587,
+    "size_mb": 37.27,
+    "sha256": "6888AB423277F508D663EED7728515492C9272A7A7A2F40A1025C076107E9A03",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_garmin_battery_percent_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_garmin_battery_percent_text_with_effects_f300.mp4",
+    "size_bytes": 38986308,
+    "size_mb": 37.18,
+    "sha256": "DCEB43E43FB4CF0409F0DC36895A2B95325E8594E1D484BEF507BDAD8D7BA31E",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_heart_rate_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_heart_rate_text_with_effects_f300.mp4",
+    "size_bytes": 39808942,
+    "size_mb": 37.96,
+    "sha256": "3F3C42B06537EF186FA5A757C376690409DAE2A46D9A23D22AE1FAA7CF43024B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_solar_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_solar_text_with_effects_f300.mp4",
+    "size_bytes": 39058070,
+    "size_mb": 37.25,
+    "sha256": "1C7A421D5E037D827A94C5E3880FF8975F9E1E99937F304C106639BB2D48D535",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_temperature_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_fit_temperature_text_with_effects_f300.mp4",
+    "size_bytes": 39572095,
+    "size_mb": 37.74,
+    "sha256": "FA52A47A9B8115674464F10939B8439C9D54223BBC3B5882AFDA99D7BCC4DD56",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_lean_indicator_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_lean_indicator_with_effects_f300.mp4",
+    "size_bytes": 38954035,
+    "size_mb": 37.15,
+    "sha256": "88FE66AF614FFB87BEEE148FEC1BBB96259B3D8345C5D42B79C775BA2FC506C8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_speed_text_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_speed_text_with_effects_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_track_map_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\E_track_map_with_effects_f300.mp4",
+    "size_bytes": 41038539,
+    "size_mb": 39.14,
+    "sha256": "57289F9286F4AD2C0FFDD5FA55F057A241E5D05D132358B8CF848FA1BCAD7DEF",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\F_graphical_no_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\F_graphical_no_effects_f300.mp4",
+    "size_bytes": 46076734,
+    "size_mb": 43.94,
+    "sha256": "F7BE3F95889B7E70BFFF171C918FB4F9B0C287645E4898F30EB9A04D6CBC0242",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\G_graphical_with_effects_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\G_graphical_with_effects_f300.mp4",
+    "size_bytes": 45502384,
+    "size_mb": 43.39,
+    "sha256": "1DD3D3183AF415F8FDB7E606023D9F4B7B795CC3D56A6733E4157C596D9F606F",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_alt_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_alt_text_outline_only_f300.mp4",
+    "size_bytes": 38910371,
+    "size_mb": 37.11,
+    "sha256": "25303F0198CDBF39DA3A756633D1A384ED88AD682A42F4C709CD34EA6D30C98D",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_compass_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_compass_outline_only_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_cadence_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_cadence_text_outline_only_f300.mp4",
+    "size_bytes": 39493073,
+    "size_mb": 37.66,
+    "sha256": "4C2C70C0F77136E0205FBE929B430BE48B0D75710DCF692EB628E49D579F503C",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_curVpower_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_curVpower_text_outline_only_f300.mp4",
+    "size_bytes": 39082264,
+    "size_mb": 37.27,
+    "sha256": "8E918B71DFB7DA3A949C973ED4CFD35DB67AD6AF851DC0D9EB006BC6CD6E069F",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_distance_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_distance_text_outline_only_f300.mp4",
+    "size_bytes": 39081795,
+    "size_mb": 37.27,
+    "sha256": "8F54B9B61CCEAED889F6E1F880E537E3E81392D5846259B9CFC7CC6103335079",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_garmin_battery_percent_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_garmin_battery_percent_text_outline_only_f300.mp4",
+    "size_bytes": 38885886,
+    "size_mb": 37.08,
+    "sha256": "E2988403FD030B8F1D57222D591F641BB730D4E3ED432B90D47F532819DADE8E",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_heart_rate_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_heart_rate_text_outline_only_f300.mp4",
+    "size_bytes": 39808942,
+    "size_mb": 37.96,
+    "sha256": "3F3C42B06537EF186FA5A757C376690409DAE2A46D9A23D22AE1FAA7CF43024B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_solar_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_solar_text_outline_only_f300.mp4",
+    "size_bytes": 38922588,
+    "size_mb": 37.12,
+    "sha256": "336841EC5F83AE5109E2F07D1722986BC06FE1FE1372BB24890386BA1CFBE23F",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_temperature_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_fit_temperature_text_outline_only_f300.mp4",
+    "size_bytes": 39080088,
+    "size_mb": 37.27,
+    "sha256": "2B37A2292B12009E1791B14FA9618F512D533451E1B7131A3EF1E782EC51089C",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_lean_indicator_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_lean_indicator_outline_only_f300.mp4",
+    "size_bytes": 38954035,
+    "size_mb": 37.15,
+    "sha256": "88FE66AF614FFB87BEEE148FEC1BBB96259B3D8345C5D42B79C775BA2FC506C8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_speed_text_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_speed_text_outline_only_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_track_map_outline_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\O_track_map_outline_only_f300.mp4",
+    "size_bytes": 41038539,
+    "size_mb": 39.14,
+    "sha256": "57289F9286F4AD2C0FFDD5FA55F057A241E5D05D132358B8CF848FA1BCAD7DEF",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_alt_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_alt_text_shadow_only_f300.mp4",
+    "size_bytes": 39264694,
+    "size_mb": 37.45,
+    "sha256": "8A373AD80DC5CECB7AB7625F0C327D8AEB1B6DF5E4FB5FAB1EB55B246BE8A703",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_compass_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_compass_shadow_only_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_cadence_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_cadence_text_shadow_only_f300.mp4",
+    "size_bytes": 39638831,
+    "size_mb": 37.8,
+    "sha256": "1B21E59FB758EBC32BD349D752913E3E6DD25562C37CD3AD6B4AF1600ED996CE",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_curVpower_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_curVpower_text_shadow_only_f300.mp4",
+    "size_bytes": 39286361,
+    "size_mb": 37.47,
+    "sha256": "792B2CE083CB5B4F930EF5A7F5836F4EA54C8D27C44E28B5EB9ABADD8F8A2DE4",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_distance_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_distance_text_shadow_only_f300.mp4",
+    "size_bytes": 39094669,
+    "size_mb": 37.28,
+    "sha256": "AFAFD7710B19F1E4B91EC791FB36C8D8260FA771287253B9B0FBD45F941A0AB5",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_garmin_battery_percent_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_garmin_battery_percent_text_shadow_only_f300.mp4",
+    "size_bytes": 39049737,
+    "size_mb": 37.24,
+    "sha256": "D0B496EDA1695728FB3316D00B7D9E872D99FD049D1C0B449053551350160907",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_heart_rate_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_heart_rate_text_shadow_only_f300.mp4",
+    "size_bytes": 39976751,
+    "size_mb": 38.12,
+    "sha256": "94EACD2975E3BBC9843B1F9BC612DBE1E3E3FF8484EEAF6E8843B83500E610C6",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_solar_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_solar_text_shadow_only_f300.mp4",
+    "size_bytes": 39118288,
+    "size_mb": 37.31,
+    "sha256": "C9D3104643E551B2E695ED6DB5936E90CFAE0E45DD277BE5B3DC1D9600B1CDD0",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_temperature_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_fit_temperature_text_shadow_only_f300.mp4",
+    "size_bytes": 39671276,
+    "size_mb": 37.83,
+    "sha256": "2AD0154BB867ADF8E87DDFE31FFA15D046B864B715FFD59605EFF12E04EB8B9C",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_lean_indicator_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_lean_indicator_shadow_only_f300.mp4",
+    "size_bytes": 38954035,
+    "size_mb": 37.15,
+    "sha256": "88FE66AF614FFB87BEEE148FEC1BBB96259B3D8345C5D42B79C775BA2FC506C8",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_speed_text_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_speed_text_shadow_only_f300.mp4",
+    "size_bytes": 38867858,
+    "size_mb": 37.07,
+    "sha256": "44C9C9687CFF975E2098128A4FE6ECCCFA0945223631672DD64136261A0DD476",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_track_map_shadow_only_f300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_4E_RESULTS_20261012\\matrix\\runs\\S_track_map_shadow_only_f300.mp4",
+    "size_bytes": 41038539,
+    "size_mb": 39.14,
+    "sha256": "57289F9286F4AD2C0FFDD5FA55F057A241E5D05D132358B8CF848FA1BCAD7DEF",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_A_300_opt.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_A_300_opt.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_A_300_opt2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_A_300_opt2.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_test_300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_test_300.mp4",
+    "size_bytes": 46354272,
+    "size_mb": 44.21,
+    "sha256": "7AA23C97295191E013F121F931C61EF6A92E69E39AB33E9700A300ABE4BADAB9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_test_300_opt.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\out_test_300_opt.mp4",
+    "size_bytes": 25911766,
+    "size_mb": 24.71,
+    "sha256": "A46E8D62BB147D8D7CECDEC2D9D7AB41E59644654603FE04344255EE1C051F05",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\smoke_etap5c.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5A_RESULTS_20261012\\smoke_etap5c.mp4",
+    "size_bytes": 8437388,
+    "size_mb": 8.05,
+    "sha256": "59EAD247E43F9F221D7F8D9BBA11E1ABC4DAFFDBA29A85B70C7FC098C897071B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "size_bytes": 427608544,
+    "size_mb": 407.8,
+    "sha256": "CE3D1DC0760F3B829070C1C5BE41E0B6D1906A646641139AF6AE44E588CFA21B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "size_bytes": 427608544,
+    "size_mb": 407.8,
+    "sha256": "CE3D1DC0760F3B829070C1C5BE41E0B6D1906A646641139AF6AE44E588CFA21B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "size_bytes": 427608544,
+    "size_mb": 407.8,
+    "sha256": "CE3D1DC0760F3B829070C1C5BE41E0B6D1906A646641139AF6AE44E588CFA21B",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\test_100\\test.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5D_RESULTS_20261012\\test_100\\test.mp4",
+    "size_bytes": 16576991,
+    "size_mb": 15.81,
+    "sha256": "F8329B117DED36460434DF2A4DE231A7724148BCBD3780E6AD7F67C8343F4DD1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_1.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_2.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\canonical_3000\\run_3.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\diagnostic_300\\diag_300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\diagnostic_300\\diag_300.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\diagnostic_300\\safe_diag_300.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5E_RESULTS_20261012\\diagnostic_300\\safe_diag_300.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5F_RESULTS_20261012\\canonical_4k\\etap5f_production_4k.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5F_RESULTS_20261012\\canonical_4k\\etap5f_production_4k.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run1\\etap5g_canonic_run1.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run1\\etap5g_canonic_run1.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run2\\etap5g_canonic_run2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run2\\etap5g_canonic_run2.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run3\\etap5g_canonic_run3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\canonic_4k_safe_production\\run3\\etap5g_canonic_run3.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\post_opt_test\\post_opt_q3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\post_opt_test\\post_opt_q3.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_A_async_q2\\var_A_async_q2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_A_async_q2\\var_A_async_q2.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_B_sync_q0\\var_B_sync_q0.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_B_sync_q0\\var_B_sync_q0.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_C_async_q1\\var_C_async_q1.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_C_async_q1\\var_C_async_q1.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_D_async_q2\\var_D_async_q2.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_D_async_q2\\var_D_async_q2.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_E_async_q3\\var_E_async_q3.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5G_RESULTS_20261012\\queue_matrix\\var_E_async_q3\\var_E_async_q3.mp4",
+    "size_bytes": 46376144,
+    "size_mb": 44.23,
+    "sha256": "E024764C2412056FCEF2E8B129AD01D33634E373CB30DE50B71DBDAC8319A6B9",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run1_3000f\\etap5h_canonical_run1_3000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run1_3000f\\etap5h_canonical_run1_3000f.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run2_3000f\\etap5h_canonical_run2_3000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run2_3000f\\etap5h_canonical_run2_3000f.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run3_3000f\\etap5h_canonical_run3_3000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\canonical_3000f\\etap5h_canonical_run3_3000f\\etap5h_canonical_run3_3000f.mp4",
+    "size_bytes": 427602378,
+    "size_mb": 407.79,
+    "sha256": "52A7FB20B5D2843DB99E044DF9CBA8F73BCC296FC7373821736DB477A9F353F1",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run1_q2_1000f\\run1_q2_1000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run1_q2_1000f\\run1_q2_1000f.mp4",
+    "size_bytes": 148300921,
+    "size_mb": 141.43,
+    "sha256": "AFA4D842C9FFF5F7A0AE42876F6184B596B2BC779F78EDB56575882AEED10184",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run2_q3_1000f\\run2_q3_1000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run2_q3_1000f\\run2_q3_1000f.mp4",
+    "size_bytes": 148300921,
+    "size_mb": 141.43,
+    "sha256": "AFA4D842C9FFF5F7A0AE42876F6184B596B2BC779F78EDB56575882AEED10184",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run3_q2_1000f\\run3_q2_1000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run3_q2_1000f\\run3_q2_1000f.mp4",
+    "size_bytes": 148300921,
+    "size_mb": 141.43,
+    "sha256": "AFA4D842C9FFF5F7A0AE42876F6184B596B2BC779F78EDB56575882AEED10184",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run4_q3_1000f\\run4_q3_1000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\run4_q3_1000f\\run4_q3_1000f.mp4",
+    "size_bytes": 148300921,
+    "size_mb": 141.43,
+    "sha256": "AFA4D842C9FFF5F7A0AE42876F6184B596B2BC779F78EDB56575882AEED10184",
+    "status": "DELETED"
+  },
+  {
+    "path": "C:\\_DEV\\_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\warmup_q2_1000f\\warmup_q2_1000f.mp4",
+    "relative_to_dev": "_SPORTCAMHUD_ETAP_5H_RESULTS_20261012\\matrix_1000f\\warmup_q2_1000f\\warmup_q2_1000f.mp4",
+    "size_bytes": 148300921,
+    "size_mb": 141.43,
+    "sha256": "AFA4D842C9FFF5F7A0AE42876F6184B596B2BC779F78EDB56575882AEED10184",
+    "status": "DELETED"
+  }
+]
