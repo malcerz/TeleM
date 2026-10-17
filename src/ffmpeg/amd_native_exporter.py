@@ -2603,7 +2603,7 @@ def export_amd_native_d3d11(
         )
 
     gpu_map_rotate_flag = _env_flag("AMD_GPU_MAP_ROTATE", True)
-    gpu_map_pitch_flag = _env_flag("AMD_NATIVE_MAP_GPU_PITCH", False)
+    gpu_map_pitch_flag = _env_flag("AMD_NATIVE_MAP_GPU_PITCH", True)
     map_source_reuse_enabled = _env_flag("AMD_MAP_SOURCE_REUSE", False)
     map_cfg = layout.get("indicators", {}).get("track_map", {})
     is_track_up = str(map_cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"

@@ -37,9 +37,9 @@ REPO = Path(__file__).resolve().parents[1]
 
 # Pinned production native builds (verified before copy).
 EXPECTED_SHA256 = {
-    # AMD Native D3D11/AMF, ABI 9: QP feedback, map style, HLG preserve (HEVC Main10) and
-    # HLG->SDR (ETAP 5Z.2), tone-mapped HLG export-preview tap (ETAP 5Z.4).
-    "runtime/amd/bin/telem_amd_native.dll": "e359d7784d2ff3d2b1aefb6cf56dc1ba3c38a67260fd8d87e27851ef0d55ee89",
+    # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), QP feedback,
+    # map style, HLG preserve (HEVC Main10) and HLG->SDR, tone-mapped HLG export-preview tap.
+    "runtime/amd/bin/telem_amd_native.dll": "bbca75fbd0dfc5d7cbb61922e92f8d5f049b4305dd18335315667e6e5e54ca5f",
     "runtime/intel/bin/telem_intel_native.dll": "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b",
 }
 FORBIDDEN_SHA256 = {
@@ -48,6 +48,7 @@ FORBIDDEN_SHA256 = {
     "6c43f398fbb1421c6dbb21928309f996e9967afea8040c2d42af6c72ba7f29ca",  # AMD DLL before map style
     "5ad042bb8f61db32af52df2a3ea1fdd77c40b253866ce28724c6fe01e4a3c0df",  # AMD DLL before HDR (ETAP 5Y)
     "2ceb50cc4d85343237f9aaf6634c7a2d93bb8de1375388166533d71227e0761e",  # AMD DLL 5Z.2, untone-mapped HDR preview
+    "e359d7784d2ff3d2b1aefb6cf56dc1ba3c38a67260fd8d87e27851ef0d55ee89",  # AMD DLL 5Z.4 before native GPU pitch
 }
 
 # Code/templates taken from the git commit.
