@@ -188,6 +188,62 @@ def iter_track_center_tiles(
     return cells
 
 
+def iter_route_tiles_chronological(
+    gps_track: list[tuple[datetime, float, float]],
+    zoom: int,
+    render_size: int,
+    start_ts: float = 0.0,
+    end_ts: float | None = None,
+    step_s: float = 1.0,
+) -> list[tuple[int, int, int]]:
+    """Return route tiles in chronological order of appearance along the GPS track.
+
+    Uses the exact position interpolation and tile footprint geometry as
+    ``MovingMapRenderer.render``, ensuring complete tile coverage from the
+    initial frame through the entire export window without omissions.
+    """
+    if not gps_track:
+        return []
+    renderer = MovingMapRenderer(gps_track, zoom=zoom)
+    dur = renderer._dur
+    s_ts = max(0.0, min(float(start_ts), dur))
+    e_ts = dur if end_ts is None else max(s_ts, min(float(end_ts), dur))
+
+    ordered: list[tuple[int, int, int]] = []
+    seen: set[tuple[int, int, int]] = set()
+
+    t = s_ts
+    last_cx: int | None = None
+    last_cy: int | None = None
+    step = max(0.1, float(step_s))
+
+    while t <= e_ts + 1e-6:
+        cpx, cpy = renderer._interp_pos(t)
+        cx, cy = int(cpx // TILE_SIZE), int(cpy // TILE_SIZE)
+        if last_cx is not None and (abs(cx - last_cx) > 1 or abs(cy - last_cy) > 1):
+            steps = max(abs(cx - last_cx), abs(cy - last_cy))
+            for st in range(1, steps):
+                icx = int(round(last_cx + (cx - last_cx) * (st / steps)))
+                icy = int(round(last_cy + (cy - last_cy) * (st / steps)))
+                tx1, tx2, ty1, ty2 = tile_range_for_center_tile(icx, icy, render_size, render_size)
+                for ty in range(ty1, ty2):
+                    for tx in range(tx1, tx2):
+                        tile = (zoom, tx, ty)
+                        if tile not in seen:
+                            seen.add(tile)
+                            ordered.append(tile)
+        last_cx, last_cy = cx, cy
+        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(cx, cy, render_size, render_size)
+        for ty in range(ty1, ty2):
+            for tx in range(tx1, tx2):
+                tile = (zoom, tx, ty)
+                if tile not in seen:
+                    seen.add(tile)
+                    ordered.append(tile)
+        t += step
+    return ordered
+
+
 # ── Tile Accounting & Network Policy ─────────────────────────────────────
 
 class MapTileStats:
@@ -319,7 +375,12 @@ class TileCache:
         d = cache_dir or Path.home() / ".telem_map_tiles"
         d.mkdir(parents=True, exist_ok=True)
         self._db = d / "tilecache.sqlite"
-        with sqlite3.connect(str(self._db)) as c:
+        with sqlite3.connect(str(self._db), timeout=10.0) as c:
+            try:
+                c.execute("PRAGMA journal_mode=WAL")
+                c.execute("PRAGMA busy_timeout=5000")
+            except Exception:
+                pass
             c.execute("CREATE TABLE IF NOT EXISTS tiles(z INT,x INT,y INT,"
                       "style TEXT,data BLOB,PRIMARY KEY(z,x,y,style))")
             c.commit()
@@ -331,12 +392,53 @@ class TileCache:
             if key in self._mem:
                 return True
         try:
-            with sqlite3.connect(str(self._db)) as c:
+            with sqlite3.connect(str(self._db), timeout=5.0) as c:
                 r = c.execute("SELECT 1 FROM tiles WHERE z=? AND x=? "
                               "AND y=? AND style=? LIMIT 1", key).fetchone()
                 return r is not None
         except Exception:
             return False
+
+    def has_many(
+        self,
+        tiles: list[tuple[int, int, int]] | set[tuple[int, int, int]],
+        style: str,
+    ) -> set[tuple[int, int, int]]:
+        """Fast batch check if multiple tiles (z, x, y) are present in memory or disk.
+
+        Returns a set of (z, x, y) tuples that exist in cache.
+        """
+        found: set[tuple[int, int, int]] = set()
+        if not tiles:
+            return found
+        missing_from_mem: list[tuple[int, int, int]] = []
+        with self._lock:
+            for t in tiles:
+                if (t[0], t[1], t[2], style) in self._mem:
+                    found.add(t)
+                else:
+                    missing_from_mem.append(t)
+
+        if not missing_from_mem:
+            return found
+
+        chunk_size = 200
+        try:
+            with sqlite3.connect(str(self._db), timeout=5.0) as c:
+                for i in range(0, len(missing_from_mem), chunk_size):
+                    chunk = missing_from_mem[i:i + chunk_size]
+                    placeholders = ','.join(['(?,?,?)'] * len(chunk))
+                    params: list[Any] = [style]
+                    for cz, cx, cy in chunk:
+                        params.extend([cz, cx, cy])
+                    q = f"SELECT z, x, y FROM tiles WHERE style=? AND (z, x, y) IN ({placeholders})"
+                    for rz, rx, ry in c.execute(q, params).fetchall():
+                        found.add((int(rz), int(rx), int(ry)))
+        except Exception:
+            for t in missing_from_mem:
+                if self.has(t[0], t[1], t[2], style):
+                    found.add(t)
+        return found
 
     def get(self, z, x, y, style) -> Image.Image | None:
         lookup_started = time.perf_counter()
@@ -472,6 +574,176 @@ def download_tile_shared(z: int, x: int, y: int, style: str) -> Image.Image | No
         return None
     cache.put(z, x, y, style, data)
     return img
+
+
+# ── RouteTilePrefetcher (Chronological streaming for export) ─────────────
+
+class RouteTilePrefetcher:
+    """Chronological background tile prefetcher for video export.
+
+    Downloads route tiles in chronological sequence while respecting fair-use rate limits.
+    Provides synchronous priority fetching on cache misses so frames never render blank tiles.
+    """
+    def __init__(
+        self,
+        tiles: list[tuple[int, int, int]],
+        style: str,
+        cache: TileCache | None = None,
+        cancel_event: Any = None,
+    ):
+        self._tiles = list(tiles)
+        self._style = style
+        self._cache = cache or get_shared_tile_cache()
+        self._cancel_event = cancel_event
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._priority_queue = deque()
+        self._priority_events: dict[tuple[int, int, int], threading.Event] = {}
+        self._thread: threading.Thread | None = None
+        self.downloaded_count = 0
+        self.priority_waits = 0
+        self.priority_wait_ms = 0.0
+        self._is_running = False
+
+    def start(self) -> None:
+        with self._lock:
+            if self._is_running:
+                return
+            self._is_running = True
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._run, name="RouteTilePrefetcher", daemon=True)
+            self._thread.start()
+
+    def stop(self, timeout: float = 2.0) -> None:
+        self._stop_event.set()
+        with self._lock:
+            for ev in list(self._priority_events.values()):
+                ev.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+        with self._lock:
+            self._is_running = False
+
+    def request_priority(self, z: int, x: int, y: int) -> threading.Event:
+        tile_key = (z, x, y)
+        with self._lock:
+            if tile_key not in self._priority_events:
+                self._priority_events[tile_key] = threading.Event()
+            if tile_key not in self._priority_queue:
+                self._priority_queue.appendleft(tile_key)
+            return self._priority_events[tile_key]
+
+    def wait_for_tile(self, z: int, x: int, y: int, timeout: float = 8.0) -> Image.Image | None:
+        t0 = time.perf_counter()
+        # Fast check if already in cache
+        cached = self._cache.get(z, x, y, self._style)
+        if cached is not None:
+            return cached
+
+        with self._lock:
+            self.priority_waits += 1
+
+        if self._is_running and not self._stop_event.is_set():
+            ev = self.request_priority(z, x, y)
+            ev.wait(timeout=timeout)
+            cached = self._cache.get(z, x, y, self._style)
+            if cached is not None:
+                with self._lock:
+                    self.priority_wait_ms += (time.perf_counter() - t0) * 1000.0
+                return cached
+
+        # Direct download fallback if event timed out or thread not running
+        d = _download_tile_raw(z, x, y, self._style)
+        if d:
+            self._cache.put(z, x, y, self._style, d)
+            with self._lock:
+                self.downloaded_count += 1
+                self.priority_wait_ms += (time.perf_counter() - t0) * 1000.0
+            return self._cache.get(z, x, y, self._style)
+
+        with self._lock:
+            self.priority_wait_ms += (time.perf_counter() - t0) * 1000.0
+        return None
+
+    def _run(self) -> None:
+        tile_idx = 0
+        total_tiles = len(self._tiles)
+        while not self._stop_event.is_set():
+            if self._cancel_event is not None and self._cancel_event.is_set():
+                break
+
+            target_tile = None
+            with self._lock:
+                if self._priority_queue:
+                    target_tile = self._priority_queue.popleft()
+
+            if target_tile is None:
+                if tile_idx < total_tiles:
+                    target_tile = self._tiles[tile_idx]
+                    tile_idx += 1
+                else:
+                    time.sleep(0.05)
+                    continue
+
+            z, x, y = target_tile
+            if self._cache.has(z, x, y, self._style):
+                with self._lock:
+                    ev = self._priority_events.pop((z, x, y), None)
+                    if ev:
+                        ev.set()
+                continue
+
+            data = _download_tile_raw(z, x, y, self._style)
+            if data:
+                self._cache.put(z, x, y, self._style, data)
+                with self._lock:
+                    self.downloaded_count += 1
+
+            with self._lock:
+                ev = self._priority_events.pop((z, x, y), None)
+                if ev:
+                    ev.set()
+
+    def get_stats(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "total_tiles": len(self._tiles),
+                "downloaded_count": self.downloaded_count,
+                "priority_waits": self.priority_waits,
+                "priority_wait_ms": round(self.priority_wait_ms, 2),
+                "is_running": self._is_running,
+            }
+
+
+_active_route_prefetcher: Optional[RouteTilePrefetcher] = None
+_prefetcher_lock = threading.Lock()
+
+
+def set_active_route_prefetcher(prefetcher: Optional[RouteTilePrefetcher]) -> None:
+    global _active_route_prefetcher
+    with _prefetcher_lock:
+        if _active_route_prefetcher is not None and _active_route_prefetcher is not prefetcher:
+            try:
+                _active_route_prefetcher.stop()
+            except Exception:
+                pass
+        _active_route_prefetcher = prefetcher
+
+
+def get_active_route_prefetcher() -> Optional[RouteTilePrefetcher]:
+    with _prefetcher_lock:
+        return _active_route_prefetcher
+
+
+def stop_active_route_prefetcher() -> None:
+    global _active_route_prefetcher
+    with _prefetcher_lock:
+        if _active_route_prefetcher is not None:
+            try:
+                _active_route_prefetcher.stop()
+            except Exception:
+                pass
+            _active_route_prefetcher = None
 
 
 def bounds_from_track(gps_track) -> tuple[float, float, float, float] | None:
@@ -765,16 +1037,20 @@ class MovingMapRenderer:
 
             # Fetch & paste tiles
             assemble_started = None
+            prefetcher = get_active_route_prefetcher()
             for ty in range(ty1, ty2):
                 for tx in range(tx1, tx2):
                     tile = self._cache.get(self._zoom, tx, ty, self._style)
                     if tile is None:
                         frame_cache_miss = True
                         if download_missing:
-                            d = _download_tile_raw(self._zoom, tx, ty, self._style)
-                            if d:
-                                self._cache.put(self._zoom, tx, ty, self._style, d)
-                                tile = self._cache.get(self._zoom, tx, ty, self._style)
+                            if prefetcher is not None:
+                                tile = prefetcher.wait_for_tile(self._zoom, tx, ty, timeout=8.0)
+                            else:
+                                d = _download_tile_raw(self._zoom, tx, ty, self._style)
+                                if d:
+                                    self._cache.put(self._zoom, tx, ty, self._style, d)
+                                    tile = self._cache.get(self._zoom, tx, ty, self._style)
                     if tile:
                         dx, dy = (tx - tx1) * TILE_SIZE, (ty - ty1) * TILE_SIZE
                         img.paste(tile, (dx, dy))

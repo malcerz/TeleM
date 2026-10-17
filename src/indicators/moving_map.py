@@ -54,10 +54,18 @@ def ensure_map_tiles_cached(
     gps_track: list | None = None,
     progress_cb: Any = None,
     cancel_event: Any = None,
+    start_time_s: float = 0.0,
+    duration_s: float | None = None,
+    initial_preload_seconds: float = 12.0,
 ) -> dict[str, Any]:
-    """Ensure 100% of required map tiles are present in cache before the render loop starts.
+    """Ensure map tiles are prepared for video export without multi-minute blocking.
 
-    Guarantees that during the frame loop, 0 HTTP network requests will be made.
+    Architecture:
+    1. Fast batch check (SQLite chunked IN, ~5ms) of route tiles in the export window.
+    2. Synchronously pre-download only the startup fragment (~25-35 tiles, ~3-4s) before frame 0.
+    3. Launch RouteTilePrefetcher in the background to stream subsequent tiles in chronological
+       route order while rendering.
+    4. Controlled priority wait on any uncached tile so grey patches are NEVER rendered.
     """
     if not gps_track or len(gps_track) < 2:
         return {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
@@ -66,9 +74,10 @@ def ensure_map_tiles_cached(
     if not cfg or not cfg.get("enabled", True):
         return {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
 
+    import time
     from src.moving_map import (
-        _download_tile_raw, get_shared_tile_cache, iter_track_center_tiles,
-        tile_range_for_center_tile, track_up_working_size,
+        _download_tile_raw, get_shared_tile_cache, iter_route_tiles_chronological,
+        track_up_working_size, RouteTilePrefetcher, set_active_route_prefetcher,
     )
     raw_map_w = s(cfg.get("size", 0.1), canvas_w)
     # AMD's aligned working raster may be a few pixels larger than the normal
@@ -84,54 +93,82 @@ def ensure_map_tiles_cached(
     render_size = track_up_working_size(map_w) if is_track_up else map_w
     margin = map_required_tile_margin(canvas_w, map_w, is_track_up)
 
-    needed: set[tuple[int, int, int]] = set()
-    for tx, ty in iter_track_center_tiles(gps_track, effective_zoom):
-        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(
-            tx, ty, render_size, render_size,
-        )
-        for tile_y in range(ty1, ty2):
-            for tile_x in range(tx1, tx2):
-                needed.add((effective_zoom, tile_x, tile_y))
+    dur_total = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp()) if hasattr(gps_track[0][0], "timestamp") else 0.0
+    s_ts = max(0.0, float(start_time_s))
+    e_ts = dur_total if duration_s is None or duration_s <= 0 else min(dur_total, s_ts + float(duration_s))
 
+    # 1. Full export window route tiles in chronological order
+    route_tiles = iter_route_tiles_chronological(
+        gps_track, effective_zoom, render_size, start_ts=s_ts, end_ts=e_ts,
+    )
+    total_route_tiles = len(route_tiles)
+
+    # 2. Startup fragment (startup window from s_ts)
+    startup_e_ts = min(e_ts, s_ts + max(1.0, float(initial_preload_seconds)))
+    startup_tiles = iter_route_tiles_chronological(
+        gps_track, effective_zoom, render_size, start_ts=s_ts, end_ts=startup_e_ts,
+    )
+
+    # 3. Fast batch cache check
+    t_chk0 = time.perf_counter()
     cache = get_shared_tile_cache()
-    missing: list[tuple[int, int, int]] = []
-    cached_count = 0
-    for z, x, y in needed:
-        if cache.has(z, x, y, map_style):
-            cached_count += 1
-        else:
-            missing.append((z, x, y))
+    cached_set = cache.has_many(route_tiles, map_style)
+    cache_check_ms = (time.perf_counter() - t_chk0) * 1000.0
 
-    total = len(needed)
-    downloaded = 0
-    if missing:
+    cached_count = len(cached_set)
+    missing_route = [t for t in route_tiles if t not in cached_set]
+    startup_missing = [t for t in startup_tiles if t not in cached_set]
+
+    # 4. Synchronously pre-download startup fragment before frame 0
+    initial_downloaded = 0
+    t_pre0 = time.perf_counter()
+    if startup_missing:
         print(
-            f"[Map Preload] Pre-caching {len(missing)}/{total} missing tiles "
-            f"(provider={map_style}, zoom={effective_zoom}, render_size={render_size})...",
+            f"[Map Preload] Pre-caching startup fragment: {len(startup_missing)}/{len(startup_tiles)} tiles "
+            f"(export window: {len(missing_route)}/{total_route_tiles} missing, provider={map_style}, zoom={effective_zoom})...",
             flush=True,
         )
-        for i, (z, x, y) in enumerate(missing, 1):
+        for i, (z, x, y) in enumerate(startup_missing, 1):
             if cancel_event is not None and cancel_event.is_set():
                 break
             d = _download_tile_raw(z, x, y, map_style)
             if d:
                 cache.put(z, x, y, map_style, d)
-                downloaded += 1
+                initial_downloaded += 1
+                cached_set.add((z, x, y))
             if progress_cb is not None:
                 try:
-                    progress_cb(cached_count + downloaded, total, f"Preload mapy: {cached_count + downloaded}/{total}")
+                    progress_cb(i, len(startup_missing), f"Preload mapy: {i}/{len(startup_missing)}")
                 except Exception:
                     pass
+    initial_preload_ms = (time.perf_counter() - t_pre0) * 1000.0
+
+    # 5. Remaining tiles for background prefetcher
+    remaining_missing = [t for t in missing_route if t not in cached_set]
+    prefetcher = None
+    if remaining_missing:
+        print(
+            f"[Map Streaming] Spawning RouteTilePrefetcher for {len(remaining_missing)} upcoming tiles...",
+            flush=True,
+        )
+        prefetcher = RouteTilePrefetcher(remaining_missing, map_style, cache=cache, cancel_event=cancel_event)
+        set_active_route_prefetcher(prefetcher)
+        prefetcher.start()
+    else:
+        set_active_route_prefetcher(None)
 
     return {
-        "required": total,
+        "required": total_route_tiles,
         "cached": cached_count,
-        "downloaded": downloaded,
-        "missing": len(missing) - downloaded,
+        "downloaded": initial_downloaded,
+        "missing": len(remaining_missing),
+        "cache_check_ms": round(cache_check_ms, 2),
+        "initial_preload_ms": round(initial_preload_ms, 2),
         "provider": map_style,
         "zoom": effective_zoom,
         "margin": margin,
         "render_size": render_size,
+        "prefetcher": prefetcher,
     }
 
 
@@ -208,7 +245,9 @@ def render_map_working_image(
             renderer._is_first_render = True
             is_track_up = str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up"
             margin = map_required_tile_margin(canvas_w, map_w, is_track_up)
-            renderer.background_precache(margin=margin, zooms=[effective_zoom])
+            from src.moving_map import get_active_route_prefetcher
+            if get_active_route_prefetcher() is None:
+                renderer.background_precache(margin=margin, zooms=[effective_zoom])
 
         if target_dt is not None:
             gps0 = gps_track[0][0]
@@ -226,7 +265,7 @@ def render_map_working_image(
             dur = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp())
             ts = (current_position if current_position is not None else 0.0) * dur
 
-        dl_missing = getattr(renderer, '_is_first_render', False) and is_map_network_allowed()
+        dl_missing = is_map_network_allowed()
         draw_track = not bool(cfg.get("hide_track", False))
         draw_marker = not bool(cfg.get("hide_marker", False))
         if str(cfg.get("map_orientation", "north_up")).strip().lower() == "track_up":
@@ -383,7 +422,9 @@ def render_map_unrotated_working_image(
             renderers[cache_key] = renderer
             renderer._is_first_render = True
             margin = map_required_tile_margin(canvas_w, map_w, True)
-            renderer.background_precache(margin=margin, zooms=[effective_zoom])
+            from src.moving_map import get_active_route_prefetcher
+            if get_active_route_prefetcher() is None:
+                renderer.background_precache(margin=margin, zooms=[effective_zoom])
 
         if target_dt is not None:
             gps0 = gps_track[0][0]
@@ -401,7 +442,7 @@ def render_map_unrotated_working_image(
             dur = (gps_track[-1][0].timestamp() - gps_track[0][0].timestamp())
             ts = (current_position if current_position is not None else 0.0) * dur
 
-        dl_missing = getattr(renderer, '_is_first_render', False) and is_map_network_allowed()
+        dl_missing = is_map_network_allowed()
         draw_track = not bool(cfg.get("hide_track", False))
         angle = track_up_rotation_degrees(map_heading)
         if angle == 0.0 and apply_pitch:

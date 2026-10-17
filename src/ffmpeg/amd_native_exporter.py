@@ -39,7 +39,7 @@ import shutil
 from collections import deque
 from dataclasses import dataclass, field
 from ctypes import byref, c_void_p, c_uint, c_uint64, c_int, c_double, c_uint8, POINTER
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -4650,9 +4650,24 @@ def export_amd_native_d3d11(
                 else frame_idx / target_fps
             ),
         )
-    # ── MAP ETAP 1: Ensure 100% of required map tiles are cached before frame loop ──
+    # ── MAP ETAP 1: Ensure map tiles are prepared for export window ──
     from src.indicators.moving_map import ensure_map_tiles_cached
-    from src.moving_map import set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats
+    from src.moving_map import (
+        set_map_network_allowed, reset_map_tile_stats, get_map_tile_stats,
+        stop_active_route_prefetcher, get_active_route_prefetcher,
+    )
+
+    export_start_s = 0.0
+    if video_timeline is not None and getattr(video_timeline, "clip_count", 0) > 0:
+        try:
+            c_dt_0 = video_timeline.frame_to_absolute(0, target_fps)
+            if c_dt_0 is not None and gps_track and hasattr(gps_track[0][0], "timestamp"):
+                gps0 = gps_track[0][0]
+                gps0_ts = gps0.timestamp() if gps0.tzinfo is not None else gps0.replace(tzinfo=timezone.utc).timestamp()
+                t0_ts = c_dt_0.timestamp() if c_dt_0.tzinfo is not None else c_dt_0.replace(tzinfo=timezone.utc).timestamp()
+                export_start_s = max(0.0, t0_ts - gps0_ts)
+        except Exception:
+            pass
 
     preload_info = {"required": 0, "cached": 0, "downloaded": 0, "missing": 0}
     map_avail = layout.get("_indicator_availability", {}).get("track_map", True) if "_indicator_availability" in layout else True
@@ -4660,14 +4675,20 @@ def export_amd_native_d3d11(
         _map_t0 = time.perf_counter()
         preload_info = ensure_map_tiles_cached(
             video_width, video_height, layout, "track_map", gps_track,
+            progress_cb=lambda done, total, msg: progress_tracker.hud_work(2, 8, msg),
             cancel_event=cancel_event,
+            start_time_s=export_start_s,
+            duration_s=duration_s,
         )
         print(
             f"[AMD Map Preload] provider={preload_info.get('provider')} "
             f"zoom={preload_info.get('zoom')} margin={preload_info.get('margin')} "
+            f"export_start_s={export_start_s:.2f} duration_s={duration_s:.2f} "
             f"required={preload_info.get('required')} "
-            f"cached={preload_info.get('cached')} downloaded={preload_info.get('downloaded')} "
-            f"missing_before_render={preload_info.get('missing')}",
+            f"cached={preload_info.get('cached')} startup_downloaded={preload_info.get('downloaded')} "
+            f"background_streaming={preload_info.get('missing')} "
+            f"cache_chk={preload_info.get('cache_check_ms', 0):.2f}ms "
+            f"startup_preload={preload_info.get('initial_preload_ms', 0):.2f}ms",
             flush=True,
         )
         progress_tracker.hud_work(2, 8, "map preload/cache")
@@ -4676,7 +4697,7 @@ def export_amd_native_d3d11(
         progress_tracker.hud_work(2, 8, "map disabled")
 
     reset_map_tile_stats()
-    set_map_network_allowed(False)
+    set_map_network_allowed(True)
 
     telemetry_cache = None
     t_precompute_begin = time.perf_counter()
@@ -7478,6 +7499,10 @@ def export_amd_native_d3d11(
         raise
     finally:
         set_map_network_allowed(True)
+        try:
+            stop_active_route_prefetcher()
+        except Exception:
+            pass
         _cleanup_native_resources()
         if t_video_render_end == 0.0:
             progress_dispatcher.stop()
@@ -8763,6 +8788,20 @@ def export_amd_native_d3d11(
             "tobytes": len(timing_samples["PIL tobytes"]),
             "update_hud": c_hud_updates.value,
             "blend_rgba_to_nv12": c_blend_calls.value,
+        },
+        "map_streaming": {
+            "required_tiles": preload_info.get("required", 0),
+            "cached_tiles": preload_info.get("cached", 0),
+            "startup_downloaded": preload_info.get("downloaded", 0),
+            "background_pending": preload_info.get("missing", 0),
+            "cache_check_ms": preload_info.get("cache_check_ms", 0.0),
+            "startup_preload_ms": preload_info.get("initial_preload_ms", 0.0),
+            "tile_stats": get_map_tile_stats(),
+            "prefetcher_stats": (
+                preload_info["prefetcher"].get_stats()
+                if preload_info.get("prefetcher") is not None
+                else None
+            ),
         },
     }
     profile_path = output_file_str + ".amd_profile.json"
