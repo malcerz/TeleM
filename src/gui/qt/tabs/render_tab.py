@@ -1174,6 +1174,12 @@ class RenderTab(QWidget):
                 )
             except Exception as exc:
                 print(f"[RenderTab] GPX load for job failed: {exc}", flush=True)
+        # The job snapshot carries the telemetry sync chosen when it was queued.
+        if hasattr(ctrl, "apply_layout_telemetry_sync"):
+            try:
+                ctrl.apply_layout_telemetry_sync(ctrl.layout)
+            except Exception as exc:
+                print(f"[RenderTab] Telemetry sync for job failed: {exc}", flush=True)
 
     def _start_render(self, options: dict, job: ExportJob | None = None) -> bool:
         """CANONICAL RENDER ENTRYPOINT — wspólna ścieżka uruchamiania dla kolejki i EKSPORTUJ."""

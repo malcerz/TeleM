@@ -10,6 +10,7 @@ from src.gui.qt._mixins.preview_mixin import PreviewMixin
 from src.gui.qt._mixins.playback_mixin import PlaybackMixin
 from src.gui.qt._mixins.project_mixin import ProjectMixin
 from src.gui.qt._mixins.render_mixin import RenderMixin
+from src.gui.qt._mixins.sync_mixin import SyncMixin
 
 __all__ = [
     "CutMixin",
@@ -19,4 +20,5 @@ __all__ = [
     "PlaybackMixin",
     "ProjectMixin",
     "RenderMixin",
+    "SyncMixin",
 ]

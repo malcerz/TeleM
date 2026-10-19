@@ -18,6 +18,7 @@ from src.gui.qt.models import (
 )
 from src.overlay_renderer import FONT_CACHE
 from src.gui.layout_manager import resolve_font_path
+from src.telemetry_sync import strip_sync_keys
 try:
     from src.indicators.helpers import _STATIC_CACHE
 except Exception:
@@ -40,6 +41,9 @@ class PresetMixin:
                 layout_copy["cut_regions"] = self._cut_regions
             else:
                 layout_copy.pop("cut_regions", None)
+            # A HUD preset is reused across recordings; the telemetry sync
+            # belongs to the project's material (src/telemetry_sync.py store).
+            strip_sync_keys(layout_copy)
             layout_copy = sanitize_layout_for_json(layout_copy)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(layout_copy, f, indent=2, ensure_ascii=False)
@@ -63,7 +67,12 @@ class PresetMixin:
             if not isinstance(loaded, dict):
                 raise ValueError("Nieprawidłowy format pliku")
             normalize_indicator_decimal_defaults(loaded)
+            # Older presets may carry telemetry_sync_*: ignore them and keep
+            # the sync of the material currently loaded.
+            strip_sync_keys(loaded)
             self.layout = loaded
+            if hasattr(self, "_mirror_sync_to_layout"):
+                self._mirror_sync_to_layout(self._sync_state)
             self._apply_global_chart_preferences()
             self._user_preset_path = str(path)
             if self.layout_mgr:
@@ -248,6 +257,7 @@ class PresetMixin:
             # P0-FIX: same as _save_project_layout — do not persist runtime
             # IN/OUT cut_regions to the global default layout.
             saved.pop("cut_regions", None)
+            strip_sync_keys(saved)
 
             # Persystuj globalny font oraz outline
             font_family = getattr(self, "_global_font_family", "") or ""

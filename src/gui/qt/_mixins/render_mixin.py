@@ -1268,7 +1268,9 @@ class RenderMixin:
             cache_key=_cache_key,
             fit_path=getattr(self, "fit_path", None),
             gpx_path=getattr(self, "gpx_path", None),
-            sync_offset_s=float(layout.get("telemetry_sync_offset_s", 0.0) or 0.0),
+            sync_offset_s=float(getattr(self.telemetry, "telemetry_sync_offset_s", None)
+                                if getattr(self.telemetry, "telemetry_sync_offset_s", None) is not None
+                                else (layout.get("telemetry_sync_offset_s", 0.0) or 0.0)),
             ffmpeg_exe=ffmpeg_exe,
             input_files=list(options.get("video_paths") or self.video_paths),
             output_file=output_path,

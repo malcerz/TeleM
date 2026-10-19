@@ -96,6 +96,13 @@ class PropertyEditor(QWidget):
         self.placeholder.setWordWrap(True)
         layout.addWidget(self.placeholder)
 
+        # Synchronizacja telemetrii — tylko gdy nie wybrano wskaźnika
+        from src.gui.qt.widgets.telemetry_sync_panel import TelemetrySyncPanel
+        self.sync_panel = TelemetrySyncPanel()
+        layout.addWidget(self.sync_panel)
+        self._sync_stretch = QWidget()
+        layout.addWidget(self._sync_stretch, 1)
+
     def _on_delete_clicked(self) -> None:
         self.signals.sig_delete_indicator.emit(self._current_key)
 
@@ -155,6 +162,8 @@ class PropertyEditor(QWidget):
             self.key_label.setText("")
             self.delete_btn.setVisible(False)
             self.placeholder.setVisible(True)
+            self.sync_panel.setVisible(True)
+            self._sync_stretch.setVisible(True)
             self.scroll_area.setVisible(False)
             self.form_container.setVisible(False)
             if self.form_container.layout():
@@ -173,6 +182,8 @@ class PropertyEditor(QWidget):
         self.key_label.setText(f"Wskaźnik: {stream_key}")
         self.delete_btn.setVisible(True)
         self.placeholder.setVisible(False)
+        self.sync_panel.setVisible(False)
+        self._sync_stretch.setVisible(False)
 
         self._suppress_emit = True
         try:

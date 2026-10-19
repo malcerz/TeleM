@@ -565,6 +565,9 @@ class ProjectMixin:
         self._cut_regions = []
         self.fit_path = self.gpx_path = self.meta_path = None
         self.telemetry.clear_all()
+        if hasattr(self, "_reset_telemetry_sync_for_load"):
+            self._reset_telemetry_sync_for_load()
+            self._publish_sync_state()
         self._clear_caches()
         self._publish_project_load_state("cleared", self._project_load_generation)
         self.signals.sig_data_streams_ready.emit([])
@@ -749,6 +752,11 @@ class ProjectMixin:
                 self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
                 self._load_or_generate_telemetry()
 
+                # New material starts from the file timestamps; the saved sync
+                # of this video set + activity is restored after the timeline.
+                if hasattr(self, "_reset_telemetry_sync_for_load"):
+                    self._reset_telemetry_sync_for_load()
+
                 # Wczytaj GPX (jeśli podano)
                 if effective_gpx_path and _GPX_AVAILABLE:
                     gpx_loaded = self.telemetry.load_gpx(
@@ -847,6 +855,12 @@ class ProjectMixin:
                 # The decoder is loaded with clip 0 (first file) at this point.
                 self._active_preview_clip_index = 0
                 self._pending_seek_ms = None
+
+                if hasattr(self, "_restore_telemetry_sync_for_project"):
+                    try:
+                        self._restore_telemetry_sync_for_project()
+                    except Exception as exc:
+                        print(f"[TelemetrySync] restore failed: {exc}", flush=True)
 
                 # P0-FIX: cut_regions from the layout file are stale IN/OUT
                 # boundaries that were incorrectly persisted by a previous
@@ -1664,6 +1678,8 @@ class ProjectMixin:
             )
             if fit_loaded:
                 self.fit_path = Path(telem_path)
+                if hasattr(self, "_restore_telemetry_sync_for_project"):
+                    self._restore_telemetry_sync_for_project()
                 if getattr(self.telemetry, "fit_data", None):
                     fit_keys = self.telemetry.register_fit_fields(
                         self.layout, BUILTIN_FIELDS,
@@ -1688,6 +1704,8 @@ class ProjectMixin:
             )
             if gpx_loaded:
                 self.gpx_path = Path(telem_path)
+                if hasattr(self, "_restore_telemetry_sync_for_project"):
+                    self._restore_telemetry_sync_for_project()
                 from src.indicators.availability import compute_indicator_availability, log_indicator_availability
                 avail = compute_indicator_availability(self.layout, telemetry=self.telemetry)
                 self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}

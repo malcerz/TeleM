@@ -86,6 +86,7 @@ from src.gui.qt._mixins import (
     PreviewMixin,
     ProjectMixin,
     RenderMixin,
+    SyncMixin,
 )
 
 
@@ -98,6 +99,7 @@ class AppController(
     PreviewMixin,
     ProjectMixin,
     RenderMixin,
+    SyncMixin,
 ):
     """Kontroler aplikacji — most między GUI a logiką biznesową.
 
@@ -295,6 +297,7 @@ class AppController(
 
         # ── Podłącz sygnały ────────────────────────────────────────────
         self._connect_signals()
+        self._init_telemetry_sync()
 
         # ── Inicjalizacja benchmarka ───────────────────────────────────
         from src.benchmark import BenchmarkTracker

@@ -220,6 +220,22 @@ class AppSignals(QObject):
     sig_remote_activity_selection_request = Signal(object)
     sig_remote_telemetry_status = Signal(object)
 
+    # ── Synchronizacja telemetrii FIT/GPX ↔ wideo ────────────────────────
+    # GUI → Kontroler
+    sig_sync_offset_nudge = Signal(float)      # delta [s]
+    sig_sync_offset_set = Signal(float)        # wartość [s]
+    sig_sync_offset_reset = Signal()
+    sig_sync_auto_requested = Signal()
+    sig_sync_auto_cancel = Signal()
+    sig_sync_proposal_accept = Signal()
+    sig_sync_state_request = Signal()
+    # Kontroler → GUI
+    sig_sync_state_changed = Signal(object)    # dict (SyncMixin._sync_payload)
+    sig_sync_progress = Signal(str)
+    # Wątki robocze → wątek GUI (kolejkowane)
+    sig_sync_applied = Signal(object)
+    sig_sync_auto_finished = Signal(object)
+
 
 class RemoteActivitySelectionRequest:
     """Request sent to the GUI thread when multiple remote activities match the video."""
