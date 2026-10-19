@@ -250,6 +250,7 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
         while proc.poll() is None:
             if time.perf_counter() - started > 420:
                 proc.kill()
+                stop.set()
                 raise TimeoutError("benchmark exceeded watchdog")
             try:
                 procs = [psutil.Process(proc.pid)] + psutil.Process(proc.pid).children(recursive=True)
