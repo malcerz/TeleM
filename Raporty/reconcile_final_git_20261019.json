@@ -1,0 +1,23 @@
+{
+  "merge_commit": "482e9437b767086df5e42af0283f40556d7f2db1",
+  "parents": [
+    "6218eafed79d68a52afb045c6c0c4dce72c6a130",
+    "ae5771755a2960367b3dabaeec1c0bdda0e4c6ac"
+  ],
+  "local_preserved": 146,
+  "remote_preserved": 10,
+  "latest_preserved": [
+    "835d857",
+    "6fa9a1d",
+    "67dfce7",
+    "6d41d1e",
+    "535fb7a",
+    "d79a682",
+    "6218eaf"
+  ],
+  "origin_main": "ae5771755a2960367b3dabaeec1c0bdda0e4c6ac",
+  "origin_main_vs_main": "0\t147",
+  "bundle": "C:\\GoPro\\TeleM_backup_20261018\\SportCamHUD_reconciled_20261019.bundle",
+  "bundle_verify": "PASS; complete history; 22 refs",
+  "main_pushed": false
+}

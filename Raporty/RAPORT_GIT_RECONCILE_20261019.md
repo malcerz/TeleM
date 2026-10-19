@@ -81,3 +81,16 @@ git diff --check dla niezacommitowanej pracy: PASS. Pełny staged diff ma odzied
 Obie stare historie pozostają w tagach i stanowią rodziców lokalnego merge. Commitów 835d857, 6fa9a1d, 67dfce7, 6d41d1e, 535fb7a, d79a682 i 6218eaf nie przepisano. Wszystkie 146 lokalnych i 10 zdalnych commitów mają pozostać przodkami nowego main; końcowe sprawdzenie Git zapisane po utworzeniu merge.
 Nie wykonano push main. Zgoda użytkownika jest wymagana przez punkt 8 jego prośby, dopiero po przedstawieniu wyników. Docelowo wyłącznie zwykły fast-forward.
 Ryzyka: niepełna zgodność natywnych parserów 3.15, brak testów AMD/NVIDIA na sprzęcie, brak docelowego DJI IMU/FIT i pełnej wizualnej oceny GUI, brak pełnego pakietu testów i długiego benchmarku. W testowanych kontraktach nie wykryto nowych regresji; globalnego braku regresji NIE UDOWODNIONO.
+
+## 9. Końcowe potwierdzenie po merge
+Merge commit: 482e9437b767086df5e42af0283f40556d7f2db1.
+Rodzice: 6218eafed79d68a52afb045c6c0c4dce72c6a130 oraz ae5771755a2960367b3dabaeec1c0bdda0e4c6ac.
+Sprawdzenie pełnych zbiorów rev-list: zachowano 146/146 lokalnych oraz 10/10 zdalnych commitów, w tym wszystkie siedem najnowszych commitów lokalnych. Oba testy merge-base --is-ancestor PASS. Indeks bez konfliktów.
+origin/main...main po merge: 0 / 147. Uzupełnienie niniejszego raportu dodaje wyłącznie commit dokumentacyjny, więc po nim oczekiwane 0 / 148; końcowy fetch i odczyt są wykonywane przed odpowiedzią użytkownikowi.
+
+Nowy, osobny bundle C:\GoPro\TeleM_backup_20261018\SportCamHUD_reconciled_20261019.bundle: git bundle verify PASS, complete history, 22 refy, main 482e943 i oba tagi bezpieczeństwa. Zawiera kod merge i obie historie, w tym najnowsze Intel/GUI/SmartSync. Nie nadpisano starej kopii. To niezależna lokalna możliwość przywrócenia obu wersji i wersji scalonej; późniejsze dokumentacyjne uzupełnienie raportu nie jest w tej kopii.
+
+Working tree po merge: jedyna śledzona modyfikacja def_layout.json (prywatna, identyczna z początkiem sesji); te same prywatne pliki nieśledzone C, pusty raport w root, obie kopie DLL i font. Brak zmian kodu poza commitami. Materiały wideo testów i screenshoty pozostają lokalnymi artefaktami ignorowanymi przez istniejący .gitignore. Błąd git add dotyczący ignorowanych PNG nie dotyczył źródeł ani raportów; commit zawierał wszystkie przygotowane nieignorowane dowody. Screenshotów nie wymuszano do Git.
+Kontrola manifestu po dodaniu wpisu GPMF: 1 PASS. git diff --check: PASS.
+
+Main jest technicznie gotowy do zwykłego push fast-forward pod warunkiem niezmienionego origin/main, z ograniczeniami testowymi opisanymi powyżej. Nie oznacza to pełnego PASS wszystkich kryteriów produktu. Publikacja pozostaje wstrzymana do wyraźnego zatwierdzenia użytkownika.
