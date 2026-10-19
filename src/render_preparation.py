@@ -372,6 +372,12 @@ class RenderPreparationService:
         compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
         if compass_cfg and compass_cfg.get("enabled", True):
             key_dict["compass_heading_contract"] = "selected_source_cog_v1"
+        # Per-clip telemetry sync corrections change the sampled activity data
+        # just like the global offset; only added when present so existing
+        # keys stay valid.
+        clip_sync = (layout or {}).get("telemetry_sync_clip_offsets_s") if isinstance(layout, dict) else None
+        if clip_sync:
+            key_dict["sync_clip_offsets_s"] = {str(k): round(float(v), 4) for k, v in sorted(clip_sync.items())}
         raw = json.dumps(key_dict, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -1277,7 +1283,20 @@ class RenderPreparationService:
 
         fit_p = getattr(telemetry, "fit_path", None) or kwargs.get("fit_path")
         gpx_p = getattr(telemetry, "gpx_path", None) or kwargs.get("gpx_path")
-        sync_offset = float(layout.get("telemetry_sync_offset_s", 0.0) or 0.0)
+        # The manager holds the offset its samples were actually shifted by;
+        # the layout copy is only a mirror and may be replaced by a preset.
+        sync_offset = float(
+            getattr(telemetry, "telemetry_sync_offset_s", None)
+            if telemetry is not None and getattr(telemetry, "telemetry_sync_offset_s", None) is not None
+            else (layout.get("telemetry_sync_offset_s", 0.0) or 0.0)
+        )
+        tm_clip_sync = getattr(telemetry, "telemetry_sync_clip_offsets_s", None) if telemetry is not None else None
+        if isinstance(tm_clip_sync, dict):
+            layout = dict(layout)
+            if tm_clip_sync:
+                layout["telemetry_sync_clip_offsets_s"] = dict(tm_clip_sync)
+            else:
+                layout.pop("telemetry_sync_clip_offsets_s", None)
 
         cache_key = cls.compute_cache_key(
             video_paths=v_paths,

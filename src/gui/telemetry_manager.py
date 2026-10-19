@@ -83,6 +83,37 @@ LAST_SMARTSYNC_DIAGNOSTICS: dict[str, Any] = {"status": "NOT_RUN"}
 Sample = tuple[datetime, float]
 SampleList = list[Sample]
 
+
+def _epoch_utc(dt: datetime) -> float:
+    """Naive datetimes in TeleM telemetry are UTC."""
+    return (dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)).timestamp()
+
+
+class _AlignedFitRecords(list):
+    """FIT records on the video timeline, carrying the parse-time metadata.
+
+    The activity-wide models (pause mapper, lap starts) were built on the FIT
+    clock, so they are moved by the same shift as the samples.
+    """
+
+    def __init__(self, records: list[dict], meta: Any, shift_s: float) -> None:
+        super().__init__(records)
+        self.field_catalog = getattr(meta, "field_catalog", {}) or {}
+        self.timezone_offset_hours = getattr(meta, "timezone_offset_hours", None)
+        self.session_total_distance = getattr(meta, "session_total_distance", None)
+        mapper = getattr(meta, "active_time_mapper", None)
+        if mapper is not None and shift_s and hasattr(mapper, "with_offset"):
+            mapper = mapper.with_offset(shift_s)
+        self.active_time_mapper = mapper
+        laps = []
+        delta = timedelta(seconds=float(shift_s or 0.0))
+        for lap in getattr(meta, "lap_summaries", None) or []:
+            lap = dict(lap)
+            if isinstance(lap.get("start_time"), datetime) and shift_s:
+                lap["start_time"] = lap["start_time"] + delta
+            laps.append(lap)
+        self.lap_summaries = laps
+
 # FIT field-name lookup (used when resolving non-standard field names)
 _FIT_LOOKUP: dict[str, tuple[str, ...]] = {
     "power": ("curVpower",),
@@ -434,6 +465,15 @@ class TelemetryDataManager:
         self.alt_array: Optional[Any] = None
         self.track_array: Optional[Any] = None
         self.gps_array: Optional[Any] = None
+
+        # Telemetry ↔ video sync (src/telemetry_sync.py contract).  The base
+        # alignment computed at load is kept in ``_fit_base``/``_gpx_base`` so
+        # a new offset re-derives the activity streams without re-parsing.
+        self.telemetry_sync_offset_s: float = 0.0
+        self.telemetry_sync_clip_offsets_s: dict[int, float] = {}
+        self.telemetry_sync_clip_windows: list[tuple[datetime, datetime]] = []
+        self._fit_base: Optional[dict[str, Any]] = None
+        self._gpx_base: Optional[dict[str, Any]] = None
 
         # GPX samples (separate from GPMF for per-indicator source selection)
         self.gpx_speed_samples: SampleList = []
@@ -846,6 +886,37 @@ class TelemetryDataManager:
                 for pt in points
             ]
 
+        base = {
+            "points": list(points), "start_dt": start_dt,
+            "base_offset_s": offset.total_seconds(), "path": Path(gpx_path),
+        }
+        state = self._derive_gpx_state(base)
+        if state is None:
+            return False
+
+        # Commit the new source only after parsing, synchronization, and sample
+        # preparation have all succeeded; failed candidate loads preserve state.
+        self._gpx_base = base
+        self._commit_gpx_state(state)
+
+        if self.start_dt_utc is None and state["speed_raw"]:
+            self.start_dt_utc = state["speed_raw"][0][0]
+
+        print(
+            f"[TelemetryManager] GPX loaded: speed={len(self.gpx_speed_samples)}, "
+            f"gps_track={len(self.gpx_gps_track)} pts",
+            flush=True,
+        )
+        return True
+
+    def _derive_gpx_state(self, base: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Build every GPX sample stream for the current telemetry sync."""
+        from src.telemetry_sync import shift_timestamps
+        points = shift_timestamps(
+            base["points"], lambda p: p[0], lambda p, ts: (ts, *p[1:]),
+            self.telemetry_sync_offset_s, self.telemetry_sync_clip_windows,
+            self.telemetry_sync_clip_offsets_s,
+        )
         # Extract GPS track (timestamp, lat, lon) for map rendering
         # GpxPoint = tuple[datetime, float, float, float, dict]
         gpx_gps_track = [
@@ -854,49 +925,42 @@ class TelemetryDataManager:
         ]
 
         # Synchronise to video timeline to get sample streams
-        gpx_result = sync_gpx_to_video(points, start_dt)
+        gpx_result = sync_gpx_to_video(points, base["start_dt"])
         if gpx_result is None:
-            return False
+            return None
 
         gpx_speed, gpx_track, gpx_alt, gpx_power, gpx_atemp, gpx_hr, gpx_cad = gpx_result
 
         gpx_speed_samples = self._smooth(gpx_speed) if gpx_speed else []
         gpx_track_samples = gpx_track or []
         gpx_alt_samples = self._smooth(gpx_alt) if gpx_alt else []
-        gpx_power_samples = gpx_power or []
-        gpx_atemp_samples = gpx_atemp or []
-        gpx_hr_samples = gpx_hr or []
-        gpx_cad_samples = gpx_cad or []
-        gpx_heading_samples = derive_heading_samples(
-            gpx_gps_track, gpx_speed_samples
-        )
-        gpx_slope_samples = derive_slope_from_streams(
-            gpx_track_samples, gpx_alt_samples
-        )
+        return {
+            "path": base["path"],
+            "gps_track": gpx_gps_track,
+            "speed_raw": gpx_speed,
+            "speed": gpx_speed_samples,
+            "track": gpx_track_samples,
+            "alt": gpx_alt_samples,
+            "power": gpx_power or [],
+            "atemp": gpx_atemp or [],
+            "hr": gpx_hr or [],
+            "cad": gpx_cad or [],
+            "heading": derive_heading_samples(gpx_gps_track, gpx_speed_samples),
+            "slope": derive_slope_from_streams(gpx_track_samples, gpx_alt_samples),
+        }
 
-        # Commit the new source only after parsing, synchronization, and sample
-        # preparation have all succeeded; failed candidate loads preserve state.
-        self.gpx_path = Path(gpx_path)
-        self.gpx_gps_track = gpx_gps_track
-        self.gpx_speed_samples = gpx_speed_samples
-        self.gpx_track_samples = gpx_track_samples
-        self.gpx_alt_samples = gpx_alt_samples
-        self.gpx_power_samples = gpx_power_samples
-        self.gpx_atemp_samples = gpx_atemp_samples
-        self.gpx_hr_samples = gpx_hr_samples
-        self.gpx_cad_samples = gpx_cad_samples
-        self.gpx_heading_samples = gpx_heading_samples
-        self.gpx_slope_samples = gpx_slope_samples
-
-        if self.start_dt_utc is None and gpx_speed:
-            self.start_dt_utc = gpx_speed[0][0]
-
-        print(
-            f"[TelemetryManager] GPX loaded: speed={len(gpx_speed_samples)}, "
-            f"gps_track={len(gpx_gps_track)} pts",
-            flush=True,
-        )
-        return True
+    def _commit_gpx_state(self, state: dict[str, Any]) -> None:
+        self.gpx_path = Path(state["path"])
+        self.gpx_gps_track = state["gps_track"]
+        self.gpx_speed_samples = state["speed"]
+        self.gpx_track_samples = state["track"]
+        self.gpx_alt_samples = state["alt"]
+        self.gpx_power_samples = state["power"]
+        self.gpx_atemp_samples = state["atemp"]
+        self.gpx_hr_samples = state["hr"]
+        self.gpx_cad_samples = state["cad"]
+        self.gpx_heading_samples = state["heading"]
+        self.gpx_slope_samples = state["slope"]
 
     # ------------------------------------------------------------------
     # FIT loading (dict-based API matching telemetry_fit)
@@ -951,6 +1015,37 @@ class TelemetryDataManager:
             for r in records:
                 r["timestamp"] = r["timestamp"] + offset
 
+        base = {
+            "records": [dict(r) for r in records], "meta": records,
+            "start_dt": start_dt, "base_offset_s": offset.total_seconds(),
+            "path": resolved_fit_path,
+        }
+        state = self._derive_fit_state(base)
+        if state is None:
+            return False
+
+        # Only assign state upon success
+        self._fit_base = base
+        self._commit_fit_state(state)
+        self._finish_fit_commit(records)
+        return True
+
+    def _derive_fit_state(self, base: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Build every FIT sample stream for the current telemetry sync."""
+        from src.telemetry_sync import TelemetrySyncState, representative_offset, shift_timestamps
+        meta = base["meta"]
+        shifted = shift_timestamps(
+            base["records"], lambda r: r["timestamp"], lambda r, ts: {**r, "timestamp": ts},
+            self.telemetry_sync_offset_s, self.telemetry_sync_clip_windows,
+            self.telemetry_sync_clip_offsets_s,
+        )
+        sync_state = TelemetrySyncState(self.telemetry_sync_offset_s, dict(self.telemetry_sync_clip_offsets_s))
+        # Activity-wide models move with the samples: base alignment plus
+        # sync (records were parsed on the FIT clock).
+        model_shift_s = float(base.get("base_offset_s", 0.0)) - representative_offset(
+            sync_state, len(self.telemetry_sync_clip_windows) or 1)
+        records = _AlignedFitRecords(shifted, meta, model_shift_s)
+
         # Extract GPS track (timestamp, lat, lon) for map rendering
         fit_gps_track = [
             (r["timestamp"], r["lat"], r["lon"])
@@ -959,12 +1054,9 @@ class TelemetryDataManager:
         ]
 
         # Synchronise to video timeline to get per-field sample dict
-        fit_result = sync_fit_to_video(records, start_dt)
+        fit_result = sync_fit_to_video(records, base["start_dt"])
         if not fit_result:
-            return False
-
-        # Only assign state upon success
-        self.fit_path = resolved_fit_path
+            return None
 
         processed_fit: dict[str, SampleList] = {}
         for key, samples in fit_result.items():
@@ -982,7 +1074,7 @@ class TelemetryDataManager:
             fit_distance, processed_fit.get("alt", [])
         )
         mapper = getattr(fit_result, "active_time_mapper", None) or getattr(records, "active_time_mapper", None)
-        self.fit_data = FitDataset(
+        fit_data = FitDataset(
             processed_fit, catalog=getattr(fit_result, "field_catalog", None),
             active_time_mapper=mapper,
             timezone_offset_hours=getattr(fit_result, "timezone_offset_hours", None),
@@ -991,9 +1083,79 @@ class TelemetryDataManager:
             distance_normalization=getattr(fit_result, "distance_normalization", None),
             source_start=getattr(fit_result, "source_start", None) or (records[0]["timestamp"] if records else None),
         )
-        self.fit_gps_track = fit_gps_track
+        return {"path": base["path"], "fit_data": fit_data, "gps_track": fit_gps_track}
+
+    def _commit_fit_state(self, state: dict[str, Any]) -> None:
+        self.fit_path = state["path"]
+        self.fit_data = state["fit_data"]
+        self.fit_gps_track = state["gps_track"]
         self.available_fit_fields = self.fit_data.available_fit_fields
 
+    def set_telemetry_sync(
+        self,
+        offset_s: float,
+        clip_offsets_s: Optional[dict[int, float]] = None,
+        clip_windows: Optional[list[tuple[datetime, datetime]]] = None,
+    ) -> dict[str, Any]:
+        """Apply a telemetry sync offset to the loaded FIT/GPX streams.
+
+        Re-derives the activity streams from the base-aligned records kept at
+        load; nothing is re-parsed and camera streams are untouched.  New
+        objects are built first and swapped in afterwards, so readers only
+        ever see a complete old or new state.
+        """
+        started = _time.perf_counter()
+        self.telemetry_sync_offset_s = float(offset_s or 0.0)
+        self.telemetry_sync_clip_offsets_s = {int(k): float(v) for k, v in (clip_offsets_s or {}).items()}
+        if clip_windows is not None:
+            self.telemetry_sync_clip_windows = list(clip_windows)
+        fit_state = self._derive_fit_state(self._fit_base) if self._fit_base else None
+        gpx_state = self._derive_gpx_state(self._gpx_base) if self._gpx_base else None
+        if fit_state is not None:
+            self._commit_fit_state(fit_state)
+            # Keep the project-wide coverage (multi-file timeline) chosen by
+            # the controller; only re-warm battery plans for the new samples.
+            self.update_battery_coverage(
+                getattr(self, "_coverage_start", None) or self.start_dt_utc,
+                getattr(self, "_coverage_end", None),
+                timeline=getattr(self, "timeline", None),
+            )
+        if gpx_state is not None:
+            self._commit_gpx_state(gpx_state)
+        self._alt_cache.clear()
+        if hasattr(self, "_smoothed_heading_cache"):
+            self._smoothed_heading_cache.clear()
+        elapsed_ms = (_time.perf_counter() - started) * 1000.0
+        print(
+            f"[TelemetrySync] offset={self.telemetry_sync_offset_s:+.3f}s "
+            f"clip_offsets={self.telemetry_sync_clip_offsets_s or {}} "
+            f"fit={'yes' if fit_state else 'no'} gpx={'yes' if gpx_state else 'no'} "
+            f"rederive_ms={elapsed_ms:.1f}",
+            flush=True,
+        )
+        return {"elapsed_ms": elapsed_ms, "fit": fit_state is not None, "gpx": gpx_state is not None}
+
+    def activity_motion_arrays(self) -> Optional[dict[str, Any]]:
+        """Base-aligned (pre-sync) activity motion samples for SmartSync."""
+        import numpy as np
+        if self._fit_base and self._fit_base.get("records"):
+            recs = self._fit_base["records"]
+
+            def col(name):
+                return np.array([np.nan if r.get(name) is None else float(r[name]) for r in recs], dtype=np.float64)
+
+            ts = np.array([_epoch_utc(r["timestamp"]) for r in recs], dtype=np.float64)
+            return {"source": "fit", "t": ts, "speed_kmh": col("speed"), "lat": col("lat"), "lon": col("lon")}
+        if self._gpx_base and self._gpx_base.get("points"):
+            pts = self._gpx_base["points"]
+            ts = np.array([_epoch_utc(p[0]) for p in pts], dtype=np.float64)
+            lat = np.array([np.nan if p[1] is None else float(p[1]) for p in pts], dtype=np.float64)
+            lon = np.array([np.nan if p[2] is None else float(p[2]) for p in pts], dtype=np.float64)
+            return {"source": "gpx", "t": ts, "speed_kmh": None, "lat": lat, "lon": lon}
+        return None
+
+    def _finish_fit_commit(self, records: Optional[list[dict]]) -> None:
+        """Coverage/battery bookkeeping after a FIT state commit."""
         if self.start_dt_utc is None:
             if getattr(self.fit_data, "source_start", None) is not None:
                 self.start_dt_utc = self.fit_data.source_start
@@ -1044,7 +1206,6 @@ class TelemetryDataManager:
             f"gps_track={len(self.fit_gps_track)} pts",
             flush=True,
         )
-        return True
 
     def update_battery_coverage(
         self, coverage_start: Optional[datetime], coverage_end: Optional[datetime],
@@ -1087,12 +1248,14 @@ class TelemetryDataManager:
             self.gpx_slope_samples.clear()
             self.gpx_gps_track.clear()
             self.gpx_path = None
+            self._gpx_base = None
         elif source == "fit":
             self.fit_data.clear()
             self.available_fit_fields = frozenset()
             self.fit_ext_fields.clear()
             self.fit_gps_track.clear()
             self.fit_path = None
+            self._fit_base = None
 
     def clear_all(self) -> None:
         """Clear all telemetry data."""
@@ -1117,6 +1280,9 @@ class TelemetryDataManager:
             getattr(self, name).clear()
         self.clear_source("gpx")
         self.clear_source("fit")
+        self.telemetry_sync_offset_s = 0.0
+        self.telemetry_sync_clip_offsets_s = {}
+        self.telemetry_sync_clip_windows = []
         self.start_dt_utc = None
         self.meta_path = None
         self.video_duration_s = 0.0

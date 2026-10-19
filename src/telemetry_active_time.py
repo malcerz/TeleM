@@ -114,6 +114,21 @@ class ActiveTimeMapper:
         else:
             self.total_elapsed_seconds = self.total_active_seconds
 
+    def with_offset(self, offset_s: float) -> "ActiveTimeMapper":
+        """Return a copy whose intervals are moved by ``offset_s`` seconds.
+
+        Used when activity timestamps are moved onto the video timeline
+        (base alignment + telemetry sync); pauses must move with them.
+        """
+        if not offset_s:
+            return self
+        d = timedelta(seconds=float(offset_s))
+        return ActiveTimeMapper(
+            [(s + d, e + d) for s, e in self.active_intervals],
+            start_dt=self.start_dt + d if self.start_dt is not None else None,
+            end_dt=self.end_dt + d if self.end_dt is not None else None,
+        )
+
     def is_paused(self, dt: datetime) -> bool:
         """Return True if ``dt`` falls strictly inside a pause interval."""
         if not self.active_intervals:
