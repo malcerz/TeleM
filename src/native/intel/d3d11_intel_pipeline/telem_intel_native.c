@@ -86,6 +86,18 @@ typedef struct {
     double slot_wait_ms;        // consumer waiting for a free encoder slot (watermark)
     double surface_acquire_ms;  // MFXMemory_GetSurfaceForEncode
     double bitstream_write_ms;  // drain thread fwrite into the live-mux pipe
+    // Flush / finalization diagnostics
+    int accepted_inputs;        // frames accepted by EncodeFrameAsync (MFX_ERR_NONE + MFX_ERR_MORE_DATA)
+    int encoded_outputs;        // bitstreams written (equals accepted_inputs on success)
+    int flush_outputs;          // buffered frames returned by EncodeFrameAsync(NULL)
+    int flush_busy_retries;     // MFX_WRN_DEVICE_BUSY retries during flush
+    int flush_end_status;       // status that ended the flush loop (MFX_ERR_MORE_DATA = normal)
+    int flush_ok;               // 1 = all accepted inputs encoded, no sync error
+    int sync_errors;            // SyncOperation calls that did not return MFX_ERR_NONE
+    int last_sync_status;
+    int drain_timeout;          // drain thread did not finish in time
+    int reserved0;
+    double flush_ms;            // flush + drain wall time
 } IntelStageTiming;
 
 // Timing helper
@@ -1312,8 +1324,12 @@ static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
             QueryPerformanceCounter(&t0);
             double cur_sync_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, freq);
 
-            ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
+            mfxStatus sync_sts = ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
             ctx->encode_pool[tail].syncp = NULL;
+            if (sync_sts != MFX_ERR_NONE) {
+                ctx->stage.sync_errors++;
+                ctx->stage.last_sync_status = (int)sync_sts;
+            }
 
             QueryPerformanceCounter(&t1);
             double cur_sync_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, freq);
@@ -1383,8 +1399,12 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
     QueryPerformanceCounter(&t0);
     double cur_sync_start = get_global_time_ms(t0, ctx->t_pipe_global_zero, ctx->freq);
     if (ctx->encode_pool[tail].syncp) {
-        ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
+        mfxStatus sync_sts = ctx->pMFXVideoCORE_SyncOperation(ctx->session, ctx->encode_pool[tail].syncp, 60000);
         ctx->encode_pool[tail].syncp = NULL;
+        if (sync_sts != MFX_ERR_NONE) {
+            ctx->stage.sync_errors++;
+            ctx->stage.last_sync_status = (int)sync_sts;
+        }
     }
     QueryPerformanceCounter(&t1);
     double cur_sync_end = get_global_time_ms(t1, ctx->t_pipe_global_zero, ctx->freq);
@@ -2440,6 +2460,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     QueryPerformanceCounter(&t0);
     double cur_enc_async_start = get_global_time_ms(t0, g_pipe.t_pipe_global_zero, freq);
     int retries = 0;
+    const ULONGLONG busy_deadline = GetTickCount64() + 5000;
     while (true) {
         sts = g_pipe.pMFXVideoENCODE_EncodeFrameAsync(
             g_pipe.session,
@@ -2455,7 +2476,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
             if (retries > 100) {
                 Sleep(1);
             }
-            if (retries > 500) break;
+            if (GetTickCount64() >= busy_deadline || g_pipe.cancelled) break;
             continue;
         }
         break;
@@ -2470,13 +2491,25 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     pmfxSurface->FrameInterface->Release(pmfxSurface);
     QueryPerformanceCounter(&t1);
     double cur_enc_async_end = get_global_time_ms(t1, g_pipe.t_pipe_global_zero, freq);
+    bool has_output = (sts >= MFX_ERR_NONE && sts != MFX_WRN_DEVICE_BUSY && g_pipe.encode_pool[cur_slot].syncp != NULL);
+    if (has_output || sts == MFX_ERR_MORE_DATA) {
+        g_pipe.stage.accepted_inputs++;
+    } else {
+        // The frame was not accepted (device still busy after the bounded retry,
+        // or a real encoder error). Report it instead of silently dropping it.
+        printf("[INTEL ENCODE] EncodeFrameAsync rejected frame=%d status=%d retries=%d\n",
+               cur_frame_id, (int)sts, retries);
+        fflush(stdout);
+        if (g_pipe.cancelled) return -1;
+        return -6;
+    }
     double submit_ms = get_time_ms(t0, t1, freq);
     g_pipe.stats.total_submit_ms += submit_ms;
     g_pipe.stats.total_encode_ms += submit_ms;
 
-    if (sts == MFX_ERR_NONE) {
+    if (has_output) {
         g_pipe.stats.submitted_frames++;
-        if (g_pipe.encode_pool[cur_slot].syncp != NULL) {
+        {
             EnterCriticalSection(&g_pipe.csEncode);
             g_pipe.encode_pool[cur_slot].in_use = true;
             g_pipe.encode_pool[cur_slot].frame_idx = cur_frame_id;
@@ -2518,6 +2551,7 @@ __declspec(dllexport) int intel_native_pipeline_step(
 
 __declspec(dllexport) int intel_native_pipeline_finish(void) {
     if (!g_pipe.pipeline_open) return 0;
+    int finish_rc = 0;
 
     // 1. Stop decode producer thread
     EnterCriticalSection(&g_pipe.csDecode);
@@ -2532,14 +2566,28 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
         g_pipe.hDecodeThread = NULL;
     }
 
-    // 2. Drain oneVPL encoder
-    while (true) {
+    // 2. Flush the encoder: EncodeFrameAsync(NULL) returns buffered frames until
+    // MFX_ERR_MORE_DATA. MFX_WRN_DEVICE_BUSY is transient (the hardware queue is
+    // full while the drain thread still syncs earlier frames) and must be retried;
+    // any other negative status is a real encoder error. Skipped on cancel.
+    LARGE_INTEGER tf0, tf1;
+    QueryPerformanceCounter(&tf0);
+    const ULONGLONG flush_deadline = GetTickCount64() + 30000;
+    mfxStatus flush_end = MFX_ERR_MORE_DATA;
+    bool flush_ok = true;
+    while (!g_pipe.cancelled) {
         EnterCriticalSection(&g_pipe.csEncode);
-        while (g_pipe.pending_encode_count >= g_pipe.pool_size && !g_pipe.cancelled) {
+        while (g_pipe.pending_encode_count >= g_pipe.pool_size && !g_pipe.cancelled &&
+               GetTickCount64() < flush_deadline) {
             SleepConditionVariableCS(&g_pipe.cvEncodeFree, &g_pipe.csEncode, 50);
         }
         int cur_slot = g_pipe.enc_head_idx;
         LeaveCriticalSection(&g_pipe.csEncode);
+        if (GetTickCount64() >= flush_deadline) {
+            flush_end = MFX_WRN_DEVICE_BUSY;
+            flush_ok = false;
+            break;
+        }
 
         g_pipe.encode_pool[cur_slot].bs.DataLength = 0;
         g_pipe.encode_pool[cur_slot].bs.DataOffset = 0;
@@ -2553,7 +2601,15 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
             &g_pipe.encode_pool[cur_slot].syncp
         );
 
-        if (sts == MFX_ERR_NONE && g_pipe.encode_pool[cur_slot].syncp) {
+        if (sts == MFX_WRN_DEVICE_BUSY) {
+            g_pipe.stage.flush_busy_retries++;
+            // Wait (bounded) for the drain thread to complete a frame, then retry.
+            EnterCriticalSection(&g_pipe.csEncode);
+            SleepConditionVariableCS(&g_pipe.cvEncodeFree, &g_pipe.csEncode, 1);
+            LeaveCriticalSection(&g_pipe.csEncode);
+            continue;
+        }
+        if (sts >= MFX_ERR_NONE && g_pipe.encode_pool[cur_slot].syncp) {
             EnterCriticalSection(&g_pipe.csEncode);
             g_pipe.encode_pool[cur_slot].in_use = true;
             g_pipe.enc_head_idx = (g_pipe.enc_head_idx + 1) % g_pipe.pool_size;
@@ -2563,9 +2619,12 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
             }
             WakeConditionVariable(&g_pipe.cvEncodeReady);
             LeaveCriticalSection(&g_pipe.csEncode);
-        } else {
-            break;
+            g_pipe.stage.flush_outputs++;
+            continue;
         }
+        flush_end = sts;
+        if (sts != MFX_ERR_MORE_DATA) flush_ok = false; // real error, or NONE without a sync point
+        break;
     }
 
     // 3. Signal Drain Thread to finish all pending frames and exit
@@ -2575,10 +2634,40 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
     LeaveCriticalSection(&g_pipe.csEncode);
 
     if (g_pipe.hDrainThread) {
-        WaitForSingleObject(g_pipe.hDrainThread, 10000);
+        // Up to 16 frames remain; each SyncOperation is bounded by 60 s inside the thread.
+        if (WaitForSingleObject(g_pipe.hDrainThread, 30000) == WAIT_TIMEOUT) {
+            g_pipe.stage.drain_timeout = 1;
+            g_pipe.cancelled = true;
+            EnterCriticalSection(&g_pipe.csEncode);
+            WakeAllConditionVariable(&g_pipe.cvEncodeReady);
+            LeaveCriticalSection(&g_pipe.csEncode);
+            WaitForSingleObject(g_pipe.hDrainThread, 5000);
+        }
         CloseHandle(g_pipe.hDrainThread);
         g_pipe.hDrainThread = NULL;
     }
+    QueryPerformanceCounter(&tf1);
+    g_pipe.stage.flush_ms = get_time_ms(tf0, tf1, g_pipe.freq);
+    g_pipe.stage.flush_end_status = (int)flush_end;
+    g_pipe.stage.encoded_outputs = g_pipe.stats.encoded_frames;
+    bool was_cancelled = g_pipe.cancelled && !g_pipe.stage.drain_timeout;
+    if (!was_cancelled) {
+        if (g_pipe.stage.drain_timeout) {
+            finish_rc = -52;
+        } else if (!flush_ok || g_pipe.stage.sync_errors > 0) {
+            finish_rc = -50;
+        } else if (g_pipe.stats.encoded_frames != g_pipe.stage.accepted_inputs) {
+            finish_rc = -51; // an accepted input never produced a bitstream
+        }
+    }
+    g_pipe.stage.flush_ok = (finish_rc == 0) ? 1 : 0;
+    printf("[INTEL FLUSH] end_status=%d outputs=%d busy_retries=%d accepted=%d encoded=%d sync_errors=%d"
+           " last_sync_status=%d drain_timeout=%d cancelled=%d ms=%.1f rc=%d\n",
+           (int)flush_end, g_pipe.stage.flush_outputs, g_pipe.stage.flush_busy_retries,
+           g_pipe.stage.accepted_inputs, g_pipe.stats.encoded_frames, g_pipe.stage.sync_errors,
+           g_pipe.stage.last_sync_status, g_pipe.stage.drain_timeout, was_cancelled ? 1 : 0,
+           g_pipe.stage.flush_ms, finish_rc);
+    fflush(stdout);
 
     QueryPerformanceCounter(&g_pipe.t_pipe_end);
     if (g_pipe.fOutIVF) {
@@ -2725,7 +2814,7 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
     if (g_pipe.hVpl) { FreeLibrary(g_pipe.hVpl); g_pipe.hVpl = NULL; }
 
     g_pipe.pipeline_open = false;
-    return 0;
+    return finish_rc;
 }
 
 __declspec(dllexport) void intel_native_pipeline_cancel(void) {

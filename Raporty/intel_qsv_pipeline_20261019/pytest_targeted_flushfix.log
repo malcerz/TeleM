@@ -1,0 +1,26 @@
+........................................................................ [ 19%]
+.................................................s...................... [ 39%]
+..............sssss...............................s....................[INTEL VBR] init with VSI status=-15; retry retaining HRD
+[INTEL VBR] init rejected status=-15
+. [ 58%]
+........................................................................ [ 78%]
+........................................................................ [ 97%]
+.........                                                                [100%]
+362 passed, 7 skipped in 23.39s
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 9.17 ms (Upload/Producer context: 00000278c98bf308)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 8.97 ms (Upload/Producer context: 00000278c98bf308)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)

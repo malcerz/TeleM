@@ -1,0 +1,82 @@
+{
+  "codec": "hevc",
+  "profile": "quality",
+  "intel_path": "ffmpeg",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\quality_matrix_flushfix\\smoke_ffmpeg_hevc_quality.mp4",
+  "bitrate": "40M",
+  "max_frames": 60,
+  "success": true,
+  "error": "",
+  "elapsed_s": 13.51,
+  "total_frames": 60,
+  "effective_fps": 4.44,
+  "ram_used_gb": 10.38,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "2.002000",
+          "nb_frames": "60"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "1.962667",
+          "nb_frames": "92"
+        }
+      ],
+      "format": {
+        "duration": "2.002000",
+        "size": "10551382"
+      }
+    },
+    "actual_video_frames": 60
+  },
+  "output_size_bytes": 10551382,
+  "stats": {
+    "codec": "hevc",
+    "encoder_accepted": {
+      "TargetUsage": 1,
+      "BufferSizeInKB": 10000,
+      "InitialDelayInKB": 5000,
+      "TargetKbps": 40000,
+      "MaxKbps": 50000,
+      "BRCParamMultiplier": 1
+    },
+    "encoder_diagnostics": [
+      "[hevc_qsv @ 0000027dd97a0d40] Using the variable bitrate (VBR) ratecontrol method",
+      "[hevc_qsv @ 0000027dd97a0d40] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+      "[hevc_qsv @ 0000027dd97a0d40] TargetUsage: 1; RateControlMethod: VBR",
+      "[hevc_qsv @ 0000027dd97a0d40] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+      "[hevc_qsv @ 0000027dd97a0d40] NumSlice: 1; NumRefFrame: 3",
+      "[hevc_qsv @ 0000027dd97a0d40] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+    ],
+    "generation_id": 1,
+    "is_cqp": false,
+    "output_validation": {
+      "duration_s": 2.002,
+      "has_audio": true,
+      "size_bytes": 10551382,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "rate_control": "VBR",
+    "rate_control_raw": "VBR",
+    "total_overlay_frames": 0
+  }
+}

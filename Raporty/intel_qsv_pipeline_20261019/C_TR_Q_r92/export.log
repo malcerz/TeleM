@@ -1,0 +1,522 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 13.02 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono PL' -> resolved='C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono PL' -> 'C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 000001d52f6d6280] Current codec type is unsupported
+[av1_qsv @ 000001d52f6d6280] Current profile is unsupported
+[av1_qsv @ 000001d52f6d6280] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 000001d52c308300] [enc:av1_qsv @ 000001d52ea60340] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001d52f3c2040] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 000001d52f3c2040] Task finished with error: Function not implemented
+[vf#0:0 @ 000001d52f3c2040] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 000001d52c308300] [enc:av1_qsv @ 000001d52ea60340] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 000001d52c308300] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 000001d52c308300] Terminating thread with error: Invalid argument
+[out#0/null @ 000001d52f6cef00] Nothing was written into output file, because at least one of its streams received no packets.
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 522, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 25160, "preview_generation_id": 0, "preview_stop_event": {"id": 2734726509456, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 576389120, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712856043216, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 208556032, "thread_count": 24}
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010381.MP4 + 2026-10-16_13-06-05.fit (mode=queue)
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-16 11:06:08.666665+00:00..2026-10-16 11:26:49.839932+00:00
+[GarminConnect] GARMIN_AUTH=CONNECTED
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/GoPro/2026-10-16/GX010381.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-16T11:06:09.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:20:41.17, start: 0.000000, bitrate: 56289 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 55843 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 13:06:09;06
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 13:06:09;06
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 13:06:09;06
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro MET
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=46.8ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010381.MP4
+[TMPC Cache] read_count=1240
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[LoadProfile] stage=json_file_read elapsed_ms=0.14 thread=Thread-19 (bg_load)/25156 input_bytes=210
+[LoadProfile] stage=json_parse elapsed_ms=0.01 thread=Thread-19 (bg_load)/25156 input_bytes=210
+[LoadProfile] stage=json_file_read elapsed_ms=116.36 thread=Thread-19 (bg_load)/25156 input_bytes=54686897
+[LoadProfile] stage=json_parse elapsed_ms=562.44 thread=Thread-19 (bg_load)/25156 input_bytes=54686897
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\gpmf.json (gpmf_json)
+[GPMF LOAD]
+SOURCE=C:\GoPro\2026-10-16\GX010381.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=False
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=12409
+ACC_SAMPLES=246606
+GYRO_SAMPLES=246605
+ISO_SAMPLES=37198
+TEMP_SAMPLES=1240
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=828.44
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=828.50 thread=Thread-19 (bg_load)/25156 input_bytes=8733184961 records=1
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=828.53 thread=Thread-19 (bg_load)/25156 input_bytes=8733184961 records=1
+[TMPC Telemetry] temperature_samples=1240
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[18079.47]
+normalized_final=18079.47
+session_total=18079.47
+match=True
+[MultiFile] project_duration=1241.173267 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=1241.2s
+[MultiFile] Clip 1/1
+  path=GX010381.MP4
+  global=0.000-1241.173
+  absolute=2026-10-16T11:06:08.666-2026-10-16T11:26:49.839
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=gps9_first_abs=2026-10-16T11:06:09.000+00:00 stmp=333335.0 tsmp=8.0 local_s=0.333335 reason=stmp
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=4026
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Adding job to clean queue and starting...
+[ExportQueue] Job added: 411f51b9-48f1-46c6-af5b-ab93be8f9c32 output=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4
+[QUEUE START] ts=2026-10-19 23:10:01.081 (1792444201.0814) thread=MainThread/26520 job_id= output_path= input_videos=[] queue_resumed=True
+[QUEUE PICK JOB] ts=2026-10-19 23:10:01.085 (1792444201.0858) thread=TeleM-ExportQueue/20072 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] status=preparing
+[QUEUE SNAPSHOT VALIDATION]
+input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4']
+fit_path=C:\GoPro\2026-10-16\2026-10-16_13-06-05.fit
+gpmf/json paths=['C:\\GoPro\\2026-10-16\\GX010381.json']
+layout snapshot keys=['version', 'global', 'charts_skip_pauses', 'custom_texts', 'indicators', 'smoothing', '_startup_preset']
+output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4
+render_mode=gpu
+encoder=intel
+hardware_decode=gpu
+quality=BALANCED
+resolution=source
+rotation=auto
+hud_frequency=Full
+hud_resolution=Auto
+bitrate=40M
+preview=False
+[QUEUE SNAPSHOT RESOLVE] ts=2026-10-19 23:10:01.116 (1792444201.1166) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] VALIDATION_PASS
+[QUEUE PREFETCH DIAG] QUEUE_MAP_PREFETCH_STARTED=NO
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[18079.47]
+normalized_final=18079.47
+session_total=18079.47
+match=True
+[TelemetrySync] offset=+0.000s clip_offsets={} fit=yes gpx=no rederive_ms=75.1
+[PREVIEW RESOURCE RELEASE] reason=queue_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-19 23:10:01.253 (1792444201.2533) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] encoder=intel render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=281257.971602s
+[STARTUP TIMELINE] event='snapshot begin' t=281257.971650s
+[RENDER WORKER START] ts=2026-10-19 23:10:01.269 (1792444201.2696) thread=TeleM-RenderWorker/16696 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] status=running
+[QUEUE PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> 3840x2160)
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[FFMPEG START] ts=2026-10-19 23:10:01.435 (1792444201.4359) thread=TeleM-RenderWorker/16696 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] encoder=intel mode=direct
+[UNKNOWN] Adapter ignored: INTEL_FORCE active
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.0
+[QUEUE PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[INTEL] Fallback reason: unsupported native vertical-slice configuration
+[INTEL_JOB_START] encoder=intel input_files=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] output_file=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 is_multi_file=False
+[INTEL_NATIVE_REQUESTED] requested=YES
+[RUNTIME]
+backend=intel
+app_root=C:\_DEV\SportCamHUD
+vendor_runtime=C:\_DEV\SportCamHUD\runtime\intel\bin
+native_dll=C:\_DEV\SportCamHUD\scratch\intel_native_flushfix_20261019\telem_intel_native.dll
+sha256=dafa1b9b42dc2af1df23411d5e5d9f9e66556512a3130eb5794e7483cc29c14c
+[INTEL_NATIVE_AVAILABLE] available=YES reason=DLL/runtime loaded; codec support is checked separately
+[INTEL_NATIVE_ENTERED] entered=YES
+INTEL_ENCODER_PROFILE: profile=fast codec=hevc target_usage=7 (BEST_SPEED) bitrate=40M resolution=3840x2160 bit_depth=10 hdr=YES
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[INTEL VBR ACCEPTED] rc=2 tu=7 target=40000 max=50000 buffer_kb=10000 initial_kb=5000 multiplier=1 init_status=0 HRD=16/16
+[INTEL_ENCODER_ACCEPTED] {"buffer_kb": 10000, "get_status": 0, "init_status": 0, "initial_delay_kb": 5000, "max_kbps": 50000, "multiplier": 1, "rate_control": 2, "target_kbps": 40000, "target_usage": 7, "valid": 1}
+[Intel][HUD] DirectSHM=ON source=default
+[Intel][Charts] Fastpath=OFF source=default
+[Intel][Compositor] Fastpath=OFF source=default
+[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.
+          hwdec-current=None, codec=None
+[HUD PREP LEAN] stage=lean_vectorize keys=('lean_indicator',) frames=300 elapsed_ms=2.68
+[HUD STARTUP TRACE] main render_start=1792444202.753 executor_create=1792444202.754 workers=4 prefetch=8
+[Intel][HUD] InitBlob=ON bytes=40427710
+[PROC] job created handle=2892
+[PROC] assigned TeleM parent pid=25160 to job (in_prior_job=True)
+[PROC] assigned pid=27100
+[PROC] assigned pid=1356 (already in job via inheritance)
+[PROC] assigned pid=23544 (already in job via inheritance)
+[PROC] assigned pid=24044 (already in job via inheritance)
+[HUD STARTUP TRACE] worker pid=27100 created=1792444203.440 init_begin=1792444204.450 init_end=1792444204.517
+[HUD STARTUP TRACE] worker pid=24044 created=1792444203.476 init_begin=1792444204.475 init_end=1792444204.544
+[HUD STARTUP TRACE] worker pid=1356 created=1792444203.453 init_begin=1792444204.466 init_end=1792444204.545
+[HUD STARTUP TRACE] worker pid=23544 created=1792444203.463 init_begin=1792444204.503 init_end=1792444204.577
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[HUD STARTUP TRACE] worker pid=1356 first_job frame=2 done=1792444204.983
+[HUD STARTUP TRACE] worker pid=24044 first_job frame=1 done=1792444205.003
+[HUD STARTUP TRACE] worker pid=27100 first_job frame=0 done=1792444205.020
+[HUD STARTUP TRACE] worker pid=23544 first_job frame=3 done=1792444205.055
+[HUD STARTUP TRACE] main first_frame=1792444205.396 hud_wait_s=1.532
+[FIRST FRAME] ts=2026-10-19 23:10:05.396 (1792444205.3967) thread=TeleM-RenderWorker/16696 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] frame=1/300
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.398 (1792444205.3981) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=0.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.428 (1792444205.4286) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=0.6% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.449 (1792444205.4495) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=0.9% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.477 (1792444205.4774) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=1.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.534 (1792444205.5348) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=2.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.583 (1792444205.5839) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=3.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.618 (1792444205.6188) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=4.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.658 (1792444205.6581) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=5.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.781 (1792444205.7812) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=6.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.844 (1792444205.8447) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=7.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:05.968 (1792444205.9680) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=8.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.117 (1792444206.1171) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=9.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.191 (1792444206.1919) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=10.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.239 (1792444206.2392) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=11.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.382 (1792444206.3830) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=12.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.511 (1792444206.5111) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=13.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.554 (1792444206.5549) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=14.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.603 (1792444206.6033) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=15.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.686 (1792444206.6863) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=16.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.755 (1792444206.7556) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=17.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.830 (1792444206.8301) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=18.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.893 (1792444206.8935) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=19.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:06.979 (1792444206.9795) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=20.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.048 (1792444207.0487) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=21.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.122 (1792444207.1226) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=22.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.181 (1792444207.1816) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=23.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.266 (1792444207.2666) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=24.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.326 (1792444207.3267) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=25.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.390 (1792444207.3901) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=26.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.478 (1792444207.4780) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=27.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.545 (1792444207.5460) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=28.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.612 (1792444207.6120) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=29.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.669 (1792444207.6695) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=30.1% status=running
+[QUEUE PROGRESS] frame=100/300 fps=20.2 elapsed=5.0s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.755 (1792444207.7552) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=31.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.816 (1792444207.8165) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=32.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.874 (1792444207.8745) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=33.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:07.931 (1792444207.9313) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=34.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.035 (1792444208.0356) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=35.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.099 (1792444208.0994) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=36.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.176 (1792444208.1762) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=37.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.249 (1792444208.2498) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=38.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.338 (1792444208.3380) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=39.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.413 (1792444208.4136) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=40.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.478 (1792444208.4786) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=41.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.545 (1792444208.5455) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=42.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.636 (1792444208.6366) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=43.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.706 (1792444208.7069) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=44.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.766 (1792444208.7667) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=45.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.839 (1792444208.8395) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=46.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:08.930 (1792444208.9307) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=47.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.002 (1792444209.0022) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=48.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.078 (1792444209.0783) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=49.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.173 (1792444209.1733) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=50.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.242 (1792444209.2425) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=51.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.308 (1792444209.3083) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=52.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.381 (1792444209.3814) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=53.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.475 (1792444209.4754) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=54.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.545 (1792444209.5452) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=55.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.615 (1792444209.6159) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=56.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.683 (1792444209.6836) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=57.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.778 (1792444209.7789) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=58.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.842 (1792444209.8424) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=59.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.903 (1792444209.9038) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=60.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:09.963 (1792444209.9639) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=61.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.047 (1792444210.0474) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=62.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.118 (1792444210.1186) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=63.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.183 (1792444210.1833) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=64.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.247 (1792444210.2479) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=65.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.333 (1792444210.3334) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=66.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.401 (1792444210.4014) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=67.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.465 (1792444210.4655) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=68.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.529 (1792444210.5297) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=69.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.614 (1792444210.6140) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=70.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.678 (1792444210.6780) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=71.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.746 (1792444210.7466) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=72.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.833 (1792444210.8333) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=73.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.900 (1792444210.9002) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=74.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:10.967 (1792444210.9674) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=75.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.038 (1792444211.0388) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=76.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.125 (1792444211.1256) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=77.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.187 (1792444211.1871) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=78.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.248 (1792444211.2489) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=79.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.313 (1792444211.3130) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=80.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.390 (1792444211.3902) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=81.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.453 (1792444211.4539) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=82.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.514 (1792444211.5145) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=83.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.577 (1792444211.5774) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=84.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.668 (1792444211.6685) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=85.3% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.736 (1792444211.7362) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=86.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.806 (1792444211.8060) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=87.1% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.868 (1792444211.8688) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=88.0% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:11.952 (1792444211.9529) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=89.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.012 (1792444212.0126) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=90.2% status=running
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.072 (1792444212.0724) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=91.1% status=running
+[QUEUE PROGRESS] frame=300/300 fps=32.0 elapsed=9.4s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.127 (1792444212.1278) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=92.0% status=finalizing
+[PROC] registry empty
+[QUEUE PROGRESS] frame=300/300 fps=0.0 elapsed=0.0s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.381 (1792444212.3813) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=97.5% status=finalizing
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] D3D11VA Hardware HEVC Decoder active on production D3D11 device.
+[STREAM INTEL THREAD] Producer Thread ID: 27160, Consumer Thread ID: 16696, Context Thread Count: 2
+[2A DECODER CONTRACT] W=3840 H=2176 Fmt=104 Bind=0x200 Misc=0x0 Array=28 Shareable=0 SharedHandle=0 hr=0x80004002
+[ENCODER TEX CONTRACT] W=3840 H=2160 Format=104 Bind=0x208 Misc=0x900 ArraySize=1 rType=5 MemId=00000000000a0014
+[STREAM INTEL] DIRECT_VP_SURFACE: CreateVideoProcessorOutputView FAILED hr=0x80070057 frame=0 (will use CopyResource fallback)
+[INTEL FLUSH] end_status=-10 outputs=1 busy_retries=0 accepted=300 encoded=300 sync_errors=0 last_sync_status=0 drain_timeout=0 cancelled=0 ms=0.9 rc=0
+[QUEUE PROGRESS] frame=300/300 fps=0.0 elapsed=0.3s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.650 (1792444212.6505) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=98.5% status=finalizing
+[QUEUE PROGRESS] frame=300/300 fps=0.0 elapsed=0.3s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.701 (1792444212.7013) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=99.5% status=finalizing
+   INTEL NATIVE 8A ASYNC PIPELINE EXPORT COMPLETE (HEVC)
+Codec Selected:             HEVC
+Frames Rendered:            300 / 300
+Total Wall Time:            10.878 s
+Frame Render Wall Time:     9.627 s
+Finalization Wall Time:     0.321 s
+Mux Wall Time:              0.000 s
+RENDER FPS:                 31.163 FPS
+USER EFFECTIVE FPS:         27.578 FPS
+First Frame Latency:        2.643 s
+Max Pending Encode Surfaces:8
+Avg HUD Wait Time:          5.11 ms / frame
+Avg Native Step Time:       22.33 ms / frame
+Native C Stage Breakdown:
+  Demux Time:               0.265 ms / frame
+  Decode Time (Producer):   2.384 ms / frame
+  P010 Convert Time:        0.000 ms / frame
+  Queue Wait (Consumer):    0.001 ms / frame
+  Base Upload Time:         0.001 ms / frame
+  HUD Upload Time:          4.195 ms / frame
+  HUD Upload Mode:          FULL_UPLOAD
+  HUD Upload API Time:      4.195 ms / frame
+  HUD Upload Dirty Bytes:   9.73 MB / frame
+  HUD Upload Regions/Frame: 5.98
+  HUD Upload Partial/Full:  299 / 1
+  VideoProcessorBlt Time:   1.696 ms / frame
+  GPU DMA Copy Time:        0.225 ms / frame
+  HEVC HW Decode Active:    YES
+  Decode->VP CPU Copies:    0
+  Decode->VP GPU Copies:    0
+  VP->Encoder CPU Copies:   0
+  VP->Encoder GPU Copies:   300
+  Encode Submit Time:       0.119 ms / frame
+  Encode Sync Time:         22.294 ms / frame
+  Encoder Slot Wait:        14.523 ms / frame
+  Encoder Surface Acquire:  0.036 ms / frame
+  Bitstream Write:          0.597 ms / frame
+  Encoder Flush:            accepted=300 encoded=300 flushed=1 busy_retries=0 end_status=-10 ok=1 sync_errors=0 0.9 ms
+Encoded HEVC Stream Size:    47.47 MB (49,770,833 bytes)
+Average HEVC Bitrate:        39.78 Mbps
+Output File:                C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 (50,098,264 bytes)
+[QUEUE PROGRESS] frame=300/300 fps=0.0 elapsed=10.9s
+[QUEUE PROGRESS] ts=2026-10-19 23:10:12.703 (1792444212.7038) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] pct=100.0% status=finalizing
+[RENDER DONE] ts=2026-10-19 23:10:12.704 (1792444212.7050) thread=MainThread/26520 job_id=411f51b9-48f1-46c6-af5b-ab93be8f9c32 output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\C_TR_Q_r92\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] success=True error= fps=32.0 elapsed=11.4s
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[HUD STARTUP TRACE] init_blob_closed name=wnsm_8d8008fb released=YES
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+hardware_decode=off
+device=CPU
+[INTEL_NATIVE_RESULT] success=YES
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+[Queue] notify_render_done error: cannot access free variable 'codec' where it is not associated with a value in enclosing scope
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[PROC] render thread exit
+[QUEUE DIAG] QUEUE_PROGRESS_UPDATE=307
+[QUEUE DIAG] QUEUE_GUI_REFRESH=310
+
+[BENCH RESULT] mode=queue success=True frames=300 elapsed=11.8s fps=25.3
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0

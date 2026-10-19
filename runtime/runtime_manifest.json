@@ -61,8 +61,8 @@
   "intel": [
     {
       "path": "intel/bin/telem_intel_native.dll",
-      "sha256": "1eb0f4788c426c651da91fcfb8c8a141db3a284179db73df7ad8ca38eb31fba5",
-      "size": 246272,
+      "sha256": "dafa1b9b42dc2af1df23411d5e5d9f9e66556512a3130eb5794e7483cc29c14c",
+      "size": 247808,
       "purpose": "Intel Native D3D11 VideoProcessor + oneVPL AV1 encoding pipeline",
       "required": true,
       "origin": "C:\\_DEV\\BikeRideHUD-intel\\telem_intel_native.dll",

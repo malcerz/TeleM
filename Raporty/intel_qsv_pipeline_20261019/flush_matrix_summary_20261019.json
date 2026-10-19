@@ -1,0 +1,296 @@
+[
+  {
+    "run": "C_TR_Q_r91",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=300 encoded=300 sync_errors=0 cancelled=0 ms=30.0 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 300,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_Q_r92",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=300 encoded=300 sync_errors=0 cancelled=0 ms=0.9 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 300,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_Q_r93",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=300 encoded=300 sync_errors=0 cancelled=0 ms=15.9 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 300,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_CANCEL_r91",
+    "ok": true,
+    "cancelled": true,
+    "flush": "end_status=-10 outputs=0 busy_retries=0 accepted=151 encoded=143 sync_errors=0 cancelled=1 ms=39.5 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": null,
+    "standby": false,
+    "mp4_exists": false
+  },
+  {
+    "run": "C_TR_CANCEL_r92",
+    "ok": true,
+    "cancelled": true,
+    "flush": "end_status=-10 outputs=0 busy_retries=0 accepted=151 encoded=143 sync_errors=0 cancelled=1 ms=26.0 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": null,
+    "standby": false,
+    "mp4_exists": false
+  },
+  {
+    "run": "C_TR_CANCEL_r93",
+    "ok": true,
+    "cancelled": true,
+    "flush": "end_status=-10 outputs=0 busy_retries=0 accepted=151 encoded=143 sync_errors=0 cancelled=1 ms=16.8 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": null,
+    "standby": false,
+    "mp4_exists": false
+  },
+  {
+    "run": "C_TR_r101",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=1 encoded=1 sync_errors=0 cancelled=0 ms=1.1 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 1,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_r101",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=1 encoded=1 sync_errors=0 cancelled=0 ms=11.9 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 1,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_r102",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=2 encoded=2 sync_errors=0 cancelled=0 ms=0.4 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 2,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_r102",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=2 encoded=2 sync_errors=0 cancelled=0 ms=22.5 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 2,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_r103",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=3 encoded=3 sync_errors=0 cancelled=0 ms=1.0 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 3,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_r103",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=3 encoded=3 sync_errors=0 cancelled=0 ms=21.8 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 3,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_r130",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=30 encoded=30 sync_errors=0 cancelled=0 ms=159.1 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 30,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_r130",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=2 accepted=30 encoded=30 sync_errors=0 cancelled=0 ms=153.4 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 30,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_r160",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=60 encoded=60 sync_errors=0 cancelled=0 ms=0.8 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 60,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_r160",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=2 accepted=60 encoded=60 sync_errors=0 cancelled=0 ms=128.2 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 60,
+    "codec": "hevc",
+    "profile": "Main 10",
+    "pix": "yuv420p10le",
+    "trc": "arib-std-b67",
+    "failed": []
+  },
+  {
+    "run": "C_TR_H264_r95",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=0 accepted=1800 encoded=1800 sync_errors=0 cancelled=0 ms=0.7 rc=0",
+    "shm_released": [
+      "YES"
+    ],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 1800,
+    "codec": "h264",
+    "profile": "High",
+    "pix": "yuv420p",
+    "trc": "bt709",
+    "failed": []
+  },
+  {
+    "run": "B0_TR_H264_r95",
+    "ok": true,
+    "cancelled": false,
+    "flush": "end_status=-10 outputs=1 busy_retries=1 accepted=1800 encoded=1800 sync_errors=0 cancelled=0 ms=96.2 rc=0",
+    "shm_released": [],
+    "forwarders": [],
+    "standby": false,
+    "mp4_ok": true,
+    "packets": 1800,
+    "codec": "h264",
+    "profile": "High",
+    "pix": "yuv420p",
+    "trc": "bt709",
+    "failed": []
+  }
+]

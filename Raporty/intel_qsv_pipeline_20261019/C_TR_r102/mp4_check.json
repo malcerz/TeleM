@@ -1,0 +1,28 @@
+{
+  "path": "C_TR_r102\\output.mp4",
+  "codec": "hevc",
+  "profile": "Main 10",
+  "pix_fmt": "yuv420p10le",
+  "color_transfer": "arib-std-b67",
+  "packets": 2,
+  "expected_frames": 2,
+  "duplicates": 0,
+  "irregular_steps": 0,
+  "first_pts": 0,
+  "last_pts": 1001,
+  "expected_last_pts": 1001.0,
+  "video_duration_s": 0.066733,
+  "expected_duration_s": 0.06673333333333334,
+  "audio": true,
+  "audio_duration_s": 0.064,
+  "checks": {
+    "frame_count": true,
+    "no_duplicates": true,
+    "continuous_pts": true,
+    "tail_frame_present": true,
+    "duration": true,
+    "audio_present": true,
+    "av_sync": true
+  },
+  "ok": true
+}

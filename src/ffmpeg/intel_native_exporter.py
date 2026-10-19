@@ -185,7 +185,11 @@ class IntelEncoderInfo(ctypes.Structure):
 class IntelStageTiming(ctypes.Structure):
     """Aggregated native stage timing (separate export; stats ABI unchanged)."""
     _fields_ = [("struct_size", ctypes.c_int), ("frames", ctypes.c_int)] + [
-        (name, ctypes.c_double) for name in ("slot_wait_ms", "surface_acquire_ms", "bitstream_write_ms")]
+        (name, ctypes.c_double) for name in ("slot_wait_ms", "surface_acquire_ms", "bitstream_write_ms")] + [
+        (name, ctypes.c_int) for name in (
+            "accepted_inputs", "encoded_outputs", "flush_outputs", "flush_busy_retries", "flush_end_status",
+            "flush_ok", "sync_errors", "last_sync_status", "drain_timeout", "reserved0")] + [
+        ("flush_ms", ctypes.c_double)]
 
 
 _LIB_NATIVE_INTEL: Optional[ctypes.CDLL] = None
@@ -1509,6 +1513,7 @@ def export_intel_native_d3d11(
 
     eof_reached = False
     error_occurred = False
+    finish_rc = 0
     try:
         if pkg_mode == "VIDEO_ONLY":
             render_print("[STREAM INTEL] Running VIDEO_ONLY package contention mode (no HUD workers).", flush=True)
@@ -1835,7 +1840,9 @@ def export_intel_native_d3d11(
         if progress_cb:
             progress_cb(frames_rendered, "Finalizacja: domykanie strumienia i kontenera...")
 
-        native_lib.intel_native_pipeline_finish()
+        # Non-zero: the encoder flush/drain failed or an accepted frame never
+        # produced a bitstream (checked below, after the mux process is closed).
+        finish_rc = native_lib.intel_native_pipeline_finish()
         shm_pool.close()
 
         if not use_legacy_post_mux and p_mux is not None:
@@ -1859,6 +1866,13 @@ def export_intel_native_d3d11(
     # Collect C stats
     stats = IntelNativePipelineStats()
     native_lib.intel_native_pipeline_get_stats(ctypes.byref(stats))
+    export_cancelled = cancel_event is not None and cancel_event.is_set()
+    if finish_rc != 0 and not export_cancelled:
+        render_print(f"[STREAM INTEL] ERROR: native encoder finalization failed (rc={finish_rc}, "
+                     f"decoded={stats.decoded_frames}, encoded={stats.encoded_frames}); see [INTEL FLUSH]", flush=True)
+        raise IntelNativeFinalizationError(
+            f"Intel: finalizacja enkodera nie powiodła się (kod {finish_rc}, "
+            f"zakodowano {stats.encoded_frames} z {stats.decoded_frames} klatek)")
 
     if (cancel_event is not None and cancel_event.is_set()) or frames_rendered == 0:
         _last_intel_export_stats = {
@@ -2327,6 +2341,10 @@ def export_intel_native_d3d11(
             render_print(f"  Encoder Slot Wait:        {timing.slot_wait_ms / n_t:.3f} ms / frame", flush=True)
             render_print(f"  Encoder Surface Acquire:  {timing.surface_acquire_ms / n_t:.3f} ms / frame", flush=True)
             render_print(f"  Bitstream Write:          {timing.bitstream_write_ms / n_t:.3f} ms / frame", flush=True)
+            render_print(f"  Encoder Flush:            accepted={timing.accepted_inputs} encoded={timing.encoded_outputs} "
+                         f"flushed={timing.flush_outputs} busy_retries={timing.flush_busy_retries} "
+                         f"end_status={timing.flush_end_status} ok={timing.flush_ok} "
+                         f"sync_errors={timing.sync_errors} {timing.flush_ms:.1f} ms", flush=True)
     if gpu_map_active:
         c_uploads = ctypes.c_int()
         c_bytes = ctypes.c_uint64()

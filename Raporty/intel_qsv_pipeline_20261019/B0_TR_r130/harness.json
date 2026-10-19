@@ -1,0 +1,98 @@
+{
+  "codec": "hevc",
+  "profile": "fast",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\2026-10-16\\GX010381.MP4",
+  "fit": "C:\\GoPro\\2026-10-16\\2026-10-16_13-06-05.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\B0_TR_r130\\output.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 2.82,
+  "total_frames": 30,
+  "effective_fps": 10.65,
+  "ram_used_gb": 10.55,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.981333",
+          "nb_frames": "46"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5804644"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5804644,
+  "stats": {
+    "audio_live_mux": true,
+    "cancelled": false,
+    "codec": "hevc",
+    "encoder_accepted": {
+      "buffer_kb": 10000,
+      "get_status": 0,
+      "init_status": 0,
+      "initial_delay_kb": 5000,
+      "max_kbps": 50000,
+      "multiplier": 1,
+      "rate_control": 2,
+      "target_kbps": 40000,
+      "target_usage": 7,
+      "valid": 1
+    },
+    "encoder_drain_seconds": 0.40451850002864376,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.4614770999760367,
+    "frame_render_seconds": 0.5281954000238329,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "is_cqp": false,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5804644,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "rate_control": "VBR",
+    "real_export_fps": 56.79716256265458,
+    "render_fps": 56.79716256265458,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 1.8718387000262737,
+    "user_effective_fps": 16.027021986231457,
+    "verify_seconds": 0.05565390002448112,
+    "video_encode_pass_count": 1
+  }
+}

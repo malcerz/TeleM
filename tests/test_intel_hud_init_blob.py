@@ -47,8 +47,9 @@ def test_blob_close_is_idempotent():
 
 def test_stage_timing_struct_matches_native_export():
     from src.ffmpeg.intel_native_exporter import IntelStageTiming
-    # C layout: int struct_size, int frames, double slot_wait/surface_acquire/bitstream_write.
-    assert ctypes.sizeof(IntelStageTiming) == 32
+    # C layout: int struct_size, int frames, 3 doubles (stage waits), 10 ints (flush
+    # diagnostics), double flush_ms.
+    assert ctypes.sizeof(IntelStageTiming) == 80
     dll = Path(__file__).resolve().parents[1] / "runtime/intel/bin/telem_intel_native.dll"
     if not dll.exists():
         pytest.skip("Intel native runtime not present")

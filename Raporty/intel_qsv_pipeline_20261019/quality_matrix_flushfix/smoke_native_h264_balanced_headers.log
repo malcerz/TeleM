@@ -1,0 +1,311 @@
+ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+  built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+  configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+  libavutil      61.  5.100 / 61.  5.100
+  libavcodec     63.  8.101 / 63.  8.101
+  libavformat    63.  6.100 / 63.  6.100
+  libavdevice    63.  2.100 / 63.  2.100
+  libavfilter    12.  3.101 / 12.  3.101
+  libswscale     10.  2.100 / 10.  2.100
+  libswresample   7.  2.100 /  7.  2.100
+[h264 @ 000001853a21ca00] Reinit context to 3840x2160, pix_fmt: yuv420p
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\quality_matrix_flushfix\smoke_native_h264_balanced.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf63.6.100
+  Duration: 00:00:02.00, start: 0.000000, bitrate: 39729 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High), 1 reference frame (avc1 / 0x31637661), yuv420p(tv, bt709, progressive, left), 3840x2160 [SAR 1:1 DAR 16:9], 39463 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 255 kb/s (default)
+    Metadata:
+      handler_name    : GoPro AAC
+[out#0/null @ 000001853a21f600] Adding streams from explicit maps...
+[vost#0:0/copy @ 000001853a223800] Created video stream from input stream 0:0
+[trace_headers @ 000001853a757a00] Extradata
+[trace_headers @ 000001853a757a00] 4 bytes left at end of AVCC header.
+[trace_headers @ 000001853a757a00] Sequence Parameter Set
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                01 = 1
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           00111 = 7
+[trace_headers @ 000001853a757a00] 8           profile_idc                                          01100100 = 100
+[trace_headers @ 000001853a757a00] 16          constraint_set0_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 17          constraint_set1_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 18          constraint_set2_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 19          constraint_set3_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 20          constraint_set4_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 21          constraint_set5_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 22          reserved_zero_2bits                                        00 = 0
+[trace_headers @ 000001853a757a00] 24          level_idc                                            00110100 = 52
+[trace_headers @ 000001853a757a00] 32          seq_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 33          chroma_format_idc                                         010 = 1
+[trace_headers @ 000001853a757a00] 36          bit_depth_luma_minus8                                       1 = 0
+[trace_headers @ 000001853a757a00] 37          bit_depth_chroma_minus8                                     1 = 0
+[trace_headers @ 000001853a757a00] 38          qpprime_y_zero_transform_bypass_flag                        0 = 0
+[trace_headers @ 000001853a757a00] 39          seq_scaling_matrix_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 40          log2_max_frame_num_minus4                               00101 = 4
+[trace_headers @ 000001853a757a00] 45          pic_order_cnt_type                                        011 = 2
+[trace_headers @ 000001853a757a00] 48          max_num_ref_frames                                        011 = 2
+[trace_headers @ 000001853a757a00] 51          gaps_in_frame_num_allowed_flag                              0 = 0
+[trace_headers @ 000001853a757a00] 52          pic_width_in_mbs_minus1                       000000011110000 = 239
+[trace_headers @ 000001853a757a00] 67          pic_height_in_map_units_minus1                000000010000111 = 134
+[trace_headers @ 000001853a757a00] 82          frame_mbs_only_flag                                         1 = 1
+[trace_headers @ 000001853a757a00] 83          direct_8x8_inference_flag                                   1 = 1
+[trace_headers @ 000001853a757a00] 84          frame_cropping_flag                                         0 = 0
+[trace_headers @ 000001853a757a00] 85          vui_parameters_present_flag                                 1 = 1
+[trace_headers @ 000001853a757a00] 86          aspect_ratio_info_present_flag                              1 = 1
+[trace_headers @ 000001853a757a00] 87          aspect_ratio_idc                                     00000001 = 1
+[trace_headers @ 000001853a757a00] 95          overscan_info_present_flag                                  0 = 0
+[trace_headers @ 000001853a757a00] 96          video_signal_type_present_flag                              1 = 1
+[trace_headers @ 000001853a757a00] 97          video_format                                              101 = 5
+[trace_headers @ 000001853a757a00] 100         video_full_range_flag                                       0 = 0
+[trace_headers @ 000001853a757a00] 101         colour_description_present_flag                             1 = 1
+[trace_headers @ 000001853a757a00] 102         colour_primaries                                     00000001 = 1
+[trace_headers @ 000001853a757a00] 110         transfer_characteristics                             00000001 = 1
+[trace_headers @ 000001853a757a00] 118         matrix_coefficients                                  00000001 = 1
+[trace_headers @ 000001853a757a00] 126         chroma_loc_info_present_flag                                0 = 0
+[trace_headers @ 000001853a757a00] 127         timing_info_present_flag                                    1 = 1
+[trace_headers @ 000001853a757a00] 128         num_units_in_tick            00000000000000000000001111101001 = 1001
+[trace_headers @ 000001853a757a00] 160         time_scale                   00000000000000001110101001100000 = 60000
+[trace_headers @ 000001853a757a00] 192         fixed_frame_rate_flag                                       1 = 1
+[trace_headers @ 000001853a757a00] 193         nal_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 000001853a757a00] 194         cpb_cnt_minus1                                              1 = 0
+[trace_headers @ 000001853a757a00] 195         bit_rate_scale                                           0100 = 4
+[trace_headers @ 000001853a757a00] 199         cpb_size_scale                                           0010 = 2
+[trace_headers @ 000001853a757a00] 203         bit_rate_value_minus1[0]      0000000000000001011111010111100 = 48827
+[trace_headers @ 000001853a757a00] 234         cpb_size_value_minus1[0]  00000000000000000000100110001001011010000 = 1249999
+[trace_headers @ 000001853a757a00] 275         cbr_flag[0]                                                 0 = 0
+[trace_headers @ 000001853a757a00] 276         initial_cpb_removal_delay_length_minus1                 10111 = 23
+[trace_headers @ 000001853a757a00] 281         cpb_removal_delay_length_minus1                         10111 = 23
+[trace_headers @ 000001853a757a00] 286         dpb_output_delay_length_minus1                          10111 = 23
+[trace_headers @ 000001853a757a00] 291         time_offset_length                                      11000 = 24
+[trace_headers @ 000001853a757a00] 296         vcl_hrd_parameters_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 297         low_delay_hrd_flag                                          0 = 0
+[trace_headers @ 000001853a757a00] 298         pic_struct_present_flag                                     1 = 1
+[trace_headers @ 000001853a757a00] 299         bitstream_restriction_flag                                  1 = 1
+[trace_headers @ 000001853a757a00] 300         motion_vectors_over_pic_boundaries_flag                     1 = 1
+[trace_headers @ 000001853a757a00] 301         max_bytes_per_pic_denom                                   011 = 2
+[trace_headers @ 000001853a757a00] 304         max_bits_per_mb_denom                                     010 = 1
+[trace_headers @ 000001853a757a00] 307         log2_max_mv_length_horizontal                         0001110 = 13
+[trace_headers @ 000001853a757a00] 314         log2_max_mv_length_vertical                           0001100 = 11
+[trace_headers @ 000001853a757a00] 321         max_num_reorder_frames                                      1 = 0
+[trace_headers @ 000001853a757a00] 322         max_dec_frame_buffering                                   011 = 2
+[trace_headers @ 000001853a757a00] 325         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 326         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 327         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] Picture Parameter Set
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                01 = 1
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           01000 = 8
+[trace_headers @ 000001853a757a00] 8           pic_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 9           seq_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 10          entropy_coding_mode_flag                                    1 = 1
+[trace_headers @ 000001853a757a00] 11          bottom_field_pic_order_in_frame_present_flag                0 = 0
+[trace_headers @ 000001853a757a00] 12          num_slice_groups_minus1                                     1 = 0
+[trace_headers @ 000001853a757a00] 13          num_ref_idx_l0_default_active_minus1                        1 = 0
+[trace_headers @ 000001853a757a00] 14          num_ref_idx_l1_default_active_minus1                        1 = 0
+[trace_headers @ 000001853a757a00] 15          weighted_pred_flag                                          0 = 0
+[trace_headers @ 000001853a757a00] 16          weighted_bipred_idc                                        00 = 0
+[trace_headers @ 000001853a757a00] 18          pic_init_qp_minus26                                         1 = 0
+[trace_headers @ 000001853a757a00] 19          pic_init_qs_minus26                                         1 = 0
+[trace_headers @ 000001853a757a00] 20          chroma_qp_index_offset                                      1 = 0
+[trace_headers @ 000001853a757a00] 21          deblocking_filter_control_present_flag                      1 = 1
+[trace_headers @ 000001853a757a00] 22          constrained_intra_pred_flag                                 0 = 0
+[trace_headers @ 000001853a757a00] 23          redundant_pic_cnt_present_flag                              0 = 0
+[trace_headers @ 000001853a757a00] 24          transform_8x8_mode_flag                                     1 = 1
+[trace_headers @ 000001853a757a00] 25          pic_scaling_matrix_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 26          second_chroma_qp_index_offset                               1 = 0
+[trace_headers @ 000001853a757a00] 27          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 28          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 29          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 30          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 31          rbsp_alignment_zero_bit                                     0 = 0
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf63.6.100
+  Stream #0:0(und): Video: h264 (High), 1 reference frame (avc1 / 0x31637661), yuv420p(tv, bt709, progressive, left), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 39463 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+[out#0/null @ 000001853a21f600] Starting thread...
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00] Starting thread...
+[trace_headers @ 000001853a757a00] Packet: 513889 bytes, key frame, pts 0, dts 0, duration 1001.
+[trace_headers @ 000001853a757a00] Access Unit Delimiter
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                00 = 0
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           01001 = 9
+[trace_headers @ 000001853a757a00] 8           primary_pic_type                                          000 = 0
+[trace_headers @ 000001853a757a00] 11          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 12          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 13          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 14          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 15          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] Sequence Parameter Set
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                01 = 1
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           00111 = 7
+[trace_headers @ 000001853a757a00] 8           profile_idc                                          01100100 = 100
+[trace_headers @ 000001853a757a00] 16          constraint_set0_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 17          constraint_set1_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 18          constraint_set2_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 19          constraint_set3_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 20          constraint_set4_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 21          constraint_set5_flag                                        0 = 0
+[trace_headers @ 000001853a757a00] 22          reserved_zero_2bits                                        00 = 0
+[trace_headers @ 000001853a757a00] 24          level_idc                                            00110100 = 52
+[trace_headers @ 000001853a757a00] 32          seq_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 33          chroma_format_idc                                         010 = 1
+[trace_headers @ 000001853a757a00] 36          bit_depth_luma_minus8                                       1 = 0
+[trace_headers @ 000001853a757a00] 37          bit_depth_chroma_minus8                                     1 = 0
+[trace_headers @ 000001853a757a00] 38          qpprime_y_zero_transform_bypass_flag                        0 = 0
+[trace_headers @ 000001853a757a00] 39          seq_scaling_matrix_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 40          log2_max_frame_num_minus4                               00101 = 4
+[trace_headers @ 000001853a757a00] 45          pic_order_cnt_type                                        011 = 2
+[trace_headers @ 000001853a757a00] 48          max_num_ref_frames                                        011 = 2
+[trace_headers @ 000001853a757a00] 51          gaps_in_frame_num_allowed_flag                              0 = 0
+[trace_headers @ 000001853a757a00] 52          pic_width_in_mbs_minus1                       000000011110000 = 239
+[trace_headers @ 000001853a757a00] 67          pic_height_in_map_units_minus1                000000010000111 = 134
+[trace_headers @ 000001853a757a00] 82          frame_mbs_only_flag                                         1 = 1
+[trace_headers @ 000001853a757a00] 83          direct_8x8_inference_flag                                   1 = 1
+[trace_headers @ 000001853a757a00] 84          frame_cropping_flag                                         0 = 0
+[trace_headers @ 000001853a757a00] 85          vui_parameters_present_flag                                 1 = 1
+[trace_headers @ 000001853a757a00] 86          aspect_ratio_info_present_flag                              1 = 1
+[trace_headers @ 000001853a757a00] 87          aspect_ratio_idc                                     00000001 = 1
+[trace_headers @ 000001853a757a00] 95          overscan_info_present_flag                                  0 = 0
+[trace_headers @ 000001853a757a00] 96          video_signal_type_present_flag                              1 = 1
+[trace_headers @ 000001853a757a00] 97          video_format                                              101 = 5
+[trace_headers @ 000001853a757a00] 100         video_full_range_flag                                       0 = 0
+[trace_headers @ 000001853a757a00] 101         colour_description_present_flag                             1 = 1
+[trace_headers @ 000001853a757a00] 102         colour_primaries                                     00000001 = 1
+[trace_headers @ 000001853a757a00] 110         transfer_characteristics                             00000001 = 1
+[trace_headers @ 000001853a757a00] 118         matrix_coefficients                                  00000001 = 1
+[trace_headers @ 000001853a757a00] 126         chroma_loc_info_present_flag                                0 = 0
+[trace_headers @ 000001853a757a00] 127         timing_info_present_flag                                    1 = 1
+[trace_headers @ 000001853a757a00] 128         num_units_in_tick            00000000000000000000001111101001 = 1001
+[trace_headers @ 000001853a757a00] 160         time_scale                   00000000000000001110101001100000 = 60000
+[trace_headers @ 000001853a757a00] 192         fixed_frame_rate_flag                                       1 = 1
+[trace_headers @ 000001853a757a00] 193         nal_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 000001853a757a00] 194         cpb_cnt_minus1                                              1 = 0
+[trace_headers @ 000001853a757a00] 195         bit_rate_scale                                           0100 = 4
+[trace_headers @ 000001853a757a00] 199         cpb_size_scale                                           0010 = 2
+[trace_headers @ 000001853a757a00] 203         bit_rate_value_minus1[0]      0000000000000001011111010111100 = 48827
+[trace_headers @ 000001853a757a00] 234         cpb_size_value_minus1[0]  00000000000000000000100110001001011010000 = 1249999
+[trace_headers @ 000001853a757a00] 275         cbr_flag[0]                                                 0 = 0
+[trace_headers @ 000001853a757a00] 276         initial_cpb_removal_delay_length_minus1                 10111 = 23
+[trace_headers @ 000001853a757a00] 281         cpb_removal_delay_length_minus1                         10111 = 23
+[trace_headers @ 000001853a757a00] 286         dpb_output_delay_length_minus1                          10111 = 23
+[trace_headers @ 000001853a757a00] 291         time_offset_length                                      11000 = 24
+[trace_headers @ 000001853a757a00] 296         vcl_hrd_parameters_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 297         low_delay_hrd_flag                                          0 = 0
+[trace_headers @ 000001853a757a00] 298         pic_struct_present_flag                                     1 = 1
+[trace_headers @ 000001853a757a00] 299         bitstream_restriction_flag                                  1 = 1
+[trace_headers @ 000001853a757a00] 300         motion_vectors_over_pic_boundaries_flag                     1 = 1
+[trace_headers @ 000001853a757a00] 301         max_bytes_per_pic_denom                                   011 = 2
+[trace_headers @ 000001853a757a00] 304         max_bits_per_mb_denom                                     010 = 1
+[trace_headers @ 000001853a757a00] 307         log2_max_mv_length_horizontal                         0001110 = 13
+[trace_headers @ 000001853a757a00] 314         log2_max_mv_length_vertical                           0001100 = 11
+[trace_headers @ 000001853a757a00] 321         max_num_reorder_frames                                      1 = 0
+[trace_headers @ 000001853a757a00] 322         max_dec_frame_buffering                                   011 = 2
+[trace_headers @ 000001853a757a00] 325         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 326         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 327         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] Picture Parameter Set
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                01 = 1
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           01000 = 8
+[trace_headers @ 000001853a757a00] 8           pic_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 9           seq_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 10          entropy_coding_mode_flag                                    1 = 1
+[trace_headers @ 000001853a757a00] 11          bottom_field_pic_order_in_frame_present_flag                0 = 0
+[trace_headers @ 000001853a757a00] 12          num_slice_groups_minus1                                     1 = 0
+[trace_headers @ 000001853a757a00] 13          num_ref_idx_l0_default_active_minus1                        1 = 0
+[trace_headers @ 000001853a757a00] 14          num_ref_idx_l1_default_active_minus1                        1 = 0
+[trace_headers @ 000001853a757a00] 15          weighted_pred_flag                                          0 = 0
+[trace_headers @ 000001853a757a00] 16          weighted_bipred_idc                                        00 = 0
+[trace_headers @ 000001853a757a00] 18          pic_init_qp_minus26                                         1 = 0
+[trace_headers @ 000001853a757a00] 19          pic_init_qs_minus26                                         1 = 0
+[trace_headers @ 000001853a757a00] 20          chroma_qp_index_offset                                      1 = 0
+[trace_headers @ 000001853a757a00] 21          deblocking_filter_control_present_flag                      1 = 1
+[trace_headers @ 000001853a757a00] 22          constrained_intra_pred_flag                                 0 = 0
+[trace_headers @ 000001853a757a00] 23          redundant_pic_cnt_present_flag                              0 = 0
+[trace_headers @ 000001853a757a00] 24          transform_8x8_mode_flag                                     1 = 1
+[trace_headers @ 000001853a757a00] 25          pic_scaling_matrix_present_flag                             0 = 0
+[trace_headers @ 000001853a757a00] 26          second_chroma_qp_index_offset                               1 = 0
+[trace_headers @ 000001853a757a00] 27          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 28          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 29          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 30          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 31          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] Supplemental Enhancement Information
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                00 = 0
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           00110 = 6
+[trace_headers @ 000001853a757a00] 8           last_payload_type_byte                               00000000 = 0
+[trace_headers @ 000001853a757a00] 16          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001853a757a00] Buffering Period
+[trace_headers @ 000001853a757a00] 24          seq_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 25          initial_cpb_removal_delay[0]         000000010001100101000000 = 72000
+[trace_headers @ 000001853a757a00] 49          initial_cpb_removal_delay_offset[0]  000000010001100101000000 = 72000
+[trace_headers @ 000001853a757a00] 73          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001853a757a00] 74          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 75          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 76          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 77          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 78          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 79          bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 80          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001853a757a00] 88          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001853a757a00] Picture Timing
+[trace_headers @ 000001853a757a00] 96          cpb_removal_delay                    000000000000000000000000 = 0
+[trace_headers @ 000001853a757a00] 120         dpb_output_delay                     000000000000000000000000 = 0
+[trace_headers @ 000001853a757a00] 144         pic_struct                                               0000 = 0
+[trace_headers @ 000001853a757a00] 148         clock_timestamp_flag[0]                                     0 = 0
+[trace_headers @ 000001853a757a00] 149         bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001853a757a00] 150         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 151         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001853a757a00] 152         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001853a757a00] 153         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 154         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 155         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 156         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 157         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 158         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] 159         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001853a757a00] Slice Header
+[trace_headers @ 000001853a757a00] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001853a757a00] 1           nal_ref_idc                                                01 = 1
+[trace_headers @ 000001853a757a00] 3           nal_unit_type                                           00101 = 5
+[trace_headers @ 000001853a757a00] 8           first_mb_in_slice                                           1 = 0
+[trace_headers @ 000001853a757a00] 9           slice_type                                            0001000 = 7
+[trace_headers @ 000001853a757a00] 16          pic_parameter_set_id                                        1 = 0
+[trace_headers @ 000001853a757a00] 17          frame_num                                            00000000 = 0
+[trace_headers @ 000001853a757a00] 25          idr_pic_id                                                  1 = 0
+[trace_headers @ 000001853a757a00] 26          no_output_of_prior_pics_flag                                0 = 0
+[trace_headers @ 000001853a757a00] 27          long_term_reference_flag                                    0 = 0
+[trace_headers @ 000001853a757a00] 28          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001853a757a00] 29          disable_deblocking_filter_idc                               1 = 0
+[trace_headers @ 000001853a757a00] 30          slice_alpha_c0_offset_div2                                  1 = 0
+[trace_headers @ 000001853a757a00] 31          slice_beta_offset_div2                                      1 = 0
+[out#0/null @ 000001853a21f600] Muxer returned EOF
+[out#0/null @ 000001853a21f600] Terminating thread with success
+[vist#0:0/h264 @ 000001853c319d00] All consumers of this stream are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00] All consumers are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00] Terminating thread with success
+[out#0/null @ 000001853a21f600] Output file #0 (pipe:):
+[out#0/null @ 000001853a21f600]   Output stream #0:0 (video): 1 packets muxed (513889 bytes); 
+[out#0/null @ 000001853a21f600]   Total: 1 packets (513889 bytes) muxed
+[out#0/null @ 000001853a21f600] video:502KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=    1 fps=0.0 q=-1.0 Lsize=N/A time=00:00:00.30 bitrate=N/A speed= 118x elapsed=0:00:00.00    
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00] Input file #0 (C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\quality_matrix_flushfix\smoke_native_h264_balanced.mp4):
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00]   Input stream #0:0 (video): 10 packets read (1624622 bytes); 
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001853a171e00]   Total: 10 packets (1624622 bytes) demuxed
+[AVIOContext @ 000001853a214200] Statistics: 1670601 bytes read, 2 seeks
+
+Exiting with exit code 0

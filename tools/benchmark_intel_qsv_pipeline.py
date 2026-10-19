@@ -144,8 +144,10 @@ def _ffmpeg_cmd(variant: str, out_mp4: Path):
 
 def _harness_cmd(variant: str, out_dir: Path, layout: Path, harness_args: list):
     path = "ffmpeg" if variant == "D" else "native"
+    if "--codec" not in harness_args:
+        harness_args = [*harness_args, "--codec", "hevc"]
     return [sys.executable, str(ROOT / "SportCamHUD.py"), "--test-intel-export", *harness_args,
-            "--intel-path", path, "--codec", "hevc", "--profile", "fast",
+            "--intel-path", path, "--profile", "fast",
             "--frames", str(FRAMES), "--bitrate", "40M", "--video", VIDEO, "--fit", FIT,
             "--layout", str(layout), "--watchdog-seconds", "300",
             "--output", str(out_dir / "output.mp4"), "--result-json", str(out_dir / "harness.json")]
@@ -200,7 +202,7 @@ def _parse_ffmpeg_log(text: str, wall: float) -> dict:
 
 
 SUFFIX_ENV = {"ZC": {"TELEM_INTEL_VP_ZERO_COPY": "1"}, "TR": {"TELEM_HUD_STARTUP_TRACE": "1"}, "NOBLOB": {"TELEM_INTEL_HUD_INIT_BLOB": "0"},
-              "Q": {}, "CANCEL": {},
+              "Q": {}, "CANCEL": {}, "H264": {},
               "SKIP": {"TELEM_INTEL_DIAG_SKIP_VP_COPY": "1"}}
 CANDIDATE_DLL = None
 REQUIRE_AC = False
@@ -241,6 +243,8 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
         harness_args = []
         if "Q" in suffixes:
             harness_args += ["--mode", "queue"]
+        if "H264" in suffixes:
+            harness_args += ["--codec", "h264"]
         if "CANCEL" in suffixes:
             harness_args += ["--cancel-after-frames", str(min(150, FRAMES // 2))]
         cmd = _harness_cmd(variant, out, layout, harness_args)
