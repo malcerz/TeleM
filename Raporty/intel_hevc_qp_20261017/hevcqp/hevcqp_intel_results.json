@@ -1,0 +1,557 @@
+[
+  {
+    "tag": "fast_60",
+    "video": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_hevc_qp_20261017\\hevcqp\\hevc_fast_on_0_60f.mp4",
+    "returncode": 0,
+    "frames": 60,
+    "wall_s": 3.698158600003808,
+    "analyzer_fps": 16.22429065101162,
+    "cpu_s_by_process": {
+      "hevcqp.exe": 0.015625,
+      "cmd.exe": 0.015625,
+      "ffprobe_mod.exe": 3.1875,
+      "ffmpeg.exe": 0.03125
+    },
+    "cpu_s_total": 3.25,
+    "avg_cores_busy": 0.8788157435964628,
+    "logical_cpus": 12,
+    "peak_rss_mb_by_process": {
+      "hevcqp.exe": 4.2890625,
+      "cmd.exe": 7.59765625,
+      "ffprobe_mod.exe": 112.4296875,
+      "ffmpeg.exe": 8.9296875
+    },
+    "peak_rss_mb_sum": 132.80859375,
+    "qp": {
+      "frame_avg_mean": 19.45947515,
+      "frame_avg_min": 16.0,
+      "frame_avg_max": 20.705224,
+      "frame_avg_stdev_across_frames": 1.210103055877664,
+      "block_qp_min": 16,
+      "block_qp_max": 26,
+      "within_frame_std_mean": 0.6598217833333333,
+      "frames_avg_not_26": 60,
+      "types": {
+        "B": 59,
+        "K": 1
+      },
+      "first10": [
+        [
+          "K",
+          16.0,
+          0.0,
+          16,
+          16
+        ],
+        [
+          "B",
+          19.623,
+          0.86,
+          19,
+          26
+        ],
+        [
+          "B",
+          19.0,
+          0.0,
+          19,
+          19
+        ],
+        [
+          "B",
+          18.001,
+          0.089,
+          18,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.001,
+          0.1,
+          17,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ]
+      ]
+    },
+    "stdout_tail": "an(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nK+I:\r\nNumber of frames      : 1 ( 1.666667 % )\r\nTotal Size            : 571662 ( 5.253497 % )\r\nAverage Size          : 571662.000000\r\nAVERAGE QP            : 16.000000\r\nStdDev (frames)       : 0.000000\r\nStdDev (MB)           : 0.000000\r\n\r\nK:\r\nNumber of frames      : 1 ( 1.666667 % )\r\nTotal Size            : 571662 ( 5.253497 % )\r\nAverage Size          : 571662.000000\r\nAVERAGE QP            : 16.000000\r\nStdDev (frames)       : 0.000000\r\nStdDev (MB)           : 0.000000\r\n\r\nI:\r\nNumber of frames      : 0 ( 0.000000 % )\r\nTotal Size            : 0 ( 0.000000 % )\r\nAverage Size          : -nan(ind)\r\nAVERAGE QP            : -nan(ind)\r\nStdDev (frames)       : -nan(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nP+B:\r\nNumber of frames      : 59 ( 98.333333 % )\r\nTotal Size            : 10309890 ( 94.746503 % )\r\nAverage Size          : 174743.898305\r\nAVERAGE QP            : 19.518110\r\nStdDev (frames)       : 1.132645\r\nStdDev (MB)           : 1.362148\r\n\r\n--------------------------------\r\n\r\nConsecutive B-Frames (number of B-Frames in each group)\r\n  1 : 0 ( 0.000000 % )\r\n  2 : 0 ( 0.000000 % )\r\n  3 : 0 ( 0.000000 % )\r\n  4 : 0 ( 0.000000 % )\r\n  5 : 0 ( 0.000000 % )\r\n  6 : 0 ( 0.000000 % )\r\n  7 : 0 ( 0.000000 % )\r\n  8 : 0 ( 0.000000 % )\r\n  9 : 0 ( 0.000000 % )\r\n 10 : 0 ( 0.000000 % )\r\n 11 : 0 ( 0.000000 % )\r\n 12 : 0 ( 0.000000 % )\r\n 13 : 0 ( 0.000000 % )\r\n 14 : 0 ( 0.000000 % )\r\n 15 : 0 ( 0.000000 % )\r\n 16 : 0 ( 0.000000 % )\r\n>16 : 59 ( 100.000000 % )\r\n"
+  },
+  {
+    "tag": "fast_600",
+    "video": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_hevc_qp_20261017\\ab\\hevc_fast_on_0.mp4",
+    "returncode": 0,
+    "frames": 600,
+    "wall_s": 32.4377811000013,
+    "analyzer_fps": 18.49694953394873,
+    "cpu_s_by_process": {
+      "hevcqp.exe": 0.03125,
+      "cmd.exe": 0.015625,
+      "ffprobe_mod.exe": 31.296875,
+      "ffmpeg.exe": 0.1875
+    },
+    "cpu_s_total": 31.53125,
+    "avg_cores_busy": 0.9720532333205348,
+    "logical_cpus": 12,
+    "peak_rss_mb_by_process": {
+      "hevcqp.exe": 4.32421875,
+      "cmd.exe": 7.4453125,
+      "ffprobe_mod.exe": 112.41796875,
+      "ffmpeg.exe": 9.80078125
+    },
+    "peak_rss_mb_sum": 132.546875,
+    "qp": {
+      "frame_avg_mean": 21.881110676666665,
+      "frame_avg_min": 16.0,
+      "frame_avg_max": 24.756937,
+      "frame_avg_stdev_across_frames": 1.3794623659810352,
+      "block_qp_min": 16,
+      "block_qp_max": 28,
+      "within_frame_std_mean": 0.851910295,
+      "frames_avg_not_26": 600,
+      "types": {
+        "B": 590,
+        "K": 10
+      },
+      "first10": [
+        [
+          "K",
+          16.0,
+          0.0,
+          16,
+          16
+        ],
+        [
+          "B",
+          19.623,
+          0.86,
+          19,
+          26
+        ],
+        [
+          "B",
+          19.0,
+          0.0,
+          19,
+          19
+        ],
+        [
+          "B",
+          18.001,
+          0.089,
+          18,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.001,
+          0.1,
+          17,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ]
+      ]
+    },
+    "stdout_tail": ")\r\nStdDev (MB)           : -nan(ind)\r\n\r\nK+I:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5355138 ( 5.198794 % )\r\nAverage Size          : 535513.800000\r\nAVERAGE QP            : 18.122111\r\nStdDev (frames)       : 1.218679\r\nStdDev (MB)           : 1.531777\r\n\r\nK:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5355138 ( 5.198794 % )\r\nAverage Size          : 535513.800000\r\nAVERAGE QP            : 18.122111\r\nStdDev (frames)       : 1.218679\r\nStdDev (MB)           : 1.531777\r\n\r\nI:\r\nNumber of frames      : 0 ( 0.000000 % )\r\nTotal Size            : 0 ( 0.000000 % )\r\nAverage Size          : -nan(ind)\r\nAVERAGE QP            : -nan(ind)\r\nStdDev (frames)       : -nan(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nP+B:\r\nNumber of frames      : 590 ( 98.333333 % )\r\nTotal Size            : 97652168 ( 94.801206 % )\r\nAverage Size          : 165512.149153\r\nAVERAGE QP            : 21.944823\r\nStdDev (frames)       : 1.290908\r\nStdDev (MB)           : 1.555574\r\n\r\n--------------------------------\r\n\r\nConsecutive B-Frames (number of B-Frames in each group)\r\n  1 : 0 ( 0.000000 % )\r\n  2 : 0 ( 0.000000 % )\r\n  3 : 0 ( 0.000000 % )\r\n  4 : 0 ( 0.000000 % )\r\n  5 : 0 ( 0.000000 % )\r\n  6 : 0 ( 0.000000 % )\r\n  7 : 0 ( 0.000000 % )\r\n  8 : 0 ( 0.000000 % )\r\n  9 : 0 ( 0.000000 % )\r\n 10 : 0 ( 0.000000 % )\r\n 11 : 0 ( 0.000000 % )\r\n 12 : 0 ( 0.000000 % )\r\n 13 : 0 ( 0.000000 % )\r\n 14 : 0 ( 0.000000 % )\r\n 15 : 0 ( 0.000000 % )\r\n 16 : 0 ( 0.000000 % )\r\n>16 : 590 ( 100.000000 % )\r\n"
+  },
+  {
+    "tag": "balanced_600",
+    "video": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_hevc_qp_20261017\\ab\\hevc_balanced_on_0.mp4",
+    "returncode": 0,
+    "frames": 600,
+    "wall_s": 35.202072899992345,
+    "analyzer_fps": 17.04445081130806,
+    "cpu_s_by_process": {
+      "hevcqp.exe": 0.046875,
+      "cmd.exe": 0.03125,
+      "ffprobe_mod.exe": 34.109375,
+      "ffmpeg.exe": 0.296875
+    },
+    "cpu_s_total": 34.484375,
+    "avg_cores_busy": 0.9796120557436689,
+    "logical_cpus": 12,
+    "peak_rss_mb_by_process": {
+      "hevcqp.exe": 4.33203125,
+      "cmd.exe": 7.59765625,
+      "ffprobe_mod.exe": 173.27734375,
+      "ffmpeg.exe": 9.296875
+    },
+    "peak_rss_mb_sum": 193.56640625,
+    "qp": {
+      "frame_avg_mean": 21.58230292833333,
+      "frame_avg_min": 16.0,
+      "frame_avg_max": 24.597716,
+      "frame_avg_stdev_across_frames": 1.352175877496559,
+      "block_qp_min": 16,
+      "block_qp_max": 28,
+      "within_frame_std_mean": 0.8433589233333333,
+      "frames_avg_not_26": 600,
+      "types": {
+        "B": 590,
+        "K": 10
+      },
+      "first10": [
+        [
+          "K",
+          16.0,
+          0.0,
+          16,
+          16
+        ],
+        [
+          "B",
+          19.624,
+          0.86,
+          19,
+          26
+        ],
+        [
+          "B",
+          19.0,
+          0.0,
+          19,
+          19
+        ],
+        [
+          "B",
+          18.001,
+          0.089,
+          18,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.001,
+          0.1,
+          17,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ]
+      ]
+    },
+    "stdout_tail": ")\r\nStdDev (MB)           : -nan(ind)\r\n\r\nK+I:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5538189 ( 5.382568 % )\r\nAverage Size          : 553818.900000\r\nAVERAGE QP            : 17.500000\r\nStdDev (frames)       : 1.024695\r\nStdDev (MB)           : 1.024695\r\n\r\nK:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5538189 ( 5.382568 % )\r\nAverage Size          : 553818.900000\r\nAVERAGE QP            : 17.500000\r\nStdDev (frames)       : 1.024695\r\nStdDev (MB)           : 1.024695\r\n\r\nI:\r\nNumber of frames      : 0 ( 0.000000 % )\r\nTotal Size            : 0 ( 0.000000 % )\r\nAverage Size          : -nan(ind)\r\nAVERAGE QP            : -nan(ind)\r\nStdDev (frames)       : -nan(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nP+B:\r\nNumber of frames      : 590 ( 98.333333 % )\r\nTotal Size            : 97353006 ( 94.617432 % )\r\nAverage Size          : 165005.094915\r\nAVERAGE QP            : 21.651495\r\nStdDev (frames)       : 1.246725\r\nStdDev (MB)           : 1.519061\r\n\r\n--------------------------------\r\n\r\nConsecutive B-Frames (number of B-Frames in each group)\r\n  1 : 0 ( 0.000000 % )\r\n  2 : 0 ( 0.000000 % )\r\n  3 : 0 ( 0.000000 % )\r\n  4 : 0 ( 0.000000 % )\r\n  5 : 0 ( 0.000000 % )\r\n  6 : 0 ( 0.000000 % )\r\n  7 : 0 ( 0.000000 % )\r\n  8 : 0 ( 0.000000 % )\r\n  9 : 0 ( 0.000000 % )\r\n 10 : 0 ( 0.000000 % )\r\n 11 : 0 ( 0.000000 % )\r\n 12 : 0 ( 0.000000 % )\r\n 13 : 0 ( 0.000000 % )\r\n 14 : 0 ( 0.000000 % )\r\n 15 : 0 ( 0.000000 % )\r\n 16 : 0 ( 0.000000 % )\r\n>16 : 590 ( 100.000000 % )\r\n"
+  },
+  {
+    "tag": "quality_600",
+    "video": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_hevc_qp_20261017\\ab\\hevc_quality_on_0.mp4",
+    "returncode": 0,
+    "frames": 600,
+    "wall_s": 35.474036100000376,
+    "analyzer_fps": 16.91377880736818,
+    "cpu_s_by_process": {
+      "hevcqp.exe": 0.046875,
+      "cmd.exe": 0.015625,
+      "ffmpeg.exe": 0.328125,
+      "ffprobe_mod.exe": 34.046875
+    },
+    "cpu_s_total": 34.4375,
+    "avg_cores_busy": 0.9707804294645693,
+    "logical_cpus": 12,
+    "peak_rss_mb_by_process": {
+      "hevcqp.exe": 4.328125,
+      "cmd.exe": 7.59375,
+      "ffmpeg.exe": 9.38671875,
+      "ffprobe_mod.exe": 204.1796875
+    },
+    "peak_rss_mb_sum": 224.6328125,
+    "qp": {
+      "frame_avg_mean": 21.28345743,
+      "frame_avg_min": 16.0,
+      "frame_avg_max": 23.783465,
+      "frame_avg_stdev_across_frames": 1.2551750157925274,
+      "block_qp_min": 16,
+      "block_qp_max": 27,
+      "within_frame_std_mean": 0.842425615,
+      "frames_avg_not_26": 600,
+      "types": {
+        "B": 590,
+        "K": 10
+      },
+      "first10": [
+        [
+          "K",
+          16.0,
+          0.0,
+          16,
+          16
+        ],
+        [
+          "B",
+          19.628,
+          0.87,
+          19,
+          26
+        ],
+        [
+          "B",
+          19.0,
+          0.0,
+          19,
+          19
+        ],
+        [
+          "B",
+          18.001,
+          0.089,
+          18,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.001,
+          0.1,
+          17,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ]
+      ]
+    },
+    "stdout_tail": ")\r\nStdDev (MB)           : -nan(ind)\r\n\r\nK+I:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5576131 ( 5.358223 % )\r\nAverage Size          : 557613.100000\r\nAVERAGE QP            : 17.400000\r\nStdDev (frames)       : 0.916515\r\nStdDev (MB)           : 0.916515\r\n\r\nK:\r\nNumber of frames      : 10 ( 1.666667 % )\r\nTotal Size            : 5576131 ( 5.358223 % )\r\nAverage Size          : 557613.100000\r\nAVERAGE QP            : 17.400000\r\nStdDev (frames)       : 0.916515\r\nStdDev (MB)           : 0.916515\r\n\r\nI:\r\nNumber of frames      : 0 ( 0.000000 % )\r\nTotal Size            : 0 ( 0.000000 % )\r\nAverage Size          : -nan(ind)\r\nAVERAGE QP            : -nan(ind)\r\nStdDev (frames)       : -nan(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nP+B:\r\nNumber of frames      : 590 ( 98.333333 % )\r\nTotal Size            : 98490657 ( 94.641777 % )\r\nAverage Size          : 166933.316949\r\nAVERAGE QP            : 21.349279\r\nStdDev (frames)       : 1.152381\r\nStdDev (MB)           : 1.442509\r\n\r\n--------------------------------\r\n\r\nConsecutive B-Frames (number of B-Frames in each group)\r\n  1 : 0 ( 0.000000 % )\r\n  2 : 0 ( 0.000000 % )\r\n  3 : 0 ( 0.000000 % )\r\n  4 : 0 ( 0.000000 % )\r\n  5 : 0 ( 0.000000 % )\r\n  6 : 0 ( 0.000000 % )\r\n  7 : 0 ( 0.000000 % )\r\n  8 : 0 ( 0.000000 % )\r\n  9 : 0 ( 0.000000 % )\r\n 10 : 0 ( 0.000000 % )\r\n 11 : 0 ( 0.000000 % )\r\n 12 : 0 ( 0.000000 % )\r\n 13 : 0 ( 0.000000 % )\r\n 14 : 0 ( 0.000000 % )\r\n 15 : 0 ( 0.000000 % )\r\n 16 : 0 ( 0.000000 % )\r\n>16 : 590 ( 100.000000 % )\r\n"
+  },
+  {
+    "tag": "fast_1800",
+    "video": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_hevc_qp_20261017\\hevcqp\\hevc_fast_1800.mp4",
+    "returncode": 0,
+    "frames": 1800,
+    "wall_s": 94.36971100000665,
+    "analyzer_fps": 19.07391662988004,
+    "cpu_s_by_process": {
+      "hevcqp.exe": 0.046875,
+      "cmd.exe": 0.03125,
+      "ffprobe_mod.exe": 91.640625,
+      "ffmpeg.exe": 0.828125
+    },
+    "cpu_s_total": 92.546875,
+    "avg_cores_busy": 0.9806840989477384,
+    "logical_cpus": 12,
+    "peak_rss_mb_by_process": {
+      "hevcqp.exe": 4.41796875,
+      "cmd.exe": 7.58203125,
+      "ffprobe_mod.exe": 112.4296875,
+      "ffmpeg.exe": 10.1640625
+    },
+    "peak_rss_mb_sum": 132.84765625,
+    "qp": {
+      "frame_avg_mean": 25.157906986666667,
+      "frame_avg_min": 16.0,
+      "frame_avg_max": 31.873426,
+      "frame_avg_stdev_across_frames": 2.9012421791985,
+      "block_qp_min": 16,
+      "block_qp_max": 35,
+      "within_frame_std_mean": 0.90581252,
+      "frames_avg_not_26": 1800,
+      "types": {
+        "B": 1770,
+        "K": 30
+      },
+      "first10": [
+        [
+          "K",
+          16.0,
+          0.0,
+          16,
+          16
+        ],
+        [
+          "B",
+          19.623,
+          0.86,
+          19,
+          26
+        ],
+        [
+          "B",
+          19.0,
+          0.0,
+          19,
+          19
+        ],
+        [
+          "B",
+          18.001,
+          0.089,
+          18,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.001,
+          0.1,
+          17,
+          26
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ],
+        [
+          "B",
+          17.0,
+          0.0,
+          17,
+          17
+        ]
+      ]
+    },
+    "stdout_tail": "dDev (MB)           : -nan(ind)\r\n\r\nK+I:\r\nNumber of frames      : 30 ( 1.666667 % )\r\nTotal Size            : 17750341 ( 5.775428 % )\r\nAverage Size          : 591678.033333\r\nAVERAGE QP            : 21.215032\r\nStdDev (frames)       : 2.858309\r\nStdDev (MB)           : 3.300100\r\n\r\nK:\r\nNumber of frames      : 30 ( 1.666667 % )\r\nTotal Size            : 17750341 ( 5.775428 % )\r\nAverage Size          : 591678.033333\r\nAVERAGE QP            : 21.215032\r\nStdDev (frames)       : 2.858309\r\nStdDev (MB)           : 3.300100\r\n\r\nI:\r\nNumber of frames      : 0 ( 0.000000 % )\r\nTotal Size            : 0 ( 0.000000 % )\r\nAverage Size          : -nan(ind)\r\nAVERAGE QP            : -nan(ind)\r\nStdDev (frames)       : -nan(ind)\r\nStdDev (MB)           : -nan(ind)\r\n\r\nP+B:\r\nNumber of frames      : 1770 ( 98.333333 % )\r\nTotal Size            : 289592068 ( 94.224572 % )\r\nAverage Size          : 163611.337853\r\nAVERAGE QP            : 25.224735\r\nStdDev (frames)       : 2.855422\r\nStdDev (MB)           : 2.994272\r\n\r\n--------------------------------\r\n\r\nConsecutive B-Frames (number of B-Frames in each group)\r\n  1 : 0 ( 0.000000 % )\r\n  2 : 0 ( 0.000000 % )\r\n  3 : 0 ( 0.000000 % )\r\n  4 : 0 ( 0.000000 % )\r\n  5 : 0 ( 0.000000 % )\r\n  6 : 0 ( 0.000000 % )\r\n  7 : 0 ( 0.000000 % )\r\n  8 : 0 ( 0.000000 % )\r\n  9 : 0 ( 0.000000 % )\r\n 10 : 0 ( 0.000000 % )\r\n 11 : 0 ( 0.000000 % )\r\n 12 : 0 ( 0.000000 % )\r\n 13 : 0 ( 0.000000 % )\r\n 14 : 0 ( 0.000000 % )\r\n 15 : 0 ( 0.000000 % )\r\n 16 : 0 ( 0.000000 % )\r\n>16 : 1770 ( 100.000000 % )\r\n"
+  }
+]

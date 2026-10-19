@@ -1,0 +1,692 @@
+{
+  "codec": "hevc",
+  "profile": "balanced",
+  "intel_path": "ffmpeg",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\ffmpeg_hevc_pipeline_audit_clean.mp4",
+  "bitrate": "40M",
+  "max_frames": 120,
+  "success": true,
+  "error": "",
+  "elapsed_s": 16.55,
+  "total_frames": 120,
+  "effective_fps": 7.25,
+  "ram_used_gb": 11.01,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "4.004000",
+          "nb_frames": "120"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "3.968000",
+          "nb_frames": "186"
+        }
+      ],
+      "format": {
+        "duration": "4.004000",
+        "size": "21047080"
+      }
+    },
+    "actual_video_frames": 120
+  },
+  "output_size_bytes": 21047080,
+  "stats": {
+    "avg_qp": null,
+    "codec": "hevc",
+    "compression_active": false,
+    "compression_text": "QP: -- (FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable)",
+    "encoder_accepted": {
+      "TargetUsage": 4,
+      "BufferSizeInKB": 10000,
+      "InitialDelayInKB": 5000,
+      "TargetKbps": 40000,
+      "MaxKbps": 50000,
+      "BRCParamMultiplier": 1
+    },
+    "encoder_diagnostics": [
+      "[hevc_qsv @ 000001a6c3fd13c0] Using the variable bitrate (VBR) ratecontrol method",
+      "[hevc_qsv @ 000001a6c3fd13c0] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+      "[hevc_qsv @ 000001a6c3fd13c0] TargetUsage: 4; RateControlMethod: VBR",
+      "[hevc_qsv @ 000001a6c3fd13c0] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+      "[hevc_qsv @ 000001a6c3fd13c0] NumSlice: 1; NumRefFrame: 3",
+      "[hevc_qsv @ 000001a6c3fd13c0] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+    ],
+    "generation_id": 1,
+    "is_cqp": false,
+    "output_validation": {
+      "duration_s": 4.004,
+      "has_audio": true,
+      "size_bytes": 21047080,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+    "qp_source": "unavailable in this FFmpeg HEVC runtime",
+    "quant_metric": "QP",
+    "quant_reason": "FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable",
+    "quant_samples": 0,
+    "rate_control": "VBR",
+    "rate_control_raw": "VBR",
+    "total_overlay_frames": 0
+  },
+  "sampled_q": {
+    "1": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "2": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "3": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "4": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "5": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "6": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "7": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "8": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "9": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "10": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "11": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "12": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "13": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "14": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "15": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "16": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "17": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "18": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "19": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "20": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "21": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "22": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "23": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "24": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "25": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "26": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "27": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "28": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "29": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "30": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "31": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "32": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "33": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "34": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "35": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "36": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "37": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "38": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "39": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "40": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "41": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "42": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "43": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "44": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "45": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "46": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "47": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "48": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "49": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "50": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "51": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "52": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "53": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "54": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "55": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "56": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "57": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "58": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "59": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "60": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "61": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "62": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "63": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "64": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "65": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "66": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "67": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "68": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "69": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "70": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "71": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "72": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "73": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "74": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "75": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "76": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "77": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "78": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "79": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "80": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "81": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "82": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "83": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "84": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "85": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "86": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "87": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "88": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "89": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "90": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "91": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "92": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "93": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "94": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "95": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "96": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "97": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "98": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "99": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "100": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "101": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "102": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "103": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "104": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "105": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "106": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "107": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "108": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "109": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "110": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "111": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "112": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "113": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "114": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "115": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "116": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "117": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "118": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "119": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "120": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    }
+  }
+}

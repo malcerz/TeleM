@@ -1,0 +1,58 @@
+[
+  {
+    "name": "native_h264_fast_vs_balanced",
+    "ssim": 0.993637,
+    "psnr_db": "46.939653",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "native_h264_fast_vs_quality",
+    "ssim": 0.992749,
+    "psnr_db": "46.197915",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "native_hevc_fast_vs_balanced",
+    "ssim": 0.996703,
+    "psnr_db": "49.903526",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "native_hevc_fast_vs_quality",
+    "ssim": 0.996603,
+    "psnr_db": "49.862229",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "ffmpeg_h264_fast_vs_balanced",
+    "ssim": 0.992907,
+    "psnr_db": "46.220762",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "ffmpeg_h264_fast_vs_quality",
+    "ssim": 0.991702,
+    "psnr_db": "45.395360",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "ffmpeg_hevc_fast_vs_balanced",
+    "ssim": 0.996073,
+    "psnr_db": "49.088861",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  },
+  {
+    "name": "ffmpeg_hevc_fast_vs_quality",
+    "ssim": 0.995954,
+    "psnr_db": "48.967076",
+    "frames": 90,
+    "meaning": "pairwise decoded similarity; no uncompressed HUD reference, not an absolute quality ranking"
+  }
+]

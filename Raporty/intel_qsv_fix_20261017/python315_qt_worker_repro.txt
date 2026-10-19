@@ -1,0 +1,11 @@
+Exception in thread Thread-1 (f):
+Traceback (most recent call last):
+  File "C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\threading.py", line 1218, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\threading.py", line 1160, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 4, in f
+TypeError: 'lazy_import' object is not callable
+<class 'lazy_import'>

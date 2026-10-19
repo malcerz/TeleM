@@ -1,0 +1,24 @@
+START benchmark_native_hevc_fast
+DONE benchmark_native_hevc_fast fps= 26.06 Mbps= 41.16 qp= 5.560636182902584
+START benchmark_native_hevc_balanced
+DONE benchmark_native_hevc_balanced fps= 21.51 Mbps= 41.11 qp= 6.912244897959184
+START benchmark_native_hevc_quality
+DONE benchmark_native_hevc_quality fps= 12.07 Mbps= 41.58 qp= 8.261758691206545
+START benchmark_native_h264_fast
+DONE benchmark_native_h264_fast fps= 26.26 Mbps= 41.28 qp= 24.615
+START benchmark_native_h264_balanced
+DONE benchmark_native_h264_balanced fps= 26.01 Mbps= 41.53 qp= 24.333333333333332
+START benchmark_native_h264_quality
+DONE benchmark_native_h264_quality fps= 25.44 Mbps= 40.86 qp= 23.95
+START benchmark_ffmpeg_hevc_fast
+DONE benchmark_ffmpeg_hevc_fast fps= 5.14 Mbps= 40.97 qp= None
+START benchmark_ffmpeg_hevc_balanced
+DONE benchmark_ffmpeg_hevc_balanced fps= 4.96 Mbps= 41.12 qp= None
+START benchmark_ffmpeg_hevc_quality
+DONE benchmark_ffmpeg_hevc_quality fps= 4.96 Mbps= 41.02 qp= None
+START benchmark_ffmpeg_h264_fast
+DONE benchmark_ffmpeg_h264_fast fps= 3.04 Mbps= 41.4 qp= 25.36802973977695
+START benchmark_ffmpeg_h264_balanced
+DONE benchmark_ffmpeg_h264_balanced fps= 3.04 Mbps= 41.28 qp= 25.24163568773234
+START benchmark_ffmpeg_h264_quality
+DONE benchmark_ffmpeg_h264_quality fps= 3.06 Mbps= 41.42 qp= 25.31679389312977

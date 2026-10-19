@@ -1,0 +1,1808 @@
+﻿ffmpeg.exe : ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg develo
+pers
+At line:1 char:363
++ ... _20261017"; & runtime\common\ffmpeg\ffmpeg.exe -nostdin -v verbose -i ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ffmpeg version ...mpeg developers:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+  configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cair
+o --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enab
+le-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avis
+ynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --ena
+ble-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enab
+le-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvven
+c --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libao
+m --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enab
+le-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enab
+le-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffn
+vcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl
+ --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --
+enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 -
+-enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-
+libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr
+ --enable-chromaprint --enable-whisper
+  libavutil      61.  5.100 / 61.  5.100
+  libavcodec     63.  8.101 / 63.  8.101
+  libavformat    63.  6.100 / 63.  6.100
+  libavdevice    63.  2.100 / 63.  2.100
+  libavfilter    12.  3.101 / 12.  3.101
+  libswscale     10.  2.100 / 10.  2.100
+  libswresample   7.  2.100 /  7.  2.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'Raporty\intel_hevc_qp_20261017\trace_fast.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2mp41
+    encoder         : Lavf63.6.100
+  Duration: 00:00:04.00, start: 0.000000, bitrate: 43130 kb/s
+  Stream #0:0[0x1](und): Video: hevc (Main 10), 1 reference frame (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/
+arib-std-b67, left), 3840x2160 [SAR 1:1 DAR 16:9], 42868 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+    Metadata:
+      handler_name    : GoPro AAC
+[out#0/null @ 000001a34dabc0c0] Adding streams from explicit maps...
+[vost#0:0/copy @ 000001a34db4ba00] Created video stream from input stream 0:0
+[trace_headers @ 000001a34db79740] Extradata
+[trace_headers @ 000001a34db79740] Video Parameter Set
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100000 = 32
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          vps_video_parameter_set_id                               0000 = 0
+[trace_headers @ 000001a34db79740] 20          vps_base_layer_internal_flag                                1 = 1
+[trace_headers @ 000001a34db79740] 21          vps_base_layer_available_flag                               1 = 1
+[trace_headers @ 000001a34db79740] 22          vps_max_layers_minus1                                  000000 = 0
+[trace_headers @ 000001a34db79740] 28          vps_max_sub_layers_minus1                                 000 = 0
+[trace_headers @ 000001a34db79740] 31          vps_temporal_id_nesting_flag                                1 = 1
+[trace_headers @ 000001a34db79740] 32          vps_reserved_0xffff_16bits                   1111111111111111 = 65535
+[trace_headers @ 000001a34db79740] 48          general_profile_space                                      00 = 0
+[trace_headers @ 000001a34db79740] 50          general_tier_flag                                           1 = 1
+[trace_headers @ 000001a34db79740] 51          general_profile_idc                                     00010 = 2
+[trace_headers @ 000001a34db79740] 56          general_profile_compatibility_flag[0]                       0 = 0
+[trace_headers @ 000001a34db79740] 57          general_profile_compatibility_flag[1]                       0 = 0
+[trace_headers @ 000001a34db79740] 58          general_profile_compatibility_flag[2]                       1 = 1
+[trace_headers @ 000001a34db79740] 59          general_profile_compatibility_flag[3]                       0 = 0
+[trace_headers @ 000001a34db79740] 60          general_profile_compatibility_flag[4]                       0 = 0
+[trace_headers @ 000001a34db79740] 61          general_profile_compatibility_flag[5]                       0 = 0
+[trace_headers @ 000001a34db79740] 62          general_profile_compatibility_flag[6]                       0 = 0
+[trace_headers @ 000001a34db79740] 63          general_profile_compatibility_flag[7]                       0 = 0
+[trace_headers @ 000001a34db79740] 64          general_profile_compatibility_flag[8]                       0 = 0
+[trace_headers @ 000001a34db79740] 65          general_profile_compatibility_flag[9]                       0 = 0
+[trace_headers @ 000001a34db79740] 66          general_profile_compatibility_flag[10]                      0 = 0
+[trace_headers @ 000001a34db79740] 67          general_profile_compatibility_flag[11]                      0 = 0
+[trace_headers @ 000001a34db79740] 68          general_profile_compatibility_flag[12]                      0 = 0
+[trace_headers @ 000001a34db79740] 69          general_profile_compatibility_flag[13]                      0 = 0
+[trace_headers @ 000001a34db79740] 70          general_profile_compatibility_flag[14]                      0 = 0
+[trace_headers @ 000001a34db79740] 71          general_profile_compatibility_flag[15]                      0 = 0
+[trace_headers @ 000001a34db79740] 72          general_profile_compatibility_flag[16]                      0 = 0
+[trace_headers @ 000001a34db79740] 73          general_profile_compatibility_flag[17]                      0 = 0
+[trace_headers @ 000001a34db79740] 74          general_profile_compatibility_flag[18]                      0 = 0
+[trace_headers @ 000001a34db79740] 75          general_profile_compatibility_flag[19]                      0 = 0
+[trace_headers @ 000001a34db79740] 76          general_profile_compatibility_flag[20]                      0 = 0
+[trace_headers @ 000001a34db79740] 77          general_profile_compatibility_flag[21]                      0 = 0
+[trace_headers @ 000001a34db79740] 78          general_profile_compatibility_flag[22]                      0 = 0
+[trace_headers @ 000001a34db79740] 79          general_profile_compatibility_flag[23]                      0 = 0
+[trace_headers @ 000001a34db79740] 80          general_profile_compatibility_flag[24]                      0 = 0
+[trace_headers @ 000001a34db79740] 81          general_profile_compatibility_flag[25]                      0 = 0
+[trace_headers @ 000001a34db79740] 82          general_profile_compatibility_flag[26]                      0 = 0
+[trace_headers @ 000001a34db79740] 83          general_profile_compatibility_flag[27]                      0 = 0
+[trace_headers @ 000001a34db79740] 84          general_profile_compatibility_flag[28]                      0 = 0
+[trace_headers @ 000001a34db79740] 85          general_profile_compatibility_flag[29]                      0 = 0
+[trace_headers @ 000001a34db79740] 86          general_profile_compatibility_flag[30]                      0 = 0
+[trace_headers @ 000001a34db79740] 87          general_profile_compatibility_flag[31]                      0 = 0
+[trace_headers @ 000001a34db79740] 88          general_progressive_source_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 89          general_interlaced_source_flag                              0 = 0
+[trace_headers @ 000001a34db79740] 90          general_non_packed_constraint_flag                          0 = 0
+[trace_headers @ 000001a34db79740] 91          general_frame_only_constraint_flag                          1 = 1
+[trace_headers @ 000001a34db79740] 92          general_reserved_zero_7bits                           0000000 = 0
+[trace_headers @ 000001a34db79740] 99          general_one_picture_only_constraint_flag                    0 = 0
+[trace_headers @ 000001a34db79740] 100         general_reserved_zero_35bits         000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 124         general_reserved_zero_35bits                      00000000000 = 0
+[trace_headers @ 000001a34db79740] 135         general_inbld_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 136         general_level_idc                                    10010110 = 150
+[trace_headers @ 000001a34db79740] 144         vps_sub_layer_ordering_info_present_flag                    0 = 0
+[trace_headers @ 000001a34db79740] 145         vps_max_dec_pic_buffering_minus1[0]                       010 = 1
+[trace_headers @ 000001a34db79740] 148         vps_max_num_reorder_pics[0]                                 1 = 0
+[trace_headers @ 000001a34db79740] 149         vps_max_latency_increase_plus1[0]                           1 = 0
+[trace_headers @ 000001a34db79740] 150         vps_max_layer_id                                       000000 = 0
+[trace_headers @ 000001a34db79740] 156         vps_num_layer_sets_minus1                                   1 = 0
+[trace_headers @ 000001a34db79740] 157         vps_timing_info_present_flag                                1 = 1
+[trace_headers @ 000001a34db79740] 158         vps_num_units_in_tick        00000000000000000000001111101001 = 1001
+[trace_headers @ 000001a34db79740] 190         vps_time_scale               00000000000000000111010100110000 = 30000
+[trace_headers @ 000001a34db79740] 222         vps_poc_proportional_to_timing_flag                         0 = 0
+[trace_headers @ 000001a34db79740] 223         vps_num_hrd_parameters                                      1 = 0
+[trace_headers @ 000001a34db79740] 224         vps_extension_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 225         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 226         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 227         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 228         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 229         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 230         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 231         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Sequence Parameter Set
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100001 = 33
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          sps_video_parameter_set_id                               0000 = 0
+[trace_headers @ 000001a34db79740] 20          sps_max_sub_layers_minus1                                 000 = 0
+[trace_headers @ 000001a34db79740] 23          sps_temporal_id_nesting_flag                                1 = 1
+[trace_headers @ 000001a34db79740] 24          general_profile_space                                      00 = 0
+[trace_headers @ 000001a34db79740] 26          general_tier_flag                                           1 = 1
+[trace_headers @ 000001a34db79740] 27          general_profile_idc                                     00010 = 2
+[trace_headers @ 000001a34db79740] 32          general_profile_compatibility_flag[0]                       0 = 0
+[trace_headers @ 000001a34db79740] 33          general_profile_compatibility_flag[1]                       0 = 0
+[trace_headers @ 000001a34db79740] 34          general_profile_compatibility_flag[2]                       1 = 1
+[trace_headers @ 000001a34db79740] 35          general_profile_compatibility_flag[3]                       0 = 0
+[trace_headers @ 000001a34db79740] 36          general_profile_compatibility_flag[4]                       0 = 0
+[trace_headers @ 000001a34db79740] 37          general_profile_compatibility_flag[5]                       0 = 0
+[trace_headers @ 000001a34db79740] 38          general_profile_compatibility_flag[6]                       0 = 0
+[trace_headers @ 000001a34db79740] 39          general_profile_compatibility_flag[7]                       0 = 0
+[trace_headers @ 000001a34db79740] 40          general_profile_compatibility_flag[8]                       0 = 0
+[trace_headers @ 000001a34db79740] 41          general_profile_compatibility_flag[9]                       0 = 0
+[trace_headers @ 000001a34db79740] 42          general_profile_compatibility_flag[10]                      0 = 0
+[trace_headers @ 000001a34db79740] 43          general_profile_compatibility_flag[11]                      0 = 0
+[trace_headers @ 000001a34db79740] 44          general_profile_compatibility_flag[12]                      0 = 0
+[trace_headers @ 000001a34db79740] 45          general_profile_compatibility_flag[13]                      0 = 0
+[trace_headers @ 000001a34db79740] 46          general_profile_compatibility_flag[14]                      0 = 0
+[trace_headers @ 000001a34db79740] 47          general_profile_compatibility_flag[15]                      0 = 0
+[trace_headers @ 000001a34db79740] 48          general_profile_compatibility_flag[16]                      0 = 0
+[trace_headers @ 000001a34db79740] 49          general_profile_compatibility_flag[17]                      0 = 0
+[trace_headers @ 000001a34db79740] 50          general_profile_compatibility_flag[18]                      0 = 0
+[trace_headers @ 000001a34db79740] 51          general_profile_compatibility_flag[19]                      0 = 0
+[trace_headers @ 000001a34db79740] 52          general_profile_compatibility_flag[20]                      0 = 0
+[trace_headers @ 000001a34db79740] 53          general_profile_compatibility_flag[21]                      0 = 0
+[trace_headers @ 000001a34db79740] 54          general_profile_compatibility_flag[22]                      0 = 0
+[trace_headers @ 000001a34db79740] 55          general_profile_compatibility_flag[23]                      0 = 0
+[trace_headers @ 000001a34db79740] 56          general_profile_compatibility_flag[24]                      0 = 0
+[trace_headers @ 000001a34db79740] 57          general_profile_compatibility_flag[25]                      0 = 0
+[trace_headers @ 000001a34db79740] 58          general_profile_compatibility_flag[26]                      0 = 0
+[trace_headers @ 000001a34db79740] 59          general_profile_compatibility_flag[27]                      0 = 0
+[trace_headers @ 000001a34db79740] 60          general_profile_compatibility_flag[28]                      0 = 0
+[trace_headers @ 000001a34db79740] 61          general_profile_compatibility_flag[29]                      0 = 0
+[trace_headers @ 000001a34db79740] 62          general_profile_compatibility_flag[30]                      0 = 0
+[trace_headers @ 000001a34db79740] 63          general_profile_compatibility_flag[31]                      0 = 0
+[trace_headers @ 000001a34db79740] 64          general_progressive_source_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 65          general_interlaced_source_flag                              0 = 0
+[trace_headers @ 000001a34db79740] 66          general_non_packed_constraint_flag                          0 = 0
+[trace_headers @ 000001a34db79740] 67          general_frame_only_constraint_flag                          1 = 1
+[trace_headers @ 000001a34db79740] 68          general_reserved_zero_7bits                           0000000 = 0
+[trace_headers @ 000001a34db79740] 75          general_one_picture_only_constraint_flag                    0 = 0
+[trace_headers @ 000001a34db79740] 76          general_reserved_zero_35bits         000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 100         general_reserved_zero_35bits                      00000000000 = 0
+[trace_headers @ 000001a34db79740] 111         general_inbld_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 112         general_level_idc                                    10010110 = 150
+[trace_headers @ 000001a34db79740] 120         sps_seq_parameter_set_id                                    1 = 0
+[trace_headers @ 000001a34db79740] 121         chroma_format_idc                                         010 = 1
+[trace_headers @ 000001a34db79740] 124         pic_width_in_luma_samples             00000000000111100000001 = 3840
+[trace_headers @ 000001a34db79740] 147         pic_height_in_luma_samples            00000000000100001110001 = 2160
+[trace_headers @ 000001a34db79740] 170         conformance_window_flag                                     0 = 0
+[trace_headers @ 000001a34db79740] 171         bit_depth_luma_minus8                                     011 = 2
+[trace_headers @ 000001a34db79740] 174         bit_depth_chroma_minus8                                   011 = 2
+[trace_headers @ 000001a34db79740] 177         log2_max_pic_order_cnt_lsb_minus4                           1 = 0
+[trace_headers @ 000001a34db79740] 178         sps_sub_layer_ordering_info_present_flag                    0 = 0
+[trace_headers @ 000001a34db79740] 179         sps_max_dec_pic_buffering_minus1[0]                       010 = 1
+[trace_headers @ 000001a34db79740] 182         sps_max_num_reorder_pics[0]                                 1 = 0
+[trace_headers @ 000001a34db79740] 183         sps_max_latency_increase_plus1[0]                           1 = 0
+[trace_headers @ 000001a34db79740] 184         log2_min_luma_coding_block_size_minus3                      1 = 0
+[trace_headers @ 000001a34db79740] 185         log2_diff_max_min_luma_coding_block_size                00100 = 3
+[trace_headers @ 000001a34db79740] 190         log2_min_luma_transform_block_size_minus2                   1 = 0
+[trace_headers @ 000001a34db79740] 191         log2_diff_max_min_luma_transform_block_size             00100 = 3
+[trace_headers @ 000001a34db79740] 196         max_transform_hierarchy_depth_inter                       011 = 2
+[trace_headers @ 000001a34db79740] 199         max_transform_hierarchy_depth_intra                       011 = 2
+[trace_headers @ 000001a34db79740] 202         scaling_list_enabled_flag                                   0 = 0
+[trace_headers @ 000001a34db79740] 203         amp_enabled_flag                                            1 = 1
+[trace_headers @ 000001a34db79740] 204         sample_adaptive_offset_enabled_flag                         1 = 1
+[trace_headers @ 000001a34db79740] 205         pcm_enabled_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 206         num_short_term_ref_pic_sets                               011 = 2
+[trace_headers @ 000001a34db79740] 209         num_negative_pics                                         010 = 1
+[trace_headers @ 000001a34db79740] 212         num_positive_pics                                           1 = 0
+[trace_headers @ 000001a34db79740] 213         delta_poc_s0_minus1[0]                                      1 = 0
+[trace_headers @ 000001a34db79740] 214         used_by_curr_pic_s0_flag[0]                                 1 = 1
+[trace_headers @ 000001a34db79740] 215         inter_ref_pic_set_prediction_flag                           1 = 1
+[trace_headers @ 000001a34db79740] 216         delta_rps_sign                                              1 = 1
+[trace_headers @ 000001a34db79740] 217         abs_delta_rps_minus1                                        1 = 0
+[trace_headers @ 000001a34db79740] 218         used_by_curr_pic_flag[0]                                    0 = 0
+[trace_headers @ 000001a34db79740] 219         use_delta_flag[0]                                           0 = 0
+[trace_headers @ 000001a34db79740] 220         used_by_curr_pic_flag[1]                                    0 = 0
+[trace_headers @ 000001a34db79740] 221         use_delta_flag[1]                                           1 = 1
+[trace_headers @ 000001a34db79740] 222         long_term_ref_pics_present_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 223         num_long_term_ref_pics_sps                                  1 = 0
+[trace_headers @ 000001a34db79740] 224         sps_temporal_mvp_enabled_flag                               1 = 1
+[trace_headers @ 000001a34db79740] 225         strong_intra_smoothing_enabled_flag                         0 = 0
+[trace_headers @ 000001a34db79740] 226         vui_parameters_present_flag                                 1 = 1
+[trace_headers @ 000001a34db79740] 227         aspect_ratio_info_present_flag                              1 = 1
+[trace_headers @ 000001a34db79740] 228         aspect_ratio_idc                                     00000001 = 1
+[trace_headers @ 000001a34db79740] 236         overscan_info_present_flag                                  0 = 0
+[trace_headers @ 000001a34db79740] 237         video_signal_type_present_flag                              1 = 1
+[trace_headers @ 000001a34db79740] 238         video_format                                              101 = 5
+[trace_headers @ 000001a34db79740] 241         video_full_range_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 242         colour_description_present_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 243         colour_primaries                                     00001001 = 9
+[trace_headers @ 000001a34db79740] 251         transfer_characteristics                             00010010 = 18
+[trace_headers @ 000001a34db79740] 259         matrix_coefficients                                  00001001 = 9
+[trace_headers @ 000001a34db79740] 267         chroma_loc_info_present_flag                                0 = 0
+[trace_headers @ 000001a34db79740] 268         neutral_chroma_indication_flag                              0 = 0
+[trace_headers @ 000001a34db79740] 269         field_seq_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 270         frame_field_info_present_flag                               1 = 1
+[trace_headers @ 000001a34db79740] 271         default_display_window_flag                                 0 = 0
+[trace_headers @ 000001a34db79740] 272         vui_timing_info_present_flag                                1 = 1
+[trace_headers @ 000001a34db79740] 273         vui_num_units_in_tick        00000000000000000000001111101001 = 1001
+[trace_headers @ 000001a34db79740] 305         vui_time_scale               00000000000000000111010100110000 = 30000
+[trace_headers @ 000001a34db79740] 337         vui_poc_proportional_to_timing_flag                         0 = 0
+[trace_headers @ 000001a34db79740] 338         vui_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 339         nal_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 340         vcl_hrd_parameters_present_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 341         sub_pic_hrd_params_present_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 342         bit_rate_scale                                           0001 = 1
+[trace_headers @ 000001a34db79740] 346         cpb_size_scale                                           0110 = 6
+[trace_headers @ 000001a34db79740] 350         initial_cpb_removal_delay_length_minus1                 10111 = 23
+[trace_headers @ 000001a34db79740] 355         au_cpb_removal_delay_length_minus1                      10111 = 23
+[trace_headers @ 000001a34db79740] 360         dpb_output_delay_length_minus1                          10111 = 23
+[trace_headers @ 000001a34db79740] 365         fixed_pic_rate_general_flag[0]                              1 = 1
+[trace_headers @ 000001a34db79740] 366         elemental_duration_in_tc_minus1[0]                          1 = 0
+[trace_headers @ 000001a34db79740] 367         cpb_cnt_minus1[0]                                           1 = 0
+[trace_headers @ 000001a34db79740] 368         bit_rate_value_minus1[0]  0000000000000000001011111010111100001 = 390624
+[trace_headers @ 000001a34db79740] 405         cpb_size_value_minus1[0]    000000000000000010011000100101101 = 78124
+[trace_headers @ 000001a34db79740] 438         cbr_flag[0]                                                 0 = 0
+[trace_headers @ 000001a34db79740] 439         bitstream_restriction_flag                                  0 = 0
+[trace_headers @ 000001a34db79740] 440         sps_extension_present_flag                                  0 = 0
+[trace_headers @ 000001a34db79740] 441         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 442         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 443         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 444         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 445         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 446         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 447         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Picture Parameter Set
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100010 = 34
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          pps_pic_parameter_set_id                                    1 = 0
+[trace_headers @ 000001a34db79740] 17          pps_seq_parameter_set_id                                    1 = 0
+[trace_headers @ 000001a34db79740] 18          dependent_slice_segments_enabled_flag                       0 = 0
+[trace_headers @ 000001a34db79740] 19          output_flag_present_flag                                    0 = 0
+[trace_headers @ 000001a34db79740] 20          num_extra_slice_header_bits                               000 = 0
+[trace_headers @ 000001a34db79740] 23          sign_data_hiding_enabled_flag                               0 = 0
+[trace_headers @ 000001a34db79740] 24          cabac_init_present_flag                                     0 = 0
+[trace_headers @ 000001a34db79740] 25          num_ref_idx_l0_default_active_minus1                        1 = 0
+[trace_headers @ 000001a34db79740] 26          num_ref_idx_l1_default_active_minus1                        1 = 0
+[trace_headers @ 000001a34db79740] 27          init_qp_minus26                                             1 = 0
+[trace_headers @ 000001a34db79740] 28          constrained_intra_pred_flag                                 0 = 0
+[trace_headers @ 000001a34db79740] 29          transform_skip_enabled_flag                                 1 = 1
+[trace_headers @ 000001a34db79740] 30          cu_qp_delta_enabled_flag                                    1 = 1
+[trace_headers @ 000001a34db79740] 31          diff_cu_qp_delta_depth                                  00100 = 3
+[trace_headers @ 000001a34db79740] 36          pps_cb_qp_offset                                            1 = 0
+[trace_headers @ 000001a34db79740] 37          pps_cr_qp_offset                                            1 = 0
+[trace_headers @ 000001a34db79740] 38          pps_slice_chroma_qp_offsets_present_flag                    0 = 0
+[trace_headers @ 000001a34db79740] 39          weighted_pred_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 40          weighted_bipred_flag                                        0 = 0
+[trace_headers @ 000001a34db79740] 41          transquant_bypass_enabled_flag                              0 = 0
+[trace_headers @ 000001a34db79740] 42          tiles_enabled_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 43          entropy_coding_sync_enabled_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 44          pps_loop_filter_across_slices_enabled_flag                  1 = 1
+[trace_headers @ 000001a34db79740] 45          deblocking_filter_control_present_flag                      1 = 1
+[trace_headers @ 000001a34db79740] 46          deblocking_filter_override_enabled_flag                     1 = 1
+[trace_headers @ 000001a34db79740] 47          pps_deblocking_filter_disabled_flag                         0 = 0
+[trace_headers @ 000001a34db79740] 48          pps_beta_offset_div2                                        1 = 0
+[trace_headers @ 000001a34db79740] 49          pps_tc_offset_div2                                          1 = 0
+[trace_headers @ 000001a34db79740] 50          pps_scaling_list_data_present_flag                          0 = 0
+[trace_headers @ 000001a34db79740] 51          lists_modification_present_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 52          log2_parallel_merge_level_minus2                            1 = 0
+[trace_headers @ 000001a34db79740] 53          slice_segment_header_extension_present_flag                 0 = 0
+[trace_headers @ 000001a34db79740] 54          pps_extension_present_flag                                  0 = 0
+[trace_headers @ 000001a34db79740] 55          rbsp_stop_one_bit                                           1 = 1
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf63.6.100
+  Stream #0:0(und): Video: hevc (Main 10), 1 reference frame (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-
+std-b67, left), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 42868 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+[out#0/null @ 000001a34dabc0c0] Starting thread...
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680] Starting thread...
+[trace_headers @ 000001a34db79740] Packet: 571552 bytes, key frame, pts 0, dts 0, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000000 = 0
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00001010 = 10
+[trace_headers @ 000001a34db79740] Buffering Period
+[trace_headers @ 000001a34db79740] 32          bp_seq_parameter_set_id                                     1 = 0
+[trace_headers @ 000001a34db79740] 33          irap_cpb_params_present_flag                                0 = 0
+[trace_headers @ 000001a34db79740] 34          concatenation_flag                                          0 = 0
+[trace_headers @ 000001a34db79740] 35          au_cpb_removal_delay_delta_minus1    000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 59          nal_initial_cpb_removal_delay[0]     000000010001100101000000 = 72000
+[trace_headers @ 000001a34db79740] 83          nal_initial_cpb_removal_offset[0]    000000010001100101000000 = 72000
+[trace_headers @ 000001a34db79740] 107         bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 108         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001a34db79740] 109         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001a34db79740] 110         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001a34db79740] 111         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 000001a34db79740] 112         last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 120         last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 128         pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 132         source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 134         duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 135         au_cpb_removal_delay_minus1          000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 159         pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 183         bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 184         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 185         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 186         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 187         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 188         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 189         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 190         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 191         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          010011 = 19
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          no_output_of_prior_pics_flag                                0 = 0
+[trace_headers @ 000001a34db79740] 18          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_type                                                011 = 2
+[trace_headers @ 000001a34db79740] 22          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 23          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 24          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 25          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 26          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 27          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 28          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 29          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 30          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 31          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 95091 bytes, pts 1001, dts 1001, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0001 = 1
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 106935 bytes, pts 2002, dts 2002, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000001 = 1
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0010 = 2
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 124775 bytes, pts 3003, dts 3003, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000010 = 2
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0011 = 3
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 145285 bytes, pts 4004, dts 4004, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000011 = 3
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0100 = 4
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 154928 bytes, pts 5005, dts 5005, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000100 = 4
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0101 = 5
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 164897 bytes, pts 6006, dts 6006, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000101 = 5
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0110 = 6
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 177248 bytes, pts 7007, dts 7007, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000110 = 6
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0111 = 7
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 182179 bytes, pts 8008, dts 8008, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000000111 = 7
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1000 = 8
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 192381 bytes, pts 9009, dts 9009, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001000 = 8
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1001 = 9
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 197287 bytes, pts 10010, dts 10010, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001001 = 9
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1010 = 10
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 188164 bytes, pts 11011, dts 11011, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001010 = 10
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1011 = 11
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 200320 bytes, pts 12012, dts 12012, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001011 = 11
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1100 = 12
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 187588 bytes, pts 13013, dts 13013, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001100 = 12
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1101 = 13
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 197680 bytes, pts 14014, dts 14014, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001101 = 13
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1110 = 14
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 186358 bytes, pts 15015, dts 15015, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001110 = 14
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1111 = 15
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 194482 bytes, pts 16016, dts 16016, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000001111 = 15
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0000 = 0
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 192144 bytes, pts 17017, dts 17017, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010000 = 16
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0001 = 1
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 195114 bytes, pts 18018, dts 18018, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010001 = 17
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0010 = 2
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 191557 bytes, pts 19019, dts 19019, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010010 = 18
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0011 = 3
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 182955 bytes, pts 20020, dts 20020, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010011 = 19
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0100 = 4
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 201199 bytes, pts 21021, dts 21021, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010100 = 20
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0101 = 5
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 169306 bytes, pts 22022, dts 22022, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010101 = 21
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0110 = 6
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 188813 bytes, pts 23023, dts 23023, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010110 = 22
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  0111 = 7
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 189473 bytes, pts 24024, dts 24024, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000010111 = 23
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1000 = 8
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 196665 bytes, pts 25025, dts 25025, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000011000 = 24
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1001 = 9
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 175004 bytes, pts 26026, dts 26026, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000011001 = 25
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1010 = 10
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 205897 bytes, pts 27027, dts 27027, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000011010 = 26
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1011 = 11
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 181475 bytes, pts 28028, dts 28028, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000011011 = 27
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1100 = 12
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] Packet: 212453 bytes, pts 29029, dts 29029, duration 1001.
+[trace_headers @ 000001a34db79740] Prefix Supplemental Enhancement Information
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          last_payload_type_byte                               00000001 = 1
+[trace_headers @ 000001a34db79740] 24          last_payload_size_byte                               00000111 = 7
+[trace_headers @ 000001a34db79740] Picture Timing
+[trace_headers @ 000001a34db79740] 32          pic_struct                                               0000 = 0
+[trace_headers @ 000001a34db79740] 36          source_scan_type                                           01 = 1
+[trace_headers @ 000001a34db79740] 38          duplicate_flag                                              0 = 0
+[trace_headers @ 000001a34db79740] 39          au_cpb_removal_delay_minus1          000000000000000000011100 = 28
+[trace_headers @ 000001a34db79740] 63          pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 000001a34db79740] 87          bit_equal_to_one                                            1 = 1
+[trace_headers @ 000001a34db79740] 88          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 000001a34db79740] 89          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 90          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 91          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 92          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 93          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 94          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] 95          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 000001a34db79740] Slice Segment Header
+[trace_headers @ 000001a34db79740] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 000001a34db79740] 1           nal_unit_type                                          000001 = 1
+[trace_headers @ 000001a34db79740] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 000001a34db79740] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 000001a34db79740] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 17          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 000001a34db79740] 18          slice_type                                                  1 = 0
+[trace_headers @ 000001a34db79740] 19          slice_pic_order_cnt_lsb                                  1101 = 13
+[trace_headers @ 000001a34db79740] 23          short_term_ref_pic_set_sps_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 24          short_term_ref_pic_set_idx                                  0 = 0
+[trace_headers @ 000001a34db79740] 25          num_long_term_pics                                          1 = 0
+[trace_headers @ 000001a34db79740] 26          slice_temporal_mvp_enabled_flag                             1 = 1
+[trace_headers @ 000001a34db79740] 27          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 000001a34db79740] 28          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 000001a34db79740] 29          num_ref_idx_active_override_flag                            0 = 0
+[trace_headers @ 000001a34db79740] 30          mvd_l1_zero_flag                                            0 = 0
+[trace_headers @ 000001a34db79740] 31          collocated_from_l0_flag                                     1 = 1
+[trace_headers @ 000001a34db79740] 32          five_minus_max_num_merge_cand                               1 = 0
+[trace_headers @ 000001a34db79740] 33          slice_qp_delta                                              1 = 0
+[trace_headers @ 000001a34db79740] 34          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 000001a34db79740] 35          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 000001a34db79740] 36          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 000001a34db79740] 37          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 38          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 000001a34db79740] 39          alignment_bit_equal_to_zero                                 0 = 0
+[out#0/null @ 000001a34dabc0c0] Muxer returned EOF
+[out#0/null @ 000001a34dabc0c0] Terminating thread with success
+[vist#0:0/hevc @ 000001a34db40180] All consumers of this stream are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680] All consumers are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680] Terminating thread with success
+[out#0/null @ 000001a34dabc0c0] Output file #0 (pipe:):
+[out#0/null @ 000001a34dabc0c0]   Output stream #0:0 (video): 30 packets muxed (5749205 bytes); 
+[out#0/null @ 000001a34dabc0c0]   Total: 30 packets (5749205 bytes) muxed
+[out#0/null @ 000001a34dabc0c0] video:5614KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing ov
+erhead: unknown
+frame=   30 fps=0.0 q=-1.0 Lsize=N/A time=00:00:01.26 bitrate=N/A speed=3.29x elapsed=0:00:00.38    
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680] Input file #0 (Raporty\intel_hevc_qp_20261017\trace_fast.mp4):
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680]   Input stream #0:0 (video): 39 packets read (7431130 bytes); 
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 000001a34daa1680]   Total: 39 packets (7431130 bytes) demuxed
+[AVIOContext @ 000001a34db33cc0] Statistics: 7509741 bytes read, 2 seeks
+
+Exiting with exit code 0

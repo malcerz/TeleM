@@ -1,0 +1,760 @@
+{
+  "tree": "61c95b88e88e64b32dd741bd85d38ea20c76952f",
+  "rules": [
+    {
+      "path": "src/gui/qt/main_window.py",
+      "method": "__init__",
+      "line": 78,
+      "call": "self.progress_bar.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/main_window.py",
+      "method": "_on_progress",
+      "line": 191,
+      "call": "self.progress_bar.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/main_window.py",
+      "method": "_on_render_state",
+      "line": 211,
+      "call": "self.progress_bar.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/main_window.py",
+      "method": "_on_error",
+      "line": 225,
+      "call": "self.progress_bar.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/main_window.py",
+      "method": "_on_progress",
+      "line": 195,
+      "call": "self.progress_bar.setVisible(False)",
+      "guards": [
+        "percent >= 100"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 207,
+      "call": "self.lbl_qp_info.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "set_qp_progress",
+      "line": 285,
+      "call": "self.lbl_qp_info.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "set_qp_result",
+      "line": 291,
+      "call": "self.lbl_qp_info.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "set_qp_error",
+      "line": 319,
+      "call": "self.lbl_qp_info.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "reset_qp",
+      "line": 329,
+      "call": "self.lbl_qp_info.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 456,
+      "call": "self.load_progress.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 468,
+      "call": "self.lbl_load_status.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 525,
+      "call": "self.lbl_mixed_res_banner.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 554,
+      "call": "self.lbl_file_info.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 558,
+      "call": "self.btn_analyze_qp.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 559,
+      "call": "self.btn_analyze_qp.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_build_ui",
+      "line": 564,
+      "call": "self.lbl_qp_result.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_rebuild_cards",
+      "line": 624,
+      "call": "self.lbl_no_files.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_clear_cards",
+      "line": 639,
+      "call": "self.lbl_no_files.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_start_loading",
+      "line": 728,
+      "call": "self.btn_load.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_start_loading",
+      "line": 729,
+      "call": "self.load_progress.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_start_loading",
+      "line": 731,
+      "call": "self.lbl_load_status.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_finish_loading_success",
+      "line": 752,
+      "call": "self.btn_load.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_on_load_error",
+      "line": 761,
+      "call": "self.btn_load.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_reset_loading_ui",
+      "line": 781,
+      "call": "self.load_progress.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_reset_loading_ui",
+      "line": 782,
+      "call": "self.lbl_load_status.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_reset_loading_ui",
+      "line": 783,
+      "call": "self.btn_load.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_on_clear",
+      "line": 803,
+      "call": "self.lbl_mixed_res_banner.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_on_clear",
+      "line": 806,
+      "call": "self.btn_analyze_qp.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_start_multi_info_inspection",
+      "line": 839,
+      "call": "self.btn_analyze_qp.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_rebuild_cards",
+      "line": 621,
+      "call": "self.lbl_no_files.setVisible(True)",
+      "guards": [
+        "not paths"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_update_mixed_resolutions_banner",
+      "line": 651,
+      "call": "self.lbl_mixed_res_banner.setVisible(True)",
+      "guards": [
+        "len(resolutions) > 1"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/load_tab.py",
+      "method": "_update_mixed_resolutions_banner",
+      "line": 653,
+      "call": "self.lbl_mixed_res_banner.setVisible(False)",
+      "guards": [
+        "len(resolutions) > 1"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 215,
+      "call": "self.hud_preview_label.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 297,
+      "call": "self.lbl_cpu_warning.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 642,
+      "call": "self.btn_cancel.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 659,
+      "call": "self.progress.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 682,
+      "call": "self.lbl_compression_stats.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_queue_panel",
+      "line": 741,
+      "call": "self.edit_yt_title.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_queue_panel",
+      "line": 748,
+      "call": "self.cmb_yt_privacy.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_queue_panel",
+      "line": 753,
+      "call": "self.edit_yt_desc.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_queue_panel",
+      "line": 813,
+      "call": "self.btn_queue_pause.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1063,
+      "call": "self.lbl_compression_stats.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1095,
+      "call": "self.btn_render.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1096,
+      "call": "self.btn_cancel.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1097,
+      "call": "self.progress.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_set_queue_btn_state",
+      "line": 1395,
+      "call": "self.btn_queue_start.setEnabled(not running)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_set_queue_btn_state",
+      "line": 1396,
+      "call": "self.btn_queue_pause.setEnabled(running)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_cancel",
+      "line": 2156,
+      "call": "self.btn_render.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_cancel",
+      "line": 2157,
+      "call": "self.btn_cancel.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_end_render",
+      "line": 2706,
+      "call": "self.btn_render.setEnabled(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_end_render",
+      "line": 2707,
+      "call": "self.btn_cancel.setEnabled(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_end_render",
+      "line": 2710,
+      "call": "self.progress.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_end_render",
+      "line": 2713,
+      "call": "self.hud_preview_label.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_end_render",
+      "line": 2714,
+      "call": "self.preview_slot.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_amd_decode_mode_restored",
+      "line": 3555,
+      "call": "self.cmb_amd_decode.blockSignals(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_amd_decode_mode_restored",
+      "line": 3562,
+      "call": "self.lbl_cpu_warning.setVisible(mode_clean == 'cpu')",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_amd_decode_mode_restored",
+      "line": 3563,
+      "call": "self.cmb_amd_decode.blockSignals(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_amd_encoder_quality_restored",
+      "line": 3572,
+      "call": "self.cmb_amd_quality.blockSignals(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_amd_encoder_quality_restored",
+      "line": 3578,
+      "call": "self.cmb_amd_quality.blockSignals(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_decode_changed",
+      "line": 301,
+      "call": "self.lbl_cpu_warning.setVisible(val == 'cpu')",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_nvidia_quality_options",
+      "line": 373,
+      "call": "self.cmb_nvidia_quality.blockSignals(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_nvidia_quality_options",
+      "line": 380,
+      "call": "self.cmb_nvidia_quality.blockSignals(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 489,
+      "call": "self.widget_amd_options.setVisible(is_amd)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 490,
+      "call": "self.widget_nvidia_options.setVisible(is_nv)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 491,
+      "call": "self.widget_intel_options.setVisible(is_intel)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_toggle_yt",
+      "line": 758,
+      "call": "self.edit_yt_title.setEnabled(on)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_toggle_yt",
+      "line": 759,
+      "call": "self.cmb_yt_privacy.setEnabled(on)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_toggle_yt",
+      "line": 760,
+      "call": "self.edit_yt_desc.setEnabled(on)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1162,
+      "call": "self.preview_slot.setVisible(True)",
+      "guards": [
+        "self._export_preview_native"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1163,
+      "call": "self.hud_preview_label.setVisible(False)",
+      "guards": [
+        "self._export_preview_native"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1171,
+      "call": "self.preview_slot.setVisible(not hud_on)",
+      "guards": [
+        "self._export_preview_native"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_start_render",
+      "line": 1172,
+      "call": "self.hud_preview_label.setVisible(hud_on)",
+      "guards": [
+        "self._export_preview_native"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_set_queue_btn_state",
+      "line": 1398,
+      "call": "self.btn_queue_stop.setEnabled(True)",
+      "guards": [
+        "hasattr(self, 'btn_queue_stop')"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_on_render_state",
+      "line": 2277,
+      "call": "self.lbl_compression_stats.setVisible(True)",
+      "guards": [
+        "comp_txt"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 493,
+      "call": "self.widget_cpu_options.setVisible(is_cpu)",
+      "guards": [
+        "hasattr(self, 'widget_cpu_options')"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 495,
+      "call": "self.cmb_nvidia_codec.setEnabled(True)",
+      "guards": [
+        "is_nv"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 496,
+      "call": "self.cmb_nvidia_quality.setEnabled(True)",
+      "guards": [
+        "is_nv"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_update_backend_visibility",
+      "line": 497,
+      "call": "self.chk_compression_analysis.setEnabled(True)",
+      "guards": [
+        "is_nv"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/render_tab.py",
+      "method": "_build_ui",
+      "line": 420,
+      "call": "item.setEnabled(False)",
+      "guards": [
+        "item is not None",
+        "model is not None",
+        "not intel_caps.get('HEVC_AVAILABLE', False) and idx_hevc >= 0"
+      ]
+    },
+    {
+      "path": "src/gui/qt/tabs/settings_tab.py",
+      "method": "_refresh_cache_button_state",
+      "line": 194,
+      "call": "self.btn_clear_cache.setEnabled(not active)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/settings_tab.py",
+      "method": "_on_global_font_restored",
+      "line": 260,
+      "call": "self.cmb_font.blockSignals(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/tabs/settings_tab.py",
+      "method": "_on_global_font_restored",
+      "line": 268,
+      "call": "self.cmb_font.blockSignals(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/data_stream_bar.py",
+      "method": "on_streams_ready",
+      "line": 232,
+      "call": "self.placeholder.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/data_stream_bar.py",
+      "method": "on_streams_ready",
+      "line": 229,
+      "call": "self.placeholder.setVisible(True)",
+      "guards": [
+        "not streams"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/discrete_slider.py",
+      "method": "addItems",
+      "line": 108,
+      "call": "self._slider.blockSignals(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/discrete_slider.py",
+      "method": "addItems",
+      "line": 110,
+      "call": "self._slider.blockSignals(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/icon_picker.py",
+      "method": "_filter_icons",
+      "line": 293,
+      "call": "btn.setVisible(match)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "_build_ui",
+      "line": 70,
+      "call": "self.delete_btn.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "_build_ui",
+      "line": 83,
+      "call": "self.scroll_area.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 164,
+      "call": "self.delete_btn.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 165,
+      "call": "self.placeholder.setVisible(False)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 175,
+      "call": "self.form_container.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 176,
+      "call": "self.scroll_area.setVisible(True)",
+      "guards": []
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 147,
+      "call": "self.delete_btn.setVisible(False)",
+      "guards": [
+        "not stream_key"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 148,
+      "call": "self.placeholder.setVisible(True)",
+      "guards": [
+        "not stream_key"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 149,
+      "call": "self.scroll_area.setVisible(False)",
+      "guards": [
+        "not stream_key"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "on_properties_ready",
+      "line": 150,
+      "call": "self.form_container.setVisible(False)",
+      "guards": [
+        "not stream_key"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "_set_field_enabled",
+      "line": 536,
+      "call": "row_w.setEnabled(enabled)",
+      "guards": [
+        "row_w is not None"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "_set_field_enabled",
+      "line": 539,
+      "call": "w.setEnabled(enabled)",
+      "guards": [
+        "w is not None and w is not row_w"
+      ]
+    },
+    {
+      "path": "src/gui/qt/widgets/property_editor.py",
+      "method": "_set_field_enabled",
+      "line": 542,
+      "call": "lbl.setEnabled(enabled)",
+      "guards": [
+        "lbl is not None"
+      ]
+    }
+  ]
+}

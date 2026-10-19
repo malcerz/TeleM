@@ -1,0 +1,30 @@
+{
+  "codec": "hevc_sdr",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\ffmpeg_hevc_sdr.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 8.51,
+  "total_frames": 30,
+  "effective_fps": 3.53,
+  "ram_used_gb": 9.72,
+  "output_size_bytes": 5777867,
+  "stats": {
+    "avg_qp": null,
+    "generation_id": 1,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5777867,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "total_overlay_frames": 0
+  },
+  "sampled_q": {}
+}

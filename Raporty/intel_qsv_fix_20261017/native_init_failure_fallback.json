@@ -1,0 +1,63 @@
+{
+  "codec": "hevc",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\native_init_failure_fallback.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 9.63,
+  "total_frames": 30,
+  "effective_fps": 3.12,
+  "ram_used_gb": 9.46,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.960000",
+          "nb_frames": "45"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5775979"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5775979,
+  "stats": {
+    "avg_qp": null,
+    "generation_id": 1,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5775979,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "total_overlay_frames": 0
+  },
+  "sampled_q": {}
+}

@@ -1,0 +1,1255 @@
+{
+  "blobs_scanned": 1863,
+  "hits": [
+    {
+      "blob": "8d56f38e08672e6cce594b458a2d2648a9cc3430",
+      "path": "scripts/test_amd_real.py",
+      "hits": [
+        {
+          "line": 46,
+          "text": "raise RuntimeError(f\"FIT/GPS SmartSync preflight failed; see {log_path}\\n{process.stdout[-3000:]}\")"
+        },
+        {
+          "line": 48,
+          "text": "smart_sync = result.get(\"smart_sync\") or {}"
+        },
+        {
+          "line": 51,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or smart_sync.get(\"gps_overlap\") is not True:"
+        },
+        {
+          "line": 52,
+          "text": "raise RuntimeError(\"Benchmark pair has no successful spatial SmartSync evidence\")"
+        }
+      ]
+    },
+    {
+      "blob": "637f2328d823eeec57ec9ea705f2c8f2bdba8bf2",
+      "path": "scripts/test_sync_integrity.py",
+      "hits": [
+        {
+          "line": 1,
+          "text": "\"\"\"Strict real-file FIT validation and SmartSync integration harness.\"\"\""
+        },
+        {
+          "line": 44,
+          "text": "sync = data.get(\"smart_sync\") or {}"
+        }
+      ]
+    },
+    {
+      "blob": "76edd140c5154f3348ce600163e3dbe01ef17254",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1270,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "416465dd42753e5a02a6b01813f2d942f8665786",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1132,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1172,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1179,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1180,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "b6d5f9e1ce14fdee19228853e3805421dde31d3a",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 79,
+          "text": "# Last measured spatial SmartSync result, consumed by the strict CLI integrity harness."
+        },
+        {
+          "line": 80,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS: dict[str, Any] = {\"status\": \"NOT_RUN\"}"
+        },
+        {
+          "line": 251,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 252,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({"
+        },
+        {
+          "line": 264,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 275,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 276,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({"
+        },
+        {
+          "line": 289,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 315,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 316,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({\"status\": \"NO_SPATIAL_MATCH\"})"
+        },
+        {
+          "line": 318,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({\"status\": \"NO_VIDEO_START\"})"
+        },
+        {
+          "line": 335,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 350,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 358,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "3dbd1e9a5db985e36b3953d8b60483e8ca050020",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 1026,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "a377f7fd25646116d49c586eaf7fa1508d75c47f",
+      "path": "src/render_logging.py",
+      "hits": [
+        {
+          "line": 83,
+          "text": "\"[FIT]\", \"[GPX]\", \"[SmartSync]\", \"[TelemetryManager]\", \"[MultiFile\","
+        }
+      ]
+    },
+    {
+      "blob": "ce3c61eaae855b47c0acd8d18fdde17f59a837a8",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1280,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "7f097d251bde6afa2053d77084709e624ae64d81",
+      "path": "tests/test_fit_gpx_file_validation.py",
+      "hits": [
+        {
+          "line": 164,
+          "text": "def test_rejected_file_does_not_start_smartsync(tmp_path, monkeypatch):"
+        }
+      ]
+    },
+    {
+      "blob": "25739269ccaca14eb98e291c701b098e89e8b932",
+      "path": "tests/test_telemetry_manager.py",
+      "hits": [
+        {
+          "line": 214,
+          "text": "# ── SmartSync: GPS-track alignment ──────────────────────────────────────────"
+        },
+        {
+          "line": 289,
+          "text": "\"\"\"Tests for GPS-track-based SmartSync offset alignment."
+        },
+        {
+          "line": 470,
+          "text": "reason=\"real SmartSync fixtures not present\","
+        }
+      ]
+    },
+    {
+      "blob": "003c4d676cdb00df5cc5d9f03e0bc39180256c1f",
+      "path": "tools/amd_stage4b_real_ab.py",
+      "hits": [
+        {
+          "line": 90,
+          "text": "result_path = out_dir / \"smart_sync.json\""
+        },
+        {
+          "line": 91,
+          "text": "log_path = out_dir / \"smart_sync.log\""
+        },
+        {
+          "line": 99,
+          "text": "raise RuntimeError(f\"SmartSync harness wrote no result JSON (exit={process.returncode}); see {log_path}\")"
+        },
+        {
+          "line": 101,
+          "text": "sync = result.get(\"smart_sync\") or {}"
+        },
+        {
+          "line": 103,
+          "text": "# Keep its overall status visible, but gate pairing on spatial SmartSync"
+        },
+        {
+          "line": 118,
+          "text": "\"spatial_smart_sync\": sync,"
+        },
+        {
+          "line": 125,
+          "text": "write_json(out_dir / \"smart_sync_summary.json\", summary)"
+        },
+        {
+          "line": 127,
+          "text": "raise RuntimeError(f\"Pair failed spatial SmartSync gate; see {log_path} and {result_path}\")"
+        },
+        {
+          "line": 392,
+          "text": "smart_sync = run_sync_preflight(repo, python, video, fit, out_dir, env)"
+        },
+        {
+          "line": 393,
+          "text": "manifest[\"smart_sync_preflight\"] = smart_sync"
+        }
+      ]
+    },
+    {
+      "blob": "38570be570daa7740046e16e94d52c4bf26b4312",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1038,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1078,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1085,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1086,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "8d157f144be5a17ebfae7c15fb2eaf6b36349ef1",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1270,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "2b9719bf276f71855173ee430eee3c543be2846d",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1018,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1058,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1065,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1066,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "df627f16f37932153c02e8a58a1bcaed45a3d95d",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1222,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "c4c6af7517c170da939f41cd59aed884fd058ed0",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1221,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "ce0ab52826d6c9c8d7cee534d8af12024bc8e641",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1217,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "c135f2ed36fef9c873d97f871a9ec51ceeef778c",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1184,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "1a051e47fd7f6b0b64bee1448b37040ae2c3991d",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1271,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "50b2ed64cd56f61fd491e3fe18f2e23d5d34e0a9",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1217,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "82a9c83f51087109478532a6e4b06681aa41a8fc",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1153,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "54e21861a0c24e0370997c3d2b5f84258620f5e9",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1145,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "692f26152565f41d7a07ad573ba959d8d6234370",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 999,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "a3bf725640e146515698be85d8c0a82d20073a68",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 959,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "d94e0967313bb06100d3a9151c256d139d98b969",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 1002,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "19f07042cf275bb0e8848a7b0a983a1e69f4d8cf",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1013,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1053,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1060,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1061,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "22aea1c6894a0943067434b2e72aeafdff07d072",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1197,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "361ebc0eff6c6d698a65ebac47291bb906bd2fda",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 957,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "3952a1bd78dc41bd39e1257cd6c5a20916e83c92",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 985,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "4f2b802576803064fcc5a29a293cb36eab1b040a",
+      "path": "scripts/test_amd_real.py",
+      "hits": [
+        {
+          "line": 46,
+          "text": "raise RuntimeError(f\"FIT/GPS SmartSync preflight failed; see {log_path}\\n{process.stdout[-3000:]}\")"
+        },
+        {
+          "line": 48,
+          "text": "smart_sync = result.get(\"smart_sync\") or {}"
+        },
+        {
+          "line": 51,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or smart_sync.get(\"gps_overlap\") is not True:"
+        },
+        {
+          "line": 52,
+          "text": "raise RuntimeError(\"Benchmark pair has no successful spatial SmartSync evidence\")"
+        }
+      ]
+    },
+    {
+      "blob": "83398ea22d2eb4a25fb4da8c49c8151654f02116",
+      "path": "scripts/test_sync_integrity.py",
+      "hits": [
+        {
+          "line": 1,
+          "text": "\"\"\"Strict real-file FIT validation and SmartSync integration harness.\"\"\""
+        },
+        {
+          "line": 44,
+          "text": "sync = data.get(\"smart_sync\") or {}"
+        }
+      ]
+    },
+    {
+      "blob": "bbcda75f340095dff70d1a6191f45e230411c35d",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1013,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1053,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1060,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1061,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "0d3f00279ee2d22670b71e87f0af26b589b4f1bf",
+      "path": "scripts/test_amd_real.py",
+      "hits": [
+        {
+          "line": 46,
+          "text": "raise RuntimeError(f\"FIT/GPS SmartSync preflight failed; see {log_path}\\n{process.stdout[-3000:]}\")"
+        },
+        {
+          "line": 48,
+          "text": "smart_sync = result.get(\"smart_sync\") or {}"
+        },
+        {
+          "line": 51,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or smart_sync.get(\"gps_overlap\") is not True:"
+        },
+        {
+          "line": 52,
+          "text": "raise RuntimeError(\"Benchmark pair has no successful spatial SmartSync evidence\")"
+        }
+      ]
+    },
+    {
+      "blob": "1ad291d048322be1817279f2b94f63735cdfcda7",
+      "path": "scripts/test_amd_real.py",
+      "hits": [
+        {
+          "line": 34,
+          "text": "raise RuntimeError(f\"FIT/GPS SmartSync preflight failed; see {log_path}\\n{process.stdout[-3000:]}\")"
+        },
+        {
+          "line": 36,
+          "text": "smart_sync = result.get(\"smart_sync\") or {}"
+        },
+        {
+          "line": 39,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or smart_sync.get(\"gps_overlap\") is not True:"
+        },
+        {
+          "line": 40,
+          "text": "raise RuntimeError(\"Benchmark pair has no successful spatial SmartSync evidence\")"
+        }
+      ]
+    },
+    {
+      "blob": "db8abf58095e6ea0cffcbbfd4dd93469cd30ed61",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 995,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1035,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1042,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1043,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "4d91bf634635dc20919457eace06684e56466ab5",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "ef1c90b1ca346869c51ae7f0f2694f6056ccc16a",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "aac7f0eb4cc0ab265b8b5cbdd7aa942a2e1f6a0f",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1197,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "f70bb2bd74022e57cfbb27c1492f0a279f1d6f44",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "e91809313801294c0747d4d034063dd557d3e7f8",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1197,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "7d940992a5a40d78a35ca0504b30b1ec2c2bf8f5",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1192,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "5779c2c836062a280be2116aafea8723f1fa4942",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1184,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "ecb53229728b385b1c0ea02842cebf43207d20a4",
+      "path": "src/render_preparation.py",
+      "hits": [
+        {
+          "line": 1179,
+          "text": "sync_offset = float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0)"
+        }
+      ]
+    },
+    {
+      "blob": "384db226907809c82dba5b5badcd754d7134ca4a",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 985,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "a8bf5190e4fe788de4a948b9363804b88e3a577c",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 985,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "40f6ac7fab4c2c5c05297bd8b198428871911f49",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "138b91e7c6e07cc335e8428c309c5badca911a61",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "31cad1b766fb545365ad4bdcc46ebdfcfbf86b5e",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 976,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "373100fef2c246aaa90dbc6834ac1fca3127a787",
+      "path": "src/render_logging.py",
+      "hits": [
+        {
+          "line": 52,
+          "text": "\"[FIT]\", \"[GPX]\", \"[SmartSync]\", \"[TelemetryManager]\", \"[MultiFile\","
+        }
+      ]
+    },
+    {
+      "blob": "d404d308ed7963e768c2d3efa657f6790948016c",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "8f7cb3f746a45a843c50bddd4e89faee0570c72b",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 244,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 257,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 323,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "c984d434928d74d3ec98d919656311ae2a89afc9",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 244,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 257,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 323,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "bc856f91776d3db9fdbf78320185d408a6b9e84b",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 852,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "9c249caf8cb0e748d8594ebb7d970c6829f28838",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "e9444f895c1a2136b730b6d24e65e6d5a9c21876",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "c06b87f170c1eae01524274927abc80fcb740abb",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 237,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 250,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 293,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 316,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "6b6541f319efedf3ebab437e46bfb9080e6c23d5",
+      "path": "src/multifile.py",
+      "hits": [
+        {
+          "line": 717,
+          "text": "# ── Absolute timestamp → global (reverse, for precompute/SmartSync) ─────"
+        }
+      ]
+    },
+    {
+      "blob": "c7ad89f37dbf633bb8cd29ec1ecd21e3b5b306ee",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 237,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 250,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 293,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 316,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "7a1a63571a8b311df184f4127cc616040dae4305",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "2cd58c3b09ed9fb9326024b1f263a93f85f463e8",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 139,
+          "text": "\"[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may \""
+        },
+        {
+          "line": 157,
+          "text": "f\"[SmartSync] GPS track alignment: offset={offset} \""
+        },
+        {
+          "line": 195,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 206,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 211,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        }
+      ]
+    },
+    {
+      "blob": "8dc23eb94a462ed1b30797f323d2f750eb3d3634",
+      "path": "tests/test_telemetry_manager.py",
+      "hits": [
+        {
+          "line": 211,
+          "text": "# ── SmartSync: GPS-track alignment ──────────────────────────────────────────"
+        },
+        {
+          "line": 286,
+          "text": "\"\"\"Tests for GPS-track-based SmartSync offset alignment."
+        }
+      ]
+    },
+    {
+      "blob": "7cef4821c1e5ee16dd61f8253fc3ed10f7686eb4",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "398bf51d015b5e0410ef566f856c231a133413e2",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "87b004aed60b9d09dcd540d142ceae6dd857a7cb",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "5a0997cc97c2c75a2bc1ff86463e277bc252f64b",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 234,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 247,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 290,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 313,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "16094547947ea630b387cee272f1b17637225b88",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 229,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 242,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 285,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        }
+      ]
+    },
+    {
+      "blob": "0cf162e7dc402ddbe7bebb8960e8c78b2b191a85",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 141,
+          "text": "\"[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may \""
+        },
+        {
+          "line": 159,
+          "text": "f\"[SmartSync] GPS track alignment: offset={offset} \""
+        },
+        {
+          "line": 197,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 208,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 213,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        }
+      ]
+    },
+    {
+      "blob": "90911455bc5ded8a861c5094597090f3c8b45474",
+      "path": "tests/test_telemetry_manager.py",
+      "hits": [
+        {
+          "line": 213,
+          "text": "# ── SmartSync: GPS-track alignment ──────────────────────────────────────────"
+        },
+        {
+          "line": 288,
+          "text": "\"\"\"Tests for GPS-track-based SmartSync offset alignment."
+        }
+      ]
+    },
+    {
+      "blob": "cd71a6ac85df84eb185aca9a3c85626753e74161",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 106,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 117,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 122,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        }
+      ]
+    }
+  ]
+}

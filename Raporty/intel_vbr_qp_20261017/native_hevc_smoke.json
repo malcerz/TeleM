@@ -1,0 +1,365 @@
+{
+  "codec": "hevc",
+  "profile": "balanced",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_vbr_hevc_smoke.mp4",
+  "bitrate": "40M",
+  "max_frames": 60,
+  "success": true,
+  "error": "",
+  "elapsed_s": 9.35,
+  "total_frames": 60,
+  "effective_fps": 6.42,
+  "ram_used_gb": 10.35,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "2.002000",
+          "nb_frames": "60",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "1.984000",
+          "nb_frames": "93"
+        }
+      ],
+      "format": {
+        "duration": "2.002000",
+        "size": "10944848"
+      }
+    },
+    "actual_video_frames": 60
+  },
+  "output_size_bytes": 10944848,
+  "stats": {
+    "audio_live_mux": true,
+    "avg_qp": 24.466666666666665,
+    "cancelled": false,
+    "codec": "hevc",
+    "encoder_accepted": {
+      "buffer_kb": 10000,
+      "get_status": 0,
+      "init_status": 0,
+      "initial_delay_kb": 5000,
+      "max_kbps": 50000,
+      "multiplier": 1,
+      "qp_supported": 1,
+      "query_status": 0,
+      "rate_control": 2,
+      "target_kbps": 40000,
+      "target_usage": 4,
+      "valid": 1
+    },
+    "encoder_drain_seconds": 0.4740278999961447,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.5412942000111798,
+    "frame_render_seconds": 5.092132399993716,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 2.002,
+      "has_audio": true,
+      "size_bytes": 10944848,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "qp_aggregation": "arithmetic mean of one returned luma QP per encoded frame",
+    "qp_source": "oneVPL encoded-frame luma QP",
+    "quant_avg": 24.466666666666665,
+    "quant_current": 31,
+    "quant_max": 31,
+    "quant_metric": "QP",
+    "quant_min": 0,
+    "quant_samples": 60,
+    "quant_sum": 1468,
+    "real_export_fps": 11.782882943121049,
+    "render_fps": 11.782882943121049,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 7.378396800006158,
+    "user_effective_fps": 8.131847829050063,
+    "verify_seconds": 0.06396719999611378,
+    "video_encode_pass_count": 1
+  },
+  "sampled_q": {
+    "10": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "11": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "12": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "13": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "14": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "15": {
+      "q_cur": 29,
+      "q_avg": 29.571428571428573,
+      "q_samples": 7
+    },
+    "16": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "17": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "18": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "19": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "20": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "21": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "22": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "23": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "24": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "25": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "26": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "27": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "28": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "29": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "30": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "31": {
+      "q_cur": 31,
+      "q_avg": 29.571428571428573,
+      "q_samples": 14
+    },
+    "32": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "33": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "34": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "35": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "36": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "37": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "38": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "39": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "40": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "41": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "42": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "43": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "44": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "45": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "46": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "47": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "48": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "49": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "50": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "51": {
+      "q_cur": 0,
+      "q_avg": 24.51851851851852,
+      "q_samples": 27
+    },
+    "52": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "53": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "54": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "55": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "56": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "57": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "58": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "59": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    },
+    "60": {
+      "q_cur": 31,
+      "q_avg": 24.046511627906977,
+      "q_samples": 43
+    }
+  }
+}

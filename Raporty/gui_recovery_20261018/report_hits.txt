@@ -1,0 +1,480 @@
+Raporty\NVIDIA_NV1\NV1_ROTATION_AUDIT.md:132:## WHY CUDA PATH DISABLED
+Raporty\NVIDIA_NV1\NV1_ROTATION_AUDIT.md:146:180° WŁĄCZONE do tej samej blokady mimo że:
+Raporty\RAPORT_AMD_8K_CHECKPOINT_PURE_SHADER_VERIFY.md:70:readback/flush lifecycle. Its previous 2F FAIL therefore was not a pure
+Raporty\RAPORT_AMD_8K_PRODUCTION_SHADER_ONLY_VERIFY.md:60:completion path. No standalone resource lifecycle or per-frame diagnostic pool
+Raporty\RAPORT_AMD_AMF_ASYNC_QUEUE_DEPTH2.md:180:   - Czyste przerwanie w 2.121 s, zerwanie potoku bez wiszących procesów, brak blokad na plikach DLL i Named Pipe.
+Raporty\RAPORT_AMD_BACKGROUND_PREVIEW_MUX_PERFORMANCE.md:50:- wyjątek Preview nie propaguje się do lifecycle renderu.
+Raporty\RAPORT_AMD_CENTRAL_TELEMETRY_CACHE.md:156:python -m pytest tests/test_central_telemetry_cache.py tests/test_telemetry_processed_cache.py tests/test_state_queue_layout_persistence.py tests/test_export_queue_basic.py tests/test_export_queue_lifecycle.py tests/test_multifile_lean_continuity.py tests/test_multifile_hud_lifecycle.py -v
+Raporty\RAPORT_AMD_CHILD_EXIT120_STDERR_HANDLE_FIX.md:5:Naprawa wyłącznie lifecycle `AMD_NATIVE_D3D11` child process: exit code 120,
+Raporty\RAPORT_AMD_CHILD_PICKLE_STARTUP_OPTIMIZATION.md:7:child-process lifecycle were not changed.
+Raporty\RAPORT_AMD_CHILD_PROCESS_PRODUCTION_BLOCKERS_FIX.md:201:- `src/ffmpeg/amd_child_process.py` — bounded parent IPC lifecycle state machine.
+Raporty\RAPORT_AMD_CONTINUOUS_HEVC_EXPORT_PREVIEW.md:140:- osobny lifecycle i teardown procesu/wątków;
+Raporty\RAPORT_AMD_CPU_DECODE_VCN_OFFLOAD_EXPERIMENT.md:59:**STATUS = BLOCKED / NO-GO dla dalszego Stage B do czasu naprawy blokady podglądu/child startup.**
+Raporty\RAPORT_AMD_CURRENT_41FPS_BOTTLENECK_AUDIT.md:151:- Backpressure potoku: brak jakichkolwiek blokad ze strony FFmpeg.
+Raporty\RAPORT_AMD_D3D11_VIDEO_DEVICE_INIT_FIX.md:110:The same VP failure reproduced with `AMD_DEBUG_NO_AMF=1` and HUD disabled, so
+Raporty\RAPORT_AMD_DIAG_GROUP_G_PIPELINE.md:91:   Wątki te intensywnie rywalizują o blokadę GIL Pythona oraz pamięć podręczną L3 CPU.
+Raporty\RAPORT_AMD_DIAG_GROUP_G_PIPELINE.md:154:   **NIE.** Przejście na `queue_depth=1` degraduje FPS do poziomu SYNC (**24.365 FPS**), ponieważ producent traci 23 ms na blokadzie kolejki. `queue_depth=2` jest niezbędne do uzyskania >35 FPS.
+Raporty\RAPORT_AMD_DIRECT_LIVE_MUX_PROGRESS_FIX.md:43:QUEUE_SMOKE_RESULT=PASS (ExportQueue lifecycle cleanly handles indeterminate mode)
+Raporty\RAPORT_AMD_DIRECT_LIVE_MUX_PROGRESS_FIX.md:45:MODIFIED_FILES=src/render_progress.py, src/gui/qt/_mixins/render_mixin.py, src/gui/qt/tabs/render_tab.py, src/ffmpeg/amd_native_exporter.py, tests/test_export_finalization_lifecycle.py, tests/test_render_progress_single_source.py
+Raporty\RAPORT_AMD_DIRECT_LIVE_MUX_PROGRESS_FIX.md:135:python -m pytest tests/test_export_finalization_lifecycle.py tests/test_finalization_tracker.py tests/test_render_progress_single_source.py tests/test_export_queue_basic.py tests/test_export_queue_lifecycle.py
+Raporty\RAPORT_AMD_DIFFERENTIAL_OPTIMIZATION_AUDIT.md:38:- Pętla anulowania i lifecycle: proste flagi boolean -> formalny RenderCancelReason, watchdog i dispatcher postępu bez blokowania GUI
+Raporty\RAPORT_AMD_DIFFERENTIAL_OPTIMIZATION_AUDIT.md:92:| **cancel/lifecycle** | Podstawowe flagi zatrzymania | `RenderCancelReason`, bezpieczny drain i kill procesu | `SUPERSEDED BY NEWER CODE` | Krytyczna (brak wiszących procesów) | Zero |
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_MULTIFILE.md:18:  - Odblokowanie `ConnectNamedPipe` w `_abort_direct_mux` (zapobieganie blokowaniu wątku pump na Win32 przy przerwaniu eksportu).
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_MULTIFILE.md:22:  - Zestaw 6 testów jednostkowych weryfikujących lifecycle direct mux dla single i multi-file, obsługę offsetów czasowych (`local_start_s`), propagację błędów, anulowanie oraz fallback.
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_MULTIFILE.md:135:| **PIPE FAILURE** | **PASS** | Odblokowanie `ConnectNamedPipe` w `_abort_direct_mux` zapobiega zakleszczeniu na Win32. Zakończenie deterministyczne w <0.1s. |
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_SINGLE_FILE.md:10:## 1. Old File Lifecycle (BEFORE)
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_SINGLE_FILE.md:27:## 2. New File Lifecycle (AFTER)
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_SINGLE_FILE.md:243:Wszystkie 5 testów w `tests/test_amd_direct_mp4_mux.py` oraz testy cyklu życia w `tests/test_export_lifecycle_p1_fixes.py` przechodzą pomyślnie:
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_SINGLE_FILE.md:244:- `test_direct_mp4_mux_lifecycle_single_file` — **PASS**
+Raporty\RAPORT_AMD_DIRECT_MP4_MUX_SINGLE_FILE.md:249:- `test_export_lifecycle_p1_fixes.py` — **PASS** (4 passed, 2 skipped).
+Raporty\RAPORT_AMD_ETAP_1_AUDIT.md:294:   - Odblokowanie wywołania `gpu_compositor.py` na zintegrowanej karcie AMD Radeon z pamięcią zero-copy (`CL_MEM_USE_HOST_PTR`).
+Raporty\RAPORT_AMD_ETAP_2A_HANDOFF_READINESS.md:38:tests/test_map_deflayout_lifecycle.py          (nowy)
+Raporty\RAPORT_AMD_ETAP_2A_HANDOFF_READINESS.md:40:tests/test_render_cancel_process_lifecycle.py  (nowy)
+Raporty\RAPORT_AMD_ETAP_3I_GPU_LEAN_PRODUCTION_GATE.md:25:- Odczyt `GetData` z flagą `D3D11_ASYNC_GETDATA_DONOTFLUSH` zapobiega jakimkolwiek blokadom/spin-waitom CPU/GPU.
+Raporty\RAPORT_AMD_ETAP_5A_RYZEN7730U_HARDWARE_REBASELINE.md:314:| test_export_lifecycle_p1_fixes | 5 | Bug `UnboundLocalError: _linfo` w `amd_native_exporter.py` (WIP) |
+Raporty\RAPORT_AMD_ETAP_5B.md:12:- pole może być dynamicznie dodane/usunięte albo enabled/disabled w GUI przed eksportem;
+Raporty\RAPORT_AMD_ETAP_5B.md:16:- standardowe `power_text`, `atemp_text`, `hr_text`, `cad_text`, `battery_text` mają jawne, strukturalne mapowanie do istniejących resolverów; nie są aktywowane, jeśli widget jest nieobecny/disabled.
+Raporty\RAPORT_AMD_ETAP_5B.md:34:ETAP 5A wykonywał 18 wywołań/frame: pięć standardowych aliasów oraz 13 zarejestrowanych w layoucie kluczy FIT, także disabled i dwa stare klucze bez aktualnych samples (`battery_pct_x100`, `solar`). ETAP 5B wykonuje cztery unikalne wywołania odpowiadające czterem aktywnym konsumentom.
+Raporty\RAPORT_AMD_ETAP_5G1A_PRODUCTION_CONFIG_TRUTH_AUDIT.md:180:2. **Stan globalnej blokady sieci (`set_map_network_allowed`):**
+Raporty\RAPORT_AMD_ETAP_5G2_PREVIEW_MAP_PRODUCTION_ALIGNMENT.md:69:- **VideoProcessor Submit:** W trybie `SYNC` wynosi zaledwie **0.26 ms** na klatkę (brak blokad wątkowych i rywalizacji o D3D11 Device Context), podczas gdy w `ASYNC` rośnie do **14.14 ms**.
+Raporty\RAPORT_AMD_ETAP_5H1_PRODUCTION_CONSOLIDATION.md:16:2. **Audyt exception-safety blokady sieciowej mapy (`map_network_allowed`):**
+Raporty\RAPORT_AMD_ETAP_5H1_PRODUCTION_CONSOLIDATION.md:17:   - Odblokowanie sieci (`set_map_network_allowed(True)`) oraz sprzątanie zasobów (`_cleanup_native_resources()`) są bezwzględnie umieszczone w bloku `finally` komendy eksportu `export_amd_native_d3d11`. Żadna ścieżka błędu, anulowania ani wyjątku nie pozostawia zablokowanego podglądu w GUI.
+Raporty\RAPORT_AMD_ETAP_5M_PRODUCTION_CHART_PRECOMPUTE_TRUTH.md:63:reported CPU chart rendering disabled.
+Raporty\RAPORT_AMD_ETAP_5M_PRODUCTION_CHART_PRECOMPUTE_TRUTH.md:126:**NO.** No production chart lifecycle change was justified. Temporary audit
+Raporty\RAPORT_AMD_ETAP_5M_PRODUCTION_CHART_PRECOMPUTE_TRUTH.md:132:- `tests/test_amd_etap5m_chart_lifecycle.py` — verifies first/second export,
+Raporty\RAPORT_AMD_ETAP_5M_PRODUCTION_CHART_PRECOMPUTE_TRUTH.md:155:cancel/restart    = PASS at cache-lifecycle/unit level; hardware cancel/restart NOT TESTED
+Raporty\RAPORT_AMD_ETAP_5M_PRODUCTION_CHART_PRECOMPUTE_TRUTH.md:196:production lifecycle fix      = NO
+Raporty\RAPORT_AMD_ETAP_5N1_5O_CANONICAL_USER_LAYOUT_OPT.md:44:- Fixed the normal profile writer to tolerate accounting-disabled runs (no behavior change to rendering).
+Raporty\RAPORT_AMD_ETAP_5N1_5O_CANONICAL_USER_LAYOUT_OPT.md:99:Canonical logs explicitly report GPU_SPLIT active for `fit_cadence_text` and `fit_heart_rate_text`, with CPU ABOVE copies disabled. No fallback or CPU readback was observed in the canonical smoke/full logs. The native profile’s chart counters are zero because the chart work is handled by the split/cache path rather than the legacy native chart-counter bucket; this is recorded as an instrumentation limitation, not interpreted as chart absence.
+Raporty\RAPORT_AMD_ETAP_5N_FULL_PRODUCTION_ACCOUNTING_TRUTH.md:218:`python -m pytest -q tests/test_amd_etap5m_chart_lifecycle.py
+Raporty\RAPORT_AMD_ETAP_5O.md:192:- `AMD_AMF_MODE=BYPASS` — niedostępny (blokada OS `g++.exe`); udokumentowano
+Raporty\RAPORT_AMD_ETAP_5O.md:206:  natywna warstwa AMF **bez zmian** (blokada builda).
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:27:root cause = `lean_cfg` was created only inside `if lean_gpu_enabled`, but the shared `_prepare_frame_cpu` diagnostics closure referenced it when `AMD_NATIVE_HUD_MODE=CPU_REFERENCE` disabled the GPU lean path.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:28:fix = define `lean_cfg` before the conditional GPU-lean setup. Also supply the existing `PreparedFrame.map_heading` field in the no-HUD diagnostic constructor, exposed by `HUD_DISABLED`.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:57:HUD_DISABLED = 1 warmup + 3 measured 1131-frame exports completed, but disabling all indicators also disables the map and overlapped the slow CPU_REFERENCE probe. Video walls: 47.930 s, 46.711 s, 51.486 s. This is maximum-removal diagnostics only; isolated HUD headroom is NOT PROVEN.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:58:MAP_DISABLED = 1 warmup + 3 measured 1131-frame exports completed cleanly. Video walls: 28.934 s, 29.246 s, 29.135 s; totals: 34.134 s, 34.652 s, 34.336 s. This is slower than the 5N.1 GPU baseline, so no E2E map headroom is shown.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:63:HUD = not isolated: HUD_DISABLED also removes the map and CPU_REFERENCE changes decode/map/HUD architecture.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:64:MAP = no positive headroom; MAP_DISABLED is approximately 4.5% slower in video wall than the approximately 27.8 s baseline.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:89:No new production switch. `AMD_5P_HUD_DISABLED`, `AMD_5P_MAP_DISABLED`, and `AMD_5O_BYPASS` are process-local diagnostic controls only.
+Raporty\RAPORT_AMD_ETAP_5P_GPU_CRITICAL_PATH_HEADROOM_OPT.md:122:`NO GPU OPTIMIZATION`. VP control is neutral, MAP_DISABLED is slower, and HUD_DISABLED is a confounded maximum-removal diagnostic rather than a safe same-semantics optimization candidate. No 5-pair A/B was applicable.
+Raporty\RAPORT_AMD_ETAP_5P.md:204:    odblokowany). Sam compose może być częściowo wchłonięty przez pacing (jak
+Raporty\RAPORT_AMD_ETAP_5R.md:27:> **Blokada g++ (error 4551) już NIE obowiązuje** — `g++.exe --version` exit 0.
+Raporty\RAPORT_AMD_ETAP_5R.md:176:| **D3D11 DRIVER PACING** | **YES** (blokada ~12.9 ms w VP setup = sync z zajętym GPU) |
+Raporty\RAPORT_AMD_ETAP_5R.md:203:   - change: zwiększyć `POOL_SIZE` (4→6–8) + jawny lifecycle, by CPU nie blokował
+Raporty\RAPORT_AMD_ETAP_5R.md:237:7. **Czy VP powoduje implicit sync?** → **TAK** — blokada siedzi w regionie setup VP.
+Raporty\RAPORT_AMD_ETAP_5R1_REAL_GUI_CONFIG_PARITY.md:272:NOT TESTED for a production fast-path candidate. Existing focused lifecycle
+Raporty\RAPORT_AMD_ETAP_5Q_CONSUMER_CRITICAL_PATH_SYNC_OPT.md:184:No new production feature switch; diagnostics are disabled by default.
+Raporty\RAPORT_AMD_ETAP_5Q_CONSUMER_CRITICAL_PATH_SYNC_OPT.md:220:No queue/surface/AMF lifecycle change was made; new cancellation acceptance is NOT APPLICABLE.
+Raporty\RAPORT_AMD_ETAP_5R_VP_BLT_SURFACE_LIFETIME_OPT.md:65:The existing lifecycle counter records slot bookkeeping and pool creation /
+Raporty\RAPORT_AMD_ETAP_5S.md:178:2. **głębszy pipeline/ring** (POOL_SIZE 6–8 + jawny lifecycle) — możliwe wygładzenie,
+Raporty\RAPORT_AMD_ETAP_5S.md:205:    z jawnym lifecycle, (c) redukcję GPU workload (GPU = sufit).
+Raporty\RAPORT_AMD_ETAP_5T.md:165:   - risk: średni (AMF/pool); correctness risk: średni (jawny lifecycle).
+Raporty\RAPORT_AMD_ETAP_5U.md:1:# RAPORT AMD — ETAP 5U: feed enkodera / lifecycle powierzchni / obsługa QueryOutput + FRONTEND BYPASS
+Raporty\RAPORT_AMD_ETAP_5U.md:8:3) pacing z lifecycle powierzchni, 4) pacing ze sposobu obsługi QueryOutput.
+Raporty\RAPORT_AMD_ETAP_5U.md:10:feed/query/resource lifecycle sztucznie ogranicza throughput?**
+Raporty\RAPORT_AMD_ETAP_5U.md:16:- **BYPASS (5O, odblokowany w 5R):** `telem_amd_set_amf_mode(ctx,1)` — pomija
+Raporty\RAPORT_AMD_ETAP_5U.md:26:  defensywny resize w init + `m_slotLastFrame` lifecycle tracking).
+Raporty\RAPORT_AMD_ETAP_5U.md:65:  enkodera — to throttling lifecycle (patrz niżej).
+Raporty\RAPORT_AMD_ETAP_5U.md:105:bottleneck feed/lifecycle.** Równolegle: `process_frame` med **14.72 → 2.30 ms**,
+Raporty\RAPORT_AMD_ETAP_5U.md:124:**Lifecycle tracking:** `m_slotLastFrame` (per-slot) dodane jako diagnostyka;
+Raporty\RAPORT_AMD_ETAP_5U.md:169:| **MIXED** | **YES** (pool4 = lifecycle-bound 30–35; pool8 = frontend/VCN-bound ~38) |
+Raporty\RAPORT_AMD_ETAP_5U.md:184:   zależne) — to NIE limit VCN, tylko lifecycle.
+Raporty\RAPORT_AMD_ETAP_5U.md:191:8. **Czy lifecycle powierzchni VP ogranicza throughput?** → **TAK — to główny
+Raporty\RAPORT_AMD_ETAP_5U.md:224:| 6 | lifecycle powierzchni zmierzony | ✅ (pool 4→8: pf 14.7→2.3 ms, +6 FPS) |
+Raporty\RAPORT_AMD_ETAP_5U.md:239:  `m_slotLastFrame` lifecycle).
+Raporty\RAPORT_AMD_ETAP_5U_VP_SETSTREAM_STATIC_CACHE_OPT.md:109:## Correctness, lifecycle, and backend isolation
+Raporty\RAPORT_AMD_ETAP_5U_VP_SETSTREAM_STATIC_CACHE_OPT.md:156:| state-signature and lifecycle audit | PASS |
+Raporty\RAPORT_AMD_ETAP_5V.md:1:# RAPORT AMD — ETAP 5V: VP output pool=8 jako production default + soak / lifecycle / regresja
+Raporty\RAPORT_AMD_ETAP_5V.md:17:- `telem_amd_native.cpp` create(): **default pool 4 → 8** (override `AMD_VP_POOL_SIZE=4|6|8` zachowany), `AMD_POOL_LIFECYCLE_STATS=1` (debug-only), print skutecznego rozmiaru po `SetupVideoProcessor`.
+Raporty\RAPORT_AMD_ETAP_5V.md:18:- `d3d11_vp_pipeline.{h,cpp}`: `m_poolSize` default 8; liczniki lifecycle (created/released textures i views) + print w destruktorze; **fallback 8→6→4** tylko na failure allocation/resource-creation (nic innego nie jest maskowane).
+Raporty\RAPORT_AMD_ETAP_5V.md:50:## LIFECYCLE (spec 5/6/7/25)
+Raporty\RAPORT_AMD_ETAP_5V.md:60:Lifecycle print (przykład, golden pool8):
+Raporty\RAPORT_AMD_ETAP_5V.md:62:[VP POOL] lifecycle: textures created=8 released=8 live=0 | views created=24 released=24 live=0
+Raporty\RAPORT_AMD_ETAP_5V.md:87:- Lifecycle: `textures live=0, views live=0` po **każdym** destroy (12/12).
+Raporty\RAPORT_AMD_ETAP_5V.md:91:| export | pool | FPS | muxed | dropped | lifecycle live | ws delta [MB] |
+Raporty\RAPORT_AMD_ETAP_5V.md:106:**SOAK PASS = True** (all accounting OK, lifecycle live=0, korupcja 0, framemd5 identyczny).
+Raporty\RAPORT_AMD_ETAP_5V.md:204:- Infrastruktura diagnostyczna `AMD_VP_POOL_SIZE` / `AMD_POOL_LIFECYCLE_STATS`: **zachowana** (spec 27).
+Raporty\RAPORT_AMD_ETAP_5V.md:229:| 1 | pool8 lifecycle poprawny | ✅ |
+Raporty\RAPORT_AMD_ETAP_5V_VP_DRIVER_WAIT_ORIGIN_OPT.md:295:- HDR/color lifecycle validation: **NOT TESTED**; no production resource
+Raporty\RAPORT_AMD_ETAP_5V_VP_DRIVER_WAIT_ORIGIN_OPT.md:296:  lifecycle change.
+Raporty\RAPORT_AMD_ETAP_5V_VP_DRIVER_WAIT_ORIGIN_OPT.md:297:- Multi-file, cancel/second-export, repeated-export lifecycle: **NOT TESTED**;
+Raporty\RAPORT_AMD_ETAP_5V_VP_DRIVER_WAIT_ORIGIN_OPT.md:298:  production lifecycle was unchanged.
+Raporty\RAPORT_AMD_ETAP_5W.md:68:   GPU zwalniane zanim device), + diagnostyka refcount (pod `AMD_POOL_LIFECYCLE_STATS`).
+Raporty\RAPORT_AMD_ETAP_5W.md:130:Diagnostyka natywna: `AMD_POOL_LIFECYCLE_STATS=1` (liczniki + print live),
+Raporty\RAPORT_AMD_ETAP_5W.md:153:| lifecycle | — | brak regresji (live=0, device=1) |
+Raporty\RAPORT_AMD_ETAP_5W.md:158:brak regresji lifecycle.
+Raporty\RAPORT_AMD_ETAP_5W.md:197:   bounded, +2.6 FPS @pool8, brak regresji lifecycle).
+Raporty\RAPORT_AMD_ETAP_5X_ABOVE_PRODUCER_STRUCTURAL_OPT.md:196:A whole-HUD `AMD_5P_HUD_DISABLED=1` control was run as HEADROOM_ONLY. It
+Raporty\RAPORT_AMD_ETAP_6_GPU_COMPOSITOR.md:41:   Sterownik AMD dla APU (karty ze zintegrowaną pamięcią APU Ryzen) uniemożliwia wielowątkową kreację wewnętrznej kolejki OpenCL na aktywnym urządzeniu D3D11VA bez blokady ekskluzywnej.
+Raporty\RAPORT_AMD_EXPORT_FINALIZATION_IMPLEMENTATION.md:159:## 7. Zachowanie Podczas Anulowania (Cancel Lifecycle)
+Raporty\RAPORT_AMD_EXPORT_FINALIZATION_IMPLEMENTATION.md:171:Zestaw testów `tests/test_export_finalization_lifecycle.py`, `tests/test_finalization_tracker.py`, `tests/test_render_progress_single_source.py`:
+Raporty\RAPORT_AMD_EXPORT_FINALIZATION_PROGRESS.md:1:# RAPORT: Naprawa cyklu życia postępu eksportu i finalizacji AMD (Export Finalization Progress Lifecycle)
+Raporty\RAPORT_AMD_EXPORT_FINALIZATION_PROGRESS.md:109:  - Usunięto synchroniczną blokadę z GUI thread w `_show_export_finished_popup`.
+Raporty\RAPORT_AMD_EXPORT_FINALIZATION_PROGRESS.md:160:- tests/test_export_finalization_lifecycle.py
+Raporty\RAPORT_AMD_EXPORT_QUEUE_ZERO_PERCENT_FIX.md:59:- Dodano watchdog startu (10 sekund): jeśli zadanie pozostaje w `preparing` (lub `running` bez postępu) dłużej niż timeout z powodu awarii workera, watchdog oznacza je jako `error ("Render worker did not start")` i automatycznie odblokowuje kolejne zadania w kolejce.
+Raporty\RAPORT_AMD_EXPORT_QUEUE_ZERO_PERCENT_FIX.md:91:python -m pytest -v tests/test_export_queue_lifecycle.py tests/test_export_queue_basic.py
+Raporty\RAPORT_AMD_EXPORT_QUEUE_ZERO_PERCENT_FIX.md:154:CASE=CASE D — combined queue lifecycle bugs fixed
+Raporty\RAPORT_AMD_FINAL_CHECKPOINT_READINESS.md:231:- `Raporty/RAPORT_GUI_V4_FULLSCREEN_LIFECYCLE_NEXT_FRAME.md`
+Raporty\RAPORT_AMD_FULL_HUD_MEMORY_GROWTH_FIX.md:32:  sampling and bounded region-size diagnostics. It is disabled by default and
+Raporty\RAPORT_AMD_FULL_HUD_MEMORY_GROWTH_FIX.md:40:path, GPU-tap implementation, or Preview lifecycle code was changed.
+Raporty\RAPORT_AMD_FULL_HUD_MEMORY_GROWTH_FIX.md:104:Edit-preview lifecycle/parity unit coverage remained green; no edit-preview
+Raporty\RAPORT_AMD_GENERIC_CPU_WIDGET_CACHE.md:58:5. **Cykl życia sesji (`session lifecycle`)**: Cache jest czyszczony na początku każdej sesji renderera w `amd_native_exporter.py`.
+Raporty\RAPORT_AMD_GENERIC_CPU_WIDGET_CACHE.md:99:| **Cache Misses** | 0 (disabled) | 300 | +300 |
+Raporty\RAPORT_AMD_GPU_FRAME_TAP_EXPORT_PREVIEW.md:48:Tryb edycji nadal korzysta z istniejącego MPV/QMedia/PIL lifecycle. GPU tap
+Raporty\RAPORT_AMD_GPU_FRAME_TAP_EXPORT_PREVIEW.md:109:narastania pamięci renderera/native resource lifecycle i nie został zmieniony
+Raporty\RAPORT_AMD_GPU_MAP_PERSPECTIVE_PITCH.md:227:- **Resource Lifecycle:** Zero memory leaks detected during 300f runs; texture SRV is cleanly released upon pipeline shutdown.
+Raporty\RAPORT_AMD_ICON_GLYPH_REGRESSION.md:75:1. **Odblokowanie master cache PNG w `.gitignore`:**
+Raporty\RAPORT_AMD_MAP_CACHE_READD_FIX.md:76:scratch/amd_map_readd_fix/cache_lifecycle.md
+Raporty\RAPORT_AMD_MAP_CACHE_READD_FIX.md:154:- `tests/test_multifile_hud_lifecycle.py`: **3/3 PASS**
+Raporty\RAPORT_AMD_MAP_CACHE_READD_FIX.md:185:- `scratch\amd_map_readd_fix\cache_lifecycle.md`
+Raporty\RAPORT_AMD_MAP_SHAPE_UI_LEGACY_RESET_LAYOUT.md:58:MODIFIED_FILES=src/indicators/helpers.py, src/indicators/moving_map.py, src/indicators/static_map.py, src/indicators/compositor.py, src/gui/qt/models.py, src/gui/qt/tabs/render_tab.py, src/gui/layout_manager.py, src/gui/qt/widgets/video_preview.py, src/gui/qt/_mixins/preview_mixin.py, src/gui/qt/_mixins/indicator_mixin.py, tests/test_multifile_hud_lifecycle.py
+Raporty\RAPORT_AMD_MAP_SHAPE_UI_LEGACY_RESET_LAYOUT.md:133:### 4.2. Testy Integracyjne Cyklu Życia HUD: `tests/test_multifile_hud_lifecycle.py`
+Raporty\RAPORT_AMD_MULTIFILE_LEAN_CONTINUITY.md:154:tests/test_multifile_hud_lifecycle.py ... 3 passed
+Raporty\RAPORT_AMD_MULTIFILE_RELIABILITY_HOTFIX.md:60:1. **Stage A (GPU Native Stream):** Silnik AMD D3D11 renderuje i koduje wideo w pełnym tempie GPU bezpośrednio do pliku tymczasowego `.part.temp_video.mp4` bez audio (`-an -c:v copy`). Eliminuje to jakiekolwiek opóźnienia i blokady rury stdin/audio ze strony demuksera `-f concat`.
+Raporty\RAPORT_AMD_MULTIFILE_LOCAL_SCRATCH_TIMEOUT_FIX.md:77:- test lifecycle multi-file i zachowania outputu przy błędzie: PASS.
+Raporty\RAPORT_AMD_MULTIFILE_STAGE_A_RENDER_ERROR_FIX.md:6:clean, commit ani push. Nie zmieniano Intel, native DLL, D3D11/AMF lifecycle,
+Raporty\RAPORT_AMD_MULTIFILE_STAGE_A_RENDER_ERROR_FIX.md:85:  `bounded input queue full; preview disabled`;
+Raporty\RAPORT_AMD_MULTIFILE_STAGE_A_RENDER_ERROR_FIX.md:112:- `dropped_chunks=1`, `last_error=bounded input queue full; preview disabled`;
+Raporty\RAPORT_AMD_MULTIFILE_STAGE_A_RENDER_ERROR_FIX.md:151:## Preview OFF — rzeczywisty lifecycle
+Raporty\RAPORT_AMD_MULTIFILE_STAGE_A_RENDER_ERROR_FIX.md:160:Checkbox steruje więc rzeczywistym lifecycle, nie tylko tworzeniem nowych ramek.
+Raporty\RAPORT_AMD_MULTIFILE_USER_PROJECT_PROOF.md:118:  - Suwak podglądu osiąga `99.53%`, indeks telemetrii `16649`, prędkość `2.4 km/h`, dystans `18.66 km`. Brak blokady pod koniec osi czasu.
+Raporty\RAPORT_AMD_NATIVE_RESOURCE_LIFECYCLE_LEAK.md:1:# AMD native D3D11 / AMF / Media Foundation — resource lifecycle leak audit
+Raporty\RAPORT_AMD_NATIVE_RESOURCE_LIFECYCLE_LEAK.md:76:## Lifecycle i granica root cause
+Raporty\RAPORT_AMD_NATIVE_RESOURCE_LIFECYCLE_LEAK.md:112:sekwencjach, lecz lifecycle kryteria nie przechodzą:
+Raporty\RAPORT_AMD_PERF_REGRESSION_MAP_MARKER_FIX.md:101:   - W raporcie `Raporty/RAPORT_MAP_DIRECTIONAL_MARKER_DISABLED.md` (z dnia 2026-09-24) wyłączono opcję markera kierunkowego (`directional`) z GUI i wymuszono `marker_style = "dot"` w linii 3870 w `src/ffmpeg/amd_native_exporter.py`.
+Raporty\RAPORT_AMD_PERF_REGRESSION_MAP_MARKER_FIX.md:161:- **Od której zmiany:** Zmiana z dnia 2026-09-24 (`RAPORT_MAP_DIRECTIONAL_MARKER_DISABLED.md`), w której wyłączono opcję strzałki, lecz pozostawiono kod logowania i obliczeń kąta w exporterze.
+Raporty\RAPORT_AMD_POST_RENDER_DESKTOP_GPU_STABILITY_AUDIT.md:147:Existing same-process lifecycle measurements were rechecked rather than
+Raporty\RAPORT_AMD_POST_RENDER_DESKTOP_GPU_STABILITY_AUDIT.md:159:Preview disabled, GPU HUD disabled and AMF bypassed.  Top-level native COM
+Raporty\RAPORT_AMD_POST_RENDER_DESKTOP_GPU_STABILITY_AUDIT.md:170:## CODE LIFECYCLE AUDIT
+Raporty\RAPORT_AMD_PRE_USB_SNAPSHOT_FORENSICS.md:102:| `src/ffmpeg/amd_native_exporter.py` | późniejsze telemetry/GUI/Preview arguments, istniejący direct mux z `20c62f3`/`356d45f`, map/chart/gauge semantics | `_create_amd_local_scratch_dir`, stale scratch cleanup, `*.temp_video.mp4`, Stage A/Stage C routing, USB finalization tracker, disk guard, overlapped writer, `CancelIoEx`, mux watchdog/flush diagnostics | hunk łączący `preview_state_provider`/`generation_id` z lifecycle mux; wymaga ręcznej korelacji funkcja po funkcji |
+Raporty\RAPORT_AMD_PRE_USB_SNAPSHOT_FORENSICS.md:103:| `src/ffmpeg/streaming.py` | preview/cancel/generation i nowszy lifecycle GUI | wyłącznie FinalizationTracker/drain/USB mux finalization blocks | mieszane hunky cancel + finalization |
+Raporty\RAPORT_AMD_REBUILD_STAGE2_FULL_GUI_RESTORE.md:76:- `tests/test_export_queue_lifecycle.py` — **6/6 PASSED**
+Raporty\RAPORT_AMD_REBUILD_STAGE3_CONFIG_GPMF_QP_FIXES.md:72:tests/test_export_finalization_lifecycle.py ............. PASSED (4/4)
+Raporty\RAPORT_AMD_REGRESSION_HUNT_ISOLATION.md:122:4. Wątek w tle konkurował o blokady GIL i zasoby I/O, co wydłużyło czas przygotowania mapy z 0.08 ms do 17.87 ms na klatkę.
+Raporty\RAPORT_AMD_RENDER_PATH_AUDIT_2_CONTROL.md:276:1. **Usunięcie nakładania `dist_visual` z chartami** (przesunięcie linijki dystansu / zmiana bboxu) → odblokowuje guard; oraz **przeniesienie chartów przed `track_map`** (lub dodanie capture w compose ABOVE) → charty trafią na GPU_SPLIT. Potencjał: −2 ms/klatkę compose (1080p) i mniej w 4K.
+Raporty\RAPORT_AMD_RENDER_PATH_AUDIT_3_CLAUDE.md:304:**Konsekwencja:** Guard `_chart_gpu_layout_safe` odrzuca oba charty, bo ich bbox nachodzi na `dist_visual`. Jest to **poprawne zachowanie** — przesunięcie `dist_visual` poniżej chartów lub przesunięcie chartów powyżej `dist_visual` usunęłoby ten bloker i odblokowało GPU_SPLIT (pod warunkiem naprawienia blokera B z Sekcji 6).
+Raporty\RAPORT_AMD_RENDER_PATH_AUDIT_3_OSS.md:21:- **Audio**: Disabled (AMD_SKIP_MUX=1)
+Raporty\RAPORT_AMD_STATE_QUEUE_LAYOUT_PERSISTENCE.md:103:python -m pytest tests/test_state_queue_layout_persistence.py tests/test_export_queue_basic.py tests/test_export_queue_lifecycle.py tests/test_icon_rendering_regression.py tests/test_render_tab_controls_cleanup.py -v
+Raporty\RAPORT_AMD_STATE_QUEUE_LAYOUT_PERSISTENCE.md:112:- `tests/test_export_queue_lifecycle.py`: 6 passed
+Raporty\RAPORT_AMD_SURGICAL_POST_STAGEA_ROLLBACK.md:43:- Usunięto `FinalizationTracker` oraz USB-specific lifecycle waits. Zachowano
+Raporty\RAPORT_AMD_SURGICAL_POST_STAGEA_ROLLBACK.md:47:  hook i nie jest wywoływany; nie uczestniczy w lifecycle.
+Raporty\RAPORT_AMD_SURGICAL_POST_STAGEA_ROLLBACK.md:122:stabilność i lifecycle muxu są potwierdzone, parity pikselowa: **NOT PROVEN**.
+Raporty\RAPORT_AMD_V106_CACHE_IPC_STARTUP_FIX.md:24:*Poprawka:* Zamknięto blok `_prep_cache` w warunku logicznym `if encoder in ("amd", "amd_native"):`, odblokowując zasoby dla Intel/NVIDIA/CPU.
+Raporty\RAPORT_AMD_V107_CACHE_SAFETY_PERFORMANCE.md:43:- **WARM START** (Pełny hit z cache): Odzyskano pożądane 1.4 sekundy. Spadek ten odblokowuje natychmiastowe uruchomienie renderowania docelowego na sprzęcie AMD.
+Raporty\RAPORT_AMD_V108_TIMELINE_CACHE_INTEGRITY.md:30:CACHE_PREFIX_SAFETY=Zabezpieczone przez blokadę obcego sygnatury osi.
+Raporty\RAPORT_AMD_WIDGET_CACHE_VISUAL_STATE.md:75:| **Cache Misses** | 0 (disabled) | 3 | +3 | - |
+Raporty\RAPORT_AVG_SPEED_PREVIEW_PARITY_FIX.md:150:- Niezależność od wybranego źródła `dist_visual` (GPMF, FIT, disabled).
+Raporty\RAPORT_CHART_DECIMALS_PREVIEW_DIM.md:166:zmienia kodu dekodowania, enkodowania, AMD map/gauge/chart lifecycle, NVIDIA,
+Raporty\RAPORT_COMMON_INTEL_TO_AMD_PORT.md:4:**Zadanie:** Selektywny port bezpiecznych zmian wspólnych (GUI, HUD, Map, Cache, Cancel Lifecycle) z gałęzi `origin/intel-render` do `amd-render` oraz analiza regresji `map_cpu_upload`  
+Raporty\RAPORT_COMMON_INTEL_TO_AMD_PORT.md:28:| **`e019a6b`** | `Poprawki i korety` (Intel QSV, device pinning, map preload overview fix, telemetry cache, render cancel lifecycle, ruler thickness) | MIXED | YES (GUI, HUD, Map Preload, Cancel Lifecycle, Processed Cache, Ruler Thickness) | YES (QSV filter graph, `intel_gpu_resident`, `intel_backend.py`) | **SELEKTYWNY** | Przeniesiono 100% backend-neutralnych hunków; odrzucono wszystkie elementy specyficzne dla Intel QSV / GPU-resident |
+Raporty\RAPORT_COMMON_INTEL_TO_AMD_PORT.md:38:* Blokada 10-bit/HDR `_probe_intel_native_source`.
+Raporty\RAPORT_DJI_ACTION6_TELEMETRY_INTEGRATION.md:83:REGRESSIONS_OR_RISKS=actual DJI IMU is absent, parser upstream does not expose DJI gyro/accel, no GUI preview or IMU render proof, compiled extension is CPython 3.14-specific. The copied application folder includes the binary and licenses; rebuilding for another Python ABI uses the pinned build script.
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:16:- lifecycle render cancel, producer, mux pump i FFmpeg,
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:78:miał własnego lifecycle. AMD render i Preview mogły równolegle używać dwóch
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:150:- `src/gui/qt/tabs/render_tab.py` — niezależny Preview lifecycle, latest-state,
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:241:  render thread i nie korzysta z jego D3D11 device/lifecycle.
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:249:PREVIEW NO MUX LIFECYCLE ACCESS: PASS
+Raporty\RAPORT_EXPORT_PREVIEW_ISOLATION_AND_DISTANCE_BAR_UNITS.md:260:blokada dla potwierdzonej izolacji fault path i testów A–D.
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:9:Był to audyt lifecycle, bez GPU-tap. Nie zmieniano natywnego pipe writera,
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:10:Stage A/B/C, komendy FFmpeg mux, AMF lifecycle ani kompozytora D3D11. Nie
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:12:wcześniejszy dirty state; zmiany tego audytu ograniczają się do lifecycle
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:20:## Ustalenia lifecycle
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:32:## Znaleziona przyczyna lifecycle Preview
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:39:Wprowadzono minimalny lifecycle fix:
+Raporty\RAPORT_EXPORT_PREVIEW_PROCESS_STATE_POISONING.md:123:**NOT READY — wymagany osobny, izolowany audyt native D3D11/AMF/MF lifecycle.**
+Raporty\RAPORT_EXPORT_PREVIEW_VIDEO_SYNC.md:53:  tests/test_export_lifecycle_p1_fixes.py -q
+Raporty\RAPORT_FALSE_USER_CANCEL_FIX.md:30:Ten lifecycle nie miał wcześniej generation guard.
+Raporty\RAPORT_FALSE_USER_CANCEL_FIX.md:68:## Naprawa lifecycle
+Raporty\RAPORT_FALSE_USER_CANCEL_FIX.md:120:  tests/test_export_lifecycle_p1_fixes.py tests/test_render_tab.py \
+Raporty\RAPORT_EXPORT_QUEUE_YT_UPLOAD.md:43:- notify_render_done state transitions (success/failure/yt_disabled)
+Raporty\RAPORT_FINALIZATION_PROGRESS_USB.md:47:3. **Wykryty i naprawiony błąd blokady bufora potoku (Subprocess Pipe Deadlock)**:
+Raporty\RAPORT_FINALIZATION_PROGRESS_USB.md:167:- `test_stage_names_and_lifecycle`: Poprawne przejścia stanów i czasy etapów.
+Raporty\RAPORT_FIT_MERGED_DISTANCE_PREVIEW_PARITY_DIM_FIX.md:142:### Edit Preview / Export Preview dim lifecycle
+Raporty\RAPORT_FIT_MERGED_DISTANCE_PREVIEW_PARITY_DIM_FIX.md:245:lifecycle i nie został oportunistycznie naprawiony.
+Raporty\RAPORT_FIT_MERGED_DISTANCE_PREVIEW_PARITY_DIM_FIX.md:266:- Zmiany są wyłącznie wspólną warstwą danych FIT i GUI preview lifecycle.
+Raporty\RAPORT_FIT_MERGED_DISTANCE_PREVIEW_PARITY_DIM_FIX.md:278:EDIT/EXPORT DIM LIFECYCLE: PASS
+Raporty\RAPORT_GPMF_NATIVE_PERF_AND_CACHE_CLEAR.md:40:CACHE_CLEAR_ACTIVE_JOB_POLICY=disabled during active render states and GPMF telemetry analysis progress
+Raporty\RAPORT_GPMF_NATIVE_PERF_AND_CACHE_CLEAR.md:56:GUI_BUTTON_SMOKE=PASS — button disabled for `running`, enabled for `completed`
+Raporty\RAPORT_GPU_RUNTIME_CAPABILITY_PRODUCTION.md:134:- ręczny Qt smoke: `source` 7680×4320 disabled/clamped do 4K; `source`
+Raporty\RAPORT_GUI_ETAP_4A1_INDICATOR_INTERACTION.md:142:- **Render/GPU:** export_lifecycle, intel_backend, etap5f, amd_native, nvidia_regression, etap8o/precomputed — zielone.
+Raporty\RAPORT_GUI_ETAP_4A1_INDICATOR_INTERACTION.md:151:3. `test_etap8s_flush_batching::test_flush_batching_above_lifecycle` (ta sama rodzina).
+Raporty\RAPORT_GUI_FIRST_HUD_COMPOSITE_FINAL_FIX.md:4:1. Rozwi�zanie blokady (warm load): Przeanalizowano i przebudowano 	elem_gpmf_native.pyd by zwalnia� GIL podczas alokacji krotek w du�ych p�tlach Pythona, redukuj�c warm load stall z 340ms do 66ms.
+Raporty\RAPORT_GUI_FIRST_HUD_COMPOSITE_FINAL_FIX.md:5:2. Rozwi�zanie blokady (cold load): Ustalono, �e _on_data_streams_ready uruchamiane w g��wnym w�tku powodowa�o synchroniczne rysowanie Pillow. Ze wzgl�du na wczytywanie kafelk�w mapy oraz generowanie wykres�w, proces ten przy pierwszym uruchomieniu zajmowa� ponad 250ms, blokuj�c event loop (GIL). Zastosowano izolacj� ca�ego bloku Pillow w background thread (ThreadPoolExecutor z flag� lock) z u�yciem bezpiecznego zwracania przez mechanizm QImage -> sig_preview_frame_ready.
+Raporty\RAPORT_GUI_FIRST_HUD_COMPOSITE_FINAL_FIX.md:6:3. Rozwi�zanie blokady mpv_hwdec_check: Odpytywanie statusu sprz�towego mpv okazywa�o si� blokuj�ce g��wnego w�tku (do 170ms) w pierwszych chwilach po za�adowaniu medi�w. Uruchomiono get_hwdec_diagnostics na izolowanym worker thread, nie ruszaj�c cyklu Qt.
+Raporty\RAPORT_GUI_PROGRESS_BARS_ETAP_1.md:121:- GUI aktualizowane ~33×/s (30 ms), nie per klatka — brak obciążenia CPU i blokady event loop.
+Raporty\RAPORT_GUI_PROGRESS_BARS_ETAP_1.md:145:- `pytest tests/test_render_tab.py tests/test_mp4_inspector.py tests/test_qp_analyzer.py tests/test_nvidia_regression_chart_preview.py tests/test_export_lifecycle_p1_fixes.py tests/test_intel_backend.py -q` → **76 passed**.
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:1:# RAPORT: UX / LOGIKA PROJEKTU — BLOKADA PROJEKTU BEZ PLIKU, NATYCHMIASTOWY HUD, GLIF ° Z ARIAL, USUNIĘCIE „LICZBY WĄTKÓW”, DOMYŚLNY EXPORT FOLDER I NAPRAWA „INTEGRACJI”
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:12:1. **Blokada zakładki „Projekt” bez pliku:** Zakładka „Projekt” musi być zablokowana (`disabled`) po starcie aplikacji oraz po zamknięciu/wyczyszczeniu projektu, dopóki nie zostanie załadowany co najmniej jeden plik wideo. Zakładki „Rendering” i „Ustawienia” muszą pozostać stale aktywne (`enabled`).
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:23:### 2.1. Blokada zakładki „Projekt” bez wideo (`main_window.py`, `signals.py`, `load_tab.py`, `controller.py`)
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:28:  - Wywoływana przy inicjalizacji GUI (start programu ze stanem `Projekt = disabled`), po pomyślnym załadowaniu wideo (`Projekt = enabled`), oraz po wyczyszczeniu projektu (`Projekt = disabled`).
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:98:1. `test_main_window_project_tab_disabled_without_video`: potwierdza, że po starcie zakładka Projekt jest disabled, a Rendering i Ustawienia są enabled; po załadowaniu wideo Projekt staje się enabled; po wyczyszczeniu Projekt wraca do disabled.
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:141:tests/test_youtube_upload_ui_disabled.py: MATCH
+Raporty\RAPORT_GUI_LOGIC_DEGREE_EXPORT_SETTINGS_CLEANUP.md:142:Raporty/RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md: MATCH
+Raporty\RAPORT_GUI_V4_FULLSCREEN_LIFECYCLE_NEXT_FRAME.md:1:# RAPORT: GUI v4 — Fullscreen Lifecycle & Next Frame Step
+Raporty\RAPORT_GUI_V4_FULLSCREEN_LIFECYCLE_NEXT_FRAME.md:6:2. **FULLSCREEN EXIT / QT WIDGET LIFECYCLE**: Wyjście z trybu pełnoekranowego (ESC) kończyło się błędem:
+Raporty\RAPORT_GUI_V4_FULLSCREEN_LIFECYCLE_NEXT_FRAME.md:90:### A. Testy Fullscreen Lifecycle & Next Frame (`tests/test_gui_v4_fullscreen_and_next_frame.py`)
+Raporty\RAPORT_INDICATORS_ETAP_10C_CPU_STATIC_LAYER_CACHE.md:80:Brak ręcznego globalnego `clear_chart_cache()`. Cache miss wynika naturalnie ze zmiany immutable key. `clear()` pozostaje dostępne dla testów i worker lifecycle.
+Raporty\RAPORT_INDICATORS_ETAP_10G_TIME_DISPLAY_OPTIMIZATION.md:136:- `tests/test_time_display_optimization.py` (5 testów: cache hit parity, dynamic changes, font invalidation, bounded cache limits, disabled/empty fields)
+Raporty\RAPORT_INDICATORS_ETAP_10K3_FIT_SPEED_REGRESSION.md:94:   - W `_discover_data_streams()` odblokowano strumienie `enhanced_speed` i `enhanced_altitude`.
+Raporty\RAPORT_INDICATORS_ETAP_10S_AMD_UPLOAD_BUFFER.md:209:- **GPU-eksportowe (środowiskowa niedostępność GPU):** `test_etap8s`, `test_etap8t_b` ×2, `test_export_lifecycle` ×2, `test_video_helpers`.
+Raporty\RAPORT_INDICATORS_ETAP_10T_SEGMENT_BAR_MAP_VISUALS.md:273:- 2 z 15 (test_export_lifecycle ×2) i `test_video_helpers` teraz **przechodzą** (flaky GPU),
+Raporty\RAPORT_INDICATORS_ETAP_10W_CONFIG_PARITY.md:168:- `test_render_tab`, `test_mp4_inspector`, `test_qp_analyzer`, `test_nvidia_regression_chart_preview`, `test_export_lifecycle_p1_fixes`, `test_intel_backend`, `test_gpmf_cache`, `test_pixel_indicator_style`, `test_static_indicator_cache` → **88 passed, 1 deselected** (pre-existing `test_slope_dynamic_marker_and_static_style_miss`, failuje też bez moich zmian).
+Raporty\RAPORT_INDICATORS_ETAP_5B_MAP_PARITY_FIX.md:62:`background_precache()` nadal jest daemon thread, a jego zachowanie nie zostało przebudowane. CPU first render może działać równolegle z istniejącym precache, ale korzysta z tej samej polityki `download_missing=True`, co AMD. Nie dodano nowego współdzielonego stanu, blokady, retry ani ścieżki zapisu.
+Raporty\RAPORT_INLINE_GPMF_DURING_EXPORT.md:66:Tests: `tests/test_inline_gpmf_export.py` with a real source: 7 passed; `tests/test_inline_gpmf_amd_real.py` opt-in real AMD A/B with native parser: 1 passed; focused existing GPMF/AMD suite: 39 passed, 2 skipped before enabling real-source tests; queue/Intel/NVIDIA/lifecycle adjacent suite: 32 passed, 2 skipped. `git diff --check` passed. Intel/NVIDIA hardware, full trimmed/multi render, real queue and STOP, GPU utilization, disk-write counters and manual QP popup remain NOT TESTED. No benchmark comparison to the canonical 4K/1131-frame workload is claimed. No known regression was seen on the exercised paths.
+Raporty\RAPORT_INLINE_GPMF_DURING_EXPORT.md:68:NEW_REGRESSIONS=focused planner, metadata timeline, payload/audio, AMD OFF/ON mux lifecycle and opt-in real AMD parser harness
+Raporty\RAPORT_INTEGRATION_AMD_MULTIFILE_RENDER_PERFORMANCE.md:65:- Existing targeted multi-file/lifecycle/GPMF suite: `53 passed, 1 skipped`.
+Raporty\RAPORT_INTEGRATION_AMD_MULTIFILE_RENDER_PERFORMANCE.md:67:- Real 014/015/016 timestamp and GUI lifecycle validation: recorded in
+Raporty\RAPORT_INTEGRATION_ICON_FONT_GAUGE_PROPERTY_FIXES.md:118:2. `test_bug2_font_lifecycle_and_persistence`: **PASS** — `default_layout()` i `normalize_layout()` zapewniają klucz `"font": ""` bez `null`.
+Raporty\RAPORT_INTEGRATION_ICON_FONT_GAUGE_PROPERTY_FIXES.md:165:                GUI AppController & MainWindow smoke lifecycle
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:41:| `src/ffmpeg/streaming.py` | Existing AMD/NVIDIA/CPU orchestration | Intel QSV selection, residency, HDR and lifecycle policy | Intel orchestration retained; AMD native path remains separately selected |
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:47:| `src/indicators/lean.py` | AMD exact lean/GPU transform behavior | Explicit cache lifecycle | Added `clear_lean_caches()` without replacing renderer |
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:99:lean, lifecycle, precompute and preview/export policy tests.
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:131:## 14. Multi-file / lifecycle
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:133:Focused cancel/writer lifecycle tests pass. Canonical multi-file, second export,
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_1_SAFE_MERGE.md:158:the lifecycle/render-tab test contracts. See `git diff --cached --name-status`
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_2_AMD_ACCEPTANCE.md:71:- `clear_lean_caches()` lifecycle hook while retaining AMD rendering;
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_2_AMD_ACCEPTANCE.md:118:## 7. Performance and lifecycle
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_2_AMD_ACCEPTANCE.md:124:Focused software lifecycle, Intel, lean and precompute suite: **34 passed**.
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_2_AMD_ACCEPTANCE.md:141:parity, HDR/audio, performance and lifecycle validation are unavailable, and
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3A_HDR_ADJUDICATION.md:68:- lifecycle/second export/cancel/resolution changes = PASS
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:108:## 12. Lifecycle
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:110:Fresh-DLL canonical export, second export, cancel, export-after-cancel, project reopen, layout reload, resolution change, return to 4K, and subsequent export are **NOT TESTED**. Native context, AMF, VP, map, gauge, lean, charts, config, and dirty-region lifecycle are **NOT PROVEN**.
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:158:Acceptance is blocked because the machine has CMake but no installed MSVC/Visual Studio/Clang/MinGW compiler or build program. Therefore the fresh AMD DLL, fresh runtime export, exact pixel parity, frame/HDR/audio integrity, performance regression, and lifecycle gates remain untested. The frozen AMD oracle is preserved with its original SHA256 and was not accepted as a fresh build.
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:244:## Lifecycle
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:248:Lifecycle gate: PASS for tested operations.
+Raporty\RAPORT_INTEGRATION_INTEL_AMD_STAGE_3_FINAL_AMD_ACCEPTANCE.md:262:Native build, fresh AMD runtime, canonical 1131-frame export, exact pre-encode pixel parity, performance, and lifecycle passed. Acceptance remains blocked because the canonical input’s Main10/BT.2020/HLG contract is not preserved in either fresh or oracle output (Main/yuv420p/bt709). Therefore the commit gate is not satisfied.
+Raporty\RAPORT_INTEGRATION_MULTIFILE_ABSOLUTE_SYNC_AND_PLAYBACK_FIX.md:93:- `67 passed`: timeline, preview seek/source switch/EOF, final-render timeline/precompute, Reset Layout x2, HUD lifecycle i aware/naive GUI datetime contract.
+Raporty\RAPORT_INTEGRATION_MULTIFILE_ABSOLUTE_SYNC_AND_PLAYBACK_FIX.md:107:- `tests/test_multifile_hud_lifecycle.py`
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:1:# TeleM Integration — Multi-file input and HUD lifecycle fix
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:35:  `TELEM_HUD_LIFECYCLE_DEBUG=1` logs lifecycle counts.
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:45:- `44 passed`: multi-file timeline/preview, new lifecycle tests, and reset
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:61:- `tests/test_multifile_hud_lifecycle.py`
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:67:modified. Code-level lifecycle/input contracts: **PASS**. Real 014/015/016 GUI
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:94:Real offscreen Qt GUI lifecycle checks passed: initial load had 28 indicators;
+Raporty\RAPORT_INTEGRATION_MULTIFILE_HUD_DUPLICATION_FIX.md:107:Final verdict: **PARTIAL** — input ownership, GPMF timestamps, seek lifecycle,
+Raporty\RAPORT_INTEGRATION_PREVIEW_OVERLAY_1TO1_FIX.md:234:### 3. Zmiany w architekturze i cyklu życia (Lifecycle)
+Raporty\RAPORT_INTEL_225U_CHART_FASTPATH_FINAL_TRUTH_3C2.md:53:## 3. ŚRODOWISKO I BLOKADA KONFIGURACJI PRODUKCYJNEJ
+Raporty\RAPORT_INTEL_225U_CHART_FASTPATH_FINAL_TRUTH_3C2.md:67:### 3.2. Blokada konfiguracji produkcyjnej
+Raporty\RAPORT_INTEL_225U_DIRECT_SHM_2D.md:13:W ramach Etapu 2D zbadano i wdrożono architekturę **Direct In-Place SHM Rendering** dla potoku HUD w środowisku Intel Core Ultra 225U. Celem było wyeliminowanie alokacji pełnoklatkowych buforów sterty oraz zbędnych operacji kopiowania pamięci (`memcpy` / `np.copyto`), redukując obciążenie magistrali pamięci RAM/L3 cache i odblokowując zyski wydajnościowe na operacji `ID3D11DeviceContext::UpdateSubresource`.
+Raporty\RAPORT_INTEL_225U_DIRECT_SHM_PRODUCTION_CLOSEOUT_2D1.md:15:2. **Potwierdzenie kontraktu Direct SHM:** Blokada braku ukrytych kopii pełnoramkowych (True SHM Aliasing).
+Raporty\RAPORT_INTEL_225U_DIRECT_SHM_PRODUCTION_CLOSEOUT_2D1.md:120:W architekturze UMA (Unified Memory Architecture) procesorów Intel Ultra 5 225U pamięć operacyjna LPDDR5x jest współdzielona pomiędzy rdzeniami CPU, kontrolerem mediów (VPU/D3D11VA/oneVPL) a zintegrowanym GPU. Eliminacja zbędnego kopiowania 29.5 MB danych na każdą klatkę zmniejsza wysycenie magistrali pamięci i buforów LLC, co bezpośrednio redukuje czas blokady magistrali podczas transferu PCIe/Direct DMA w `UpdateSubresource`.
+Raporty\RAPORT_INTEL_AV1_REALTIME_QUANTIZER.md:155:All requirements for real-time Intel AV1 compression quality telemetry are met in full. The implementation preserves complete backward compatibility with AMD/NVIDIA pipelines, enforces codec-accurate metric semantics (ase_q_idx / Quantizer), exhibits negligible overhead, and passes all unit, integration, queue lifecycle, and visual smoke tests.
+Raporty\RAPORT_INTEL_CORE_ULTRA_ETAP_1A_CURRENT_INTEGRATION_LOG_AUDIT.md:172:- utwardzono writer/EOF/tail-frame lifecycle;
+Raporty\RAPORT_INTEL_CORE_ULTRA_ETAP_1A_CURRENT_INTEGRATION_LOG_AUDIT.md:260:  cross-GPU fallback disabled.
+Raporty\RAPORT_INTEL_ETAP_1.md:148:[INTEL] Cross-GPU fallback: DISABLED
+Raporty\RAPORT_INTEL_ETAP_1.md:172:   - `[INTEL] INTEL_CROSS_GPU_FALLBACK: DISABLED`.
+Raporty\RAPORT_INTEL_ETAP_1B_HW.md:28:[INTEL] INTEL_CROSS_GPU_FALLBACK: DISABLED
+Raporty\RAPORT_INTEL_ETAP_3A_GPU_RESIDENT.md:56:## Frame lifecycle BEFORE
+Raporty\RAPORT_INTEL_ETAP_3A_GPU_RESIDENT.md:129:## Frame lifecycle AFTER
+Raporty\RAPORT_INTEL_ETAP_3A_GPU_RESIDENT.md:222:- disabled/no HUD native case.
+Raporty\RAPORT_INTEL_ETAP_4A_CPU_REFERENCE_HUD_REGION.md:169:klatką (`first_sched` 30 s w audit lifecycle; para-0 1080p: 79,7 s), także w
+Raporty\RAPORT_INTEL_ETAP_4A_CPU_REFERENCE_HUD_REGION.md:198:  `parity.py`, `lifecycle_breakdown.py`), wyniki JSON (baseline/ab/interleaved/
+Raporty\RAPORT_INTEL_ETAP_4B_4C_PRODUCTION_OPTIMIZATION_OX.md:337:(a) decyzja produktowa o akceptacji VPP-scalera odblokowuje B/E;
+Raporty\RAPORT_INTEL_ETAP_4B_4C_PRODUCTION_OPTIMIZATION_OX.md:343:1. Decyzja jakościowa VPP-vs-lanczos (odblokowuje największy pozostały zysk).
+Raporty\RAPORT_INTEL_ETAP_4_PIPELINE_BOTTLENECK_AUDIT_OX.md:128:| `shm_pool.acquire` (`streaming.py:465-496`) | POTENTIALLY BLOCKING | bounded 30 s, fail-fast gdy FFmpeg martwy; blokada = backpressure enkodera |
+Raporty\RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md:26:Strata ZMIENNA między runami ⇒ race/lifecycle, nie deterministyczny bug muxera.
+Raporty\RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md:49:## Writer lifecycle
+Raporty\RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md:58:## Reorder-buffer lifecycle
+Raporty\RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md:181:- tests/test_render_cancel_process_lifecycle.py: stary test kodowal BUG#1 jako kontrakt - zaktualizowany (done=>write; explicit cancel=>discard).
+Raporty\RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md:202:- tests/test_etap5h_writer_queue.py, tests/test_render_cancel_process_lifecycle.py
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:26:| tests/test_etap5h_writer_queue.py | +5 testów: writer lifecycle, rational FPS, command construction (5B) | test, Intel YES | COMMIT |
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:27:| tests/test_render_cancel_process_lifecycle.py | kontrakt done→write / explicit-cancel→discard (5B; stary test kodował BUG#1) | test, Intel YES | COMMIT |
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:65:## Writer lifecycle final contract
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:108:tests/test_video_helpers.py, test_intel_backend.py, test_gpu_compositor.py, test_amd_native_overlay_handoff.py, test_etap5f_pipeline_audit.py, test_etap5h_writer_queue.py, test_render_cancel_process_lifecycle.py => 74 passed (12.30 s). Zgodne z minimum 5B.
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:131:6. tests/test_render_cancel_process_lifecycle.py
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:150:    git add -- src/ffmpeg/streaming.py src/ffmpeg/command_builder.py src/benchmark.py .gitignore tests/test_video_helpers.py tests/test_etap5h_writer_queue.py tests/test_render_cancel_process_lifecycle.py Raporty/RAPORT_INTEL_ETAP_3B_AB_PARITY_PERF.md Raporty/RAPORT_INTEL_ETAP_3C_HUD_REGION.md Raporty/RAPORT_INTEL_HOTFIX_10BIT_CPU_REFERENCE.md Raporty/RAPORT_INTEL_HOTFIX_2_QSV_HWDOWNLOAD_SYNC.md Raporty/RAPORT_INTEL_ETAP_4_PIPELINE_BOTTLENECK_AUDIT_OX.md Raporty/RAPORT_INTEL_ETAP_4A_CPU_REFERENCE_HUD_REGION.md Raporty/RAPORT_INTEL_ETAP_4B_4C_PRODUCTION_OPTIMIZATION_OX.md Raporty/RAPORT_INTEL_ETAP_4D_HDR_P010_NATIVE_OX.md Raporty/RAPORT_INTEL_ETAP_4E_P010_CPU_OVERLAY_OX.md Raporty/RAPORT_INTEL_ETAP_4F_10BIT_REGION_COMPOSITOR_OX.md Raporty/RAPORT_INTEL_ETAP_4G_P0_VIDEO_PATH_OX.md Raporty/RAPORT_INTEL_ETAP_4H_HEVC_QSV_QUALITY_PERF_OX.md Raporty/RAPORT_INTEL_ETAP_4I_QP_REALTIME_FRONTIER_OX.md Raporty/RAPORT_INTEL_ETAP_4J_VBR_PRODUCTION_OX.md Raporty/RAPORT_INTEL_ETAP_4K_QSV_RC_CONTRACT_OX.md Raporty/RAPORT_INTEL_ETAP_5A_PRODUCTION_HARDENING_OX.md Raporty/RAPORT_INTEL_ETAP_5B_QSV_TAIL_LOSS_OX.md Raporty/RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:156:    Intel: stabilize QSV render pipeline and frame lifecycle
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:167:    - Writer lifecycle: normal EOF writes the full queued backlog; discard is
+Raporty\RAPORT_INTEL_ETAP_5C_FINAL_COMMIT_AUDIT_OX.md:180:    python -m pytest tests/test_etap5h_writer_queue.py tests/test_render_cancel_process_lifecycle.py tests/test_intel_backend.py -q   # zielone
+Raporty\RAPORT_INTEL_ETAP_5D_REAL_GUI_REGRESSION_OX.md:80:ZAIMPLEMENTOWANY: streaming -noautorotate pomijany dla encoder==intel (NV/AMD/CPU kontrakt bez zmian); command_builder: intel SW-decode i hwdownload branchy usunely reczne vflip,hflip/transpose (pozostaje format/scale). 5B rational -r, writer lifecycle, REGION logic, frame count, timeline - nietkniete.
+Raporty\RAPORT_INTEL_ETAP_5G_EXACT_FRAME_TELEMETRY_PARITY_ANTIGRAVITY.md:221:	modified:   tests/test_render_cancel_process_lifecycle.py
+Raporty\RAPORT_INTEL_ETAP_5I_FINAL_CHANGESET_STAGING_ANTIGRAVITY.md:73:4. [`tests/test_render_cancel_process_lifecycle.py`](file:///f:/_DEV/TeleM/tests/test_render_cancel_process_lifecycle.py) (MODIFIED)
+Raporty\RAPORT_INTEL_ETAP_5I_FINAL_CHANGESET_STAGING_ANTIGRAVITY.md:171: tests/test_render_cancel_process_lifecycle.py |  29 ++-
+Raporty\RAPORT_INTEL_ETAP_5I_FINAL_CHANGESET_STAGING_ANTIGRAVITY.md:217:Intel: harden HDR pipeline, writer lifecycle, and preview-export parity
+Raporty\RAPORT_LAYOUT_OWNERSHIP_AND_LEAN_HUD_FIX.md:17:2. **Diagnoza i usunięcie blokady (hang/freeze) podczas przygotowywania HUD z włączonym wskaźnikiem Lean**:
+Raporty\RAPORT_LEGACY_AUDIO_CACHE_PERMANENT_REMOVAL.md:168:python -m pytest tests/test_audio_cache.py tests/test_gui_logic_degree_export_settings_cleanup.py tests/test_render_tab_controls_cleanup.py tests/test_settings_tab_layout_and_persistence.py tests/test_common_render_preparation.py tests/test_real_gui_startup_and_child_hash.py tests/test_gauge_needle_width_parity.py tests/test_youtube_upload_ui_disabled.py
+Raporty\RAPORT_LIVE_QP_STATS_RESTORE.md:84:3. Bezpieczeństwo lifecycle i brak wycieków między jobami:
+Raporty\RAPORT_LOADING_GPMF_WARM_CACHE_ETAP_2.md:182:python -m pytest -q tests/test_gpmf_cache.py tests/test_telemetry_processed_cache.py tests/test_telemetry_manager.py tests/test_gpmf_timing.py tests/test_map_deflayout_lifecycle.py tests/test_map_overview_first.py tests/test_map_preload_etap1.py tests/test_map_sync.py tests/test_controller_properties.py tests/test_render_tab.py
+Raporty\RAPORT_LOADING_JSON_FREEZE_ETAP_1.md:139:python -m pytest -q tests/test_gpmf_cache.py tests/test_map_deflayout_lifecycle.py tests/test_map_overview_first.py tests/test_map_preload_etap1.py tests/test_map_sync.py tests/test_telemetry_manager.py
+Raporty\RAPORT_LOAD_PANEL_HARDWARE_AND_MULTIFILE_INFO.md:145:- `tests/test_export_queue_lifecycle.py`: 6 passed
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:1:# TeleM — MAP ETAP 1D: def_layout lifecycle
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:7:## 2. Lifecycle mapy z def_layout
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:13:## 3. Lifecycle mapy dodanej ręcznie
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:62:## 10. Test startup lifecycle
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:64:Dodano `tests/test_map_deflayout_lifecycle.py`:
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:71:Test wykorzystuje tę samą konfigurację wskaźnika przez cały lifecycle. Nie usuwa i nie tworzy go ponownie. Różnica providerów między saved layout i dawnym interactive default została pokryta przez test wyboru providera oraz test renderu zgodnego Satellite context.
+Raporty\RAPORT_MAP_DEFLAYOUT_LIFECYCLE_ETAP_1D.md:86:python -m pytest -q tests/test_map_deflayout_lifecycle.py tests/test_map_overview_first.py tests/test_map_preload_etap1.py tests/test_map_sync.py
+Raporty\RAPORT_MAP_MAIN_VS_EXPORT_PREVIEW_INTEL.md:72:Warunek działa provider-neutralnie: najpierw sprawdzany jest zgodny provider (`snap["provider"] == map_style`), następnie obecność overview. Przełączanie Standard/Satellite oraz generation lifecycle pozostają bez zmian. Nie wykonano fizycznego przełączenia w GUI.
+Raporty\RAPORT_MAP_PRELOAD_ETAP_1.md:99:**Wszystkie `set_*` przyjmują opcjonalny `generation` i ignorują wywołania nieaktualnej generacji** — to mechanizm ochrony przed przedawnionymi zadaniami (stale job guard). Lifecycle: `idle → preparing → ready | error | cancelled`.
+Raporty\RAPORT_MAP_PRELOAD_ETAP_1B_RUNTIME_GUI.md:70:### 5.1 `frame_data.py` — TypeError naive/aware (BLOKADA CAŁEGO OVERLAYA)
+Raporty\RAPORT_MAP_PRELOAD_ETAP_1B_RUNTIME_GUI.md:130:## 8. Provider/cache/generation lifecycle
+Raporty\RAPORT_MAP_PRELOAD_ETAP_1B_RUNTIME_GUI.md:147:## 10. Test integracyjny lifecycle
+Raporty\RAPORT_MAP_PRELOAD_ETAP_1B_RUNTIME_GUI.md:199:| `tests/test_map_preload_etap1b_runtime.py` | 2 testy lifecycle (placeholder→ready→mapa; standard A != satellite B) |
+Raporty\RAPORT_MAP_RENDER_CACHE_MISS_FIX.md:48:→ [MAP CACHE MISS DURING RENDER] when network is disabled
+Raporty\RAPORT_MULTIFILE_ETAP_1_AUDYT.md:214:| **NVIDIA (NVENC/NVDEC)** | Obecna ścieżka ustawia `hwaccel=cuda`, `-hwaccel_output_format cuda`, atlas/bbox HUD. Concat z `-hwaccel` musi być zweryfikowany (może wymagać `-hwaccel_output_format cuda` per input). | Zachować obecne wywołanie; concat już działa w produkcji dla N plików (testy `test_export_lifecycle`). Weryfikacja przy zmianie timestampów. |
+Raporty\RAPORT_MULTIFILE_ETAP_1_AUDYT.md:277:- Jedyna realna blokada multi-file to **jeden liniowy `start_dt_utc + t`** w preview/render/precompute/AMD-native oraz **per-clip GPMF/absolute start**.
+Raporty\RAPORT_MULTIFILE_ETAP_2_TIMELINE.md:98:`test_multifile_timeline`, `test_export_lifecycle_p1_fixes`, `test_render_tab`, `test_video_helpers`, `test_gpmf_cache`, `test_telemetry_manager`, `test_cut_feature`, `test_chart_seek_history`, `test_mp4_inspector`, `test_chart_axis_cache`:
+Raporty\RAPORT_MULTIFILE_ETAP_3_PER_CLIP_TIME.md:124:`test_multifile_timeline` (28), `test_gpmf_timing`, `test_gpmf_cache`, `test_telemetry_manager`, `test_video_helpers`, `test_export_lifecycle`, `test_render_tab`, `test_cut_feature`, `test_chart_seek_history`, `test_chart_axis_cache`:
+Raporty\RAPORT_MULTIFILE_ETAP_4A_PREVIEW.md:161:- Szeroka regresja (render_tab, cut_feature, chart_seek_history, chart_axis, export_lifecycle, video_helpers, gpmf_timing/cache, telemetry_manager, mp4_inspector, controller_properties, etap10m_chart_dynamic): **218 passed / 0 failed**.
+Raporty\RAPORT_MULTIFILE_ETAP_4A_PREVIEW.md:189:- **MPV / QMediaPlayer**: zmiany zachowują istniejący lifecycle; QMedia seek odroczony do załadowania źródła (brak race).
+Raporty\RAPORT_MULTIFILE_ETAP_4B_RENDER.md:159:- Szeroka: `export_lifecycle, intel_backend, etap5f, etap8o, etap8p_b, render_tab, cut_feature, chart_seek_history, chart_axis, etap10m_chart_dynamic, video_helpers, gpmf_timing/cache, telemetry_manager, controller_properties, nvidia_etap5b4, amd_above_dirty_mode, etap8e, etap8m4, etap6_chart_window, nvidia_regression_chart_preview, integration_real_data, map_sync, track_up_map` — **341 passed / 17 skipped / 0 failed**.
+Raporty\RAPORT_NVIDIA_ETAP_4A_WALLCLOCK.md:30:## C. Produkcyjny lifecycle eksportu
+Raporty\RAPORT_NVIDIA_ETAP_4A_WALLCLOCK.md:32:Pełny lifecycle od kliknięcia przycisku **Eksport** w GUI do gotowego pliku na dysku:
+Raporty\RAPORT_NVIDIA_ETAP_5H_WRITER_QUEUE.md:5:## A. Post-5G lifecycle
+Raporty\RAPORT_NVIDIA_ETAP_5H_WRITER_QUEUE.md:182:- added opt-in raw FileIO A/B support, disabled by default;
+Raporty\RAPORT_NVIDIA_ETAP_5H_WRITER_QUEUE.md:184:- added writer lifecycle, partial-write and exception tests;
+Raporty\RAPORT_NVIDIA_ETAP_5H_WRITER_QUEUE.md:213:zero-copy SHM safety and lifecycle audit tests. Existing cancel lifecycle
+Raporty\RAPORT_NVIDIA_ETAP_5G_ZERO_COPY_SHM.md:87:Istniejącą integrację lifecycle z `src/ffmpeg/streaming.py` i
+Raporty\RAPORT_NVIDIA_ETAP_5G_ZERO_COPY_SHM.md:131:## H. Testy bezpieczeństwa i lifecycle
+Raporty\RAPORT_NVIDIA_FINAL_BASELINE.md:49:## C. Kontrola zero-copy i lifecycle
+Raporty\RAPORT_NVIDIA_FINAL_BASELINE.md:169:Nie zaobserwowano błędów lifecycle ani różnicy liczby klatek. Audyt potwierdził
+Raporty\RAPORT_NVIDIA_ETAP_5F_PIPELINE_BOTTLENECK.md:21:## A. Aktualny lifecycle
+Raporty\RAPORT_NVIDIA_ETAP_5F_PIPELINE_BOTTLENECK.md:261:- `src/ffmpeg/pipeline_audit.py` — opt-in agregator lifecycle/percentyli/occupancy.
+Raporty\RAPORT_PORTABLE_CLEANROOM_MINIMAL_RUNTIME.md:173:Skrypt budujący posiada wbudowaną blokadę bezpieczeństwa odrzucającą budowanie pakietu w przypadku wykrycia jakichkolwiek zabronionych wzorców:
+Raporty\RAPORT_PRESENTATION_INTERPOLATION_PRODUCTION_ARCHITECTURE.md:15:## Lifecycle / isolation
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:51:- **Cykl życia procesów i stabilność renderera:** [`src/process_lifecycle.py`](file:///H:/_Dev/SportCamHUD/src/process_lifecycle.py), [`src/render_progress.py`](file:///H:/_Dev/SportCamHUD/src/render_progress.py)
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:74:- Nowe i zaktualizowane zestawy testowe: `test_integer_fields_presentation.py`, `test_telemetry_states_rate_aware.py`, `test_gopro_battery_iso_decimal_ui.py`, `test_chart_decimals_preview_dim.py`, `test_process_lifecycle.py`, manualne smoke testy baterii Garmin/GoPro, `test_rt_quality_display.py`, `test_hud_prep_progress.py`, `test_presentation_architecture.py`.
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:167:feat(shared): telemetry presentation, bounded initial backfill, autoplacement, strict JSON persistence & process lifecycle
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:174:- `src/process_lifecycle.py`, `src/render_progress.py`
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:191:- `tests/test_integer_fields_presentation.py`, `tests/test_telemetry_states_rate_aware.py`, `tests/test_gopro_battery_iso_decimal_ui.py`, `tests/test_chart_decimals_preview_dim.py`, `tests/test_process_lifecycle.py`, `tests/manual_garmin_battery_final_smoke.py`, `tests/manual_garmin_startup_range.py`, `tests/manual_gopro_battery_final_smoke.py`, `tests/manual_gopro_battery_iso_decimal_gui.py`, `tests/manual_gopro_battery_startup.py`, `tests/test_hud_prep_progress.py`, `tests/test_rt_quality_display.py`, `tests/test_presentation_architecture.py`, `tests/test_intel_auto_hud_policy.py`
+Raporty\RAPORT_PRE_AMD_CHECKPOINT_AUDIT.md:204:2. Zmiany współdzielone (prezentacja, backfill, autoplacement, JSON, lifecycle) są backend-neutralne i w pełni przetestowane.
+Raporty\RAPORT_QP_SUMMARY_AND_ORIGINAL_GPMF_EXPORT.md:73:TRIMMED_GPMF_SYNC_PASS=NO; explicitly disabled for trimmed exports, with duration mismatch protection
+Raporty\RAPORT_QP_SUMMARY_AND_ORIGINAL_GPMF_EXPORT.md:88:- `96 passed` across the new focused suite and existing queue, render-tab, progress, finalization, and cancellation lifecycle suites.
+Raporty\RAPORT_QUEUE_AV1_MAP_STOP_FIX.md:63:| **Pytest Suite (Queue Lifecycle & Basic)** | **PASS** | 39 passed in 5.34s (w tym 2 nowe testy regresyjne cyklu anulowania i uzdrawiania) |
+Raporty\RAPORT_REAL_12FIT_DISTANCE_FINAL_VALIDATION.md:8:BAR min/mid/max oraz sprawdzenie lifecycle przyciemnienia Export Preview.
+Raporty\RAPORT_REAL_12FIT_DISTANCE_FINAL_VALIDATION.md:17:- Implementacja normalizacji i preview lifecycle pochodzi z poprzedniego etapu,
+Raporty\RAPORT_REAL_12FIT_DISTANCE_FINAL_VALIDATION.md:257:## DIMMING LIFECYCLE
+Raporty\RAPORT_REAL_12FIT_DISTANCE_FINAL_VALIDATION.md:317:distance, poziomego markera dystansu ani dim lifecycle. Nie zostały naprawione,
+Raporty\RAPORT_REAL_12FIT_DISTANCE_FINAL_VALIDATION.md:373:EDIT / EXPORT DIM LIFECYCLE:       PASS
+Raporty\RAPORT_RENDER_CANCEL_PARTIAL_MP4_ETAP_1B.md:22:## 4. Writer/stdin lifecycle
+Raporty\RAPORT_RENDER_CANCEL_PARTIAL_MP4_ETAP_1B.md:83:- `tests/test_render_cancel_process_lifecycle.py`: 3 passed, w tym rawvideo EOF → MP4 → ffprobe.
+Raporty\RAPORT_RENDER_CANCEL_PARTIAL_MP4_ETAP_1B.md:84:- `tests/test_etap5h_writer_queue.py`, `tests/test_render_tab.py`: razem z lifecycle `26 passed`.
+Raporty\RAPORT_RENDER_CANCEL_PARTIAL_MP4_ETAP_1B.md:92:- `tests/test_render_cancel_process_lifecycle.py` — test EOF partial MP4 i ffprobe.
+Raporty\RAPORT_RENDER_PROGRESS_SINGLE_SOURCE.md:100:snapshoty starszej generacji. Stare lifecycle signals nie mogą nadpisać
+Raporty\RAPORT_RENDER_PROGRESS_SINGLE_SOURCE.md:107:  sygnałem lifecycle.
+Raporty\RAPORT_RENDER_PROGRESS_SINGLE_SOURCE.md:128:  poprawny cancel lifecycle.
+Raporty\RAPORT_RENDER_PROGRESS_SINGLE_SOURCE.md:129:- `src/gui/qt/main_window.py` — odbiór tego samego snapshotu i blokada
+Raporty\RAPORT_RENDER_PROGRESS_SINGLE_SOURCE.md:138:  tests/test_export_lifecycle_p1_fixes.py tests/test_render_tab.py \
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:1:# TeleM — RENDER CANCEL: process lifecycle ETAP 1
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:23:## 2. Faktyczne miejsce blokady
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:35:Przed poprawką mógł dokończyć część już zaplanowanych prac i przepchnąć reorder buffer. Po poprawce główne pętle sprawdzają event, top-up nie planuje nowych futures, a anulowane futures są odrzucane. Zadania już wykonujące rasteryzację są zatrzymywane przez nieblokujące zamknięcie lifecycle executora.
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:87:- `tests/test_render_cancel_process_lifecycle.py`: bounded terminate/kill oraz writer discard pending frames.
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:90:- Wynik: `24 passed` dla zestawu lifecycle/writer/RenderTab.
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:101:- `src/ffmpeg/streaming.py` — cancel-aware producer/writer, bounded FFmpeg cleanup, executor/process-tree lifecycle.
+Raporty\RAPORT_RENDER_CANCEL_PROCESS_LIFECYCLE_ETAP_1.md:104:- `tests/test_render_cancel_process_lifecycle.py` — testy lifecycle.
+Raporty\RAPORT_SEGMENT_BAR_GROW_HEIGHT_UI.md:18:4. Zaimplementowanie dynamicznej logiki aktywacji: gdy `Rosnąca wysokość segmentów` = OFF, kontrolka `grow_start` jest wyszarzona/disabled; po włączeniu (ON) staje się natychmiast aktywna.
+Raporty\RAPORT_SONET.md:47:    self._end_render()                         # ← natychmiast: _rendering = False, btn_render.setEnabled(True)
+Raporty\RAPORT_SPORTCAMHUD_AMD_GPU_PITCH_FINAL_DLL.md:178:> Przeniesienie operacji obrotu i homografii mapy do shadera GPU D3D11 zredukowało obciążenie CPU mapy z 28.5 ms do zaledwie 2.9 ms na klatkę. Pozwoliło to całkowicie odblokować wątek producenta HUD i przekroczyć barierę 50 FPS w natywnym potoku renderującym.
+Raporty\RAPORT_SPORTCAMHUD_AMD_GPU_TRACKUP_PITCH_DLL.md:236:           pitch_fallback_reason = "GPU map is disabled"
+Raporty\RAPORT_SPORTCAMHUD_ETAP_2_DEFAULT_EXPORT_DIRECTORY.md:54:- `tests/test_export_queue_basic.py` + `tests/test_export_queue_lifecycle.py`: **32 passed** in the isolated profile.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_3_RENDER_ERROR_PIPELINE.md:81:- `tests/test_export_queue_lifecycle.py`
+Raporty\RAPORT_SPORTCAMHUD_ETAP_4D_HUD_EFFECTS_PERFORMANCE_RECOVERY.md:72:  test_fast_path_when_effects_disabled                          PASSED
+Raporty\RAPORT_SPORTCAMHUD_ETAP_4D_HUD_EFFECTS_PERFORMANCE_RECOVERY.md:80:  test_disabled_effects_preserve_identity                       PASSED
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5D_AMD_BUFFER_AND_ROTATION_OPTIMIZATION.md:147:- Zapewnia to pełną izolację pamięci bez żadnych blokad i mutexów.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5G_SAFE_PIPELINE_FPS_RECOVERY.md:148:| **C. var_C_async_q1** | ASYNC | 1 | 30.55 s | 17.88 FPS | 17.88 FPS | 46.50 ms | 33.12 ms | **6.61 ms** *(blokada!)* |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5F_EXPORT_ARTIFACT_AND_SAFETY_GATE.md:246:- Zdarzenia GUI nie są blokowane przez proces eksportu dzięki odseparowaniu wątków roboczych i braku blokad globalnych (GIL-safe worker queue).
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5H_BEST_KNOWN_SAFE_FPS_RECOVERY.md:262:   Wątek producenta przekazuje bufory RGBA przez bezpieczną, zsynchronizowaną kolejkę `Queue(maxsize=AMD_QUEUE_DEPTH)` z blokadą GIL i poprawnym zarządzaniem pamięcią w CPythonie.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5L_AMD_KNOWN_GOOD_AND_ORIGINAL_GAUGE_SHADOWS.md:173:| **queue_wait (avg)** | 0.000 ms | 0.000 ms | 0.000 ms | **Brak blokad kolejki** |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5L_B_COMPASS_ORIGINAL_SHADOWS.md:163:| 6 | `test_compass_explicit_fit_has_no_fallback` | Ścisła blokada fallbacku: `source="fit"` przy pustym FIT zwraca `available=False` | **PASS** |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:112:4. Pre-encode readback publicznym harness/API DLL: max_diff, MAE, different_pixels, dirty coverage, brak ghostingu, cancel/drain i mux lifecycle. Nie porównywać HEVC jako dowodu bit-exact.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:142:| Anulowanie | `_cleanup_cancelled_amd_outputs` / `_abort_direct_mux`, niedokończone .part/stage/concat | Wymagany lifecycle. Nie usuwa completed output; nie jest drugim muxem. Zachowano. |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:196:Zestaw główny: test_etap5f_bar_cache_and_immutability, test_cache_and_parity_validation, test_generic_widget_cache, test_gui_freeze_dummy_cache_safety, test_gui_bar_drag_hotfix, test_render_tab, test_render_tab_controls_cleanup, test_compass_rendering, test_compass_source_parity_hotfix, test_amd_direct_mp4_mux, test_render_cancel_process_lifecycle, test_export_finalization_lifecycle. Dodatkowy: test_compass_and_shadow_outline, test_effects_percent_amd_parity, test_bar_integration, test_bar_orientation_contract, test_controller_properties, test_amd_benchmark_governance, test_export_queue_lifecycle, test_amd_native_ordered_map_clear.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:198:13 zastanych błędów: 2 cache parity/mutation Bar, 1 prewarm GUI cache, 2 RenderTab controls/dialog, 1 compass GUI schema, 1 ROSE upright cardinal contract, 6 mux lifecycle/range/failure/cancel. Pięć dodatkowych: 4 orientation/ruler/slope contracts i 1 test źródłowy early-clears. Ostatni wycina źródło od wrappera `_consume_prepared_frame` (:6717), podczas gdy early-clears są wcześniej w `_consume_prepared_frame_impl` (:6049, wywołanie :6463). Dlatego nie znajduje stringa wywołania; sam prefix `native_dll.` nie jest przyczyną błędu testu. Mux mocks tworzą wcześniejsze .part i trafiają w istniejący PARTIAL_OUTPUT_EXISTS guard. Nie zmieniano testów ani guardów, by uzyskać zielony wynik.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:210:Każdy wiersz to osobny mały etap/commit, z zachowaniem starych importów, sygnatur i adapterów w dotychczasowym module. Bez zmiany defaultów, render order, floating-point rounding czy parametrów kodeka. Najpierw naprawa/ustalenie baseline istniejących failing tests. Nie wycinać równocześnie geometrii, uploadu i lifecycle.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:218:| A5 | amd_live_mux: pipe/FFmpeg/audio concat plan/open/drain; jeden owner lifecycle | single+multi/audio ranges, one mux, pipe startup failure, partial recovery |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5M_SOURCE_DEBT_AUDIT.md:233:RenderMixin pozostaje adapterem controller API; jego `_render_pipeline` można odciążać dopiero po ustaleniu ownership opcji i callbacków w B2/B3. streaming pozostaje backend routerem; wspólne lifecycle utils wydzielać dopiero po dowodzie backend-neutrality.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5R_F_FINALIZATION_DIAGNOSTICS.md:43:Dopiero po takim przypisaniu przyczyny można zaproponować minimalną poprawkę w builderze wejścia audio lub lifecycle. Nie proponujemy teraz zmiany parametrów „na próbę”, nowego demuxera ani przebudowy architektury.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:53:| 8 | test_direct_mp4_mux_lifecycle_single_file[False] / MUX | C: globalny fake Popen tworzył .part także przy capability probe przed preflight. Ponadto mock native próbował otwierać prawdziwy named pipe. | Jeden live mux → PARTIAL_OUTPUT_EXISTS jeszcze przed native create. | Fixture ograniczono do właściwej komendy mux; Win32 pipe jest mockiem, probe dummy media kontrolowane. Usunięto otwieranie pipe w fake_create. Wszystkie asercje pipe/no raw/final rename zachowano. PASS. |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:54:| 9 | test_direct_mp4_mux_lifecycle_single_file[True] / MUX | C: ta sama kolizja probe/mux, wariant Inline GPMF. | Live mux z mapowaniem GPMF w jednej komendzie → wcześniejszy fake .part. | Te same poprawki fixture; zachowane asercje liczby inputs, gpmd, stream index i codec data. PASS. |
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:75:- QT_QPA_PLATFORM=offscreen. Pełna suite repo poza grupą 5M **NOT TESTED**, ręczne GUI **NOT TESTED**. Zaliczone mock lifecycle tests nie dowodzą realnego multi-file/cancel/error GPU.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:83:Mock Popen routuje wyłącznie komendę z stdin=PIPE oraz formatem hevc/h264/obu do fake muxera; pomocnicze probes nie tworzą partial. Mock Win32 odłącza unit tests od rzeczywistych handles/pipe dereferences. Osobny istniejący legacy multi-file fixture zachowuje własne mocks; nie jest pomijany. Testy używają dummy bytes w plikach, nie generują rzeczywistego audio-cache/M4A/ADTS/remuxowanego materiału. Fixtures EOF/probe count służą lifecycle, nie dowodzą zgodności liczby kodowanych klatek realnego GPU.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:96:Projekt cache: jawny RenderCacheContext z session/backend/policy, legacy singleton jako adapter bez zmiany domyślnego AMD ON ani nieprzeanalizowanych defaults Intel/NVIDIA. Osobno ownership obrazów/metadata (kopie publiczne albo verified readonly views), osobno session registry i lifecycle. Testy: mutacja hit/miss, dwa consumers i dwa identyczne indicator keys, niezależny enable/clear, cfg/font/resolution/source invalidation, A→B→A, concurrent producer/consumer. Nie wdrożono.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:135:Proponowany odrębny etap lifecycle:
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:170:Brak production delta w 5N względem zaakceptowanych porządków 5M: nie zmieniono rendererów, native exporter, mux lifecycle, global cache, ustawień ani appearance. Jedyna zmiana src zatwierdzona w cleanup jest tą samą martwą definicją9 lines z5M. Nie połączono jej z testami w jednym commicie.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5N_TEST_BASELINE_AND_SAFETY_PLAN.md:181:6. Osobny fail-closed Live Mux etap, test startup/single/multi/cancel/errors; dopiero potem wydzielenie mux lifecycle.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5R_F_LIVE_MUX_AUDIO_FINALIZATION.md:134:   - `tests/test_export_finalization_lifecycle.py` (8 testów)
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5R_F_LIVE_MUX_AUDIO_FINALIZATION.md:135:   - `tests/test_render_cancel_process_lifecycle.py` (3 testy)
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5O_BAR_CACHE_OWNERSHIP_AND_ROSE_CONTRACT.md:67:Lista 20 plików: test_etap5f_bar_cache_and_immutability, test_cache_and_parity_validation, test_generic_widget_cache, test_gui_freeze_dummy_cache_safety, test_gui_bar_drag_hotfix, test_render_tab, test_render_tab_controls_cleanup, test_compass_rendering, test_compass_source_parity_hotfix, test_amd_direct_mp4_mux, test_render_cancel_process_lifecycle, test_export_finalization_lifecycle, test_compass_and_shadow_outline, test_effects_percent_amd_parity, test_bar_integration, test_bar_orientation_contract, test_controller_properties, test_amd_benchmark_governance, test_export_queue_lifecycle, test_amd_native_ordered_map_clear (wszystkie w tests/, rozszerzenie .py).
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5O_BAR_CACHE_OWNERSHIP_AND_ROSE_CONTRACT.md:145:**FILE MUX FALLBACK — ACTIVE RISK.** Nie zmieniono fallbacku ani startup mux lifecycle. Zielone testy nie dowodzą wyeliminowania zakazanej historycznej gałęzi. Badane eksporty używały Single Live Mux.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5S_LOGS_LEAN_COMPASS_FIT_GUI.md:71:5. **Blokady mmap na systemie Windows:**
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5S_LOGS_LEAN_COMPASS_FIT_GUI.md:79:- **Bezpieczeństwo buforów Windows:** Przed wywołaniem `RenderTelemetryCache.load(mmap=True)` sprawdzany jest nagłówek `manifest.json`, co eliminuje kolizje blokad plików.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5S_LOGS_LEAN_COMPASS_FIT_GUI.md:117:- Wszystkie 10 dedykowanych testów (`test_youtube_upload_ui_disabled.py` oraz `test_amd_queue_trim_snapshot.py`) zakończyło się wynikiem pozytywnym.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5Y_PORTABLE_RELEASE.md:23:`tools/build_portable_release.py` (przepisany): kod + `def_layout.json` (szablon) + `presets/` z `git archive <commit>`; `src/native` tylko `telem_gpmf_native.pyd`; jawna lista binarek z working tree z kontrolą SHA (AMD/Intel przypięte, lista zakazanych starych hashy); runtime MSVC app‑local z `VC\Redist\MSVC\14.44.35112\x64\Microsoft.VC143.CRT`; wbudowany CPython z domknięciem zależności `pyproject` (importlib.metadata); launcher `python\python.exe -s -E` (izolacja od user site / zmiennych PYTHON*), fallback na systemowy Python; `THIRD_PARTY_NOTICES.txt`; manifest; denylist; cel musi być pusty. `.ps1` zaktualizowany (parametry `-Commit -Target -NoPython`).
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5Y_PORTABLE_RELEASE.md:44:Licencje (`THIRD_PARTY_NOTICES.txt`): FFmpeg gyan.dev full_build `--enable-gpl --enable-version3` → **GPLv3: przy redystrybucji wymagana oferta kodu źródłowego** (linki w pliku); Qt/PySide6 LGPLv3 (dynamicznie, niemodyfikowane); Python PSF; MSVC runtime — pliki redystrybucyjne VS; libmpv GPL/LGPL; telemetry_parser MIT/Apache‑2.0. Fontów nie dołączono (fallback korzysta z Segoe UI/Arial systemu).
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5Y_PORTABLE_RELEASE.md:89:- Redystrybucja FFmpeg GPLv3 wymaga dołączenia oferty źródeł (informacja jest w `THIRD_PARTY_NOTICES.txt`; decyzja dystrybucyjna należy do użytkownika).
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5Z2_HDR_EXPORT_IMPLEMENTATION.md:191:2. **Wieloplikowy HLG** (np. GX010114–116, ~31 GB): klasyfikacja i blokady mają testy jednostkowe, rzeczywisty eksport wieloplikowy HLG nie był uruchamiany. Dodatkowy GX010361 nie był testowany.
+Raporty\RAPORT_SPORTCAMHUD_ETAP_5Z3_HDR_STABILITY.md:121:Zakres czasu (300 kl.), HUD (layout 5Y), bitrate i preset zostały zachowane. Po anulowaniu i błędzie nie było starych pipe’ów, procesów ani blokad pliku (snapshoty), a nowy FFmpeg działał z nowym tokenem pipe.
+Raporty\RAPORT_SPORTCAMHUD_FIX_OUTLINE_COMPASS.md:140:No FPS performance claim. Enabled mask effects add rasterization work; disabled
+Raporty\RAPORT_SPORTCAMHUD_MAP_STREAMING_PRELOAD_FIX.md:21:5. **Zachować limity zapytań serwerów mapowych** (`REQUEST_DELAY = 0.15 s` pod blokadą `_fetch_lock`) oraz warunki licencyjne dostawców.
+Raporty\RAPORT_SPORTCAMHUD_MAP_STREAMING_PRELOAD_FIX.md:38:2. **Kolejkowanie pod blokadą `_fetch_lock`:**  
+Raporty\RAPORT_SPORTCAMHUD_MAP_STREAMING_PRELOAD_FIX.md:108:   - Zachowuje interwał `0.15 s` i blokadę serwera, zapewniając pełną zgodność z regulaminem dostawców map satelitarnych.
+Raporty\RAPORT_SPORTCAMHUD_MAP_STREAMING_PRELOAD_FIX.md:202:| Zachowanie limitów dostawców map | **SPEŁNIONO** | `REQUEST_DELAY = 0.15s` pod blokadą wątków |
+Raporty\RAPORT_SPORTCAMHUD_PORTABLE_UPDATE_20261015.md:17:- runtime: `common/ffmpeg` (ffmpeg/ffprobe), `amd/bin` (DLL SHA `380f86b0…a50b` = produkcyjny VBR z commita e76d6b1, + libwinpthread), `intel/bin` (DLL `113abafb…ba4b` + av*.dll), parser telemetrii (z `runtime/telemetry_parser` w repo) w `runtime/common/telemetry/telemetry_parser`, README licencji;
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:24:   - Wszelkie błędy przygotowania (`_on_render_requested`) oraz ewentualny błąd startu wątku `TeleM-RenderWorker` emitują terminalny sygnał `RenderProgressState(state="failed", failed=True)` oraz `sig_error`, natychmiast odblokowując kontrolki GUI (przyciski, pasek postępu) i powiadamiając kolejkę zadań.
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:30:   - Pomyślne przetestowanie przycisku `btn_cancel.click()` — czyste zatrzymanie procesu potomnego, odblokowanie przycisku „Eksportuj” i powrót GUI do stanu gotowości.
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:64:- **Otoczenie fazy setup blokiem `try...except`**: Przygotowanie snapshotu, wykrywanie kodera oraz rejestracja sesji anulowania zostały objęte zabezpieczeniem, które w razie nieprzewidzianego błędu emituje `RenderProgressState(generation_id=generation_id, state="failed", failed=True)` i natychmiast odblokowuje GUI.
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:112:- `test_render_cancel_process_lifecycle.py` (3/3 PASSED)
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:113:- `test_export_finalization_lifecycle.py` (8/8 PASSED)
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:120:- `test_export_queue_lifecycle.py` (9/9 PASSED)
+Raporty\RAPORT_SPORTCAMHUD_RENDERPROGRESSSTATE_SCOPE_HOTFIX.md:216:1. Eksport w SportCamHUD jest w pełni sprawny, stabilny i odblokowany.
+Raporty\RAPORT_SPORTCAMHUD_RENDER_0_PERCENT_AND_PREVIEW_DIAGNOSIS.md:54:## 3. Proces i wątek odpowiedzialny za blokadę
+Raporty\RAPORT_SPORTCAMHUD_RENDER_0_PERCENT_AND_PREVIEW_DIAGNOSIS.md:156:   W `_on_render_requested()` usunięto cichy powrót (`silent return`) w przypadku braku ścieżki wideo: teraz emitowany jest stan terminalny `RenderProgressState(state="failed", failed=True)` oraz wywoływane jest zakończenie renderingu `_end_render()`, co natychmiast odblokowuje kontrolki interfejsu.
+Raporty\RAPORT_SPORTCAMHUD_RENDER_0_PERCENT_AND_PREVIEW_DIAGNOSIS.md:197:python.exe -m pytest tests/test_etap5f_bar_cache_and_immutability.py tests/test_cache_and_parity_validation.py tests/test_generic_widget_cache.py tests/test_gui_freeze_dummy_cache_safety.py tests/test_gui_bar_drag_hotfix.py tests/test_render_tab.py tests/test_render_tab_controls_cleanup.py tests/test_compass_rendering.py tests/test_compass_source_parity_hotfix.py tests/test_amd_direct_mp4_mux.py tests/test_render_cancel_process_lifecycle.py tests/test_export_finalization_lifecycle.py tests/test_compass_and_shadow_outline.py tests/test_effects_percent_amd_parity.py tests/test_bar_integration.py tests/test_bar_orientation_contract.py tests/test_controller_properties.py tests/test_amd_benchmark_governance.py tests/test_export_queue_lifecycle.py tests/test_amd_native_ordered_map_clear.py tests/test_bar_cache_ownership.py
+Raporty\RAPORT_SPORTCAMHUD_RENDER_0_PERCENT_AND_PREVIEW_DIAGNOSIS.md:237:- Brak otwartych blokad funkcjonalnych w diagnozowanym zakresie.
+Raporty\RAPORT_SPORTCAMHUD_SETTINGS_AND_EXPORT_LOGGING.md:45:  `diagnostics_path` w szczegółach błędów lifecycle/no-terminal.
+Raporty\RAPORT_SPORTCAMHUD_SETTINGS_PAUSES_QUEUE_QP.md:72:  layout). Przy starcie `_load_app_preferences_into_form()` odtwarza checkbox (z blokadą
+Raporty\RAPORT_SPORTCAMHUD_V113_AUDIO_FIT_GPMF_REBRAND.md:13:Rozpoczęto cykl ewolucyjny v1.13 pod nową marką SportCamHUD. Wszystkie pliki, klasy i szablony odwołujące się do dawnej nazwy BikeRideHUD zostały globalnie przemianowane. Podmieniono launcher główny (SportCamHUD.py). Co krytyczne, zaprogramowano blok migracyjny wstrzykiwany na starcie (tuż po importach w pliku uruchomieniowym). Przenosi on bezpiecznie i niewidzialnie dawny profil %LOCALAPPDATA%\BikeRideHUD pod nową nazwę chroniąc layout, układy okien, konfigurację licencji, bufor logowania i cache telemetrii. Zaktualizowano też klucze deponentów poświadczeń Windows Credential Manager z płynną migracją i nowym prefiksem sesji (szczególnie dla pociętej sesji DI Garmina). Synchronizacja z portable została zachowana.
+Raporty\RAPORT_SPORTCAMHUD_V114_AUTOFIT_FIX.md:49:* Zmiany pomyślnie przeszły testy layoutu (brak zniszczenia stylów / zakładek) oraz zapobiegły długim blokadom aplikacji przy wczytywaniu dużych nagrań wideo.
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:93:Wcześniej raportowany czas **62.70 ms** dotyczył wyłącznie zwrócenia kontroli do pętli zdarzeń Qt w wątku GUI (kickoff / natychmiastowe odblokowanie GUI). Poniżej zestawiono rzeczywiste czasy wszystkich 4 etapów cyklu ładowania aż do pełnej gotowości projektu i wygenerowania kompozycji HUD:
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:99:| **1. Kliknięcie „Wczytaj” -> Rozpoczęcie operacji (kickoff)** | **0.96 ms** | **2.15 ms** | Natychmiastowe odblokowanie wątku GUI, brak blokujących pętli |
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:113:| **Czas gotowości projektu (Warm Cache)** | ~4100 ms (blokada GUI) | **1.58 s** (asynchronicznie) | **2.6× szybszy rendering** |
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:149:- **Dodano 5 nowych testów regresyjnych late-attach i lifecycle:**
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:150:  1. `test_autofit_lifecycle_film_a_to_b` — weryfikacja izolacji generacji i uniemożliwienia przypisania FIT z filmu A do filmu B.
+Raporty\RAPORT_SPORTCAMHUD_V114_LOAD_PERFORMANCE.md:164:- **Odpowiedź GUI:** Interfejs nie ulega zamrożeniu; kliknięcie „Wczytaj” odblokowuje GUI w <2 ms, a proces ładowania raportuje postęp asynchronicznie.
+Raporty\RAPORT_TELEM_ETAP_7B.md:66:| map disabled/unavailable | dotychczasowy CPU_REFERENCE |
+Raporty\RAPORT_TELEM_ETAP_7D.md:110:ORDERED MAP CLEAR LIFECYCLE = PASS
+Raporty\RAPORT_TELEM_ETAP_8B.md:113:The existing runtime diagnostic was used through a runtime layout copy with both potential chart indicators disabled; `def_layout.json` was not written.
+Raporty\RAPORT_TELEM_ETAP_8C.md:24:existing native ABOVE_MAP upload/lifecycle
+Raporty\RAPORT_TELEM_ETAP_8C.md:54:Testy obejmują visible → `None` → visible, zmianę pozycji i rozmiaru bbox, częściową alpha, element dotykający krawędzi klatki, wiele elementów i custom text. Istniejące testy ETAPU 7D dotyczące clear lifecycle, kolejności i native ordered-map również przechodzą.
+Raporty\RAPORT_TELEM_ETAP_8C.md:133:Przechodzą testy dotyczące AMD ordered map, AMD clear order, GPU compositor, map sync, Telemetry source/None contract, chart history i STEP lookup. Nie zmieniono implementacji GPS9, SmartSync, ISOE, SHUT, TMPC ani map lifecycle. Native DLL została przebudowana w istniejącym build directory; kod native nie wymagał zmiany w ETAPIE 8C.
+Raporty\RAPORT_TELEM_ETAP_8C.md:146:- upload i native lifecycle pozostają aktywne;
+Raporty\RAPORT_TELEM_ETAP_8F.md:166:> Zauważalny paradoks: gdy mapa lub widgety są wyłączone, Python compositing (`compose_overlay`) staje się szybszy (z ~11 ms spada do ~4 ms), co powoduje, że wątek Pythona wyprzedza GPU i częściej uderza w blokadę synchronizacji AMF / D3D11 backpressure w `telem_amd_process_frame` (stąd wzrost `process_frame` z 2.99 ms do 5.3–7.3 ms). Całkowity czas wall pozostaje stały (~33–35 s / 26–27 FPS), co dowodzi, że **przepustowość całego systemu jest ograniczona przez cykl GPU + VideoProcessor (~21 ms) oraz transfery klatki**.
+Raporty\RAPORT_TELEM_ETAP_8M_1.md:33:  2. Usunięto blokadę `decoderWidth != ctx->width` z `telem_amd_set_decode_mode`.
+Raporty\RAPORT_TELEM_ETAP_8N.md:12:CLEAR LIFECYCLE          = PASS
+Raporty\RAPORT_TELEM_ETAP_8N.md:92:## E. Native Lifecycle
+Raporty\RAPORT_TELEM_ETAP_8N.md:270:Obecnie `Telemetry/frame_data` zużywa aż **$\sim 7,4\text{ ms}$** per frame na ciągłą interpolację próbek telemetrii w pętli renderowania. Wdrożenie prekomputacji / lookup tabeli telemetrii odblokuje natychmiastowy wzrost throughput o kolejne $3\dots 5\text{ FPS}$.
+Raporty\RAPORT_TELEM_ETAP_8Q.md:123:## H. Lifecycle & Invalidation
+Raporty\RAPORT_TELEM_ETAP_8Q.md:130:## I. None / Zero Lifecycle
+Raporty\RAPORT_TELEM_ETAP_8T_A.md:10:   - **Zachowanie GIL:** Wszystkie blokujące wywołania natywnej biblioteki DLL (`telem_amd_native.dll`) przez `ctypes` **zwalniają blokadę Python GIL** (`Py_BEGIN_ALLOW_THREADS`). Oznacza to, że dedykowany wątek `CPU Producer Thread` może w $100\%$ równolegle przygotowywać dane dla klatki $N+1$, podczas gdy wątek `GPU Consumer Thread` czeka na wykonanie klatki $N$ przez GPU i enkoder AMF.
+Raporty\RAPORT_TELEM_ETAP_8T_A.md:146:- **Wniosek:** Brak konieczności stosowania blokad (lock-free execution).
+Raporty\RAPORT_TELEM_ETAP_8T_A.md:221:## X. Cancellation, Error Propagation & EOF Lifecycle
+Raporty\RAPORT_TELEM_ETAP_8S.md:31:ABOVE LIFECYCLE                 = PASS
+Raporty\RAPORT_TELEM_ETAP_8S.md:147:## O–P. Dynamic Elements & Above Lifecycle
+Raporty\RAPORT_TELEM_ETAP_8S.md:151:- **Above Lifecycle:** Przejście wartości ze stanu aktywnego do `None` powoduje natychmiastowe, czyste wyzerowanie obszaru (`getbbox() is None`) bez ghostingu.
+Raporty\RAPORT_TELEM_ETAP_8S.md:226:  5. `test_flush_batching_above_lifecycle` — PASS
+Raporty\RAPORT_TELEM_ETAP_8T_B.md:39:CANCEL/ERROR LIFECYCLE     = PASS
+Raporty\RAPORT_TELEM_ETAP_8T_B.md:164:## F–J. Queue Behavior, Cancellation & EOF Lifecycle
+Raporty\RAPORT_TELEM_ETAP_8T_B.md:182:- **Above Map Lifecycle**: Cykl widoczności `visible -> None -> None -> visible` działa bez jakiegokolwiek ghostingu.
+Raporty\RAPORT_TELEM_ETAP_8T_C.md:105:## E. Cykl Życia EOF, Sentinela i Drenażu (Drain Lifecycle)
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:1:# TeleM — RAPORT: FINAL RC P1 FIX (Export Lifecycle P1-A + P1-B)
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:11:Powodowało to natychmiastowe ustawienie `_rendering = False` i odblokowanie przycisku `btn_render` ("EKSPORTUJ"), podczas gdy wątek renderujący (`worker`) w tle nadal realizował procedury zamykania pipeline'u D3D11 / AMF / MediaFoundation oraz zwalniania procesów dekodera. W efekcie użytkownik mógł natychmiast uruchomić drugi eksport równolegle do wciąż trwającego cleanupu pierwszego, prowadząc do kolizji kontekstów GPU i wyścigu o pliki wyjściowe.
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:19:  - `btn_cancel`: DISABLED
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:21:  - `btn_render`: DISABLED
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:25:  - `btn_render`: DISABLED (brak możliwości uruchomienia kolejnego eksportu)
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:26:  - `btn_cancel`: DISABLED (brak powtórnego klikania cancel)
+Raporty\RAPORT_TELEM_FINAL_RC_P1_FIX.md:80:- `test_cancel_then_immediate_render_blocked_until_stopped`: zweryfikowano blokadę startu drugiego renderu podczas stanu `CANCELLING` i poprawne odblokowanie po `sig_render_stopped`.
+Raporty\RAPORT_TELEM_ETAP_9A_LITE.md:25:## B. GUI WORKFLOW & LIFECYCLE
+Raporty\RAPORT_TELEM_ETAP_9A_LITE.md:81:- Wprowadzone w ETAP 8V-A wywołanie `telem_amd_close` w ścieżkach sukcesu i przerwania gwarantuje natychmiastowe zwolnienie blokad GPU/AMF, zamknięcie plików tymczasowych `.h265` i zapobieganie wyciekom pamięci.
+Raporty\RAPORT_TELEM_ETAP_9A_LITE.md:86:## I. NEW VIDEO AFTER EXPORT LIFECYCLE
+Raporty\RAPORT_TELEM_FIX_CHART_CLIPPING.md:166:## Q. SECOND EXPORT / CANCEL LIFECYCLE
+Raporty\RAPORT_WORKTREE_CLEANUP_AUDIT.md:82:   - `SportCamHUD-main-amd-integration`: czyste giciowo, ale zawiera nieśledzone foldery `src/native/bin/` i `third_party/`, przez co Git bez `--force` odrzucił usunięcie.
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:26:# YouTube upload UI temporarily disabled.
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:48:     - Cała ramka `yt_frame` (checkbox „Upload YouTube po renderze”, tytuł, prywatność, opis, automatyczne odblokowywanie po zaznaczeniu) jest tworzona dokładnie tak jak dotychczas.
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:82:Stworzono dedykowany zestaw testów jednostkowych: `tests/test_youtube_upload_ui_disabled.py`.
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:85:tests/test_youtube_upload_ui_disabled.py::test_feature_flag_defaults PASSED
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:86:tests/test_youtube_upload_ui_disabled.py::test_youtube_ui_hidden_when_disabled PASSED
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:87:tests/test_youtube_upload_ui_disabled.py::test_add_to_queue_without_youtube_controls PASSED
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:88:tests/test_youtube_upload_ui_disabled.py::test_upload_not_triggered_when_feature_disabled PASSED
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:89:tests/test_youtube_upload_ui_disabled.py::test_youtube_ui_re_enabled_with_flag PASSED
+Raporty\RAPORT_YOUTUBE_UPLOAD_UI_DISABLED.md:103:tests/test_youtube_upload_ui_disabled.py .....                           [ 10%]
+Raporty\RAPORT_V111_STARTUP_SYNC_QUEUE_RECOVERY.md:11:- Skrypt w `test_sync_integrity.py` poprawnie zidentyfikował brak punktu zbiegu GPS (brak `[SmartSync] absolute_overlap=yes`) jako **fail**, co przywróciło szczelność testu. Przypadek negatywny potwierdza skuteczność blokady.

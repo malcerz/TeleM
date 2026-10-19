@@ -1,0 +1,44 @@
+........................................................................ [ 33%]
+[INTEL VBR] init with VSI status=-15; retry retaining HRD
+[INTEL VBR] init rejected status=-15
+.........................................s.........................F.... [ 67%]
+......................................................................   [100%]
+================================== FAILURES ===================================
+_______________ test_intel_native_8a_av1_freeze_and_parameters ________________
+tests\test_intel_native_8a.py:95: in test_intel_native_8a_av1_freeze_and_parameters
+    assert 'target_kbps = 40000' in source
+E   AssertionError: assert 'target_kbps = 40000' in '@_with_intel_cleanup\ndef export_intel_native_d3d11(\n    ffmpeg_exe: str,\n    input_files: list,\n    output_file: ..._rendered >= total_frames - 1 or eof_reached or frames_rendered >= total_frames)\n    )\n    return export_succeeded\n'
+============================== warnings summary ===============================
+tests\test_intel_3g9_lazy_payload.py:56
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:56: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+tests\test_intel_3g9_lazy_payload.py:77
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:77: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+tests\test_intel_3g9_lazy_payload.py:106
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:106: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_intel_native_8a.py::test_intel_native_8a_av1_freeze_and_parameters
+1 failed, 212 passed, 1 skipped, 3 warnings in 35.66s
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 69.62 ms (Upload/Producer context: 0000019828b62148)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 48.86 ms (Upload/Producer context: 0000019828b6e178)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)

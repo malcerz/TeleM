@@ -1,0 +1,247 @@
+{
+  "codec": "h264",
+  "profile": "balanced",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\native_init_fallback_final.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 24.78,
+  "total_frames": 30,
+  "effective_fps": 1.21,
+  "ram_used_gb": 11.59,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.960000",
+          "nb_frames": "45"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5140025"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5140025,
+  "stats": {
+    "avg_qp": 24.0,
+    "codec": "h264",
+    "compression_active": true,
+    "compression_text": "QP: 25.0 | Avg: 24.0 | Min: 23.0 | Max: 25.0 (pr\u00f3bki progress)",
+    "current_qp": 25.0,
+    "encoder_accepted": {
+      "TargetUsage": 4,
+      "BufferSizeInKB": 10000,
+      "InitialDelayInKB": 5000,
+      "TargetKbps": 40000,
+      "MaxKbps": 50000,
+      "BRCParamMultiplier": 1
+    },
+    "encoder_diagnostics": [
+      "[h264_qsv @ 000001be5ff8c080] Using the variable bitrate (VBR) ratecontrol method",
+      "[h264_qsv @ 000001be5ff8c080] GopPicSize: 256; GopRefDist: 3; GopOptFlag: closed; IdrInterval: 0",
+      "[h264_qsv @ 000001be5ff8c080] TargetUsage: 4; RateControlMethod: VBR",
+      "[h264_qsv @ 000001be5ff8c080] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+      "[h264_qsv @ 000001be5ff8c080] NumSlice: 1; NumRefFrame: 2",
+      "[h264_qsv @ 000001be5ff8c080] NalHrdConformance: ON; SingleSeiNalUnit: ON; VuiVclHrdParameters: OFF VuiNalHrdParameters: ON"
+    ],
+    "generation_id": 1,
+    "is_cqp": false,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5140025,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+    "qp_source": "FFmpeg QSV oneVPL frame-info via packet quality side data (progress sampled)",
+    "quant_avg": 24.0,
+    "quant_current": 25.0,
+    "quant_max": 25.0,
+    "quant_metric": "QP",
+    "quant_min": 23.0,
+    "quant_reason": "",
+    "quant_samples": 9,
+    "rate_control": "VBR",
+    "rate_control_raw": "VBR",
+    "total_overlay_frames": 0
+  },
+  "sampled_q": {
+    "1": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "2": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "3": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "4": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "5": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "6": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "7": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "8": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "9": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "10": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "11": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "12": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "13": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "14": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "15": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "16": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "17": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "18": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "19": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "20": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "21": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "22": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "23": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "24": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "25": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "26": {
+      "q_cur": 23.0,
+      "q_avg": 23.0,
+      "q_samples": 1
+    },
+    "27": {
+      "q_cur": 23.0,
+      "q_avg": 23.0,
+      "q_samples": 1
+    },
+    "28": {
+      "q_cur": 23.0,
+      "q_avg": 23.0,
+      "q_samples": 1
+    },
+    "29": {
+      "q_cur": 23.0,
+      "q_avg": 23.0,
+      "q_samples": 1
+    },
+    "30": {
+      "q_cur": 23.0,
+      "q_avg": 23.0,
+      "q_samples": 1
+    }
+  }
+}

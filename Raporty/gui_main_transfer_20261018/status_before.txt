@@ -1,0 +1,47 @@
+ M def_layout.json
+ M src/ffmpeg/command_builder.py
+ M src/ffmpeg/intel_backend.py
+ M src/ffmpeg/intel_config.py
+ M src/ffmpeg/intel_native_exporter.py
+ M src/ffmpeg/nvidia_native_exporter.py
+ M src/ffmpeg/second_pass.py
+ M src/ffmpeg/streaming.py
+ M src/gui/qt/_mixins/render_mixin.py
+ M src/gui/qt/application.py
+ M src/gui/qt/tabs/render_tab.py
+ M src/native/d3d11_intel_pipeline/telem_intel_native.c
+ M tests/test_intel_native_7g.py
+ M tests/test_intel_native_8a.py
+ M tests/test_intel_native_8b.py
+ M tests/test_intel_native_8c.py
+ M tests/test_intel_pipeline_async.py
+ M tests/test_intel_queue_native_fallback_hwdownload.py
+ M tools/build_portable_release.py
+?? C
+?? RAPORT_INTEL_HEVC_SLICE_QP_20261017.md
+?? Raporty/RAPORT_INTEL_D3D11_QSV_FIX_20261017.md
+?? Raporty/RAPORT_INTEL_HEVCQP_EKSPERYMENT_20261017.md
+?? Raporty/RAPORT_INTEL_HEVC_QP_AUDYT_20261017.md
+?? Raporty/RAPORT_INTEL_HEVC_SLICE_QP_20261017.md
+?? Raporty/RAPORT_INTEL_VBR_QP_20261017.md
+?? Raporty/RAPORT_INTEL_VBR_QP_AUDYT_20261017.md
+?? Raporty/RAPORT_SPORTCAMHUD_DJI_SYNC_LOSS_AUDIT_20261018.md
+?? Raporty/RAPORT_SPORTCAMHUD_GUI_LICENSES_AND_CONTROL_LOCK_REGRESSIONS.md
+?? Raporty/dji_sync_audit_20261018/
+?? Raporty/gui_recovery_20261018/
+?? Raporty/intel_hevc_qp_20261017/
+?? Raporty/intel_qsv_fix_20261017/
+?? Raporty/intel_vbr_qp_20261017/
+?? runtime/intel/
+?? src/ffmpeg/intel_telemetry.py
+?? src/ffmpeg/live_av_mux.py
+?? tests/test_intel_hevc_slice_qp_native.py
+?? tests/test_intel_runtime_capabilities.py
+?? tests/test_intel_vbr_control.py
+?? tests/test_live_av_mux.py
+?? tools/build_intel_native.py
+?? tools/compare_intel_presets.py
+?? tools/report_intel_vbr_results.py
+?? tools/run_intel_hevc_qp_ab.py
+?? tools/run_intel_vbr_matrix.py
+?? tools/verify_intel_vbr_regressions.py

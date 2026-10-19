@@ -1,0 +1,38 @@
+{
+  "multifile_cases": [
+    {
+      "offset": 0.0,
+      "preview_at_global_2": "2026-01-01 00:00:10",
+      "common_speed": [
+        0.0,
+        10.0,
+        100.0,
+        110.0
+      ],
+      "scalar_speed": [
+        0.0,
+        10.0,
+        100.0,
+        110.0
+      ]
+    },
+    {
+      "offset": 2.0,
+      "preview_at_global_2": "2026-01-01 00:00:10",
+      "common_speed": [
+        0.0,
+        10.0,
+        100.0,
+        110.0
+      ],
+      "scalar_speed": [
+        0.0,
+        10.0,
+        100.0,
+        110.0
+      ]
+    }
+  ],
+  "normalize_layout_keeps_offset": false,
+  "scope": "actual preview time resolver and two actual telemetry builders; synthetic two-clip timeline, 8s gap; no GPU encode"
+}

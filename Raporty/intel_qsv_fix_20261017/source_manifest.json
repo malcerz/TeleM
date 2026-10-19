@@ -1,0 +1,16 @@
+{
+  "base_commit": "e21d625c0f6458bf43af5d1f1c06173e797f7536",
+  "state": "uncommitted working snapshot; installed Portable unchanged",
+  "source_sha256": {
+    "src/ffmpeg/streaming.py": "f03000827f142c2691770cf7fef3b0b8ec6673826cc929a4b5c7b766c08709dc",
+    "src/ffmpeg/second_pass.py": "dfbbf6a44106c61e8b56a514dfa953f1b35835496007a77bf7ffab6cb41389a2",
+    "src/ffmpeg/intel_backend.py": "661a7d95156c0805928c40aadb1d3c91a064dfa2be4a296e576940d377420d31",
+    "src/ffmpeg/intel_native_exporter.py": "acfa85d9286e98fc29b4bbd4c2af511bc6e10afb42872758f4f7acc5031b2579",
+    "src/ffmpeg/command_builder.py": "bfaa9ad22fb454e56339ca169b0762f76007b23a88a3413481108831a695bab2",
+    "src/gui/qt/application.py": "e37cd544766ac58a52ba177e33dcde23addd5798f986cb7aaf0a1cd016df2bae",
+    "src/gui/qt/tabs/render_tab.py": "eef113638c21659d850b7cf82fa5657b74f539af53a50adb91d6af961f8ebe23",
+    "src/ffmpeg/live_av_mux.py": "6662f28db52950dcb149e878d8807adefbe8ad50cbdc3aa0590428324be595db"
+  },
+  "portable_source_matches": true,
+  "native_dll_sha256": "113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b"
+}

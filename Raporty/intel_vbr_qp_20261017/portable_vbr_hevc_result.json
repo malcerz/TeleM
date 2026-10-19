@@ -1,0 +1,278 @@
+{
+  "codec": "hevc",
+  "profile": "balanced",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\portable_vbr_hevc.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 8.93,
+  "total_frames": 30,
+  "effective_fps": 3.36,
+  "ram_used_gb": 11.89,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.981333",
+          "nb_frames": "46"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5732788"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5732788,
+  "stats": {
+    "audio_live_mux": true,
+    "avg_qp": null,
+    "cancelled": false,
+    "codec": "hevc",
+    "compression_active": false,
+    "compression_text": "QP: -- (niezweryfikowana telemetria HEVC oneVPL)",
+    "current_qp": null,
+    "encoder_accepted": {
+      "buffer_kb": 10000,
+      "get_status": 0,
+      "init_status": 0,
+      "initial_delay_kb": 5000,
+      "max_kbps": 50000,
+      "multiplier": 1,
+      "qp_supported": 1,
+      "qp_unverified_zero": 6,
+      "query_status": 0,
+      "rate_control": 2,
+      "target_kbps": 40000,
+      "target_usage": 4,
+      "valid": 1
+    },
+    "encoder_drain_seconds": 0.7187864999868907,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.8116517000016756,
+    "frame_render_seconds": 5.24996149999788,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "is_cqp": false,
+    "mean_qp": null,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5732788,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "qp_aggregation": "unavailable",
+    "qp_avg": null,
+    "qp_rejected_samples": 6,
+    "qp_source": "unavailable",
+    "qp_unverified_feedback": {
+      "quant_avg": 30.166666666666668,
+      "quant_current": 31,
+      "quant_max": 31,
+      "quant_min": 28,
+      "quant_samples": 24,
+      "quant_sum": 724
+    },
+    "quant_avg": null,
+    "quant_current": null,
+    "quant_max": null,
+    "quant_metric": "QP",
+    "quant_min": null,
+    "quant_reason": "HEVC oneVPL feedback could not be validated against this runtime's bitstream; no reliable frame QP available",
+    "quant_samples": 0,
+    "quant_sum": 0,
+    "rate_control": "VBR",
+    "real_export_fps": 5.71432761935723,
+    "render_fps": 5.71432761935723,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 7.402203499994357,
+    "user_effective_fps": 4.052847236640126,
+    "verify_seconds": 0.08981849999690894,
+    "video_encode_pass_count": 1
+  },
+  "sampled_q": {
+    "1": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "2": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "3": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "4": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "5": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "6": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "7": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "8": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "9": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "10": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "11": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "12": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "13": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "14": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "15": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "16": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "17": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "18": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "19": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "20": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "21": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "22": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "23": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "24": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "25": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "26": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "27": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "28": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "29": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "30": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    }
+  }
+}

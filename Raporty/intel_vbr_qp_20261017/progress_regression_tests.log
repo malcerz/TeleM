@@ -1,0 +1,225 @@
+============================= test session starts =============================
+platform win32 -- Python 3.15.0, pytest-9.1.1, pluggy-1.7.0 -- C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\_DEV\SportCamHUD
+configfile: pyproject.toml
+plugins: platformdirs-4.13.3
+collecting ... collected 25 items
+
+tests/test_intel_vbr_control.py::test_vbr_preserves_40m_native_buffer_and_scales_high_bitrates PASSED
+tests/test_intel_vbr_control.py::test_invalid_bitrate_is_not_silently_replaced[bad] PASSED
+tests/test_intel_vbr_control.py::test_invalid_bitrate_is_not_silently_replaced[0M] PASSED
+tests/test_intel_vbr_control.py::test_invalid_bitrate_is_not_silently_replaced[-5M] PASSED
+tests/test_intel_vbr_control.py::test_invalid_bitrate_is_not_silently_replaced[nan] PASSED
+tests/test_intel_vbr_control.py::test_profiles_change_only_preset_not_vbr_limits[fast-7-veryfast] PASSED
+tests/test_intel_vbr_control.py::test_profiles_change_only_preset_not_vbr_limits[balanced-4-medium] PASSED
+tests/test_intel_vbr_control.py::test_profiles_change_only_preset_not_vbr_limits[quality-1-veryslow] PASSED
+tests/test_intel_vbr_control.py::test_ffmpeg_telemetry_uses_real_distinct_samples_and_rejects_unknown_hevc PASSED
+tests/test_intel_vbr_control.py::test_unverified_native_hevc_feedback_is_not_published_as_real_qp PASSED
+tests/test_render_progress_state_scope_hotfix.py::test_render_progress_state_scope_is_global_not_cellvar PASSED
+tests/test_render_progress_state_scope_hotfix.py::test_on_render_requested_positive_scope_no_unbound_local [GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 67.05 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> fallback='' reason='font 'Digital-7 Mono' not found'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[STARTUP TIMELINE] event='GUI dispatch end' t=89778.986403s
+[STARTUP TIMELINE] event='snapshot begin' t=89778.986630s
+PASSED
+tests/test_render_progress_state_scope_hotfix.py::test_on_render_requested_missing_video_emits_failed_terminal_state [GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[STARTUP TIMELINE] event='GUI dispatch end' t=89779.041679s
+[STARTUP TIMELINE] event='snapshot begin' t=89779.041834s
+PASSED
+tests/test_render_progress_state_scope_hotfix.py::test_on_render_requested_nonexistent_video_file_emits_failed_terminal_state [GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[STARTUP TIMELINE] event='GUI dispatch end' t=89779.079354s
+[STARTUP TIMELINE] event='snapshot begin' t=89779.079513s
+PASSED
+tests/test_render_progress_state_scope_hotfix.py::test_render_tab_unlocks_on_failed_terminal_state [INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 00000231795dac00] Current codec type is unsupported
+[av1_qsv @ 00000231795dac00] Current profile is unsupported
+[av1_qsv @ 00000231795dac00] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 0000023176d31640] [enc:av1_qsv @ 0000023176fa6240] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 0000023179b100c0] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 0000023179b100c0] Task finished with error: Function not implemented
+[vf#0:0 @ 0000023179b100c0] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 0000023176d31640] [enc:av1_qsv @ 0000023176fa6240] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 0000023176d31640] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 0000023176d31640] Terminating thread with error: Invalid argument
+[out#0/null @ 0000023176d05100] Nothing was written into output file, because at least one of its streams received no packets.
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 534, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 20412, "preview_generation_id": 0, "preview_stop_event": {"id": 2197348529232, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 605675520, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712716910288, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 230961152, "thread_count": 26}
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+PASSED
+tests/test_render_progress_single_source.py::test_stale_cancelled_generation_cannot_replace_active_export_status [PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 534, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 20412, "preview_generation_id": 0, "preview_stop_event": {"id": 2197349143120, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 608841728, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712716910288, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 234278912, "thread_count": 26}
+[STARTUP TIMELINE] event='GUI Render clicked' t=89783.205581s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=89783.205706s
+FAILED
+tests/test_render_progress_single_source.py::test_cancel_requested_is_not_cancelled_until_terminal_state PASSED
+tests/test_render_progress_single_source.py::test_render_state_status_uses_exporter_fps_and_eta PASSED
+tests/test_render_progress_single_source.py::test_main_window_consumes_the_same_canonical_snapshot [PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 557, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 20412, "preview_generation_id": 0, "preview_stop_event": {"id": 2197391768176, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 615743488, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712716910288, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 243367936, "thread_count": 27}
+PASSED
+tests/test_render_progress_single_source.py::test_new_render_has_fresh_cancel_event PASSED
+tests/test_render_progress_single_source.py::test_preview_stop_does_not_cancel_render [PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 557, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 20412, "preview_generation_id": 0, "preview_stop_event": {"id": 2197391768080, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 627879936, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712716910288, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 254025728, "thread_count": 27}
+[STARTUP TIMELINE] event='GUI Render clicked' t=89788.493335s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=89788.493436s
+FAILED
+tests/test_render_progress_single_source.py::test_old_generation_cancel_is_ignored [RenderCancel] IGNORE generation=1 active_generation=2 source=STALE_WORKER reason=USER_CANCEL
+PASSED
+tests/test_render_progress_single_source.py::test_internal_stop_is_not_reported_as_user_cancel PASSED
+tests/test_render_progress_single_source.py::test_user_cancel_sets_user_reason [RenderCancel] SET generation=7 source=GUI_BUTTON reason=USER_CANCEL thread=MainThread frame=0 elapsed=0.000s stack=_on_render_cancel_requested -> test_user_cancel_sets_user_reason -> pytest_pyfunc_call -> _multicall
+PASSED
+tests/test_render_progress_single_source.py::test_render_tab_indeterminate_progress_mode_lifecycle [PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 554, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 20412, "preview_generation_id": 0, "preview_stop_event": {"id": 2197398698128, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 629493760, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712716910288, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 256077824, "thread_count": 27}
+[STARTUP TIMELINE] event='GUI Render clicked' t=89789.155946s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=89789.156095s
+FAILED
+
+================================== FAILURES ===================================
+_____ test_stale_cancelled_generation_cannot_replace_active_export_status _____
+
+    def test_stale_cancelled_generation_cannot_replace_active_export_status():
+        app = QApplication.instance() or QApplication(sys.argv)
+        tab = RenderTab(preview=VideoPreview())
+        tab._on_render()
+        current_generation = tab._render_generation_id
+    
+        tab._on_render_state(RenderProgressState(
+            generation_id=current_generation,
+            state="rendering",
+            frame=10330,
+            total_frames=55649,
+            percent=100.0 * 10330 / 55649,
+            global_percent=18.0,
+            elapsed_s=290.0,
+            fps=35.7,
+            eta_s=(55649 - 10330) / 35.7,
+        ))
+        expected = tab.lbl_stats.text()
+    
+        tab._on_render_state(RenderProgressState(
+            generation_id=current_generation - 1,
+            state="cancelled",
+            frame=19,
+            total_frames=55649,
+            percent=0.0,
+            elapsed_s=290.0,
+            cancelled=True,
+        ))
+    
+        assert tab.lbl_stats.text() == expected
+>       assert "10330" in tab.lbl_stats.text()
+E       AssertionError: assert '10330' in 'Gotowy'
+E        +  where 'Gotowy' = <built-in method text of PySide6.QtWidgets.QLabel object at 0x000001FFF21D0800>()
+E        +    where <built-in method text of PySide6.QtWidgets.QLabel object at 0x000001FFF21D0800> = <PySide6.QtWidgets.QLabel(0x1ff9e27afc0) at 0x000001FFF21D0800>.text
+E        +      where <PySide6.QtWidgets.QLabel(0x1ff9e27afc0) at 0x000001FFF21D0800> = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9d3bea90) at 0x000001FF9EBC94C0>.lbl_stats
+
+tests\test_render_progress_single_source.py:54: AssertionError
+__________________ test_preview_stop_does_not_cancel_render ___________________
+
+    def test_preview_stop_does_not_cancel_render():
+        app = QApplication.instance() or QApplication(sys.argv)
+        tab = RenderTab(preview=VideoPreview())
+        tab._on_render()
+        requests = []
+        tab.signals.sig_render_cancel_requested.connect(requests.append)
+    
+        tab._on_render_progress(10330, 55649, 290.0, 35.7, {"frame": 10330, "ts": 344.0})
+    
+        assert requests == []
+>       assert tab._rendering is True
+E       assert False is True
+E        +  where False = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9e278fb0) at 0x000001FF9F0D7800>._rendering
+
+tests\test_render_progress_single_source.py:161: AssertionError
+____________ test_render_tab_indeterminate_progress_mode_lifecycle ____________
+
+    def test_render_tab_indeterminate_progress_mode_lifecycle():
+        app = QApplication.instance() or QApplication(sys.argv)
+        tab = RenderTab(preview=VideoPreview())
+        tab._on_render()
+        gen_id = tab._render_generation_id
+    
+        # 1. During render: determinate mode (0..100)
+        tab._on_render_state(RenderProgressState(
+            generation_id=gen_id,
+            state="rendering",
+            frame=500,
+            total_frames=1000,
+            percent=50.0,
+            global_percent=46.0,
+            progress_mode="determinate",
+        ))
+        assert tab.progress.minimum() == 0
+        assert tab.progress.maximum() == 100
+        assert not tab._is_indeterminate
+    
+        # 2. Transition to Muxowanie MP4 (indeterminate / busy)
+        tab._on_render_state(RenderProgressState(
+            generation_id=gen_id,
+            state="finalizing",
+            phase="finalize",
+            progress_mode="indeterminate",
+            frame=1000,
+            total_frames=1000,
+            global_percent=92.0,
+            finalization_stage="Muxowanie MP4...",
+        ))
+>       assert tab._is_indeterminate is True
+E       assert False is True
+E        +  where False = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9e516810) at 0x000001FFF21D2440>._is_indeterminate
+
+tests\test_render_progress_single_source.py:245: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_render_progress_single_source.py::test_stale_cancelled_generation_cannot_replace_active_export_status - AssertionError: assert '10330' in 'Gotowy'
+ +  where 'Gotowy' = <built-in method text of PySide6.QtWidgets.QLabel object at 0x000001FFF21D0800>()
+ +    where <built-in method text of PySide6.QtWidgets.QLabel object at 0x000001FFF21D0800> = <PySide6.QtWidgets.QLabel(0x1ff9e27afc0) at 0x000001FFF21D0800>.text
+ +      where <PySide6.QtWidgets.QLabel(0x1ff9e27afc0) at 0x000001FFF21D0800> = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9d3bea90) at 0x000001FF9EBC94C0>.lbl_stats
+FAILED tests/test_render_progress_single_source.py::test_preview_stop_does_not_cancel_render - assert False is True
+ +  where False = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9e278fb0) at 0x000001FF9F0D7800>._rendering
+FAILED tests/test_render_progress_single_source.py::test_render_tab_indeterminate_progress_mode_lifecycle - assert False is True
+ +  where False = <src.gui.qt.tabs.render_tab.RenderTab(0x1ff9e516810) at 0x000001FFF21D2440>._is_indeterminate
+======================== 3 failed, 22 passed in 19.80s ========================

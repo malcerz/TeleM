@@ -1,0 +1,24 @@
+START smoke_native_hevc_fast
+DONE smoke_native_hevc_fast fps= 3.4 Mbps= 45.95 qp= 30.130434782608695
+START smoke_native_hevc_balanced
+DONE smoke_native_hevc_balanced fps= 3.13 Mbps= 45.55 qp= 30.166666666666668
+START smoke_native_hevc_quality
+DONE smoke_native_hevc_quality fps= 3.25 Mbps= 45.48 qp= 30.22222222222222
+START smoke_native_h264_fast
+DONE smoke_native_h264_fast fps= 3.44 Mbps= 41.18 qp= 22.433333333333334
+START smoke_native_h264_balanced
+DONE smoke_native_h264_balanced fps= 3.53 Mbps= 40.5 qp= 22.4
+START smoke_native_h264_quality
+DONE smoke_native_h264_quality fps= 3.52 Mbps= 38.9 qp= 22.4
+START smoke_ffmpeg_hevc_fast
+DONE smoke_ffmpeg_hevc_fast fps= 1.18 Mbps= 45.9 qp= None
+START smoke_ffmpeg_hevc_balanced
+DONE smoke_ffmpeg_hevc_balanced fps= 1.27 Mbps= 45.94 qp= None
+START smoke_ffmpeg_hevc_quality
+DONE smoke_ffmpeg_hevc_quality fps= 1.2 Mbps= 44.89 qp= None
+START smoke_ffmpeg_h264_fast
+DONE smoke_ffmpeg_h264_fast fps= 3.78 Mbps= 41.36 qp= 24.25
+START smoke_ffmpeg_h264_balanced
+DONE smoke_ffmpeg_h264_balanced fps= 3.66 Mbps= 40.81 qp= 24.25
+START smoke_ffmpeg_h264_quality
+DONE smoke_ffmpeg_h264_quality fps= 3.72 Mbps= 41.92 qp= 24.75

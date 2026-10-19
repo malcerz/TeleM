@@ -1,0 +1,10 @@
+{
+  "tree": "61c95b88e88e64b32dd741bd85d38ea20c76952f",
+  "is_commit": false,
+  "files_checked": [
+    "settings_tab.py",
+    "main_window.py",
+    "signals.py",
+    "controller.py"
+  ]
+}

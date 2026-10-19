@@ -1,0 +1,91 @@
+{
+  "codec": "h264",
+  "intel_path": "native",
+  "mode": "queue",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\queue_h264.mp4",
+  "bitrate": "40M",
+  "max_frames": 60,
+  "success": true,
+  "error": "",
+  "elapsed_s": 5.58,
+  "total_frames": 60,
+  "effective_fps": 10.74,
+  "ram_used_gb": 9.89,
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "2.002000",
+          "nb_frames": "60",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "1.984000",
+          "nb_frames": "93"
+        }
+      ],
+      "format": {
+        "duration": "2.002000",
+        "size": "9871172"
+      }
+    },
+    "actual_video_frames": 60
+  },
+  "output_size_bytes": 9871172,
+  "stats": {
+    "audio_live_mux": true,
+    "avg_qp": null,
+    "cancelled": false,
+    "codec": "h264",
+    "encoder_drain_seconds": 0.1656420000072103,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.2769216000015149,
+    "frame_render_seconds": 3.6190815000009025,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 2.002,
+      "has_audio": true,
+      "size_bytes": 9871172,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "quant_avg": 0.0,
+    "quant_current": 0,
+    "quant_max": 0,
+    "quant_metric": "QP",
+    "quant_min": 0,
+    "quant_samples": 0,
+    "quant_sum": 0,
+    "real_export_fps": 16.578792160382417,
+    "render_fps": 16.578792160382417,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 4.595503500007908,
+    "user_effective_fps": 13.056240736166723,
+    "verify_seconds": 0.1104743000032613,
+    "video_encode_pass_count": 1
+  },
+  "sampled_q": {}
+}

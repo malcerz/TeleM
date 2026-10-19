@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "events": [
+    {
+      "state": "loading",
+      "generation": 1,
+      "ready": false,
+      "paths": []
+    },
+    {
+      "state": "cleared",
+      "generation": 2,
+      "ready": false,
+      "paths": []
+    },
+    {
+      "state": "loading",
+      "generation": 3,
+      "ready": false,
+      "paths": []
+    },
+    {
+      "state": "ready",
+      "generation": 1,
+      "ready": true,
+      "paths": [
+        "C:\\_DEV\\SportCamHUD-gui-regression\\Raporty\\gui_recovery_20261018\\project_probe\\tiny.mp4"
+      ]
+    },
+    {
+      "state": "failed",
+      "generation": 3,
+      "ready": false,
+      "paths": []
+    }
+  ],
+  "invalid_errors": 0,
+  "final_tabs": [
+    true,
+    false,
+    true,
+    true
+  ],
+  "exclusions": [
+    "GPU/decoder presentation",
+    "telemetry extraction",
+    "map prefetch",
+    "export"
+  ]
+}

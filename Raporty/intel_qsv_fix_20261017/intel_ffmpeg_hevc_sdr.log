@@ -1,0 +1,375 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 12.97 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> fallback='' reason='font 'Digital-7 Mono' not found'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 000001d1611629c0] Current codec type is unsupported
+[av1_qsv @ 000001d1611629c0] Current profile is unsupported
+[av1_qsv @ 000001d1611629c0] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 000001d161d29a00] [enc:av1_qsv @ 000001d160d6d140] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001d161162d40] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 000001d161162d40] Task finished with error: Function not implemented
+[vf#0:0 @ 000001d161162d40] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 000001d161d29a00] [enc:av1_qsv @ 000001d160d6d140] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 000001d161d29a00] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 000001d161d29a00] Terminating thread with error: Invalid argument
+[out#0/null @ 000001d161d3de80] Nothing was written into output file, because at least one of its streams received no packets.
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 549, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 1704, "preview_generation_id": 0, "preview_stop_event": {"id": 1487924989584, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 574554112, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712907226832, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 202477568, "thread_count": 24}
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010378.MP4 + 2026-10-15_15-03-50.fit (mode=direct)
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-15 13:03:58.134663+00:00..2026-10-15 13:06:24.747796+00:00
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/GoPro/GX010378.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-15T13:03:56.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:02:26.61, start: 0.000000, bitrate: 53743 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 53291 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 15:03:56;16
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 15:03:56;16
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 15:03:56;16
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 181 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-15T13:03:56.000000Z
+      handler_name    : GoPro MET
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=31.4ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010378.MP4
+[TMPC Cache] read_count=147
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[LoadProfile] stage=json_file_read elapsed_ms=0.16 thread=Thread-34 (bg_load)/7532 input_bytes=197
+[LoadProfile] stage=json_parse elapsed_ms=0.01 thread=Thread-34 (bg_load)/7532 input_bytes=197
+[LoadProfile] stage=json_file_read elapsed_ms=10.53 thread=Thread-34 (bg_load)/7532 input_bytes=6449293
+[LoadProfile] stage=json_parse elapsed_ms=53.55 thread=Thread-34 (bg_load)/7532 input_bytes=6449293
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\gpmf.json (gpmf_json)
+[GPMF LOAD]
+SOURCE=C:\GoPro\GX010378.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=False
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=1465
+ACC_SAMPLES=29139
+GYRO_SAMPLES=29138
+ISO_SAMPLES=4394
+TEMP_SAMPLES=147
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=114.78
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=114.85 thread=Thread-34 (bg_load)/7532 input_bytes=984930235 records=1
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=114.88 thread=Thread-34 (bg_load)/7532 input_bytes=984930235 records=1
+[TMPC Telemetry] temperature_samples=147
+[SmartSync] absolute_overlap=yes WARNING: trajectory alignment rejected: baseline=0.000s candidate=0.000s matched=99/99 coverage=1.00 median_error=230.3m p90_error=465.5m
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[7470.72]
+normalized_final=7470.72
+session_total=7470.72
+match=True
+[MultiFile] project_duration=146.613133 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=146.6s
+[MultiFile] Clip 1/1
+  path=GX010378.MP4
+  global=0.000-146.613
+  absolute=2026-10-15T13:03:58.134-2026-10-15T13:06:24.747
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=gps9_first_abs=2026-10-15T13:03:58.300+00:00 stmp=165337.0 tsmp=9.0 local_s=0.165337 reason=stmp
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=1459
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=79444.271039s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=79444.271141s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-17 15:06:27.592 (1792242387.5928) thread=MainThread/7252 job_id= output_path=C:\_DEV\SportCamHUD\scratch\intel_fix\ffmpeg_hevc_sdr.mp4 input_videos=[] encoder=intel render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=79444.303231s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=32.090ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=79444.303444s
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> 3840x2160)
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[FFMPEG START] ts=2026-10-17 15:06:27.725 (1792242387.7253) thread=TeleM-RenderWorker/8948 job_id= output_path=C:\_DEV\SportCamHUD\scratch\intel_fix\ffmpeg_hevc_sdr.mp4 input_videos=['C:\\GoPro\\GX010378.MP4'] encoder=intel mode=direct
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[UNKNOWN] Adapter ignored: INTEL_FORCE active
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.0
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[INTEL] Fallback reason: unsupported native vertical-slice configuration
+[INTEL_JOB_START] encoder=intel input_files=['C:\\GoPro\\GX010378.MP4'] output_file=C:\_DEV\SportCamHUD\scratch\intel_fix\ffmpeg_hevc_sdr.mp4 is_multi_file=False
+[INTEL_NATIVE_REQUESTED] requested=YES
+[RUNTIME]
+backend=intel
+app_root=C:\_DEV\SportCamHUD
+vendor_runtime=C:\_DEV\SportCamHUD\runtime\intel\bin
+native_dll=C:\_DEV\SportCamHUD\runtime\intel\bin\telem_intel_native.dll
+sha256=113abafbab0c877bc406692a4f60d287041d7e6307912a1b6e790d602888ba4b
+[INTEL_NATIVE_AVAILABLE] available=YES reason=available
+[INTEL_NATIVE_FALLBACK_REASON] HEVC 8-bit SDR uses FFmpeg QSV; native VP currently outputs HEVC Main10
+[INTEL_FFMPEG_FALLBACK_ENTERED] entered=YES reason=HEVC 8-bit SDR uses FFmpeg QSV; native VP currently outputs HEVC Main10
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=847.6
+[HUD PREP PROGRESS] phase=worker_init done=1 total=1 phase_pct=100.0% overall_pct=5.0% elapsed_ms=852.4
+[FIRST FRAME] ts=2026-10-17 15:06:28.632 (1792242388.6328) thread=TeleM-RenderWorker/8948 job_id= output_path=C:\_DEV\SportCamHUD\scratch\intel_fix\ffmpeg_hevc_sdr.mp4 input_videos=['C:\\GoPro\\GX010378.MP4'] frame=1/1
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.8s
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[HUD PREP PROGRESS] phase=map_preload done=0 total=1 phase_pct=0.0% overall_pct=5.0% elapsed_ms=853.2
+[HUD PREP PROGRESS] phase=map_preload done=1 total=1 phase_pct=100.0% overall_pct=10.0% elapsed_ms=853.2
+[DIRECT PROGRESS] frame=1/1 fps=0.0 elapsed=0.9s
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.9s
+[DIRECT PROGRESS] frame=1/1 fps=0.0 elapsed=0.9s
+[PROC] job created handle=2424
+[PROC] assigned TeleM parent pid=1704 to job (in_prior_job=True)
+[PROC] assigned pid=17480
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.9s
+[HUD PREP PROGRESS] phase=telemetry_cache done=0 total=30 phase_pct=0.0% overall_pct=10.0% elapsed_ms=942.9
+[DIRECT PROGRESS] frame=0/30 fps=0.0 elapsed=0.9s
+[HUD PREP LEAN] stage=lean_vectorize keys=('lean_indicator',) frames=30 elapsed_ms=169.20
+[HUD PREP PROGRESS] phase=telemetry_cache done=11 total=43 phase_pct=25.6% overall_pct=85.0% elapsed_ms=1123.8
+[HUD PREP PROGRESS] phase=telemetry_cache done=43 total=43 phase_pct=100.0% overall_pct=85.0% elapsed_ms=1126.2
+[HUD PREP PROGRESS] phase=workers_setup done=0 total=11 phase_pct=0.0% overall_pct=85.0% elapsed_ms=1126.6
+[HUD PREP PROGRESS] phase=workers_setup done=11 total=11 phase_pct=100.0% overall_pct=100.0% elapsed_ms=1126.7
+[DIRECT PROGRESS] frame=43/43 fps=0.0 elapsed=1.1s
+[HUD PREP PROGRESS] TOTAL HUD PREPARATION: 1126.7 ms (1.13 s)
+[DIRECT PROGRESS] frame=0/11 fps=0.0 elapsed=1.1s
+[DIRECT PROGRESS] frame=11/11 fps=0.0 elapsed=1.1s
+[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.
+          hwdec-current=None, codec=None
+[PROC] assigned pid=5420 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=16768 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=2768 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=2448 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=15172 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=12404 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[DIRECT PROGRESS] frame=30/30 fps=7.9 elapsed=3.8s
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=5.1s
+[RenderCancel] ffmpeg graceful stop requested elapsed=0.000s thread=TeleM-RenderWorker pid=17480
+[RenderCancel] stdin_closed elapsed=0.000s thread=TeleM-RenderWorker pid=17480
+[RenderCancel] ffmpeg graceful wait start elapsed=0.000s thread=TeleM-RenderWorker pid=17480
+[RenderCancel] ffmpeg exited rc=0 elapsed=0.051s thread=TeleM-RenderWorker pid=17480
+[PROC] ffmpeg exit
+[PROC] registry empty
+[PROC] registry empty
+
+=== TeleM PERFORMANCE BENCHMARK ===
+frame_conversion         : avg=  0.31ms | p95=  0.31ms | range=[0.31-0.31]ms (n=1)
+ffmpeg_write             : avg= 93.87ms | p95=532.21ms | range=[6.24-670.39]ms (n=30)
+===================================
+
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+[PROC] render thread exit
+[BENCH STATS] quant_current=None quant_min=None quant_max=None quant_samples=None quant_sum=None quant_avg=None
+
+[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.5s fps=3.5
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0

@@ -1,0 +1,135 @@
+ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+  built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+  configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+  libavutil      61.  5.100 / 61.  5.100
+  libavcodec     63.  8.101 / 63.  8.101
+  libavformat    63.  6.100 / 63.  6.100
+  libavdevice    63.  2.100 / 63.  2.100
+  libavfilter    12.  3.101 / 12.  3.101
+  libswscale     10.  2.100 / 10.  2.100
+  libswresample   7.  2.100 /  7.  2.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\_DEV\SportCamHUD\Raporty\intel_vbr_qp_20261017\matrix\benchmark_ffmpeg_hevc_fast.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2mp41
+    encoder         : Lavf63.6.100
+  Duration: 00:00:20.02, start: 0.000000, bitrate: 41232 kb/s
+  Stream #0:0[0x1](und): Video: hevc (Main 10) (hev1 / 0x31766568), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, progressive), 3840x2160 [SAR 1:1 DAR 16:9], 40970 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      encoder         : Lavc63.8.101 hevc_qsv
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+Input #1, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\_DEV\SportCamHUD\Raporty\intel_vbr_qp_20261017\matrix\benchmark_ffmpeg_hevc_quality.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2mp41
+    encoder         : Lavf63.6.100
+  Duration: 00:00:20.02, start: 0.000000, bitrate: 41281 kb/s
+  Stream #1:0[0x1](und): Video: hevc (Main 10) (hev1 / 0x31766568), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, progressive), 3840x2160 [SAR 1:1 DAR 16:9], 41018 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      encoder         : Lavc63.8.101 hevc_qsv
+  Stream #1:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+Stream mapping:
+  Stream #0:0 (hevc) -> select:default
+  Stream #1:0 (hevc) -> select:default
+  ssim:default -> Stream #0:0 (wrapped_avframe)
+  psnr:default -> Stream #0:1 (wrapped_avframe)
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf63.6.100
+  Stream #0:0: Video: wrapped_avframe, yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, progressive), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 200 kb/s, 29.97 fps, 29.97 tbn (default)
+    Metadata:
+      encoder         : Lavc63.8.101 wrapped_avframe
+  Stream #0:1: Video: wrapped_avframe, yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, progressive), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 200 kb/s, 29.97 fps, 29.97 tbn
+    Metadata:
+      encoder         : Lavc63.8.101 wrapped_avframe
+frame=    2 fps=0.0 q=-0.0 q=-0.0 size=N/A time=00:00:00.06 bitrate=N/A speed=0.13x elapsed=0:00:00.51    
+frame=   15 fps= 15 q=-0.0 q=-0.0 size=N/A time=00:00:00.50 bitrate=N/A speed=0.487x elapsed=0:00:01.02    
+frame=   30 fps= 19 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.647x elapsed=0:00:01.54    
+frame=   30 fps= 15 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.486x elapsed=0:00:02.06    
+frame=   30 fps= 12 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.389x elapsed=0:00:02.57    
+frame=   30 fps=9.7 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.324x elapsed=0:00:03.09    
+frame=   30 fps=8.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.277x elapsed=0:00:03.60    
+frame=   30 fps=7.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.243x elapsed=0:00:04.12    
+frame=   30 fps=6.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.216x elapsed=0:00:04.63    
+frame=   30 fps=5.8 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.194x elapsed=0:00:05.15    
+frame=   30 fps=5.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.176x elapsed=0:00:05.68    
+frame=   30 fps=4.8 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.162x elapsed=0:00:06.19    
+frame=   30 fps=4.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.149x elapsed=0:00:06.72    
+frame=   30 fps=4.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.138x elapsed=0:00:07.22    
+frame=   30 fps=3.9 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.129x elapsed=0:00:07.75    
+frame=   30 fps=3.6 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.121x elapsed=0:00:08.26    
+frame=   30 fps=3.4 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.114x elapsed=0:00:08.77    
+frame=   30 fps=3.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.108x elapsed=0:00:09.29    
+frame=   30 fps=3.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.102x elapsed=0:00:09.81    
+frame=   30 fps=2.9 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0969x elapsed=0:00:10.32    
+frame=   30 fps=2.8 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0923x elapsed=0:00:10.84    
+frame=   30 fps=2.6 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0881x elapsed=0:00:11.35    
+frame=   30 fps=2.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0843x elapsed=0:00:11.87    
+frame=   30 fps=2.4 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0807x elapsed=0:00:12.39    
+frame=   30 fps=2.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0776x elapsed=0:00:12.90    
+frame=   30 fps=2.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0746x elapsed=0:00:13.41    
+frame=   30 fps=2.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0718x elapsed=0:00:13.94    
+frame=   30 fps=2.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0693x elapsed=0:00:14.45    
+frame=   30 fps=2.0 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0669x elapsed=0:00:14.97    
+frame=   30 fps=1.9 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0646x elapsed=0:00:15.49    
+frame=   30 fps=1.9 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0626x elapsed=0:00:16.00    
+frame=   30 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0606x elapsed=0:00:16.51    
+frame=   30 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0588x elapsed=0:00:17.03    
+frame=   30 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.057x elapsed=0:00:17.55    
+frame=   30 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0554x elapsed=0:00:18.07    
+frame=   30 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0538x elapsed=0:00:18.59    
+frame=   30 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0524x elapsed=0:00:19.10    
+frame=   30 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.051x elapsed=0:00:19.62    
+frame=   30 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0497x elapsed=0:00:20.14    
+frame=   30 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0484x elapsed=0:00:20.66    
+frame=   30 fps=1.4 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0473x elapsed=0:00:21.16    
+frame=   30 fps=1.4 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0462x elapsed=0:00:21.68    
+frame=   30 fps=1.4 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0451x elapsed=0:00:22.21    
+frame=   30 fps=1.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.044x elapsed=0:00:22.72    
+frame=   30 fps=1.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0431x elapsed=0:00:23.24    
+frame=   30 fps=1.3 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0421x elapsed=0:00:23.77    
+frame=   30 fps=1.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0412x elapsed=0:00:24.28    
+frame=   30 fps=1.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0404x elapsed=0:00:24.79    
+frame=   30 fps=1.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0395x elapsed=0:00:25.31    
+frame=   30 fps=1.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0388x elapsed=0:00:25.82    
+frame=   30 fps=1.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.038x elapsed=0:00:26.34    
+frame=   30 fps=1.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0373x elapsed=0:00:26.85    
+frame=   30 fps=1.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0366x elapsed=0:00:27.37    
+frame=   30 fps=1.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0359x elapsed=0:00:27.88    
+frame=   30 fps=1.1 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0352x elapsed=0:00:28.41    
+frame=   30 fps=1.0 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0346x elapsed=0:00:28.92    
+frame=   30 fps=1.0 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.034x elapsed=0:00:29.43    
+frame=   30 fps=1.0 q=-0.0 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.0334x elapsed=0:00:29.95    
+frame=   36 fps=1.2 q=-0.0 q=-0.0 size=N/A time=00:00:01.20 bitrate=N/A speed=0.0394x elapsed=0:00:30.46    
+frame=   50 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:01.66 bitrate=N/A speed=0.0539x elapsed=0:00:30.97    
+frame=   60 fps=1.9 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0636x elapsed=0:00:31.49    
+frame=   60 fps=1.9 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0625x elapsed=0:00:32.01    
+frame=   60 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0615x elapsed=0:00:32.52    
+frame=   60 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0606x elapsed=0:00:33.04    
+frame=   60 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0597x elapsed=0:00:33.55    
+frame=   60 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0587x elapsed=0:00:34.08    
+frame=   60 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0579x elapsed=0:00:34.58    
+frame=   60 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.057x elapsed=0:00:35.12    
+frame=   60 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0562x elapsed=0:00:35.63    
+frame=   60 fps=1.7 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0554x elapsed=0:00:36.15    
+frame=   60 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0546x elapsed=0:00:36.67    
+frame=   60 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0538x elapsed=0:00:37.19    
+frame=   60 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0531x elapsed=0:00:37.69    
+frame=   60 fps=1.6 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0524x elapsed=0:00:38.21    
+frame=   60 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0517x elapsed=0:00:38.72    
+frame=   60 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.051x elapsed=0:00:39.26    
+frame=   60 fps=1.5 q=-0.0 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.0503x elapsed=0:00:39.77    
+frame=   71 fps=1.8 q=-0.0 q=-0.0 size=N/A time=00:00:02.36 bitrate=N/A speed=0.0588x elapsed=0:00:40.29    
+frame=   85 fps=2.1 q=-0.0 q=-0.0 size=N/A time=00:00:02.83 bitrate=N/A speed=0.0695x elapsed=0:00:40.80    
+[Parsed_psnr_7 @ 00000281af18ddc0] PSNR y:47.506647 u:55.143566 v:56.928259 average:48.967076 min:46.164224 max:53.959105
+[Parsed_ssim_6 @ 00000281af18d3c0] SSIM Y:0.994604 (22.679077) U:0.998299 (27.691934) V:0.999009 (30.041182) All:0.995954 (23.929567)
+[out#0/null @ 00000281af1be200] video:75KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=   90 fps=2.2 q=-0.0 Lq=-0.0 size=N/A time=00:00:03.00 bitrate=N/A speed=0.0734x elapsed=0:00:40.88    

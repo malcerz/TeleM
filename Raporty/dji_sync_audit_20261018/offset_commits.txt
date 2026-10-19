@@ -1,0 +1,2 @@
+b1e6507409d5ebfef61388aa84c585ab0d435f42 feat: Release v1.09 - AMD Cache Key Parity and Real FIT Benchmark Integrity
+02f4117362e9a45df50af780641feaf6015c259b fix(gui): remove dummy cache hazard, add prewarm generation safety, vectorize telemetry loops

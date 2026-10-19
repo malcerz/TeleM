@@ -1,0 +1,671 @@
+﻿[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 59.46 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> fallback='' reason='font 'Digital-7 Mono' not found'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 0000019ff739b180] Current codec type is unsupported
+[av1_qsv @ 0000019ff739b180] Current profile is unsupported
+[av1_qsv @ 0000019ff739b180] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 0000019ff66a6e00] [enc:av1_qsv @ 0000019ff406fac0] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 0000019ff6d79900] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 0000019ff6d79900] Task finished with error: Function not implemented
+[vf#0:0 @ 0000019ff6d79900] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 0000019ff66a6e00] [enc:av1_qsv @ 0000019ff406fac0] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 0000019ff66a6e00] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 0000019ff66a6e00] Terminating thread with error: Invalid argument
+[out#0/null @ 0000019ff4063940] Nothing was written into output file, because at least one of its streams received no packets.
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 539, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 2440, "preview_generation_id": 0, "preview_stop_event": {"id": 1951962169264, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 576405504, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712758001360, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 203378688, "thread_count": 24}
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010378.MP4 + 2026-10-15_15-03-50.fit (mode=direct)
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-15 13:03:58.134663+00:00..2026-10-15 13:06:24.747796+00:00
+python : Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/GoPro/GX010378.MP4':
+At line:1 char:1118
++ ... _TRACE="1"; python SportCamHUD.py --test-intel-export --intel-path na ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Input #0, mov,m.../GX010378.MP4'::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-15T13:03:56.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:02:26.61, start: 0.000000, bitrate: 53743 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 38
+40x2160 [SAR 1:1 DAR 16:9], 53291 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 15:03:56;16
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 15:03:56;16
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-15T13:03:56.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 15:03:56;16
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 181 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-15T13:03:56.000000Z
+      handler_name    : GoPro MET
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=96.3ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010378.MP4
+[TMPC Cache] read_count=147
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[LoadProfile] stage=json_file_read elapsed_ms=0.30 thread=Thread-34 (bg_load)/2292 input_bytes=197
+[LoadProfile] stage=json_parse elapsed_ms=0.04 thread=Thread-34 (bg_load)/2292 input_bytes=197
+[LoadProfile] stage=json_file_read elapsed_ms=32.43 thread=Thread-34 (bg_load)/2292 input_bytes=6449293
+[LoadProfile] stage=json_parse elapsed_ms=189.80 thread=Thread-34 (bg_load)/2292 input_bytes=6449293
+[TELEMETRY CACHE] source=GX010378.MP4 key=GX010378_210b3c5f8a612ff0 status=HIT path=C:\Users\MalcerzSur\AppData\Local\SportCamHUD\cache\media\GX010378_210b3c5f8a612ff0\gpmf.json (gpmf_json)
+[GPMF LOAD]
+SOURCE=C:\GoPro\GX010378.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=False
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=1465
+ACC_SAMPLES=29139
+GYRO_SAMPLES=29138
+ISO_SAMPLES=4394
+TEMP_SAMPLES=147
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=374.56
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=374.73 thread=Thread-34 (bg_load)/2292 input_bytes=984930235 records=1
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=374.82 thread=Thread-34 (bg_load)/2292 input_bytes=984930235 records=1
+[TMPC Telemetry] temperature_samples=147
+[SmartSync] absolute_overlap=yes WARNING: trajectory alignment rejected: baseline=0.000s candidate=0.000s matched=99/99 coverage=1.00 median_error=230.3m p90_error=465.5m
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[7470.72]
+normalized_final=7470.72
+session_total=7470.72
+match=True
+[MultiFile] project_duration=146.613133 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=146.6s
+[MultiFile] Clip 1/1
+  path=GX010378.MP4
+  global=0.000-146.613
+  absolute=2026-10-15T13:03:58.134-2026-10-15T13:06:24.747
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=gps9_first_abs=2026-10-15T13:03:58.300+00:00 stmp=165337.0 tsmp=9.0 local_s=0.165337 reason=stmp
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=1459
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=93712.670668s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=93712.671125s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-17 19:04:16.025 (1792256656.0252) thread=MainThread/896 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_hevc_qp_20261017\trace_fast.mp4 input_videos=[] encoder=intel render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=93712.737282s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=66.156ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=93712.738040s
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> 3840x2160)
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[FFMPEG START] ts=2026-10-17 19:04:16.400 (1792256656.4001) thread=TeleM-RenderWorker/16980 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_hevc_qp_20261017\trace_fast.mp4 input_videos=['C:\\GoPro\\GX010378.MP4'] encoder=intel mode=direct
+[UNKNOWN] Adapter ignored: INTEL_FORCE active
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.0
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[INTEL] Fallback reason: unsupported native vertical-slice configuration
+[INTEL_JOB_START] encoder=intel input_files=['C:\\GoPro\\GX010378.MP4'] output_file=C:\_DEV\SportCamHUD\Raporty\intel_hevc_qp_20261017\trace_fast.mp4 is_multi_file=False
+[INTEL_NATIVE_REQUESTED] requested=YES
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[RUNTIME]
+backend=intel
+app_root=C:\_DEV\SportCamHUD
+vendor_runtime=C:\_DEV\SportCamHUD\runtime\intel\bin
+native_dll=C:\_DEV\SportCamHUD\runtime\intel\bin\telem_intel_native_qpcand.dll
+sha256=4a5f2a5efc04197f4c8187097cea66c2815b9c43d4b57741364fc2a4a63ba48b
+[INTEL_NATIVE_AVAILABLE] available=YES reason=DLL/runtime loaded; codec support is checked separately
+[INTEL_NATIVE_ENTERED] entered=YES
+INTEL_ENCODER_PROFILE: profile=fast codec=hevc target_usage=7 (BEST_SPEED) bitrate=40M resolution=3840x2160 bit_depth=10 hdr=YES
+[INTEL VBR ACCEPTED] rc=2 tu=7 target=40000 max=50000 buffer_kb=10000 initial_kb=5000 multiplier=1 init_status=0 HRD=16
+/16
+[INTEL QP] source=oneVPL encoded-frame-info supported=1 query_status=0 aggregation=one_luma_qp_per_encoded_frame
+[INTEL QP] oneVPL encode-stats(frame) query_status=-3 flags_after=8
+[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.
+          hwdec-current=None, codec=None
+[INTEL_ENCODER_ACCEPTED] {"buffer_kb": 10000, "get_status": 0, "init_status": 0, "initial_delay_kb": 5000, "max_kbps": 50000, "multiplier": 1, "qp_supported": 1, "qp_unverified_zero": 0, "query_status": 0, "rate_control": 2, "target_kbps": 40000, "target_usage": 7, "valid": 1}
+[Intel][HUD] DirectSHM=ON source=default
+[Intel][Charts] Fastpath=OFF source=default
+[Intel][Compositor] Fastpath=OFF source=default
+[HUD PREP LEAN] stage=lean_vectorize keys=('lean_indicator',) frames=300 elapsed_ms=6.44
+[PROC] job created handle=2512
+[PROC] assigned TeleM parent pid=2440 to job (in_prior_job=True)
+[PROC] assigned pid=5900
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=13900 (already in job via inheritance)
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=17208 (already in job via inheritance)
+[FIRST FRAME] ts=2026-10-17 19:04:21.882 (1792256661.8820) thread=TeleM-RenderWorker/16980 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_hevc_qp_20261017\trace_fast.mp4 input_videos=['C:\\GoPro\\GX010378.MP4'] frame=1/300
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[PROC] assigned pid=6984 (already in job via inheritance)
+[INTEL HEVC QP] frame=1 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=28 vpl_frame_order=0 bytes=571661
+[INTEL HEVC QP] frame=2 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=95090
+[INTEL HEVC QP] frame=3 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=106934
+[INTEL HEVC QP] frame=4 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=124774
+[INTEL HEVC QP] frame=5 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=145284
+[INTEL HEVC QP] frame=6 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=154927
+[INTEL HEVC QP] frame=7 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=164896
+[INTEL HEVC QP] frame=8 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=177247
+[INTEL HEVC QP] frame=9 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=182178
+[INTEL HEVC QP] frame=10 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=192380
+[INTEL HEVC QP] frame=11 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=29 vpl_frame_order=0 bytes=197286
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=
+renderer=_render_gauge_indicator
+[INTEL HEVC QP] frame=12 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=188163
+[INTEL HEVC QP] frame=13 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=200319
+[INTEL HEVC QP] frame=14 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=187587
+[INTEL HEVC QP] frame=15 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=197679
+[INTEL HEVC QP] frame=16 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=186357
+[INTEL HEVC QP] frame=17 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=194481
+[INTEL HEVC QP] frame=18 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=192143
+[INTEL HEVC QP] frame=19 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=195113
+[INTEL HEVC QP] frame=20 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=191556
+[INTEL HEVC QP] frame=21 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=182954
+[INTEL HEVC QP] frame=22 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=201198
+[INTEL HEVC QP] frame=23 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=169305
+[INTEL HEVC QP] frame=24 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=188812
+[INTEL HEVC QP] frame=25 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=189472
+[INTEL HEVC QP] frame=26 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=196664
+[INTEL HEVC QP] frame=27 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=175003
+[INTEL HEVC QP] frame=28 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=205896
+[INTEL HEVC QP] frame=29 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=181474
+[INTEL HEVC QP] frame=30 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=212452
+[INTEL HEVC QP] frame=31 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=209341
+[INTEL HEVC QP] frame=32 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=187430
+[INTEL HEVC QP] frame=33 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=200748
+[INTEL HEVC QP] frame=34 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=175681
+[INTEL HEVC QP] frame=35 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=187842
+[INTEL HEVC QP] frame=36 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=187306
+[INTEL HEVC QP] frame=37 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=181286
+[INTEL HEVC QP] frame=38 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=178999
+[INTEL HEVC QP] frame=39 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=173283
+[INTEL HEVC QP] frame=40 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=167790
+[INTEL HEVC QP] frame=41 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=162030
+[INTEL HEVC QP] frame=42 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=159306
+[INTEL HEVC QP] frame=43 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=156294
+[INTEL HEVC QP] frame=44 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=157250
+[INTEL HEVC QP] frame=45 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=161024
+[INTEL HEVC QP] frame=46 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=167264
+[INTEL HEVC QP] frame=47 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=172050
+[INTEL HEVC QP] frame=48 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=173823
+[INTEL HEVC QP] frame=49 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=178222
+[INTEL HEVC QP] frame=50 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=171760
+[INTEL HEVC QP] frame=51 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=154567
+[INTEL HEVC QP] frame=52 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=152853
+[INTEL HEVC QP] frame=53 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=157868
+[INTEL HEVC QP] frame=54 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=159047
+[INTEL HEVC QP] frame=55 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=159753
+[INTEL HEVC QP] frame=56 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=159206
+[INTEL HEVC QP] frame=57 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=160123
+[INTEL HEVC QP] frame=58 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=155188
+[INTEL HEVC QP] frame=59 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=184346
+[INTEL HEVC QP] frame=60 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=180527
+[INTEL HEVC QP] frame=61 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=28 vpl_frame_order=0 bytes=626918
+[INTEL HEVC QP] frame=62 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=156381
+[INTEL HEVC QP] frame=63 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=155615
+[INTEL HEVC QP] frame=64 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=154991
+[INTEL HEVC QP] frame=65 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=156594
+[INTEL HEVC QP] frame=66 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=155484
+[INTEL HEVC QP] frame=67 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=157493
+[INTEL HEVC QP] frame=68 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=158501
+[INTEL HEVC QP] frame=69 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=161533
+[INTEL HEVC QP] frame=70 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=161995
+[INTEL HEVC QP] frame=71 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=161522
+[INTEL HEVC QP] frame=72 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=164084
+[INTEL HEVC QP] frame=73 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=165755
+[INTEL HEVC QP] frame=74 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=167239
+[INTEL HEVC QP] frame=75 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=170763
+[INTEL HEVC QP] frame=76 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=172711
+[INTEL HEVC QP] frame=77 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=178512
+[INTEL HEVC QP] frame=78 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=182281
+[INTEL HEVC QP] frame=79 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=181264
+[INTEL HEVC QP] frame=80 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=178819
+[INTEL HEVC QP] frame=81 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=172988
+[INTEL HEVC QP] frame=82 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=167686
+[INTEL HEVC QP] frame=83 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=167778
+[INTEL HEVC QP] frame=84 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=167333
+[INTEL HEVC QP] frame=85 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=164953
+[INTEL HEVC QP] frame=86 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=172074
+[INTEL HEVC QP] frame=87 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=163470
+[INTEL HEVC QP] frame=88 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=159782
+[INTEL HEVC QP] frame=89 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=162783
+[INTEL HEVC QP] frame=90 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=183948
+[INTEL HEVC QP] frame=91 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=203626
+[INTEL HEVC QP] frame=92 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=167134
+[INTEL HEVC QP] frame=93 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=169791
+[INTEL HEVC QP] frame=94 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=169307
+[DIRECT PROGRESS] frame=100/300 fps=13.5 elapsed=7.4s Q_cur=None Q_avg=None Q_samples=0
+[INTEL HEVC QP] frame=95 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=168674
+[INTEL HEVC QP] frame=96 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=164874
+[INTEL HEVC QP] frame=97 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=164616
+[INTEL HEVC QP] frame=98 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=166386
+[INTEL HEVC QP] frame=99 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=169242
+[INTEL HEVC QP] frame=100 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=169714
+[INTEL HEVC QP] frame=101 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=166641
+[INTEL HEVC QP] frame=102 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=166840
+[INTEL HEVC QP] frame=103 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=153149
+[INTEL HEVC QP] frame=104 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=152089
+[INTEL HEVC QP] frame=105 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=149579
+[INTEL HEVC QP] frame=106 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=143163
+[INTEL HEVC QP] frame=107 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=164597
+[INTEL HEVC QP] frame=108 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=161795
+[INTEL HEVC QP] frame=109 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=167621
+[INTEL HEVC QP] frame=110 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=161757
+[INTEL HEVC QP] frame=111 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=161228
+[INTEL HEVC QP] frame=112 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=181397
+[INTEL HEVC QP] frame=113 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=194041
+[INTEL HEVC QP] frame=114 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=144400
+[INTEL HEVC QP] frame=115 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=162905
+[INTEL HEVC QP] frame=116 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=202981
+[INTEL HEVC QP] frame=117 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=176380
+[INTEL HEVC QP] frame=118 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=230371
+[INTEL HEVC QP] frame=119 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=193358
+[INTEL HEVC QP] frame=120 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=175172
+[INTEL HEVC QP] frame=121 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=648090
+[INTEL HEVC QP] frame=122 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=165197
+[INTEL HEVC QP] frame=123 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=159341
+[INTEL HEVC QP] frame=124 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=155121
+[INTEL HEVC QP] frame=125 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=146537
+[INTEL HEVC QP] frame=126 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=156546
+[INTEL HEVC QP] frame=127 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=147984
+[INTEL HEVC QP] frame=128 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=159612
+[INTEL HEVC QP] frame=129 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=144648
+[INTEL HEVC QP] frame=130 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=147613
+[INTEL HEVC QP] frame=131 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=136576
+[INTEL HEVC QP] frame=132 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=131971
+[INTEL HEVC QP] frame=133 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=124089
+[INTEL HEVC QP] frame=134 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=116416
+[INTEL HEVC QP] frame=135 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=115693
+[INTEL HEVC QP] frame=136 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=115134
+[INTEL HEVC QP] frame=137 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=139394
+[INTEL HEVC QP] frame=138 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=145256
+[INTEL HEVC QP] frame=139 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=141356
+[INTEL HEVC QP] frame=140 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=140311
+[INTEL HEVC QP] frame=141 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=129420
+[INTEL HEVC QP] frame=142 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=147008
+[INTEL HEVC QP] frame=143 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=140325
+[INTEL HEVC QP] frame=144 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=152458
+[INTEL HEVC QP] frame=145 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=143717
+[INTEL HEVC QP] frame=146 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=146776
+[INTEL HEVC QP] frame=147 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=143376
+[INTEL HEVC QP] frame=148 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=139890
+[INTEL HEVC QP] frame=149 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=138604
+[INTEL HEVC QP] frame=150 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=135053
+[INTEL HEVC QP] frame=151 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=124687
+[INTEL HEVC QP] frame=152 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=133528
+[INTEL HEVC QP] frame=153 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=133178
+[INTEL HEVC QP] frame=154 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=131861
+[INTEL HEVC QP] frame=155 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=130334
+[INTEL HEVC QP] frame=156 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=155270
+[INTEL HEVC QP] frame=157 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=157979
+[INTEL HEVC QP] frame=158 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=158601
+[INTEL HEVC QP] frame=159 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=170624
+[INTEL HEVC QP] frame=160 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=165878
+[INTEL HEVC QP] frame=161 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=167698
+[INTEL HEVC QP] frame=162 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=166619
+[INTEL HEVC QP] frame=163 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=177476
+[INTEL HEVC QP] frame=164 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=165195
+[INTEL HEVC QP] frame=165 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=185441
+[INTEL HEVC QP] frame=166 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=31 vpl_frame_order=0 bytes=193074
+[INTEL HEVC QP] frame=167 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=169134
+[INTEL HEVC QP] frame=168 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=162688
+[INTEL HEVC QP] frame=169 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=149977
+[INTEL HEVC QP] frame=170 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=141731
+[INTEL HEVC QP] frame=171 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=141601
+[INTEL HEVC QP] frame=172 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=147751
+[INTEL HEVC QP] frame=173 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=148606
+[INTEL HEVC QP] frame=174 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=143508
+[INTEL HEVC QP] frame=175 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=143305
+[INTEL HEVC QP] frame=176 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=152148
+[INTEL HEVC QP] frame=177 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=146803
+[INTEL HEVC QP] frame=178 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=159052
+[INTEL HEVC QP] frame=179 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=154518
+[INTEL HEVC QP] frame=180 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=156724
+[INTEL HEVC QP] frame=181 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=530136
+[INTEL HEVC QP] frame=182 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=162002
+[INTEL HEVC QP] frame=183 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=163216
+[INTEL HEVC QP] frame=184 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=167360
+[INTEL HEVC QP] frame=185 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=169502
+[INTEL HEVC QP] frame=186 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=169336
+[INTEL HEVC QP] frame=187 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=173558
+[INTEL HEVC QP] frame=188 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=171362
+[INTEL HEVC QP] frame=189 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=175329
+[INTEL HEVC QP] frame=190 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=179429
+[INTEL HEVC QP] frame=191 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=194494
+[INTEL HEVC QP] frame=192 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=192969
+[INTEL HEVC QP] frame=193 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=190293
+[INTEL HEVC QP] frame=194 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=191257
+[INTEL HEVC QP] frame=195 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=191677
+[INTEL HEVC QP] frame=196 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=0 vpl_frame_order=0 bytes=200122
+[INTEL HEVC QP] frame=197 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=174627
+[INTEL HEVC QP] frame=198 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=195585
+[INTEL HEVC QP] frame=199 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=161620
+[INTEL HEVC QP] frame=200 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176385
+[INTEL HEVC QP] frame=201 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=180120
+[INTEL HEVC QP] frame=202 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=171976
+[INTEL HEVC QP] frame=203 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=163698
+[INTEL HEVC QP] frame=204 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=178218
+[INTEL HEVC QP] frame=205 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176964
+[INTEL HEVC QP] frame=206 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=182104
+[INTEL HEVC QP] frame=207 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=188778
+[INTEL HEVC QP] frame=208 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=197466
+[INTEL HEVC QP] frame=209 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=174798
+[INTEL HEVC QP] frame=210 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=206540
+[INTEL HEVC QP] frame=211 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=186818
+[INTEL HEVC QP] frame=212 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=189681
+[INTEL HEVC QP] frame=213 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=158503
+[INTEL HEVC QP] frame=214 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176327
+[INTEL HEVC QP] frame=215 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=141028
+[INTEL HEVC QP] frame=216 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=165322
+[INTEL HEVC QP] frame=217 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=166008
+[INTEL HEVC QP] frame=218 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=159066
+[INTEL HEVC QP] frame=219 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=144499
+[INTEL HEVC QP] frame=220 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=146385
+[INTEL HEVC QP] frame=221 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=147493
+[INTEL HEVC QP] frame=222 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=148756
+[INTEL HEVC QP] frame=223 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=148670
+[INTEL HEVC QP] frame=224 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=148419
+[INTEL HEVC QP] frame=225 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=152013
+[INTEL HEVC QP] frame=226 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=157308
+[INTEL HEVC QP] frame=227 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=158421
+[INTEL HEVC QP] frame=228 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=163790
+[INTEL HEVC QP] frame=229 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=168900
+[INTEL HEVC QP] frame=230 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=170624
+[INTEL HEVC QP] frame=231 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=171922
+[INTEL HEVC QP] frame=232 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=171059
+[INTEL HEVC QP] frame=233 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176224
+[INTEL HEVC QP] frame=234 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=175386
+[INTEL HEVC QP] frame=235 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=175774
+[INTEL HEVC QP] frame=236 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176851
+[INTEL HEVC QP] frame=237 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=175545
+[INTEL HEVC QP] frame=238 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=167557
+[INTEL HEVC QP] frame=239 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=174775
+[INTEL HEVC QP] frame=240 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=167924
+[INTEL HEVC QP] frame=241 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=30 vpl_frame_order=0 bytes=572640
+[INTEL HEVC QP] frame=242 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=143156
+[INTEL HEVC QP] frame=243 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=143252
+[INTEL HEVC QP] frame=244 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=147393
+[INTEL HEVC QP] frame=245 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=152024
+[INTEL HEVC QP] frame=246 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=156900
+[INTEL HEVC QP] frame=247 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=180688
+[INTEL HEVC QP] frame=248 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=177047
+[INTEL HEVC QP] frame=249 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=178068
+[INTEL HEVC QP] frame=250 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=164876
+[INTEL HEVC QP] frame=251 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=186381
+[INTEL HEVC QP] frame=252 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=162945
+[INTEL HEVC QP] frame=253 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=196439
+[INTEL HEVC QP] frame=254 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=148394
+[INTEL HEVC QP] frame=255 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=180081
+[INTEL HEVC QP] frame=256 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=177119
+[INTEL HEVC QP] frame=257 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=179662
+[INTEL HEVC QP] frame=258 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=175560
+[INTEL HEVC QP] frame=259 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=172707
+[INTEL HEVC QP] frame=260 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=162716
+[INTEL HEVC QP] frame=261 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=166473
+[INTEL HEVC QP] frame=262 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=187109
+[INTEL HEVC QP] frame=263 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=165958
+[INTEL HEVC QP] frame=264 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=166970
+[INTEL HEVC QP] frame=265 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=199051
+[INTEL HEVC QP] frame=266 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=152670
+[INTEL HEVC QP] frame=267 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=152260
+[INTEL HEVC QP] frame=268 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=176591
+[INTEL HEVC QP] frame=269 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=201843
+[INTEL HEVC QP] frame=270 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=164231
+[INTEL HEVC QP] frame=271 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=174766
+[INTEL HEVC QP] frame=272 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=3 vpl_frame_order=0 bytes=158855
+[INTEL HEVC QP] frame=273 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=187700
+[INTEL HEVC QP] frame=274 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=166452
+[INTEL HEVC QP] frame=275 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=192823
+[INTEL HEVC QP] frame=276 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=152960
+[INTEL HEVC QP] frame=277 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=161170
+[INTEL HEVC QP] frame=278 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=192407
+[INTEL HEVC QP] frame=279 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=129797
+[INTEL HEVC QP] frame=280 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=215704
+[INTEL HEVC QP] frame=281 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=130177
+[INTEL HEVC QP] frame=282 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=208463
+[INTEL HEVC QP] frame=283 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=134754
+[INTEL HEVC QP] frame=284 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=173572
+[INTEL HEVC QP] frame=285 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=164960
+[INTEL HEVC QP] frame=286 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=176425
+[INTEL HEVC QP] frame=287 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=155526
+[INTEL HEVC QP] frame=288 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=174339
+[INTEL HEVC QP] frame=289 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=159113
+[INTEL HEVC QP] frame=290 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=147445
+[INTEL HEVC QP] frame=291 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=154823
+[DIRECT PROGRESS] frame=300/300 fps=27.6 elapsed=10.9s Q_cur=None Q_avg=None Q_samples=0
+[INTEL HEVC QP] frame=292 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=159839
+[INTEL HEVC QP] frame=293 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=187396
+[INTEL HEVC QP] frame=294 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=171826
+[INTEL HEVC QP] frame=295 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=212226
+[INTEL HEVC QP] frame=296 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=152422
+[INTEL HEVC QP] frame=297 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=214655
+[INTEL HEVC QP] frame=298 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=2 vpl_frame_order=0 bytes=175478
+[INTEL HEVC QP] frame=299 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=156801
+[PROC] registry empty
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=0.0s
+[INTEL HEVC QP] frame=284 slice_qp=26.00 min=26 max=26 slices=1 vpl_qp=1 vpl_frame_order=0 bytes=163846
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=0.4s
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=0.5s
+   INTEL NATIVE 8A ASYNC PIPELINE EXPORT COMPLETE (HEVC)
+Codec Selected:             HEVC
+Frames Rendered:            300 / 300
+Total Wall Time:            12.705 s
+Frame Render Wall Time:     11.135 s
+Finalization Wall Time:     0.501 s
+Mux Wall Time:              0.000 s
+RENDER FPS:                 26.941 FPS
+USER EFFECTIVE FPS:         23.612 FPS
+First Frame Latency:        3.335 s
+Max Pending Encode Surfaces:8
+Avg HUD Wait Time:          5.65 ms / frame
+Avg Native Step Time:       12.70 ms / frame
+Native C Stage Breakdown:
+  Demux Time:               0.389 ms / frame
+  Decode Time (Producer):   3.404 ms / frame
+  P010 Convert Time:        0.000 ms / frame
+  Queue Wait (Consumer):    0.001 ms / frame
+[DIRECT PROGRESS] frame=300/300 fps=0.0 elapsed=12.7s
+  Base Upload Time:         0.002 ms / frame
+  HUD Upload Time:          5.282 ms / frame
+  HUD Upload Mode:          FULL_UPLOAD
+  HUD Upload API Time:      5.282 ms / frame
+  HUD Upload Dirty Bytes:   9.73 MB / frame
+  HUD Upload Regions/Frame: 5.98
+  HUD Upload Partial/Full:  299 / 1
+  VideoProcessorBlt Time:   2.169 ms / frame
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+  GPU DMA Copy Time:        0.381 ms / frame
+[EXPORT PREVIEW RESOURCES]
+  HEVC HW Decode Active:    YES
+decoder=none
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+  Decode->VP CPU Copies:    0
+mean_ms=0.000
+p95_ms=0.000
+  Decode->VP GPU Copies:    0
+  VP->Encoder CPU Copies:   0
+  VP->Encoder GPU Copies:   300
+  Encode Submit Time:       0.218 ms / frame
+  Encode Sync Time:         16.607 ms / frame
+Encoded HEVC Stream Size:    49.71 MB (52,123,964 bytes)
+Average HEVC Bitrate:        41.66 Mbps
+Output File:                C:\_DEV\SportCamHUD\Raporty\intel_hevc_qp_20261017\trace_fast.mp4 (52,451,479 bytes)
+[INTEL_NATIVE_RESULT] success=YES
+[PROC] render thread exit
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[BENCH STATS] quant_current=None quant_min=None quant_max=None quant_samples=0 quant_sum=0 quant_avg=None
+
+[BENCH RESULT] mode=direct success=True frames=300 elapsed=14.5s fps=20.7
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] D3D11VA Hardware HEVC Decoder active on production D3D11 device.
+[STREAM INTEL THREAD] Producer Thread ID: 8856, Consumer Thread ID: 16980, Context Thread Count: 2
+[2A DECODER CONTRACT] W=3840 H=2176 Fmt=104 Bind=0x200 Misc=0x0 Array=28 Shareable=0 SharedHandle=0 hr=0x80004002
+[ENCODER TEX CONTRACT] W=3840 H=2160 Format=104 Bind=0x208 Misc=0x900 ArraySize=1 rType=5 MemId=00000000000a0014
+[STREAM INTEL] DIRECT_VP_SURFACE: CreateVideoProcessorOutputView FAILED hr=0x80070057 frame=0 (will use CopyResource fallback)

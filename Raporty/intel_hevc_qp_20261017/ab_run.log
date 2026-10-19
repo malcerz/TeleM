@@ -1,0 +1,216 @@
+﻿START hevc_fast_on_0
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.734 s
+analysis speed: 104.64 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_fast_on_0 ok= True fps= 54.2 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_fast_off_1
+DONE hevc_fast_off_1 ok= True fps= 54.6 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_fast_off_2
+DONE hevc_fast_off_2 ok= True fps= 54.91 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_fast_on_3
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.862 s
+analysis speed: 102.35 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_fast_on_3 ok= True fps= 54.61 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_fast_on_4
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.848 s
+analysis speed: 102.60 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_fast_on_4 ok= True fps= 54.18 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_fast_off_5
+DONE hevc_fast_off_5 ok= True fps= 53.74 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_fast_off_6
+DONE hevc_fast_off_6 ok= True fps= 53.01 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_fast_on_7
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.805 s
+analysis speed: 103.36 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_fast_on_7 ok= True fps= 53.43 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_balanced_on_0
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.795 s
+analysis speed: 103.54 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_balanced_on_0 ok= True fps= 32.74 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_balanced_off_1
+DONE hevc_balanced_off_1 ok= True fps= 32.22 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_balanced_off_2
+DONE hevc_balanced_off_2 ok= True fps= 32.05 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_balanced_on_3
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.986 s
+analysis speed: 100.23 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_balanced_on_3 ok= True fps= 31.55 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_balanced_on_4
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.954 s
+analysis speed: 100.77 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_balanced_on_4 ok= True fps= 31.42 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_balanced_off_5
+DONE hevc_balanced_off_5 ok= True fps= 31.12 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_balanced_off_6
+DONE hevc_balanced_off_6 ok= True fps= 31.84 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_balanced_on_7
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 5.936 s
+analysis speed: 101.08 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_balanced_on_7 ok= True fps= 32.41 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_quality_on_0
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 6.071 s
+analysis speed: 98.84 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_quality_on_0 ok= True fps= 15.3 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_quality_off_1
+DONE hevc_quality_off_1 ok= True fps= 15.27 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_quality_off_2
+DONE hevc_quality_off_2 ok= True fps= 15.25 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_quality_on_3
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 6.433 s
+analysis speed: 93.26 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_quality_on_3 ok= True fps= 15.19 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_quality_on_4
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 6.366 s
+analysis speed: 94.26 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_quality_on_4 ok= True fps= 15.17 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)
+START hevc_quality_off_5
+DONE hevc_quality_off_5 ok= True fps= 14.36 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_quality_off_6
+DONE hevc_quality_off_6 ok= True fps= 13.44 slice_qp_avg= None text= Slice QP: -- (telemetry disabled)
+START hevc_quality_on_7
+QP ANALYSIS
+codec: hevc
+accuracy: SLICE_ONLY
+exact_block_qp: False
+frames: 600
+blocks/cells: 1224000
+avg: 26.0
+median: 26.0
+min: 26
+max: 26
+elapsed: 7.409 s
+analysis speed: 80.98 fps
+QP samples: 1224000
+warning: cu_qp_delta_enabled_flag=1: per-CU QP jest kodowane w CABAC; statystyki dotyczą bazowego SliceQpY, nie pełnej mapy QP CU.
+DONE hevc_quality_on_7 ok= True fps= 13.88 slice_qp_avg= 26.0 text= Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | próbki: 600 (odrzucone: 0)

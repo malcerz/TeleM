@@ -1,0 +1,18 @@
+{
+  "http_status": 200,
+  "id": "8ohkxYmM3Mep",
+  "response": {
+    "id": "8ohkxYmM3Mep",
+    "time": 1792318118,
+    "expires": 1792361318,
+    "event": "message",
+    "topic": "MalcerzPOP",
+    "title": "SportCamHUD — GUI Regression Recovery",
+    "message": "PARTIAL. 5 przywroconych rodzin wymagan/regresji GUI + 1 dodatkowy blad odblokowania integracji. Ustawienia: lewa kolumna opcji, prawa licencje na bialym tle. Projekt: blokada do ready, po clear i bledzie. Testy Qt 80 PASS + 29 PASS; 8 bledow segmentow takze na czystej bazie; 3 stare kontrakty nadal FAIL. Portable: 50 pozycji licencji, ffmpeg/ffprobe -L PASS. Commit dacd0a1af8e93093114a5a2d2544a9e4a892c921. Raport: RAPORT_SPORTCAMHUD_GUI_LICENSES_AND_CONTROL_LOCK_REGRESSIONS.md"
+  },
+  "request": {
+    "topic": "MalcerzPOP",
+    "title": "SportCamHUD — GUI Regression Recovery",
+    "message": "PARTIAL. 5 przywroconych rodzin wymagan/regresji GUI + 1 dodatkowy blad odblokowania integracji. Ustawienia: lewa kolumna opcji, prawa licencje na bialym tle. Projekt: blokada do ready, po clear i bledzie. Testy Qt 80 PASS + 29 PASS; 8 bledow segmentow takze na czystej bazie; 3 stare kontrakty nadal FAIL. Portable: 50 pozycji licencji, ffmpeg/ffprobe -L PASS. Commit dacd0a1af8e93093114a5a2d2544a9e4a892c921. Raport: RAPORT_SPORTCAMHUD_GUI_LICENSES_AND_CONTROL_LOCK_REGRESSIONS.md"
+  }
+}

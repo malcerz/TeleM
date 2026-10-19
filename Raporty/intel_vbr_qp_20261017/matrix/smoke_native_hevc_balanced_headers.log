@@ -1,0 +1,378 @@
+ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+  built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+  configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+  libavutil      61.  5.100 / 61.  5.100
+  libavcodec     63.  8.101 / 63.  8.101
+  libavformat    63.  6.100 / 63.  6.100
+  libavdevice    63.  2.100 / 63.  2.100
+  libavfilter    12.  3.101 / 12.  3.101
+  libswscale     10.  2.100 / 10.  2.100
+  libswresample   7.  2.100 /  7.  2.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\_DEV\SportCamHUD\Raporty\intel_vbr_qp_20261017\matrix\smoke_native_hevc_balanced.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2mp41
+    encoder         : Lavf63.6.100
+  Duration: 00:00:01.00, start: 0.000000, bitrate: 45816 kb/s
+  Stream #0:0[0x1](und): Video: hevc (Main 10), 1 reference frame (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, left), 3840x2160 [SAR 1:1 DAR 16:9], 45546 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 256 kb/s (default)
+    Metadata:
+      handler_name    : GoPro AAC
+[out#0/null @ 00000171ca74d4c0] Adding streams from explicit maps...
+[vost#0:0/copy @ 00000171ca7d39c0] Created video stream from input stream 0:0
+[trace_headers @ 00000171ca809c40] Extradata
+[trace_headers @ 00000171ca809c40] Video Parameter Set
+[trace_headers @ 00000171ca809c40] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 00000171ca809c40] 1           nal_unit_type                                          100000 = 32
+[trace_headers @ 00000171ca809c40] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 00000171ca809c40] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 00000171ca809c40] 16          vps_video_parameter_set_id                               0000 = 0
+[trace_headers @ 00000171ca809c40] 20          vps_base_layer_internal_flag                                1 = 1
+[trace_headers @ 00000171ca809c40] 21          vps_base_layer_available_flag                               1 = 1
+[trace_headers @ 00000171ca809c40] 22          vps_max_layers_minus1                                  000000 = 0
+[trace_headers @ 00000171ca809c40] 28          vps_max_sub_layers_minus1                                 000 = 0
+[trace_headers @ 00000171ca809c40] 31          vps_temporal_id_nesting_flag                                1 = 1
+[trace_headers @ 00000171ca809c40] 32          vps_reserved_0xffff_16bits                   1111111111111111 = 65535
+[trace_headers @ 00000171ca809c40] 48          general_profile_space                                      00 = 0
+[trace_headers @ 00000171ca809c40] 50          general_tier_flag                                           1 = 1
+[trace_headers @ 00000171ca809c40] 51          general_profile_idc                                     00010 = 2
+[trace_headers @ 00000171ca809c40] 56          general_profile_compatibility_flag[0]                       0 = 0
+[trace_headers @ 00000171ca809c40] 57          general_profile_compatibility_flag[1]                       0 = 0
+[trace_headers @ 00000171ca809c40] 58          general_profile_compatibility_flag[2]                       1 = 1
+[trace_headers @ 00000171ca809c40] 59          general_profile_compatibility_flag[3]                       0 = 0
+[trace_headers @ 00000171ca809c40] 60          general_profile_compatibility_flag[4]                       0 = 0
+[trace_headers @ 00000171ca809c40] 61          general_profile_compatibility_flag[5]                       0 = 0
+[trace_headers @ 00000171ca809c40] 62          general_profile_compatibility_flag[6]                       0 = 0
+[trace_headers @ 00000171ca809c40] 63          general_profile_compatibility_flag[7]                       0 = 0
+[trace_headers @ 00000171ca809c40] 64          general_profile_compatibility_flag[8]                       0 = 0
+[trace_headers @ 00000171ca809c40] 65          general_profile_compatibility_flag[9]                       0 = 0
+[trace_headers @ 00000171ca809c40] 66          general_profile_compatibility_flag[10]                      0 = 0
+[trace_headers @ 00000171ca809c40] 67          general_profile_compatibility_flag[11]                      0 = 0
+[trace_headers @ 00000171ca809c40] 68          general_profile_compatibility_flag[12]                      0 = 0
+[trace_headers @ 00000171ca809c40] 69          general_profile_compatibility_flag[13]                      0 = 0
+[trace_headers @ 00000171ca809c40] 70          general_profile_compatibility_flag[14]                      0 = 0
+[trace_headers @ 00000171ca809c40] 71          general_profile_compatibility_flag[15]                      0 = 0
+[trace_headers @ 00000171ca809c40] 72          general_profile_compatibility_flag[16]                      0 = 0
+[trace_headers @ 00000171ca809c40] 73          general_profile_compatibility_flag[17]                      0 = 0
+[trace_headers @ 00000171ca809c40] 74          general_profile_compatibility_flag[18]                      0 = 0
+[trace_headers @ 00000171ca809c40] 75          general_profile_compatibility_flag[19]                      0 = 0
+[trace_headers @ 00000171ca809c40] 76          general_profile_compatibility_flag[20]                      0 = 0
+[trace_headers @ 00000171ca809c40] 77          general_profile_compatibility_flag[21]                      0 = 0
+[trace_headers @ 00000171ca809c40] 78          general_profile_compatibility_flag[22]                      0 = 0
+[trace_headers @ 00000171ca809c40] 79          general_profile_compatibility_flag[23]                      0 = 0
+[trace_headers @ 00000171ca809c40] 80          general_profile_compatibility_flag[24]                      0 = 0
+[trace_headers @ 00000171ca809c40] 81          general_profile_compatibility_flag[25]                      0 = 0
+[trace_headers @ 00000171ca809c40] 82          general_profile_compatibility_flag[26]                      0 = 0
+[trace_headers @ 00000171ca809c40] 83          general_profile_compatibility_flag[27]                      0 = 0
+[trace_headers @ 00000171ca809c40] 84          general_profile_compatibility_flag[28]                      0 = 0
+[trace_headers @ 00000171ca809c40] 85          general_profile_compatibility_flag[29]                      0 = 0
+[trace_headers @ 00000171ca809c40] 86          general_profile_compatibility_flag[30]                      0 = 0
+[trace_headers @ 00000171ca809c40] 87          general_profile_compatibility_flag[31]                      0 = 0
+[trace_headers @ 00000171ca809c40] 88          general_progressive_source_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 89          general_interlaced_source_flag                              0 = 0
+[trace_headers @ 00000171ca809c40] 90          general_non_packed_constraint_flag                          0 = 0
+[trace_headers @ 00000171ca809c40] 91          general_frame_only_constraint_flag                          1 = 1
+[trace_headers @ 00000171ca809c40] 92          general_reserved_zero_7bits                           0000000 = 0
+[trace_headers @ 00000171ca809c40] 99          general_one_picture_only_constraint_flag                    0 = 0
+[trace_headers @ 00000171ca809c40] 100         general_reserved_zero_35bits         000000000000000000000000 = 0
+[trace_headers @ 00000171ca809c40] 124         general_reserved_zero_35bits                      00000000000 = 0
+[trace_headers @ 00000171ca809c40] 135         general_inbld_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 136         general_level_idc                                    10010110 = 150
+[trace_headers @ 00000171ca809c40] 144         vps_sub_layer_ordering_info_present_flag                    0 = 0
+[trace_headers @ 00000171ca809c40] 145         vps_max_dec_pic_buffering_minus1[0]                     00100 = 3
+[trace_headers @ 00000171ca809c40] 150         vps_max_num_reorder_pics[0]                                 1 = 0
+[trace_headers @ 00000171ca809c40] 151         vps_max_latency_increase_plus1[0]                           1 = 0
+[trace_headers @ 00000171ca809c40] 152         vps_max_layer_id                                       000000 = 0
+[trace_headers @ 00000171ca809c40] 158         vps_num_layer_sets_minus1                                   1 = 0
+[trace_headers @ 00000171ca809c40] 159         vps_timing_info_present_flag                                1 = 1
+[trace_headers @ 00000171ca809c40] 160         vps_num_units_in_tick        00000000000000000000001111101001 = 1001
+[trace_headers @ 00000171ca809c40] 192         vps_time_scale               00000000000000000111010100110000 = 30000
+[trace_headers @ 00000171ca809c40] 224         vps_poc_proportional_to_timing_flag                         0 = 0
+[trace_headers @ 00000171ca809c40] 225         vps_num_hrd_parameters                                      1 = 0
+[trace_headers @ 00000171ca809c40] 226         vps_extension_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 227         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 00000171ca809c40] 228         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 229         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 230         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 231         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] Sequence Parameter Set
+[trace_headers @ 00000171ca809c40] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 00000171ca809c40] 1           nal_unit_type                                          100001 = 33
+[trace_headers @ 00000171ca809c40] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 00000171ca809c40] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 00000171ca809c40] 16          sps_video_parameter_set_id                               0000 = 0
+[trace_headers @ 00000171ca809c40] 20          sps_max_sub_layers_minus1                                 000 = 0
+[trace_headers @ 00000171ca809c40] 23          sps_temporal_id_nesting_flag                                1 = 1
+[trace_headers @ 00000171ca809c40] 24          general_profile_space                                      00 = 0
+[trace_headers @ 00000171ca809c40] 26          general_tier_flag                                           1 = 1
+[trace_headers @ 00000171ca809c40] 27          general_profile_idc                                     00010 = 2
+[trace_headers @ 00000171ca809c40] 32          general_profile_compatibility_flag[0]                       0 = 0
+[trace_headers @ 00000171ca809c40] 33          general_profile_compatibility_flag[1]                       0 = 0
+[trace_headers @ 00000171ca809c40] 34          general_profile_compatibility_flag[2]                       1 = 1
+[trace_headers @ 00000171ca809c40] 35          general_profile_compatibility_flag[3]                       0 = 0
+[trace_headers @ 00000171ca809c40] 36          general_profile_compatibility_flag[4]                       0 = 0
+[trace_headers @ 00000171ca809c40] 37          general_profile_compatibility_flag[5]                       0 = 0
+[trace_headers @ 00000171ca809c40] 38          general_profile_compatibility_flag[6]                       0 = 0
+[trace_headers @ 00000171ca809c40] 39          general_profile_compatibility_flag[7]                       0 = 0
+[trace_headers @ 00000171ca809c40] 40          general_profile_compatibility_flag[8]                       0 = 0
+[trace_headers @ 00000171ca809c40] 41          general_profile_compatibility_flag[9]                       0 = 0
+[trace_headers @ 00000171ca809c40] 42          general_profile_compatibility_flag[10]                      0 = 0
+[trace_headers @ 00000171ca809c40] 43          general_profile_compatibility_flag[11]                      0 = 0
+[trace_headers @ 00000171ca809c40] 44          general_profile_compatibility_flag[12]                      0 = 0
+[trace_headers @ 00000171ca809c40] 45          general_profile_compatibility_flag[13]                      0 = 0
+[trace_headers @ 00000171ca809c40] 46          general_profile_compatibility_flag[14]                      0 = 0
+[trace_headers @ 00000171ca809c40] 47          general_profile_compatibility_flag[15]                      0 = 0
+[trace_headers @ 00000171ca809c40] 48          general_profile_compatibility_flag[16]                      0 = 0
+[trace_headers @ 00000171ca809c40] 49          general_profile_compatibility_flag[17]                      0 = 0
+[trace_headers @ 00000171ca809c40] 50          general_profile_compatibility_flag[18]                      0 = 0
+[trace_headers @ 00000171ca809c40] 51          general_profile_compatibility_flag[19]                      0 = 0
+[trace_headers @ 00000171ca809c40] 52          general_profile_compatibility_flag[20]                      0 = 0
+[trace_headers @ 00000171ca809c40] 53          general_profile_compatibility_flag[21]                      0 = 0
+[trace_headers @ 00000171ca809c40] 54          general_profile_compatibility_flag[22]                      0 = 0
+[trace_headers @ 00000171ca809c40] 55          general_profile_compatibility_flag[23]                      0 = 0
+[trace_headers @ 00000171ca809c40] 56          general_profile_compatibility_flag[24]                      0 = 0
+[trace_headers @ 00000171ca809c40] 57          general_profile_compatibility_flag[25]                      0 = 0
+[trace_headers @ 00000171ca809c40] 58          general_profile_compatibility_flag[26]                      0 = 0
+[trace_headers @ 00000171ca809c40] 59          general_profile_compatibility_flag[27]                      0 = 0
+[trace_headers @ 00000171ca809c40] 60          general_profile_compatibility_flag[28]                      0 = 0
+[trace_headers @ 00000171ca809c40] 61          general_profile_compatibility_flag[29]                      0 = 0
+[trace_headers @ 00000171ca809c40] 62          general_profile_compatibility_flag[30]                      0 = 0
+[trace_headers @ 00000171ca809c40] 63          general_profile_compatibility_flag[31]                      0 = 0
+[trace_headers @ 00000171ca809c40] 64          general_progressive_source_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 65          general_interlaced_source_flag                              0 = 0
+[trace_headers @ 00000171ca809c40] 66          general_non_packed_constraint_flag                          0 = 0
+[trace_headers @ 00000171ca809c40] 67          general_frame_only_constraint_flag                          1 = 1
+[trace_headers @ 00000171ca809c40] 68          general_reserved_zero_7bits                           0000000 = 0
+[trace_headers @ 00000171ca809c40] 75          general_one_picture_only_constraint_flag                    0 = 0
+[trace_headers @ 00000171ca809c40] 76          general_reserved_zero_35bits         000000000000000000000000 = 0
+[trace_headers @ 00000171ca809c40] 100         general_reserved_zero_35bits                      00000000000 = 0
+[trace_headers @ 00000171ca809c40] 111         general_inbld_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 112         general_level_idc                                    10010110 = 150
+[trace_headers @ 00000171ca809c40] 120         sps_seq_parameter_set_id                                    1 = 0
+[trace_headers @ 00000171ca809c40] 121         chroma_format_idc                                         010 = 1
+[trace_headers @ 00000171ca809c40] 124         pic_width_in_luma_samples             00000000000111100000001 = 3840
+[trace_headers @ 00000171ca809c40] 147         pic_height_in_luma_samples            00000000000100001110001 = 2160
+[trace_headers @ 00000171ca809c40] 170         conformance_window_flag                                     0 = 0
+[trace_headers @ 00000171ca809c40] 171         bit_depth_luma_minus8                                     011 = 2
+[trace_headers @ 00000171ca809c40] 174         bit_depth_chroma_minus8                                   011 = 2
+[trace_headers @ 00000171ca809c40] 177         log2_max_pic_order_cnt_lsb_minus4                         010 = 1
+[trace_headers @ 00000171ca809c40] 180         sps_sub_layer_ordering_info_present_flag                    0 = 0
+[trace_headers @ 00000171ca809c40] 181         sps_max_dec_pic_buffering_minus1[0]                     00100 = 3
+[trace_headers @ 00000171ca809c40] 186         sps_max_num_reorder_pics[0]                                 1 = 0
+[trace_headers @ 00000171ca809c40] 187         sps_max_latency_increase_plus1[0]                           1 = 0
+[trace_headers @ 00000171ca809c40] 188         log2_min_luma_coding_block_size_minus3                      1 = 0
+[trace_headers @ 00000171ca809c40] 189         log2_diff_max_min_luma_coding_block_size                00100 = 3
+[trace_headers @ 00000171ca809c40] 194         log2_min_luma_transform_block_size_minus2                   1 = 0
+[trace_headers @ 00000171ca809c40] 195         log2_diff_max_min_luma_transform_block_size             00100 = 3
+[trace_headers @ 00000171ca809c40] 200         max_transform_hierarchy_depth_inter                       011 = 2
+[trace_headers @ 00000171ca809c40] 203         max_transform_hierarchy_depth_intra                       011 = 2
+[trace_headers @ 00000171ca809c40] 206         scaling_list_enabled_flag                                   0 = 0
+[trace_headers @ 00000171ca809c40] 207         amp_enabled_flag                                            1 = 1
+[trace_headers @ 00000171ca809c40] 208         sample_adaptive_offset_enabled_flag                         1 = 1
+[trace_headers @ 00000171ca809c40] 209         pcm_enabled_flag                                            0 = 0
+[trace_headers @ 00000171ca809c40] 210         num_short_term_ref_pic_sets                             00101 = 4
+[trace_headers @ 00000171ca809c40] 215         num_negative_pics                                       00100 = 3
+[trace_headers @ 00000171ca809c40] 220         num_positive_pics                                           1 = 0
+[trace_headers @ 00000171ca809c40] 221         delta_poc_s0_minus1[0]                                      1 = 0
+[trace_headers @ 00000171ca809c40] 222         used_by_curr_pic_s0_flag[0]                                 1 = 1
+[trace_headers @ 00000171ca809c40] 223         delta_poc_s0_minus1[1]                                      1 = 0
+[trace_headers @ 00000171ca809c40] 224         used_by_curr_pic_s0_flag[1]                                 1 = 1
+[trace_headers @ 00000171ca809c40] 225         delta_poc_s0_minus1[2]                                      1 = 0
+[trace_headers @ 00000171ca809c40] 226         used_by_curr_pic_s0_flag[2]                                 1 = 1
+[trace_headers @ 00000171ca809c40] 227         inter_ref_pic_set_prediction_flag                           0 = 0
+[trace_headers @ 00000171ca809c40] 228         num_negative_pics                                         010 = 1
+[trace_headers @ 00000171ca809c40] 231         num_positive_pics                                           1 = 0
+[trace_headers @ 00000171ca809c40] 232         delta_poc_s0_minus1[0]                                      1 = 0
+[trace_headers @ 00000171ca809c40] 233         used_by_curr_pic_s0_flag[0]                                 1 = 1
+[trace_headers @ 00000171ca809c40] 234         inter_ref_pic_set_prediction_flag                           1 = 1
+[trace_headers @ 00000171ca809c40] 235         delta_rps_sign                                              1 = 1
+[trace_headers @ 00000171ca809c40] 236         abs_delta_rps_minus1                                        1 = 0
+[trace_headers @ 00000171ca809c40] 237         used_by_curr_pic_flag[0]                                    1 = 1
+[trace_headers @ 00000171ca809c40] 238         used_by_curr_pic_flag[1]                                    1 = 1
+[trace_headers @ 00000171ca809c40] 239         inter_ref_pic_set_prediction_flag                           1 = 1
+[trace_headers @ 00000171ca809c40] 240         delta_rps_sign                                              1 = 1
+[trace_headers @ 00000171ca809c40] 241         abs_delta_rps_minus1                                        1 = 0
+[trace_headers @ 00000171ca809c40] 242         used_by_curr_pic_flag[0]                                    0 = 0
+[trace_headers @ 00000171ca809c40] 243         use_delta_flag[0]                                           1 = 1
+[trace_headers @ 00000171ca809c40] 244         used_by_curr_pic_flag[1]                                    0 = 0
+[trace_headers @ 00000171ca809c40] 245         use_delta_flag[1]                                           1 = 1
+[trace_headers @ 00000171ca809c40] 246         used_by_curr_pic_flag[2]                                    0 = 0
+[trace_headers @ 00000171ca809c40] 247         use_delta_flag[2]                                           1 = 1
+[trace_headers @ 00000171ca809c40] 248         long_term_ref_pics_present_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 249         num_long_term_ref_pics_sps                                  1 = 0
+[trace_headers @ 00000171ca809c40] 250         sps_temporal_mvp_enabled_flag                               1 = 1
+[trace_headers @ 00000171ca809c40] 251         strong_intra_smoothing_enabled_flag                         0 = 0
+[trace_headers @ 00000171ca809c40] 252         vui_parameters_present_flag                                 1 = 1
+[trace_headers @ 00000171ca809c40] 253         aspect_ratio_info_present_flag                              1 = 1
+[trace_headers @ 00000171ca809c40] 254         aspect_ratio_idc                                     00000001 = 1
+[trace_headers @ 00000171ca809c40] 262         overscan_info_present_flag                                  0 = 0
+[trace_headers @ 00000171ca809c40] 263         video_signal_type_present_flag                              1 = 1
+[trace_headers @ 00000171ca809c40] 264         video_format                                              101 = 5
+[trace_headers @ 00000171ca809c40] 267         video_full_range_flag                                       1 = 1
+[trace_headers @ 00000171ca809c40] 268         colour_description_present_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 269         colour_primaries                                     00001001 = 9
+[trace_headers @ 00000171ca809c40] 277         transfer_characteristics                             00010010 = 18
+[trace_headers @ 00000171ca809c40] 285         matrix_coefficients                                  00001001 = 9
+[trace_headers @ 00000171ca809c40] 293         chroma_loc_info_present_flag                                0 = 0
+[trace_headers @ 00000171ca809c40] 294         neutral_chroma_indication_flag                              0 = 0
+[trace_headers @ 00000171ca809c40] 295         field_seq_flag                                              0 = 0
+[trace_headers @ 00000171ca809c40] 296         frame_field_info_present_flag                               1 = 1
+[trace_headers @ 00000171ca809c40] 297         default_display_window_flag                                 0 = 0
+[trace_headers @ 00000171ca809c40] 298         vui_timing_info_present_flag                                1 = 1
+[trace_headers @ 00000171ca809c40] 299         vui_num_units_in_tick        00000000000000000000001111101001 = 1001
+[trace_headers @ 00000171ca809c40] 331         vui_time_scale               00000000000000000111010100110000 = 30000
+[trace_headers @ 00000171ca809c40] 363         vui_poc_proportional_to_timing_flag                         0 = 0
+[trace_headers @ 00000171ca809c40] 364         vui_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 365         nal_hrd_parameters_present_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 366         vcl_hrd_parameters_present_flag                             0 = 0
+[trace_headers @ 00000171ca809c40] 367         sub_pic_hrd_params_present_flag                             0 = 0
+[trace_headers @ 00000171ca809c40] 368         bit_rate_scale                                           0001 = 1
+[trace_headers @ 00000171ca809c40] 372         cpb_size_scale                                           0110 = 6
+[trace_headers @ 00000171ca809c40] 376         initial_cpb_removal_delay_length_minus1                 10111 = 23
+[trace_headers @ 00000171ca809c40] 381         au_cpb_removal_delay_length_minus1                      10111 = 23
+[trace_headers @ 00000171ca809c40] 386         dpb_output_delay_length_minus1                          10111 = 23
+[trace_headers @ 00000171ca809c40] 391         fixed_pic_rate_general_flag[0]                              1 = 1
+[trace_headers @ 00000171ca809c40] 392         elemental_duration_in_tc_minus1[0]                          1 = 0
+[trace_headers @ 00000171ca809c40] 393         cpb_cnt_minus1[0]                                           1 = 0
+[trace_headers @ 00000171ca809c40] 394         bit_rate_value_minus1[0]  0000000000000000001011111010111100001 = 390624
+[trace_headers @ 00000171ca809c40] 431         cpb_size_value_minus1[0]    000000000000000010011000100101101 = 78124
+[trace_headers @ 00000171ca809c40] 464         cbr_flag[0]                                                 0 = 0
+[trace_headers @ 00000171ca809c40] 465         bitstream_restriction_flag                                  0 = 0
+[trace_headers @ 00000171ca809c40] 466         sps_extension_present_flag                                  0 = 0
+[trace_headers @ 00000171ca809c40] 467         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 00000171ca809c40] 468         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 469         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 470         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 471         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] Picture Parameter Set
+[trace_headers @ 00000171ca809c40] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 00000171ca809c40] 1           nal_unit_type                                          100010 = 34
+[trace_headers @ 00000171ca809c40] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 00000171ca809c40] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 00000171ca809c40] 16          pps_pic_parameter_set_id                                    1 = 0
+[trace_headers @ 00000171ca809c40] 17          pps_seq_parameter_set_id                                    1 = 0
+[trace_headers @ 00000171ca809c40] 18          dependent_slice_segments_enabled_flag                       0 = 0
+[trace_headers @ 00000171ca809c40] 19          output_flag_present_flag                                    0 = 0
+[trace_headers @ 00000171ca809c40] 20          num_extra_slice_header_bits                               000 = 0
+[trace_headers @ 00000171ca809c40] 23          sign_data_hiding_enabled_flag                               0 = 0
+[trace_headers @ 00000171ca809c40] 24          cabac_init_present_flag                                     0 = 0
+[trace_headers @ 00000171ca809c40] 25          num_ref_idx_l0_default_active_minus1                      011 = 2
+[trace_headers @ 00000171ca809c40] 28          num_ref_idx_l1_default_active_minus1                      011 = 2
+[trace_headers @ 00000171ca809c40] 31          init_qp_minus26                                             1 = 0
+[trace_headers @ 00000171ca809c40] 32          constrained_intra_pred_flag                                 0 = 0
+[trace_headers @ 00000171ca809c40] 33          transform_skip_enabled_flag                                 1 = 1
+[trace_headers @ 00000171ca809c40] 34          cu_qp_delta_enabled_flag                                    1 = 1
+[trace_headers @ 00000171ca809c40] 35          diff_cu_qp_delta_depth                                  00100 = 3
+[trace_headers @ 00000171ca809c40] 40          pps_cb_qp_offset                                            1 = 0
+[trace_headers @ 00000171ca809c40] 41          pps_cr_qp_offset                                            1 = 0
+[trace_headers @ 00000171ca809c40] 42          pps_slice_chroma_qp_offsets_present_flag                    0 = 0
+[trace_headers @ 00000171ca809c40] 43          weighted_pred_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 44          weighted_bipred_flag                                        0 = 0
+[trace_headers @ 00000171ca809c40] 45          transquant_bypass_enabled_flag                              0 = 0
+[trace_headers @ 00000171ca809c40] 46          tiles_enabled_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 47          entropy_coding_sync_enabled_flag                            0 = 0
+[trace_headers @ 00000171ca809c40] 48          pps_loop_filter_across_slices_enabled_flag                  1 = 1
+[trace_headers @ 00000171ca809c40] 49          deblocking_filter_control_present_flag                      1 = 1
+[trace_headers @ 00000171ca809c40] 50          deblocking_filter_override_enabled_flag                     1 = 1
+[trace_headers @ 00000171ca809c40] 51          pps_deblocking_filter_disabled_flag                         0 = 0
+[trace_headers @ 00000171ca809c40] 52          pps_beta_offset_div2                                        1 = 0
+[trace_headers @ 00000171ca809c40] 53          pps_tc_offset_div2                                          1 = 0
+[trace_headers @ 00000171ca809c40] 54          pps_scaling_list_data_present_flag                          0 = 0
+[trace_headers @ 00000171ca809c40] 55          lists_modification_present_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 56          log2_parallel_merge_level_minus2                            1 = 0
+[trace_headers @ 00000171ca809c40] 57          slice_segment_header_extension_present_flag                 0 = 0
+[trace_headers @ 00000171ca809c40] 58          pps_extension_present_flag                                  0 = 0
+[trace_headers @ 00000171ca809c40] 59          rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 00000171ca809c40] 60          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 61          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 62          rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 63          rbsp_alignment_zero_bit                                     0 = 0
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf63.6.100
+  Stream #0:0(und): Video: hevc (Main 10), 1 reference frame (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, left), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 45546 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+[out#0/null @ 00000171ca74d4c0] Starting thread...
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380] Starting thread...
+[trace_headers @ 00000171ca809c40] Packet: 557656 bytes, key frame, pts 0, dts 0, duration 1001.
+[trace_headers @ 00000171ca809c40] Prefix Supplemental Enhancement Information
+[trace_headers @ 00000171ca809c40] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 00000171ca809c40] 1           nal_unit_type                                          100111 = 39
+[trace_headers @ 00000171ca809c40] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 00000171ca809c40] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 00000171ca809c40] 16          last_payload_type_byte                               00000000 = 0
+[trace_headers @ 00000171ca809c40] 24          last_payload_size_byte                               00001010 = 10
+[trace_headers @ 00000171ca809c40] Buffering Period
+[trace_headers @ 00000171ca809c40] 32          bp_seq_parameter_set_id                                     1 = 0
+[trace_headers @ 00000171ca809c40] 33          irap_cpb_params_present_flag                                0 = 0
+[trace_headers @ 00000171ca809c40] 34          concatenation_flag                                          0 = 0
+[trace_headers @ 00000171ca809c40] 35          au_cpb_removal_delay_delta_minus1    000000000000000000000000 = 0
+[trace_headers @ 00000171ca809c40] 59          nal_initial_cpb_removal_delay[0]     000000010001100101000000 = 72000
+[trace_headers @ 00000171ca809c40] 83          nal_initial_cpb_removal_offset[0]    000000010001100101000000 = 72000
+[trace_headers @ 00000171ca809c40] 107         bit_equal_to_one                                            1 = 1
+[trace_headers @ 00000171ca809c40] 108         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 00000171ca809c40] 109         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 00000171ca809c40] 110         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 00000171ca809c40] 111         bit_equal_to_zero                                           0 = 0
+[trace_headers @ 00000171ca809c40] 112         last_payload_type_byte                               00000001 = 1
+[trace_headers @ 00000171ca809c40] 120         last_payload_size_byte                               00000111 = 7
+[trace_headers @ 00000171ca809c40] Picture Timing
+[trace_headers @ 00000171ca809c40] 128         pic_struct                                               0000 = 0
+[trace_headers @ 00000171ca809c40] 132         source_scan_type                                           01 = 1
+[trace_headers @ 00000171ca809c40] 134         duplicate_flag                                              0 = 0
+[trace_headers @ 00000171ca809c40] 135         au_cpb_removal_delay_minus1          000000000000000000000000 = 0
+[trace_headers @ 00000171ca809c40] 159         pic_dpb_output_delay                 000000000000000000000000 = 0
+[trace_headers @ 00000171ca809c40] 183         bit_equal_to_one                                            1 = 1
+[trace_headers @ 00000171ca809c40] 184         rbsp_stop_one_bit                                           1 = 1
+[trace_headers @ 00000171ca809c40] 185         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 186         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 187         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 188         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 189         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 190         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] 191         rbsp_alignment_zero_bit                                     0 = 0
+[trace_headers @ 00000171ca809c40] Slice Segment Header
+[trace_headers @ 00000171ca809c40] 0           forbidden_zero_bit                                          0 = 0
+[trace_headers @ 00000171ca809c40] 1           nal_unit_type                                          010011 = 19
+[trace_headers @ 00000171ca809c40] 7           nuh_layer_id                                           000000 = 0
+[trace_headers @ 00000171ca809c40] 13          nuh_temporal_id_plus1                                     001 = 1
+[trace_headers @ 00000171ca809c40] 16          first_slice_segment_in_pic_flag                             1 = 1
+[trace_headers @ 00000171ca809c40] 17          no_output_of_prior_pics_flag                                0 = 0
+[trace_headers @ 00000171ca809c40] 18          slice_pic_parameter_set_id                                  1 = 0
+[trace_headers @ 00000171ca809c40] 19          slice_type                                                011 = 2
+[trace_headers @ 00000171ca809c40] 22          slice_sao_luma_flag                                         1 = 1
+[trace_headers @ 00000171ca809c40] 23          slice_sao_chroma_flag                                       1 = 1
+[trace_headers @ 00000171ca809c40] 24          slice_qp_delta                                              1 = 0
+[trace_headers @ 00000171ca809c40] 25          deblocking_filter_override_flag                             0 = 0
+[trace_headers @ 00000171ca809c40] 26          slice_loop_filter_across_slices_enabled_flag                1 = 1
+[trace_headers @ 00000171ca809c40] 27          alignment_bit_equal_to_one                                  1 = 1
+[trace_headers @ 00000171ca809c40] 28          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 00000171ca809c40] 29          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 00000171ca809c40] 30          alignment_bit_equal_to_zero                                 0 = 0
+[trace_headers @ 00000171ca809c40] 31          alignment_bit_equal_to_zero                                 0 = 0
+[out#0/null @ 00000171ca74d4c0] Muxer returned EOF
+[out#0/null @ 00000171ca74d4c0] Terminating thread with success
+[vist#0:0/hevc @ 00000171ca81eb40] All consumers of this stream are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380] All consumers are done
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380] Terminating thread with success
+[out#0/null @ 00000171ca74d4c0] Output file #0 (pipe:):
+[out#0/null @ 00000171ca74d4c0]   Output stream #0:0 (video): 1 packets muxed (557656 bytes); 
+[out#0/null @ 00000171ca74d4c0]   Total: 1 packets (557656 bytes) muxed
+[out#0/null @ 00000171ca74d4c0] video:545KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=    1 fps=0.0 q=-1.0 Lsize=N/A time=00:00:00.30 bitrate=N/A speed= 111x elapsed=0:00:00.00    
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380] Input file #0 (C:\_DEV\SportCamHUD\Raporty\intel_vbr_qp_20261017\matrix\smoke_native_hevc_balanced.mp4):
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380]   Input stream #0:0 (video): 10 packets read (1886364 bytes); 
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 00000171ca731380]   Total: 10 packets (1886364 bytes) demuxed
+[AVIOContext @ 00000171ca7d5380] Statistics: 1931562 bytes read, 2 seeks
+
+Exiting with exit code 0

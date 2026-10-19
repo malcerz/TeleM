@@ -1,0 +1,17 @@
+{
+  "codec": "av1",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\unsupported_av1.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": false,
+  "error": "Intel: wybrany kodek AV1 10-bit HDR jest niedost\u0119pny na tym sprz\u0119cie/sterowniku/runtime. Obs\u0142ugiwane: H.264 8-bit SDR, HEVC 8-bit SDR, HEVC Main10/HDR. Wybierz obs\u0142ugiwany kodek w zak\u0142adce eksportu. HDR nie zosta\u0142o zmienione na SDR.",
+  "elapsed_s": 0.05,
+  "total_frames": 0,
+  "effective_fps": 0.0,
+  "ram_used_gb": 9.8,
+  "codec_error_dialog": "Intel: wybrany kodek AV1 10-bit HDR jest niedost\u0119pny na tym sprz\u0119cie/sterowniku/runtime. Obs\u0142ugiwane: H.264 8-bit SDR, HEVC 8-bit SDR, HEVC Main10/HDR. Wybierz obs\u0142ugiwany kodek w zak\u0142adce eksportu. HDR nie zosta\u0142o zmienione na SDR."
+}

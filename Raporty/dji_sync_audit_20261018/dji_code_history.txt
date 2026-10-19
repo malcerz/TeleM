@@ -1,0 +1,12 @@
+1875bfb358ea414d9ecec97966b0195e482efd9a 2026-10-16 11:00:55 +0200 fix(export): reject uncertain HDR metadata safely
+74165c198f09e5ca61172bc59371886671676101 2026-10-12 13:36:53 +0200 feat(audit): ETAP 5C historical source recovery, degree fallback helpers, and telemetry provenance
+982cb2268ea4ccb0c790e5856286f079e9a6935a 2026-10-11 18:48:22 +0200 Recover AutoFIT and DJI no-GPS matching
+037b17d8e371c102870ed4f7a9eabf288b90dbd6 2026-10-10 18:00:30 +0200 REBRANDING: Complete rename to SportCamHUD, add AppData migration, bump version to 1.13
+c52248ba5e9fff326fa74d7d50bbcfcbf45fb8ca 2026-10-09 13:43:00 +0200 fix: export error backward compatibility, portable sync manifest, real AMD testing harness and version bump to 1.03
+23a95188d63f04d38b1fee1996407a931bb29d2e 2026-10-09 11:27:47 +0200 test: add parity checker script
+d9d079a03c5bdd56892fcf864201cc6315e37516 2026-10-09 11:27:43 +0200 fix: restore missing integration and runtime modules
+e9f7a0a606bcd06d1587191fafc5cb0d8e59f6c8 2026-10-03 11:26:25 +0200 fix(amd): eliminate queue export regression and restore ~100% GPU utilization parity
+d42efcf192f277d03ed61b2ab64b886b25069672 2026-10-03 08:36:15 +0200 feat: automatic hiding of indicators without project data and bump version to 1.0
+a2bb11f01dc5a54ba2b4ff11c567c143afadf2fd 2026-10-03 07:54:12 +0200 fix(dji): isolate telemetry parsing into separate worker process to prevent GUI freeze
+29098dfa8188f12856323a0e59e6384683e53d0b 2026-09-30 20:51:09 +0200 docs(report): update commit hash in cleanroom runtime report
+353df3d6cfb1ab877ef57f14da64170ced6aa6b5 2026-09-29 16:27:06 +0200 feat(telemetry): add DJI Action 6 metadata foundation

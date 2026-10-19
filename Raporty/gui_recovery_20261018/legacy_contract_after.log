@@ -1,0 +1,86 @@
+..F.FF                                                                   [100%]
+================================== FAILURES ===================================
+____________________ test_settings_persistence_auto_source ____________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1ef23fe99e0) at 0x000001EF24C35040>
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-20/test_settings_persistence_auto0')
+
+    def test_settings_persistence_auto_source(qapp, tmp_path):
+        """Weryfikuje persystencję auto_activity_source w def_layout.json."""
+        from src.gui.qt.tabs.settings_tab import SettingsTab
+        tab = SettingsTab()
+        tab.base_dir = tmp_path
+    
+        # Zmiana źródła na garmin
+        idx = tab.cmb_auto_source.findData("garmin")
+        assert idx >= 0
+        tab.cmb_auto_source.setCurrentIndex(idx)
+>       tab._ensure_disk_persistence()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'SettingsTab' object has no attribute '_ensure_disk_persistence'
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:85: AttributeError
+_____________________ test_default_export_dir_resolution ______________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1ef23fe99e0) at 0x000001EF24C35040>
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-20/test_default_export_dir_resolu0')
+
+    def test_default_export_dir_resolution(qapp, tmp_path):
+        """Weryfikuje wyznaczanie domyślnego katalogu eksportu: wideo parent, last_export_dir, brak CWD."""
+        from src.gui.qt.tabs.render_tab import RenderTab
+    
+        tab = RenderTab()
+        video_dir = tmp_path / "source_video_dir"
+        video_dir.mkdir(parents=True)
+        dummy_video = video_dir / "clip01.mp4"
+        dummy_video.touch()
+    
+        # 1. Na podstawie źródłowego pliku wideo
+        class DummyCtrl:
+            video_paths = [str(dummy_video)]
+            video_path = str(dummy_video)
+            layout = {}
+    
+        tab._controller = DummyCtrl()
+        resolved = tab.resolve_default_export_dir()
+        assert resolved == video_dir
+        assert resolved != Path.cwd()
+    
+        # 2. Na podstawie zapisanego last_export_dir
+        custom_dir = tmp_path / "custom_exports"
+        custom_dir.mkdir(parents=True)
+        tab._controller.layout = {"global": {"last_export_dir": str(custom_dir)}}
+        resolved_custom = tab.resolve_default_export_dir()
+>       assert resolved_custom == custom_dir
+E       AssertionError: assert WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-20/test_default_export_dir_resolu0/source_video_dir') == WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-20/test_default_export_dir_resolu0/custom_exports')
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:160: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 487, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 22248, "preview_generation_id": 0, "preview_stop_event": {"id": 2127107160368, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 509194240, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712758001360, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 161558528, "thread_count": 20}
+______________________ test_instant_hud_request_refresh _______________________
+
+    def test_instant_hud_request_refresh():
+        """Weryfikuje, że request_preview_refresh wymusza reset _preview_telemetry_loading i wywołanie _render_preview."""
+        from src.gui.qt._mixins.preview_mixin import PreviewMixin
+    
+        class DummyPreviewController(PreviewMixin):
+            def __init__(self):
+                self._preview_telemetry_loading = True
+                self.video_path = "C:/dummy/video.mp4"
+                self.rendered_ts = None
+            def _render_preview(self, seek_seconds=None):
+                self.rendered_ts = seek_seconds
+    
+        ctrl = DummyPreviewController()
+        assert ctrl._preview_telemetry_loading is True
+>       ctrl.request_preview_refresh(0.0)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'DummyPreviewController' object has no attribute 'request_preview_refresh'
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:182: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_settings_persistence_auto_source
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_default_export_dir_resolution
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_instant_hud_request_refresh
+3 failed, 3 passed in 3.36s

@@ -1,0 +1,177 @@
+........................................................................ [ 66%]
+...F....F......F.......FFFFF........                                     [100%]
+================================== FAILURES ===================================
+_______________________ test_canonical_count_precedence _______________________
+
+    def test_canonical_count_precedence():
+>       assert _resolve_segment_count({"segment_count": 5, "segments": 20}) == 5
+E       AssertionError: assert 20 == 5
+E        +  where 20 = _resolve_segment_count({'segment_count': 5, 'segments': 20})
+
+tests\test_etap10t2_segment_gui_hardening.py:77: AssertionError
+________________ test_v10_battery_new_gui_fields_change_raster ________________
+
+    def test_v10_battery_new_gui_fields_change_raster():
+        cfg = _v10_cfg("fit_battery_pct_text")
+        base = _render_seg(cfg, 50.0)
+        # gradient start
+        assert not _img_equal(base, _render_seg(dict(cfg, segment_color_start="#0000ff"), 50.0))
+        # inactive opacity (legacy inactive_alpha: 60 present)
+        assert not _img_equal(base, _render_seg(dict(cfg, segment_inactive_opacity=0.2), 50.0))
+        # segment count (legacy segments: 20 present)
+>       assert not _img_equal(base, _render_seg(dict(cfg, segment_count=5), 50.0))
+E       AssertionError: assert not True
+E        +  where True = _img_equal(<PIL.Image.Image image mode=RGBA size=148x84 at 0x1D385D5AD50>, <PIL.Image.Image image mode=RGBA size=148x84 at 0x1D385D5B650>)
+E        +    where <PIL.Image.Image image mode=RGBA size=148x84 at 0x1D385D5B650> = _render_seg({'enabled': True, 'label': 'EDGE BATTERY', 'x': 88.0, 'y': 6.5, ...}, 50.0)
+E        +      where {'enabled': True, 'label': 'EDGE BATTERY', 'x': 88.0, 'y': 6.5, ...} = dict({'enabled': True, 'label': 'EDGE BATTERY', 'x': 88.0, 'y': 6.5, ...}, segment_count=5)
+
+tests\test_etap10t2_segment_gui_hardening.py:128: AssertionError
+____________________ test_v10_segment_count_actual_render _____________________
+
+    def test_v10_segment_count_actual_render():
+        cfg = _v10_cfg("fit_battery_pct_text")
+        # rectangle + black->white gradient: every segment gets a distinct colour, so
+        # counting distinct active colours == the actual rendered segment count (works
+        # even when dense 1px segments have no visible gaps).
+        for n in (5, 10, 20, 37, 50, 80, 100):
+            cfg2 = dict(cfg, segment_count=n, show_value=False, show_label=False,
+                        show_min=False, show_max=False, segment_shape="rectangle",
+                        segment_color_mode="gradient", segment_color_start="#000000",
+                        segment_color_end="#ffffff")
+            img = _render_seg(cfg2, 100.0)
+            a = np.array(img)
+            row_sums = (a[:, :, 3] > 0).sum(axis=1)
+            ys = np.where(row_sums > a.shape[1] * 0.05)[0]
+            band = a[ys[0]: ys[-1] + 1]
+            mask = band[:, :, 3] >= 200
+            distinct = len(np.unique(band[mask][:, :3], axis=0)) if mask.any() else 0
+>           assert distinct == n, f"segment_count={n} rendered {distinct} distinct segments"
+E           AssertionError: segment_count=5 rendered 20 distinct segments
+E           assert 20 == 5
+
+tests\test_etap10t2_segment_gui_hardening.py:258: AssertionError
+____________________ test_save_load_new_wins_after_reload _____________________
+
+    def test_save_load_new_wins_after_reload():
+        cfg = _v10_cfg("fit_battery_pct_text")
+        # user changes new field -> save (JSON keeps legacy + new with conflict) -> reload
+        edited = dict(cfg, segment_color_start="#0000ff", segment_inactive_opacity=0.2, segment_count=7)
+        dumped = json.dumps(edited)
+        loaded = json.loads(dumped)
+        base = _render_seg(cfg, 50.0)
+        reloaded = _render_seg(loaded, 50.0)
+        assert not _img_equal(base, reloaded)
+        assert _resolve_segment_gradient(loaded) == ("#0000ff", "#FF9A2E")
+        assert abs(_resolve_segment_inactive_opacity(loaded) - 0.2) < 1e-9
+>       assert _resolve_segment_count(loaded) == 7
+E       AssertionError: assert 20 == 7
+E        +  where 20 = _resolve_segment_count({'enabled': True, 'label': 'EDGE BATTERY', 'x': 88.0, 'y': 6.5, ...})
+
+tests\test_etap10t2_segment_gui_hardening.py:371: AssertionError
+_______________________ test_gui_schema_fields_present ________________________
+
+    def test_gui_schema_fields_present():
+        schema = get_schema_for_form("bar", bar_style="segments")
+        names = {f.name for f in schema}
+        for prop in ("segment_count", "segment_color_start", "segment_color_end",
+                     "segment_inactive_color", "segment_inactive_opacity",
+                     "segment_corner_radius", "value_font_size", "label_font_size",
+                     "range_font_size", "marker_style", "marker_size", "marker_color",
+                     "marker_border_color", "marker_border_width", "marker_position",
+                     "marker_offset", "segment_thresholds", "fill_direction",
+                     "segment_fill_mode", "gradient_space"):
+>           assert prop in names, prop
+E           AssertionError: segment_count
+E           assert 'segment_count' in {'auto_scale', 'bar_style', 'decimals', 'fill_direction', 'font', 'form', ...}
+
+tests\test_etap10t2_segment_gui_hardening.py:393: AssertionError
+__________________________ test_gui_ranges_sensible ___________________________
+
+    def test_gui_ranges_sensible():
+        schema = get_schema_for_form("bar", bar_style="segments")
+        ranges = {
+            "segment_count": (2, 100),
+            "segment_width": (0, 200),
+            "segment_height": (0, 200),
+            "segment_gap": (0, 20),
+            "segment_corner_radius": (0, 40),
+            "segment_inactive_opacity": (0.0, 1.0),
+            "marker_size": (1, 40),
+            "marker_border_width": (0, 8),
+            "marker_offset": (0, 40),
+        }
+        for name, (lo, hi) in ranges.items():
+            f = _schema_field(schema, name)
+>           assert f is not None, name
+E           AssertionError: segment_count
+E           assert None is not None
+
+tests\test_etap10t2_segment_gui_hardening.py:411: AssertionError
+______________________ test_gui_to_renderer_integration _______________________
+
+    def test_gui_to_renderer_integration():
+        """FieldSchema change -> config updated (controller style) -> JSON ->
+        renderer receives new value -> raster changes."""
+        cfg = _v10_cfg("fit_battery_pct_text")
+        # value 52% -> 10.4 segments: whole rounds up to 11, partial fills the 11th
+        # half-way, so segment_fill_mode changes the raster.
+        base = _render_seg(cfg, 52.0)
+        # simulate PropertyEditor -> controller property change for each schema field
+        changes = {
+            "segment_color_start": "#0000ff",
+            "segment_color_end": "#ff00ff",
+            "segment_inactive_opacity": 0.15,
+            "segment_corner_radius": 6,
+            "value_font_size": 2.4,
+            "marker_style": "circle",
+            "marker_color": "#00ff00",
+            "segment_count": 8,
+            "fill_direction": "reverse",
+            "segment_fill_mode": "partial",
+        }
+        for field, value in changes.items():
+            edited = dict(cfg, **{field: value})
+            if field == "segment_corner_radius":
+                # at 20 narrow segments the radius is clamped to the segment half-
+                # width; widen the segments so the radius change is visible
+                edited["segment_count"] = 6
+            if field in ("marker_color", "marker_size"):
+                # marker props only matter when a marker style is active
+                edited["marker_style"] = "triangle"
+            dumped = json.dumps(edited)
+            loaded = json.loads(dumped)
+            img = _render_seg(loaded, 52.0)
+>           assert not _img_equal(base, img), field
+E           AssertionError: segment_corner_radius
+E           assert not True
+E            +  where True = _img_equal(<PIL.Image.Image image mode=RGBA size=148x84 at 0x1D38C0F9010>, <PIL.Image.Image image mode=RGBA size=148x84 at 0x1D38AC84110>)
+
+tests\test_etap10t2_segment_gui_hardening.py:448: AssertionError
+_____________________ test_battery_pct_real_normalisation _____________________
+
+    def test_battery_pct_real_normalisation():
+        # min=87 max=91 value=89 -> (89-87)/(91-87) = 0.5
+        frac = _fraction(89.0, 87.0, 91.0)
+        assert abs(frac - 0.5) < 1e-9
+        cfg = dict(_v10_cfg("fit_battery_pct_text"), min_val=87.0, max_val=91.0,
+                   segment_count=10, show_value=False, show_label=False,
+                   show_min=False, show_max=False)
+        img = _render_seg(cfg, 89.0, val_min=87.0, val_max=91.0)
+        # active segments (alpha>=200) should be ~5 of 10; inactive ones (alpha 60)
+        # must not be counted.
+        runs = _count_rendered_segments(img, active_only=True)
+>       assert runs == 5, f"89/87..91 should activate ~5 of 10 segments, got {runs}"
+E       AssertionError: 89/87..91 should activate ~5 of 10 segments, got 10
+E       assert 10 == 5
+
+tests\test_etap10t2_segment_gui_hardening.py:464: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_canonical_count_precedence
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_v10_battery_new_gui_fields_change_raster
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_v10_segment_count_actual_render
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_save_load_new_wins_after_reload
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_gui_schema_fields_present
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_gui_ranges_sensible
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_gui_to_renderer_integration
+FAILED tests/test_etap10t2_segment_gui_hardening.py::test_battery_pct_real_normalisation
+8 failed, 100 passed in 44.45s

@@ -1,0 +1,694 @@
+COMMIT 1385e0d59b600ee304488f111a5c9e67a033bcbf 2026-10-16T17:58:58+02:00 fix(gui): drop the HLG description paragraph from the export tab
+
+:100644 100644 6e85a85883faf3620d9ab092d4d4baf351a031b1 723c36ae38ed79d50c861badcd59e8b02241e536 M	src/gui/qt/tabs/render_tab.py
+COMMIT 1404441c291bb678235235ced8bf4896de2498b8 2026-10-16T17:31:08+02:00 fix(gui): keep the Mapa indicator tile compact after preset load
+
+:100644 100644 ee9212a6399c4838c3a36f33ef79aa4be0e82ceb 24fec378e05c5190eec8b2176c6dd7f0d0c03aa0 M	src/gui/qt/widgets/data_stream_bar.py
+COMMIT b05db3bdd9696be2f9db081e7a180d129f9ae5b7 2026-10-16T11:39:17+02:00 fix(preview): apply correct HLG to SDR presentation
+
+:100644 100644 f8d50ee50c1523cb9b94a82c02efd5c678f2716a e26a1e46c568b2e3bbe17c56b2b58f67be0b4a7d M	src/gui/qt/mpv_hwdec.py
+COMMIT f62331b58be479e785f22cd7832f5368b8136368 2026-10-16T11:00:56+02:00 test(amd): validate multi-file HDR cancellation and retry
+
+:100644 100644 38570be570daa7740046e16e94d52c4bf26b4312 416465dd42753e5a02a6b01813f2d942f8665786 M	src/gui/qt/application.py
+COMMIT 1875bfb358ea414d9ecec97966b0195e482efd9a 2026-10-16T11:00:55+02:00 fix(export): reject uncertain HDR metadata safely
+
+:100644 100644 44350ecb7192898a9046a07b20f9d8855f86450a 6e85a85883faf3620d9ab092d4d4baf351a031b1 M	src/gui/qt/tabs/render_tab.py
+COMMIT 1a389f85248f336899ba42e50962f87ab3c9eb7c 2026-10-16T09:45:14+02:00 feat(export): detect HLG and persist HDR export mode
+
+:100644 100644 2e5de786783353f9df83ac90ec9706b245993a48 8ec4f0734af3711df704bb8e83c52c8226b510e3 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 41728388c04e74bbca20e064634d3d53b0753fa0 3c09c3c3dedb14cef336abc468aadc9779ac0a96 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 8d157f144be5a17ebfae7c15fb2eaf6b36349ef1 76edd140c5154f3348ce600163e3dbe01ef17254 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 2b9719bf276f71855173ee430eee3c543be2846d 38570be570daa7740046e16e94d52c4bf26b4312 M	src/gui/qt/application.py
+:100644 100644 76b503ff5a5fb8ff7eec349bc6da508223c521ba 2575b56da10ac57763c374a89ec3f84348bcee7d M	src/gui/qt/controller.py
+:100644 100644 5200fbf24256980c4ba4e8f327bbe1a839eea1c6 30eff0412969312d1e14bebc845e05f3bc1f0e56 M	src/gui/qt/signals.py
+:100644 100644 1efa17714a01148e8d31a1ab4add875634c0ab41 44350ecb7192898a9046a07b20f9d8855f86450a M	src/gui/qt/tabs/render_tab.py
+COMMIT 8af7934006def51b4f13f1a6181890e3a77a3451 2026-10-15T18:35:56+02:00 fix(hud): honor map shape corner radius and border
+
+:100644 100644 192d68bad5f6b6f25be4fb86cbf2e3e0f750f6f0 3966c260cabf5245e3fdae41ca39bf43bd4fccbe M	src/gui/qt/models.py
+COMMIT 62960ef4780b83fbe48df1d413a20865514ceb0b 2026-10-15T17:32:32+02:00 fix(hud): apply text unit offsets
+
+:100644 100644 e02fe42f1d7ffe5f65dbdca6f7a0fc65c5466510 192d68bad5f6b6f25be4fb86cbf2e3e0f750f6f0 M	src/gui/qt/models.py
+COMMIT f14e45f13cc9f8a44b571e382ec2148ad217aebc 2026-10-15T11:19:49+02:00 feat(logging): configurable AMD export log beside output MP4
+
+:100644 100644 636fad20d5699809f177f40a0a9c756040b79834 2e5de786783353f9df83ac90ec9706b245993a48 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 df627f16f37932153c02e8a58a1bcaed45a3d95d 8d157f144be5a17ebfae7c15fb2eaf6b36349ef1 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 e7a77c0948b23778c59494895d752a15721837c6 76b503ff5a5fb8ff7eec349bc6da508223c521ba M	src/gui/qt/controller.py
+:100644 100644 04e06f93f42b4a763461cf1108b0e6440a15a1c4 1efa17714a01148e8d31a1ab4add875634c0ab41 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 42e34b70c84253491f7cc8a2adcc81ded0da1128 d422a37999421dc6d44bf628ea0fa93afe7a222d M	src/gui/qt/tabs/settings_tab.py
+COMMIT 25eb07e6afa0a1d46bfe76020954baa708f823b3 2026-10-15T11:19:41+02:00 fix(settings): finalize unified preferences persistence
+
+:100644 100644 fa0c890144d9449b0ea1c18dc33df7edfb9f19ab 636fad20d5699809f177f40a0a9c756040b79834 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 057be4466c165a05ecdeb2c1c18443fa7d4f9586 e7a77c0948b23778c59494895d752a15721837c6 M	src/gui/qt/controller.py
+:100644 100644 93aaa567476351410d54b97c144f4e967a975636 04e06f93f42b4a763461cf1108b0e6440a15a1c4 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 0f6851ac1738b720cb50d4ddae64452f39ae7d62 42e34b70c84253491f7cc8a2adcc81ded0da1128 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 7272c5fb8ed03928ef7b789ab188efa1d985467f 2026-10-15T08:58:52+02:00 fix(gui): restore consistent AMD VBR QP status in queue
+
+:100644 100644 c4c6af7517c170da939f41cd59aed884fd058ed0 df627f16f37932153c02e8a58a1bcaed45a3d95d M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 d3d78c22f58eb09eaf7595817e7c3073326b54db 93aaa567476351410d54b97c144f4e967a975636 M	src/gui/qt/tabs/render_tab.py
+COMMIT 1f7f8e040b9ab138e7a26aa410821815d0c3b6b7 2026-10-15T08:58:45+02:00 fix(settings): unify persistence and save skip-pauses option
+
+:100644 100644 56ae1fb2f72860cc20d5c7f8ae00d4bf98b6ac75 7c68093a467e00d0557c09d1c1a44ccf31cba7ed M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 03fed349c0702d69b6f688c9dc483aba78506cfa fa0c890144d9449b0ea1c18dc33df7edfb9f19ab M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 c491fe97f48d3b610e9e00a14901002e86d99641 41728388c04e74bbca20e064634d3d53b0753fa0 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 ce0ab52826d6c9c8d7cee534d8af12024bc8e641 c4c6af7517c170da939f41cd59aed884fd058ed0 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 b5b1b17ff3f555090fdec242b603dae622ee160b 057be4466c165a05ecdeb2c1c18443fa7d4f9586 M	src/gui/qt/controller.py
+:100644 100644 f6741de34b43ec3f32ff2e62863dce3ae8ad24f3 d3d78c22f58eb09eaf7595817e7c3073326b54db M	src/gui/qt/tabs/render_tab.py
+:100644 100644 196f9d52829198c96e7090b55ece2daa56ba50b7 0f6851ac1738b720cb50d4ddae64452f39ae7d62 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 2c26191f69e40dfa316faa793b20c0ab132cd347 2026-10-14T14:29:40+02:00 fix(render): correct QP reporting in export status
+
+:100644 100644 c135f2ed36fef9c873d97f871a9ec51ceeef778c ce0ab52826d6c9c8d7cee534d8af12024bc8e641 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 7531e2f296eda816c4f514b8aface36e8703a641 f6741de34b43ec3f32ff2e62863dce3ae8ad24f3 M	src/gui/qt/tabs/render_tab.py
+COMMIT 38a45c8814bf15d7cc5c5d77924115da6d6cef6f 2026-10-14T10:25:33+02:00 fix(gui): remove YouTube upload controls
+
+:100644 100644 2a0e58c807ff24c3d3af32695a2e80f864811f03 7531e2f296eda816c4f514b8aface36e8703a641 M	src/gui/qt/tabs/render_tab.py
+COMMIT 6e0992c93042a6ed91482e668bfcb85296e050f0 2026-10-13T17:34:29+02:00 fix(gui): resolve RenderProgressState scope error in export startup
+
+:100644 100644 82a9c83f51087109478532a6e4b06681aa41a8fc c135f2ed36fef9c873d97f871a9ec51ceeef778c M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 989c03b777cefdbbf70110209e90a4952e5c53d1 2a0e58c807ff24c3d3af32695a2e80f864811f03 M	src/gui/qt/tabs/render_tab.py
+COMMIT 7f124902b57e0a0ca05f4a198f12346b0d5b3f54 2026-10-13T15:41:56+02:00 fix(gui): prevent render preparation deadlock
+
+:100644 100644 54e21861a0c24e0370997c3d2b5f84258620f5e9 82a9c83f51087109478532a6e4b06681aa41a8fc M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 9f9e60242d4ce73040426cdf26ec6d51ea9fac64 989c03b777cefdbbf70110209e90a4952e5c53d1 M	src/gui/qt/tabs/render_tab.py
+COMMIT f2daa7c3681551be4b965ffb40943b6e05d50829 2026-10-13T15:39:06+02:00 fix(preview): restore video preview
+
+:100644 100644 9b3b5cc9444dc20094f9c1e350e6e66009b1c749 82a92cacde2d97ddb08d199a73828c50b39d2ec2 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 fc6382c48f3a28a05dff20c49639316cd202232b c491fe97f48d3b610e9e00a14901002e86d99641 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 5aadfa56692c861a181323f43692f5e1fda888ed afd5ace6af6f7fa254e30d81d366f25002560285 M	src/gui/qt/main_window.py
+COMMIT 93b72921a83acf4bfaf257592fff7ee57560e057 2026-10-13T15:32:39+02:00 fix(garmin): correct Qt WebEngine availability detection
+
+:000000 100644 0000000000000000000000000000000000000000 8df75ceafe5457214128753063664232fc409fa9 A	src/gui/qt/garmin_login.py
+:100644 100644 454b73018152fe9b707629350189eb0bcd11f438 196f9d52829198c96e7090b55ece2daa56ba50b7 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 7a1bfb20dde434c0ecdd2b988ce6a224a19cc198 2026-10-13T08:17:24+02:00 fix(compass): restore original needle and rose dial and needle shadows
+
+:100644 100644 a7067258a8de1edd145a7eca5b45fc62b3be040d e02fe42f1d7ffe5f65dbdca6f7a0fc65c5466510 M	src/gui/qt/models.py
+COMMIT 063f5fdc740b98e3cbb62fb6e7e4dbe7127efb95 2026-10-11T20:19:23+02:00 feat: restore typed render error pipeline
+
+:100644 100644 692f26152565f41d7a07ad573ba959d8d6234370 54e21861a0c24e0370997c3d2b5f84258620f5e9 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 2e470cca69ca9fce16e626fd97b9f161b7134ddd 5200fbf24256980c4ba4e8f327bbe1a839eea1c6 M	src/gui/qt/signals.py
+:100644 100644 6bc6741e80cdf2d63efbc4ba9f4c805b37fcdd0a 9f9e60242d4ce73040426cdf26ec6d51ea9fac64 M	src/gui/qt/tabs/render_tab.py
+COMMIT 4b52155c6c4066cc2b663edf8946f47b28090695 2026-10-11T19:21:45+02:00 Restore global default export directory
+
+:100644 100644 a3bf725640e146515698be85d8c0a82d20073a68 692f26152565f41d7a07ad573ba959d8d6234370 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 b67e801fc253e172f2f73e8d5f67c045712bb061 2e470cca69ca9fce16e626fd97b9f161b7134ddd M	src/gui/qt/signals.py
+:100644 100644 10daf26b031ef656444c4a10abefd8d3a415f77b 6bc6741e80cdf2d63efbc4ba9f4c805b37fcdd0a M	src/gui/qt/tabs/render_tab.py
+:100644 100644 2e2a05a297359eea2f200d4f0498b378a5ed0268 454b73018152fe9b707629350189eb0bcd11f438 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 982cb2268ea4ccb0c790e5856286f079e9a6935a 2026-10-11T18:48:22+02:00 Recover AutoFIT and DJI no-GPS matching
+
+:100644 100644 b703d1b50e3bf831eb2ee96a0764c4265c6366e9 4447faf2750d2b4b8c7bd46fd859af55c8a91d8a M	src/gui/qt/tabs/load_tab.py
+COMMIT 310555087e31405b25e6a288093c04ee8be7ae63 2026-10-11T14:04:50+02:00 fix(hud): unify indicator effects to 0-100% scale and resolve AMD rendering FPS regression
+
+:100644 100644 19f07042cf275bb0e8848a7b0a983a1e69f4d8cf 2b9719bf276f71855173ee430eee3c543be2846d M	src/gui/qt/application.py
+:100644 100644 b1aa8f7480b43691883e925473f3200490da21bf a7067258a8de1edd145a7eca5b45fc62b3be040d M	src/gui/qt/models.py
+:100644 100644 1b12736dc884dd3a95a2a1154f558f1d6582d399 778c36ed26ef8b29d65ffa923a2b1f658969e987 M	src/gui/qt/widgets/property_editor.py
+COMMIT 570f60e20b57cc938dae84a04af68a55b7b60509 2026-10-11T11:51:59+02:00 fix(hud): compass source and selectable rose; configurable faded effects
+
+:100644 100644 66328c94334c4e6aa9dcf8726eb106110ce9ebf7 b1aa8f7480b43691883e925473f3200490da21bf M	src/gui/qt/models.py
+:100644 100644 ca9d34f0aa9700e3b0e83986da45890c5a323c3b 1b12736dc884dd3a95a2a1154f558f1d6582d399 M	src/gui/qt/widgets/property_editor.py
+COMMIT fa8ba86f2f10e04d7629e1c3d2487487834b52c7 2026-10-11T10:42:30+02:00 fix(nvidia): resolve hardcoded FPS with rational parser and implement single-pass live audio mux without cache
+
+:100644 100644 361ebc0eff6c6d698a65ebac47291bb906bd2fda a3bf725640e146515698be85d8c0a82d20073a68 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 2460ad78bd4eb2f6806c15f87dfd60c62c176718 2026-10-11T09:55:59+02:00 fix(load): fix late-attach lifecycle, benchmark load stages and update v1.14 performance report
+
+:100644 100644 4c01459286095f7f023c62e7b5450cc19430d231 fc6382c48f3a28a05dff20c49639316cd202232b M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 58a2951d3e6b7f57d19404787c2da1032bf633f7 b703d1b50e3bf831eb2ee96a0764c4265c6366e9 M	src/gui/qt/tabs/load_tab.py
+COMMIT 216e3f86323eeb4f42c68ac00ccf97d3a2826296 2026-10-11T08:18:25+02:00 FEAT(v1.14): Fix GPMF date/camera metadata & optimize MP4 load performance with lightweight cache
+
+:100644 100644 c7561e307a3a89999e01f3029a1af0aa00616c05 4c01459286095f7f023c62e7b5450cc19430d231 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 32b419eb29a8825399cff358049b81e220e53772 47f63f51dcde41a0753dff067ad4015f845f96c5 M	src/gui/qt/mp4_inspector.py
+:100644 100644 e32d3dc2e3d3fbae04ebca801701cbb86e0aa92b 58a2951d3e6b7f57d19404787c2da1032bf633f7 M	src/gui/qt/tabs/load_tab.py
+COMMIT a07e51cb1473a9783608e0846722a6de918ed4d9 2026-10-10T22:48:00+02:00 FIX: Needs_selection popup via BlockingQueuedConnection, accurate firmware check, dynamic break condition for GPMF
+
+:100644 100644 a0814f5c98b598bc1fb4e932c3332362dedd3b41 32b419eb29a8825399cff358049b81e220e53772 M	src/gui/qt/mp4_inspector.py
+:100644 100644 ff42eb640167137e262accce11d160d245854b6a e32d3dc2e3d3fbae04ebca801701cbb86e0aa92b M	src/gui/qt/tabs/load_tab.py
+COMMIT b27db2ba2cf687c266c8b8639c8d597d02a15406 2026-10-10T21:26:18+02:00 FEAT: Add metadata_only to GPMF native parser & display record date/camera in UI
+
+:100644 100644 e0d82525beeb4cd970756aba657e8ba417f153ab a0814f5c98b598bc1fb4e932c3332362dedd3b41 M	src/gui/qt/mp4_inspector.py
+:100644 100644 ae9771d6be34d212fe361e27c34bd132f08e561e ff42eb640167137e262accce11d160d245854b6a M	src/gui/qt/tabs/load_tab.py
+COMMIT f6ada939decd880ec656dab3b66a5c9dc7b2e1b9 2026-10-10T21:21:23+02:00 FIX: Complete AutoFIT logic (local dirs, time window fallback, GUI sync)
+
+:100644 100644 d8422ab4600d3a436c2ce6015a91d67bb41c863c ae9771d6be34d212fe361e27c34bd132f08e561e M	src/gui/qt/tabs/load_tab.py
+COMMIT 318b0bec99e4785c525e6dd8024a13f5810307a3 2026-10-10T20:32:14+02:00 FIX: Update and fix telemetry auto-search GUI status messages
+
+:100644 100644 485e55c048caa982da089ae2fe0d67fb4f9085ac d8422ab4600d3a436c2ce6015a91d67bb41c863c M	src/gui/qt/tabs/load_tab.py
+COMMIT 037b17d8e371c102870ed4f7a9eabf288b90dbd6 2026-10-10T18:00:30+02:00 REBRANDING: Complete rename to SportCamHUD, add AppData migration, bump version to 1.13
+
+:100644 100644 c04d62eab95e44b1fcc314ccca0b8b03d9bc0c8f 03fed349c0702d69b6f688c9dc483aba78506cfa M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 bbcda75f340095dff70d1a6191f45e230411c35d 19f07042cf275bb0e8848a7b0a983a1e69f4d8cf M	src/gui/qt/application.py
+:100644 100644 0c95ade615a40f3bef57505a1b377e74f6b2ca1b 5aadfa56692c861a181323f43692f5e1fda888ed M	src/gui/qt/main_window.py
+:100644 100644 8eae0d091978a0284d23e1332ec5242011a8eff1 e0d82525beeb4cd970756aba657e8ba417f153ab M	src/gui/qt/mp4_inspector.py
+:100644 100644 6fcd9abfb8d2aeb5823258686b5a2863bde93efa 10daf26b031ef656444c4a10abefd8d3a415f77b M	src/gui/qt/tabs/render_tab.py
+:100644 100644 4abafea0c2275364d8728dba3a805016458f823e 2e2a05a297359eea2f200d4f0498b378a5ed0268 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 420b28fa18ed0cd0d17c60b8ba7fb270c41a40a4 2026-10-10T17:58:06+02:00 GPMF METADATA: Extract and display camera name and record date in video info
+
+:100644 100644 4df3655370f1fe65a336381638c67c2f5e5ea130 8eae0d091978a0284d23e1332ec5242011a8eff1 M	src/gui/qt/mp4_inspector.py
+COMMIT 1f5e8649059380a35fbcd4909249f286cc00f0ec 2026-10-10T17:56:11+02:00 AUTOFIT: Single coordinator architecture, GPS distance fallback, late telemetry attach
+
+:100644 100644 2f50c4538387e987da2873369766507c8774dad4 c7561e307a3a89999e01f3029a1af0aa00616c05 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 2aad73469906da71b37275077094c69b386b8af1 b5b1b17ff3f555090fdec242b603dae622ee160b M	src/gui/qt/controller.py
+:100644 100644 cc096b63ae1bd5e54a406a0fc9e1d44044ac183e b67e801fc253e172f2f73e8d5f67c045712bb061 M	src/gui/qt/signals.py
+COMMIT 041527ae83a1075079f93cb206c585d8f376eb41 2026-10-10T16:19:45+02:00 Measure real AMD acceptance and update startup timeline test contract
+
+:100644 100644 db8abf58095e6ea0cffcbbfd4dd93469cd30ed61 bbcda75f340095dff70d1a6191f45e230411c35d M	src/gui/qt/application.py
+COMMIT 2429ac772dd63002d569e63d5fa826fa6abea145 2026-10-10T16:19:45+02:00 Fix AMD queue jobs losing frozen trim ranges and bump to 1.12
+
+:100644 100644 837f30210ffc99b5ba2d99f30b4c3f2ba8eabdc3 6fcd9abfb8d2aeb5823258686b5a2863bde93efa M	src/gui/qt/tabs/render_tab.py
+COMMIT a515c77370575c4bf70b3cb0d889e70db118af19 2026-10-10T14:20:59+02:00 fix: require measured SmartSync result in integrity harness
+
+:100644 100644 adcd2047908083e78c4531a146d85693688dfc8d 2f50c4538387e987da2873369766507c8774dad4 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 606358aa26be73bafa2f91398f54e5cc934c3185 db8abf58095e6ea0cffcbbfd4dd93469cd30ed61 M	src/gui/qt/application.py
+COMMIT f8c80b73b745a04c0f62d2dd3fdd8afbd7897826 2026-10-10T13:06:45+02:00 v1.11: Release Gate Fixes - Sync Integrity Harness Strict Rejection, FIT Rollback state, Render Prep Fallback, and Queue Parity Bench
+
+:100644 100644 6035d570080edfddde718c98d1c2a6cc02b2d6e9 606358aa26be73bafa2f91398f54e5cc934c3185 M	src/gui/qt/application.py
+COMMIT e4dde4fe19e22400a76d2e65a86e3a7b519d4292 2026-10-10T10:38:13+02:00 fix: V1.10 Final Audit - FIT contract, Sync false pass, Queue regression
+
+:100644 100644 29a512b668c4a5b1c29ce083c35b1b9d16a2ddaf 6035d570080edfddde718c98d1c2a6cc02b2d6e9 M	src/gui/qt/application.py
+COMMIT b1e6507409d5ebfef61388aa84c585ab0d435f42 2026-10-10T07:52:55+02:00 feat: Release v1.09 - AMD Cache Key Parity and Real FIT Benchmark Integrity
+
+:100644 100644 188b4ff8169d8026e7416ed4c7999e8492714ca3 361ebc0eff6c6d698a65ebac47291bb906bd2fda M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 7f5a6fc87e2df88e3984079455aad71bad3ac65a 29a512b668c4a5b1c29ce083c35b1b9d16a2ddaf M	src/gui/qt/application.py
+COMMIT 73e3ceb14300e9d98d4f84ce88de8fc51d109987 2026-10-09T21:46:43+02:00 fix(amd): Resolve canonical timeline before cache_key generation, strictly verify key in worker, and log 34.8 FPS benchmark
+
+:100644 100644 385b51a9d1e0dcca74c66f2dbd0ad45c8926f9a9 188b4ff8169d8026e7416ed4c7999e8492714ca3 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 911df23ab46d77aa272e97b901aac87d0e7173c4 2026-10-09T19:39:32+02:00 fix(amd): Restore cache key propagation, fix lazy stringification, and add chart bounds checks. Bump to v1.06
+
+:100644 100644 658304740da38aee89f54bee88664758f4f430d2 385b51a9d1e0dcca74c66f2dbd0ad45c8926f9a9 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 9c4b9842f6e9c6cef1c324441fdffe09824e1b32 2026-10-09T17:58:18+02:00 fix: restore lightning-fast AMD render startup and eliminate 60s IPC/re-compute bottlenecks (v1.05)
+
+:100644 100644 34bbcc92e18866a4f15ba93191f1f000ebc176fa 658304740da38aee89f54bee88664758f4f430d2 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT c52248ba5e9fff326fa74d7d50bbcfcbf45fb8ca 2026-10-09T13:43:00+02:00 fix: export error backward compatibility, portable sync manifest, real AMD testing harness and version bump to 1.03
+
+:100644 100644 938603957fbeacc4d2903d5ca3b56fafad891574 485e55c048caa982da089ae2fe0d67fb4f9085ac M	src/gui/qt/tabs/load_tab.py
+COMMIT d95c6fb8b98808469110191649ab970dbdddf382 2026-10-09T11:27:34+02:00 feat: add centralized app version and window title
+
+:100644 100644 38442bea9a36e93e7923cb313d48d3898ceee92c 0c95ade615a40f3bef57505a1b377e74f6b2ca1b M	src/gui/qt/main_window.py
+COMMIT 3adc9ad5b3ea4773280f5a9845bddbf2a1b35a05 2026-10-08T21:35:24+02:00 Fix GUI freeze during first HUD composite & async MPV hwdec check
+
+:100644 100644 41256e4fa4764e4d4e77a66787c6f310153d2296 9b3b5cc9444dc20094f9c1e350e6e66009b1c749 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 109bac3d2a555928e5bd67c5f89070e196020cfd ccdf80433974f38a241ee4c6fcbe586157b8a199 M	src/gui/qt/_mixins/preview_mixin.py
+COMMIT 35e9e19f70daa91f212ff8a1a35e832c5d03d68f 2026-10-03T20:34:36+02:00 feat(telemetry): auto search FIT/GPX immediately upon MP4 selection without clicking Load
+
+:100644 100644 66d350d2d75a6de414d7c2257b5849efa4480b18 adcd2047908083e78c4531a146d85693688dfc8d M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 6493d6ddd788ae38302798ef8d13a2f0e7b69c5f 938603957fbeacc4d2903d5ca3b56fafad891574 M	src/gui/qt/tabs/load_tab.py
+COMMIT 368e7927481689778cba9b0aceb2a61629067a51 2026-10-03T19:09:32+02:00 fix(map): resolve preview map disappearance on cache miss and scrubbing
+
+:100644 100644 4334366ee18c5b485250d954959644ba3a424d66 66d350d2d75a6de414d7c2257b5849efa4480b18 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 f12e844c2ff08a5430aa41084be1f351a0d79715 cc096b63ae1bd5e54a406a0fc9e1d44044ac183e M	src/gui/qt/signals.py
+:100644 100644 28f8e9e9c11d851775dafeb3ff168c5b6d59b4ed 6493d6ddd788ae38302798ef8d13a2f0e7b69c5f M	src/gui/qt/tabs/load_tab.py
+:100644 100644 30fa8d2cffff6ddfa20a0537c2053fb0b041581f 4abafea0c2275364d8728dba3a805016458f823e M	src/gui/qt/tabs/settings_tab.py
+COMMIT 15d8b0b4d7d703f3021f916e287380720f8eec7d 2026-10-03T13:29:56+02:00 feat(integrations): add automatic telemetry download from Garmin Connect and Strava
+
+:100644 100644 056ae3f9ebf550dd26570608fbede1f10a0cbb22 c04d62eab95e44b1fcc314ccca0b8b03d9bc0c8f M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 a03e760bc32710b26a81a458f53b9d3224c6d30e 4334366ee18c5b485250d954959644ba3a424d66 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 3c0dd9f1f675e93d608fcae08865a492c3f00401 38442bea9a36e93e7923cb313d48d3898ceee92c M	src/gui/qt/main_window.py
+:100644 100644 b180fc0762e0edde2f57206fade14891097f5659 f12e844c2ff08a5430aa41084be1f351a0d79715 M	src/gui/qt/signals.py
+:100644 100644 c1a95ef03ef752fca8a2576367b70474638d0242 30fa8d2cffff6ddfa20a0537c2053fb0b041581f M	src/gui/qt/tabs/settings_tab.py
+COMMIT 2552765928e73a5b07106c3224133167b79e129d 2026-10-03T13:07:35+02:00 fix(preview): resolve preview map stability, bottom panel layout/ordering, and AMD preview parity
+
+:100644 100644 1038eeb8d9c322cadab18af6aa4bc692d5e3cd97 56ae1fb2f72860cc20d5c7f8ae00d4bf98b6ac75 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 741e1d87a54e9f3a57a724a0a018923d7c65ad99 109bac3d2a555928e5bd67c5f89070e196020cfd M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 6e542541ea051532344d4c3dd11c547a8e81c5ec f18e72852f40c9f138556f3814ad1b6ba0fb77e8 M	src/gui/qt/tabs/project_tab.py
+:100644 100644 803995dff495e17a2902b031e48a87465f187407 837f30210ffc99b5ba2d99f30b4c3f2ba8eabdc3 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 98257552f4e3b9396c56c3f61535701ac44e919f ee9212a6399c4838c3a36f33ef79aa4be0e82ceb M	src/gui/qt/widgets/data_stream_bar.py
+COMMIT e9f7a0a606bcd06d1587191fafc5cb0d8e59f6c8 2026-10-03T11:26:25+02:00 fix(amd): eliminate queue export regression and restore ~100% GPU utilization parity
+
+:100644 100644 617e7c479eb90a719742c529e85ac75550dcf6fd 34bbcc92e18866a4f15ba93191f1f000ebc176fa M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 6d529fb610539f06dd42e8ea81dd7b328fdb1dc6 7f5a6fc87e2df88e3984079455aad71bad3ac65a M	src/gui/qt/application.py
+:100644 100644 07de7895dabf2c02b5786a77742affdd2de341d0 803995dff495e17a2902b031e48a87465f187407 M	src/gui/qt/tabs/render_tab.py
+COMMIT d42efcf192f277d03ed61b2ab64b886b25069672 2026-10-03T08:36:15+02:00 feat: automatic hiding of indicators without project data and bump version to 1.0
+
+:100644 100644 3e1057332029cb1c51452b33e61ccf4c96d2fa4c 056ae3f9ebf550dd26570608fbede1f10a0cbb22 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 4da3bf145b1ac56c89f078f53ddd3a671b6c3075 741e1d87a54e9f3a57a724a0a018923d7c65ad99 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 8985deea71bf61fa0d7abe183d2b0f4b1a8a6355 a03e760bc32710b26a81a458f53b9d3224c6d30e M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 6b3410de5db0d3886c286760c50188d53c89ef6f 2aad73469906da71b37275077094c69b386b8af1 M	src/gui/qt/controller.py
+:100644 100644 9da3ac418ff10accec329f4b2016badf060fe1dd 3c0dd9f1f675e93d608fcae08865a492c3f00401 M	src/gui/qt/main_window.py
+COMMIT b33d3dfae0a893a3bd94ce537510a40ce0cf43d1 2026-10-03T07:54:43+02:00 docs(report): add comprehensive report on DJI loading GUI freeze fix
+
+:100644 100644 51baf8b7bdb714cfe4fc6cf820d976813dd760cf 3e1057332029cb1c51452b33e61ccf4c96d2fa4c M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 353da463b1f58c44575948b08e2f8cd8e91c3e0c 617e7c479eb90a719742c529e85ac75550dcf6fd M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 b08857c9f0ae54deccf6f94c09a48de423174ad5 6d529fb610539f06dd42e8ea81dd7b328fdb1dc6 M	src/gui/qt/application.py
+:100644 100644 4e38d62f3fd43ce057a123aa2d7484764bb716e2 6b3410de5db0d3886c286760c50188d53c89ef6f M	src/gui/qt/controller.py
+:100644 100644 2d0cada38bea83e35f83c5a34abd74e6f575b608 b180fc0762e0edde2f57206fade14891097f5659 M	src/gui/qt/signals.py
+:100644 100644 2305c8a9e24f2b105b1f284543c5c35e74722339 07de7895dabf2c02b5786a77742affdd2de341d0 M	src/gui/qt/tabs/render_tab.py
+COMMIT a2bb11f01dc5a54ba2b4ff11c567c143afadf2fd 2026-10-03T07:54:12+02:00 fix(dji): isolate telemetry parsing into separate worker process to prevent GUI freeze
+
+:100644 100644 27b5cb3497c6652154234b42e62f526868ae4c00 8985deea71bf61fa0d7abe183d2b0f4b1a8a6355 M	src/gui/qt/_mixins/project_mixin.py
+COMMIT 89b11847e3d886bdbcdb1912534e830db01030d6 2026-10-02T09:52:38+02:00 fix(intel): resolve native queue fallback and hwdownload nv12 bug
+
+:100644 100644 a52600ec8b1440e64a8585aff14ca7ab4a5c1fa6 353da463b1f58c44575948b08e2f8cd8e91c3e0c M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 29098dfa8188f12856323a0e59e6384683e53d0b 2026-09-30T20:51:09+02:00 docs(report): update commit hash in cleanroom runtime report
+
+:100644 100644 b7dcb1169f7a918786864716c664a818c813f572 a52600ec8b1440e64a8585aff14ca7ab4a5c1fa6 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 5e4ce67d557840774d4f694672322975ea3d6722 b08857c9f0ae54deccf6f94c09a48de423174ad5 M	src/gui/qt/application.py
+:100644 100644 e0f3d8687dc49df57034e14917bd569f77bbd11d 2305c8a9e24f2b105b1f284543c5c35e74722339 M	src/gui/qt/tabs/render_tab.py
+COMMIT 353df3d6cfb1ab877ef57f14da64170ced6aa6b5 2026-09-29T16:27:06+02:00 feat(telemetry): add DJI Action 6 metadata foundation
+
+:100644 100644 18e97753f515f0a1d4221caf06723986741c80d2 27b5cb3497c6652154234b42e62f526868ae4c00 M	src/gui/qt/_mixins/project_mixin.py
+COMMIT 82251d5337ce0478c682582a52f954eb76ed43ca 2026-09-29T13:49:19+02:00 feat(export): mux original GPMF inline with audio
+
+:100644 100644 852ce56abde82f00397fab7f47dc336c61eeae21 b7dcb1169f7a918786864716c664a818c813f572 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 3eab0284b60b0f90a35cfacf1e45dc2caffaf236 2026-09-29T12:28:47+02:00 fix(export): use resolved output path for GPMF finalization
+
+:100644 100644 9fa25eae49efdf065121e77dc55f59f005907c35 852ce56abde82f00397fab7f47dc336c61eeae21 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT dfc234ee9d5b4e231c69db068d7193b1b237841a 2026-09-29T11:24:19+02:00 feat(export): preserve original GoPro GPMF and fix QP summary
+
+:100644 100644 eeec3002a73d5f8491b5b8ab8ca12f5de214fbc7 51baf8b7bdb714cfe4fc6cf820d976813dd760cf M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 6fe745182f6f4fa4924d91c9acd7118333785767 9fa25eae49efdf065121e77dc55f59f005907c35 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 234d8dbcf5132290445f5b6fcfef1e01bf4a0e0d e0f3d8687dc49df57034e14917bd569f77bbd11d M	src/gui/qt/tabs/render_tab.py
+COMMIT 6caba0100a4eb15235c5443a3bb459ac254c02da 2026-09-28T16:55:48+02:00 fix(intel): prevent final mux stalls and report true render fps
+
+:100644 100644 11697a75bb0bcbb9a6be598d5fd6ddc21fc69238 6fe745182f6f4fa4924d91c9acd7118333785767 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 445181a90107e1ac0b02ef16200b5166bac96c03 234d8dbcf5132290445f5b6fcfef1e01bf4a0e0d M	src/gui/qt/tabs/render_tab.py
+COMMIT 6280bf861ff8bd17625fd477576eebba2ba44aa8 2026-09-28T15:11:58+02:00 feat(intel): add realtime AV1 quantizer statistics
+
+:100644 100644 56ecc983689f1a0ac3b7a6cccffa30957a719253 11697a75bb0bcbb9a6be598d5fd6ddc21fc69238 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 ea2e88f426f92dc91a39c0989dccd8699773d6a2 445181a90107e1ac0b02ef16200b5166bac96c03 M	src/gui/qt/tabs/render_tab.py
+COMMIT 07c677a68d66f47b1190b97ba0aba7f49545d8ed 2026-09-28T11:36:07+02:00 fix(queue): restore AV1 map and canonical stop lifecycle
+
+:100644 100644 841fbf47e17ec6e58decfae1d68f60ccfa35ee20 56ecc983689f1a0ac3b7a6cccffa30957a719253 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 56e9e7cd9612c0a6ce1d9e1948458d3fca55157e ea2e88f426f92dc91a39c0989dccd8699773d6a2 M	src/gui/qt/tabs/render_tab.py
+COMMIT 4641dcb27e50e340f4eaf69a9d94d1eb694bf3c4 2026-09-28T08:26:36+02:00 feat(gui): convert Intel encoder profile selector to DiscreteSlider
+
+:100644 100644 58e048248dea91c4c38be96a33e88e1c4fda2f52 56e9e7cd9612c0a6ce1d9e1948458d3fca55157e M	src/gui/qt/tabs/render_tab.py
+COMMIT a6910e073b7d0762ab497488fdd8185ffcaf7164 2026-09-28T07:38:48+02:00 feat(shared): integrate latest accepted AMD production backend (9451c4c) into main
+
+:100644 100644 9e0b36af2d03cad8cef6724d466a4681ee7a13b4 eeec3002a73d5f8491b5b8ab8ca12f5de214fbc7 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 686330bef7802d05735960725533e02886365d24 841fbf47e17ec6e58decfae1d68f60ccfa35ee20 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 bd492cadce2743e7221ebfd4de68e2499c2f7ec2 9da3ac418ff10accec329f4b2016badf060fe1dd M	src/gui/qt/main_window.py
+:100644 100644 7f45c64a78923535a245535d2f27e7c29932f47f 58e048248dea91c4c38be96a33e88e1c4fda2f52 M	src/gui/qt/tabs/render_tab.py
+COMMIT 9a92b9be721b304cdfc9fa395ee8f31ee30ab035 2026-09-28T05:53:41+02:00 Merge latest accepted AMD production backend into main
+COMMIT 63f5b5a4a1bddcb9abe5d24acfd529e3cc5e7b84 2026-09-27T17:02:11+02:00 Intel: add Fast Balanced Quality encoder profiles
+
+:100644 100644 e1d3977e8637eedfa5df55e1236ed9f1cfb6091b c2b7b08a69ae42d50cbe1dac7ed0e97de8b7d755 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 aaeec4c983973f4e1dd45118cd17b30737ace093 4f1d888018e911e199adaed98a9f4572e3a9f2a6 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 bc3e3a30387b7688e096c1939bfe2aa0f31ebd31 1b69ef68165abcef432b1feb13d2f334536230b8 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 8ce320d1425b4e94e55089fbcbef660a9cebf50c 2cf521b8af36de32d0626d82f3de726519dd732b M	src/gui/qt/tabs/render_tab.py
+:100644 100644 acd9c72909c0719d1901554ef80855977c0b4cd9 9a830da422c9e0e197bdc6f9f085e023b4ae9bac M	src/gui/qt/widgets/property_editor.py
+COMMIT 6d2379888011db19a4b62d9bd40f2fd844f309d1 2026-09-27T13:30:26+02:00 Merge Intel 225U production backend into main
+COMMIT 4eab62a23178e7b05ed43629c4d86145679236b5 2026-09-26T13:00:19+02:00 Intel: fix runtime codec probing and orientation
+
+:100644 100644 a8377388d06604e8b56a58ca479ec8288b4ee22f 81d9fe4c438589735caf9f131a19a1c4feae0f7e M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 4556e48c5533bc8e3120d372164e80b92afb2ed1 41256e4fa4764e4d4e77a66787c6f310153d2296 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 b0fd38671fcb23108fb9fbd3a6adf8e5d6fceb54 e1d3977e8637eedfa5df55e1236ed9f1cfb6091b M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 eed4c7ae00dac597e23fe6cbd3c4410226918a30 68eadeea9e3e746013b2bdbdfc3000ab1c14c0ce M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 5c37a35bc28b9b716fc0c8a3e02b55f3b8e9f4f4 aaeec4c983973f4e1dd45118cd17b30737ace093 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 d61368139fb240e6bbbf9f674c8b8918f7102204 8b14ba26a13fc47755ec0f9164043f290cc17a99 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 b531d67f9daa62e88fa18d606b1059149b53aacc fe03fce9dc6ab094ab9a7dd1e3887a4fa73f1a68 M	src/gui/qt/application.py
+:100644 100644 93af1eca87f051c01748cc2c05b962d30cf81573 acb01c488ed91d6cbaec5d10b6d3a26861790c9c M	src/gui/qt/controller.py
+:100644 100644 b28ef4360a85d34bb94249a486f229804e8c2fe1 99093a7a5d772e0b6ef148be8033d9555229e0f1 M	src/gui/qt/main_window.py
+:100644 100644 453aa87c7946bec8c5c0bdeb375abdd91751f348 70675e80f93b94b66079b32ea7f2a1ee502c855d M	src/gui/qt/models.py
+:100644 100644 83041f873b672d04249a1eef718d3ee24eabed79 9b9e3976625a25702a3c2a447126407559832a46 M	src/gui/qt/signals.py
+:100644 100644 82647a09465df7d1530edc9a6333428f4f50eaee 58b9b4ed767b60785e1ccea7e4b96cb475f294b9 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 848178eb2e587894f86e7fc983e780e5a373d304 0655ffbb9c1f290568bb8769a5e3f0f7e055083a M	src/gui/qt/tabs/render_tab.py
+:100644 100644 0366914324345c1a260d307b87840436c3bed9b3 77bc917f91c878e3949aaca56f1469709daa0af0 M	src/gui/qt/tabs/settings_tab.py
+:000000 100644 0000000000000000000000000000000000000000 a5aa66d22d987df730d1f6b2a0fbfe6b7c826c87 A	src/gui/qt/widgets/icon_picker.py
+:100644 100644 c54c8dc33efd1f74f715ac1572668a6b3580da41 9a830da422c9e0e197bdc6f9f085e023b4ae9bac M	src/gui/qt/widgets/property_editor.py
+:100644 100644 5b3526733aa004de81e51efd2e0b6cfb79023165 acb7fdd36646c5d3bf6d57ded35c4f88949a97e4 M	src/gui/qt/widgets/video_preview.py
+COMMIT 3cd108441f7d6c846a4ea851742f36549b88b40f 2026-09-26T10:57:43+02:00 fix(progress): correct frame and finalization percentage mapping
+
+:100644 100644 49b1ff523ac27c04189008220d923a4d2368635d 418608abab72690847ef624166b1dbd20fc99cc4 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 db1a993e514135722e1ee346462575463defda33 a6edc42f33fdf7790c0b70fa813b0390d101261d M	src/gui/qt/tabs/render_tab.py
+COMMIT 2751188f4a707d2539f150fdf7e1956bd0820e1d 2026-09-25T17:55:09+02:00 feat(gui): restore detailed finalization progress display
+
+:100644 100644 450555c5b665c587c5744ae57970825c58ffb6e7 49b1ff523ac27c04189008220d923a4d2368635d M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 ccaa1b41c8b3e7860483f7954574cb17d5f6f05c db1a993e514135722e1ee346462575463defda33 M	src/gui/qt/tabs/render_tab.py
+COMMIT 62b09a4ef39ba70a3b94837980988fc6ffce9d22 2026-09-25T14:19:16+02:00 fix(gui): restore QP in render progress display
+
+:100644 100644 da26c91b07fe0a61d466efd516ad887dd3a8cdf5 450555c5b665c587c5744ae57970825c58ffb6e7 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 42490e028dfea3927578dbebab3f00bebb201922 ccaa1b41c8b3e7860483f7954574cb17d5f6f05c M	src/gui/qt/tabs/render_tab.py
+COMMIT 5b19bd6af718dd169539fb821ec9b80e2e330da7 2026-09-25T14:04:53+02:00 fix(gpmf): restore native parser as production default
+
+:100644 100644 f102a0acee84014c24e3875699a1aac0e59b03eb 44f9d48dc99bcb5299d5ad4a95c4d3d0c3955733 M	src/gui/qt/_mixins/project_mixin.py
+COMMIT d3d8d4665993cb3be350b679f864d1a6a2636024 2026-09-25T14:03:04+02:00 fix(config): ignore legacy source-side configs and use cache only
+
+:100644 100644 28401f74a909e14db36afd8ee7bd591d364d2e2b f102a0acee84014c24e3875699a1aac0e59b03eb M	src/gui/qt/_mixins/project_mixin.py
+COMMIT 6f2045d427c71803d1bee0c8cfbc47a37eecb12f 2026-09-25T12:41:13+02:00 feat(gui): restore complete current interface on known-good AMD backend
+
+:100644 100644 81d9fe4c438589735caf9f131a19a1c4feae0f7e 1038eeb8d9c322cadab18af6aa4bc692d5e3cd97 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 06a6670bad5c80132f30e7e97dc51bf7483f9356 224d81eb475e6a9795b2eceef1ef90ac1ee4917d M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 dcbb692aec648df7a0e15ca0f43fd6c0d7dae59a 4da3bf145b1ac56c89f078f53ddd3a671b6c3075 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 953cfe3c38eee554764a7f528e6b472a8b36520d 28401f74a909e14db36afd8ee7bd591d364d2e2b M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 012d70dde6cca0b69248c65528b75f25ee028aa9 da26c91b07fe0a61d466efd516ad887dd3a8cdf5 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 fe03fce9dc6ab094ab9a7dd1e3887a4fa73f1a68 5e4ce67d557840774d4f694672322975ea3d6722 M	src/gui/qt/application.py
+:100644 100644 acb01c488ed91d6cbaec5d10b6d3a26861790c9c 4e38d62f3fd43ce057a123aa2d7484764bb716e2 M	src/gui/qt/controller.py
+:000000 100644 0000000000000000000000000000000000000000 192497cc77b7831542a740a8cc70362fbb7bbf42 A	src/gui/qt/hardware_info.py
+:100644 100644 99093a7a5d772e0b6ef148be8033d9555229e0f1 bd492cadce2743e7221ebfd4de68e2499c2f7ec2 M	src/gui/qt/main_window.py
+:100644 100644 9b9e3976625a25702a3c2a447126407559832a46 2d0cada38bea83e35f83c5a34abd74e6f575b608 M	src/gui/qt/signals.py
+:100644 100644 58b9b4ed767b60785e1ccea7e4b96cb475f294b9 28f8e9e9c11d851775dafeb3ff168c5b6d59b4ed M	src/gui/qt/tabs/load_tab.py
+:100644 100644 c7ea8515a767e22b287d8d67721de0c894fec299 42490e028dfea3927578dbebab3f00bebb201922 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 77bc917f91c878e3949aaca56f1469709daa0af0 c1a95ef03ef752fca8a2576367b70474638d0242 M	src/gui/qt/tabs/settings_tab.py
+COMMIT 5bacdaa267ac5bfe07375fa3ed6df8ea235b72ca 2026-09-25T12:00:31+02:00 feat(gui): restore reusable widgets and property editor dynamic controls
+
+:100644 100644 107dad431c2cf097d6c9681dad31cd9e3f26c27b 66328c94334c4e6aa9dcf8726eb106110ce9ebf7 M	src/gui/qt/models.py
+:100644 100644 5d1c81bd66b2781f7d775059e54b2d2b058c6379 129df93bf823afa6d68e125120f8664989b51048 M	src/gui/qt/widgets/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 c28361a7e7909ad78c609b5db63d0aad39865f72 A	src/gui/qt/widgets/discrete_slider.py
+:100644 100644 a5aa66d22d987df730d1f6b2a0fbfe6b7c826c87 c994d16baf44ec63d58f21bafd376de570862502 M	src/gui/qt/widgets/icon_picker.py
+:100644 100644 34f5e3cf7e1e65a461ebedb9faeaa3075818f0c8 ca9d34f0aa9700e3b0e83986da45890c5a323c3b M	src/gui/qt/widgets/property_editor.py
+:100644 100644 acb7fdd36646c5d3bf6d57ded35c4f88949a97e4 1e6dbe35dc3bc11f03ec4ceeb5cec6dd936375cd M	src/gui/qt/widgets/video_preview.py
+COMMIT 5e4ee74caa47ce08076a681e14636c1263f2f271 2026-09-25T07:33:27+02:00 Intel: integrate validated production runtime v4
+
+:100644 100644 37d54d02cd09304d1bef576867abad6242c8705f a8377388d06604e8b56a58ca479ec8288b4ee22f M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 90c7bfa0e051e0bd0ba1190469238de54dc9bc59 d61368139fb240e6bbbf9f674c8b8918f7102204 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT b3c74bf040ae4f61f2aa3bd9b90ac6e1a749ea82 2026-09-16T05:56:52+02:00 feat(shared): finalize BikeRideHUD telemetry, GUI, persistence and lifecycle
+
+:100644 100644 84ee934d0adb2bd2949810554d7e35659bbf1195 81d9fe4c438589735caf9f131a19a1c4feae0f7e M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 ce32e04548fc9cb74b22b5be7e86ddd404a6314b 41256e4fa4764e4d4e77a66787c6f310153d2296 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 c8364aeb1dac65dffc00b2504ca4f2985f261949 06a6670bad5c80132f30e7e97dc51bf7483f9356 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 4c65ac59dae1991bf9bf2602889c2c0308718292 dcbb692aec648df7a0e15ca0f43fd6c0d7dae59a M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 86a41f573a10c30e45cbbc8781a879bcc85410b6 953cfe3c38eee554764a7f528e6b472a8b36520d M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 8982946d9f77b19f4b12384172088ec2c20cc228 012d70dde6cca0b69248c65528b75f25ee028aa9 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 b531d67f9daa62e88fa18d606b1059149b53aacc fe03fce9dc6ab094ab9a7dd1e3887a4fa73f1a68 M	src/gui/qt/application.py
+:100644 100644 8bbcc68a38a949a99e9257ac7179369691e77f2f 99093a7a5d772e0b6ef148be8033d9555229e0f1 M	src/gui/qt/main_window.py
+:100644 100644 002cebab0ed5d0f274bd17fe7e9e278103d20a6e 107dad431c2cf097d6c9681dad31cd9e3f26c27b M	src/gui/qt/models.py
+:100644 100644 dc89de4bbf14808d7a19f72f46b52a75afafe732 c7ea8515a767e22b287d8d67721de0c894fec299 M	src/gui/qt/tabs/render_tab.py
+COMMIT 463b4bc7f5c2eccb9d1f622eaf17c32defbdb6ec 2026-09-09T22:30:54+02:00 TeleM: checkpoint telemetry presentation fixes before NVIDIA work
+
+:100644 100644 bfeb04dc5dbaae9123eac4b89d167a42dd0486a8 84ee934d0adb2bd2949810554d7e35659bbf1195 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 6b059e01c995360e2dc82b36c555fc2071b1cb25 c8364aeb1dac65dffc00b2504ca4f2985f261949 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 900e8c3ef58847a8e9dcae60669746e4446c108f 4c65ac59dae1991bf9bf2602889c2c0308718292 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 7df84ba6e4ad5ae4e8b0af3fd31f0d9cc30ad986 86a41f573a10c30e45cbbc8781a879bcc85410b6 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 bcb78a0d51c56f38b445785a96c448ca671b3c26 002cebab0ed5d0f274bd17fe7e9e278103d20a6e M	src/gui/qt/models.py
+COMMIT 3546274f8083c51c34bb708ba13debde9f41cab5 2026-09-09T17:55:26+02:00 TeleM: consolidate integrated AMD and shared presentation pipeline
+
+:100644 100644 fef3104e9fcc0972125a21bce8fee94d78d35051 bfeb04dc5dbaae9123eac4b89d167a42dd0486a8 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 184f74e98065bc60b24acd759af58a8ac52d2d14 ce32e04548fc9cb74b22b5be7e86ddd404a6314b M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 3a72ac4b34c7efcda751fa80843cc3944bb65c2d 6b059e01c995360e2dc82b36c555fc2071b1cb25 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 eed4c7ae00dac597e23fe6cbd3c4410226918a30 900e8c3ef58847a8e9dcae60669746e4446c108f M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 37a06b076a18fa5c2048d505b03b352d38c0731e 7df84ba6e4ad5ae4e8b0af3fd31f0d9cc30ad986 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 cd96f2744354184418afd5a9f07fbdd5e40e2905 8982946d9f77b19f4b12384172088ec2c20cc228 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 19a197b1a90b3609e24942622cbe928a33fe1f18 acb01c488ed91d6cbaec5d10b6d3a26861790c9c M	src/gui/qt/controller.py
+:100644 100644 babd1dfe6dca43ffbe5cefa031d85fb59fdaa865 8bbcc68a38a949a99e9257ac7179369691e77f2f M	src/gui/qt/main_window.py
+:100644 100644 e847f8b6dacf9f079093a7ffca7fe1335be6bdfb bcb78a0d51c56f38b445785a96c448ca671b3c26 M	src/gui/qt/models.py
+:100644 100644 92ef6c5fccbf190816581d5fb51d38eb50c6fc56 9b9e3976625a25702a3c2a447126407559832a46 M	src/gui/qt/signals.py
+:100644 100644 82647a09465df7d1530edc9a6333428f4f50eaee 58b9b4ed767b60785e1ccea7e4b96cb475f294b9 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 03600b19d6c4a919b9e7fff05de7d070ee94ff7f dc89de4bbf14808d7a19f72f46b52a75afafe732 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 6cd5ef41e1b81b662e246650d5506839549aad46 77bc917f91c878e3949aaca56f1469709daa0af0 M	src/gui/qt/tabs/settings_tab.py
+:100644 100644 74112fa961a70fc48ff7347b944373936c963a16 acb7fdd36646c5d3bf6d57ded35c4f88949a97e4 M	src/gui/qt/widgets/video_preview.py
+COMMIT f63a8507ceba28f3282f269d7fee2f1406fd73e0 2026-09-04T09:33:13+02:00 fix(amd): stabilize async HUD buffers and finalize decode selector
+
+:100644 100644 c38c97c0421a975410ef625fb7e3d0582682067e 3a72ac4b34c7efcda751fa80843cc3944bb65c2d M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 5eca51e4e1c4106a2562f871d45753f8853407e5 cd96f2744354184418afd5a9f07fbdd5e40e2905 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 0f826a2d6f68d8da696e5e2b0c2d9a227a469ca9 19a197b1a90b3609e24942622cbe928a33fe1f18 M	src/gui/qt/controller.py
+:100644 100644 d5a867ff4bfb032d8def7b8d4bdd265fecce9be8 92ef6c5fccbf190816581d5fb51d38eb50c6fc56 M	src/gui/qt/signals.py
+:100644 100644 e06794ab6add47c5de7a9245c70b48b772135e3c 03600b19d6c4a919b9e7fff05de7d070ee94ff7f M	src/gui/qt/tabs/render_tab.py
+COMMIT 47ee0b40d261817225b4f7c8a6909854ed13a808 2026-09-03T18:52:09+02:00 feat(gui): finalize layout persistence, preview controls and indicator parity
+
+:100644 100644 37d54d02cd09304d1bef576867abad6242c8705f fef3104e9fcc0972125a21bce8fee94d78d35051 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 4556e48c5533bc8e3120d372164e80b92afb2ed1 184f74e98065bc60b24acd759af58a8ac52d2d14 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 b0fd38671fcb23108fb9fbd3a6adf8e5d6fceb54 c38c97c0421a975410ef625fb7e3d0582682067e M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 5c37a35bc28b9b716fc0c8a3e02b55f3b8e9f4f4 37a06b076a18fa5c2048d505b03b352d38c0731e M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 90c7bfa0e051e0bd0ba1190469238de54dc9bc59 5eca51e4e1c4106a2562f871d45753f8853407e5 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 93af1eca87f051c01748cc2c05b962d30cf81573 0f826a2d6f68d8da696e5e2b0c2d9a227a469ca9 M	src/gui/qt/controller.py
+:100644 100644 b28ef4360a85d34bb94249a486f229804e8c2fe1 babd1dfe6dca43ffbe5cefa031d85fb59fdaa865 M	src/gui/qt/main_window.py
+:100644 100644 453aa87c7946bec8c5c0bdeb375abdd91751f348 e847f8b6dacf9f079093a7ffca7fe1335be6bdfb M	src/gui/qt/models.py
+:100644 100644 83041f873b672d04249a1eef718d3ee24eabed79 d5a867ff4bfb032d8def7b8d4bdd265fecce9be8 M	src/gui/qt/signals.py
+:100644 100644 848178eb2e587894f86e7fc983e780e5a373d304 e06794ab6add47c5de7a9245c70b48b772135e3c M	src/gui/qt/tabs/render_tab.py
+:100644 100644 0366914324345c1a260d307b87840436c3bed9b3 6cd5ef41e1b81b662e246650d5506839549aad46 M	src/gui/qt/tabs/settings_tab.py
+:000000 100644 0000000000000000000000000000000000000000 a5aa66d22d987df730d1f6b2a0fbfe6b7c826c87 A	src/gui/qt/widgets/icon_picker.py
+:100644 100644 c54c8dc33efd1f74f715ac1572668a6b3580da41 34f5e3cf7e1e65a461ebedb9faeaa3075818f0c8 M	src/gui/qt/widgets/property_editor.py
+:100644 100644 5b3526733aa004de81e51efd2e0b6cfb79023165 74112fa961a70fc48ff7347b944373936c963a16 M	src/gui/qt/widgets/video_preview.py
+COMMIT 10697665d12330c4d318abdbe81893522d3cc749 2026-08-31T22:39:38+02:00 Integration: checkpoint multi-file preview, render and telemetry fixes
+
+:100644 100644 4a3f4dade19c9e3c59b8e9177ac691932819f0a1 37d54d02cd09304d1bef576867abad6242c8705f M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 7478f1a09666c94ca3d5260075931b1da971c82f 4556e48c5533bc8e3120d372164e80b92afb2ed1 M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 de35f4b01812e3c8bb7e5e1c8367e7544e9cef8d eed4c7ae00dac597e23fe6cbd3c4410226918a30 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 dfbd1279f6966627107530623b7a997cd056994a 5c37a35bc28b9b716fc0c8a3e02b55f3b8e9f4f4 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 7f6da19b5813bd0e1d2e28da80b14d464bfd36ee b531d67f9daa62e88fa18d606b1059149b53aacc M	src/gui/qt/application.py
+:100644 100644 f01db0b5058501044c2fd1f394efa30aa93fc900 93af1eca87f051c01748cc2c05b962d30cf81573 M	src/gui/qt/controller.py
+:100644 100644 786cc4c053a9b2d3be89ddddb742c3324f7869d9 b28ef4360a85d34bb94249a486f229804e8c2fe1 M	src/gui/qt/main_window.py
+:100644 100644 47db7f72fe3154bb99c294e401081740120a46bc 82647a09465df7d1530edc9a6333428f4f50eaee M	src/gui/qt/tabs/load_tab.py
+:100644 100644 1f65a94557e80b213ba343ed0d6533817d8409f7 6e542541ea051532344d4c3dd11c547a8e81c5ec M	src/gui/qt/tabs/project_tab.py
+:100644 100644 2fc5081427e57487f064ac15cfe858907891175d 848178eb2e587894f86e7fc983e780e5a373d304 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 653b3901c8af66c3bdea1d6c7d3c5854f376be5d 5c2fb723053ee81c59df4a545b629c7e9bc59a61 M	src/gui/qt/widgets/seek_bar.py
+:100644 100644 ea3ec999f01eb656afa9e57d0a13b531d4c75f7c 5b3526733aa004de81e51efd2e0b6cfb79023165 M	src/gui/qt/widgets/video_preview.py
+COMMIT feb04820bbcde6376989792b429b8dabde2bf594 2026-08-30T09:32:44+02:00 Integration: merge Intel and AMD render backends safely
+COMMIT 7e4e34ecae13eae947c0386443e6a7317b42256f 2026-08-29T22:48:24+02:00 AMD: freeze optimized backend before Intel integration
+
+:100644 100644 953ea9733a0f021006483ffac68c8db3c4183e6f b0fd38671fcb23108fb9fbd3a6adf8e5d6fceb54 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 dfbd1279f6966627107530623b7a997cd056994a 1829948d05782f31a4a96d3eff3d8ac8f7f29c54 M	src/gui/qt/_mixins/project_mixin.py
+COMMIT 3ab0b8927b7b9a93dbcba87900275e100b29091f 2026-08-27T21:25:45+02:00 AMD ETAP 4I: direct strided pointer for map upload + below HUD dirty rect memmove
+
+:100644 100644 a860c3acced28958d3a183dace8fe02f73c9cb53 8d446d5d73e08ec8e245ea8fa27f8edaf3cd6863 M	src/gui/qt/_mixins/preview_mixin.py
+COMMIT 5cc14bf3dc0d45a28593581626d0ac2ab84d81fe 2026-08-27T12:01:12+02:00 Intel: auto-select validated 75% HUD for 4K
+
+:100644 100644 837ff01b1c0a2988386f004d4c168c66f1cd1ca1 90c7bfa0e051e0bd0ba1190469238de54dc9bc59 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 afe052c9d70a11d1de9cffcbe6efd592c56cf871 2fc5081427e57487f064ac15cfe858907891175d M	src/gui/qt/tabs/render_tab.py
+COMMIT 2db0004da1df46ed8d2be0d0c418583a2ab35f29 2026-08-27T08:16:27+02:00 feat: implement indicator system, chart rendering engine, and optimization suite for TeleM dashboard.
+
+:100644 100644 4fab33dfdbb667ca16ab485b323065c79a7654a6 953ea9733a0f021006483ffac68c8db3c4183e6f M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 fd6c57e520837dcb0f6d202459cfb4183624846c dfbd1279f6966627107530623b7a997cd056994a M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 2214522c210c61edde7154e699d6889fe5ecdf3a 311a5120350c56b5cf7bc6fe69d78d32e9be7043 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 8cd54dcc9c3e9510c270af0eb3c94fc0a4df36fd 7f6da19b5813bd0e1d2e28da80b14d464bfd36ee M	src/gui/qt/application.py
+:100644 100644 badb28198b17d927f21e046d0be51705b24a5bbc f01db0b5058501044c2fd1f394efa30aa93fc900 M	src/gui/qt/controller.py
+:100644 100644 9c71391a18838a94a8f3e1676c74563300fb3809 453aa87c7946bec8c5c0bdeb375abdd91751f348 M	src/gui/qt/models.py
+:100644 100644 3cd1eab265ef3bb6c11a27b6387cdb95b1a55673 83041f873b672d04249a1eef718d3ee24eabed79 M	src/gui/qt/signals.py
+:100644 100644 9143629981b92d585ebc2dcafc86a3f914d374f2 afe052c9d70a11d1de9cffcbe6efd592c56cf871 M	src/gui/qt/tabs/render_tab.py
+COMMIT ed42c3fc9d17ba039fd784e728df80aa57e5061b 2026-08-27T08:07:33+02:00 feat: implement FFmpeg streaming architecture with Intel QSV/CPU-reference pipeline optimizations and HUD region-based rendering support.
+
+:100644 100644 a860c3acced28958d3a183dace8fe02f73c9cb53 de35f4b01812e3c8bb7e5e1c8367e7544e9cef8d M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 311a5120350c56b5cf7bc6fe69d78d32e9be7043 837ff01b1c0a2988386f004d4c168c66f1cd1ca1 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT e019a6b45278f09f718f528642767f505ea87934 2026-08-25T07:18:01+02:00 Poprawki i korety
+
+:100644 100644 ab2956f8123246b0a31631016b4fef508ff228f7 4a3f4dade19c9e3c59b8e9177ac691932819f0a1 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 fbd52c95e5106d9b6cdca5ed2e1977b90abe9a4e 7478f1a09666c94ca3d5260075931b1da971c82f M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 6eb663bd2d55096291b938753aa3bdd478f97102 953ea9733a0f021006483ffac68c8db3c4183e6f M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 de3ff07126a1ac4ea3d7d04110ef8e0c7c217d63 a860c3acced28958d3a183dace8fe02f73c9cb53 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 e9954b2972f472bb8cced7cc19d462c2116d6b51 dfbd1279f6966627107530623b7a997cd056994a M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 d380fba18b2ceee04d5950e01671436d6f162bab 311a5120350c56b5cf7bc6fe69d78d32e9be7043 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 8cd54dcc9c3e9510c270af0eb3c94fc0a4df36fd 7f6da19b5813bd0e1d2e28da80b14d464bfd36ee M	src/gui/qt/application.py
+:100644 100644 4392cae72cef5b73953fa1c3ad5a85855c4e2050 f01db0b5058501044c2fd1f394efa30aa93fc900 M	src/gui/qt/controller.py
+:100644 100644 e03077909ae53c958e7939a430b36f6eb60c2495 453aa87c7946bec8c5c0bdeb375abdd91751f348 M	src/gui/qt/models.py
+:100644 100644 da22b8ef52815c88e6c7110119c4afc1da915823 83041f873b672d04249a1eef718d3ee24eabed79 M	src/gui/qt/signals.py
+:100644 100644 5806f7a4a26effecf46654f98b82c7ad7a220f08 47db7f72fe3154bb99c294e401081740120a46bc M	src/gui/qt/tabs/load_tab.py
+:100644 100644 a648a0bb3046ad36f53ff380aa2a8d1361be7adb afe052c9d70a11d1de9cffcbe6efd592c56cf871 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 aa5a4af6af4db25c36d5422a91f6abc4f3d18293 c54c8dc33efd1f74f715ac1572668a6b3580da41 M	src/gui/qt/widgets/property_editor.py
+:100644 100644 722cfad9b16072429e48cefc7c9f6e66e7258bce ea3ec999f01eb656afa9e57d0a13b531d4c75f7c M	src/gui/qt/widgets/video_preview.py
+COMMIT c4dc477b68e49e904875b82e9628ce13df1395a5 2026-08-25T07:16:56+02:00 Poprawki
+
+:100644 100644 65a3f29e91180cac7c41d4af2658f1086abcb7f0 67042ae91ec5d99b96f3db02ffe3413dc8f7319b M	src/gui/qt/_mixins/cut_mixin.py
+:100644 100644 8379ca86c49c2c063fb1915aa7f8c0e376c0406e d380fba18b2ceee04d5950e01671436d6f162bab M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 801dc70a753e227c616c199807349a856937c3d6 8cd54dcc9c3e9510c270af0eb3c94fc0a4df36fd M	src/gui/qt/application.py
+:100644 100644 4762f955c8f15677334b08fc193cfd1f267ab625 786cc4c053a9b2d3be89ddddb742c3324f7869d9 M	src/gui/qt/main_window.py
+:000000 100644 0000000000000000000000000000000000000000 4df3655370f1fe65a336381638c67c2f5e5ea130 A	src/gui/qt/mp4_inspector.py
+:100644 100644 49a974117581f25566cf2fed41e518a73847dede da22b8ef52815c88e6c7110119c4afc1da915823 M	src/gui/qt/signals.py
+:100644 100644 1a702376a45a0c332ccc4f86f425353139f5ef18 5806f7a4a26effecf46654f98b82c7ad7a220f08 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 174e60cb1ffea2439e5915fd5b186cfc3284002e 1f65a94557e80b213ba343ed0d6533817d8409f7 M	src/gui/qt/tabs/project_tab.py
+:100644 100644 4ad38b30880b9dc8c45f944ae2457e8963e62d37 a648a0bb3046ad36f53ff380aa2a8d1361be7adb M	src/gui/qt/tabs/render_tab.py
+:100644 100644 a129280a000979296f9e7a308b118862953036c9 722cfad9b16072429e48cefc7c9f6e66e7258bce M	src/gui/qt/widgets/video_preview.py
+COMMIT e8a811e5149807e5d5b12b68ff3862f507e81dc5 2026-08-24T08:04:59+02:00 Teraz działa
+
+:100644 100644 486df8af620180c1e271ab54afa7b22825a76882 fd6c57e520837dcb0f6d202459cfb4183624846c M	src/gui/qt/_mixins/project_mixin.py
+COMMIT 3024abdc795d646fbbd9bc5b7e329f3757800f56 2026-08-24T06:15:19+02:00 mapy
+
+:100644 100644 6b4125169ad95960c52eba7784a3474edb9b4f86 4a3f4dade19c9e3c59b8e9177ac691932819f0a1 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 fbd52c95e5106d9b6cdca5ed2e1977b90abe9a4e 7478f1a09666c94ca3d5260075931b1da971c82f M	src/gui/qt/_mixins/playback_mixin.py
+:100644 100644 48328797bab303dc0ce99fcd4d565eb0b10d593c 4fab33dfdbb667ca16ab485b323065c79a7654a6 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 470202a94d2fb843c2a96d1d5f35551fc76caef4 a860c3acced28958d3a183dace8fe02f73c9cb53 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 6dea44a043a21bb43a7cd17c66305aa4861a6b74 486df8af620180c1e271ab54afa7b22825a76882 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 001957f86227836f8e5f62596521392cad79d9fc 2214522c210c61edde7154e699d6889fe5ecdf3a M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 122ad6356946223aebae428938daec9ce3314f9f badb28198b17d927f21e046d0be51705b24a5bbc M	src/gui/qt/controller.py
+:100644 100644 8d49701f3bf662f41ac448fbb54fea399106edf0 9c71391a18838a94a8f3e1676c74563300fb3809 M	src/gui/qt/models.py
+:100644 100644 5e19030e1614388e7da4b9c6e2471d2f0fff94d9 3cd1eab265ef3bb6c11a27b6387cdb95b1a55673 M	src/gui/qt/signals.py
+:100644 100644 b8e2e746698b599cef897cc15bb5a739fd87313c 9143629981b92d585ebc2dcafc86a3f914d374f2 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 722cfad9b16072429e48cefc7c9f6e66e7258bce ea3ec999f01eb656afa9e57d0a13b531d4c75f7c M	src/gui/qt/widgets/video_preview.py
+COMMIT 80f0ec48388966cdf4c9fc54eed005db497b5440 2026-08-23T15:37:32+02:00 gui
+
+:100644 100644 40267401048f197437bef5c852475bbae6ceadb2 6b4125169ad95960c52eba7784a3474edb9b4f86 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 46120a81abd07dacc8f4109b84269c578461b9ba 8d49701f3bf662f41ac448fbb54fea399106edf0 M	src/gui/qt/models.py
+COMMIT 1771a5625d8d33f7a4032a0950fe8b78a670d6b7 2026-08-23T13:29:28+02:00 poprawki
+
+:100644 100644 eb6231e5b18f1dc659c0d7209514e9ba5730c1cd 40267401048f197437bef5c852475bbae6ceadb2 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 0f888e5bfe3b2c88441451cdb0a39b44e737869e 6dea44a043a21bb43a7cd17c66305aa4861a6b74 M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 49cf0161708c3c02b15b81ba2d8386a072328cd8 001957f86227836f8e5f62596521392cad79d9fc M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 75e40ec6bf141bc57abc9b2434245dd0ebd08e4c 46120a81abd07dacc8f4109b84269c578461b9ba M	src/gui/qt/models.py
+:100644 100644 5806f7a4a26effecf46654f98b82c7ad7a220f08 47db7f72fe3154bb99c294e401081740120a46bc M	src/gui/qt/tabs/load_tab.py
+:100644 100644 5f628f0aafdc130369fcb3284f44dc9e1a01aa01 b8e2e746698b599cef897cc15bb5a739fd87313c M	src/gui/qt/tabs/render_tab.py
+:100644 100644 954e9891cd946c296919af1de5818fecead1cf33 c54c8dc33efd1f74f715ac1572668a6b3580da41 M	src/gui/qt/widgets/property_editor.py
+COMMIT 0c8ef1ea02a09a87877fc83602fafc2ec03ba9fe 2026-08-23T07:05:26+02:00 feat: enhance map rendering with anti-aliased routes
+
+:100644 100644 2a58537b0ae173d5452b6aa414f315ed654f7d8f eb6231e5b18f1dc659c0d7209514e9ba5730c1cd M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 d303d1aeac59f2ecf423120e08effaf114cefe1b 470202a94d2fb843c2a96d1d5f35551fc76caef4 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 214ce6b3f2ecfc6d18b940ddc9e971bd583bf216 75e40ec6bf141bc57abc9b2434245dd0ebd08e4c M	src/gui/qt/models.py
+:100644 100644 4ebabdc2450b43f4860128f204f256d0b5fe7c18 954e9891cd946c296919af1de5818fecead1cf33 M	src/gui/qt/widgets/property_editor.py
+COMMIT 8266d0ffe03b02795b7105cb9547dad2acaa4dff 2026-08-22T22:47:37+02:00 oPTYMALIZACJE
+
+:100644 100644 cb7e02b83327f7f826a91572a89ac5e59a1994f8 2a58537b0ae173d5452b6aa414f315ed654f7d8f M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 aed3be1dace7f2233aa5e1524b505ecae3e4e0e2 48328797bab303dc0ce99fcd4d565eb0b10d593c M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 c352b3e20edbaf234994e25ebffa465054c20fbb d303d1aeac59f2ecf423120e08effaf114cefe1b M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 a7fb2b5cfc266188fcda2d63e9b0dd527a9e0ed9 49cf0161708c3c02b15b81ba2d8386a072328cd8 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 e71f653427469cdaa5167dddd1929c39b48fc7ca 214ce6b3f2ecfc6d18b940ddc9e971bd583bf216 M	src/gui/qt/models.py
+:100644 100644 76e057f792d3f81329d7a1d3cf999d80fe639dbf 5f628f0aafdc130369fcb3284f44dc9e1a01aa01 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 a1fd93b37014db2d435d491f1f3e86b0b04830ec 4ebabdc2450b43f4860128f204f256d0b5fe7c18 M	src/gui/qt/widgets/property_editor.py
+COMMIT 7b9394bcad1422b6ed8c63499aef1315322f69c8 2026-08-20T20:35:55+02:00 Fial nV
+
+:100644 100644 2bda9a817eca958358502f9d248659094ed20db7 a7fb2b5cfc266188fcda2d63e9b0dd527a9e0ed9 M	src/gui/qt/_mixins/render_mixin.py
+COMMIT 80b5e47d3b4db5a608b3299235276bc3282e626a 2026-08-20T10:37:53+02:00 refactor: implement telemetry data models, FFmpeg render orchestration, and benchmarking suite for HUD overlay atlas generation
+
+:100644 100644 59e61348b285fde3d5436f3fc358b3a5df8d4cbf cb7e02b83327f7f826a91572a89ac5e59a1994f8 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 868b55b1195bf597c95e91e0c50e7aa320cd0c45 aed3be1dace7f2233aa5e1524b505ecae3e4e0e2 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 0ad8c95b35810886a92e5e2ec4c1f1e061f7789f e71f653427469cdaa5167dddd1929c39b48fc7ca M	src/gui/qt/models.py
+COMMIT 74b4f24ebde53062abde17c5353cab008d57243a 2026-08-20T05:52:04+02:00 feat: implement video rendering pipeline with asynchronous background processing and lifecycle management support
+
+:100644 100644 1ca4d483e3ac32dc798646255a6c99655f111a9c 2bda9a817eca958358502f9d248659094ed20db7 M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 4e4825acc5a9bb0951e3eb6eb42d6fcefd8cfe0f 5e19030e1614388e7da4b9c6e2471d2f0fff94d9 M	src/gui/qt/signals.py
+:100644 100644 38a8f8392e8e5e35a3cc0e4dcaac87e7314ec78f 76e057f792d3f81329d7a1d3cf999d80fe639dbf M	src/gui/qt/tabs/render_tab.py
+COMMIT f455ff605ab44af01cc247d11b9ae37d1570b2e1 2026-08-19T21:47:14+02:00 Stable RC with export preview and chart clipping fixes
+
+:100644 100644 da22b8ef52815c88e6c7110119c4afc1da915823 4e4825acc5a9bb0951e3eb6eb42d6fcefd8cfe0f M	src/gui/qt/signals.py
+:100644 100644 ec79b07330498816e2f1b7f5d056e294f29a1418 38a8f8392e8e5e35a3cc0e4dcaac87e7314ec78f M	src/gui/qt/tabs/render_tab.py
+COMMIT df260c18a389e9627fc03148f144d38e067bbcb6 2026-08-19T09:45:34+02:00 fix: timezone-aware chart slicing and agent.md rewrite
+
+:100644 100644 2891b9da44093686232acf65d2d35e2f8d185582 868b55b1195bf597c95e91e0c50e7aa320cd0c45 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 c95632a2362ec91d84e6ed8ac8f7e90d990c8c97 c352b3e20edbaf234994e25ebffa465054c20fbb M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 b6302f7cb8aab184c1e4a41a21b257bd4555a11c 1ca4d483e3ac32dc798646255a6c99655f111a9c M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 063738edf123d5998e4b8fc63b332d33f4bd41db 0ad8c95b35810886a92e5e2ec4c1f1e061f7789f M	src/gui/qt/models.py
+:100644 100644 d33363992309e7e1870b2ebad421e41c7bd8df45 ec79b07330498816e2f1b7f5d056e294f29a1418 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 aa5a4af6af4db25c36d5422a91f6abc4f3d18293 a1fd93b37014db2d435d491f1f3e86b0b04830ec M	src/gui/qt/widgets/property_editor.py
+COMMIT 67b55884a0b0122326744f48e557ae570b0dc9e9 2026-08-18T20:32:26+02:00 Optymalizacje
+
+:100644 100644 3f8a1c55f003606acbbcd5658af92e0b0b5b94d1 59e61348b285fde3d5436f3fc358b3a5df8d4cbf M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 6eb663bd2d55096291b938753aa3bdd478f97102 2891b9da44093686232acf65d2d35e2f8d185582 M	src/gui/qt/_mixins/preset_mixin.py
+:100644 100644 e9954b2972f472bb8cced7cc19d462c2116d6b51 0f888e5bfe3b2c88441451cdb0a39b44e737869e M	src/gui/qt/_mixins/project_mixin.py
+:100644 100644 d380fba18b2ceee04d5950e01671436d6f162bab b6302f7cb8aab184c1e4a41a21b257bd4555a11c M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 4392cae72cef5b73953fa1c3ad5a85855c4e2050 122ad6356946223aebae428938daec9ce3314f9f M	src/gui/qt/controller.py
+:100644 100644 e03077909ae53c958e7939a430b36f6eb60c2495 063738edf123d5998e4b8fc63b332d33f4bd41db M	src/gui/qt/models.py
+COMMIT c4d5f84e616be0864b50f2b7517f2ef0f0ad7b28 2026-08-17T20:26:50+02:00 Synchonizacja wskazników epap1
+
+:100644 100644 ab2956f8123246b0a31631016b4fef508ff228f7 3f8a1c55f003606acbbcd5658af92e0b0b5b94d1 M	src/gui/qt/_mixins/indicator_mixin.py
+:100644 100644 de3ff07126a1ac4ea3d7d04110ef8e0c7c217d63 c95632a2362ec91d84e6ed8ac8f7e90d990c8c97 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 a648a0bb3046ad36f53ff380aa2a8d1361be7adb d33363992309e7e1870b2ebad421e41c7bd8df45 M	src/gui/qt/tabs/render_tab.py
+COMMIT ce4dc824cbfd195eb85b67628c567b71a025703c 2026-08-17T07:18:16+02:00 GIU Export
+
+:100644 100644 904bdf887012b8ee1146f7fb5bfa88a4e540d929 a648a0bb3046ad36f53ff380aa2a8d1361be7adb M	src/gui/qt/tabs/render_tab.py
+COMMIT 6b10fd6be7f1459d3dd6dbd3663e26d325df9fed 2026-08-16T22:37:01+02:00 GUI Renderingu
+
+:100644 100644 8379ca86c49c2c063fb1915aa7f8c0e376c0406e d380fba18b2ceee04d5950e01671436d6f162bab M	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 49a974117581f25566cf2fed41e518a73847dede da22b8ef52815c88e6c7110119c4afc1da915823 M	src/gui/qt/signals.py
+:100644 100644 31d2d96c41bdc6f439c0f676d975c7b5cb8a4b41 904bdf887012b8ee1146f7fb5bfa88a4e540d929 M	src/gui/qt/tabs/render_tab.py
+COMMIT 3abbe7f3f411f479ef76e8c2b3cad9085c5543f7 2026-08-15T22:34:34+02:00 GUI redesign and loading improvements
+
+:100644 100644 65a3f29e91180cac7c41d4af2658f1086abcb7f0 67042ae91ec5d99b96f3db02ffe3413dc8f7319b M	src/gui/qt/_mixins/cut_mixin.py
+:100644 100644 1f74b882000acdd649619798efd90301c9c8ef32 8cd54dcc9c3e9510c270af0eb3c94fc0a4df36fd M	src/gui/qt/application.py
+:100644 100644 4762f955c8f15677334b08fc193cfd1f267ab625 786cc4c053a9b2d3be89ddddb742c3324f7869d9 M	src/gui/qt/main_window.py
+:000000 100644 0000000000000000000000000000000000000000 4df3655370f1fe65a336381638c67c2f5e5ea130 A	src/gui/qt/mp4_inspector.py
+:100644 100644 1a702376a45a0c332ccc4f86f425353139f5ef18 5806f7a4a26effecf46654f98b82c7ad7a220f08 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 174e60cb1ffea2439e5915fd5b186cfc3284002e 1f65a94557e80b213ba343ed0d6533817d8409f7 M	src/gui/qt/tabs/project_tab.py
+:100644 100644 4ad38b30880b9dc8c45f944ae2457e8963e62d37 31d2d96c41bdc6f439c0f676d975c7b5cb8a4b41 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 a129280a000979296f9e7a308b118862953036c9 722cfad9b16072429e48cefc7c9f6e66e7258bce M	src/gui/qt/widgets/video_preview.py
+COMMIT d08db6557c1e78a97d3193314d6dac4250e4b851 2026-08-12T16:32:17+02:00 feat: add infrastructure for AMD telemetry pipeline benchmarking, multi-region HUD testing, and frame rendering optimizations
+
+:100644 100644 801dc70a753e227c616c199807349a856937c3d6 1f74b882000acdd649619798efd90301c9c8ef32 M	src/gui/qt/application.py
+COMMIT dc4ac05369fd70cc62c477eaab84404209367ad9 2026-08-12T16:25:00+02:00 feat: implement HUD sub-window rendering pipeline and performance profiling tools
+
+:100644 100644 8e8430870f52b90dc33a2201f1bc74c2ee37873b de3ff07126a1ac4ea3d7d04110ef8e0c7c217d63 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 41c62f5a8c2f170fcb3e52522d2edfbd55ff404a 4392cae72cef5b73953fa1c3ad5a85855c4e2050 M	src/gui/qt/controller.py
+COMMIT 87962b96b493e26bfc8e1226de87935d1c01c98f 2026-08-11T10:50:15+02:00 feat: add preview generation mixin with async compositing, telemetry indicators, and layout support
+
+:100644 100644 8e8430870f52b90dc33a2201f1bc74c2ee37873b de3ff07126a1ac4ea3d7d04110ef8e0c7c217d63 M	src/gui/qt/_mixins/preview_mixin.py
+:100644 100644 41c62f5a8c2f170fcb3e52522d2edfbd55ff404a 4392cae72cef5b73953fa1c3ad5a85855c4e2050 M	src/gui/qt/controller.py
+COMMIT 4a3118bd5a0de41c928acba7cf40421a335a90f6 2026-08-11T10:29:20+02:00 stage2: refaktor architektury wideo i kontrolera
+
+:000000 100644 0000000000000000000000000000000000000000 cb03c8ce9fd8c1bb95a6d8faa7246ba82fb3bae0 A	src/gui/qt/_mixins/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 65a3f29e91180cac7c41d4af2658f1086abcb7f0 A	src/gui/qt/_mixins/cut_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 ab2956f8123246b0a31631016b4fef508ff228f7 A	src/gui/qt/_mixins/indicator_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 fbd52c95e5106d9b6cdca5ed2e1977b90abe9a4e A	src/gui/qt/_mixins/playback_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 6eb663bd2d55096291b938753aa3bdd478f97102 A	src/gui/qt/_mixins/preset_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 8e8430870f52b90dc33a2201f1bc74c2ee37873b A	src/gui/qt/_mixins/preview_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 e9954b2972f472bb8cced7cc19d462c2116d6b51 A	src/gui/qt/_mixins/project_mixin.py
+:000000 100644 0000000000000000000000000000000000000000 8379ca86c49c2c063fb1915aa7f8c0e376c0406e A	src/gui/qt/_mixins/render_mixin.py
+:100644 100644 f495c61f7176f9bc65ecda1e9e2de4e891070ff9 41c62f5a8c2f170fcb3e52522d2edfbd55ff404a M	src/gui/qt/controller.py
+COMMIT c12aabade64548ecace8ccf8280ccdaadc37e6bc 2026-08-11T10:16:42+02:00 stage1: stabilizacja i porzadkowanie projektu
+
+:100644 100644 8ee49ae6391d14f2085955cdb7f064e256730262 f495c61f7176f9bc65ecda1e9e2de4e891070ff9 M	src/gui/qt/controller.py
+COMMIT ee85231eacb5a8d996dd7b896a2e9962d2c70cb8 2026-08-11T09:03:37+02:00 Popraka map
+
+:100644 100644 a575761e3cb566367f84c785728fec419ce99640 8ee49ae6391d14f2085955cdb7f064e256730262 M	src/gui/qt/controller.py
+:100644 100644 794e68b58fa54a40386341e81602159c4d1c7efb e03077909ae53c958e7939a430b36f6eb60c2495 M	src/gui/qt/models.py
+:000000 100644 0000000000000000000000000000000000000000 f8d50ee50c1523cb9b94a82c02efd5c678f2716a A	src/gui/qt/mpv_hwdec.py
+:100644 100644 a85143fc21902584983696dc54814e0f786dc60f 49a974117581f25566cf2fed41e518a73847dede M	src/gui/qt/signals.py
+:100644 100644 68b86dc19fcd09e64533272aa19c0f4bd47a5900 1a702376a45a0c332ccc4f86f425353139f5ef18 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 40987c3288a76f2e34ec9042a0230c3adc300ba6 4ad38b30880b9dc8c45f944ae2457e8963e62d37 M	src/gui/qt/tabs/render_tab.py
+:100644 100644 1655bc71d6bc3172c462e14f50499d0687e7e67c 0366914324345c1a260d307b87840436c3bed9b3 M	src/gui/qt/tabs/settings_tab.py
+:100644 100644 24d9390a8603a6550738cc5b1335cf1879dda792 a129280a000979296f9e7a308b118862953036c9 M	src/gui/qt/widgets/video_preview.py
+COMMIT 7d09b095f41c48a448d612a6dfec27c7d055da1f 2026-08-07T12:58:35+02:00 Aktualizacja kodu (bez dużych plików DLL)
+
+:100644 100644 ecbc2c8205cc862262e3c67472d29fe8b0d7dd07 a575761e3cb566367f84c785728fec419ce99640 M	src/gui/qt/controller.py
+:100644 100644 7b0c576f2db5f256b3179e8182d8a5b3b82926aa 794e68b58fa54a40386341e81602159c4d1c7efb M	src/gui/qt/models.py
+:100644 100644 d5136ca7655e5eaaca9d81b836c0e42e086a6294 68b86dc19fcd09e64533272aa19c0f4bd47a5900 M	src/gui/qt/tabs/load_tab.py
+:100644 100644 6dc9682aa6ccd9b4a3ed879034f92f0bf3bc0b76 aa5a4af6af4db25c36d5422a91f6abc4f3d18293 M	src/gui/qt/widgets/property_editor.py
+:100644 100644 eb13ef40cdd12691586a39a679000be494078f61 24d9390a8603a6550738cc5b1335cf1879dda792 M	src/gui/qt/widgets/video_preview.py
+COMMIT 3f1c2d696f1254e09b7f1cd2eb897a91f0358c2d 2026-07-28T21:01:50+02:00 Mapy satelitarne
+
+:100644 100644 a82ada64d982d43f51a50d119c3e6cafea89a5a0 7b0c576f2db5f256b3179e8182d8a5b3b82926aa M	src/gui/qt/models.py
+COMMIT 4259344cc5deeb1fedf2e37f83f1bfb1372c4337 2026-07-28T06:09:49+02:00 Nocne zmiany
+
+:100644 100644 c35d2e748d48de40e8ea499b7f281eb95cd35322 ecbc2c8205cc862262e3c67472d29fe8b0d7dd07 M	src/gui/qt/controller.py
+:100644 100644 e7498951e330953b8f876131b35f7804c702116b a82ada64d982d43f51a50d119c3e6cafea89a5a0 M	src/gui/qt/models.py
+:100644 100644 9bed412af7ac2ce0ce8592db7e415c24256141e1 6dc9682aa6ccd9b4a3ed879034f92f0bf3bc0b76 M	src/gui/qt/widgets/property_editor.py
+:100644 100644 285226eb6a460042a2469f3985f7e3fbce1748be 653b3901c8af66c3bdea1d6c7d3c5854f376be5d M	src/gui/qt/widgets/seek_bar.py
+:100644 100644 6f9e68af44b902e1b453af55dfcc2dadb81f4d23 eb13ef40cdd12691586a39a679000be494078f61 M	src/gui/qt/widgets/video_preview.py
+COMMIT 8811fc6bb3f342e38775a0a526d7234413e12d20 2026-07-27T22:18:12+02:00 Kolejne optymalizacje
+
+:100644 100644 0f1ddb3bf8f547850db46321612d1809b154ff8e c35d2e748d48de40e8ea499b7f281eb95cd35322 M	src/gui/qt/controller.py
+COMMIT e11e45d2306e3e8aa09e9e8241b54e13942fa29e 2026-07-27T20:25:12+02:00 Szybszy podgląd
+
+:100644 100644 ddbcd2442d7942bac707f1f98a2942f9682c89a7 0f1ddb3bf8f547850db46321612d1809b154ff8e M	src/gui/qt/controller.py
+:100644 100644 151d8bb455513b7eb38c6ab48a159d65334ee8f0 a85143fc21902584983696dc54814e0f786dc60f M	src/gui/qt/signals.py
+:100644 100644 a0f7d60237ecc09bf6eedca03489deaf8b1f0153 6f9e68af44b902e1b453af55dfcc2dadb81f4d23 M	src/gui/qt/widgets/video_preview.py
+COMMIT b8b4553f3960a0dce28d22f29374ee8a3fe76b17 2026-07-27T19:32:26+02:00 Poprawion pogląd. Dalej jest wolno alu już trochę lepiej
+
+:100644 100644 6169a4fdcae1c570ecddb96734f145ed8d548d30 ddbcd2442d7942bac707f1f98a2942f9682c89a7 M	src/gui/qt/controller.py
+:100644 100644 663ad29fcf219b7dae3e777fb985bfd0fcee6451 285226eb6a460042a2469f3985f7e3fbce1748be M	src/gui/qt/widgets/seek_bar.py
+:100644 100644 6a596c21e7ce6f2fc074a60149e10131370a2bd9 a0f7d60237ecc09bf6eedca03489deaf8b1f0153 M	src/gui/qt/widgets/video_preview.py
+COMMIT 42441e401c46e1c915e2d8ea1aa4af4889ba85de 2026-07-27T17:21:28+02:00 Walka z wycinaniem
+
+:100644 100644 9f111aef13928864efa88867ff108f79aaeb7e6f 6169a4fdcae1c570ecddb96734f145ed8d548d30 M	src/gui/qt/controller.py
+:100644 100644 1907d3314e1b55506dfafbff02289c59c1bc7665 151d8bb455513b7eb38c6ab48a159d65334ee8f0 M	src/gui/qt/signals.py
+:100644 100644 8391fbf1d75b922b6c05696781eea07bbf88fa1b 174e60cb1ffea2439e5915fd5b186cfc3284002e M	src/gui/qt/tabs/project_tab.py
+:000000 100644 0000000000000000000000000000000000000000 663ad29fcf219b7dae3e777fb985bfd0fcee6451 A	src/gui/qt/widgets/seek_bar.py
+:100644 100644 5382c15bf14eb5084426135fb20171834e5790fd 6a596c21e7ce6f2fc074a60149e10131370a2bd9 M	src/gui/qt/widgets/video_preview.py
+COMMIT 36e4751297d44c9dd9b22e60342c955b912957d1 2026-07-26T22:17:00+02:00 Narzedzie wycinania
+
+:100644 100644 8abd0c061da0125aea33a8155a52d3d2cc8ce646 801dc70a753e227c616c199807349a856937c3d6 M	src/gui/qt/application.py
+:100644 100644 0bb0bfecbcc19648260eb81d040583e209122bd2 9f111aef13928864efa88867ff108f79aaeb7e6f M	src/gui/qt/controller.py
+:100644 100644 5c317b1bc54bac5c93dc1fcdf8737b9547652870 1907d3314e1b55506dfafbff02289c59c1bc7665 M	src/gui/qt/signals.py
+:100644 100644 2983421b820f0d2246d053d84d1abd021c55c77d 8391fbf1d75b922b6c05696781eea07bbf88fa1b M	src/gui/qt/tabs/project_tab.py
+:000000 100644 0000000000000000000000000000000000000000 fea88c5ea5457d2aaac7595012a7e575d4b52a3f A	src/gui/qt/widgets/trim_bar.py
+:100644 100644 671df46a1b973f327e04137916c617e1d33e896f 5382c15bf14eb5084426135fb20171834e5790fd M	src/gui/qt/widgets/video_preview.py
+COMMIT 9f46a5354954571a0c29cfcbfb2cb0c715b73401 2026-07-26T19:13:02+02:00 Walka z wolnym podglądem
+
+:100644 100644 e6c9a93d8dfa91691a6f62b055a2e01fa81376ee 0bb0bfecbcc19648260eb81d040583e209122bd2 M	src/gui/qt/controller.py
+COMMIT 37909b02e68c7b26936bf1119f3e4074e9752ea5 2026-07-26T18:46:53+02:00 Wydzielenie wskaźników
+
+:100644 100644 c287a378120a1e3c6901a4488419bf2551d0040b e6c9a93d8dfa91691a6f62b055a2e01fa81376ee M	src/gui/qt/controller.py
+:100644 100644 cbafd3af0444d4442bcfc36f85ad03b9e8dfd50d e7498951e330953b8f876131b35f7804c702116b M	src/gui/qt/models.py
+COMMIT 9ca7568323d669bc86b7ac909769dfd182973aa6 2026-07-26T18:05:42+02:00 Poprawki na wskaźnikach przed wyoderbnieniem ich
+
+:100644 100644 3d87c2567d76814b1be47b6664f069dfdd7818f7 cbafd3af0444d4442bcfc36f85ad03b9e8dfd50d M	src/gui/qt/models.py
+COMMIT c3d7fba5f503972bdd01c23272a0a68037e73d8a 2026-07-26T15:37:39+02:00 Poprawki wydajności generowania wskaźników
+
+:100644 100644 bdbc10b711c90395c803aeed9683cd7e96809f90 c287a378120a1e3c6901a4488419bf2551d0040b M	src/gui/qt/controller.py
+COMMIT fc60ba613c46c3c0accdc331e09616fe033b46a3 2026-07-26T14:13:18+02:00 Poprawki presetu  i interface
+
+:100644 100644 4fcd96a7580eeb7e61f1b03fb7fd4f54c7b0e324 bdbc10b711c90395c803aeed9683cd7e96809f90 M	src/gui/qt/controller.py
+:100644 100644 44635dded66baf5524816ce83a1e7217ef3e0078 671df46a1b973f327e04137916c617e1d33e896f M	src/gui/qt/widgets/video_preview.py
+COMMIT e2f4dd151651a146c9eace6b3ddcec9b09bf852f 2026-07-26T09:49:58+02:00 Rendering - zgodność
+
+:100644 100644 40e5d9112889f2ddaaff300a49bf85038c7ac117 4fcd96a7580eeb7e61f1b03fb7fd4f54c7b0e324 M	src/gui/qt/controller.py
+COMMIT 4df3dadd5739e9d957204f5eb428888939e949f8 2026-07-25T16:16:13+02:00 Poprawiony rendering
+
+:000000 100644 0000000000000000000000000000000000000000 a0ab3c441a2b8fa3a19eb31b80a0f42acbba2801 A	src/gui/qt/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 8abd0c061da0125aea33a8155a52d3d2cc8ce646 A	src/gui/qt/application.py
+:000000 100644 0000000000000000000000000000000000000000 40e5d9112889f2ddaaff300a49bf85038c7ac117 A	src/gui/qt/controller.py
+:000000 100644 0000000000000000000000000000000000000000 4762f955c8f15677334b08fc193cfd1f267ab625 A	src/gui/qt/main_window.py
+:000000 100644 0000000000000000000000000000000000000000 3d87c2567d76814b1be47b6664f069dfdd7818f7 A	src/gui/qt/models.py
+:000000 100644 0000000000000000000000000000000000000000 f030a33a3229d0232ae694b5157963e928b37deb A	src/gui/qt/property_pages/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 5c317b1bc54bac5c93dc1fcdf8737b9547652870 A	src/gui/qt/signals.py
+:000000 100644 0000000000000000000000000000000000000000 03cf4c806095d5706f2745eb071b4f76d1722d46 A	src/gui/qt/tabs/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 d5136ca7655e5eaaca9d81b836c0e42e086a6294 A	src/gui/qt/tabs/load_tab.py
+:000000 100644 0000000000000000000000000000000000000000 2983421b820f0d2246d053d84d1abd021c55c77d A	src/gui/qt/tabs/project_tab.py
+:000000 100644 0000000000000000000000000000000000000000 40987c3288a76f2e34ec9042a0230c3adc300ba6 A	src/gui/qt/tabs/render_tab.py
+:000000 100644 0000000000000000000000000000000000000000 1655bc71d6bc3172c462e14f50499d0687e7e67c A	src/gui/qt/tabs/settings_tab.py
+:000000 100644 0000000000000000000000000000000000000000 5d1c81bd66b2781f7d775059e54b2d2b058c6379 A	src/gui/qt/widgets/__init__.py
+:000000 100644 0000000000000000000000000000000000000000 98257552f4e3b9396c56c3f61535701ac44e919f A	src/gui/qt/widgets/data_stream_bar.py
+:000000 100644 0000000000000000000000000000000000000000 9bed412af7ac2ce0ce8592db7e415c24256141e1 A	src/gui/qt/widgets/property_editor.py
+:000000 100644 0000000000000000000000000000000000000000 44635dded66baf5524816ce83a1e7217ef3e0078 A	src/gui/qt/widgets/video_preview.py

@@ -1,0 +1,14 @@
+982cb2268ea4ccb0c790e5856286f079e9a6935a 2026-10-11 18:48:22 +0200 Recover AutoFIT and DJI no-GPS matching
+037b17d8e371c102870ed4f7a9eabf288b90dbd6 2026-10-10 18:00:30 +0200 REBRANDING: Complete rename to SportCamHUD, add AppData migration, bump version to 1.13
+a515c77370575c4bf70b3cb0d889e70db118af19 2026-10-10 14:20:59 +0200 fix: require measured SmartSync result in integrity harness
+b1e6507409d5ebfef61388aa84c585ab0d435f42 2026-10-10 07:52:55 +0200 feat: Release v1.09 - AMD Cache Key Parity and Real FIT Benchmark Integrity
+73e3ceb14300e9d98d4f84ce88de8fc51d109987 2026-10-09 21:46:43 +0200 fix(amd): Resolve canonical timeline before cache_key generation, strictly verify key in worker, and log 34.8 FPS benchmark
+02f4117362e9a45df50af780641feaf6015c259b 2026-10-08 20:53:51 +0200 fix(gui): remove dummy cache hazard, add prewarm generation safety, vectorize telemetry loops
+e9f7a0a606bcd06d1587191fafc5cb0d8e59f6c8 2026-10-03 11:26:25 +0200 fix(amd): eliminate queue export regression and restore ~100% GPU utilization parity
+a2bb11f01dc5a54ba2b4ff11c567c143afadf2fd 2026-10-03 07:54:12 +0200 fix(dji): isolate telemetry parsing into separate worker process to prevent GUI freeze
+29098dfa8188f12856323a0e59e6384683e53d0b 2026-09-30 20:51:09 +0200 docs(report): update commit hash in cleanroom runtime report
+353df3d6cfb1ab877ef57f14da64170ced6aa6b5 2026-09-29 16:27:06 +0200 feat(telemetry): add DJI Action 6 metadata foundation
+e019a6b45278f09f718f528642767f505ea87934 2026-08-25 07:18:01 +0200 Poprawki i korety
+67b55884a0b0122326744f48e557ae570b0dc9e9 2026-08-18 20:32:26 +0200 Optymalizacje
+ee85231eacb5a8d996dd7b896a2e9962d2c70cb8 2026-08-11 09:03:37 +0200 Popraka map
+7d09b095f41c48a448d612a6dfec27c7d055da1f 2026-08-07 12:58:35 +0200 Aktualizacja kodu (bez dużych plików DLL)

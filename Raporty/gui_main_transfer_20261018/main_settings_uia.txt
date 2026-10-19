@@ -1,0 +1,73 @@
+Window: "SportCamHUD v1.14 — unknown — e21d625", App: python.exe.
+	0 okno (settable, string) SportCamHUD v1.14 — unknown — e21d625 Secondary Actions: Raise ID: QApplication.MainWindow
+		1 pasek tytułu (settable, string) Value: SportCamHUD v1.14 — unknown — e21d625
+			2 pasek menu System ID: MenuBar
+				52 element menu System
+			4 przycisk Minimalizuj
+			5 przycisk Maksymalizuj
+			6 przycisk Zamknij
+		7 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget
+			8 okienko (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget
+				53 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab
+					54 niestandardowy (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter
+						55 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel
+							56 tekst Licencje zewnętrznych komponentów ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel.QLabel
+							57 tekst Dokumenty dołączone do aplikacji i używanego środowiska Python. Wyświetlane są oryginalne treści; brak dokumentu nie potwierdza licencji komponentu. THIRD_PARTY_NOTICES może zawierać informacje ogólne zależne od wydania. ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel.QLabel
+							58 pole kombi (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel.QComboBox
+							59 edytuj Value: Wczytywanie dokumentów... ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel.QPlainTextEdit
+								60 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.licensePanel.QPlainTextEdit.qt_scrollarea_viewport
+						61 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea
+							62 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport
+								63 grupa (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget
+									64 grupa (settable, string) Ogólne ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox
+										65 tekst Język: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										66 pole kombi (settable, string) Język: Value: Polski ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QComboBox
+										67 tekst Motyw: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										68 pole kombi (settable, string) Motyw: Value: Fusion ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QComboBox
+										69 tekst Startowy preset: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										70 edytuj (settable, string) Ogólne ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLineEdit
+										71 przycisk (settable, string) Wybierz ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										72 przycisk (settable, string) Wyczyść ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										73 tekst Domyślny folder eksportu: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										74 edytuj (settable, string) Ogólne ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLineEdit
+										75 przycisk (settable, string) Wybierz ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										76 przycisk (settable, string) Wyczyść ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+									77 grupa (settable, string) Czcionka HUD ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox
+										78 tekst Czcionka: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										79 pole kombi (settable, string) Czcionka: Value: Arial ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QComboBox
+										80 tekst Obramowanie: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										81 pokrętło (settable, float) Obramowanie: Value: 3 ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QSpinBox
+										82 przycisk (settable, string) Zapisz ustawienia ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+									83 grupa (settable, string) Wydajność ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox
+										84 tekst Katalog cache: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										85 edytuj (settable, string) Wydajność Value: cache/ ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLineEdit
+										86 przycisk (settable, string) Wybierz ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										87 przycisk (settable, string) Czyść cache ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										88 tekst Ścieżka ffmpeg: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										89 edytuj (settable, string) Wydajność ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLineEdit
+										90 przycisk (settable, string) Wybierz ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QPushButton
+										91 pole wyboru (settable, string) Zapisuj log eksportu AMD ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QCheckBox
+									92 grupa (settable, string) Wykresy ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox
+										93 pole wyboru (settable, string) Pomiń pauzy aktywności ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QCheckBox
+									94 grupa (settable, string) Integracje / Dane aktywności ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox
+										95 tekst Automatyczne źródło aktywności: ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QLabel
+										96 pole kombi (settable, string) Automatyczne źródło aktywności: Value: Garmin Connect ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QComboBox
+										97 grupa (settable, string) Integracje / Dane aktywności ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QWidget
+											98 przycisk (settable, string) Połącz z Garmin Connect ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QWidget.QPushButton
+											99 przycisk (settable, string) Sprawdź połączenie ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QWidget.QPushButton
+											100 przycisk (settable, string) Rozłącz ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QWidget.QPushButton
+											101 tekst Status: Niepołączono ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.QScrollArea.qt_scrollarea_viewport.QWidget.QGroupBox.QWidget.QLabel
+						102 przycisk przewijania (settable, string) ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_stackedwidget.SettingsTab.QSplitter.qt_splithandle_licensePanel
+			44 tab (settable, string) Ustawienia ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_tabbar
+				45 element tabulatora (selectable, settable, string) Wczytywanie ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_tabbar
+				46 element tabulatora (selectable, settable, string) Projekt ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_tabbar
+				47 element tabulatora (selectable, settable, string) Rendering ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_tabbar
+				48 element tabulatora (selectable, settable, string) Ustawienia ID: QApplication.MainWindow.QTabWidget.qt_tabwidget_tabbar
+		49 pasek stanu ID: QApplication.MainWindow.QStatusBar
+			103 przycisk przewijania (settable, string) ID: QApplication.MainWindow.QStatusBar.QSizeGrip
+			50 tekst Gotowy ID: QApplication.MainWindow.QStatusBar.QLabel
+			51 tekst ID: QApplication.MainWindow.QStatusBar.QLabel
+
+Document text: ```
+cache/
+```

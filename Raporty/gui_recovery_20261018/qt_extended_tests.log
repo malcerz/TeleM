@@ -1,0 +1,190 @@
+...................FF...........FF.FF
+================================== FAILURES ===================================
+_ test_property_dependencies_disable_and_restore_real_fields[show_min-range_gap-False-True] _
+
+parent = 'show_min', child = 'range_gap', off = False, on = True
+
+    @pytest.mark.parametrize("parent,child,off,on", [
+        ("show_marker","marker_style",False,True),
+        ("marker_style","marker_size","none","dot"),
+        ("show_label","label_font_size",False,True),
+        ("show_value","decimals",False,True),
+        ("show_min","range_gap",False,True),
+        ("show_max","range_gap",False,True),
+        ("segment_color_mode","segment_color","gradient","solid"),
+        ("segment_color_mode","segment_color_start","solid","gradient"),
+        ("segment_color_mode","gradient_space","solid","gradient"),
+        ("segment_color_mode","segment_thresholds","solid","threshold"),
+        ("grow_height","grow_start",False,True),
+        ("segment_shape","segment_corner_radius","square","rounded"),
+        ("auto_scale","min_val",True,False),
+        ("auto_scale","max_val",True,False),
+        ("outline_enabled","outline_width",False,True),
+        ("shadow_enabled","shadow_distance",False,True),
+    ])
+    def test_property_dependencies_disable_and_restore_real_fields(parent, child, off, on):
+        from src.gui.qt.models import FieldSchema
+        from src.gui.qt.widgets.property_editor import PropertyEditor
+        editor = PropertyEditor()
+        is_bool = isinstance(off, bool)
+        parent_schema = FieldSchema(parent, "bool" if is_bool else "choice", parent,
+                                    choices=None if is_bool else [off,on])
+        if child == "marker_style":
+            child_schema = FieldSchema(child, "choice", child, choices=["none","dot"])
+        else:
+            child_schema = FieldSchema(child, "float", child, min_val=0, max_val=100)
+        values = {parent:off, "show_min":False, "show_max":False}
+        values[parent] = off
+        editor.on_properties_ready("fixture", [parent_schema,child_schema], values)
+>       assert not editor._field_widgets[child].isEnabled()
+E       assert not True
+E        +  where True = <built-in method isEnabled of PySide6.QtWidgets.QDoubleSpinBox object at 0x0000029BBE6D8B40>()
+E        +    where <built-in method isEnabled of PySide6.QtWidgets.QDoubleSpinBox object at 0x0000029BBE6D8B40> = <PySide6.QtWidgets.QDoubleSpinBox(0x29bbeca8c10) at 0x0000029BBE6D8B40>.isEnabled
+
+tests\test_gui_recovery_states.py:224: AssertionError
+_ test_property_dependencies_disable_and_restore_real_fields[show_max-range_gap-False-True] _
+
+parent = 'show_max', child = 'range_gap', off = False, on = True
+
+    @pytest.mark.parametrize("parent,child,off,on", [
+        ("show_marker","marker_style",False,True),
+        ("marker_style","marker_size","none","dot"),
+        ("show_label","label_font_size",False,True),
+        ("show_value","decimals",False,True),
+        ("show_min","range_gap",False,True),
+        ("show_max","range_gap",False,True),
+        ("segment_color_mode","segment_color","gradient","solid"),
+        ("segment_color_mode","segment_color_start","solid","gradient"),
+        ("segment_color_mode","gradient_space","solid","gradient"),
+        ("segment_color_mode","segment_thresholds","solid","threshold"),
+        ("grow_height","grow_start",False,True),
+        ("segment_shape","segment_corner_radius","square","rounded"),
+        ("auto_scale","min_val",True,False),
+        ("auto_scale","max_val",True,False),
+        ("outline_enabled","outline_width",False,True),
+        ("shadow_enabled","shadow_distance",False,True),
+    ])
+    def test_property_dependencies_disable_and_restore_real_fields(parent, child, off, on):
+        from src.gui.qt.models import FieldSchema
+        from src.gui.qt.widgets.property_editor import PropertyEditor
+        editor = PropertyEditor()
+        is_bool = isinstance(off, bool)
+        parent_schema = FieldSchema(parent, "bool" if is_bool else "choice", parent,
+                                    choices=None if is_bool else [off,on])
+        if child == "marker_style":
+            child_schema = FieldSchema(child, "choice", child, choices=["none","dot"])
+        else:
+            child_schema = FieldSchema(child, "float", child, min_val=0, max_val=100)
+        values = {parent:off, "show_min":False, "show_max":False}
+        values[parent] = off
+        editor.on_properties_ready("fixture", [parent_schema,child_schema], values)
+>       assert not editor._field_widgets[child].isEnabled()
+E       assert not True
+E        +  where True = <built-in method isEnabled of PySide6.QtWidgets.QDoubleSpinBox object at 0x0000029BBE6B2CC0>()
+E        +    where <built-in method isEnabled of PySide6.QtWidgets.QDoubleSpinBox object at 0x0000029BBE6B2CC0> = <PySide6.QtWidgets.QDoubleSpinBox(0x29bbeca9f70) at 0x0000029BBE6B2CC0>.isEnabled
+
+tests\test_gui_recovery_states.py:224: AssertionError
+______________ test_settings_tab_no_thread_spin_and_dash_source _______________
+
+qapp = <PySide6.QtWidgets.QApplication(0x29bb7fe1810) at 0x0000029B9ED249C0>
+
+    def test_settings_tab_no_thread_spin_and_dash_source(qapp):
+        """Weryfikuje usunięcie liczby wątków z GUI i etykietę '--' dla braku źródła aktywności."""
+        from src.gui.qt.tabs.settings_tab import SettingsTab
+        tab = SettingsTab()
+    
+        # Brak spin_threads w atrybutach/layout
+>       assert not hasattr(tab, "spin_threads") or tab.spin_threads is None
+E       AssertionError: assert (not True or <PySide6.QtWidgets.QSpinBox(0x29bbf3de510) at 0x0000029BBF767FC0> is None)
+E        +  where True = hasattr(<src.gui.qt.tabs.settings_tab.SettingsTab(0x29bbf1a6e40) at 0x0000029BBF7589C0>, 'spin_threads')
+E        +  and   <PySide6.QtWidgets.QSpinBox(0x29bbf3de510) at 0x0000029BBF767FC0> = <src.gui.qt.tabs.settings_tab.SettingsTab(0x29bbf1a6e40) at 0x0000029BBF7589C0>.spin_threads
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:67: AssertionError
+____________________ test_settings_persistence_auto_source ____________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x29bb7fe1810) at 0x0000029B9ED249C0>
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-16/test_settings_persistence_auto0')
+
+    def test_settings_persistence_auto_source(qapp, tmp_path):
+        """Weryfikuje persystencję auto_activity_source w def_layout.json."""
+        from src.gui.qt.tabs.settings_tab import SettingsTab
+        tab = SettingsTab()
+        tab.base_dir = tmp_path
+    
+        # Zmiana źródła na garmin
+        idx = tab.cmb_auto_source.findData("garmin")
+        assert idx >= 0
+        tab.cmb_auto_source.setCurrentIndex(idx)
+>       tab._ensure_disk_persistence()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'SettingsTab' object has no attribute '_ensure_disk_persistence'
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:85: AttributeError
+_____________________ test_default_export_dir_resolution ______________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x29bb7fe1810) at 0x0000029B9ED249C0>
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-16/test_default_export_dir_resolu0')
+
+    def test_default_export_dir_resolution(qapp, tmp_path):
+        """Weryfikuje wyznaczanie domyślnego katalogu eksportu: wideo parent, last_export_dir, brak CWD."""
+        from src.gui.qt.tabs.render_tab import RenderTab
+    
+        tab = RenderTab()
+        video_dir = tmp_path / "source_video_dir"
+        video_dir.mkdir(parents=True)
+        dummy_video = video_dir / "clip01.mp4"
+        dummy_video.touch()
+    
+        # 1. Na podstawie źródłowego pliku wideo
+        class DummyCtrl:
+            video_paths = [str(dummy_video)]
+            video_path = str(dummy_video)
+            layout = {}
+    
+        tab._controller = DummyCtrl()
+        resolved = tab.resolve_default_export_dir()
+        assert resolved == video_dir
+        assert resolved != Path.cwd()
+    
+        # 2. Na podstawie zapisanego last_export_dir
+        custom_dir = tmp_path / "custom_exports"
+        custom_dir.mkdir(parents=True)
+        tab._controller.layout = {"global": {"last_export_dir": str(custom_dir)}}
+        resolved_custom = tab.resolve_default_export_dir()
+>       assert resolved_custom == custom_dir
+E       AssertionError: assert WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-16/test_default_export_dir_resolu0/source_video_dir') == WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-16/test_default_export_dir_resolu0/custom_exports')
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:160: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 508, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 15176, "preview_generation_id": 0, "preview_stop_event": {"id": 2867955357776, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 545239040, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712671100624, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 199671808, "thread_count": 26}
+______________________ test_instant_hud_request_refresh _______________________
+
+    def test_instant_hud_request_refresh():
+        """Weryfikuje, że request_preview_refresh wymusza reset _preview_telemetry_loading i wywołanie _render_preview."""
+        from src.gui.qt._mixins.preview_mixin import PreviewMixin
+    
+        class DummyPreviewController(PreviewMixin):
+            def __init__(self):
+                self._preview_telemetry_loading = True
+                self.video_path = "C:/dummy/video.mp4"
+                self.rendered_ts = None
+            def _render_preview(self, seek_seconds=None):
+                self.rendered_ts = seek_seconds
+    
+        ctrl = DummyPreviewController()
+        assert ctrl._preview_telemetry_loading is True
+>       ctrl.request_preview_refresh(0.0)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'DummyPreviewController' object has no attribute 'request_preview_refresh'
+
+tests\test_gui_logic_degree_export_settings_cleanup.py:182: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_gui_recovery_states.py::test_property_dependencies_disable_and_restore_real_fields[show_min-range_gap-False-True]
+FAILED tests/test_gui_recovery_states.py::test_property_dependencies_disable_and_restore_real_fields[show_max-range_gap-False-True]
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_settings_tab_no_thread_spin_and_dash_source
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_settings_persistence_auto_source
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_default_export_dir_resolution
+FAILED tests/test_gui_logic_degree_export_settings_cleanup.py::test_instant_hud_request_refresh
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 6 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+6 failed, 31 passed in 18.26s

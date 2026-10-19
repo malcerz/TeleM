@@ -1,0 +1,56 @@
+[
+  {
+    "analyzers": 0,
+    "run": 0,
+    "success": true,
+    "fps": 36.63,
+    "export_wall_s": 24.68489910000062,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  },
+  {
+    "analyzers": 1,
+    "run": 1,
+    "success": true,
+    "fps": 33.11,
+    "export_wall_s": 30.05722980000428,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  },
+  {
+    "analyzers": 3,
+    "run": 2,
+    "success": true,
+    "fps": 19.53,
+    "export_wall_s": 44.389364500006195,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  },
+  {
+    "analyzers": 3,
+    "run": 3,
+    "success": true,
+    "fps": 21.32,
+    "export_wall_s": 40.636323200000334,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  },
+  {
+    "analyzers": 1,
+    "run": 4,
+    "success": true,
+    "fps": 27.7,
+    "export_wall_s": 30.545116200009943,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  },
+  {
+    "analyzers": 0,
+    "run": 5,
+    "success": true,
+    "fps": 32.54,
+    "export_wall_s": 26.378057800000533,
+    "analyzer_runs_completed": 0,
+    "analyzer_nonzero_rc": 0
+  }
+]

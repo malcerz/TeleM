@@ -1,0 +1,38 @@
+........................................................................ [ 32%]
+[INTEL VBR] init with VSI status=-15; retry retaining HRD
+[INTEL VBR] init rejected status=-15
+.........................................s.............................. [ 64%]
+........................................................................ [ 96%]
+........                                                                 [100%][STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 63.31 ms (Upload/Producer context: 0000029ab1ad48f8)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 60.94 ms (Upload/Producer context: 0000029acc093cf8)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+
+============================== warnings summary ===============================
+tests\test_intel_3g9_lazy_payload.py:56
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:56: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+tests\test_intel_3g9_lazy_payload.py:77
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:77: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+tests\test_intel_3g9_lazy_payload.py:106
+  C:\_DEV\SportCamHUD\tests\test_intel_3g9_lazy_payload.py:106: PytestUnknownMarkWarning: Unknown pytest.mark.intel - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.intel
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+223 passed, 1 skipped, 3 warnings in 34.00s

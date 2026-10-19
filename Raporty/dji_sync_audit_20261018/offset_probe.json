@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "offset": 0.0,
+      "key": "4dc53dbe11c1a66e3330a1986211dd0a2109c08cffa0be7334355582efb1fe78",
+      "speed": [
+        0.0,
+        10.0,
+        20.0,
+        30.0
+      ]
+    },
+    {
+      "offset": 2.0,
+      "key": "f57e234b34410e5f410563e6fa6699980693aa3a754139510926f057d576bccb",
+      "speed": [
+        0.0,
+        10.0,
+        20.0,
+        30.0
+      ]
+    }
+  ],
+  "keys_differ": true,
+  "speeds_equal": true,
+  "session_roundtrip_offset": 2.5,
+  "scope": "Common RenderPreparationService actual cold build, synthetic samples; no GPU or video export"
+}

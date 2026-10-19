@@ -1,0 +1,227 @@
+[
+  {
+    "name": "native_hevc",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\native_hevc.mp4",
+    "pass": true,
+    "frames": 30,
+    "video": {
+      "codec_name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "color_transfer": "arib-std-b67",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "1.001000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "0.981333"
+    },
+    "av_duration_delta_s": 0.01966699999999988,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "d28df1536d0971c952b90e0f2aead4fd6e63fbc1a7a4336cb45c613a06709657"
+  },
+  {
+    "name": "native_h264",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\native_h264.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "h264",
+      "profile": "High",
+      "pix_fmt": "yuv420p",
+      "color_transfer": "bt709",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.984000"
+    },
+    "av_duration_delta_s": 0.017999999999999794,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "aa5d49e0620ba11c0ef1c58e20d7a4bd63945dc19f797599ba408561c3d8dbdf"
+  },
+  {
+    "name": "ffmpeg_hevc_final",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\ffmpeg_hevc_final.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "color_transfer": "arib-std-b67",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.962667"
+    },
+    "av_duration_delta_s": 0.03933299999999984,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "badc1eb997903033b2a9b96401688c7221340354d8706ae07f152e667d4e7461"
+  },
+  {
+    "name": "ffmpeg_h264",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\ffmpeg_h264.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "h264",
+      "profile": "High",
+      "pix_fmt": "yuv420p",
+      "color_transfer": "bt709",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.962667"
+    },
+    "av_duration_delta_s": 0.03933299999999984,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "8a5fb98e3dff9831a2e4931a1e00de6e169eb653191c8cbee09aadc83f61c5fb"
+  },
+  {
+    "name": "ffmpeg_hevc_sdr",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\ffmpeg_hevc_sdr.mp4",
+    "pass": true,
+    "frames": 30,
+    "video": {
+      "codec_name": "hevc",
+      "profile": "Main",
+      "pix_fmt": "yuv420p",
+      "color_transfer": "bt709",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "1.001000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "0.960000"
+    },
+    "av_duration_delta_s": 0.040999999999999925,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "7e409f56e46aeea9e43a2619b13801080b69800a712bc45b0b287950241847eb"
+  },
+  {
+    "name": "queue_h264",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\queue_h264.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "h264",
+      "profile": "High",
+      "pix_fmt": "yuv420p",
+      "color_transfer": "bt709",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.984000"
+    },
+    "av_duration_delta_s": 0.017999999999999794,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "aa5d49e0620ba11c0ef1c58e20d7a4bd63945dc19f797599ba408561c3d8dbdf"
+  },
+  {
+    "name": "portable_native_hevc_final",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\portable_native_hevc_final.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "color_transfer": "arib-std-b67",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.984000"
+    },
+    "av_duration_delta_s": 0.017999999999999794,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "cfeea54a5a69b00fc3ad7fef9be1a2777c8190f459264cc408947cbb7ea78785"
+  },
+  {
+    "name": "portable_native_h264",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\portable_native_h264.mp4",
+    "pass": true,
+    "frames": 60,
+    "video": {
+      "codec_name": "h264",
+      "profile": "High",
+      "pix_fmt": "yuv420p",
+      "color_transfer": "bt709",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "2.002000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "1.984000"
+    },
+    "av_duration_delta_s": 0.017999999999999794,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "aa5d49e0620ba11c0ef1c58e20d7a4bd63945dc19f797599ba408561c3d8dbdf"
+  },
+  {
+    "name": "native_init_failure_fallback",
+    "path": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\native_init_failure_fallback.mp4",
+    "pass": true,
+    "frames": 30,
+    "video": {
+      "codec_name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "color_transfer": "arib-std-b67",
+      "width": 3840,
+      "height": 2160,
+      "start_time": "0.000000",
+      "duration": "1.001000"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "start_time": "0.000000",
+      "duration": "0.960000"
+    },
+    "av_duration_delta_s": 0.040999999999999925,
+    "decode_returncode": 0,
+    "decode_stderr": "",
+    "sha256": "4cc8f7695ba8e52e7e59a8f1c7a51ed8084adda958eeff4009cf640240f826cb"
+  }
+]

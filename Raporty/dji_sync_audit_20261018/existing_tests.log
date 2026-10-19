@@ -1,0 +1,265 @@
+............................s.....Fsss...FFFFFFF...sss.................. [ 97%]
+..                                                                       [100%]
+================================== FAILURES ===================================
+___________________ test_missing_runtime_reports_python_abi ___________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002288C82EE00>
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-25/test_missing_runtime_reports_p0')
+
+    def test_missing_runtime_reports_python_abi(monkeypatch, tmp_path):
+        monkeypatch.setattr(telemetry_dji, "DJI_RUNTIME", tmp_path / "missing")
+        monkeypatch.setattr(telemetry_dji.importlib.machinery, "EXTENSION_SUFFIXES", [".missing"])
+>       with pytest.raises(RuntimeError, match="Python 3.14"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'Python 3.14'
+E         Actual message: 'DJI telemetry parser is unavailable for Python 3.15; checked: C:\\_DEV\\SportCamHUD\\runtime\\telemetry_parser, C:\\Users\\MalcerzSur\\AppData\\Local\\Temp\\pytest-of-MalcerzSur\\pytest-25\\test_missing_runtime_reports_p0\\missing'
+
+tests\test_dji_telemetry.py:120: AssertionError
+_____________________ test_dji_manager_exists_before_load _____________________
+
+    def test_dji_manager_exists_before_load():
+        """Verify AppController initializes self.telemetry as a valid TelemetryDataManager."""
+        ctrl = AppController()
+        assert ctrl.telemetry is not None
+        assert isinstance(ctrl.telemetry, TelemetryDataManager)
+>       assert ctrl.ensure_telemetry_manager() is ctrl.telemetry
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'AppController' object has no attribute 'ensure_telemetry_manager'
+
+tests\test_dji_action2_none_fix.py:34: AttributeError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 62.57 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> fallback='' reason='font 'Digital-7 Mono' not found'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+_____________ test_clear_then_reload_reinitializes_dji_correctly ______________
+
+    def test_clear_then_reload_reinitializes_dji_correctly():
+        """Verify that clear_project() preserves or re-instantiates self.telemetry instead of leaving it None."""
+        ctrl = AppController()
+        assert ctrl.telemetry is not None
+    
+        # Clear project
+>       ctrl.clear_project()
+        ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'AppController' object has no attribute 'clear_project'
+
+tests\test_dji_action2_none_fix.py:43: AttributeError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+________________ test_dji_single_file_load_does_not_call_none _________________
+
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-25/test_dji_single_file_load_does0')
+
+    def test_dji_single_file_load_does_not_call_none(tmp_path):
+        """Verify that loading a single DJI clip does not raise 'NoneType' has no attribute 'load_dji_telemetry'."""
+        ctrl = AppController()
+>       ctrl.clear_project()  # simulate state after user clicked clear
+        ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'AppController' object has no attribute 'clear_project'
+
+tests\test_dji_action2_none_fix.py:56: AttributeError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+_________________ test_dji_multifile_load_does_not_call_none __________________
+
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-25/test_dji_multifile_load_does_n0')
+
+    def test_dji_multifile_load_does_not_call_none(tmp_path):
+        """Verify loading multi-clip DJI sequence does not fail on None and merges all clips."""
+        ctrl = AppController()
+>       ctrl.clear_project()
+        ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'AppController' object has no attribute 'clear_project'
+
+tests\test_dji_action2_none_fix.py:83: AttributeError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+________________________ test_dji_and_fit_can_coexist _________________________
+
+    def test_dji_and_fit_can_coexist():
+        """Verify DJI camera data and FIT activity data cleanly coexist on TelemetryDataManager."""
+        tm = TelemetryDataManager()
+    
+        dji_data = {
+            "gyroscope_samples": [(datetime(2026, 10, 5, 12, 0, 0), (0.1, 0.2, 0.3))],
+            "accelerometer_samples": [(datetime(2026, 10, 5, 12, 0, 0), (0.0, 0.0, 9.81))],
+            "quaternion_samples": [(datetime(2026, 10, 5, 12, 0, 0), (1.0, 0.0, 0.0, 0.0))],
+            "derived_angular_velocity_samples": [(datetime(2026, 10, 5, 12, 0, 0), (0.1, 0.2, 0.3))],
+            "camera_metadata": {"camera": "DJI Action 2"},
+            "start_dt_utc": datetime(2026, 10, 5, 12, 0, 0),
+        }
+    
+        tm.load_dji_telemetry(dji_data)
+>       assert tm.is_dji is True
+               ^^^^^^^^^
+E       AttributeError: 'TelemetryDataManager' object has no attribute 'is_dji'
+
+tests\test_dji_action2_none_fix.py:142: AttributeError
+_____________________ test_late_fit_attach_preserves_dji ______________________
+
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-25/test_late_fit_attach_preserves0')
+
+    def test_late_fit_attach_preserves_dji(tmp_path):
+        """Verify that attach_late_telemetry preserves DJI state and sets FIT data."""
+        ctrl = AppController()
+        dummy_fields = {
+            "_dji": True,
+            "start_dt_utc": datetime(2026, 10, 5, 12, 0, 0, tzinfo=timezone.utc),
+            "gyroscope_samples": [(datetime(2026, 10, 5, 12, 0, 0), (0.1, 0.2, 0.3))],
+            "accelerometer_samples": [],
+            "quaternion_samples": [],
+            "camera_metadata": {"camera": "Action 2"},
+        }
+    
+        video_file = tmp_path / "DJI_0010.MP4"
+        video_file.write_bytes(b"\x00" * 1024)
+        ctrl.video_path = video_file
+        ctrl.video_paths = [video_file]
+    
+        with patch.object(ctrl, "_load_single_clip_telemetry", return_value=(dummy_fields, [])):
+            ctrl._load_or_generate_telemetry()
+    
+>       assert ctrl.telemetry.is_dji is True
+               ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'TelemetryDataManager' object has no attribute 'is_dji'
+
+tests\test_dji_action2_none_fix.py:189: AttributeError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=0.38 thread=MainThread/19144 input_bytes=1024 records=0
+___________________ test_stale_dji_worker_result_is_ignored ___________________
+
+tmp_path = WindowsPath('C:/Users/MalcerzSur/AppData/Local/Temp/pytest-of-MalcerzSur/pytest-25/test_stale_dji_worker_result_i0')
+
+    def test_stale_dji_worker_result_is_ignored(tmp_path):
+        """Verify that if _load_cancel_event is set, loading terminates and does not attach stale data."""
+        ctrl = AppController()
+        ctrl._load_cancel_event = threading.Event()
+        ctrl._load_cancel_event.set()  # cancelled
+    
+        video_file = tmp_path / "DJI_0010.MP4"
+        video_file.write_bytes(b"\x00" * 1024)
+        ctrl.video_path = video_file
+        ctrl.video_paths = [video_file]
+    
+        single_clip_called = False
+        def mock_clip(*args, **kwargs):
+            nonlocal single_clip_called
+            single_clip_called = True
+            return {"_dji": True}, []
+    
+        with patch.object(ctrl, "_load_single_clip_telemetry", side_effect=mock_clip):
+>           ctrl._load_or_generate_telemetry()
+
+tests\test_dji_action2_none_fix.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <src.gui.qt.controller.AppController(0x2289eac8180) at 0x000002289EDCC0C0>
+
+    def _load_or_generate_telemetry(self) -> None:
+        """Wczytaj lub wygeneruj telemetrię dla wszystkich klipów projektu."""
+        if not self.video_path:
+            return
+        load_start = _time.perf_counter()
+        paths = getattr(self, "video_paths", None) or [self.video_path]
+        total_clips = len(paths)
+        print(f"[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla {total_clips} klip(ów)...", flush=True)
+    
+        for idx, p in enumerate(paths):
+            pct_clip_start = 30 + int(35 * (idx / total_clips))
+            self.signals.sig_progress.emit(pct_clip_start, f"Analiza telemetrii ({idx + 1}/{total_clips})...")
+            t_clip_0 = _time.perf_counter()
+            fields, records = self._load_single_clip_telemetry(p, clip_idx=idx, total_clips=total_clips)
+            _profile_load_stage(f"clip_load_{idx + 1}_ms", t_clip_0, p, len(records) if records else 0)
+    
+            if idx == 0:
+                if fields:
+                    if fields.get("_dji"):
+                        self.telemetry.load_dji_telemetry(fields)
+>                       self.telemetry.start_dt_utc = fields["start_dt_utc"]
+                                                      ^^^^^^^^^^^^^^^^^^^^^^
+E                       KeyError: 'start_dt_utc'
+
+src\gui\qt\_mixins\project_mixin.py:1475: KeyError
+---------------------------- Captured stdout call -----------------------------
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: HIT
+Probe: UNKNOWN
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=6.53 thread=MainThread/19144 input_bytes=1024 records=0
+=========================== short test summary info ===========================
+FAILED tests/test_dji_telemetry.py::test_missing_runtime_reports_python_abi
+FAILED tests/test_dji_action2_none_fix.py::test_dji_manager_exists_before_load
+FAILED tests/test_dji_action2_none_fix.py::test_clear_then_reload_reinitializes_dji_correctly
+FAILED tests/test_dji_action2_none_fix.py::test_dji_single_file_load_does_not_call_none
+FAILED tests/test_dji_action2_none_fix.py::test_dji_multifile_load_does_not_call_none
+FAILED tests/test_dji_action2_none_fix.py::test_dji_and_fit_can_coexist - Att...
+FAILED tests/test_dji_action2_none_fix.py::test_late_fit_attach_preserves_dji
+FAILED tests/test_dji_action2_none_fix.py::test_stale_dji_worker_result_is_ignored
+8 failed, 59 passed, 7 skipped in 5.08s

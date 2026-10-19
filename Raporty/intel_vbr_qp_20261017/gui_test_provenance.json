@@ -1,0 +1,8 @@
+{
+  "method": "RenderTab._on_render",
+  "head": "e21d625",
+  "ast_unchanged": true,
+  "head_sha256": "ab3e17fce94e51f532a85927923a320e8289c6904a85b15942629281fbda4d5e",
+  "current_sha256": "ab3e17fce94e51f532a85927923a320e8289c6904a85b15942629281fbda4d5e",
+  "failure": "GUI tests call _on_render without loaded video; unchanged input guard refuses start"
+}

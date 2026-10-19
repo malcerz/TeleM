@@ -1,0 +1,30 @@
+{
+  "codec": "h264",
+  "intel_path": "ffmpeg",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\scratch\\intel_fix\\ffmpeg_h264.mp4",
+  "bitrate": "40M",
+  "max_frames": 60,
+  "success": true,
+  "error": "",
+  "elapsed_s": 10.43,
+  "total_frames": 60,
+  "effective_fps": 5.76,
+  "ram_used_gb": 9.86,
+  "output_size_bytes": 10205237,
+  "stats": {
+    "avg_qp": null,
+    "generation_id": 1,
+    "output_validation": {
+      "duration_s": 2.002,
+      "has_audio": true,
+      "size_bytes": 10205237,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "total_overlay_frames": 0
+  },
+  "sampled_q": {}
+}

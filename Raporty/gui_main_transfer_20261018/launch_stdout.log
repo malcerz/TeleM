@@ -1,0 +1,38 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 18.08 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> fallback='' reason='font 'Digital-7 Mono' not found'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> ''
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 00000288ad6faac0] Current codec type is unsupported
+[av1_qsv @ 00000288ad6faac0] Current profile is unsupported
+[av1_qsv @ 00000288ad6faac0] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 00000288b07a70c0] [enc:av1_qsv @ 00000288afe17880] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 00000288ad8470c0] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 00000288ad8470c0] Task finished with error: Function not implemented
+[vf#0:0 @ 00000288ad8470c0] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 00000288b07a70c0] [enc:av1_qsv @ 00000288afe17880] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 00000288b07a70c0] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 00000288b07a70c0] Terminating thread with error: Invalid argument
+[out#0/null @ 00000288ad7f4240] Nothing was written into output file, because at least one of its streams received no packets.
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 608, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 3628, "preview_generation_id": 0, "preview_stop_event": {"id": 1880322509328, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 578244608, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712737095376, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 210825216, "thread_count": 24}
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[ExportQueue] Initialized
+[PROC] job created handle=2460
+[PROC] assigned TeleM parent pid=3628 to job (in_prior_job=True)
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0

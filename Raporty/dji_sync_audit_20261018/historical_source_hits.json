@@ -1,0 +1,2469 @@
+{
+  "blobs_scanned": 502,
+  "hits": [
+    {
+      "blob": "8ec4f0734af3711df704bb8e83c52c8226b510e3",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 115,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 140,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "ccdf80433974f38a241ee4c6fcbe586157b8a199",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "72bf9a3e3d24830d69b533e95fb1aaf69ead4ee3",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 835,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "76edd140c5154f3348ce600163e3dbe01ef17254",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1270,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "416465dd42753e5a02a6b01813f2d942f8665786",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1132,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1172,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1179,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1180,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "3966c260cabf5245e3fdae41ca39bf43bd4fccbe",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 914,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "b6d5f9e1ce14fdee19228853e3805421dde31d3a",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 79,
+          "text": "# Last measured spatial SmartSync result, consumed by the strict CLI integrity harness."
+        },
+        {
+          "line": 80,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS: dict[str, Any] = {\"status\": \"NOT_RUN\"}"
+        },
+        {
+          "line": 251,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 252,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({"
+        },
+        {
+          "line": 264,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 275,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 276,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({"
+        },
+        {
+          "line": 289,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 309,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 315,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.clear()"
+        },
+        {
+          "line": 316,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({\"status\": \"NO_SPATIAL_MATCH\"})"
+        },
+        {
+          "line": 318,
+          "text": "LAST_SMARTSYNC_DIAGNOSTICS.update({\"status\": \"NO_VIDEO_START\"})"
+        },
+        {
+          "line": 335,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 350,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 358,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 830,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 856,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 877,
+          "text": "# Commit the new source only after parsing, synchronization, and sample"
+        },
+        {
+          "line": 942,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 961,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "3c09c3c3dedb14cef336abc468aadc9779ac0a96",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 768,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "38570be570daa7740046e16e94d52c4bf26b4312",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1038,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1078,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1085,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1086,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "2e5de786783353f9df83ac90ec9706b245993a48",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 115,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 140,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "41728388c04e74bbca20e064634d3d53b0753fa0",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 758,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "8d157f144be5a17ebfae7c15fb2eaf6b36349ef1",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1270,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "2b9719bf276f71855173ee430eee3c543be2846d",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1018,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1058,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1065,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1066,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "192d68bad5f6b6f25be4fb86cbf2e3e0f750f6f0",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 914,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "e02fe42f1d7ffe5f65dbdca6f7a0fc65c5466510",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 914,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "636fad20d5699809f177f40a0a9c756040b79834",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 115,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 140,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "df627f16f37932153c02e8a58a1bcaed45a3d95d",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1222,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "fa0c890144d9449b0ea1c18dc33df7edfb9f19ab",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 115,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 140,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "c4c6af7517c170da939f41cd59aed884fd058ed0",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1221,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "03fed349c0702d69b6f688c9dc483aba78506cfa",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 114,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 139,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "c491fe97f48d3b610e9e00a14901002e86d99641",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 756,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "ce0ab52826d6c9c8d7cee534d8af12024bc8e641",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1217,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "c135f2ed36fef9c873d97f871a9ec51ceeef778c",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1184,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "82a9c83f51087109478532a6e4b06681aa41a8fc",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1153,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "54e21861a0c24e0370997c3d2b5f84258620f5e9",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 1145,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "fc6382c48f3a28a05dff20c49639316cd202232b",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 753,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "a7067258a8de1edd145a7eca5b45fc62b3be040d",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 914,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "692f26152565f41d7a07ad573ba959d8d6234370",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 999,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "a3bf725640e146515698be85d8c0a82d20073a68",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 959,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "19f07042cf275bb0e8848a7b0a983a1e69f4d8cf",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1013,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1053,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1060,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1061,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "b1aa8f7480b43691883e925473f3200490da21bf",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 906,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "66328c94334c4e6aa9dcf8726eb106110ce9ebf7",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 885,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "361ebc0eff6c6d698a65ebac47291bb906bd2fda",
+      "path": "src/gui/qt/_mixins/render_mixin.py",
+      "hits": [
+        {
+          "line": 957,
+          "text": "sync_offset_s=float(layout.get(\"telemetry_sync_offset_s\", 0.0) or 0.0),"
+        }
+      ]
+    },
+    {
+      "blob": "4c01459286095f7f023c62e7b5450cc19430d231",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 674,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "c7561e307a3a89999e01f3029a1af0aa00616c05",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 674,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "c04d62eab95e44b1fcc314ccca0b8b03d9bc0c8f",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 114,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 139,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "bbcda75f340095dff70d1a6191f45e230411c35d",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 1013,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1053,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1060,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1061,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "2f50c4538387e987da2873369766507c8774dad4",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 1021,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "db8abf58095e6ea0cffcbbfd4dd93469cd30ed61",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 995,
+          "text": "\"smart_sync\": dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS),"
+        },
+        {
+          "line": 1035,
+          "text": "smart_sync = dict(telemetry_manager.LAST_SMARTSYNC_DIAGNOSTICS)"
+        },
+        {
+          "line": 1042,
+          "text": "if smart_sync.get(\"status\") != \"VALID\" or not smart_sync.get(\"matched_points\"):"
+        },
+        {
+          "line": 1043,
+          "text": "_finish_sync_test(\"INVALID\", validation=result, error=\"No accepted spatial SmartSync result\")"
+        }
+      ]
+    },
+    {
+      "blob": "adcd2047908083e78c4531a146d85693688dfc8d",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 1017,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "606358aa26be73bafa2f91398f54e5cc934c3185",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 952,
+          "text": "print(f\"[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...\\n  VIDEO: {video_path}\\n  FIT: {fit_path}\", flush=True)"
+        }
+      ]
+    },
+    {
+      "blob": "4d91bf634635dc20919457eace06684e56466ab5",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 803,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 829,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 912,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 931,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "6035d570080edfddde718c98d1c2a6cc02b2d6e9",
+      "path": "src/gui/qt/application.py",
+      "hits": [
+        {
+          "line": 939,
+          "text": "print(\"[TEST SYNC INTEGRITY] Uruchamianie walidacji synchronizacji...\", flush=True)"
+        }
+      ]
+    },
+    {
+      "blob": "ef1c90b1ca346869c51ae7f0f2694f6056ccc16a",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 803,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 829,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 913,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 932,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "f70bb2bd74022e57cfbb27c1492f0a279f1d6f44",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 800,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 826,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 907,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 926,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "109bac3d2a555928e5bd67c5f89070e196020cfd",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "66d350d2d75a6de414d7c2257b5849efa4480b18",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 1008,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "4334366ee18c5b485250d954959644ba3a424d66",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 984,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "056ae3f9ebf550dd26570608fbede1f10a0cbb22",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 114,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 139,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "a03e760bc32710b26a81a458f53b9d3224c6d30e",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 897,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "741e1d87a54e9f3a57a724a0a018923d7c65ad99",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "3e1057332029cb1c51452b33e61ccf4c96d2fa4c",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 110,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 135,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "4da3bf145b1ac56c89f078f53ddd3a671b6c3075",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "8985deea71bf61fa0d7abe183d2b0f4b1a8a6355",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 897,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "51baf8b7bdb714cfe4fc6cf820d976813dd760cf",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 110,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 135,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "27b5cb3497c6652154234b42e62f526868ae4c00",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 894,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "18e97753f515f0a1d4221caf06723986741c80d2",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 894,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "40f6ac7fab4c2c5c05297bd8b198428871911f49",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 789,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 815,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 896,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 915,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "eeec3002a73d5f8491b5b8ab8ca12f5de214fbc7",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 110,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 135,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "9e0b36af2d03cad8cef6724d466a4681ee7a13b4",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 110,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 135,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "c2b7b08a69ae42d50cbe1dac7ed0e97de8b7d755",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 109,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 134,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "68eadeea9e3e746013b2bdbdfc3000ab1c14c0ce",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "4f1d888018e911e199adaed98a9f4572e3a9f2a6",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 505,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "70675e80f93b94b66079b32ea7f2a1ee502c855d",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 863,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "138b91e7c6e07cc335e8428c309c5badca911a61",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 780,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 806,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 884,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 903,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "e1d3977e8637eedfa5df55e1236ed9f1cfb6091b",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 106,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 131,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "aaeec4c983973f4e1dd45118cd17b30737ace093",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 502,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "224d81eb475e6a9795b2eceef1ef90ac1ee4917d",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 107,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 132,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "44f9d48dc99bcb5299d5ad4a95c4d3d0c3955733",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 880,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "f102a0acee84014c24e3875699a1aac0e59b03eb",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 880,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "28401f74a909e14db36afd8ee7bd591d364d2e2b",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 910,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "06a6670bad5c80132f30e7e97dc51bf7483f9356",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 106,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 131,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "dcbb692aec648df7a0e15ca0f43fd6c0d7dae59a",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "953cfe3c38eee554764a7f528e6b472a8b36520d",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 497,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "d404d308ed7963e768c2d3efa657f6790948016c",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 780,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 806,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 884,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 903,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "b0fd38671fcb23108fb9fbd3a6adf8e5d6fceb54",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 93,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 111,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "eed4c7ae00dac597e23fe6cbd3c4410226918a30",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 405,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "5c37a35bc28b9b716fc0c8a3e02b55f3b8e9f4f4",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 452,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "453aa87c7946bec8c5c0bdeb375abdd91751f348",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 744,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "8f7cb3f746a45a843c50bddd4e89faee0570c72b",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 244,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 257,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 277,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 323,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 741,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 767,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 845,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 864,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "107dad431c2cf097d6c9681dad31cd9e3f26c27b",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 840,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "c8364aeb1dac65dffc00b2504ca4f2985f261949",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 105,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 124,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "4c65ac59dae1991bf9bf2602889c2c0308718292",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 403,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "86a41f573a10c30e45cbbc8781a879bcc85410b6",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 487,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "002cebab0ed5d0f274bd17fe7e9e278103d20a6e",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 815,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "9c249caf8cb0e748d8594ebb7d970c6829f28838",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 780,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 806,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 884,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 903,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "6b059e01c995360e2dc82b36c555fc2071b1cb25",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 100,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 118,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "900e8c3ef58847a8e9dcae60669746e4446c108f",
+      "path": "src/gui/qt/_mixins/preview_mixin.py",
+      "hits": [
+        {
+          "line": 401,
+          "text": "\"\"\"Synchronizuje fizyczny rozmiar podglądu z VideoPreview i wykonuje natychmiastowy render.\"\"\""
+        }
+      ]
+    },
+    {
+      "blob": "7df84ba6e4ad5ae4e8b0af3fd31f0d9cc30ad986",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 481,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "bcb78a0d51c56f38b445785a96c448ca671b3c26",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 762,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "e9444f895c1a2136b730b6d24e65e6d5a9c21876",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 282,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 320,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 328,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 780,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 806,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 884,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 903,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "3a72ac4b34c7efcda751fa80843cc3944bb65c2d",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 100,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 118,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "37a06b076a18fa5c2048d505b03b352d38c0731e",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 463,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "e847f8b6dacf9f079093a7ffca7fe1335be6bdfb",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 752,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "c984d434928d74d3ec98d919656311ae2a89afc9",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 244,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 257,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 277,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 323,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 687,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 713,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 791,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 810,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "c38c97c0421a975410ef625fb7e3d0582682067e",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 100,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 118,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "dfbd1279f6966627107530623b7a997cd056994a",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 418,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "c06b87f170c1eae01524274927abc80fcb740abb",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 237,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 250,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 270,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 293,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 316,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 675,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 701,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 779,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 798,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "1829948d05782f31a4a96d3eff3d8ac8f7f29c54",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 418,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "c7ad89f37dbf633bb8cd29ec1ecd21e3b5b306ee",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 237,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 250,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 270,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 293,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 316,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 675,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 701,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 779,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 798,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "953ea9733a0f021006483ffac68c8db3c4183e6f",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 90,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 108,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "6eb663bd2d55096291b938753aa3bdd478f97102",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 88,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 98,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "e03077909ae53c958e7939a430b36f6eb60c2495",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 420,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "2cd58c3b09ed9fb9326024b1f263a93f85f463e8",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 88,
+          "text": "\"\"\"Cross-correlate video (GPMF) GPS positions with FIT/GPX positions to find"
+        },
+        {
+          "line": 139,
+          "text": "\"[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may \""
+        },
+        {
+          "line": 157,
+          "text": "f\"[SmartSync] GPS track alignment: offset={offset} \""
+        },
+        {
+          "line": 173,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 195,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 206,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 211,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        },
+        {
+          "line": 463,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 489,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 547,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 566,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "4fab33dfdbb667ca16ab485b323065c79a7654a6",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 89,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 107,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "fd6c57e520837dcb0f6d202459cfb4183624846c",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 335,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "9c71391a18838a94a8f3e1676c74563300fb3809",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 743,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "7a1a63571a8b311df184f4127cc616040dae4305",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 269,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 633,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 659,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 737,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 756,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "486df8af620180c1e271ab54afa7b22825a76882",
+      "path": "src/gui/qt/_mixins/project_mixin.py",
+      "hits": [
+        {
+          "line": 335,
+          "text": "f\"FIT/GPMF synchronization may be incorrect.\", flush=True,"
+        }
+      ]
+    },
+    {
+      "blob": "48328797bab303dc0ce99fcd4d565eb0b10d593c",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 89,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 107,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "8d49701f3bf662f41ac448fbb54fea399106edf0",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 725,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "7cef4821c1e5ee16dd61f8253fc3ed10f7686eb4",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 269,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 624,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 650,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 722,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 741,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "46120a81abd07dacc8f4109b84269c578461b9ba",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 661,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "398bf51d015b5e0410ef566f856c231a133413e2",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 269,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 624,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 650,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 722,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 741,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "75e40ec6bf141bc57abc9b2434245dd0ebd08e4c",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 619,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "214ce6b3f2ecfc6d18b940ddc9e971bd583bf216",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 557,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "87b004aed60b9d09dcd540d142ceae6dd857a7cb",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 236,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 249,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 269,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 292,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 307,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 315,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 624,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 650,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 722,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 741,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "aed3be1dace7f2233aa5e1524b505ecae3e4e0e2",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 89,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 99,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "e71f653427469cdaa5167dddd1929c39b48fc7ca",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 471,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "5a0997cc97c2c75a2bc1ff86463e277bc252f64b",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 234,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 247,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 267,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 290,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 305,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 313,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 607,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 633,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 699,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 718,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "16094547947ea630b387cee272f1b17637225b88",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 229,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 242,
+          "text": "\"[SmartSync] absolute_overlap=yes \""
+        },
+        {
+          "line": 262,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 285,
+          "text": "f\"[SmartSync] absolute_overlap=no method=absolute_time \""
+        },
+        {
+          "line": 300,
+          "text": "f\"[SmartSync] absolute_overlap=no method=timezone_fallback \""
+        },
+        {
+          "line": 308,
+          "text": "f\"[SmartSync] absolute_overlap=no method=align_start_fallback \""
+        },
+        {
+          "line": 601,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 627,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 692,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 711,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "868b55b1195bf597c95e91e0c50e7aa320cd0c45",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 89,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 99,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "0ad8c95b35810886a92e5e2ec4c1f1e061f7789f",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 431,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "2891b9da44093686232acf65d2d35e2f8d185582",
+      "path": "src/gui/qt/_mixins/preset_mixin.py",
+      "hits": [
+        {
+          "line": 89,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 99,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "063738edf123d5998e4b8fc63b332d33f4bd41db",
+      "path": "src/gui/qt/models.py",
+      "hits": [
+        {
+          "line": 427,
+          "text": "\"\"\"Synchronizuje size/font_size tylko dla formy \"text\"."
+        }
+      ]
+    },
+    {
+      "blob": "0cf162e7dc402ddbe7bebb8960e8c78b2b191a85",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 90,
+          "text": "\"\"\"Cross-correlate video (GPMF) GPS positions with FIT/GPX positions to find"
+        },
+        {
+          "line": 141,
+          "text": "\"[SmartSync] WARNING: GPS tracks do not overlap — the FIT/GPX file may \""
+        },
+        {
+          "line": 159,
+          "text": "f\"[SmartSync] GPS track alignment: offset={offset} \""
+        },
+        {
+          "line": 175,
+          "text": "0. GPS track alignment (most reliable — GoPro clock can drift): cross-correlate"
+        },
+        {
+          "line": 197,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 208,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 213,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        },
+        {
+          "line": 466,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 492,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 550,
+          "text": "# Prefer GPS-track cross-correlation when both tracks are available."
+        },
+        {
+          "line": 569,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "f495c61f7176f9bc65ecda1e9e2de4e891070ff9",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1293,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 1303,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "8ee49ae6391d14f2085955cdb7f064e256730262",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1296,
+          "text": "# \"Rozmiar\" (size) i \"Size\" (font_size) są zsynchronizowane tylko dla"
+        },
+        {
+          "line": 1306,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "a575761e3cb566367f84c785728fec419ce99640",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1216,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "cd71a6ac85df84eb185aca9a3c85626753e74161",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 106,
+          "text": "print(f\"[SmartSync] Direct match found: vid_dt={vid_dt} inside [{fit_start}..{fit_end}]\", flush=True)"
+        },
+        {
+          "line": 117,
+          "text": "print(f\"[SmartSync] Timezone offset match found: tz_h={tz_h}h, offset={offset}, vid_dt={vid_dt} -> FIT [{shifted_fit_start}..{shifted_fit_end}]\", flush=True)"
+        },
+        {
+          "line": 122,
+          "text": "print(f\"[SmartSync] No timestamp overlap. Fallback offset={fallback_offset} (aligning FIT start {fit_start} to video start {vid_dt})\", flush=True)"
+        },
+        {
+          "line": 390,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 462,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "ecbc2c8205cc862262e3c67472d29fe8b0d7dd07",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1141,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "9af8ba531f32f203c14098aaedef0a1cc8eef463",
+      "path": "src/gui/telemetry_manager.py",
+      "hits": [
+        {
+          "line": 338,
+          "text": "# Synchronise to video timeline to get sample streams"
+        },
+        {
+          "line": 396,
+          "text": "# — synchronize timestamps to video start so they match start_dt_utc"
+        },
+        {
+          "line": 418,
+          "text": "# Synchronise to video timeline to get per-field sample dict"
+        }
+      ]
+    },
+    {
+      "blob": "c35d2e748d48de40e8ea499b7f281eb95cd35322",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1103,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "0f1ddb3bf8f547850db46321612d1809b154ff8e",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1097,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "ddbcd2442d7942bac707f1f98a2942f9682c89a7",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 1069,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "6169a4fdcae1c570ecddb96734f145ed8d548d30",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 959,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "9f111aef13928864efa88867ff108f79aaeb7e6f",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 959,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "0bb0bfecbcc19648260eb81d040583e209122bd2",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 949,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "e6c9a93d8dfa91691a6f62b055a2e01fa81376ee",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 937,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "c770c58b1b4ff19c9ff9639617ce3be75c933035",
+      "path": "src/gui/hud_tuner_app.py",
+      "hits": [
+        {
+          "line": 728,
+          "text": "# Synchronizuj layout_mgr po zmianie"
+        },
+        {
+          "line": 1359,
+          "text": "# Synchronizuj layout_mgr, aby był spójny ze stanem UI"
+        },
+        {
+          "line": 1769,
+          "text": "# Użyj start_dt_utc z GUI – FIT/GPX były do niego zsynchronizowane"
+        }
+      ]
+    },
+    {
+      "blob": "c287a378120a1e3c6901a4488419bf2551d0040b",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 937,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "bdbc10b711c90395c803aeed9683cd7e96809f90",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 947,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "4fcd96a7580eeb7e61f1b03fb7fd4f54c7b0e324",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 834,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    },
+    {
+      "blob": "40e5d9112889f2ddaaff300a49bf85038c7ac117",
+      "path": "src/gui/qt/controller.py",
+      "hits": [
+        {
+          "line": 834,
+          "text": "# Synchronizuj layout_mgr"
+        }
+      ]
+    }
+  ]
+}
