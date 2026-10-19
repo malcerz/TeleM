@@ -1235,41 +1235,44 @@ def export_nvidia_native_d3d11(
             print("[EXACT GOOD330 CHECK] VERIFIED: All counts match EXACT GOOD330 specification!", flush=True)
 
     # 4. Resolve Live Audio Inputs directly from original source MP4(s)
-    has_audio = any(_probe_clip_audio_stream(ffprobe_exe, clip.path) for clip in clips_desc)
+    from src.ffmpeg.live_av_mux import (
+        AudioSegment,
+        audio_segments_from_timeline,
+        build_live_audio_inputs,
+        raw_video_timestamp_args,
+    )
+
     audio_concat_path: Optional[Path] = None
-    audio_args: list[str] = []
-
-    if has_audio:
-        vt_clips = list(getattr(video_timeline, "clips", ()) or ())
-        use_concat_plan = (len(clips_desc) > 1) or (len(vt_clips) > 1)
-
-        if use_concat_plan:
-            audio_concat_path = output_tmp_path.with_name(f"{output_tmp_path.stem}.audio.concat.txt")
-            _write_nvidia_audio_concat_plan(
-                audio_concat_path,
-                clips_desc=clips_desc,
-                video_timeline=video_timeline,
-                start_frame=start_frame,
-                export_frames=export_frames,
-                fps_num=target_fps_num,
-                fps_den=target_fps_den,
+    vt_clips = list(getattr(video_timeline, "clips", ()) or ())
+    if vt_clips:
+        audio_segments = audio_segments_from_timeline(video_timeline)
+    else:
+        audio_fps = target_fps_num / float(target_fps_den)
+        req_end_frame = start_frame + export_frames
+        audio_segments = []
+        for clip in clips_desc:
+            overlap_start_f = max(start_frame, clip.global_start_frame)
+            overlap_end_f = min(req_end_frame, clip.global_start_frame + clip.frame_count)
+            if overlap_start_f >= overlap_end_f:
+                continue
+            local_start_s = (overlap_start_f - clip.global_start_frame) / audio_fps
+            local_end_s = (overlap_end_f - clip.global_start_frame) / audio_fps
+            audio_segments.append(
+                AudioSegment(
+                    path=str(clip.path),
+                    start_s=local_start_s,
+                    duration_s=(
+                        None if local_end_s >= clip.duration_sec - 1e-6
+                        else local_end_s - local_start_s
+                    ),
+                )
             )
-            audio_args = [
-                "-copyts", "-avoid_negative_ts", "make_zero",
-                "-f", "concat", "-safe", "0", "-i", str(audio_concat_path),
-            ]
-        else:
-            single_path = str(clips_desc[0].path)
-            single_local_start = 0.0
-            if vt_clips:
-                single_local_start = float(getattr(vt_clips[0], "local_start_s", 0.0) or 0.0)
-            elif start_frame > 0:
-                single_local_start = start_frame * target_fps_den / float(target_fps_num)
-
-            if single_local_start > 1e-6:
-                audio_args = ["-ss", f"{single_local_start:.6f}", "-i", single_path]
-            else:
-                audio_args = ["-i", single_path]
+    live_audio = build_live_audio_inputs(
+        audio_segments,
+        first_input_index=1,
+        has_audio=lambda path: _probe_clip_audio_stream(ffprobe_exe, path),
+    )
+    has_audio = live_audio.has_audio
 
     # 5. Video Pipe & Live FFmpeg MP4 Muxer
     prep_tracker.start_phase("native_setup", items_total=1)
@@ -1291,18 +1294,27 @@ def export_nvidia_native_d3d11(
 
     from src.ffmpeg.gpmf_export import inline_gpmf_mux_args
 
+    video_ts_args = raw_video_timestamp_args("ffmpeg", v_fmt, target_fps_num, target_fps_den)
+    print(
+        f"[NVIDIA LIVE MUX] audio={live_audio.mode} segments={len(audio_segments)} "
+        f"video_ts={'setts' if video_ts_args else 'none'}",
+        flush=True,
+    )
     if has_audio:
-        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 2)
+        gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1 + live_audio.input_count)
         cmd_mux = [
             "ffmpeg", "-y",
-            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}", "-i", "-",
-            *audio_args,
+            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}",
+            *video_ts_args,
+            "-i", "-",
+            *live_audio.input_args,
             *gpmf_inputs,
-            "-map", "0:v", "-map", "1:a?",
+            "-map", "0:v",
+            *live_audio.map_args,
             *gpmf_maps,
             "-t", f"{duration_s:.6f}",
             "-c:v", "copy",
-            "-c:a", "copy",
+            *live_audio.codec_args,
             "-tag:v", v_tag,
             "-f", "mp4",
             "-progress", "pipe:1",
@@ -1312,7 +1324,9 @@ def export_nvidia_native_d3d11(
         gpmf_inputs, gpmf_maps = inline_gpmf_mux_args(inline_gpmf_plan, 1)
         cmd_mux = [
             "ffmpeg", "-y",
-            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}", "-i", "-",
+            "-f", v_fmt, "-r", f"{target_fps_num}/{target_fps_den}",
+            *video_ts_args,
+            "-i", "-",
             *gpmf_inputs,
             "-map", "0:v",
             *gpmf_maps,

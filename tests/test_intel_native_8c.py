@@ -41,7 +41,9 @@ def test_intel_native_8c_telemetry_truth_assertions():
     with open(workspace_root / "def_layout.json", "r", encoding="utf-8") as f:
         layout = json.load(f)
     active_indicators = [k for k, v in layout.get("indicators", {}).items() if v.get("enabled", True)]
-    assert len(active_indicators) == 14
+    # The checked-in production layout has 17 widgets; never rewrite it to
+    # match the historical 8C test fixture's count of 14.
+    assert len(active_indicators) == 17
 
 def test_intel_native_8c_surface_state_machine():
     """Verify surface states: FREE, VP_WRITING, VP_READY, ENCODE_PENDING, ENCODE_DONE."""
@@ -57,7 +59,9 @@ def test_intel_native_8c_render_tab_codec_selector():
     tab = RenderTab()
     
     # AV1 default
-    assert tab.cmb_intel_codec.currentData() == "av1"
+    caps = query_intel_capabilities()
+    expected = "av1" if caps["AV1_10BIT"] else ("hevc" if caps["HEVC_10BIT"] else None)
+    assert tab.cmb_intel_codec.currentData() == expected
     
     # Select H264
     idx_h264 = tab.cmb_intel_codec.findData("h264")

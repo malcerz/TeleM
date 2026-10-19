@@ -115,6 +115,9 @@ def test_intel_native_7g_rational_global_timeline_continuity():
 
 def test_intel_native_7g_capacity_hierarchy():
     """Verify the 7G capacity hierarchy: Producer < Consumer << Encoder."""
+    from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+    if not query_intel_capabilities()["AV1_10BIT"]:
+        pytest.skip("This legacy capacity entrypoint measures AV1, unavailable on this device")
     from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()

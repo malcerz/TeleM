@@ -133,7 +133,7 @@ def test_intel_8bit_nv12_generates_valid_nv12() -> None:
         intel_gpu_compositor=False,
         intel_cpu_download_format="nv12",
         intel_cpu_software_decode=False,
-        intel_codec="hevc",
+        intel_codec="hevc_sdr",
     )
 
     cmd_str = " ".join(cmd)
@@ -222,6 +222,7 @@ def test_consecutive_intel_queue_dispatch_contract() -> None:
     mock_res.adapters = [{"index": 0}]
 
     with patch("src.ffmpeg.intel_native_exporter.export_intel_native_d3d11", side_effect=mock_native_exporter), \
+         patch("src.ffmpeg.intel_native_exporter.validate_intel_codec", return_value="hevc"), \
          patch("src.ffmpeg.intel_native_exporter.is_intel_native_available", return_value=(True, "available")), \
          patch("src.ffmpeg.streaming.resolve_intel_force", return_value=mock_res), \
          patch("src.ffmpeg.streaming._probe_intel_cpu_download_format", return_value="p010le"), \
@@ -284,6 +285,7 @@ def test_intel_fallback_records_root_cause_on_failure() -> None:
     mock_res.adapters = [{"index": 0}]
 
     with patch("src.ffmpeg.intel_native_exporter.export_intel_native_d3d11", return_value=False), \
+         patch("src.ffmpeg.intel_native_exporter.validate_intel_codec", return_value="hevc"), \
          patch("src.ffmpeg.intel_native_exporter.is_intel_native_available", return_value=(True, "available")), \
          patch("src.ffmpeg.streaming.resolve_intel_force", return_value=mock_res), \
          patch("src.ffmpeg.streaming._probe_intel_cpu_download_format", return_value="p010le"), \

@@ -944,6 +944,14 @@ def main() -> None:
 
         parser = argparse.ArgumentParser(description="SportCamHUD Intel Export Benchmark")
         parser.add_argument("--test-intel-export", action="store_true")
+        parser.add_argument("--codec", choices=["av1", "h264", "hevc", "hevc_sdr"], default="hevc")
+        parser.add_argument("--intel-path", choices=["native", "ffmpeg"], default="native")
+        parser.add_argument("--profile", choices=["fast", "balanced", "quality"], default="balanced")
+        parser.add_argument("--layout", default="")
+        parser.add_argument("--fail-executor-init", action="store_true", help="Harness-only failure injection for FFmpeg cleanup")
+        parser.add_argument("--fail-native-init", action="store_true", help="Harness-only -11 injection before the native pipe writer connects")
+        parser.add_argument("--watchdog-seconds", type=int, default=120)
+        parser.add_argument("--preview-hud", action="store_true")
         parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
         parser.add_argument("--video", default=r"C:\GoPro\2026-09-30\GX010331.MP4")
         parser.add_argument("--fit", default=r"C:\GoPro\2026-09-30\Poranna_jazda_na_rowerze.fit")
@@ -969,12 +977,16 @@ def main() -> None:
         else:
             os.environ.pop("TELEM_MAX_FRAMES", None)
 
-        os.environ["TELEM_INTEL_CODEC"] = "av1"
+        os.environ["TELEM_INTEL_CODEC"] = test_args.codec
+        os.environ["TELEM_INTEL_NATIVE_D3D11"] = "1" if test_args.intel_path == "native" else "0"
         os.environ["TELEM_INTEL_HEVC_HW_DECODE"] = "1"
 
         t_start = [0.0]
         t_finish = [0.0]
         bench_result = {
+            "codec": test_args.codec,
+            "profile": test_args.profile,
+            "intel_path": test_args.intel_path,
             "mode": test_args.mode,
             "video": str(video_path),
             "fit": str(fit_path),
@@ -988,6 +1000,31 @@ def main() -> None:
             "effective_fps": 0.0,
             "ram_used_gb": 0.0,
         }
+        # Diagnose deadlocks and fail the harness instead of waiting forever
+        # on a hidden modal dialog or an unavailable device.
+        import faulthandler
+        faulthandler.dump_traceback_later(test_args.watchdog_seconds, exit=True)
+        if test_args.fail_executor_init:
+            from src.ffmpeg.streaming import _RenderExecutor
+            def _fail_executor_init(*args, **kwargs):
+                raise TypeError("HARNESS_EXECUTOR_INIT_FAILURE: 'lazy_import' object is not callable")
+            _RenderExecutor.__init__ = _fail_executor_init
+        if test_args.fail_native_init:
+            from src.ffmpeg.intel_native_exporter import _load_native_intel_dll
+            _load_native_intel_dll().intel_native_pipeline_init_multi_ex = lambda *args: -11
+
+        # Inspect the actual error dialog, then dismiss only this expected
+        # unsupported-codec error so the normal sig_error handler can finish.
+        from PySide6.QtWidgets import QMessageBox
+        dialog_timer = QTimer(window)
+        def _inspect_intel_error_dialog():
+            dialog = QApplication.activeModalWidget()
+            if isinstance(dialog, QMessageBox) and ("Intel: wybrany kodek" in dialog.text() or "HARNESS_EXECUTOR_INIT_FAILURE" in dialog.text()):
+                bench_result["codec_error_dialog"] = dialog.text()
+                print(f"[BENCH DIALOG] {dialog.text()}", flush=True)
+                dialog.reject()
+        dialog_timer.timeout.connect(_inspect_intel_error_dialog)
+        dialog_timer.start(100)
 
         def _on_render_finished_bench(stats, final_path):
             t_finish[0] = time.perf_counter()
@@ -997,8 +1034,32 @@ def main() -> None:
                 frames_done = getattr(_controller, "video_frames", 0) or 51213
             eff_fps = frames_done / elapsed if elapsed > 0 else 0.0
             vm = psutil.virtual_memory()
+            holder_stats = getattr(_controller, "render_process_holder", {}).get("intel_encoder_stats")
+            if holder_stats:
+                stats = dict(stats or {}, **holder_stats)
 
-            bench_result["success"] = True
+            from src.ffmpeg.intel_native_exporter import _probe_video_summary
+            from src.runtime_paths import get_ffmpeg_exe
+            summary = _probe_video_summary(str(get_ffmpeg_exe()), str(final_path))
+            source_summary = _probe_video_summary(str(get_ffmpeg_exe()), str(video_path))
+            videos = [s for s in summary.get("streams", []) if s.get("codec_type") == "video"]
+            audio = [s for s in summary.get("streams", []) if s.get("codec_type") == "audio"]
+            source_audio = any(s.get("codec_type") == "audio" for s in source_summary.get("streams", []))
+            actual_frames = int(videos[0].get("nb_frames", 0)) if videos else 0
+            import threading
+            forwarders = [t.name for t in threading.enumerate() if t.name == "IntelPipeForwarder"]
+            bench_result["pipe_forwarders_after_export"] = forwarders
+            valid = bool(videos) and (not source_audio or bool(audio))
+            valid = valid and not forwarders
+            if test_args.frames:
+                valid = valid and actual_frames == test_args.frames
+            if videos and audio:
+                valid = valid and abs(float(videos[0].get("duration", 0)) - float(audio[0].get("duration", 0))) < 0.1
+            bench_result["validation"] = {"valid": valid, "probe": summary, "actual_video_frames": actual_frames}
+            bench_result["success"] = valid
+            if not valid:
+                bench_result["error"] = "MP4 validation failed: missing streams, frame count or A/V duration mismatch"
+            faulthandler.cancel_dump_traceback_later()
             bench_result["elapsed_s"] = round(elapsed, 2)
             bench_result["total_frames"] = frames_done
             bench_result["effective_fps"] = round(eff_fps, 2)
@@ -1009,12 +1070,13 @@ def main() -> None:
                 bench_result["sampled_q"] = sampled_q_values
                 print(f"[BENCH STATS] quant_current={stats.get('quant_current')} quant_min={stats.get('quant_min')} quant_max={stats.get('quant_max')} quant_samples={stats.get('quant_samples')} quant_sum={stats.get('quant_sum')} quant_avg={stats.get('quant_avg')}", flush=True)
 
-            print(f"\n[BENCH RESULT] mode={test_args.mode} success=True frames={frames_done} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
+            print(f"\n[BENCH RESULT] mode={test_args.mode} success={valid} frames={actual_frames} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
             if test_args.result_json:
                 Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
             QTimer.singleShot(500, window.close)
 
         def _on_render_error_bench(msg):
+            faulthandler.cancel_dump_traceback_later()
             t_finish[0] = time.perf_counter()
             elapsed = max(0.001, t_finish[0] - t_start[0])
             vm = psutil.virtual_memory()
@@ -1022,6 +1084,8 @@ def main() -> None:
             bench_result["error"] = str(msg)
             bench_result["elapsed_s"] = round(elapsed, 2)
             bench_result["ram_used_gb"] = round(vm.used / (1024**3), 2)
+            bench_result["ffmpeg_children_after_error"] = [p.pid for p in psutil.Process().children(recursive=True)
+                                                         if p.is_running() and p.name().lower() == "ffmpeg.exe"]
             print(f"\n[BENCH RESULT] mode={test_args.mode} success=False error={msg}", flush=True)
             if test_args.result_json:
                 Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
@@ -1053,14 +1117,18 @@ def main() -> None:
 
             rt.cmb_render_mode.setCurrentIndex(rt.cmb_render_mode.findData("gpu"))
             rt.cmb_encoder.setCurrentText("intel")
-            idx_codec = rt.cmb_intel_codec.findData("av1")
+            rt.cmb_encoder_profile.setCurrentIndex(rt.cmb_encoder_profile.findData(test_args.profile))
+            if test_args.layout:
+                from src.gui.layout_manager import normalize_layout
+                _controller.layout = normalize_layout(Path(test_args.layout).resolve(), 1280, 720)
+            idx_codec = rt.cmb_intel_codec.findData(test_args.codec)
             if idx_codec >= 0:
                 rt.cmb_intel_codec.setCurrentIndex(idx_codec)
             rt.cmb_resolution.setCurrentText("source")
             rt.cmb_update_rate.setCurrentText("Full")
             rt.cmb_hud_resolution.setCurrentText("Auto")
             rt.edit_bitrate.setText(test_args.bitrate)
-            rt.chk_hud_preview.setChecked(True)
+            rt.chk_hud_preview.setChecked(test_args.preview_hud)
             rt.chk_original_gpmf.setChecked(bool(test_args.gpmf))
             rt.edit_output.setText(str(out_path))
             rt._user_edited_output = True
@@ -1081,7 +1149,10 @@ def main() -> None:
 
         def _poll_ready_bench():
             btn = window._render_tab.btn_render
-            if getattr(_controller, "telemetry", None) and getattr(_controller.telemetry, "fit_data", None) and btn.isEnabled():
+            if (getattr(_controller, "telemetry", None)
+                    and getattr(_controller.telemetry, "fit_data", None)
+                    and not getattr(_controller, "_preview_telemetry_loading", False)
+                    and btn.isEnabled()):
                 _trigger_test_export()
             else:
                 QTimer.singleShot(100, _poll_ready_bench)

@@ -14,7 +14,7 @@ import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import ProcessPoolExecutor
 
 from src.ffmpeg.detection import detect_gpu_decoder, _test_encoder
 from src.ffmpeg.worker_cache import init_worker

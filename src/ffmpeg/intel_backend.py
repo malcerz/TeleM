@@ -307,55 +307,41 @@ def ffmpeg_encoders_have_qsv(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
 _QSV_CODECS_CACHE: dict[str, dict[str, bool]] = {}
 
 
-def _get_qsv_cache_file() -> Path | None:
-    try:
-        p = Path(os.environ.get("LOCALAPPDATA", ".")) / "SportCamHUD" / "cache" / "qsv_codecs.json"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        return p
-    except Exception:
-        return None
-
-
 def probe_qsv_codecs(ffmpeg_exe: str = "ffmpeg") -> dict[str, bool]:
-    """Probe hardware usability for each QSV encoder via real test encode."""
-    global _QSV_CODECS_CACHE
+    """Encode real frames on Intel D3D11, separately for each pixel format.
+
+    Cache only in this process: a Portable directory or user cache can move
+    between GPUs, drivers and runtimes without changing ffmpeg.exe's mtime.
+    """
     if ffmpeg_exe in _QSV_CODECS_CACHE:
         return dict(_QSV_CODECS_CACHE[ffmpeg_exe])
-
-    cache_file = _get_qsv_cache_file()
-    if cache_file and cache_file.exists():
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                disk_cache = json.load(f)
-            if ffmpeg_exe in disk_cache and any(disk_cache[ffmpeg_exe].values()):
-                mtime_ok = True
-                if os.path.exists(ffmpeg_exe):
-                    mtime_ok = os.path.getmtime(ffmpeg_exe) <= cache_file.stat().st_mtime
-                if mtime_ok:
-                    _QSV_CODECS_CACHE[ffmpeg_exe] = disk_cache[ffmpeg_exe]
-                    return dict(_QSV_CODECS_CACHE[ffmpeg_exe])
-        except Exception:
-            pass
-
-    from src.ffmpeg.detection import _test_encoder
     print(f"[INTEL] Probing hardware QSV encoders with {ffmpeg_exe}...", flush=True)
-    res = {
-        "hevc_qsv": _test_encoder("hevc_qsv", ffmpeg_exe),
-        "av1_qsv": _test_encoder("av1_qsv", ffmpeg_exe),
-        "h264_qsv": _test_encoder("h264_qsv", ffmpeg_exe),
-    }
-    _QSV_CODECS_CACHE[ffmpeg_exe] = res
-    if cache_file:
+    res = {}
+    for key, encoder, pixel_format, profile in (
+        ("h264_qsv", "h264_qsv", "nv12", "high"),
+        ("hevc_qsv", "hevc_qsv", "nv12", "main"),
+        ("hevc_main10", "hevc_qsv", "p010le", "main10"),
+        ("av1_qsv", "av1_qsv", "p010le", "main"),
+    ):
+        cmd = [ffmpeg_exe, "-hide_banner", "-nostdin", "-v", "error",
+               "-init_hw_device", "d3d11va=intel_probe:,vendor_id=0x8086",
+               "-init_hw_device", "qsv=intel_qsv@intel_probe",
+               "-f", "lavfi", "-i", "color=s=1280x720:r=30",
+               "-vf", f"format={pixel_format}", "-frames:v", "3",
+               "-c:v", encoder, "-profile:v", profile, "-b:v", "5M",
+               "-maxrate", "6250k", "-bufsize", "10M", "-strict", "strict",
+               *(["-color_primaries", "bt2020", "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc"] if pixel_format == "p010le" else []),
+               "-f", "null", "-"]
         try:
-            disk_cache = {}
-            if cache_file.exists():
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    disk_cache = json.load(f)
-            disk_cache[ffmpeg_exe] = res
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(disk_cache, f, indent=2)
-        except Exception:
-            pass
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20,
+                                  **({} if os.name != "nt" else {"startupinfo": _nt_startupinfo()}))
+            res[key] = proc.returncode == 0
+            detail = (proc.stderr or "").strip()[-1600:] if not res[key] else "encoded=3"
+        except Exception as exc:
+            res[key] = False
+            detail = str(exc)
+        print(f"[INTEL_CAPABILITY] codec={key} format={pixel_format} usable={res[key]} detail={detail}", flush=True)
+    _QSV_CODECS_CACHE[ffmpeg_exe] = res
     return dict(res)
 
 
@@ -597,7 +583,8 @@ def validate_intel_graph_contract(
         mismatch_reasons.append(
             f"hwdownload_expected={expected_download},actual={has_hwdownload}"
         )
-    expected_encoder = "av1_qsv" if str(expected_codec).lower() in ("av1", "av1_qsv") else "hevc_qsv"
+    expected_encoder = ("av1_qsv" if str(expected_codec).lower() in ("av1", "av1_qsv")
+                        else "h264_qsv" if str(expected_codec).lower() in ("h264", "h264_qsv") else "hevc_qsv")
     if expected_encoder not in command:
         mismatch_reasons.append(f"{expected_encoder}_missing")
     return {

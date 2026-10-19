@@ -402,6 +402,7 @@ class RenderMixin:
                         hud_state.get("is_cqp")
                         or (
                             hud_state.get("quant_min") is not None
+                            and not hud_state.get("rate_control")
                             and hud_state.get("quant_min") == hud_state.get("quant_max")
                             and hud_state.get("quant_samples", 0) > 1
                         )

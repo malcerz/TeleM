@@ -27,10 +27,10 @@ def test_intel_native_8b_capabilities_truth():
     """Verify runtime capability query returns exact hardware truth on Intel GPU."""
     caps = query_intel_capabilities()
     assert isinstance(caps, dict)
-    assert caps["AV1_AVAILABLE"] is True
-    assert caps["AV1_10BIT"] is True
-    assert caps["H264_AVAILABLE"] is True
-    assert caps["H264_8BIT"] is True
+    assert isinstance(caps["AV1_AVAILABLE"], bool)
+    assert caps["AV1_AVAILABLE"] == caps["AV1_10BIT"]
+    assert isinstance(caps["H264_AVAILABLE"], bool)
+    assert caps["H264_AVAILABLE"] == caps["H264_8BIT"]
     assert caps["H264_10BIT"] is False
     assert isinstance(caps["HEVC_AVAILABLE"], bool)
 
@@ -50,12 +50,14 @@ def test_intel_native_8b_render_tab_intel_codec_selector():
     assert hasattr(tab, "widget_intel_options")
     
     # Check item count
-    assert tab.cmb_intel_codec.count() == 3
+    assert tab.cmb_intel_codec.count() == 4
     
     # Check default selection is AV1
-    assert tab.cmb_intel_codec.currentData() == "av1"
-    assert "AV1" in tab.cmb_intel_codec.currentText()
-    assert "HDR 10-bit" in tab.lbl_intel_codec_info.text()
+    caps = query_intel_capabilities()
+    expected = "av1" if caps["AV1_10BIT"] else ("hevc" if caps["HEVC_10BIT"] else None)
+    assert tab.cmb_intel_codec.currentData() == expected
+    if expected:
+        assert "HDR 10-bit" in tab.lbl_intel_codec_info.text()
     
     # Check H.264 item
     idx_h264 = tab.cmb_intel_codec.findData("h264")
@@ -68,7 +70,7 @@ def test_intel_native_8b_render_tab_intel_codec_selector():
     item = model.item(idx_hevc)
     assert item is not None
     caps = query_intel_capabilities()
-    assert item.isEnabled() == caps.get("HEVC_AVAILABLE", False)
+    assert item.isEnabled() == caps.get("HEVC_10BIT", False)
 
 def test_intel_native_8b_intel_codec_selection_semantics():
     """Verify selecting H.264 updates UI label to SDR 8-bit BT.709."""

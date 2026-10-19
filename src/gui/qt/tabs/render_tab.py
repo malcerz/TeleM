@@ -481,31 +481,37 @@ class RenderTab(QWidget):
         layout_intel.setSpacing(6)
 
         self.cmb_intel_codec = QComboBox()
-        self.cmb_intel_codec.addItem("AV1 — 10-bit HDR (Zalecany)", "av1")
+        self.cmb_intel_codec.addItem("AV1 — 10-bit HDR", "av1")
         self.cmb_intel_codec.addItem("H.264 — 8-bit SDR", "h264")
-        self.cmb_intel_codec.addItem("H.265 — 10-bit HDR", "hevc")
+        self.cmb_intel_codec.addItem("H.265 — Main10 / HDR", "hevc")
+        self.cmb_intel_codec.addItem("H.265 — 8-bit SDR", "hevc_sdr")
 
         try:
             from src.ffmpeg.intel_native_exporter import query_intel_capabilities
             intel_caps = query_intel_capabilities()
         except Exception:
-            intel_caps = {"AV1_AVAILABLE": True, "H264_AVAILABLE": True, "HEVC_AVAILABLE": True}
+            intel_caps = {}
 
-        idx_hevc = self.cmb_intel_codec.findData("hevc")
-        if not intel_caps.get("HEVC_AVAILABLE", False) and idx_hevc >= 0:
-            model = self.cmb_intel_codec.model()
-            if model is not None:
-                item = model.item(idx_hevc) if hasattr(model, "item") else None
-                if item is not None:
-                    item.setEnabled(False)
-                    item.setText("H.265 (Niedostępny na aktualnym sterowniku/runtime Intel)")
-                    item.setToolTip("Niedostępny na aktualnym sterowniku/runtime Intel")
+        for codec_name, cap_key in (("av1", "AV1_10BIT"), ("h264", "H264_8BIT"),
+                                    ("hevc", "HEVC_10BIT"), ("hevc_sdr", "HEVC_8BIT")):
+            idx = self.cmb_intel_codec.findData(codec_name)
+            item = self.cmb_intel_codec.model().item(idx)
+            available = bool(intel_caps.get(cap_key, False))
+            item.setEnabled(available)
+            if not available:
+                item.setText(item.text() + " — niedostępny")
+                item.setToolTip("Brak potwierdzonego kodowania na aktualnym sprzęcie/sterowniku/runtime Intel")
+
+        # Default to a proven HDR encoder. SDR must be selected explicitly.
+        default_codec = "av1" if intel_caps.get("AV1_10BIT") else ("hevc" if intel_caps.get("HEVC_10BIT") else None)
+        self.cmb_intel_codec.setCurrentIndex(self.cmb_intel_codec.findData(default_codec) if default_codec else -1)
 
         self.cmb_intel_codec.setToolTip(
             "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).\n"
-            "AV1: 10-bit HDR (HLG BT.2020, produkcyjny default).\n"
+            "Dostępność potwierdzana rzeczywistym kodowaniem na Intel D3D11/QSV.\n"
+            "AV1: 10-bit HDR (HLG BT.2020).\n"
             "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).\n"
-            "H.265: 10-bit HDR (HLG BT.2020)."
+            "H.265: Main10 HDR lub jawnie wybrany 8-bit SDR."
         )
 
         self.lbl_intel_codec_info = QLabel("Format: HDR 10-bit (HLG / BT.2020)")
@@ -513,11 +519,13 @@ class RenderTab(QWidget):
 
         def _on_intel_codec_changed(_idx: int) -> None:
             c = self.cmb_intel_codec.currentData()
-            if c == "h264":
+            if c is None:
+                self.lbl_intel_codec_info.setText("Wybierz obsługiwany kodek. Zmiana HDR na SDR wymaga Twojego wyboru.")
+            elif c in ("h264", "hevc_sdr"):
                 self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
                 self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
             elif c == "hevc":
-                if intel_caps.get("HEVC_AVAILABLE", False):
+                if intel_caps.get("HEVC_10BIT", False):
                     self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
                     self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
                 else:
@@ -528,6 +536,7 @@ class RenderTab(QWidget):
                 self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
 
         self.cmb_intel_codec.currentIndexChanged.connect(_on_intel_codec_changed)
+        _on_intel_codec_changed(self.cmb_intel_codec.currentIndex())
 
         row_intel_codec = QVBoxLayout()
         row_intel_codec.setSpacing(2)
@@ -1018,16 +1027,17 @@ class RenderTab(QWidget):
         # Canonical entrypoint
         success = self._start_render(options, job=job)
         if not success:
+            rejection = getattr(self, "_render_start_rejection", "") or "Render start rejected (busy)"
             log_queue_trace(
                 "QUEUE DISPATCH FAILED",
                 job_id=job.job_id,
                 output_path=job.output_path,
                 input_videos=job.video_paths,
-                extra="controller/tab was busy",
+                extra=rejection,
             )
             if self._export_queue:
                 self._export_queue.notify_render_done(
-                    job.job_id, success=False, error_message="Render start rejected (busy)"
+                    job.job_id, success=False, error_message=rejection
                 )
 
     def _restore_controller_global_preferences(self) -> None:
@@ -1168,6 +1178,16 @@ class RenderTab(QWidget):
     def _start_render(self, options: dict, job: ExportJob | None = None) -> bool:
         """CANONICAL RENDER ENTRYPOINT — wspólna ścieżka uruchamiania dla kolejki i EKSPORTUJ."""
         from src.gui.export_queue import log_queue_trace
+        self._render_start_rejection = ""
+        if options.get("encoder") == "intel":
+            try:
+                from src.ffmpeg.intel_native_exporter import validate_intel_codec
+                validate_intel_codec(options.get("intel_codec", ""))
+            except ValueError as exc:
+                self._render_start_rejection = str(exc)
+                from src.gui.qt.signals import get_signals
+                get_signals().sig_error.emit(str(exc))
+                return False
         if self._rendering or self._cancelling:
             print(
                 f"[RenderTab] _start_render: busy "
@@ -2419,7 +2439,7 @@ class RenderTab(QWidget):
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
             "nvidia_codec": self.cmb_nvidia_codec.currentText(),
             "nvidia_quality": self.cmb_nvidia_quality.currentData() or self.cmb_nvidia_quality.currentText() or "P3",
-            "intel_codec": self.cmb_intel_codec.currentData() or "av1",
+            "intel_codec": self.cmb_intel_codec.currentData() or "",
             "encoder_profile": (
                 self.cmb_encoder_profile.currentData()
                 if hasattr(self, "cmb_encoder_profile")

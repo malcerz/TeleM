@@ -242,6 +242,46 @@ class IntelEncoderEffectiveConfig(NamedTuple):
         )
 
 
+class IntelVbrConfig(NamedTuple):
+    target_kbps: int
+    max_kbps: int
+    buffer_kb: int
+    initial_delay_kb: int
+    multiplier: int
+
+    def ffmpeg_args(self) -> list[str]:
+        return ["-b:v", str(self.target_kbps * 1000), "-maxrate", str(self.max_kbps * 1000),
+                "-bufsize", str(self.buffer_kb * 8000), "-rc_init_occupancy", str(self.initial_delay_kb * 8000)]
+
+
+def resolve_intel_vbr(bitrate: str) -> IntelVbrConfig:
+    """VBR: 125% peak, two seconds of target-rate VBV, half-full initially.
+
+    40M retains the previous native 10000 KB / 5000 KB buffer defaults.
+    Values use decimal kbps/KB, matching oneVPL and FFmpeg's bit units.
+    """
+    import re
+    import math
+    from decimal import Decimal
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([kKmMgG]?)\s*", str(bitrate))
+    if not match:
+        raise ValueError(f"Intel VBR: nieprawidłowy bitrate {bitrate!r}")
+    bps = Decimal(match[1]) * {"": 1, "k": 1000, "m": 1000000, "g": 1000000000}[match[2].lower()]
+    target = int(bps / 1000)
+    if target < 1 or target > 10000000:
+        raise ValueError("Intel VBR: bitrate poza zakresem 1 kbps..10 Gbps")
+    peak = max(target + 1, math.ceil(target * 1.25))
+    buffer = max(1, math.ceil(target / 4))
+    initial = max(1, math.ceil(buffer / 2))
+    multiplier = max(1, math.ceil(max(target, peak, buffer, initial) / 65535))
+    return IntelVbrConfig(target, peak, buffer, initial, multiplier)
+
+
+def intel_ffmpeg_preset(profile: str | EncoderProfile | None) -> str:
+    return {EncoderProfile.FAST: "veryfast", EncoderProfile.BALANCED: "medium",
+            EncoderProfile.QUALITY: "veryslow"}[resolve_encoder_profile(profile)]
+
+
 def resolve_intel_encoder_config(
     codec: str,
     profile: str | EncoderProfile | None,

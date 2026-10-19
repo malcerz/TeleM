@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 from fractions import Fraction
 from typing import Any
 from src.ffmpeg.detection import _test_encoder
@@ -696,6 +697,8 @@ intel_codec: str = "hevc",
     enable_compression_analysis: bool = True,
     is_10bit: bool = False,
     max_frames: int | None = None,
+    intel_output_duration_s: float | None = None,
+    intel_encoder_profile: str = "balanced",
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
@@ -1054,6 +1057,24 @@ intel_codec: str = "hevc",
         ov_op = f"overlay={s_hud_x}:{s_hud_y}:shortest=1"
         filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
 
+    if encoder == "intel":
+        # The selected codec defines output depth. Preserve Main10/HDR through
+        # overlay negotiation; SDR conversion happens only on explicit selection.
+        sdr_output = str(intel_codec).lower() in ("h264", "h264_qsv", "hevc_sdr")
+        out_format = "nv12" if sdr_output else "p010le"
+        if not intel_gpu_resident and not intel_gpu_compositor:
+            if not sdr_output:
+                filter_complex = re.sub(r"(overlay=[^;\[]+)", r"\1:format=yuv420p10", filter_complex)
+            if sdr_output and intel_cpu_download_format == "p010le":
+                # Tone-map the base before compositing the SDR HUD.
+                filter_complex = filter_complex.replace("[base];", "[hdrbase];", 1)
+                filter_complex = filter_complex.replace(
+                    ";[1:v]", ";[hdrbase]zscale=t=linear:npl=100,format=gbrpf32le,"
+                    "zscale=p=bt709,tonemap=tonemap=mobius:desat=0,"
+                    "zscale=t=bt709:m=bt709:r=tv,format=nv12[base];[1:v]", 1)
+            filter_complex = filter_complex.replace("[vtemp]", "[intel_composed]", 1)
+            filter_complex += f";[intel_composed]format={out_format}[vtemp]"
+
     # ── Cut region drop (select filter) ────────────────────────────────
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
     if has_cuts:
@@ -1166,19 +1187,24 @@ intel_codec: str = "hevc",
         else:
             cmd.extend(["-c:a", "copy"])
     elif encoder == "intel":
-        codec_name = "av1_qsv" if str(intel_codec).lower() in ("av1", "av1_qsv") else "hevc_qsv"
+        codec_name = ("av1_qsv" if str(intel_codec).lower() in ("av1", "av1_qsv")
+                      else "h264_qsv" if str(intel_codec).lower() in ("h264", "h264_qsv") else "hevc_qsv")
         pix_fmt = (
             "nv12"
             if intel_gpu_resident
-            else _resolve_intel_cpu_format(intel_cpu_download_format)
+            else ("nv12" if sdr_output else "p010le")
         )
+        from src.ffmpeg.intel_config import intel_ffmpeg_preset, resolve_intel_vbr
         cmd.extend([
             "-c:v", codec_name,
-            "-preset", "veryfast",
+            "-preset", intel_ffmpeg_preset(intel_encoder_profile),
+            "-strict", "strict",
             "-async_depth", "4",
         ])
+        cmd.extend(resolve_intel_vbr(video_bitrate).ffmpeg_args())
         if codec_name == "hevc_qsv":
             cmd.extend(["-look_ahead", "0"])
+            cmd.extend(["-profile:v", "main" if sdr_output else "main10"])
         cmd.extend(["-pix_fmt", pix_fmt])
         if pix_fmt == "p010le":
             cmd.extend([
@@ -1186,6 +1212,8 @@ intel_codec: str = "hevc",
                 "-color_trc", "arib-std-b67",
                 "-colorspace", "bt2020nc",
             ])
+        else:
+            cmd.extend(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
@@ -1200,11 +1228,14 @@ intel_codec: str = "hevc",
         else:
             cmd.extend(["-c:a", "copy"])
 
-    cmd = append_bitrate_args(cmd, encoder, video_bitrate)
+    if encoder != "intel":
+        cmd = append_bitrate_args(cmd, encoder, video_bitrate)
     if max_frames is not None and int(max_frames) > 0:
         cmd.extend(["-frames:v", str(int(max_frames))])
+    if encoder == "intel" and intel_output_duration_s is not None:
+        cmd.extend(["-t", f"{intel_output_duration_s:.9f}"])
     cmd.append(str(output_file))
     if encoder == "nv" and enable_compression_analysis:
         cmd.extend(["-stats_period", "0.25"])
-    cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "error"])
+    cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "verbose" if encoder == "intel" else "error"])
     return cmd, filter_complex

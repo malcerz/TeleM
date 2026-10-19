@@ -269,7 +269,11 @@ class _RenderExecutor:
     """ProcessPoolExecutor context with guaranteed non-orphan cancellation exit."""
 
     def __init__(self, *args: Any, cancel_event: Any = None, **kwargs: Any) -> None:
-        from concurrent.futures import ProcessPoolExecutor
+        # Import the defining module eagerly. CPython 3.15's package export
+        # is a lazy import; never pass that package-level proxy to the renderer.
+        from concurrent.futures.process import ProcessPoolExecutor
+        import multiprocessing
+        kwargs.setdefault("mp_context", multiprocessing.get_context("spawn"))
         self._args = args
         self._kwargs = kwargs
         self._cancel_event = cancel_event
@@ -307,7 +311,7 @@ class _RenderExecutor:
 
     def __exit__(self, exc_type, exc, tb):
         self._sync_workers()
-        cancelled = self._cancel_event is not None and self._cancel_event.is_set()
+        cancelled = exc_type is not None or (self._cancel_event is not None and self._cancel_event.is_set())
 
         try:
             from src.process_lifecycle import RenderProcessRegistry
@@ -373,6 +377,8 @@ def _stop_ffmpeg_process(
     """Graceful stdin close, then bounded terminate/kill process-tree fallback."""
     if process is None:
         return None
+    if cancel_started is None:
+        cancel_started = time.perf_counter()
     def _finish(rc: int | None) -> int | None:
         print("[PROC] ffmpeg exit", flush=True)
         try:
@@ -388,6 +394,23 @@ def _stop_ffmpeg_process(
         return _finish(process.returncode)
 
     _cancel_log("ffmpeg graceful stop requested", cancel_started, process)
+    if graceful_timeout <= 0:
+        # An initialization failure has no MP4 frames to finalize. Unblock any
+        # writer holding stdin's lock before attempting BufferedWriter.close().
+        process.terminate()
+        _cancel_log("initialization/error abort: terminate", cancel_started, process)
+        if not _wait_process_bounded(process, 1.0):
+            process.kill()
+            _wait_process_bounded(process, 1.0)
+        if process.poll() is not None:
+            try:
+                if process.stdin is not None:
+                    process.stdin.close()
+            except (OSError, ValueError):
+                pass
+        setattr(process, "_telem_cancel_mode", "terminate")
+        _cancel_log(f"ffmpeg error abort done rc={process.poll()}", cancel_started, process)
+        return _finish(process.poll())
     try:
         if process.stdin is not None:
             process.stdin.close()
@@ -395,7 +418,7 @@ def _stop_ffmpeg_process(
         pass
     _cancel_log("stdin_closed", cancel_started, process)
     _cancel_log("ffmpeg graceful wait start", cancel_started, process)
-    graceful_deadline = time.monotonic() + max(0.1, graceful_timeout)
+    graceful_deadline = time.monotonic() + max(0.0, graceful_timeout)
     next_progress = 1
     while process.poll() is None and time.monotonic() < graceful_deadline:
         elapsed = time.monotonic() - (graceful_deadline - graceful_timeout)
@@ -1043,7 +1066,14 @@ def stream_overlay_to_ffmpeg(
         # cross-GPU fallback (NVIDIA/AMD/CUDA/NVENC/AMF) and no silent CPU
         # fallback.  On failure resolve_intel_force raises IntelBackendError,
         # which intentionally stops the Intel backend initialisation.
+        from src.ffmpeg.intel_native_exporter import validate_intel_codec, _set_last_intel_export_stats
+        _set_last_intel_export_stats({})
         intel_resolution = resolve_intel_force(ffmpeg_exe=ffmpeg_exe)
+        codec = validate_intel_codec(os.environ.get("TELEM_INTEL_CODEC") or codec, ffmpeg_exe)
+        # Preserve the user's requested output through the FFmpeg fallback.
+        intel_resolution.selected_codec = codec
+        intel_resolution.selected_encoder = "h264_qsv" if codec == "h264" else ("av1_qsv" if codec == "av1" else "hevc_qsv")
+        intel_resolution.encode_path = f"QSV-{codec.upper()}"
         intel_selection = intel_device_selection(intel_resolution)
 
     t_prod_start = time.perf_counter()
@@ -1237,8 +1267,9 @@ def stream_overlay_to_ffmpeg(
         # override TELEM_INTEL_QSV_BITRATE_MBPS is set; Intel-only).
         video_bitrate, intel_rc_source = resolve_intel_qsv_bitrate(
             video_bitrate)
-        print("[INTEL] QSV encoder: HEVC", flush=True)
-        print("[INTEL] QSV preset: veryfast", flush=True)
+        print(f"[INTEL] QSV encoder: {codec.upper()}", flush=True)
+        from src.ffmpeg.intel_config import intel_ffmpeg_preset
+        print(f"[INTEL] QSV preset: {intel_ffmpeg_preset(encoder_profile)}", flush=True)
         print(f"[INTEL] QSV rate-control source: {intel_rc_source}",
               flush=True)
         print(f"[INTEL] QSV target bitrate: {video_bitrate}", flush=True)
@@ -1256,7 +1287,10 @@ def stream_overlay_to_ffmpeg(
 
         fallback_reason = None
 
-        if not native_requested:
+        if codec == "hevc_sdr":
+            fallback_reason = "HEVC 8-bit SDR uses FFmpeg QSV; native VP currently outputs HEVC Main10"
+            print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+        elif not native_requested:
             fallback_reason = "TELEM_INTEL_NATIVE_D3D11 environment override disabled native pipeline"
             print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
         elif not native_available:
@@ -1794,6 +1828,8 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         enable_compression_analysis=enable_compression_analysis,
         is_10bit=is_10bit_source,
         max_frames=max_frames,
+        intel_output_duration_s=(min(duration_s, total_overlay_frames / generation_fps) if encoder == "intel" else None),
+        intel_encoder_profile=encoder_profile,
     )
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
@@ -1884,7 +1920,7 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             proof_region_count = 1
             proof_total_region_bytes = proof_hud_bytes
 
-        encode_path_label = "QSV_AV1" if resolved_intel_codec == "av1" else "QSV_HEVC"
+        encode_path_label = "QSV_" + resolved_intel_codec.upper()
         proof_caps = IntelRenderCapabilities(
             adapter_name=intel_selection.adapter_name,
             adapter_vendor_id=intel_selection.vendor_id,
@@ -2011,6 +2047,9 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
 
     compression_tracker = None
     nv_profile_name = ""
+    if encoder == "intel":
+        from src.ffmpeg.intel_telemetry import IntelQsvTracker
+        compression_tracker = IntelQsvTracker(codec)
     if encoder == "nv":
         from src.ffmpeg.compression_tracker import CompressionTracker
         from src.ffmpeg.nvidia_config import resolve_nvidia_profile
@@ -2025,6 +2064,10 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         )
 
     def _report_progress_step(piped: int) -> None:
+        if encoder == "intel" and compression_tracker is not None:
+            observed_rc = compression_tracker.get_hud_state_dict().get("rate_control_raw")
+            if observed_rc and observed_rc != "VBR":
+                raise RuntimeError(f"Intel QSV changed rate control to {observed_rc}; only VBR is permitted")
         _report_stream_progress(
             piped, total_overlay_frames, start_time,
             progress_cb, on_render_progress, target_fps, pipeline_audit,
@@ -2585,7 +2628,7 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         except queue.Full:
             pass
         try:
-            _stop_ffmpeg_process(process, cancel_started)
+            _stop_ffmpeg_process(process, cancel_started, graceful_timeout=0.0)
         except Exception:
             pass
         raise
@@ -2762,6 +2805,26 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             f"csv={audit_result['artifacts']['csv']}", flush=True,
         )
 
+    if encoder == "intel" and compression_tracker is not None:
+        state = compression_tracker.get_hud_state_dict()
+        diagnostic_keys = ("ratecontrol method", "TargetUsage:", "TargetKbps:", "BufferSizeInKB:", "InitialDelayInKB:", "NalHrdConformance:", "GopPicSize:", "NumSlice:")
+        state["encoder_diagnostics"] = [line for line in stdout_lines if any(key in line for key in diagnostic_keys)]
+        for line in state["encoder_diagnostics"]:
+            print(f"[INTEL FFMPEG ACCEPTED] {line}", flush=True)
+        if not state["rate_control"]:
+            raise RuntimeError("Intel FFmpeg QSV did not confirm VBR in runtime diagnostics; output is not accepted")
+        from src.ffmpeg.intel_config import resolve_intel_vbr
+        requested_rc = resolve_intel_vbr(video_bitrate)
+        accepted_rc = state["encoder_accepted"]
+        multiplier = accepted_rc.get("BRCParamMultiplier", 1) or 1
+        for key, requested in (("TargetKbps", requested_rc.target_kbps), ("MaxKbps", requested_rc.max_kbps),
+                               ("BufferSizeInKB", requested_rc.buffer_kb), ("InitialDelayInKB", requested_rc.initial_delay_kb)):
+            if key not in accepted_rc or abs(accepted_rc[key] * multiplier - requested) > multiplier:
+                raise RuntimeError(f"Intel QSV did not accept requested VBR {key}: requested={requested}, actual={accepted_rc}")
+        if active_process_holder is not None:
+            active_process_holder["intel_encoder_stats"] = state
+        from src.ffmpeg.intel_native_exporter import _set_last_intel_export_stats
+        _set_last_intel_export_stats(dict(state, codec=codec))
     return total_piped
 
 
