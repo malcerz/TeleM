@@ -18,6 +18,9 @@ class AppSignals(QObject):
     # Zakładka Wczytywanie: użytkownik wybrał pliki
     sig_files_selected = Signal(list, str, str)
     # (video_paths: list[str], gpx_path: str, fit_path: str)
+    sig_project_cleared = Signal()
+    # Generation-tagged project readiness, independent of generic progress.
+    sig_project_load_state = Signal(object)
 
     # Zakładka Projekt: kliknięto przycisk strumienia danych
     sig_stream_clicked = Signal(str)

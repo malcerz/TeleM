@@ -334,7 +334,9 @@ class ProjectMixin:
 
         info = ffprobe_stream_info(ffprobe_exe, Path(video_path))
         streams = info.get("streams", [])
-        stream = streams[0] if streams else {}
+        stream = next((s for s in streams if s.get("codec_type", "video") == "video"), {})
+        if not stream or int(stream.get("width", 0)) <= 0 or int(stream.get("height", 0)) <= 0:
+            raise ValueError(f"Nie udało się odczytać prawidłowego strumienia wideo: {video_path}")
         width = int(stream.get("width", 1920) or 1920)
         height = int(stream.get("height", 1080) or 1080)
         fps = parse_fps(
@@ -526,6 +528,49 @@ class ProjectMixin:
         accepted = self._request_telemetry_validation(result)
         return accepted, parsed
 
+    def _publish_project_load_state(self, state: str, generation: int) -> None:
+        if generation != getattr(self, "_project_load_generation", 0):
+            return
+        self.signals.sig_project_load_state.emit({
+            "state": state, "generation": generation,
+            "ready": bool(getattr(self, "project_ready", False)),
+            "paths": [str(p) for p in getattr(self, "video_paths", [])],
+        })
+
+    def clear_project(self) -> None:
+        """Clear project state without touching the user's HUD or preferences."""
+        self._project_load_generation = getattr(self, "_project_load_generation", 0) + 1
+        cancel = getattr(self, "_load_cancel_event", None)
+        if cancel is not None:
+            cancel.set()
+        self.project_ready = False
+        self._project_loading = False
+        self._preview_telemetry_loading = False
+        try:
+            self._on_playback_stop()
+            if self.is_using_mpv():
+                self.mpv_player.stop()
+            elif getattr(self, "media_player", None) is not None:
+                self.media_player.setSource(QUrl())
+        except Exception as exc:
+            print(f"[ProjectClear] Preview stop failed: {exc}", flush=True)
+        self.video_paths = []
+        self.video_path = None
+        self.video_clips = []
+        self.video_timeline = None
+        self.video_metadata = None
+        self.video_info = {}
+        self.video_duration_s = 0.0
+        self._active_preview_clip_index = None
+        self._cut_regions = []
+        self.fit_path = self.gpx_path = self.meta_path = None
+        self.telemetry.clear_all()
+        self._clear_caches()
+        self._publish_project_load_state("cleared", self._project_load_generation)
+        self.signals.sig_data_streams_ready.emit([])
+        self.signals.sig_video_duration_ready.emit(0.0)
+        self.signals.sig_video_info_ready.emit("")
+
     def _on_files_selected(
         self,
         video_paths: list[str],
@@ -533,6 +578,15 @@ class ProjectMixin:
         fit_path: str,
     ) -> None:
         """Użytkownik wybrał pliki w zakładce Wczytywanie."""
+        if not video_paths:
+            return
+        previous_paths = list(getattr(self, "video_paths", []))
+        previous_ready = bool(getattr(self, "project_ready", False))
+        self._project_load_generation = getattr(self, "_project_load_generation", 0) + 1
+        generation = self._project_load_generation
+        self._project_loading = True
+        self.project_ready = False
+        self._publish_project_load_state("loading", generation)
         # Suppress decoder callbacks until an explicitly selected FIT has
         # loaded and its presentation plans have been warmed.
         self._preview_telemetry_loading = bool(fit_path)
@@ -543,6 +597,15 @@ class ProjectMixin:
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
 
         def bg_load() -> None:
+            def current() -> bool:
+                return not load_cancel_event.is_set() and generation == self._project_load_generation
+
+            def failed() -> None:
+                if current():
+                    self.project_ready = previous_ready and list(self.video_paths) == previous_paths
+                    self._project_loading = False
+                    self._publish_project_load_state("failed", generation)
+
             try:
                 effective_fit_path = fit_path
                 effective_gpx_path = gpx_path
@@ -571,7 +634,10 @@ class ProjectMixin:
                     "ffmpeg",
                     [str(self.base_dir / "ffmpeg.exe"), "ffmpeg.exe"],
                 )
+                if not current():
+                    return
                 if not ffprobe_exe or not ffmpeg_exe:
+                    failed()
                     self.signals.sig_error.emit(
                         "Nie znaleziono ffprobe.exe / ffmpeg.exe"
                     )
@@ -586,7 +652,12 @@ class ProjectMixin:
                     ffmpeg_exe=ffmpeg_exe,
                     ffprobe_exe=ffprobe_exe,
                 )
-
+                candidate_state = self._probe_candidate_video_state(
+                    candidate_video_path, ffprobe_exe,
+                    default_fps=self.fps if hasattr(self, "fps") else 30.0,
+                )
+                if not current():
+                    return
                 self.video_paths = candidate_video_paths
                 self.video_path = candidate_video_path
                 self.ffprobe_exe = ffprobe_exe
@@ -613,10 +684,6 @@ class ProjectMixin:
 
                 # Analiza wideo
                 self.signals.sig_progress.emit(15, "Analiza strumienia...")
-                candidate_state = self._probe_candidate_video_state(
-                    candidate_video_path, ffprobe_exe,
-                    default_fps=self.fps if hasattr(self, "fps") else 30.0,
-                )
                 w = candidate_state["width"]
                 h = candidate_state["height"]
                 self.video_width = w
@@ -809,6 +876,8 @@ class ProjectMixin:
                 self.signals.sig_progress.emit(75, "Przygotowywanie danych...")
                 self.signals.sig_progress.emit(80, "Budowa interfejsu...")
                 streams = self._discover_data_streams()
+                if not current():
+                    return
                 self.signals.sig_data_streams_ready.emit(streams)
                 self.signals.sig_progress.emit(85, "Przygotowywanie podglądu...")
 
@@ -849,6 +918,8 @@ class ProjectMixin:
                     self.last_preview_ts = 0.0
 
                 self.signals.sig_progress.emit(95, "Składanie podglądu...")
+                if not current():
+                    return
                 self._preview_telemetry_loading = False
                 self.refresh_preview_geometry_and_hud()
 
@@ -880,6 +951,11 @@ class ProjectMixin:
                 except Exception as e:
                     print(f"[AutoExportName] Failed to generate default name: {e}", flush=True)
 
+                if not current():
+                    return
+                self.project_ready = True
+                self._project_loading = False
+                self._publish_project_load_state("ready", generation)
                 self.signals.sig_progress.emit(100, "Gotowe")
                 try:
                     self._trigger_map_background_prefetch(reason="telemetry_loaded")
@@ -887,6 +963,9 @@ class ProjectMixin:
                     pass
 
             except Exception as e:
+                if not current():
+                    return
+                failed()
                 import traceback
                 traceback.print_exc()
                 self._preview_telemetry_loading = False

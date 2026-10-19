@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 import threading
 
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QComboBox,
     QSpinBox, QPushButton, QLineEdit, QHBoxLayout, QFileDialog,
-    QStyleFactory, QCheckBox, QMessageBox, QLabel,
+    QStyleFactory, QCheckBox, QMessageBox, QLabel, QSplitter, QScrollArea,
 )
 from PySide6.QtGui import QFontDatabase
 
@@ -39,7 +39,23 @@ class SettingsTab(QWidget):
         self.signals.sig_progress.connect(self._on_progress)
 
     def _build_ui(self) -> None:
-        vbox = QVBoxLayout(self)
+        from src.gui.qt.license_dialog import LicensePanel
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.settings_splitter = QSplitter(Qt.Horizontal)
+        outer.addWidget(self.settings_splitter)
+        self.settings_scroll = QScrollArea()
+        self.settings_scroll.setWidgetResizable(True)
+        self.settings_content = QWidget()
+        self.settings_scroll.setWidget(self.settings_content)
+        self.settings_splitter.addWidget(self.settings_scroll)
+        self.licenses_panel = LicensePanel(self.base_dir, self)
+        self.settings_splitter.addWidget(self.licenses_panel)
+        self.settings_splitter.setChildrenCollapsible(False)
+        self.settings_splitter.setStretchFactor(0, 2)
+        self.settings_splitter.setStretchFactor(1, 1)
+        self.settings_splitter.setSizes([1000, 500])
+        vbox = QVBoxLayout(self.settings_content)
         vbox.setAlignment(Qt.AlignTop)
         vbox.setContentsMargins(24, 24, 24, 24)
 
@@ -145,14 +161,6 @@ class SettingsTab(QWidget):
         perf_form = QFormLayout(perf_group)
         perf_form.setSpacing(10)
 
-        self.spin_threads = QSpinBox()
-        self.spin_threads.setRange(1, 32)
-        self.spin_threads.setValue(8)
-        self.spin_threads.valueChanged.connect(
-            lambda v: self.signals.sig_settings_changed.emit("threads", v)
-        )
-        perf_form.addRow("Liczba wątków:", self.spin_threads)
-
         row_cache = QHBoxLayout()
         self.edit_cache = QLineEdit("cache/")
         self.edit_cache.setMinimumHeight(28)
@@ -216,7 +224,7 @@ class SettingsTab(QWidget):
         integ_form.setSpacing(10)
 
         self.cmb_auto_source = QComboBox()
-        self.cmb_auto_source.addItem("Nic", "none")
+        self.cmb_auto_source.addItem("--", "none")
         self.cmb_auto_source.addItem("Garmin Connect", "garmin")
         self.cmb_auto_source.addItem("Strava", "strava")
         integ_form.addRow("Automatyczne źródło aktywności:", self.cmb_auto_source)
@@ -290,11 +298,16 @@ class SettingsTab(QWidget):
 
         vbox.addStretch()
 
-    def _on_auto_source_changed(self, _index: int = 0) -> None:
+    def closeEvent(self, event):
+        self.licenses_panel.stop_probe()
+        super().closeEvent(event)
+
+    def _on_auto_source_changed(self, _index: int = 0, *, notify: bool = True) -> None:
         source = str(self.cmb_auto_source.currentData() or "none")
         self.garmin_container.setVisible(source == "garmin")
         self.strava_container.setVisible(source == "strava")
-        self.signals.sig_settings_changed.emit("auto_activity_source", source)
+        if notify:
+            self.signals.sig_settings_changed.emit("auto_activity_source", source)
 
     def _set_garmin_busy(self, busy: bool) -> None:
         self._garmin_busy = busy
@@ -351,9 +364,12 @@ class SettingsTab(QWidget):
         threading.Thread(target=self._bg_test_garmin, daemon=True).start()
 
     def _bg_test_garmin(self) -> None:
-        from src.integrations.garmin_connect import GarminProvider
-        provider = GarminProvider()
-        ok, msg = provider.test_connection()
+        try:
+            from src.integrations.garmin_connect import GarminProvider
+            provider = GarminProvider()
+            ok, msg = provider.test_connection()
+        except Exception as exc:
+            ok, msg = False, f"Błąd połączenia: {exc}"
         if ok:
             self.sig_garmin_status.emit(f"Status: Połączono z Garmin Connect — {msg}", "#44ff44")
         else:
@@ -376,14 +392,18 @@ class SettingsTab(QWidget):
         self.btn_strava_connect.setEnabled(False)
         self.lbl_strava_status.setText("Oczekiwanie na autoryzację w przeglądarce...")
         self.lbl_strava_status.setStyleSheet("color: #ffa500;")
-        threading.Thread(target=self._bg_connect_strava, daemon=True).start()
+        threading.Thread(target=self._bg_connect_strava, args=(
+            self.edit_strava_client_id.text().strip(), self.edit_strava_client_secret.text().strip(),
+        ), daemon=True).start()
 
-    def _bg_connect_strava(self) -> None:
-        from src.integrations import credential_store
-        from src.integrations.strava import run_strava_oauth_flow
-        cid = self.edit_strava_client_id.text().strip()
-        sec = self.edit_strava_client_secret.text().strip() or credential_store.get_strava_client_secret() or ""
-        ok, msg = run_strava_oauth_flow(cid, sec)
+    def _bg_connect_strava(self, client_id: str = "", client_secret: str = "") -> None:
+        try:
+            from src.integrations import credential_store
+            from src.integrations.strava import run_strava_oauth_flow
+            secret = client_secret or credential_store.get_strava_client_secret() or ""
+            ok, msg = run_strava_oauth_flow(client_id, secret)
+        except Exception as exc:
+            ok, msg = False, f"Błąd połączenia: {exc}"
         if ok:
             self.sig_strava_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
         else:
@@ -393,13 +413,15 @@ class SettingsTab(QWidget):
         self.btn_strava_test.setEnabled(False)
         self.lbl_strava_status.setText("Sprawdzanie połączenia...")
         self.lbl_strava_status.setStyleSheet("color: #ffa500;")
-        threading.Thread(target=self._bg_test_strava, daemon=True).start()
+        threading.Thread(target=self._bg_test_strava, args=(self.edit_strava_client_id.text().strip(),), daemon=True).start()
 
-    def _bg_test_strava(self) -> None:
-        from src.integrations.strava import StravaProvider
-        cid = self.edit_strava_client_id.text().strip()
-        provider = StravaProvider(client_id=cid)
-        ok, msg = provider.test_connection()
+    def _bg_test_strava(self, client_id: str = "") -> None:
+        try:
+            from src.integrations.strava import StravaProvider
+            provider = StravaProvider(client_id=client_id)
+            ok, msg = provider.test_connection()
+        except Exception as exc:
+            ok, msg = False, f"Błąd połączenia: {exc}"
         if ok:
             self.sig_strava_status.emit(f"Status: Połączono jako {msg}", "#44ff44")
         else:
@@ -431,10 +453,8 @@ class SettingsTab(QWidget):
 
         auto_source = integrations.get("auto_activity_source", "none").lower()
         idx = self.cmb_auto_source.findData(auto_source)
-        if idx >= 0:
-            self.cmb_auto_source.setCurrentIndex(idx)
-        else:
-            self.cmb_auto_source.setCurrentIndex(0)
+        with QSignalBlocker(self.cmb_auto_source):
+            self.cmb_auto_source.setCurrentIndex(idx if idx >= 0 else 0)
 
         strava_cid = integrations.get("strava_client_id", "")
         self.edit_strava_client_id.setText(strava_cid)
@@ -455,7 +475,7 @@ class SettingsTab(QWidget):
             self.lbl_strava_status.setText(f"Status: Połączono jako {name}")
             self.lbl_strava_status.setStyleSheet("color: #aaffaa;")
 
-        self._on_auto_source_changed(self.cmb_auto_source.currentIndex())
+        self._on_auto_source_changed(self.cmb_auto_source.currentIndex(), notify=False)
         # Restore/refresh only the selected provider; NONE makes zero requests.
         if auto_source == "garmin" and garmin_tokens:
             QTimer.singleShot(0, self._restore_garmin_if_selected)

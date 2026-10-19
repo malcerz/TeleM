@@ -1044,8 +1044,25 @@ class LoadTab(QWidget):
             self._load_target = pct
         if text:
             self.lbl_load_status.setText(text)
-        if percent >= 100:
+        if percent >= 100 and getattr(self, "_project_load_generation", None) is None:
             self._finish_loading_success()
+
+    def _on_project_load_state(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+        generation = int(payload.get("generation", 0))
+        if generation < getattr(self, "_project_load_generation", 0):
+            return
+        self._project_load_generation = generation
+        state = payload.get("state")
+        if state == "loading":
+            self._start_loading()
+        elif state == "ready":
+            self._finish_loading_success()
+        elif state == "failed":
+            self._on_load_error("Nie udało się wczytać projektu.")
+        elif state == "cleared":
+            self._reset_loading_ui()
 
     def _finish_loading_success(self) -> None:
         self._loaded_once = True
@@ -1146,12 +1163,14 @@ class LoadTab(QWidget):
         self._reset_qp_state()
         self.btn_analyze_qp.setEnabled(False)
         self._reset_loading_ui()
+        self.signals.sig_project_cleared.emit()
 
     # ═════════════════════════════════════════════════════════════════════
     # Asynchroniczna inspekcja plików
     # ═════════════════════════════════════════════════════════════════════
 
     def _connect_local_signals(self) -> None:
+        self.signals.sig_project_load_state.connect(self._on_project_load_state)
         self.signals.sig_remote_telemetry_status.connect(self._on_remote_telemetry_status)
         self.signals.sig_settings_changed.connect(self._on_settings_changed)
         self.sig_autofit_status.connect(self._on_autofit_status)

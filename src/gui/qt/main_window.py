@@ -59,6 +59,8 @@ class MainWindow(QMainWindow):
         self.signals = get_signals()
         self._render_state_active = False
         self._render_generation_id = 0
+        self._project_ready = False
+        self._project_load_generation = 0
 
         # ── Współdzielony podgląd wideo (Projekt ↔ Rendering) ───────────
         self.preview = VideoPreview()
@@ -106,8 +108,58 @@ class MainWindow(QMainWindow):
 
         # Po załadowaniu danych przełącz na zakładkę Projekt
         self.signals.sig_data_streams_ready.connect(self._on_data_streams_ready)
+        self.signals.sig_project_load_state.connect(self._on_project_load_state)
+        self.signals.sig_project_cleared.connect(self._on_project_cleared)
+        self._update_main_tabs_state()
+
+    def _update_main_tabs_state(self) -> None:
+        controller = getattr(self, "_controller", None)
+        ready = self._project_ready
+        if controller is not None:
+            # Older embedding controllers expose committed paths only. The
+            # application controller explicitly distinguishes pending/ready.
+            ready = bool(getattr(controller, "project_ready", bool(getattr(controller, "video_paths", []))))
+            ready = ready and not getattr(controller, "_project_loading", False)
+        self.tabs.setTabEnabled(self.tabs.indexOf(self._project_tab), ready)
+        for tab in (self._load_tab, self._render_tab, self._settings_tab):
+            self.tabs.setTabEnabled(self.tabs.indexOf(tab), True)
+        if not ready and self.tabs.currentWidget() is self._project_tab:
+            self.tabs.setCurrentWidget(self._load_tab)
+
+    def _on_project_load_state(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+        generation = int(payload.get("generation", 0))
+        controller = getattr(self, "_controller", None)
+        expected = getattr(controller, "_project_load_generation", generation)
+        if generation != expected or generation < self._project_load_generation:
+            return
+        self._project_load_generation = generation
+        self._project_ready = bool(payload.get("ready", False))
+        self._update_main_tabs_state()
+        if payload.get("state") == "cleared":
+            self._on_project_cleared()
+        if self._project_ready and payload.get("state") == "ready":
+            self.tabs.setCurrentWidget(self._project_tab)
+
+    def _on_project_cleared(self) -> None:
+        self._project_ready = False
+        self.preview.clear_editor_state()
+        self._project_tab.property_editor.on_properties_ready("", [], {})
+        self.tabs.setTabEnabled(self.tabs.indexOf(self._project_tab), False)
+        self.tabs.setCurrentWidget(self._load_tab)
+
+    def clear_project(self) -> None:
+        controller = getattr(self, "_controller", None)
+        if controller is not None and hasattr(controller, "clear_project"):
+            controller.clear_project()
+        self._on_project_cleared()
+        self._update_main_tabs_state()
 
     def _on_data_streams_ready(self, _streams) -> None:
+        self._update_main_tabs_state()
+        if not self.tabs.isTabEnabled(self.tabs.indexOf(self._project_tab)):
+            return
         self.tabs.setCurrentWidget(self._project_tab)
         self.preview._notify_controller_preview_size()
         if hasattr(self, "_controller") and self._controller:
@@ -125,6 +177,7 @@ class MainWindow(QMainWindow):
         self.preview.set_controller(controller)
         self._project_tab.set_controller(controller)
         self._render_tab.set_controller(controller)
+        self._update_main_tabs_state()
 
 
     def check_mpv_availability(self) -> None:
@@ -423,6 +476,9 @@ class MainWindow(QMainWindow):
 
         controller = getattr(self, "_controller", None)
         worker = getattr(controller, "render_worker_thread", None) if controller else None
+        load_cancel = getattr(controller, "_load_cancel_event", None)
+        if load_cancel is not None:
+            load_cancel.set()
         render_active = worker is not None and worker.is_alive()
 
         if render_active:

@@ -134,6 +134,9 @@ class AppController(
 
         # ── Stan ────────────────────────────────────────────────────────
         self.video_paths: list[Path] = []
+        self.project_ready = False
+        self._project_load_generation = 0
+        self._project_loading = False
         self.video_path: Optional[Path] = None
         # ── Multi-file: per-clip model + global timeline (ETAP MULTIFILE) ─
         # ``video_clips`` is the ordered list of VideoClip; ``video_timeline``
@@ -340,6 +343,7 @@ class AppController(
 
     def _connect_signals(self) -> None:
         s = self.signals
+        s.sig_project_cleared.connect(self.clear_project)
         s.sig_files_selected.connect(self._on_files_selected)
         s.sig_late_telemetry_matched.connect(self.late_attach_telemetry)
         s.sig_stream_clicked.connect(self._on_stream_clicked)
