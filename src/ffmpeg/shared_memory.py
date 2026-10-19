@@ -154,6 +154,49 @@ def _close_shm_in_worker() -> None:
     _SHM_BLOCKS = []
 
 
+_TRACE_FIRST_JOB_DONE = False
+
+
+class WorkerInitBlob:
+    """Worker initargs pickled once into one shared memory block.
+
+    Spawned workers receive only the block name. Passing tens of MB of
+    initargs through each spawn pipe makes the parent block until every
+    child has booted and read them, so workers would start one by one.
+    """
+
+    def __init__(self, init_args: tuple) -> None:
+        import pickle
+        payload = pickle.dumps(init_args, protocol=pickle.HIGHEST_PROTOCOL)
+        self.size = len(payload)
+        self._shm = shared_memory.SharedMemory(create=True, size=max(1, self.size))
+        self._shm.buf[:self.size] = payload
+        self.name = self._shm.name
+
+    def close(self) -> None:
+        if self._shm is None:
+            return
+        try:
+            self._shm.close()
+            self._shm.unlink()
+        except Exception:
+            pass
+        self._shm = None
+
+
+def _init_worker_with_shm_blob(
+    blob_name: str, blob_size: int, shm_names: list[str], frame_size: int,
+) -> None:
+    """Initialiser variant that reads init_worker args from a WorkerInitBlob."""
+    import pickle
+    blob = shared_memory.SharedMemory(name=blob_name, create=False)
+    try:
+        init_worker_args = pickle.loads(bytes(blob.buf[:blob_size]))
+    finally:
+        blob.close()
+    _init_worker_with_shm(shm_names, frame_size, *init_worker_args)
+
+
 def _init_worker_with_shm(
     shm_names: list[str], frame_size: int,
     *init_worker_args: Any,
@@ -166,9 +209,19 @@ def _init_worker_with_shm(
             psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
         except Exception:
             pass
+    trace = os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1"
+    t_init0 = time.time()
     init_worker(*init_worker_args)
     _init_shm_in_worker(shm_names, frame_size)
     atexit.register(_close_shm_in_worker)
+    if trace:
+        try:
+            import psutil
+            created = psutil.Process().create_time()
+        except Exception:
+            created = 0.0
+        print(f"[HUD STARTUP TRACE] worker pid={os.getpid()} created={created:.3f} "
+              f"init_begin={t_init0:.3f} init_end={time.time():.3f}", flush=True)
 
 
 def render_frame_shm_job(job: tuple) -> tuple[int, int]:
@@ -308,6 +361,10 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             del shm_arr
             del img_arr
         del shm_buf
+    global _TRACE_FIRST_JOB_DONE
+    if not _TRACE_FIRST_JOB_DONE and os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+        _TRACE_FIRST_JOB_DONE = True
+        print(f"[HUD STARTUP TRACE] worker pid={os.getpid()} first_job frame={index} done={time.time():.3f}", flush=True)
     if audit_enabled:
         if not zero_copy:
             shm_copy_finished_ns = time.perf_counter_ns()

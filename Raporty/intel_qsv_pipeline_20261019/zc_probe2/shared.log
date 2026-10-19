@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "C:\_DEV\SportCamHUD\SportCamHUD.py", line 51, in <module>
+    from src.gui.qt.application import main
+  File "C:\_DEV\SportCamHUD\src\gui\__init__.py", line 1, in <module>
+    from src.gui.layout_manager import LayoutManager
+  File "C:\_DEV\SportCamHUD\src\gui\layout_manager.py", line 9, in <module>
+    from src.gui.qt.models import normalize_indicator_decimal_defaults
+  File "C:\_DEV\SportCamHUD\src\gui\qt\models.py", line 11, in <module>
+    from src.indicators.icons import ICON_NAMES, ICON_LABELS
+  File "C:\_DEV\SportCamHUD\src\indicators\__init__.py", line 61, in <module>
+    from .text import _render_text_indicator
+  File "C:\_DEV\SportCamHUD\src\indicators\text.py", line 19, in <module>
+    from src.indicators.icons import render_icon
+  File "C:\_DEV\SportCamHUD\src\indicators\icons.py", line 14, in <module>
+    from PIL import Image, ImageDraw, ImageFilter, ImageOps
+ModuleNotFoundError: No module named 'PIL'

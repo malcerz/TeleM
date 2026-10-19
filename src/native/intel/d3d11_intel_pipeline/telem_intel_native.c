@@ -79,6 +79,15 @@ typedef struct {
 #define ENCODE_POOL_SIZE 16
 #define MAX_MULTI_CLIPS 64
 
+// Aggregated per-stage timing (separate export; IntelNativePipelineStats ABI stays 752 B).
+typedef struct {
+    int struct_size;
+    int frames;
+    double slot_wait_ms;        // consumer waiting for a free encoder slot (watermark)
+    double surface_acquire_ms;  // MFXMemory_GetSurfaceForEncode
+    double bitstream_write_ms;  // drain thread fwrite into the live-mux pipe
+} IntelStageTiming;
+
 // Timing helper
 
 static inline double get_global_time_ms(LARGE_INTEGER t, LARGE_INTEGER t_zero, LARGE_INTEGER freq) {
@@ -492,6 +501,7 @@ typedef struct {
     LARGE_INTEGER t_pipe_start;
     LARGE_INTEGER t_pipe_end;
     IntelNativePipelineStats stats;
+    IntelStageTiming stage;
     double map_samples_buffer[4096];
     double sync_samples_buffer[4096];
     int num_sync_samples;
@@ -1321,11 +1331,15 @@ static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
                 ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
 
                 if (ctx->fOutIVF) {
+                    LARGE_INTEGER w0, w1;
+                    QueryPerformanceCounter(&w0);
                     if (ctx->codec_id == INTEL_CODEC_AV1) {
                         uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
                         fwrite(frame_hdr, 1, 12, ctx->fOutIVF);
                     }
                     fwrite(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset, 1, ctx->encode_pool[tail].bs.DataLength, ctx->fOutIVF);
+                    QueryPerformanceCounter(&w1);
+                    ctx->stage.bitstream_write_ms += get_time_ms(w0, w1, freq);
                 }
             }
 
@@ -1460,6 +1474,7 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     g_pipe.stats.d3d11_mt_protection_active = saved_mt_active;
     g_pipe.stats.d3d11_mt_qi_hresult = saved_mt_qi_hr;
     g_pipe.cancelled = false;
+    memset(&g_pipe.stage, 0, sizeof(g_pipe.stage));
     const char* env_depth = getenv("TELEM_INTEL_MFX_ASYNC_DEPTH");
     int mfx_depth = (env_depth && atoi(env_depth) > 0) ? atoi(env_depth) : (force_serial_7d ? 1 : 8);
     if (mfx_depth > ENCODE_POOL_SIZE) mfx_depth = ENCODE_POOL_SIZE;
@@ -2273,11 +2288,15 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     }
 
     // 4. Async queue throttle: wait on cvEncodeFree if watermark reached
+    LARGE_INTEGER tw0, tw1;
+    QueryPerformanceCounter(&tw0);
     EnterCriticalSection(&g_pipe.csEncode);
     while (g_pipe.pending_encode_count >= g_pipe.app_drain_watermark && !g_pipe.cancelled) {
         SleepConditionVariableCS(&g_pipe.cvEncodeFree, &g_pipe.csEncode, 50);
     }
     LeaveCriticalSection(&g_pipe.csEncode);
+    QueryPerformanceCounter(&tw1);
+    g_pipe.stage.slot_wait_ms += get_time_ms(tw0, tw1, freq);
 
     // Sample encoder pending occupancy
     int p_cnt = g_pipe.pending_encode_count;
@@ -2299,6 +2318,9 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
         sts = g_pipe.pMFXMemory_GetSurfaceForEncode(g_pipe.session, &pmfxSurface);
         if (sts != MFX_ERR_NONE || !pmfxSurface) return -3;
     }
+    LARGE_INTEGER t_acq_end;
+    QueryPerformanceCounter(&t_acq_end);
+    g_pipe.stage.surface_acquire_ms += get_time_ms(t_acq, t_acq_end, freq);
 
     mfxHDL hSurfRes = NULL;
     mfxResourceType rType = 0;
@@ -2309,6 +2331,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     g_pipe.vp_ring_head = (g_pipe.vp_ring_head + 1) % g_pipe.vp_ring_size;
     ID3D11VideoProcessorOutputView* pTargetOutView = g_pipe.pVPOutViewRing[vp_slot];
     ID3D11Texture2D* pCurVPOutTex = g_pipe.pVPOutTexRing[vp_slot];
+    bool direct_view_used = false;
 
     if (g_pipe.use_direct_vp_surface && pEncTex) {
         if (!g_pipe.stats.direct_vp_first_fail_hr && g_pipe.stats.decoded_frames == 0) {
@@ -2351,6 +2374,7 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
         }
         if (pDirectView) {
             pTargetOutView = pDirectView;
+            direct_view_used = true;
         }
     }
 
@@ -2389,8 +2413,10 @@ __declspec(dllexport) int intel_native_pipeline_step_regions(
     WakeConditionVariable(&g_pipe.cvDecodeFree);
     LeaveCriticalSection(&g_pipe.csDecode);
 
-    // Fallback CopyResource only if direct VP surface was not used
-    if (pTargetOutView != pEncTex) {
+    // Fallback CopyResource only if direct VP surface was not used.
+    // (The previous test compared a view pointer with a texture pointer and was
+    // always true, which would overwrite a direct VP write with a stale ring frame.)
+    if (!direct_view_used) {
         QueryPerformanceCounter(&t0);
         ID3D11DeviceContext_CopyResource(g_pipe.pContext, (ID3D11Resource*)pEncTex, (ID3D11Resource*)pCurVPOutTex);
         QueryPerformanceCounter(&t1);
@@ -2705,6 +2731,14 @@ __declspec(dllexport) int intel_native_pipeline_finish(void) {
 __declspec(dllexport) void intel_native_pipeline_cancel(void) {
     g_pipe.cancelled = true;
     intel_native_pipeline_finish();
+}
+
+__declspec(dllexport) int intel_native_pipeline_get_stage_timing(IntelStageTiming* out_timing, int size) {
+    if (!out_timing || size < (int)sizeof(IntelStageTiming)) return -1;
+    g_pipe.stage.struct_size = (int)sizeof(IntelStageTiming);
+    g_pipe.stage.frames = g_pipe.stats.decoded_frames;
+    memcpy(out_timing, &g_pipe.stage, sizeof(IntelStageTiming));
+    return 0;
 }
 
 __declspec(dllexport) int intel_native_pipeline_get_stats(IntelNativePipelineStats* out_stats) {

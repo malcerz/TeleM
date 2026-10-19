@@ -1,0 +1,152 @@
+{
+  "variant": "D",
+  "rep": 0,
+  "command": [
+    "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+    "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+    "--test-intel-export",
+    "--intel-path",
+    "ffmpeg",
+    "--codec",
+    "hevc",
+    "--profile",
+    "fast",
+    "--frames",
+    "1800",
+    "--bitrate",
+    "40M",
+    "--video",
+    "C:\\GoPro\\2026-10-16\\GX010381.MP4",
+    "--fit",
+    "C:\\GoPro\\2026-10-16\\2026-10-16_13-06-05.fit",
+    "--layout",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\D_r0\\layout_no_hud.json",
+    "--watchdog-seconds",
+    "900",
+    "--output",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\D_r0\\output.mp4",
+    "--result-json",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\D_r0\\harness.json"
+  ],
+  "exit_code": 0,
+  "process_wall_s": 177.98623149999185,
+  "power_before": {
+    "ac_line_status": 0,
+    "battery_percent": 93
+  },
+  "power_after": {
+    "ac_line_status": 0,
+    "battery_percent": 88
+  },
+  "head": "a32d85496f6cc02b42c7fb81bafaee162c8253df",
+  "layout_sha256": "ddd2c643540de81980ff81a96e577f7baaf1c2cd74c33872a6290d7e55a7a139",
+  "dll_sha256": "5d3a967e0cb016fcbc8d4f74a4b26e2b9da53f5f776ad29d5b655f1a9bae056c",
+  "harness": {
+    "codec": "hevc",
+    "profile": "fast",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\2026-10-16\\GX010381.MP4",
+    "fit": "C:\\GoPro\\2026-10-16\\2026-10-16_13-06-05.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\D_r0\\output.mp4",
+    "bitrate": "40M",
+    "max_frames": 1800,
+    "success": true,
+    "error": "",
+    "elapsed_s": 153.26,
+    "total_frames": 1800,
+    "effective_fps": 11.74,
+    "ram_used_gb": 10.53,
+    "pipe_forwarders_after_export": [],
+    "output_size_bytes": 309014682,
+    "stats": {
+      "codec": "hevc",
+      "encoder_accepted": {
+        "TargetUsage": 7,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[hevc_qsv @ 00000175ff1e0080] Using the variable bitrate (VBR) ratecontrol method",
+        "[hevc_qsv @ 00000175ff1e0080] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+        "[hevc_qsv @ 00000175ff1e0080] TargetUsage: 7; RateControlMethod: VBR",
+        "[hevc_qsv @ 00000175ff1e0080] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[hevc_qsv @ 00000175ff1e0080] NumSlice: 1; NumRefFrame: 3",
+        "[hevc_qsv @ 00000175ff1e0080] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 60.06,
+        "has_audio": true,
+        "size_bytes": 309014682,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    }
+  },
+  "harness_valid": true,
+  "native": {
+    "steady_500_1500_fps": 13.966480446927372
+  },
+  "success": true,
+  "counters": {
+    "cpu_perf": 40.64836708873552,
+    "cpu_freq": 1538.523961661342,
+    "cpu_time": 75.1006221466118,
+    "tree_cpu_percent_machine": 57.22955271565495,
+    "gpu_engines_mean": {
+      "3D_eng0": 18.0,
+      "LegacyOverlay_eng10": 0.0,
+      "VideoDecode_eng1": 6.1,
+      "Copy_eng2": 0.0,
+      "VideoProcessing_eng3": 0.0,
+      "VideoDecode_eng4": 0.0,
+      "3D_eng10": 0.0,
+      "3D_eng11": 0.0,
+      "3D_eng12": 0.0,
+      "3D_eng1": 0.0,
+      "3D_eng2": 0.0,
+      "3D_eng3": 0.0,
+      "3D_eng4": 0.0,
+      "3D_eng5": 0.0,
+      "3D_eng6": 0.0,
+      "3D_eng7": 0.0,
+      "3D_eng8": 0.0,
+      "3D_eng9": 0.0
+    },
+    "gpu_engines_p90": {
+      "3D_eng0": 23.8,
+      "LegacyOverlay_eng10": 0.0,
+      "VideoDecode_eng1": 9.4,
+      "Copy_eng2": 0.0,
+      "VideoProcessing_eng3": 0.0,
+      "VideoDecode_eng4": 0.0,
+      "3D_eng10": 0.0,
+      "3D_eng11": 0.0,
+      "3D_eng12": 0.0,
+      "3D_eng1": 0.0,
+      "3D_eng2": 0.0,
+      "3D_eng3": 0.0,
+      "3D_eng4": 0.0,
+      "3D_eng5": 0.0,
+      "3D_eng6": 0.0,
+      "3D_eng7": 0.0,
+      "3D_eng8": 0.0,
+      "3D_eng9": 0.0
+    },
+    "thermal_max_c": 51.9,
+    "thermal_mean_c": 49.24504792332268,
+    "battery_discharge_mw_mean": 22452.62048192771,
+    "battery_discharge_mw_max": 25360,
+    "power_online_values": [
+      "False"
+    ]
+  }
+}

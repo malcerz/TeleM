@@ -1,0 +1,287 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 37.09 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono PL' -> resolved='C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono PL' -> 'C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 000001f9a036e700] Current codec type is unsupported
+[av1_qsv @ 000001f9a036e700] Current profile is unsupported
+[av1_qsv @ 000001f9a036e700] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 000001f9a138af00] [enc:av1_qsv @ 000001f9a1392f80] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001f9a036eac0] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 000001f9a036eac0] Task finished with error: Function not implemented
+[vf#0:0 @ 000001f9a036eac0] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 000001f9a138af00] [enc:av1_qsv @ 000001f9a1392f80] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 000001f9a138af00] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 000001f9a138af00] Terminating thread with error: Invalid argument
+[out#0/null @ 000001f9a02c7a40] Nothing was written into output file, because at least one of its streams received no packets.
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 522, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 21484, "preview_generation_id": 0, "preview_stop_event": {"id": 2033563857008, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 576258048, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713381969616, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 208678912, "thread_count": 24}
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010381.MP4 + 2026-10-16_13-06-05.fit (mode=direct)
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-16 11:06:08.666665+00:00..2026-10-16 11:26:49.839932+00:00
+[GarminConnect] GARMIN_AUTH=CONNECTED
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/GoPro/2026-10-16/GX010381.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-16T11:06:09.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:20:41.17, start: 0.000000, bitrate: 56289 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 55843 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 13:06:09;06
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 13:06:09;06
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 13:06:09;06
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro MET
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=130.7ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010381.MP4
+[TMPC Cache] read_count=1240
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[LoadProfile] stage=json_file_read elapsed_ms=0.66 thread=Thread-19 (bg_load)/16692 input_bytes=210
+[LoadProfile] stage=json_parse elapsed_ms=0.15 thread=Thread-19 (bg_load)/16692 input_bytes=210
+[LoadProfile] stage=json_file_read elapsed_ms=486.19 thread=Thread-19 (bg_load)/16692 input_bytes=54686897
+[LoadProfile] stage=json_parse elapsed_ms=1743.08 thread=Thread-19 (bg_load)/16692 input_bytes=54686897
+[TELEMETRY CACHE] source=GX010381.MP4 key=GX010381_6e09139bce0ff4bf status=HIT path=C:\_DEV\SportCamHUD\scratch\qsvbench-local\SportCamHUD\cache\media\GX010381_6e09139bce0ff4bf\gpmf.json (gpmf_json)
+[GPMF LOAD]
+SOURCE=C:\GoPro\2026-10-16\GX010381.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=False
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=12409
+ACC_SAMPLES=246606
+GYRO_SAMPLES=246605
+ISO_SAMPLES=37198
+TEMP_SAMPLES=1240
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=2789.14
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=2789.34 thread=Thread-19 (bg_load)/16692 input_bytes=8733184961 records=1
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=2789.42 thread=Thread-19 (bg_load)/16692 input_bytes=8733184961 records=1
+[TMPC Telemetry] temperature_samples=1240
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[18079.47]
+normalized_final=18079.47
+session_total=18079.47
+match=True
+[MultiFile] project_duration=1241.173267 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=1241.2s
+[MultiFile] Clip 1/1
+  path=GX010381.MP4
+  global=0.000-1241.173
+  absolute=2026-10-16T11:06:08.666-2026-10-16T11:26:49.839
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=gps9_first_abs=2026-10-16T11:06:09.000+00:00 stmp=333335.0 tsmp=8.0 local_s=0.333335 reason=stmp
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=4026
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=257827.140578s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=257827.140643s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-19 16:39:30.552 (1792420770.5530) thread=MainThread/10512 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\B_r1\output.mp4 input_videos=[] encoder=intel render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=257827.264873s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=124.230ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=257827.264954s
+[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> 3840x2160)
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[FFMPEG START] ts=2026-10-19 16:39:31.056 (1792420771.0565) thread=TeleM-RenderWorker/26208 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\B_r1\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] encoder=intel mode=direct
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[UNKNOWN] Adapter ignored: INTEL_FORCE active
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.1
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[INTEL] Fallback reason: unsupported native vertical-slice configuration
+[INTEL_JOB_START] encoder=intel input_files=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] output_file=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\B_r1\output.mp4 is_multi_file=False
+[INTEL_NATIVE_REQUESTED] requested=YES
+[RUNTIME]
+backend=intel
+app_root=C:\_DEV\SportCamHUD
+vendor_runtime=C:\_DEV\SportCamHUD\runtime\intel\bin
+native_dll=C:\_DEV\SportCamHUD\runtime\intel\bin\telem_intel_native.dll
+sha256=5d3a967e0cb016fcbc8d4f74a4b26e2b9da53f5f776ad29d5b655f1a9bae056c
+[INTEL_NATIVE_AVAILABLE] available=YES reason=DLL/runtime loaded; codec support is checked separately
+[INTEL_NATIVE_ENTERED] entered=YES
+INTEL_ENCODER_PROFILE: profile=fast codec=hevc target_usage=7 (BEST_SPEED) bitrate=40M resolution=3840x2160 bit_depth=10 hdr=YES
+[INTEL VBR ACCEPTED] rc=2 tu=7 target=40000 max=50000 buffer_kb=10000 initial_kb=5000 multiplier=1 init_status=0 HRD=16/16
+[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.
+          hwdec-current=None, codec=None
+[INTEL_ENCODER_ACCEPTED] {"buffer_kb": 10000, "get_status": 0, "init_status": 0, "initial_delay_kb": 5000, "max_kbps": 50000, "multiplier": 1, "rate_control": 2, "target_kbps": 40000, "target_usage": 7, "valid": 1}
+[Intel][HUD] DirectSHM=ON source=default
+[Intel][Charts] Fastpath=OFF source=default
+[Intel][Compositor] Fastpath=OFF source=default
+[PROC] job created handle=3044
+[PROC] assigned TeleM parent pid=21484 to job (in_prior_job=True)
+[PROC] assigned pid=8496
+[PROC] assigned pid=24812 (already in job via inheritance)
+[PROC] assigned pid=23076 (already in job via inheritance)
+[FIRST FRAME] ts=2026-10-19 16:39:42.552 (1792420782.5526) thread=TeleM-RenderWorker/26208 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\B_r1\output.mp4 input_videos=['C:\\GoPro\\2026-10-16\\GX010381.MP4'] frame=1/1800
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[DIRECT PROGRESS] frame=100/1800 fps=11.3 elapsed=8.9s
+[DIRECT PROGRESS] frame=300/1800 fps=24.9 elapsed=12.1s
+[DIRECT PROGRESS] frame=500/1800 fps=32.7 elapsed=15.3s
+[DIRECT PROGRESS] frame=1000/1800 fps=43.1 elapsed=23.2s
+[DIRECT PROGRESS] frame=1500/1800 fps=48.1 elapsed=31.2s
+[DIRECT PROGRESS] frame=1800/1800 fps=50.3 elapsed=35.8s
+[PROC] registry empty
+[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.0s
+[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.1s
+[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.2s
+[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=39.8s
+   INTEL NATIVE 8A ASYNC PIPELINE EXPORT COMPLETE (HEVC)
+Codec Selected:             HEVC
+Frames Rendered:            1800 / 1800
+Total Wall Time:            39.773 s
+Frame Render Wall Time:     35.916 s
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+Finalization Wall Time:     0.185 s
+[EXPORT PREVIEW RESOURCES]
+Mux Wall Time:              0.000 s
+decoder=none
+RENDER FPS:                 50.117 FPS
+hardware_decode=off
+device=CPU
+workers=0
+USER EFFECTIVE FPS:         45.256 FPS
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+First Frame Latency:        7.243 s
+Max Pending Encode Surfaces:8
+Avg HUD Wait Time:          0.00 ms / frame
+Avg Native Step Time:       15.02 ms / frame
+Native C Stage Breakdown:
+  Demux Time:               0.155 ms / frame
+  Decode Time (Producer):   0.967 ms / frame
+  P010 Convert Time:        0.000 ms / frame
+  Queue Wait (Consumer):    0.000 ms / frame
+  Base Upload Time:         0.000 ms / frame
+  HUD Upload Time:          0.005 ms / frame
+  HUD Upload Mode:          FULL_UPLOAD
+  HUD Upload API Time:      9.053 ms / frame
+  HUD Upload Dirty Bytes:   14.06 MB / frame
+  HUD Upload Regions/Frame: 0.00
+  HUD Upload Partial/Full:  0 / 1
+  VideoProcessorBlt Time:   1.022 ms / frame
+  GPU DMA Copy Time:        0.119 ms / frame
+  HEVC HW Decode Active:    YES
+  Decode->VP CPU Copies:    0
+  Decode->VP GPU Copies:    0
+  VP->Encoder CPU Copies:   0
+  VP->Encoder GPU Copies:   1800
+  Encode Submit Time:       0.067 ms / frame
+  Encode Sync Time:         15.803 ms / frame
+Encoded HEVC Stream Size:    291.35 MB (305,505,364 bytes)
+Average HEVC Bitrate:        40.69 Mbps
+Output File:                C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\B_r1\output.mp4 (307,462,241 bytes)
+[INTEL_NATIVE_RESULT] success=YES
+[PROC] render thread exit
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+
+[BENCH RESULT] mode=direct success=True frames=1800 elapsed=41.2s fps=43.7
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] D3D11VA Hardware HEVC Decoder active on production D3D11 device.
+[STREAM INTEL THREAD] Producer Thread ID: 18812, Consumer Thread ID: 26208, Context Thread Count: 2
+[2A DECODER CONTRACT] W=3840 H=2176 Fmt=104 Bind=0x200 Misc=0x0 Array=28 Shareable=0 SharedHandle=0 hr=0x80004002
+[ENCODER TEX CONTRACT] W=3840 H=2160 Format=104 Bind=0x208 Misc=0x900 ArraySize=1 rType=5 MemId=00000000000a0014
+[STREAM INTEL] DIRECT_VP_SURFACE: CreateVideoProcessorOutputView FAILED hr=0x80070057 frame=0 (will use CopyResource fallback)

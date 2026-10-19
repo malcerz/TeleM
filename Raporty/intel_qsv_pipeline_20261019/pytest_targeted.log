@@ -1,0 +1,120 @@
+........................................................................ [ 22%]
+..............................s..............................sssss...... [ 44%]
+......................s....................[INTEL VBR] init with VSI status=-15; retry retaining HRD
+[INTEL VBR] init rejected status=-15
+........F.....F.............. [ 66%]
+........................................................................ [ 88%]
+......................................                                   [100%]
+=================================== ERRORS ====================================
+_____________ ERROR collecting tests/test_intel_av1_quantizer.py ______________
+ImportError while importing test module 'C:\_DEV\SportCamHUD\tests\test_intel_av1_quantizer.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_intel_av1_quantizer.py:9: in <module>
+    from src.ffmpeg.intel_native_exporter import (
+E   ImportError: cannot import name 'IntelCompressionTracker' from 'src.ffmpeg.intel_native_exporter' (C:\_DEV\SportCamHUD\src\ffmpeg\intel_native_exporter.py)
+================================== FAILURES ===================================
+____________ test_intel_native_8b_render_tab_intel_codec_selector _____________
+
+    def test_intel_native_8b_render_tab_intel_codec_selector():
+        """Verify Qt GUI RenderTab contains Intel Codec Selector reflecting runtime capabilities."""
+        app = _get_app()
+        from src.gui.qt.tabs.render_tab import RenderTab
+        tab = RenderTab()
+        assert hasattr(tab, "cmb_intel_codec")
+        assert hasattr(tab, "widget_intel_options")
+    
+        caps = query_intel_capabilities()
+        av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
+        hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
+        h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
+    
+        expected_codecs = []
+        if av1_ok:
+            expected_codecs.append("av1")
+        if hevc_ok:
+            expected_codecs.append("hevc")
+        if h264_ok:
+            expected_codecs.append("h264")
+    
+        actual_codecs = [tab.cmb_intel_codec.itemData(i) for i in range(tab.cmb_intel_codec.count())]
+>       assert actual_codecs == expected_codecs
+E       AssertionError: assert ['av1', 'hevc...', 'hevc_sdr'] == ['hevc', 'h264']
+E         
+E         At index 0 diff: 'av1' != 'hevc'
+E         Left contains 2 more items, first extra item: 'h264'
+E         Use -v to get more diff
+
+tests\test_intel_native_8b.py:66: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 567, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 11592, "preview_generation_id": 0, "preview_stop_event": {"id": 2164340099600, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 1079115776, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713035677392, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 673865728, "thread_count": 34}
+_______________ test_intel_native_8c_render_tab_codec_selector ________________
+
+    def test_intel_native_8c_render_tab_codec_selector():
+        """Verify GUI RenderTab persistence and capability-aware default selection."""
+        app = _get_app()
+        from src.gui.qt.tabs.render_tab import RenderTab
+        from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+        tab = RenderTab()
+    
+        caps = query_intel_capabilities()
+        av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
+        hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
+        h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
+    
+        expected_default = "av1" if av1_ok else ("hevc" if hevc_ok else ("h264" if h264_ok else "none"))
+        assert tab.cmb_intel_codec.currentData() == expected_default
+    
+        # Select H264 if available
+        if h264_ok:
+            idx_h264 = tab.cmb_intel_codec.findData("h264")
+            assert idx_h264 >= 0
+            tab.cmb_intel_codec.setCurrentIndex(idx_h264)
+            assert tab.cmb_intel_codec.currentData() == "h264"
+    
+        # Check AV1 is present only if AV1 is supported on HW
+        idx_av1 = tab.cmb_intel_codec.findData("av1")
+        if av1_ok:
+            assert idx_av1 >= 0
+            tab.cmb_intel_codec.setCurrentIndex(idx_av1)
+            assert tab.cmb_intel_codec.currentData() == "av1"
+        else:
+>           assert idx_av1 == -1
+E           assert 0 == -1
+
+tests\test_intel_native_8c.py:84: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 567, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 11592, "preview_generation_id": 0, "preview_stop_event": {"id": 2164340102288, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 1088167936, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713035677392, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 684064768, "thread_count": 34}
+=========================== short test summary info ===========================
+FAILED tests/test_intel_native_8b.py::test_intel_native_8b_render_tab_intel_codec_selector
+FAILED tests/test_intel_native_8c.py::test_intel_native_8c_render_tab_codec_selector
+ERROR tests/test_intel_av1_quantizer.py
+2 failed, 317 passed, 7 skipped, 1 error in 19.61s
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 9.77 ms (Upload/Producer context: 000001f7f3403118)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)
+[STREAM INTEL] DUAL_D3D11_DEVICE_READY: Device A created in 9.85 ms (Upload/Producer context: 000001f7f340c628)
+[STREAM INTEL D3D11] ID3D11Multithread QI=0x00000000 (status=PASS), Protected Before=0, Protected After=1
+[STREAM INTEL] STAGED_RING2: DISABLED (legacy UpdateSubresource path)
+[STREAM INTEL] CONTENTION_INSTRUMENTATION: DISABLED (clean production mode)

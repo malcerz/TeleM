@@ -61,7 +61,7 @@
   "intel": [
     {
       "path": "intel/bin/telem_intel_native.dll",
-      "sha256": "5d3a967e0cb016fcbc8d4f74a4b26e2b9da53f5f776ad29d5b655f1a9bae056c",
+      "sha256": "1eb0f4788c426c651da91fcfb8c8a141db3a284179db73df7ad8ca38eb31fba5",
       "size": 246272,
       "purpose": "Intel Native D3D11 VideoProcessor + oneVPL AV1 encoding pipeline",
       "required": true,

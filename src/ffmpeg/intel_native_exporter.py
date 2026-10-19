@@ -182,6 +182,12 @@ class IntelEncoderInfo(ctypes.Structure):
         "initial_delay_kb", "multiplier", "reserved_diagnostic_0", "init_status", "reserved_diagnostic_1", "get_status", "reserved_diagnostic_2")]
 
 
+class IntelStageTiming(ctypes.Structure):
+    """Aggregated native stage timing (separate export; stats ABI unchanged)."""
+    _fields_ = [("struct_size", ctypes.c_int), ("frames", ctypes.c_int)] + [
+        (name, ctypes.c_double) for name in ("slot_wait_ms", "surface_acquire_ms", "bitstream_write_ms")]
+
+
 _LIB_NATIVE_INTEL: Optional[ctypes.CDLL] = None
 _INTEL_CAPS_CACHE: Optional[dict[str, Any]] = None
 
@@ -1541,10 +1547,29 @@ def export_intel_native_d3d11(
                     profile_name="INTEL_NATIVE_7E_ASYNC"
                 )
         else:
+            if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+                render_print(f"[HUD STARTUP TRACE] main render_start={time.time() - (time.perf_counter() - t_render_start):.3f} "
+                             f"executor_create={time.time():.3f} workers={n_workers} prefetch={MAX_IN_FLIGHT}", flush=True)
+            # Pickle the (large) worker initargs once into shared memory so the
+            # spawned HUD workers start in parallel instead of one by one.
+            hud_initializer = _init_worker_with_shm
+            hud_initargs = (shm_names, frame_size, *init_args)
+            if os.environ.get("TELEM_INTEL_HUD_INIT_BLOB", "1").strip() != "0":
+                try:
+                    from src.ffmpeg.shared_memory import WorkerInitBlob, _init_worker_with_shm_blob
+                    init_blob = WorkerInitBlob(init_args)
+                    cleanup.callback(init_blob.close)
+                    hud_initializer = _init_worker_with_shm_blob
+                    hud_initargs = (init_blob.name, init_blob.size, shm_names, frame_size)
+                    render_print(f"[Intel][HUD] InitBlob=ON bytes={init_blob.size}", flush=True)
+                except Exception as exc:
+                    render_print(f"[Intel][HUD] InitBlob=OFF (fallback: {exc})", flush=True)
+            else:
+                render_print("[Intel][HUD] InitBlob=OFF source=env", flush=True)
             with _RenderExecutor(
                 max_workers=n_workers,
-                initializer=_init_worker_with_shm,
-                initargs=(shm_names, frame_size, *init_args),
+                initializer=hud_initializer,
+                initargs=hud_initargs,
                 cancel_event=cancel_event,
             ) as ex:
                 pending_jobs: dict[int, Any] = {}  # frame_idx -> (Future, slot)
@@ -1750,6 +1775,8 @@ def export_intel_native_d3d11(
                         render_print(f"[STREAM INTEL] Rendered frame {frames_rendered}/{total_frames}", flush=True)
                     if frames_rendered == 1:
                         first_frame_latency = time.perf_counter() - t_render_start
+                        if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+                            render_print(f"[HUD STARTUP TRACE] main first_frame={time.time():.3f} hud_wait_s={total_hud_wait_s:.3f}", flush=True)
                         if t_first_frame is None:
                             t_first_frame = time.perf_counter()
                         if t_first_frame is None:
@@ -2280,6 +2307,14 @@ def export_intel_native_d3d11(
     render_print(f"  VP->Encoder GPU Copies:   {stats.vp_to_encoder_gpu_copy_count}", flush=True)
     render_print(f"  Encode Submit Time:       {stats.total_submit_ms / max(1, stats.decoded_frames):.3f} ms / frame", flush=True)
     render_print(f"  Encode Sync Time:         {stats.total_sync_ms / max(1, stats.decoded_frames):.3f} ms / frame", flush=True)
+    if hasattr(native_lib, "intel_native_pipeline_get_stage_timing"):
+        timing = IntelStageTiming()
+        native_lib.intel_native_pipeline_get_stage_timing.argtypes = [ctypes.POINTER(IntelStageTiming), ctypes.c_int]
+        if native_lib.intel_native_pipeline_get_stage_timing(ctypes.byref(timing), ctypes.sizeof(timing)) == 0:
+            n_t = max(1, timing.frames)
+            render_print(f"  Encoder Slot Wait:        {timing.slot_wait_ms / n_t:.3f} ms / frame", flush=True)
+            render_print(f"  Encoder Surface Acquire:  {timing.surface_acquire_ms / n_t:.3f} ms / frame", flush=True)
+            render_print(f"  Bitstream Write:          {timing.bitstream_write_ms / n_t:.3f} ms / frame", flush=True)
     if gpu_map_active:
         c_uploads = ctypes.c_int()
         c_bytes = ctypes.c_uint64()
