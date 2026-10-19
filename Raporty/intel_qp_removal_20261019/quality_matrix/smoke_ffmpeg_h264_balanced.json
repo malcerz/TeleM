@@ -1,0 +1,82 @@
+{
+  "codec": "h264",
+  "profile": "balanced",
+  "intel_path": "ffmpeg",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qp_removal_20261019\\quality_matrix\\smoke_ffmpeg_h264_balanced.mp4",
+  "bitrate": "40M",
+  "max_frames": 60,
+  "success": true,
+  "error": "",
+  "elapsed_s": 15.43,
+  "total_frames": 60,
+  "effective_fps": 3.89,
+  "ram_used_gb": 8.82,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "2.002000",
+          "nb_frames": "60"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "1.962667",
+          "nb_frames": "92"
+        }
+      ],
+      "format": {
+        "duration": "2.002000",
+        "size": "10029221"
+      }
+    },
+    "actual_video_frames": 60
+  },
+  "output_size_bytes": 10029221,
+  "stats": {
+    "codec": "h264",
+    "encoder_accepted": {
+      "TargetUsage": 4,
+      "BufferSizeInKB": 10000,
+      "InitialDelayInKB": 5000,
+      "TargetKbps": 40000,
+      "MaxKbps": 50000,
+      "BRCParamMultiplier": 1
+    },
+    "encoder_diagnostics": [
+      "[h264_qsv @ 0000016d58d6fc40] Using the variable bitrate (VBR) ratecontrol method",
+      "[h264_qsv @ 0000016d58d6fc40] GopPicSize: 256; GopRefDist: 3; GopOptFlag: closed; IdrInterval: 0",
+      "[h264_qsv @ 0000016d58d6fc40] TargetUsage: 4; RateControlMethod: VBR",
+      "[h264_qsv @ 0000016d58d6fc40] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+      "[h264_qsv @ 0000016d58d6fc40] NumSlice: 1; NumRefFrame: 2",
+      "[h264_qsv @ 0000016d58d6fc40] NalHrdConformance: ON; SingleSeiNalUnit: ON; VuiVclHrdParameters: OFF VuiNalHrdParameters: ON"
+    ],
+    "generation_id": 1,
+    "is_cqp": false,
+    "output_validation": {
+      "duration_s": 2.002,
+      "has_audio": true,
+      "size_bytes": 10029221,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "rate_control": "VBR",
+    "rate_control_raw": "VBR",
+    "total_overlay_frames": 0
+  }
+}

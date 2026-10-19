@@ -694,7 +694,7 @@ def _build_stream_ffmpeg_cmd(
 intel_codec: str = "hevc",
     nvidia_codec: str = "HEVC",
     nvidia_quality: str = "Fast",
-    enable_compression_analysis: bool = True,
+    enable_compression_analysis: bool = False,
     is_10bit: bool = False,
     max_frames: int | None = None,
     intel_output_duration_s: float | None = None,
@@ -1231,7 +1231,5 @@ intel_codec: str = "hevc",
     if encoder == "intel" and intel_output_duration_s is not None:
         cmd.extend(["-t", f"{intel_output_duration_s:.9f}"])
     cmd.append(str(output_file))
-    if encoder == "nv" and enable_compression_analysis:
-        cmd.extend(["-stats_period", "0.25"])
     cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "verbose" if encoder == "intel" else "error"])
     return cmd, filter_complex

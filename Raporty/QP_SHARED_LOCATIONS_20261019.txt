@@ -1,0 +1,269 @@
+src/gui/qt/_mixins/render_mixin.py:243:            self._last_export_qp_generation_id = generation_id
+src/gui/qt/_mixins/render_mixin.py:316:            if isinstance(hud_state, dict) and hud_state.get("compression_active"):
+src/gui/qt/_mixins/render_mixin.py:373:                cur_qp_val = None
+src/gui/qt/_mixins/render_mixin.py:374:                avg_qp_val = None
+src/gui/qt/_mixins/render_mixin.py:377:                    for k in ("current_qp", "quant_current", "qp_last"):
+src/gui/qt/_mixins/render_mixin.py:383:                                    cur_qp_val = fv
+src/gui/qt/_mixins/render_mixin.py:387:                    for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
+src/gui/qt/_mixins/render_mixin.py:393:                                    avg_qp_val = fv
+src/gui/qt/_mixins/render_mixin.py:397:                    if cur_qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
+src/gui/qt/_mixins/render_mixin.py:401:                                cur_qp_val = fv
+src/gui/qt/_mixins/render_mixin.py:407:                            hud_state.get("quant_min") is not None
+src/gui/qt/_mixins/render_mixin.py:409:                            and hud_state.get("quant_min") == hud_state.get("quant_max")
+src/gui/qt/_mixins/render_mixin.py:410:                            and hud_state.get("quant_samples", 0) > 1
+src/gui/qt/_mixins/render_mixin.py:413:                    if "compression_text" in hud_state and hud_state["compression_text"]:
+src/gui/qt/_mixins/render_mixin.py:414:                        comp_txt = str(hud_state["compression_text"])
+src/gui/qt/_mixins/render_mixin.py:415:                    elif hud_state.get("compression_active"):
+src/gui/qt/_mixins/render_mixin.py:423:                    elif "qp_avg" in hud_state and hud_state["qp_avg"] is not None:
+src/gui/qt/_mixins/render_mixin.py:425:                            comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
+src/gui/qt/_mixins/render_mixin.py:427:                            comp_txt = f"QP avg: {hud_state['qp_avg']}"
+src/gui/qt/_mixins/render_mixin.py:428:                if cur_qp_val is None and getattr(latest, "qp", None) is not None:
+src/gui/qt/_mixins/render_mixin.py:429:                    cur_qp_val = latest.qp
+src/gui/qt/_mixins/render_mixin.py:430:                if avg_qp_val is None and getattr(latest, "avg_qp", None) is not None:
+src/gui/qt/_mixins/render_mixin.py:431:                    avg_qp_val = latest.avg_qp
+src/gui/qt/_mixins/render_mixin.py:443:                        self._last_export_qp_generation_id = generation_id
+src/gui/qt/_mixins/render_mixin.py:471:                    compression_text=comp_txt or getattr(latest, "compression_text", ""),
+src/gui/qt/_mixins/render_mixin.py:472:                    qp=cur_qp_val,
+src/gui/qt/_mixins/render_mixin.py:473:                    avg_qp=avg_qp_val,
+src/gui/qt/_mixins/render_mixin.py:477:                    quant_metric=str(hud_state.get("quant_metric", getattr(latest, "quant_metric", ""))) if isinstance(hud_state, dict) else getattr(latest, "quant_metric", ""),
+src/gui/qt/_mixins/render_mixin.py:495:                if isinstance(hud_state, dict) and hud_state.get("compression_active"):
+src/gui/qt/_mixins/render_mixin.py:502:                elif getattr(latest, "compression_text", ""):
+src/gui/qt/_mixins/render_mixin.py:503:                    final_comp_txt = re.sub(r"\s*\|\s*q teraz:\s*[\d\.]+", "", latest.compression_text)
+src/gui/qt/_mixins/render_mixin.py:525:                    compression_text=final_comp_txt or getattr(latest, "compression_text", ""),
+src/gui/qt/_mixins/render_mixin.py:594:            final_comp_txt = getattr(latest, "compression_text", "")
+src/gui/qt/_mixins/render_mixin.py:610:                compression_text=final_comp_txt,
+src/gui/qt/_mixins/render_mixin.py:655:                            qp = stats["encoder_stats"].get("qp_avg")
+src/gui/qt/_mixins/render_mixin.py:659:                    quant_metric = stats.get("quant_metric", "") if stats else ""
+src/gui/qt/_mixins/render_mixin.py:660:                    quant_avg = stats.get("quant_avg") if stats else None
+src/gui/qt/_mixins/render_mixin.py:661:                    quant_min = stats.get("quant_min") if stats else None
+src/gui/qt/_mixins/render_mixin.py:662:                    quant_max = stats.get("quant_max") if stats else None
+src/gui/qt/_mixins/render_mixin.py:663:                    quant_samples = stats.get("quant_samples") if stats else None
+src/gui/qt/_mixins/render_mixin.py:677:                        quant_metric=quant_metric,
+src/gui/qt/_mixins/render_mixin.py:678:                        quant_avg=quant_avg,
+src/gui/qt/_mixins/render_mixin.py:679:                        quant_min=quant_min,
+src/gui/qt/_mixins/render_mixin.py:680:                        quant_max=quant_max,
+src/gui/qt/_mixins/render_mixin.py:681:                        quant_samples=quant_samples,
+src/gui/qt/_mixins/render_mixin.py:771:                        live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+src/gui/qt/_mixins/render_mixin.py:1043:        qp_mode = options.get("qp") is not None or any(
+src/gui/qt/_mixins/render_mixin.py:1049:        if bitrate_value and not qp_mode:
+src/gui/qt/_mixins/render_mixin.py:1368:            enable_compression_analysis=bool(options.get("compression_analysis", True)),
+src/gui/qt/_mixins/render_mixin.py:1424:                    "compression_analysis": bool(options.get("compression_analysis", True)),
+src/gui/qt/_mixins/render_mixin.py:1618:                    enable_compression_analysis=bool(options.get("compression_analysis", True)),
+src/gui/qt/_mixins/render_mixin.py:1641:                    enable_compression_analysis=bool(options.get("compression_analysis", True)),
+src/gui/qt/_mixins/render_mixin.py:1730:                "compression_analysis": bool(options.get("compression_analysis", True)),
+src/gui/qt/_mixins/render_mixin.py:1858:                stats["avg_qp"] = enc_info.get("qp_avg")
+src/gui/export_queue.py:192:    quant_metric: str = ""
+src/gui/export_queue.py:193:    quant_avg: Optional[float] = None
+src/gui/export_queue.py:194:    quant_min: Optional[int] = None
+src/gui/export_queue.py:195:    quant_max: Optional[int] = None
+src/gui/export_queue.py:196:    quant_samples: Optional[int] = None
+src/gui/export_queue.py:513:        job.quant_metric = ""
+src/gui/export_queue.py:514:        job.quant_avg = None
+src/gui/export_queue.py:515:        job.quant_min = None
+src/gui/export_queue.py:516:        job.quant_max = None
+src/gui/export_queue.py:517:        job.quant_samples = None
+src/gui/export_queue.py:595:        quant_metric: str = "",
+src/gui/export_queue.py:596:        quant_avg: float | None = None,
+src/gui/export_queue.py:597:        quant_min: int | None = None,
+src/gui/export_queue.py:598:        quant_max: int | None = None,
+src/gui/export_queue.py:599:        quant_samples: int | None = None,
+src/gui/export_queue.py:624:        if quant_metric:
+src/gui/export_queue.py:625:            job.quant_metric = quant_metric
+src/gui/export_queue.py:626:        if quant_avg is not None:
+src/gui/export_queue.py:627:            job.quant_avg = quant_avg
+src/gui/export_queue.py:628:        if quant_min is not None:
+src/gui/export_queue.py:629:            job.quant_min = quant_min
+src/gui/export_queue.py:630:        if quant_max is not None:
+src/gui/export_queue.py:631:            job.quant_max = quant_max
+src/gui/export_queue.py:632:        if quant_samples is not None:
+src/gui/export_queue.py:633:            job.quant_samples = quant_samples
+src/gui/export_queue.py:643:            if elapsed_s > 0 or average_fps > 0 or average_qp is not None or quant_avg is not None:
+src/gui/export_queue.py:683:            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} qp={job.average_qp} quant_avg={job.quant_avg} elapsed={job.render_elapsed_s:.1f}s",
+src/ffmpeg/streaming.py:706:    compression_tracker: Optional[Any] = None,
+src/ffmpeg/streaming.py:742:        if compression_tracker is not None:
+src/ffmpeg/streaming.py:743:            hud_state.update(compression_tracker.get_hud_state_dict())
+src/ffmpeg/streaming.py:1024:    enable_compression_analysis: bool = True,
+src/ffmpeg/streaming.py:1828:        enable_compression_analysis=enable_compression_analysis,
+src/ffmpeg/streaming.py:2048:    compression_tracker = None
+src/ffmpeg/streaming.py:2052:        compression_tracker = IntelQsvTracker(codec)
+src/ffmpeg/streaming.py:2054:        from src.ffmpeg.compression_tracker import CompressionTracker
+src/ffmpeg/streaming.py:2061:        compression_tracker = CompressionTracker(
+src/ffmpeg/streaming.py:2063:            is_active=enable_compression_analysis,
+src/ffmpeg/streaming.py:2067:        if encoder == "intel" and compression_tracker is not None:
+src/ffmpeg/streaming.py:2068:            observed_rc = compression_tracker.get_hud_state_dict().get("rate_control_raw")
+src/ffmpeg/streaming.py:2074:            compression_tracker=compression_tracker,
+src/ffmpeg/streaming.py:2086:                if compression_tracker is not None:
+src/ffmpeg/streaming.py:2087:                    compression_tracker.feed_progress_line(line_str)
+src/ffmpeg/streaming.py:2808:    if encoder == "intel" and compression_tracker is not None:
+src/ffmpeg/streaming.py:2809:        state = compression_tracker.get_hud_state_dict()
+src/gui/qt/tabs/render_tab.py:152:        self._last_export_qp_generation_id = 0
+src/gui/qt/tabs/render_tab.py:435:        self.chk_compression_analysis = QCheckBox("Analiza kompresji podczas eksportu")
+src/gui/qt/tabs/render_tab.py:436:        self.chk_compression_analysis.setChecked(True)
+src/gui/qt/tabs/render_tab.py:437:        self.chk_compression_analysis.setToolTip("Pomiary QP/Quantizer w czasie rzeczywistym podczas renderowania NVENC")
+src/gui/qt/tabs/render_tab.py:438:        layout_nvidia.addRow(self.chk_compression_analysis)
+src/gui/qt/tabs/render_tab.py:521:                self.chk_compression_analysis.setEnabled(True)
+src/gui/qt/tabs/render_tab.py:703:        self.lbl_compression_stats = QLabel("")
+src/gui/qt/tabs/render_tab.py:704:        self.lbl_compression_stats.setStyleSheet("QLabel { color: #0066cc; font-size: 11px; font-weight: bold; }")
+src/gui/qt/tabs/render_tab.py:705:        self.lbl_compression_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+src/gui/qt/tabs/render_tab.py:706:        self.lbl_compression_stats.setWordWrap(False)
+src/gui/qt/tabs/render_tab.py:707:        self.lbl_compression_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+src/gui/qt/tabs/render_tab.py:708:        self.lbl_compression_stats.setVisible(False)
+src/gui/qt/tabs/render_tab.py:709:        bottom_layout.addWidget(self.lbl_compression_stats)
+src/gui/qt/tabs/render_tab.py:1165:        self.lbl_compression_stats.setText("")
+src/gui/qt/tabs/render_tab.py:1166:        self.lbl_compression_stats.setVisible(False)
+src/gui/qt/tabs/render_tab.py:1172:        self._reset_export_qp_state(self._render_generation_id)
+src/gui/qt/tabs/render_tab.py:1312:    def _reset_export_qp_state(self, generation_id: int) -> None:
+src/gui/qt/tabs/render_tab.py:1315:        self._last_export_qp_generation_id = int(generation_id or 0)
+src/gui/qt/tabs/render_tab.py:1581:            is_av1 = (job_codec == "av1") or (getattr(job, "quant_metric", "") == "base_q_idx")
+src/gui/qt/tabs/render_tab.py:1582:            q_avg = getattr(job, "quant_avg", None)
+src/gui/qt/tabs/render_tab.py:1583:            q_min = getattr(job, "quant_min", None)
+src/gui/qt/tabs/render_tab.py:1584:            q_max = getattr(job, "quant_max", None)
+src/gui/qt/tabs/render_tab.py:1600:                qp_str = f"{avg_qp:.1f}" if avg_qp is not None else "brak danych"
+src/gui/qt/tabs/render_tab.py:1601:                quality_details = f"\n   |_ Średnie QP: {qp_str}"
+src/gui/qt/tabs/render_tab.py:2410:            "compression_analysis": self.chk_compression_analysis.isChecked(),
+src/gui/qt/tabs/render_tab.py:2667:            qp_val = getattr(snapshot, "qp", None)
+src/gui/qt/tabs/render_tab.py:2668:            avg_qp_val = getattr(snapshot, "avg_qp", None)
+src/gui/qt/tabs/render_tab.py:2669:            is_cqp_val = getattr(snapshot, "is_cqp", False)
+src/gui/qt/tabs/render_tab.py:2671:            quant_metric_snap = getattr(snapshot, "quant_metric", "")
+src/gui/qt/tabs/render_tab.py:2673:                getattr(snapshot, "compression_text", "")
+src/gui/qt/tabs/render_tab.py:2681:                qp=qp_val,
+src/gui/qt/tabs/render_tab.py:2682:                avg_qp=avg_qp_val,
+src/gui/qt/tabs/render_tab.py:2683:                is_cqp=is_cqp_val,
+src/gui/qt/tabs/render_tab.py:2686:                quant_metric=quant_metric_snap,
+src/gui/qt/tabs/render_tab.py:2689:        comp_txt = getattr(snapshot, "compression_text", "")
+src/gui/qt/tabs/render_tab.py:2693:            self.lbl_compression_stats.setText(comp_txt)
+src/gui/qt/tabs/render_tab.py:2694:            self.lbl_compression_stats.setVisible(True)
+src/gui/qt/tabs/render_tab.py:2756:        qp_val = None
+src/gui/qt/tabs/render_tab.py:2757:        avg_qp_val = None
+src/gui/qt/tabs/render_tab.py:2760:            for k in ("current_qp", "quant_current", "qp_last"):
+src/gui/qt/tabs/render_tab.py:2766:                            qp_val = fv
+src/gui/qt/tabs/render_tab.py:2770:            for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
+src/gui/qt/tabs/render_tab.py:2776:                            avg_qp_val = fv
+src/gui/qt/tabs/render_tab.py:2780:            if qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
+src/gui/qt/tabs/render_tab.py:2784:                        qp_val = fv
+src/gui/qt/tabs/render_tab.py:2790:                    hud_state.get("quant_min") is not None
+src/gui/qt/tabs/render_tab.py:2791:                    and hud_state.get("quant_min") == hud_state.get("quant_max")
+src/gui/qt/tabs/render_tab.py:2792:                    and hud_state.get("quant_samples", 0) > 1
+src/gui/qt/tabs/render_tab.py:2808:            is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
+src/gui/qt/tabs/render_tab.py:2809:            quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
+src/gui/qt/tabs/render_tab.py:2811:                str(hud_state.get("compression_text", "") or "")
+src/gui/qt/tabs/render_tab.py:2817:                qp=qp_val,
+src/gui/qt/tabs/render_tab.py:2818:                avg_qp=avg_qp_val,
+src/gui/qt/tabs/render_tab.py:2821:                quant_metric=quant_m_hud,
+src/gui/qt/tabs/render_tab.py:2849:        is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
+src/gui/qt/tabs/render_tab.py:2850:        quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
+src/gui/qt/tabs/render_tab.py:2851:        self._set_stats(completed, total, elapsed, fps, status, qp=qp_val, is_av1=is_av1_hud, quant_metric=quant_m_hud)
+src/gui/qt/tabs/render_tab.py:2951:                   is_av1: bool = False, quant_metric: str = "",
+src/gui/qt/tabs/render_tab.py:2976:        q_label = "Q" if (is_av1 or quant_metric == "base_q_idx") else "QP"
+src/gui/qt/tabs/render_tab.py:2978:            qp_txt = f"{q_label}: --"
+src/gui/qt/tabs/render_tab.py:2981:            qp_txt = rate_text
+src/gui/qt/tabs/render_tab.py:2984:                qp_txt = f"{q_label} avg: {avg_qp:.1f}"
+src/gui/qt/tabs/render_tab.py:2986:                qp_txt = f"{q_label} (target): {int(round(qp))}"
+src/gui/qt/tabs/render_tab.py:2988:                qp_txt = f"{q_label}: --"
+src/gui/qt/tabs/render_tab.py:2991:                qp_txt = f"{q_label}: {qp:.0f} (avg: {avg_qp:.1f})"
+src/gui/qt/tabs/render_tab.py:2993:                qp_txt = f"{q_label}: {qp:.1f}"
+src/gui/qt/tabs/render_tab.py:2995:            qp_txt = f"{q_label} avg: {avg_qp:.1f}"
+src/gui/qt/tabs/render_tab.py:2997:            qp_txt = f"{q_label}: --"
+src/gui/qt/tabs/render_tab.py:3002:            f"   |   {qp_txt}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+src/gui/qt/tabs/render_tab.py:3016:            or _stats.get("quant_metric") == "base_q_idx"
+src/gui/qt/tabs/render_tab.py:3043:            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+src/gui/qt/tabs/render_tab.py:3062:                    quant_metric=_stats.get("quant_metric", "") if _stats else "",
+src/gui/qt/tabs/render_tab.py:3063:                    quant_avg=_stats.get("quant_avg") if _stats else None,
+src/gui/qt/tabs/render_tab.py:3064:                    quant_min=_stats.get("quant_min") if _stats else None,
+src/gui/qt/tabs/render_tab.py:3065:                    quant_max=_stats.get("quant_max") if _stats else None,
+src/gui/qt/tabs/render_tab.py:3066:                    quant_samples=_stats.get("quant_samples") if _stats else None,
+src/gui/qt/tabs/render_tab.py:3093:        is_av1_fin = (_stats.get("codec") == "av1" or _stats.get("quant_metric") == "base_q_idx") if _stats else False
+src/gui/qt/tabs/render_tab.py:3094:        quant_m_fin = _stats.get("quant_metric", "") if _stats else ""
+src/gui/qt/tabs/render_tab.py:3096:                        "Gotowe", final_eta="00:00", qp=qp, is_av1=is_av1_fin, quant_metric=quant_m_fin)
+src/gui/qt/tabs/render_tab.py:3116:            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
+src/gui/qt/tabs/render_tab.py:3119:        qp_str = f"{qp:.1f}" if qp is not None else "brak danych"
+src/gui/qt/tabs/render_tab.py:3123:        is_av1 = (stats.get("codec") == "av1") or (stats.get("quant_metric") == "base_q_idx")
+src/gui/qt/tabs/render_tab.py:3125:            q_val = stats.get("quant_avg") if stats.get("quant_samples", 0) > 0 else stats.get("avg_qp")
+src/gui/qt/tabs/render_tab.py:3127:            q_min = stats.get("quant_min")
+src/gui/qt/tabs/render_tab.py:3128:            q_max = stats.get("quant_max")
+src/gui/qt/tabs/render_tab.py:3129:            range_info = f"\nZakres Quantizer: {q_min}–{q_max}" if (q_min is not None and q_max is not None and stats.get("quant_samples", 0) > 0) else ""
+src/gui/qt/tabs/render_tab.py:3132:            quality_line = f"Średnie QP: {qp_str}"
+src/ffmpeg/amd_native_exporter.py:872:        ("last_frame_qp_result", ctypes.c_int32),
+src/ffmpeg/amd_native_exporter.py:873:        ("last_avg_qp_result", ctypes.c_int32),
+src/ffmpeg/amd_native_exporter.py:874:        ("last_min_qp_result", ctypes.c_int32),
+src/ffmpeg/amd_native_exporter.py:875:        ("last_max_qp_result", ctypes.c_int32),
+src/ffmpeg/amd_native_exporter.py:881:        ("frame_qp_samples", c_uint64),
+src/ffmpeg/amd_native_exporter.py:882:        ("avg_qp_samples", c_uint64),
+src/ffmpeg/amd_native_exporter.py:883:        ("min_qp_samples", c_uint64),
+src/ffmpeg/amd_native_exporter.py:884:        ("max_qp_samples", c_uint64),
+src/ffmpeg/amd_native_exporter.py:2167:    qp_p: int = 28,
+src/ffmpeg/amd_native_exporter.py:2168:    qp_i: int = 28,
+src/ffmpeg/amd_native_exporter.py:3035:    if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+src/ffmpeg/amd_native_exporter.py:3036:        native_dll.telem_amd_get_encoder_qp_stats.restype = None
+src/ffmpeg/amd_native_exporter.py:3037:        native_dll.telem_amd_get_encoder_qp_stats.argtypes = [
+src/ffmpeg/amd_native_exporter.py:3046:    if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
+src/ffmpeg/amd_native_exporter.py:3047:        native_dll.telem_amd_get_encoder_qp_feedback_diag.restype = c_int
+src/ffmpeg/amd_native_exporter.py:3048:        native_dll.telem_amd_get_encoder_qp_feedback_diag.argtypes = [
+src/ffmpeg/amd_native_exporter.py:7029:            qp_avg_val = c_double(0.0)
+src/ffmpeg/amd_native_exporter.py:7030:            qp_min_val = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7031:            qp_max_val = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7032:            qp_samples_val = c_uint64(0)
+src/ffmpeg/amd_native_exporter.py:7033:            qp_last_val = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7034:            qp_supp_val = c_int(0)
+src/ffmpeg/amd_native_exporter.py:7035:            if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+src/ffmpeg/amd_native_exporter.py:7036:                native_dll.telem_amd_get_encoder_qp_stats(
+src/ffmpeg/amd_native_exporter.py:7038:                    byref(qp_avg_val),
+src/ffmpeg/amd_native_exporter.py:7039:                    byref(qp_min_val),
+src/ffmpeg/amd_native_exporter.py:7040:                    byref(qp_max_val),
+src/ffmpeg/amd_native_exporter.py:7041:                    byref(qp_samples_val),
+src/ffmpeg/amd_native_exporter.py:7042:                    byref(qp_last_val),
+src/ffmpeg/amd_native_exporter.py:7043:                    byref(qp_supp_val),
+src/ffmpeg/amd_native_exporter.py:7046:            has_qp = qp_samples_val.value > 0
+src/ffmpeg/amd_native_exporter.py:7047:            cur_qp = float(qp_last_val.value) if (has_qp and qp_last_val.value >= 0) else None
+src/ffmpeg/amd_native_exporter.py:7048:            avg_qp = float(qp_avg_val.value) if has_qp else None
+src/ffmpeg/amd_native_exporter.py:7053:                qp_txt = f"RC: VBR | QP: {cur_qp:.0f} | QP avg: {avg_qp:.1f}"
+src/ffmpeg/amd_native_exporter.py:7055:                qp_txt = f"RC: VBR | QP avg: {avg_qp:.1f}"
+src/ffmpeg/amd_native_exporter.py:7057:                qp_txt = "RC: VBR | QP avg: N/A"
+src/ffmpeg/amd_native_exporter.py:7061:                f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+src/ffmpeg/amd_native_exporter.py:7071:                qp_avg=avg_qp,
+src/ffmpeg/amd_native_exporter.py:7072:                quant_current=cur_qp,
+src/ffmpeg/amd_native_exporter.py:7073:                quant_avg=avg_qp,
+src/ffmpeg/amd_native_exporter.py:7074:                quant_min=int(qp_min_val.value) if has_qp else None,
+src/ffmpeg/amd_native_exporter.py:7075:                quant_max=int(qp_max_val.value) if has_qp else None,
+src/ffmpeg/amd_native_exporter.py:7076:                quant_samples=int(qp_samples_val.value),
+src/ffmpeg/amd_native_exporter.py:7079:                compression_text=qp_txt,
+src/ffmpeg/amd_native_exporter.py:7451:        c_qp_avg = c_double(0.0)
+src/ffmpeg/amd_native_exporter.py:7452:        c_qp_min = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7453:        c_qp_max = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7454:        c_qp_samples = c_uint64(0)
+src/ffmpeg/amd_native_exporter.py:7455:        c_qp_last = ctypes.c_int64(0)
+src/ffmpeg/amd_native_exporter.py:7456:        c_qp_supp = c_int(0)
+src/ffmpeg/amd_native_exporter.py:7457:        if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
+src/ffmpeg/amd_native_exporter.py:7458:            native_dll.telem_amd_get_encoder_qp_stats(
+src/ffmpeg/amd_native_exporter.py:7460:                byref(c_qp_avg),
+src/ffmpeg/amd_native_exporter.py:7461:                byref(c_qp_min),
+src/ffmpeg/amd_native_exporter.py:7462:                byref(c_qp_max),
+src/ffmpeg/amd_native_exporter.py:7463:                byref(c_qp_samples),
+src/ffmpeg/amd_native_exporter.py:7464:                byref(c_qp_last),
+src/ffmpeg/amd_native_exporter.py:7465:                byref(c_qp_supp),
+src/ffmpeg/amd_native_exporter.py:7467:            if c_qp_samples.value > 0:
+src/ffmpeg/amd_native_exporter.py:7468:                print(f"[AMD ENCODER] Hardware QP stats: avg={c_qp_avg.value:.1f} min={c_qp_min.value} max={c_qp_max.value} samples={c_qp_samples.value}", flush=True)
+src/ffmpeg/amd_native_exporter.py:7471:        if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
+src/ffmpeg/amd_native_exporter.py:7472:            qp_diag = TelemAMDQPFeedbackDiag()
+src/ffmpeg/amd_native_exporter.py:7473:            if native_dll.telem_amd_get_encoder_qp_feedback_diag(h_context, byref(qp_diag)):
+src/ffmpeg/amd_native_exporter.py:7476:                    f"encoder_set={qp_diag.encoder_set_result} surface_flag={qp_diag.surface_flag_enabled} "
+src/ffmpeg/amd_native_exporter.py:7477:                    f"surface_set={qp_diag.surface_set_result} ok={qp_diag.surface_set_ok} fail={qp_diag.surface_set_fail} "
+src/ffmpeg/amd_native_exporter.py:7478:                    f"outputs={qp_diag.output_buffers} "
+src/ffmpeg/amd_native_exporter.py:7479:                    f"get_results(frame/avg/min/max)={qp_diag.last_frame_qp_result}/{qp_diag.last_avg_qp_result}/"
+src/ffmpeg/amd_native_exporter.py:7480:                    f"{qp_diag.last_min_qp_result}/{qp_diag.last_max_qp_result} "
+src/ffmpeg/amd_native_exporter.py:7481:                    f"samples(frame/avg/min/max)={qp_diag.frame_qp_samples}/{qp_diag.avg_qp_samples}/"
+src/ffmpeg/amd_native_exporter.py:7482:                    f"{qp_diag.min_qp_samples}/{qp_diag.max_qp_samples} "
+src/ffmpeg/amd_native_exporter.py:7483:                    f"intra={qp_diag.intra_samples} inter={qp_diag.inter_samples} "
+src/ffmpeg/amd_native_exporter.py:7484:                    f"last(frameQP/avgQP/minQP/maxQP)={qp_diag.last_frame_qp}/{qp_diag.last_avg_qp}/"
+src/ffmpeg/amd_native_exporter.py:7485:                    f"{qp_diag.last_min_qp}/{qp_diag.last_max_qp}",
+src/ffmpeg/amd_native_exporter.py:8933:                    "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8977:        "quant_metric": "QP",
+src/ffmpeg/amd_native_exporter.py:8978:        "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8979:        "qp_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8980:        "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8981:        "qp_min": int(c_qp_min.value) if 'c_qp_min' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8982:        "qp_max": int(c_qp_max.value) if 'c_qp_max' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8983:        "qp_last": int(c_qp_last.value) if 'c_qp_last' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8984:        "qp_samples": int(c_qp_samples.value) if 'c_qp_samples' in locals() else 0,
+src/ffmpeg/amd_native_exporter.py:8991:            "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
+src/ffmpeg/amd_native_exporter.py:8992:            "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,

@@ -1,0 +1,12 @@
+{
+  "IntelNativePipelineStats": {
+    "size_before": 752,
+    "size_after": 752,
+    "all_offsets_preserved": true
+  },
+  "IntelEncoderInfo": {
+    "size_before": 52,
+    "size_after": 52,
+    "all_offsets_preserved": true
+  }
+}

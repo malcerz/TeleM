@@ -19,6 +19,40 @@ try:
 except ImportError:  # helpers are reused by tools/run_intel_hevc_qp_ab.py outside pytest
     pytest = None
 
+class IntelHevcSliceQpStats(ctypes.Structure):
+    """Mirror of IntelHevcSliceQpStats (telem_intel_native.c): HEVC SliceQpY
+    parsed from encoded slice headers, plus the oneVPL frame-info cross-check."""
+    _fields_ = [
+        ("valid", ctypes.c_int),
+        ("disabled", ctypes.c_int),
+        ("cu_qp_delta_enabled", ctypes.c_int),
+        ("max_slices_per_frame", ctypes.c_int),
+        ("frames", ctypes.c_uint32),
+        ("slices", ctypes.c_uint32),
+        ("parse_errors", ctypes.c_uint32),
+        ("frames_without_slice_qp", ctypes.c_uint32),
+        ("cur_frame_min", ctypes.c_int),
+        ("cur_frame_max", ctypes.c_int),
+        ("cur_frame_slices", ctypes.c_int),
+        ("cur_frame_weighted", ctypes.c_double),
+        ("run_min", ctypes.c_int),
+        ("run_max", ctypes.c_int),
+        ("run_weighted_sum", ctypes.c_double),
+        ("run_avg", ctypes.c_double),
+        ("bit_depth_luma", ctypes.c_int),
+        ("vpl_last_qp", ctypes.c_int),
+        ("vpl_reported", ctypes.c_uint32),
+        ("vpl_match", ctypes.c_uint32),
+        ("vpl_mismatch", ctypes.c_uint32),
+        ("vpl_zero", ctypes.c_uint32),
+        ("parse_us_total", ctypes.c_double),
+        ("last_frame_type", ctypes.c_int),
+        ("type_frames", ctypes.c_uint32 * 3),
+        ("type_sum", ctypes.c_double * 3),
+        ("rejected_frames", ctypes.c_uint32),
+        ("parse_us_max", ctypes.c_double),
+    ]
+
 ROOT = Path(__file__).resolve().parents[1]
 DLL = Path(os.environ.get("TELEM_INTEL_NATIVE_DLL", ROOT / "runtime/intel/bin/telem_intel_native.dll"))
 FFMPEG = ROOT / "runtime/common/ffmpeg/ffmpeg.exe"
@@ -38,7 +72,6 @@ def _lib():
     lib = ctypes.CDLL(str(DLL))
     if not hasattr(lib, "intel_native_hevc_slice_qp_selftest"):
         _skip("DLL without Slice QP self-test hook")
-    from src.ffmpeg.intel_native_exporter import IntelHevcSliceQpStats
     lib.intel_native_hevc_slice_qp_selftest.argtypes = [ctypes.c_char_p, ctypes.c_uint32,
                                                          ctypes.POINTER(ctypes.c_double), ctypes.c_int]
     lib.intel_native_hevc_slice_qp_selftest.restype = ctypes.c_int

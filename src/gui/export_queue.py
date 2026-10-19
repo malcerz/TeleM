@@ -187,6 +187,7 @@ class ExportJob:
     finalization_elapsed_s: float = 0.0
     effective_fps: float = 0.0
     average_fps: float = 0.0
+    # Legacy queue-file compatibility only; production no longer populates QP.
     average_qp: Optional[float] = None
     codec: str = ""
     quant_metric: str = ""
@@ -617,20 +618,8 @@ class ExportQueue:
             job.render_elapsed_s = max(0.0, job.render_finished_at - job.render_started_at)
         if average_fps > 0:
             job.average_fps = average_fps
-        if average_qp is not None:
-            job.average_qp = average_qp
         if codec:
             job.codec = codec
-        if quant_metric:
-            job.quant_metric = quant_metric
-        if quant_avg is not None:
-            job.quant_avg = quant_avg
-        if quant_min is not None:
-            job.quant_min = quant_min
-        if quant_max is not None:
-            job.quant_max = quant_max
-        if quant_samples is not None:
-            job.quant_samples = quant_samples
         if frame_render_elapsed_s > 0:
             job.frame_render_elapsed_s = frame_render_elapsed_s
         if finalization_elapsed_s > 0:
@@ -640,7 +629,7 @@ class ExportQueue:
 
         if already_done:
             # Already finalized state machine, but persist updated stats if any
-            if elapsed_s > 0 or average_fps > 0 or average_qp is not None or quant_avg is not None:
+            if elapsed_s > 0 or average_fps > 0:
                 self._persist()
                 self._notify_updated(job)
             return
@@ -680,7 +669,7 @@ class ExportQueue:
             job_id=job.job_id,
             output_path=job.output_path,
             input_videos=job.video_paths,
-            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} qp={job.average_qp} quant_avg={job.quant_avg} elapsed={job.render_elapsed_s:.1f}s",
+            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} elapsed={job.render_elapsed_s:.1f}s",
         )
         self._persist()
         self._notify_updated(job)

@@ -174,7 +174,6 @@ struct TelemEncodeDiagInfo {
     uint64_t QueryRam();
 
     // Live Compression Analysis (Stage 8K.5)
-    void RecordCompressionSample(uint32_t frame_idx, uint64_t pts, NV_ENC_PIC_TYPE pic_type, uint32_t qp, uint32_t bytes);
 
 private:
     TelemNvencConfig                m_config;
@@ -306,16 +305,6 @@ private:
         uint32_t encoded_bytes;
     };
 
-    bool                                m_enable_compression_analysis;
-    std::wstring                        m_compression_csv_path;
-    FILE*                               m_compression_csv_file;
-    std::vector<FrameCompressionSample> m_compression_samples;
-    std::mutex                          m_compression_mutex;
-    TelemCompressionStats               m_live_compression_stats;
-    uint64_t                            m_i_frame_qp_sum;
-    uint64_t                            m_p_frame_qp_sum;
-    uint64_t                            m_b_frame_qp_sum;
-    uint64_t                            m_total_qp_sum;
 
     // Live Render Preview Tap (Stage 8L.4)
     bool                                m_preview_tap_enabled{false};

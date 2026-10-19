@@ -1,0 +1,92 @@
+src/ffmpeg/intel_native_exporter.py:22:1: 'queue' imported but unused
+src/ffmpeg/intel_native_exporter.py:23:1: 'shutil' imported but unused
+src/ffmpeg/intel_native_exporter.py:32:1: 'numpy as np' imported but unused
+src/ffmpeg/intel_native_exporter.py:618:5: `global _last_intel_export_stats` is unused: name is never assigned in scope
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_HUD_MULTIRECT' imported but unused
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_HUD_WORKERS' imported but unused
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_HUD_PREFETCH' imported but unused
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_HUD_TEXTURE_RING' imported but unused
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_VP_RING' imported but unused
+src/ffmpeg/intel_native_exporter.py:746:5: 'src.ffmpeg.intel_config.DEFAULT_INTEL_ENCODE_ASYNC' imported but unused
+src/ffmpeg/intel_native_exporter.py:768:18: f-string is missing placeholders
+src/ffmpeg/intel_native_exporter.py:900:22: f-string is missing placeholders
+src/ffmpeg/intel_native_exporter.py:1127:5: local variable 'is_av1_export' is assigned to but never used
+src/ffmpeg/intel_native_exporter.py:1135:5: 'src.ffmpeg.worker_cache._resolve_cache_samples' imported but unused
+src/ffmpeg/intel_native_exporter.py:1309:5: local variable 'env_w' is assigned to but never used
+src/ffmpeg/intel_native_exporter.py:1310:5: local variable 'env_pf' is assigned to but never used
+src/ffmpeg/intel_native_exporter.py:1457:22: f-string is missing placeholders
+src/ffmpeg/intel_native_exporter.py:2051:38: f-string is missing placeholders
+src/ffmpeg/intel_native_exporter.py:2289:22: f-string is missing placeholders
+src/ffmpeg/intel_native_exporter.py:2298:5: 'src.ffmpeg.intel_backend.classify_intel_capability' imported but unused
+src/ffmpeg/intel_native_exporter.py:2298:5: 'src.ffmpeg.intel_backend.validate_intel_graph_contract' imported but unused
+src/ffmpeg/intel_native_exporter.py:2451:13: dictionary key 'BASE_STAGING_SLOTS' repeated with different values
+src/ffmpeg/intel_native_exporter.py:2550:13: dictionary key 'BASE_STAGING_SLOTS' repeated with different values
+src/ffmpeg/amd_native_exporter.py:70:1: 'src.ffmpeg.worker_cache.WORKER_CACHE' imported but unused
+src/ffmpeg/amd_native_exporter.py:75:1: 'src.render_logging.render_debug_print' imported but unused
+src/ffmpeg/amd_native_exporter.py:89:5: `global _last_amd_export_stats` is unused: name is never assigned in scope
+src/ffmpeg/amd_native_exporter.py:1288:5: local variable 'non_contig_regions' is assigned to but never used
+src/ffmpeg/amd_native_exporter.py:2194:15: undefined name 'Union'
+src/ffmpeg/amd_native_exporter.py:2195:15: undefined name 'Union'
+src/ffmpeg/amd_native_exporter.py:3373:11: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:3884:12: undefined name 'failure_context_dumped'
+src/ffmpeg/amd_native_exporter.py:3886:9: undefined name 'failure_context_dumped'
+src/ffmpeg/amd_native_exporter.py:3950:25: undefined name 'mux_pump_stop'
+src/ffmpeg/amd_native_exporter.py:3981:15: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:3988:46: undefined name 'NATIVE_STAGE_NAMES'
+src/ffmpeg/amd_native_exporter.py:3993:15: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:4005:15: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:4009:15: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:4031:9: local variable 'mux_rc' is assigned to but never used
+src/ffmpeg/amd_native_exporter.py:4060:9: `nonlocal audio_concat_path` is unused: name is never assigned in scope
+src/ffmpeg/amd_native_exporter.py:4638:5: 'src.moving_map.get_active_route_prefetcher' imported but unused
+src/ffmpeg/amd_native_exporter.py:4774:9: redefinition of unused 'WORKER_CACHE' from line 70
+src/ffmpeg/amd_native_exporter.py:5114:25: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:6365:9: `nonlocal chart_full_tobytes_total` is unused: name is never assigned in scope
+src/ffmpeg/amd_native_exporter.py:6365:9: `nonlocal chart_split_frames` is unused: name is never assigned in scope
+src/ffmpeg/amd_native_exporter.py:6365:9: `nonlocal chart_uploaded_bytes_total` is unused: name is never assigned in scope
+src/ffmpeg/amd_native_exporter.py:6409:9: local variable 'raw_nv12' is assigned to but never used
+src/ffmpeg/amd_native_exporter.py:6486:39: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:6491:39: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:7909:19: f-string is missing placeholders
+src/ffmpeg/amd_native_exporter.py:8151:15: f-string is missing placeholders
+src/ffmpeg/nvidia_native_exporter.py:11:1: 'sys' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:14:1: 'bisect' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:23:1: 'uuid' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:25:1: 'datetime.timedelta' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:27:1: 'typing.Tuple' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemIndicatorStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemTextStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemTimeDisplayStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemBarStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemSegmentBarStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemGaugeStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemChartStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemMapStyle' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:29:1: 'src.ffmpeg.nvidia_config.TelemPipelineStats' imported but unused
+src/ffmpeg/nvidia_native_exporter.py:1393:5: local variable 'csv_path_str' is assigned to but never used
+src/ffmpeg/nvidia_native_exporter.py:1606:13: local variable 'cur_video_time_s' is assigned to but never used
+src/ffmpeg/streaming.py:1653:19: f-string is missing placeholders
+src/ffmpeg/streaming.py:1673:19: f-string is missing placeholders
+src/ffmpeg/streaming.py:1694:19: f-string is missing placeholders
+src/ffmpeg/streaming.py:1995:15: f-string is missing placeholders
+src/ffmpeg/streaming.py:2181:17: 'src.ffmpeg.worker_cache._resolve_cache_samples' imported but unused
+src/ffmpeg/streaming.py:2340:27: f-string is missing placeholders
+src/ffmpeg/streaming.py:2350:27: f-string is missing placeholders
+src/gui/qt/_mixins/render_mixin.py:10:1: 're' imported but unused
+src/gui/qt/_mixins/render_mixin.py:18:1: 'src.ffmpeg.detection._test_encoder' imported but unused
+src/gui/qt/_mixins/render_mixin.py:1426:23: f-string is missing placeholders
+src/gui/qt/_mixins/render_mixin.py:1446:23: f-string is missing placeholders
+src/gui/qt/_mixins/render_mixin.py:1584:38: undefined name 'Any'
+src/gui/qt/tabs/render_tab.py:55:1: 'src.render_progress.next_render_generation_id' imported but unused
+src/gui/qt/tabs/render_tab.py:476:9: 'src.ffmpeg.encoder_profile.EncoderProfile' imported but unused
+src/gui/qt/tabs/render_tab.py:476:9: 'src.ffmpeg.encoder_profile.LEGACY_DEFAULT_ENCODER_PROFILE' imported but unused
+src/gui/qt/tabs/render_tab.py:1152:9: redefinition of unused 'next_render_generation_id' from line 55
+src/gui/qt/tabs/render_tab.py:1978:9: local variable 'dur' is assigned to but never used
+src/gui/qt/tabs/render_tab.py:2873:9: local variable 'render_generation' is assigned to but never used
+src/gui/qt/tabs/render_tab.py:2876:9: local variable 'is_av1_stats' is assigned to but never used
+src/gui/qt/tabs/render_tab.py:3961:5: redefinition of unused 'showEvent' from line 3079
+src/gui/qt/tabs/render_tab.py:3966:5: redefinition of unused 'resizeEvent' from line 3083
+src/gui/qt/tabs/render_tab.py:3996:57: undefined name 'Any'
+src/gui/qt/tabs/render_tab.py:4071:88: undefined name 'Optional'
+src/gui/qt/tabs/render_tab.py:4114:86: undefined name 'Optional'
+src/gui/qt/tabs/render_tab.py:4160:89: undefined name 'Optional'

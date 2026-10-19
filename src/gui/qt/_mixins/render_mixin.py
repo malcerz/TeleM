@@ -7,7 +7,6 @@ import hashlib
 import json
 import inspect
 import os
-import re
 import threading
 import time
 import traceback
@@ -239,8 +238,6 @@ class RenderMixin:
                 int(getattr(self, "_render_generation_counter", 0)), generation_id
             )
             self._active_render_generation_id = generation_id
-            self._last_export_qp = None
-            self._last_export_qp_generation_id = generation_id
             self._render_session_start = time.monotonic()
             self._render_primary_error = ""
             self._render_cleanup_errors = []
@@ -312,16 +309,6 @@ class RenderMixin:
                 float(elapsed or 0.0),
                 time.monotonic() - self._render_session_start,
             )
-            comp_txt = ""
-            if isinstance(hud_state, dict) and hud_state.get("compression_active"):
-                is_av1 = hud_state.get("is_av1", False)
-                cur_qp = hud_state.get("current_qp", 0)
-                mean_qp = hud_state.get("mean_qp", 0.0)
-                p90_qp = hud_state.get("p90_qp", 0.0)
-                mbps = hud_state.get("bitrate_mbps", 0.0)
-                prefix = "QIndex śr" if is_av1 else "QP śr"
-                comp_txt = f"{prefix}: {mean_qp:.1f} | P90: {p90_qp:.0f} | q teraz: {int(cur_qp)} | {mbps:.1f} Mbps"
-
             # Pobierz lub bezpiecznie zainicjalizuj stan referencyjny latest
             latest = getattr(self, "_render_latest_state", None)
             if not isinstance(latest, RenderProgressState) or latest.generation_id != generation_id:
@@ -369,79 +356,6 @@ class RenderMixin:
                     if effective_fps > 0 and total_frames > frame else None
                 )
 
-                comp_txt = ""
-                cur_qp_val = None
-                avg_qp_val = None
-                is_cqp = False
-                if isinstance(hud_state, dict):
-                    for k in ("current_qp", "quant_current", "qp_last"):
-                        v = hud_state.get(k)
-                        if v is not None:
-                            try:
-                                fv = float(v)
-                                if fv >= 0:
-                                    cur_qp_val = fv
-                                    break
-                            except (ValueError, TypeError):
-                                pass
-                    for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
-                        v = hud_state.get(k)
-                        if v is not None:
-                            try:
-                                fv = float(v)
-                                if fv >= 0:
-                                    avg_qp_val = fv
-                                    break
-                            except (ValueError, TypeError):
-                                pass
-                    if cur_qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
-                        try:
-                            fv = float(hud_state["qp"])
-                            if fv >= 0:
-                                cur_qp_val = fv
-                        except (ValueError, TypeError):
-                            pass
-                    is_cqp = bool(
-                        hud_state.get("is_cqp")
-                        or (
-                            hud_state.get("quant_min") is not None
-                            and not hud_state.get("rate_control")
-                            and hud_state.get("quant_min") == hud_state.get("quant_max")
-                            and hud_state.get("quant_samples", 0) > 1
-                        )
-                    )
-                    if "compression_text" in hud_state and hud_state["compression_text"]:
-                        comp_txt = str(hud_state["compression_text"])
-                    elif hud_state.get("compression_active"):
-                        is_av1 = hud_state.get("is_av1", False)
-                        cur_qp = hud_state.get("current_qp", 0)
-                        mean_qp = hud_state.get("mean_qp", 0.0)
-                        p90_qp = hud_state.get("p90_qp", 0.0)
-                        mbps = hud_state.get("bitrate_mbps", 0.0)
-                        prefix = "QIndex śr" if is_av1 else "QP śr"
-                        comp_txt = f"{prefix}: {mean_qp:.1f} | P90: {p90_qp:.0f} | q teraz: {int(cur_qp)} | {mbps:.1f} Mbps"
-                    elif "qp_avg" in hud_state and hud_state["qp_avg"] is not None:
-                        try:
-                            comp_txt = f"QP avg: {float(hud_state['qp_avg']):.1f}"
-                        except (ValueError, TypeError):
-                            comp_txt = f"QP avg: {hud_state['qp_avg']}"
-                if cur_qp_val is None and getattr(latest, "qp", None) is not None:
-                    cur_qp_val = latest.qp
-                if avg_qp_val is None and getattr(latest, "avg_qp", None) is not None:
-                    avg_qp_val = latest.avg_qp
-                if not is_cqp and getattr(latest, "is_cqp", False):
-                    is_cqp = latest.is_cqp
-
-                # Remember only an encoder average from this render generation.
-                # The completed stats dictionary should remain canonical, but a
-                # backend can omit its terminal summary after publishing it live.
-                if isinstance(hud_state, dict):
-                    from src.ffmpeg.export_stats import live_render_avg_qp
-                    live_avg_qp = live_render_avg_qp(hud_state)
-                    if live_avg_qp is not None:
-                        self._last_export_qp = live_avg_qp
-                        self._last_export_qp_generation_id = generation_id
-
                 is_done_frames = (total_frames > 0 and frame >= total_frames)
                 st_val = "cancelling" if self.render_cancel_event.is_set() else ("finalizing" if is_done_frames else "rendering")
                 ph_val = "finalize" if is_done_frames else "render"
@@ -468,13 +382,10 @@ class RenderMixin:
                     frame_total=total_frames,
                     fps_instant=effective_fps,
                     fps_average=effective_fps,
-                    compression_text=comp_txt or getattr(latest, "compression_text", ""),
-                    qp=cur_qp_val,
-                    avg_qp=avg_qp_val,
-                    is_cqp=is_cqp,
+
                     rate_control=str(hud_state.get("rate_control", getattr(latest, "rate_control", "")) or "") if isinstance(hud_state, dict) else getattr(latest, "rate_control", ""),
                     is_av1=bool(hud_state.get("is_av1", getattr(latest, "is_av1", False))) if isinstance(hud_state, dict) else getattr(latest, "is_av1", False),
-                    quant_metric=str(hud_state.get("quant_metric", getattr(latest, "quant_metric", ""))) if isinstance(hud_state, dict) else getattr(latest, "quant_metric", ""),
+
                 )
             elif phase == "finalize":
                 prev_global = float(getattr(latest, "global_percent", 0.0))
@@ -490,17 +401,6 @@ class RenderMixin:
                 write_speed_mbps = hud_state.get("write_speed_mbps") if isinstance(hud_state, dict) else None
                 stall_warning = bool(hud_state.get("stall_warning", False)) if isinstance(hud_state, dict) else False
                 stall_seconds = hud_state.get("stall_seconds") if isinstance(hud_state, dict) else None
-
-                final_comp_txt = ""
-                if isinstance(hud_state, dict) and hud_state.get("compression_active"):
-                    is_av1 = hud_state.get("is_av1", False)
-                    mean_qp = hud_state.get("mean_qp", 0.0)
-                    p90_qp = hud_state.get("p90_qp", 0.0)
-                    mbps = hud_state.get("bitrate_mbps", 0.0)
-                    prefix = "QIndex śr" if is_av1 else "QP śr"
-                    final_comp_txt = f"{prefix}: {mean_qp:.1f} | P90: {p90_qp:.0f} | {mbps:.1f} Mbps"
-                elif getattr(latest, "compression_text", ""):
-                    final_comp_txt = re.sub(r"\s*\|\s*q teraz:\s*[\d\.]+", "", latest.compression_text)
 
                 snapshot = replace(
                     latest,
@@ -522,7 +422,7 @@ class RenderMixin:
                     role=str(hud_state.get("role", getattr(latest, "role", ""))) if isinstance(hud_state, dict) else getattr(latest, "role", ""),
                     phase="finalize",
                     progress_mode=prog_mode,
-                    compression_text=final_comp_txt or getattr(latest, "compression_text", ""),
+
                 )
 
             elif phase in ("complete", "completed"):
@@ -591,9 +491,7 @@ class RenderMixin:
         def emit_terminal_state(kind: str, *, error: bool = False) -> None:
             latest = getattr(self, "_render_latest_state", RenderProgressState(generation_id=generation_id, state=kind))
             now_elapsed = max(latest.elapsed_s, time.monotonic() - self._render_session_start)
-            final_comp_txt = getattr(latest, "compression_text", "")
-            if kind == "completed" and final_comp_txt:
-                final_comp_txt = re.sub(r"\s*\|\s*q teraz:\s*[\d\.]+", "", final_comp_txt)
+
             snapshot = replace(
                 latest,
                 generation_id=generation_id,
@@ -607,7 +505,7 @@ class RenderMixin:
                 percent=100.0 if kind == "completed" else latest.percent,
                 global_percent=100.0 if kind == "completed" else latest.global_percent,
                 progress_mode="determinate",
-                compression_text=final_comp_txt,
+
                 cancel_reason=(
                     getattr(self, "_render_cancel_reason", RenderCancelReason.NONE)
                     if kind == "cancelled" else RenderCancelReason.NONE
@@ -642,7 +540,6 @@ class RenderMixin:
                         else 0.0
                     )
                     fps = 0.0
-                    qp = None
                     if stats:
                         fps = (
                             stats.get("real_export_fps")
@@ -650,17 +547,6 @@ class RenderMixin:
                             or stats.get("render_fps")
                             or 0.0
                         )
-                        qp = stats.get("avg_qp")
-                        if qp is None and "encoder_stats" in stats:
-                            qp = stats["encoder_stats"].get("qp_avg")
-                        if qp is None and "amf_stats" in stats:
-                            qp = stats["amf_stats"].get("avg_qp")
-                    codec = stats.get("codec", options.get("codec", "")) if stats else options.get("codec", "")
-                    quant_metric = stats.get("quant_metric", "") if stats else ""
-                    quant_avg = stats.get("quant_avg") if stats else None
-                    quant_min = stats.get("quant_min") if stats else None
-                    quant_max = stats.get("quant_max") if stats else None
-                    quant_samples = stats.get("quant_samples") if stats else None
                     frame_render_s = stats.get("frame_render_seconds", 0.0) if stats else 0.0
                     fin_s = stats.get("finalization_seconds", 0.0) if stats else 0.0
                     eff_fps = stats.get("user_effective_fps", 0.0) if stats else 0.0
@@ -672,13 +558,9 @@ class RenderMixin:
                         output_path=output,
                         elapsed_s=elapsed,
                         average_fps=fps,
-                        average_qp=qp,
+
                         codec=codec,
-                        quant_metric=quant_metric,
-                        quant_avg=quant_avg,
-                        quant_min=quant_min,
-                        quant_max=quant_max,
-                        quant_samples=quant_samples,
+
                         frame_render_elapsed_s=frame_render_s,
                         finalization_elapsed_s=fin_s,
                         effective_fps=eff_fps,
@@ -762,15 +644,6 @@ class RenderMixin:
                             )
                 if not self.render_cancel_event.is_set():
                     output = options.get("output", "output.mp4")
-                    # Zero additional QP analysis after export. Use strictly in-render statistics.
-                    from src.ffmpeg.export_stats import resolve_render_avg_qp
-                    qp = resolve_render_avg_qp(
-                        stats,
-                        generation_id=generation_id,
-                        live_qp=getattr(self, "_last_export_qp", None),
-                        live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
-                    )
-                    stats["avg_qp"] = qp
                     stats["_queue_job_id"] = options.get("_queue_job_id")
 
                     self._finish_amd_export_log(options, "completed", f"output={output}")
@@ -1365,7 +1238,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             nvidia_backend=options.get("nvidia_backend", "legacy_cuda"),
             nvidia_codec=options.get("nvidia_codec", "HEVC"),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
-            enable_compression_analysis=bool(options.get("compression_analysis", True)),
+            enable_compression_analysis=False,
             codec=options.get("intel_codec") or "hevc",
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
@@ -1421,7 +1294,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     "output": str(output),
                     "hud_preview_checkbox": bool(options.get("_gui_hud_preview_checkbox", False)),
                     "native_preview_tap_enabled": preview_enabled,
-                    "compression_analysis": bool(options.get("compression_analysis", True)),
+                    "compression_analysis": False,
                     "start_frame": int(options.get("start_frame", 0) or 0),
                     "max_frames": options.get("max_frames"),
                 },
@@ -1615,7 +1488,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
                     target_fps=target_fps,
-                    enable_compression_analysis=bool(options.get("compression_analysis", True)),
+                    enable_compression_analysis=False,
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
                     cancel_event=self.render_cancel_event,
@@ -1638,7 +1511,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
                     target_fps=target_fps,
-                    enable_compression_analysis=bool(options.get("compression_analysis", True)),
+                    enable_compression_analysis=False,
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
                     cancel_event=self.render_cancel_event,
@@ -1727,7 +1600,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                 "update_rate": str(options.get("update_rate", getattr(self, "update_rate", "Full"))),
                 "hud_resolution_scale": str(hud_resolution_scale),
                 "rotation": str(options.get("rotation", getattr(self, "rotation", "auto"))),
-                "compression_analysis": bool(options.get("compression_analysis", True)),
+                "compression_analysis": False,
                 "preview_enabled": bool(options.get("_gui_hud_preview_checkbox", getattr(self, "_gui_hud_preview_checkbox", False))),
                 "video_paths": [str(p) for p in (options.get("video_paths") or self.video_paths or [])],
                 "fit_path": str(options.get("fit_path") or getattr(self, "fit_path", "") or ""),
@@ -1855,7 +1728,6 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                 stats["effective_fps"] = eff_fps
 
                 enc_info = prof_data.get("encoder", {})
-                stats["avg_qp"] = enc_info.get("qp_avg")
                 stats["encoder_stats"] = enc_info
                 stats["profile"] = prof_data
 

@@ -48,7 +48,6 @@ from src.ffmpeg.nvidia_config import (
     TelemNvencConfig,
     TelemProgressInfo,
     TelemPipelineStats,
-    TelemCompressionStats,
 )
 from src.indicators.frame_data import compute_indicator_auto_ranges
 from src.indicators.helpers import s
@@ -963,7 +962,7 @@ def export_nvidia_native_d3d11(
     quality_profile: str = "Quality",
     video_bitrate: str | float = "40M",
     target_fps: float | str | tuple[int, int] | None = None,
-    enable_compression_analysis: bool = True,
+    enable_compression_analysis: bool = False,
     compression_csv_path: Optional[Path | str] = None,
     progress_cb: Optional[Callable[[int, str], None]] = None,
     on_render_progress: Optional[Callable[[int, int, float, float, dict], None]] = None,
@@ -1006,7 +1005,7 @@ def export_nvidia_native_d3d11(
                 quality_profile=quality_profile,
                 video_bitrate=video_bitrate,
                 target_fps=target_fps,
-                enable_compression_analysis=enable_compression_analysis,
+                enable_compression_analysis=False,
                 compression_csv_path=compression_csv_path,
                 max_frames=max_frames,
                 start_frame=start_frame,
@@ -1390,7 +1389,6 @@ def export_nvidia_native_d3d11(
     max_bps = int(target_bps * 1.25)
     vbv_bits = target_bps
 
-    csv_path_str = str(Path(compression_csv_path).resolve()) if compression_csv_path else ""
     enc_cfg = TelemEncoderConfig(
         codec=spec["codec"],
         quality_mode=spec["quality_mode"],
@@ -1406,8 +1404,8 @@ def export_nvidia_native_d3d11(
         enable_aq=0,
         aq_strength=0,
         enable_temporal_aq=0,
-        enable_compression_analysis=1 if enable_compression_analysis else 0,
-        compression_csv_path=csv_path_str,
+        enable_compression_analysis=0,
+        compression_csv_path="",
     )
 
     cfg = TelemNvencConfig(
@@ -1479,7 +1477,7 @@ def export_nvidia_native_d3d11(
             "preview_width": int(preview_width) if enable_preview else 0,
             "preview_height": int(preview_height) if enable_preview else 0,
             "preview_fps": float(preview_fps) if enable_preview else 0.0,
-            "compression_analysis_enabled": bool(enable_compression_analysis),
+            "compression_analysis_enabled": False,
             "native_exporter_function": (
                 "src.ffmpeg.nvidia_native_exporter.export_nvidia_native_d3d11"
             ),
@@ -1579,7 +1577,6 @@ def export_nvidia_native_d3d11(
     prep_tracker.finish()
 
     progress = TelemProgressInfo()
-    comp_stats = TelemCompressionStats()
     cancelled = False
 
     preview_c_buf = None
@@ -1614,15 +1611,6 @@ def export_nvidia_native_d3d11(
                 "frame_total": export_frames,
                 "global_pct": 10.0 + (88.0 * cur_completed / export_frames) if export_frames else 10.0,
             }
-
-            if enable_compression_analysis:
-                dll.telem_nvenc_get_compression_stats(handle, ctypes.byref(comp_stats))
-                hud_state["compression_active"] = bool(comp_stats.is_active)
-                hud_state["is_av1"] = bool(comp_stats.is_av1)
-                hud_state["current_qp"] = comp_stats.current_qp
-                hud_state["mean_qp"] = comp_stats.mean_qp
-                hud_state["p90_qp"] = comp_stats.p90_qp
-                hud_state["bitrate_mbps"] = comp_stats.average_bitrate_mbps
 
             if on_render_progress:
                 on_render_progress(
@@ -1674,12 +1662,7 @@ def export_nvidia_native_d3d11(
                     "global_pct": 98.5,
                     "finalize_stage": "Finalizowanie kontenera MP4...",
                     "backend": f"NVIDIA_NATIVE_{profile_name}",
-                    "compression_active": bool(comp_stats.is_active) if enable_compression_analysis else False,
-                    "is_av1": bool(comp_stats.is_av1) if enable_compression_analysis else False,
-                    "current_qp": comp_stats.current_qp if enable_compression_analysis else 0,
-                    "mean_qp": comp_stats.mean_qp if enable_compression_analysis else 0.0,
-                    "p90_qp": comp_stats.p90_qp if enable_compression_analysis else 0.0,
-                    "bitrate_mbps": comp_stats.average_bitrate_mbps if enable_compression_analysis else 0.0,
+
                 },
             )
 
@@ -1738,12 +1721,7 @@ def export_nvidia_native_d3d11(
             "global_pct": 100.0,
             "finalize_stage": "Gotowe",
             "backend": f"NVIDIA_NATIVE_{profile_name}",
-            "compression_active": bool(comp_stats.is_active) if enable_compression_analysis else False,
-            "is_av1": bool(comp_stats.is_av1) if enable_compression_analysis else False,
-            "current_qp": comp_stats.current_qp if enable_compression_analysis else 0,
-            "mean_qp": comp_stats.mean_qp if enable_compression_analysis else 0.0,
-            "p90_qp": comp_stats.p90_qp if enable_compression_analysis else 0.0,
-            "bitrate_mbps": comp_stats.average_bitrate_mbps if enable_compression_analysis else 0.0,
+
         }
         on_render_progress(
             export_frames,

@@ -1069,8 +1069,6 @@ def main() -> None:
             bench_result["output_size_bytes"] = os.path.getsize(out_path) if out_path.exists() else 0
             if isinstance(stats, dict):
                 bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
-                bench_result["sampled_q"] = sampled_q_values
-                print(f"[BENCH STATS] quant_current={stats.get('quant_current')} quant_min={stats.get('quant_min')} quant_max={stats.get('quant_max')} quant_samples={stats.get('quant_samples')} quant_sum={stats.get('quant_sum')} quant_avg={stats.get('quant_avg')}", flush=True)
 
             print(f"\n[BENCH RESULT] mode={test_args.mode} success={valid} frames={actual_frames} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
             if test_args.result_json:
@@ -1096,20 +1094,9 @@ def main() -> None:
         get_signals().sig_render_finished.connect(_on_render_finished_bench)
         get_signals().sig_error.connect(_on_render_error_bench)
 
-        sampled_q_values = {}
-
         def _progress_bench(done, total, elapsed, fps, hud_state):
-            q_str = ""
-            if isinstance(hud_state, dict):
-                cur = hud_state.get("quant_current")
-                avg = hud_state.get("quant_avg")
-                samples = hud_state.get("quant_samples")
-                if cur is not None or samples is not None:
-                    q_str = f" Q_cur={cur} Q_avg={avg} Q_samples={samples}"
-                    if done in (100, 300, 500, 1000) or done not in sampled_q_values:
-                        sampled_q_values[done] = {"q_cur": cur, "q_avg": avg, "q_samples": samples}
             if done in (100, 300, 500, 1000) or done == 0 or done % 500 == 0 or (total and done >= total):
-                print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s{q_str}", flush=True)
+                print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)
 
         get_signals().sig_render_progress.connect(_progress_bench)
 

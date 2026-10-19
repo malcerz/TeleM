@@ -110,13 +110,6 @@ D3D11NvencPipeline::D3D11NvencPipeline()
     memset(&m_progress, 0, sizeof(m_progress));
     memset(&m_stats, 0, sizeof(m_stats));
 
-    m_enable_compression_analysis = false;
-    m_compression_csv_file = nullptr;
-    memset(&m_live_compression_stats, 0, sizeof(m_live_compression_stats));
-    m_i_frame_qp_sum = 0;
-    m_p_frame_qp_sum = 0;
-    m_b_frame_qp_sum = 0;
-    m_total_qp_sum = 0;
 
     m_preview_tap_enabled = false;
     m_preview_tap_width = 960;
@@ -161,22 +154,8 @@ bool D3D11NvencPipeline::Configure(const TelemNvencConfig& config) {
     if (m_config.bit_depth == 0) m_config.bit_depth = 10;
 
     // Compression analysis setup (Stage 8K.5)
-    m_enable_compression_analysis = (m_config.encoder_config.enable_compression_analysis != 0);
-    m_compression_csv_path.clear();
-    if (m_config.encoder_config.compression_csv_path[0] != L'\0') {
-        m_compression_csv_path = m_config.encoder_config.compression_csv_path;
-    }
-    m_compression_samples.clear();
-    if (m_enable_compression_analysis) {
-        m_compression_samples.reserve(60000);
-    }
-    memset(&m_live_compression_stats, 0, sizeof(m_live_compression_stats));
-    m_live_compression_stats.is_active = m_enable_compression_analysis ? 1 : 0;
-    m_live_compression_stats.is_av1 = (m_config.encoder_config.codec == TELEM_CODEC_AV1) ? 1 : 0;
-    m_i_frame_qp_sum = 0;
-    m_p_frame_qp_sum = 0;
-    m_b_frame_qp_sum = 0;
-    m_total_qp_sum = 0;
+
+
 
     // Ring size for persistent D3D11 textures (needs >= 64 for lookahead 25 + 7 B-frames)
     uint32_t min_ring = 64;
@@ -1633,17 +1612,7 @@ bool D3D11NvencPipeline::StartNvencSession() {
         m_free_bitstream_buffers.push(bs.bitstreamBuffer);
     }
 
-    if (m_enable_compression_analysis && !m_compression_csv_path.empty()) {
-        if (m_compression_csv_file) {
-            fclose(m_compression_csv_file);
-            m_compression_csv_file = nullptr;
-        }
-        m_compression_csv_file = _wfopen(m_compression_csv_path.c_str(), L"w");
-        if (m_compression_csv_file) {
-            setvbuf(m_compression_csv_file, nullptr, _IOFBF, 64 * 1024);
-            fprintf(m_compression_csv_file, "time_sec,frame,avg_qp,frame_type,encoded_bytes\n");
-        }
-    }
+
 
     return true;
 }
@@ -1670,11 +1639,7 @@ void D3D11NvencPipeline::EndNvencSession() {
     }
     m_ring_registered_handles.clear();
 
-    if (m_compression_csv_file) {
-        fflush(m_compression_csv_file);
-        fclose(m_compression_csv_file);
-        m_compression_csv_file = nullptr;
-    }
+
 
     m_nvenc.nvEncDestroyEncoder(m_hEncoder);
     m_hEncoder = nullptr;
@@ -1842,9 +1807,7 @@ bool D3D11NvencPipeline::ProcessBitstreamQueue(HANDLE hOutputFile, bool blocking
                    lockBs.frameIdx, lockBs.pictureType, lockBs.bitstreamSizeInBytes, (long long)lockBs.outputTimeStamp);
             fflush(stdout);
         }
-        if (m_enable_compression_analysis) {
-            RecordCompressionSample(lockBs.frameIdx, lockBs.outputTimeStamp, lockBs.pictureType, lockBs.frameAvgQP, lockBs.bitstreamSizeInBytes);
-        }
+
         m_in_flight_bitstream_buffers.pop();
         m_in_flight_bitstream_ownership.pop();
         if (hOutputFile != INVALID_HANDLE_VALUE && lockBs.bitstreamSizeInBytes > 0) {
@@ -2568,12 +2531,7 @@ void D3D11NvencPipeline::Destroy() {
         m_hNvencDll = nullptr;
     }
 
-    if (m_compression_csv_file) {
-        fflush(m_compression_csv_file);
-        fclose(m_compression_csv_file);
-        m_compression_csv_file = nullptr;
-    }
-    m_compression_samples.clear();
+
 
     m_configured = false;
     m_video_opened = false;
@@ -2600,125 +2558,14 @@ uint64_t D3D11NvencPipeline::QueryRam() {
     return 0;
 }
 
-void D3D11NvencPipeline::RecordCompressionSample(uint32_t frame_idx, uint64_t pts, NV_ENC_PIC_TYPE pic_type, uint32_t qp, uint32_t bytes) {
-    (void)pts;
-    std::lock_guard<std::mutex> lock(m_compression_mutex);
 
-    char ftype = 'P';
-    switch (pic_type) {
-        case NV_ENC_PIC_TYPE_I:
-        case NV_ENC_PIC_TYPE_IDR:
-            ftype = 'I';
-            m_live_compression_stats.i_frame_count++;
-            m_i_frame_qp_sum += qp;
-            break;
-        case NV_ENC_PIC_TYPE_B:
-        case NV_ENC_PIC_TYPE_BI:
-            ftype = 'B';
-            m_live_compression_stats.b_frame_count++;
-            m_b_frame_qp_sum += qp;
-            break;
-        case NV_ENC_PIC_TYPE_P:
-        case NV_ENC_PIC_TYPE_NONREF_P:
-        case NV_ENC_PIC_TYPE_SWITCH:
-        default:
-            ftype = 'P';
-            m_live_compression_stats.p_frame_count++;
-            m_p_frame_qp_sum += qp;
-            break;
-    }
-
-    uint8_t clamped_qp = (qp > 255) ? 255 : (uint8_t)qp;
-    m_live_compression_stats.qp_histogram[clamped_qp]++;
-    m_total_qp_sum += clamped_qp;
-
-    double frame_dur = (m_config.fps_num > 0) ? ((double)m_config.fps_den / (double)m_config.fps_num) : (1001.0 / 30000.0);
-    double time_sec = (double)frame_idx * frame_dur;
-    double inst_mbps = (frame_dur > 0.0) ? (((double)bytes * 8.0) / frame_dur / 1000000.0) : 0.0;
-
-    m_live_compression_stats.frames_analyzed++;
-    m_live_compression_stats.current_qp = clamped_qp;
-    m_live_compression_stats.current_frame_type = ftype;
-    m_live_compression_stats.current_bitrate_mbps = inst_mbps;
-    m_live_compression_stats.total_encoded_bytes += bytes;
-    if (inst_mbps > m_live_compression_stats.peak_bitrate_mbps) {
-        m_live_compression_stats.peak_bitrate_mbps = inst_mbps;
-    }
-
-    FrameCompressionSample sample{};
-    sample.frame_index = frame_idx;
-    sample.timestamp_sec = time_sec;
-    sample.frame_type = ftype;
-    sample.qp = clamped_qp;
-    sample.encoded_bytes = bytes;
-    m_compression_samples.push_back(sample);
-
-    if (m_compression_csv_file) {
-        fprintf(m_compression_csv_file, "%.3f,%u,%u,%c,%u\n", time_sec, frame_idx, (unsigned int)clamped_qp, ftype, bytes);
-    }
-}
 
 void D3D11NvencPipeline::GetCompressionStats(TelemCompressionStats& out_stats) {
-    std::lock_guard<std::mutex> lock(m_compression_mutex);
-    out_stats = m_live_compression_stats;
-
-    if (out_stats.frames_analyzed > 0) {
-        out_stats.mean_qp = (double)m_total_qp_sum / (double)out_stats.frames_analyzed;
-        out_stats.i_frame_mean_qp = (out_stats.i_frame_count > 0) ? ((double)m_i_frame_qp_sum / (double)out_stats.i_frame_count) : 0.0;
-        out_stats.p_frame_mean_qp = (out_stats.p_frame_count > 0) ? ((double)m_p_frame_qp_sum / (double)out_stats.p_frame_count) : 0.0;
-        out_stats.b_frame_mean_qp = (out_stats.b_frame_count > 0) ? ((double)m_b_frame_qp_sum / (double)out_stats.b_frame_count) : 0.0;
-
-        out_stats.mean_bytes_per_frame = (double)out_stats.total_encoded_bytes / (double)out_stats.frames_analyzed;
-        double frame_dur = (m_config.fps_num > 0) ? ((double)m_config.fps_den / (double)m_config.fps_num) : (1001.0 / 30000.0);
-        out_stats.average_bitrate_mbps = (frame_dur > 0.0) ? (out_stats.mean_bytes_per_frame * 8.0 / frame_dur / 1000000.0) : 0.0;
-
-        // Min & Max QP
-        uint32_t min_q = 255;
-        uint32_t max_q = 0;
-        bool found = false;
-        for (uint32_t q = 0; q < 256; ++q) {
-            if (out_stats.qp_histogram[q] > 0) {
-                if (!found) { min_q = q; found = true; }
-                max_q = q;
-            }
-        }
-        out_stats.min_qp = found ? min_q : 0;
-        out_stats.max_qp = found ? max_q : 0;
-
-        // Percentiles: p10, p50 (median), p90, p95
-        uint64_t total = out_stats.frames_analyzed;
-        uint64_t target_p10 = (uint64_t)(0.10 * (double)total);
-        uint64_t target_p50 = (uint64_t)(0.50 * (double)total);
-        uint64_t target_p90 = (uint64_t)(0.90 * (double)total);
-        uint64_t target_p95 = (uint64_t)(0.95 * (double)total);
-
-        uint64_t cum = 0;
-        bool set_p10 = false, set_p50 = false, set_p90 = false, set_p95 = false;
-        for (uint32_t q = 0; q < 256; ++q) {
-            cum += out_stats.qp_histogram[q];
-            if (!set_p10 && cum >= target_p10) { out_stats.p10_qp = (double)q; set_p10 = true; }
-            if (!set_p50 && cum >= target_p50) { out_stats.median_qp = (double)q; out_stats.p50_qp = (double)q; set_p50 = true; }
-            if (!set_p90 && cum >= target_p90) { out_stats.p90_qp = (double)q; set_p90 = true; }
-            if (!set_p95 && cum >= target_p95) { out_stats.p95_qp = (double)q; set_p95 = true; }
-        }
-    }
+    out_stats = {}; // Compatibility ABI; production does not collect quantizer data.
 }
 
-bool D3D11NvencPipeline::ExportCompressionCsv(const wchar_t* csv_path) {
-    if (!csv_path || csv_path[0] == L'\0') return false;
-    std::lock_guard<std::mutex> lock(m_compression_mutex);
-
-    FILE* fp = _wfopen(csv_path, L"w");
-    if (!fp) return false;
-    setvbuf(fp, nullptr, _IOFBF, 64 * 1024);
-
-    fprintf(fp, "time_sec,frame,avg_qp,frame_type,encoded_bytes\n");
-    for (const auto& s : m_compression_samples) {
-        fprintf(fp, "%.3f,%u,%u,%c,%u\n", s.timestamp_sec, s.frame_index, (unsigned int)s.qp, s.frame_type, s.encoded_bytes);
-    }
-    fflush(fp);
-    fclose(fp);
-    return true;
+bool D3D11NvencPipeline::ExportCompressionCsv(const wchar_t*) {
+    return false;
 }
 
 void D3D11NvencPipeline::ReleasePreviewTap() {

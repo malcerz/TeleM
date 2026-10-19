@@ -1,0 +1,43 @@
+.....................................................................FFF [ 85%]
+F...........                                                             [100%]
+================================== FAILURES ===================================
+__ test_ffmpeg_telemetry_uses_real_distinct_samples_and_rejects_unknown_hevc __
+
+    def test_ffmpeg_telemetry_uses_real_distinct_samples_and_rejects_unknown_hevc():
+        tracker=IntelQsvTracker("h264")
+        for line in ["frame=0","stream_0_0_q=0", "frame=10", "stream_0_0_q=23", "stream_0_0_q=23",
+                     "frame=20", "stream_0_0_q=31", "TargetUsage: 4; RateControlMethod: VBR"]:
+            tracker.feed_progress_line(line)
+        data=tracker.get_hud_state_dict()
+>       assert data["quant_avg"] == 27 and data["quant_samples"] == 2
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'quant_avg'
+
+tests\test_intel_vbr_control.py:43: KeyError
+______ test_unverified_native_hevc_feedback_is_not_published_as_real_qp _______
+
+    def test_unverified_native_hevc_feedback_is_not_published_as_real_qp():
+>       from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
+E       ImportError: cannot import name '_withhold_unverified_hevc_qp' from 'src.ffmpeg.intel_native_exporter' (C:\_DEV\SportCamHUD\src\ffmpeg\intel_native_exporter.py)
+
+tests\test_intel_vbr_control.py:53: ImportError
+____________ test_hevc_slice_qp_is_published_under_slice_keys_only ____________
+
+    def test_hevc_slice_qp_is_published_under_slice_keys_only():
+>       from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
+E       ImportError: cannot import name '_withhold_unverified_hevc_qp' from 'src.ffmpeg.intel_native_exporter' (C:\_DEV\SportCamHUD\src\ffmpeg\intel_native_exporter.py)
+
+tests\test_intel_vbr_control.py:76: ImportError
+___________________ test_hevc_slice_qp_absent_shows_reason ____________________
+
+    def test_hevc_slice_qp_absent_shows_reason():
+>       from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
+E       ImportError: cannot import name '_withhold_unverified_hevc_qp' from 'src.ffmpeg.intel_native_exporter' (C:\_DEV\SportCamHUD\src\ffmpeg\intel_native_exporter.py)
+
+tests\test_intel_vbr_control.py:93: ImportError
+=========================== short test summary info ===========================
+FAILED tests/test_intel_vbr_control.py::test_ffmpeg_telemetry_uses_real_distinct_samples_and_rejects_unknown_hevc
+FAILED tests/test_intel_vbr_control.py::test_unverified_native_hevc_feedback_is_not_published_as_real_qp
+FAILED tests/test_intel_vbr_control.py::test_hevc_slice_qp_is_published_under_slice_keys_only
+FAILED tests/test_intel_vbr_control.py::test_hevc_slice_qp_absent_shows_reason
+4 failed, 80 passed in 10.50s

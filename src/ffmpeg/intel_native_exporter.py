@@ -146,12 +146,12 @@ class IntelNativePipelineStats(ctypes.Structure):
         ("total_producer_d3d11_window_ms", ctypes.c_double),
         ("total_consumer_d3d11_window_ms", ctypes.c_double),
         # Intel Compression / Quantizer Observability
-        ("quant_current", ctypes.c_int),
-        ("quant_min", ctypes.c_int),
-        ("quant_max", ctypes.c_int),
-        ("quant_samples", ctypes.c_uint32),
-        ("quant_sum", ctypes.c_uint64),
-        ("quant_avg", ctypes.c_double),
+        ("reserved_quant_current", ctypes.c_int),
+        ("reserved_quant_min", ctypes.c_int),
+        ("reserved_quant_max", ctypes.c_int),
+        ("reserved_quant_samples", ctypes.c_uint32),
+        ("reserved_quant_sum", ctypes.c_uint64),
+        ("reserved_quant_avg", ctypes.c_double),
     ]
 
 
@@ -179,114 +179,8 @@ class IntelCapabilityInfo(ctypes.Structure):
 class IntelEncoderInfo(ctypes.Structure):
     _fields_ = [(name, ctypes.c_int) for name in (
         "valid", "rate_control", "target_usage", "target_kbps", "max_kbps", "buffer_kb",
-        "initial_delay_kb", "multiplier", "qp_supported", "init_status", "query_status", "get_status", "qp_unverified_zero")]
+        "initial_delay_kb", "multiplier", "reserved_diagnostic_0", "init_status", "reserved_diagnostic_1", "get_status", "reserved_diagnostic_2")]
 
-
-class IntelHevcSliceQpStats(ctypes.Structure):
-    """Mirror of IntelHevcSliceQpStats (telem_intel_native.c): HEVC SliceQpY
-    parsed from encoded slice headers, plus the oneVPL frame-info cross-check."""
-    _fields_ = [
-        ("valid", ctypes.c_int),
-        ("disabled", ctypes.c_int),
-        ("cu_qp_delta_enabled", ctypes.c_int),
-        ("max_slices_per_frame", ctypes.c_int),
-        ("frames", ctypes.c_uint32),
-        ("slices", ctypes.c_uint32),
-        ("parse_errors", ctypes.c_uint32),
-        ("frames_without_slice_qp", ctypes.c_uint32),
-        ("cur_frame_min", ctypes.c_int),
-        ("cur_frame_max", ctypes.c_int),
-        ("cur_frame_slices", ctypes.c_int),
-        ("cur_frame_weighted", ctypes.c_double),
-        ("run_min", ctypes.c_int),
-        ("run_max", ctypes.c_int),
-        ("run_weighted_sum", ctypes.c_double),
-        ("run_avg", ctypes.c_double),
-        ("bit_depth_luma", ctypes.c_int),
-        ("vpl_last_qp", ctypes.c_int),
-        ("vpl_reported", ctypes.c_uint32),
-        ("vpl_match", ctypes.c_uint32),
-        ("vpl_mismatch", ctypes.c_uint32),
-        ("vpl_zero", ctypes.c_uint32),
-        ("parse_us_total", ctypes.c_double),
-        ("last_frame_type", ctypes.c_int),
-        ("type_frames", ctypes.c_uint32 * 3),
-        ("type_sum", ctypes.c_double * 3),
-        ("rejected_frames", ctypes.c_uint32),
-        ("parse_us_max", ctypes.c_double),
-    ]
-
-
-_HEVC_QP_UNAVAILABLE_REASON = (
-    "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); "
-    "oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; "
-    "no reliable frame/CU QP without full entropy decoding"
-)
-
-
-def _read_hevc_slice_qp(native_lib: Any) -> Optional[IntelHevcSliceQpStats]:
-    fn = getattr(native_lib, "intel_native_get_hevc_slice_qp", None)
-    if fn is None:
-        return None
-    stats = IntelHevcSliceQpStats()
-    return stats if fn(ctypes.byref(stats)) == 0 else None
-
-
-def _hevc_slice_qp_fields(sq: Optional[IntelHevcSliceQpStats]) -> dict[str, Any]:
-    """Slice QP is reported under its own keys; it is never a frame-average or CU QP."""
-    if sq is None:
-        return {"slice_qp_available": False, "slice_qp_reason": "native parser unavailable"}
-    counts = {"slice_qp_valid_samples": int(sq.frames), "slice_qp_rejected_samples": int(sq.rejected_frames),
-              "slice_qp_parse_errors": int(sq.parse_errors)}
-    if not sq.valid or sq.frames == 0:
-        why = "telemetry disabled" if sq.disabled else (
-            "no valid HEVC slice header parsed" if sq.rejected_frames else "no encoded HEVC frames yet")
-        return {"slice_qp_available": False, "slice_qp_reason": why, **counts}
-    cu_note = ("cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base"
-               if sq.cu_qp_delta_enabled else "cu_qp_delta_enabled_flag=0: Slice QP equals the QP of every CU in the slice")
-    types = {}
-    for idx, name in ((2, "I"), (1, "P"), (0, "B")):
-        n = int(sq.type_frames[idx])
-        types[name] = {"frames": n, "avg": sq.type_sum[idx] / n if n else None}
-    return {
-        "slice_qp_available": True,
-        # Current frame: slice base QPs of the last encoded frame (one value when all slices agree).
-        "slice_qp_current": sq.cur_frame_min if sq.cur_frame_min == sq.cur_frame_max else None,
-        "slice_qp_current_min": sq.cur_frame_min,
-        "slice_qp_current_max": sq.cur_frame_max,
-        "slice_qp_current_ctu_weighted": sq.cur_frame_weighted,
-        "slice_qp_current_frame_type": {2: "I", 1: "P", 0: "B"}.get(sq.last_frame_type),
-        "slice_qp_avg": sq.run_avg,
-        "slice_qp_min": sq.run_min,
-        "slice_qp_max": sq.run_max,
-        **counts,
-        "slice_qp_frames": int(sq.frames),
-        "slice_qp_slices": int(sq.slices),
-        "slice_qp_max_slices_per_frame": sq.max_slices_per_frame,
-        "slice_qp_by_frame_type": types,
-        "slice_qp_cu_qp_delta_enabled": bool(sq.cu_qp_delta_enabled),
-        "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
-        "slice_qp_aggregation": ("per frame: slice base QP weighted by the CTUs each slice covers "
-                                 "(= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; "
-                                 "min/max: over all slices of valid frames"),
-        "slice_qp_note": cu_note,
-        "slice_qp_parse_us_per_frame": sq.parse_us_total / max(1, sq.frames + sq.rejected_frames),
-        "slice_qp_parse_us_max": sq.parse_us_max,
-        "vpl_hevc_frame_qp_crosscheck": {
-            "reported": sq.vpl_reported, "match_slice_qp": sq.vpl_match,
-            "mismatch": sq.vpl_mismatch, "zero": sq.vpl_zero, "last": sq.vpl_last_qp,
-        },
-    }
-
-
-def _hevc_compression_text(fields: dict[str, Any]) -> str:
-    if not fields.get("slice_qp_available"):
-        return f"Slice QP: -- ({fields.get('slice_qp_reason', '')})"
-    cur = fields.get("slice_qp_current")
-    cur_txt = str(cur) if cur is not None else f"{fields['slice_qp_current_min']}-{fields['slice_qp_current_max']}"
-    return (f"Slice QP: {cur_txt} | Avg: {fields['slice_qp_avg']:.1f} | Min: {fields['slice_qp_min']} | "
-            f"Max: {fields['slice_qp_max']} | próbki: {fields['slice_qp_valid_samples']}"
-            f" (odrzucone: {fields['slice_qp_rejected_samples']})")
 
 _LIB_NATIVE_INTEL: Optional[ctypes.CDLL] = None
 _INTEL_CAPS_CACHE: Optional[dict[str, Any]] = None
@@ -500,9 +394,6 @@ def _load_native_intel_dll() -> ctypes.CDLL:
         lib.intel_native_configure_vbr.restype = ctypes.c_int
         lib.intel_native_get_encoder_info.argtypes = [ctypes.POINTER(IntelEncoderInfo)]
         lib.intel_native_get_encoder_info.restype = ctypes.c_int
-    if hasattr(lib, "intel_native_get_hevc_slice_qp"):
-        lib.intel_native_get_hevc_slice_qp.argtypes = [ctypes.POINTER(IntelHevcSliceQpStats)]
-        lib.intel_native_get_hevc_slice_qp.restype = ctypes.c_int
 
     lib.intel_native_query_capabilities.argtypes = [ctypes.POINTER(IntelCapabilityInfo)]
     lib.intel_native_query_capabilities.restype = None
@@ -731,87 +622,6 @@ def get_last_intel_export_stats() -> dict[str, Any]:
 def _set_last_intel_export_stats(stats: dict[str, Any]) -> None:
     global _last_intel_export_stats
     _last_intel_export_stats = dict(stats)
-
-def _withhold_unverified_hevc_qp(state: dict[str, Any], native_lib: Any = None) -> dict[str, Any]:
-    """HEVC: frame/CU QP stays unavailable; Slice QP is attached under its own keys."""
-    result = dict(state)
-    result["qp_unverified_feedback"] = {key: state.get(key) for key in
-        ("quant_current", "quant_avg", "quant_min", "quant_max", "quant_samples", "quant_sum")}
-    for key in ("quant_current", "quant_avg", "quant_min", "quant_max", "current_qp", "mean_qp", "avg_qp", "qp_avg"):
-        result[key] = None
-    slice_fields = _hevc_slice_qp_fields(_read_hevc_slice_qp(native_lib)) if native_lib is not None else {}
-    result.update(slice_fields)
-    # compression_active implies classical QP fields (formatted by progress/GUI code); Slice QP is shown
-    # only through compression_text and the slice_qp_* keys.
-    result.update(quant_samples=0, quant_sum=0, compression_active=False,
-                  qp_source="unavailable", qp_aggregation="unavailable", quant_reason=_HEVC_QP_UNAVAILABLE_REASON,
-                  compression_text=_hevc_compression_text(slice_fields) if slice_fields
-                  else "Slice QP: -- (parser niedostępny)")
-    return result
-
-
-class IntelCompressionTracker:
-    """Live compression / quantizer tracker for Intel exports."""
-    def __init__(self, native_lib: Any, is_av1: bool, codec: str = "h264"):
-        self.native_lib = native_lib
-        self.is_av1 = is_av1
-        self.codec = codec
-        self._stats = IntelNativePipelineStats()
-        self._last_poll = 0.0
-        self._cached_dict: dict[str, Any] = {}
-
-    def get_hud_state_dict(self) -> dict[str, Any]:
-        now = time.monotonic()
-        if now - self._last_poll >= 0.5 or not self._cached_dict:
-            self._last_poll = now
-            if self.native_lib.intel_native_pipeline_get_stats(ctypes.byref(self._stats)) == 0:
-                info = IntelEncoderInfo()
-                if hasattr(self.native_lib, "intel_native_get_encoder_info"):
-                    self.native_lib.intel_native_get_encoder_info(ctypes.byref(info))
-                if self._stats.quant_samples > 0:
-                    cur = self._stats.quant_current
-                    avg = self._stats.quant_avg
-                    qmin = self._stats.quant_min
-                    qmax = self._stats.quant_max
-                    samples = self._stats.quant_samples
-                    txt = (
-                        f"AV1 Q: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax}"
-                        if self.is_av1
-                        else f"QP: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax} (oneVPL; próbki={samples}, pominięte={info.qp_unverified_zero})"
-                    )
-                    self._cached_dict = {
-                        "compression_active": True,
-                        "rate_control": "VBR",
-                        "is_cqp": False,
-                        "qp_source": "oneVPL encoded-frame luma QP",
-                        "qp_rejected_samples": info.qp_unverified_zero,
-                        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
-                        "is_av1": self.is_av1,
-                        "quant_metric": "base_q_idx" if self.is_av1 else "QP",
-                        "quant_current": cur,
-                        "quant_avg": avg,
-                        "quant_min": qmin,
-                        "quant_max": qmax,
-                        "quant_samples": samples,
-                        "current_qp": cur,
-                        "mean_qp": avg,
-                        "avg_qp": avg,
-                        "qp_avg": avg,
-                        "compression_text": txt,
-                    }
-                else:
-                    self._cached_dict = {
-                        "compression_active": False,
-                        "rate_control": "VBR",
-                        "is_cqp": False,
-                        "is_av1": self.is_av1,
-                        "compression_text": "QP: -- (brak próbek enkodera oneVPL)",
-                        "quant_reason": "oneVPL did not report encoded-frame QP; no estimate substituted",
-                    }
-        if self.codec == "hevc":
-            return _withhold_unverified_hevc_qp(self._cached_dict, self.native_lib)
-        return dict(self._cached_dict)
-
 
 def _probe_video_summary(ffmpeg_exe: str, media_path: str) -> dict[str, Any]:
     ffprobe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
@@ -1302,7 +1112,7 @@ def export_intel_native_d3d11(
     cleanup.callback(native_lib.intel_native_pipeline_finish)
     accepted = IntelEncoderInfo()
     native_lib.intel_native_get_encoder_info(ctypes.byref(accepted))
-    accepted_config = {name: getattr(accepted, name) for name, _ in IntelEncoderInfo._fields_}
+    accepted_config = {name: getattr(accepted, name) for name, _ in IntelEncoderInfo._fields_ if not name.startswith("reserved_")}
     render_print(f"[INTEL_ENCODER_ACCEPTED] {json.dumps(accepted_config, sort_keys=True)}", flush=True)
     tolerance = max(1, accepted.multiplier)
     expected_vbr = {"target_kbps": vbr.target_kbps, "max_kbps": vbr.max_kbps,
@@ -1314,8 +1124,6 @@ def export_intel_native_d3d11(
 
     global _last_intel_export_stats
     _last_intel_export_stats = {}
-    is_av1_export = (codec_id == 0)
-    comp_tracker = IntelCompressionTracker(native_lib, is_av1=is_av1_export, codec=codec_name.lower())
 
     # 4. Setup HUD Parameters (2560x1440 RGBA)
     from src.ffmpeg.shared_memory import SharedFramePool, _init_worker_with_shm, render_frame_shm_job, get_intel_direct_shm_config
@@ -1729,7 +1537,7 @@ def export_intel_native_d3d11(
                 _report_stream_progress(
                     frames_rendered, total_frames, t_render_start,
                     progress_cb, on_render_progress, target_fps,
-                    compression_tracker=comp_tracker,
+
                     profile_name="INTEL_NATIVE_7E_ASYNC"
                 )
         else:
@@ -1950,7 +1758,7 @@ def export_intel_native_d3d11(
                     _report_stream_progress(
                         frames_rendered, total_frames, t_render_start,
                         progress_cb, on_render_progress, target_fps,
-                        compression_tracker=comp_tracker,
+
                         profile_name="INTEL_NATIVE_7E_ASYNC"
                     )
 
@@ -2018,14 +1826,6 @@ def export_intel_native_d3d11(
             "rate_control": "VBR",
             "is_cqp": False,
             "codec": "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc"),
-            "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
-            "quant_current": stats.quant_current if stats.quant_samples else None,
-            "quant_avg": stats.quant_avg if stats.quant_samples else None,
-            "quant_min": stats.quant_min if stats.quant_samples else None,
-            "quant_max": stats.quant_max if stats.quant_samples else None,
-            "quant_samples": stats.quant_samples,
-            "quant_sum": stats.quant_sum,
-            "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
             "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
             "frame_render_seconds": frame_render_s,
             "render_fps": render_fps,
@@ -2045,8 +1845,7 @@ def export_intel_native_d3d11(
             "gpmf_live_mux": bool(inline_gpmf_plan and inline_gpmf_plan.enabled) if not use_legacy_post_mux else False,
             "post_render_full_mux_seconds": 0.0,
         }
-        if codec_id == 2:
-            _last_intel_export_stats = _withhold_unverified_hevc_qp(_last_intel_export_stats, native_lib)
+
         render_print(f"[STREAM INTEL] Export cancelled or incomplete ({frames_rendered}/{total_frames} frames), skipping container remux.", flush=True)
         if p_mux is not None:
             try:
@@ -2416,23 +2215,12 @@ def export_intel_native_d3d11(
                 pass
 
     native_lib.intel_native_get_encoder_info(ctypes.byref(accepted))
-    accepted_config = {name: getattr(accepted, name) for name, _ in IntelEncoderInfo._fields_}
+    accepted_config = {name: getattr(accepted, name) for name, _ in IntelEncoderInfo._fields_ if not name.startswith("reserved_")}
     _last_intel_export_stats = {
         "rate_control": "VBR",
         "is_cqp": False,
         "encoder_accepted": accepted_config,
-        "qp_source": "oneVPL encoded-frame luma QP" if accepted.qp_supported else "unavailable",
-        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
-        "qp_rejected_samples": accepted.qp_unverified_zero,
         "codec": "av1" if codec_id == 0 else ("h264" if codec_id == 1 else "hevc"),
-        "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
-        "quant_current": stats.quant_current if stats.quant_samples else None,
-        "quant_avg": stats.quant_avg if stats.quant_samples else None,
-        "quant_min": stats.quant_min if stats.quant_samples else None,
-        "quant_max": stats.quant_max if stats.quant_samples else None,
-        "quant_samples": stats.quant_samples,
-        "quant_sum": stats.quant_sum,
-        "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
         "real_export_fps": render_fps,
         "render_fps": render_fps,
         "user_effective_fps": user_effective_fps,
@@ -2453,8 +2241,6 @@ def export_intel_native_d3d11(
         "cancelled": False,
     }
 
-    if codec_id == 2:
-        _last_intel_export_stats = _withhold_unverified_hevc_qp(_last_intel_export_stats, native_lib)
     render_print("\n============================================================", flush=True)
     render_print(f"   INTEL NATIVE 8A ASYNC PIPELINE EXPORT COMPLETE ({codec_name})", flush=True)
     render_print("============================================================", flush=True)

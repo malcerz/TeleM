@@ -1,0 +1,42 @@
+{
+  "command": [
+    "C:\\_DEV\\SportCamHUD\\scratch\\intel_vbr_deps\\llvm-mingw-20261006-ucrt-x86_64\\bin\\clang++.exe",
+    "-shared",
+    "-O2",
+    "-std=c++17",
+    "-static-libgcc",
+    "-static-libstdc++",
+    "-Wl,--no-insert-timestamp",
+    "-IC:\\_DEV\\SportCamHUD\\native\\d3d11_amf_pipeline\\include",
+    "-IC:\\_DEV\\SportCamHUD\\native\\d3d11_amf_pipeline\\src",
+    "-IC:\\_DEV\\SportCamHUD\\scratch\\amd_no_qp_final_20261019",
+    "C:\\_DEV\\SportCamHUD\\native\\d3d11_amf_pipeline\\src\\telem_amd_native.cpp",
+    "C:\\_DEV\\SportCamHUD\\native\\d3d11_amf_pipeline\\src\\d3d11_vp_pipeline.cpp",
+    "C:\\_DEV\\SportCamHUD\\native\\d3d11_amf_pipeline\\src\\d3d11_amf_encoder.cpp",
+    "-ld3d11",
+    "-ldxgi",
+    "-ld3dcompiler",
+    "-lmfplat",
+    "-lmfreadwrite",
+    "-lmfuuid",
+    "-lole32",
+    "-luuid",
+    "-ldxguid",
+    "-o",
+    "C:\\_DEV\\SportCamHUD\\scratch\\amd_no_qp_final_20261019\\telem_amd_native.dll"
+  ],
+  "source_hash": "ea20fc9b3ea0885d405b3609f5f62de63b9efec65766df40f61715df2ac558be",
+  "source_files": {
+    "CMakeLists.txt": "2a5cddb3f485119c599cc5137f1f33d4d202e3e401f385bfbf8a0de35a76a977",
+    "src/telem_amd_native.cpp": "e9bf4e1037c7caec17186d743b8641782bcca5362296dc47e986dc030308b736",
+    "src/d3d11_vp_pipeline.cpp": "4f1b4c0340cbacd48956841b32aaf07b0cdf0481a0fd6336d89ad2098aa946fc",
+    "src/d3d11_vp_pipeline.h": "73d9ef9d39f51cf5cc5e6a6d2e0996b57b154f769fe0d40e4bc930c719bc2fd1",
+    "src/d3d11_amf_encoder.cpp": "f54672fd188cbd3c06aff374273af177e02395b9bfa73652fbbfc24765222c4a",
+    "src/d3d11_amf_encoder.h": "70b986a347b78a234faaa08281c3785c983a581bc4b5196b68fdb7adfd8e40d7",
+    "src/telem_amd_build_info.h.in": "f34d1adbb612acb0b443b84de7a830ee3476a08e441824d85ea670e99df9c616"
+  },
+  "build_id": "telem-amd-native/1.0.0+aa42e65cf823.srcea20fc9b3ea0",
+  "abi": 9,
+  "compiler": "clang version 23.1.3 (https://github.com/llvm/llvm-project.git 0d261d1ca552c95a8f007e061c787ac7132fbcbc)\nTarget: x86_64-w64-windows-gnu\nThread model: posix\nInstalledDir: C:/_DEV/SportCamHUD/scratch/intel_vbr_deps/llvm-mingw-20261006-ucrt-x86_64/bin\nConfiguration file: C:/_DEV/SportCamHUD/scratch/intel_vbr_deps/llvm-mingw-20261006-ucrt-x86_64/bin/x86_64-w64-windows-gnu.cfg\n",
+  "dll_sha256": "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb"
+}

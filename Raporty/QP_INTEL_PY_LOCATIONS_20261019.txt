@@ -1,0 +1,102 @@
+149:        ("quant_current", ctypes.c_int),
+150:        ("quant_min", ctypes.c_int),
+151:        ("quant_max", ctypes.c_int),
+152:        ("quant_samples", ctypes.c_uint32),
+153:        ("quant_sum", ctypes.c_uint64),
+154:        ("quant_avg", ctypes.c_double),
+182:        "initial_delay_kb", "multiplier", "qp_supported", "init_status", "query_status", "get_status", "qp_unverified_zero")]
+191:        ("cu_qp_delta_enabled", ctypes.c_int),
+221:    "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); "
+227:def _read_hevc_slice_qp(native_lib: Any) -> Optional[IntelHevcSliceQpStats]:
+228:    fn = getattr(native_lib, "intel_native_get_hevc_slice_qp", None)
+235:def _hevc_slice_qp_fields(sq: Optional[IntelHevcSliceQpStats]) -> dict[str, Any]:
+238:        return {"slice_qp_available": False, "slice_qp_reason": "native parser unavailable"}
+239:    counts = {"slice_qp_valid_samples": int(sq.frames), "slice_qp_rejected_samples": int(sq.rejected_frames),
+240:              "slice_qp_parse_errors": int(sq.parse_errors)}
+244:        return {"slice_qp_available": False, "slice_qp_reason": why, **counts}
+245:    cu_note = ("cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base"
+246:               if sq.cu_qp_delta_enabled else "cu_qp_delta_enabled_flag=0: Slice QP equals the QP of every CU in the slice")
+252:        "slice_qp_available": True,
+254:        "slice_qp_current": sq.cur_frame_min if sq.cur_frame_min == sq.cur_frame_max else None,
+255:        "slice_qp_current_min": sq.cur_frame_min,
+256:        "slice_qp_current_max": sq.cur_frame_max,
+257:        "slice_qp_current_ctu_weighted": sq.cur_frame_weighted,
+258:        "slice_qp_current_frame_type": {2: "I", 1: "P", 0: "B"}.get(sq.last_frame_type),
+259:        "slice_qp_avg": sq.run_avg,
+260:        "slice_qp_min": sq.run_min,
+261:        "slice_qp_max": sq.run_max,
+263:        "slice_qp_frames": int(sq.frames),
+264:        "slice_qp_slices": int(sq.slices),
+265:        "slice_qp_max_slices_per_frame": sq.max_slices_per_frame,
+266:        "slice_qp_by_frame_type": types,
+267:        "slice_qp_cu_qp_delta_enabled": bool(sq.cu_qp_delta_enabled),
+268:        "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+269:        "slice_qp_aggregation": ("per frame: slice base QP weighted by the CTUs each slice covers "
+272:        "slice_qp_note": cu_note,
+273:        "slice_qp_parse_us_per_frame": sq.parse_us_total / max(1, sq.frames + sq.rejected_frames),
+274:        "slice_qp_parse_us_max": sq.parse_us_max,
+275:        "vpl_hevc_frame_qp_crosscheck": {
+282:def _hevc_compression_text(fields: dict[str, Any]) -> str:
+283:    if not fields.get("slice_qp_available"):
+284:        return f"Slice QP: -- ({fields.get('slice_qp_reason', '')})"
+285:    cur = fields.get("slice_qp_current")
+286:    cur_txt = str(cur) if cur is not None else f"{fields['slice_qp_current_min']}-{fields['slice_qp_current_max']}"
+287:    return (f"Slice QP: {cur_txt} | Avg: {fields['slice_qp_avg']:.1f} | Min: {fields['slice_qp_min']} | "
+288:            f"Max: {fields['slice_qp_max']} | próbki: {fields['slice_qp_valid_samples']}"
+289:            f" (odrzucone: {fields['slice_qp_rejected_samples']})")
+503:    if hasattr(lib, "intel_native_get_hevc_slice_qp"):
+504:        lib.intel_native_get_hevc_slice_qp.argtypes = [ctypes.POINTER(IntelHevcSliceQpStats)]
+505:        lib.intel_native_get_hevc_slice_qp.restype = ctypes.c_int
+738:    result["qp_unverified_feedback"] = {key: state.get(key) for key in
+739:        ("quant_current", "quant_avg", "quant_min", "quant_max", "quant_samples", "quant_sum")}
+740:    for key in ("quant_current", "quant_avg", "quant_min", "quant_max", "current_qp", "mean_qp", "avg_qp", "qp_avg"):
+742:    slice_fields = _hevc_slice_qp_fields(_read_hevc_slice_qp(native_lib)) if native_lib is not None else {}
+744:    # compression_active implies classical QP fields (formatted by progress/GUI code); Slice QP is shown
+745:    # only through compression_text and the slice_qp_* keys.
+746:    result.update(quant_samples=0, quant_sum=0, compression_active=False,
+747:                  qp_source="unavailable", qp_aggregation="unavailable", quant_reason=_HEVC_QP_UNAVAILABLE_REASON,
+748:                  compression_text=_hevc_compression_text(slice_fields) if slice_fields
+754:    """Live compression / quantizer tracker for Intel exports."""
+771:                if self._stats.quant_samples > 0:
+772:                    cur = self._stats.quant_current
+773:                    avg = self._stats.quant_avg
+774:                    qmin = self._stats.quant_min
+775:                    qmax = self._stats.quant_max
+776:                    samples = self._stats.quant_samples
+780:                        else f"QP: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax} (oneVPL; próbki={samples}, pominięte={info.qp_unverified_zero})"
+783:                        "compression_active": True,
+786:                        "qp_source": "oneVPL encoded-frame luma QP",
+787:                        "qp_rejected_samples": info.qp_unverified_zero,
+788:                        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+790:                        "quant_metric": "base_q_idx" if self.is_av1 else "QP",
+791:                        "quant_current": cur,
+792:                        "quant_avg": avg,
+793:                        "quant_min": qmin,
+794:                        "quant_max": qmax,
+795:                        "quant_samples": samples,
+799:                        "qp_avg": avg,
+800:                        "compression_text": txt,
+804:                        "compression_active": False,
+808:                        "compression_text": "QP: -- (brak próbek enkodera oneVPL)",
+809:                        "quant_reason": "oneVPL did not report encoded-frame QP; no estimate substituted",
+1732:                    compression_tracker=comp_tracker,
+1953:                        compression_tracker=comp_tracker,
+2021:            "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+2022:            "quant_current": stats.quant_current if stats.quant_samples else None,
+2023:            "quant_avg": stats.quant_avg if stats.quant_samples else None,
+2024:            "quant_min": stats.quant_min if stats.quant_samples else None,
+2025:            "quant_max": stats.quant_max if stats.quant_samples else None,
+2026:            "quant_samples": stats.quant_samples,
+2027:            "quant_sum": stats.quant_sum,
+2028:            "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
+2424:        "qp_source": "oneVPL encoded-frame luma QP" if accepted.qp_supported else "unavailable",
+2425:        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+2426:        "qp_rejected_samples": accepted.qp_unverified_zero,
+2428:        "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+2429:        "quant_current": stats.quant_current if stats.quant_samples else None,
+2430:        "quant_avg": stats.quant_avg if stats.quant_samples else None,
+2431:        "quant_min": stats.quant_min if stats.quant_samples else None,
+2432:        "quant_max": stats.quant_max if stats.quant_samples else None,
+2433:        "quant_samples": stats.quant_samples,
+2434:        "quant_sum": stats.quant_sum,
+2435:        "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,

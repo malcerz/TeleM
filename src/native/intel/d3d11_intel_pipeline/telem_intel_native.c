@@ -313,12 +313,12 @@ typedef struct {
     double total_producer_d3d11_window_ms;
     double total_consumer_d3d11_window_ms;
     // Intel Compression / Quantizer Observability
-    int quant_current;
-    int quant_min;
-    int quant_max;
-    uint32_t quant_samples;
-    uint64_t quant_sum;
-    double quant_avg;
+    int reserved_quant_current;
+    int reserved_quant_min;
+    int reserved_quant_max;
+    uint32_t reserved_quant_samples;
+    uint64_t reserved_quant_sum;
+    double reserved_quant_avg;
 } IntelNativePipelineStats;
 
 typedef struct {
@@ -354,8 +354,6 @@ typedef struct {
 typedef struct {
     mfxSyncPoint syncp;
     mfxBitstream bs;
-    mfxExtAVCEncodedFrameInfo frame_info;
-    mfxExtBuffer* frame_ext[1];
     uint8_t* pBsBuffer;
     int frame_idx;
     bool in_use;
@@ -520,7 +518,6 @@ typedef struct {
     bool use_staging_ring;
     int topology_mode; // 0 = Topology A (legacy), 1 = Topology C (Pack in Consumer)
     int codec_id; // INTEL_CODEC_AV1 = 0, INTEL_CODEC_H264 = 1, INTEL_CODEC_HEVC = 2
-    bool quant_telemetry_disabled;
     volatile LONG producer_in_d3d11;
     volatile LONG consumer_in_d3d11;
     bool logged_thread_ids;
@@ -1266,70 +1263,11 @@ __declspec(dllexport) int intel_d3d11_vp_get_output_frame(char* out_p010_buffer,
 }
 
 
-static int av1_extract_base_q_idx(const uint8_t* data, size_t length) {
-    if (!data || length < 4) return -1;
-    size_t offset = 0;
-    while (offset < length) {
-        uint8_t b0 = data[offset++];
-        int obu_type = (b0 >> 3) & 0x0F;
-        int has_ext = (b0 >> 2) & 1;
-        int has_size = (b0 >> 1) & 1;
-        if (has_ext) {
-            if (offset >= length) return -1;
-            offset++;
-        }
-        size_t obu_size = 0;
-        if (has_size) {
-            int shift = 0;
-            while (offset < length) {
-                uint8_t s = data[offset++];
-                obu_size |= ((size_t)(s & 0x7F)) << shift;
-                shift += 7;
-                if (!(s & 0x80)) break;
-            }
-        } else {
-            obu_size = length - offset;
-        }
-        if ((obu_type == 6 || obu_type == 3) && offset + obu_size <= length) {
-            const uint8_t* payload = data + offset;
-            if (obu_size >= 9) {
-                int show_existing = (payload[0] >> 7) & 1;
-                if (!show_existing) {
-                    int frame_type = (payload[0] >> 5) & 3;
-                    if (frame_type == 0) { // KEY_FRAME
-                        return ((payload[2] & 0x0F) << 4) | ((payload[3] >> 4) & 0x0F);
-                    } else if (frame_type == 1) { // INTER_FRAME
-                        return ((payload[7] & 0x1F) << 3) | ((payload[8] >> 5) & 0x07);
-                    }
-                }
-            }
-            return -1;
-        }
-        offset += obu_size;
-    }
-    return -1;
-}
-
-static void record_quant_sample(IntelNativeContext* ctx, int q) {
-    if (q < 0 || !ctx || ctx->quant_telemetry_disabled) return;
-    if (ctx->stats.quant_samples == 0) {
-        ctx->stats.quant_min = q;
-        ctx->stats.quant_max = q;
-    } else {
-        if (q < ctx->stats.quant_min) ctx->stats.quant_min = q;
-        if (q > ctx->stats.quant_max) ctx->stats.quant_max = q;
-    }
-    ctx->stats.quant_current = q;
-    ctx->stats.quant_sum += (uint64_t)q;
-    ctx->stats.quant_samples++;
-    ctx->stats.quant_avg = (double)ctx->stats.quant_sum / (double)ctx->stats.quant_samples;
-}
-
 // Separate ABI: do not change the layout of IntelNativePipelineStats.
 typedef struct {
     int valid, rate_control, target_usage, target_kbps, max_kbps;
-    int buffer_kb, initial_delay_kb, multiplier, qp_supported;
-    int init_status, query_status, get_status, qp_unverified_zero;
+    int buffer_kb, initial_delay_kb, multiplier, reserved_diagnostic_0;
+    int init_status, reserved_diagnostic_1, get_status, reserved_diagnostic_2;
 } IntelEncoderInfo;
 static IntelEncoderInfo g_encoder_info;
 static int g_requested_tu = 0, g_requested_buffer = 0, g_requested_delay = 0;
@@ -1343,563 +1281,6 @@ __declspec(dllexport) int intel_native_get_encoder_info(IntelEncoderInfo* info) 
     *info = g_encoder_info;
     return 0;
 }
-// ---------------------------------------------------------------------------
-// HEVC Slice QP from the encoded Annex B bitstream (headers only).
-// Parses VPS/SPS/PPS and slice_segment_header() up to slice_qp_delta:
-// SliceQpY = 26 + init_qp_minus26 + slice_qp_delta. CABAC data (per-CU
-// cu_qp_delta) is never touched, so this is the slice base QP, not the
-// per-CU or frame-average QP. Runs in the drain thread on bs.Data which is
-// already in system memory after SyncOperation: no GPU access, no new sync.
-// Separate ABI: IntelNativePipelineStats layout is untouched.
-// ---------------------------------------------------------------------------
-typedef struct {
-    int valid;                  // 1 after at least one parsed slice
-    int disabled;               // telemetry disabled via TELEM_INTEL_QUANT_TELEMETRY=0
-    int cu_qp_delta_enabled;    // PPS flag: per-CU QP deltas present inside slices
-    int max_slices_per_frame;
-    uint32_t frames;            // frames with >=1 parsed independent slice
-    uint32_t slices;            // parsed independent slice segments
-    uint32_t parse_errors;
-    uint32_t frames_without_slice_qp;
-    int cur_frame_min, cur_frame_max, cur_frame_slices;
-    double cur_frame_weighted;  // CTU-weighted mean of slice base QPs in last frame
-    int run_min, run_max;       // over all slices
-    double run_weighted_sum;    // sum of per-frame CTU-weighted slice QP
-    double run_avg;             // run_weighted_sum / frames
-    int bit_depth_luma;
-    // oneVPL mfxExtAVCEncodedFrameInfo.QP cross-check (HEVC)
-    int vpl_last_qp;            // -1 = not reported
-    uint32_t vpl_reported, vpl_match, vpl_mismatch, vpl_zero;
-    double parse_us_total;      // CPU time spent in the parser
-    // Appended fields (ABI grows only at the end)
-    // Frame type by prediction structure: 2 = I (all slices intra), 1 = P (inter, past references
-    // only: P or generalized-B slices), 0 = B (some slice references a future picture), -1 = none
-    int last_frame_type;
-    uint32_t type_frames[3];    // valid frames per frame type (index as above)
-    double type_sum[3];         // sum of per-frame CTU-weighted Slice QP per type
-    uint32_t rejected_frames;   // encoded frames with no trustworthy Slice QP sample
-    double parse_us_max;        // worst single-frame parse time
-} IntelHevcSliceQpStats;
-
-#define HQP_MAX_ST_RPS 65
-#define HQP_MAX_PPS 64
-typedef struct {
-    int valid;
-    int sps_id, chroma, sep_colour, width, height, bit_depth, ctb, log2_poc_lsb;
-    int sao, num_st_rps, long_term_present, num_lt, temporal_mvp;
-    struct HqpRps { int n_neg, n_pos; int32_t s0[16], s1[16]; uint8_t u0[16], u1[16]; } rps[HQP_MAX_ST_RPS];
-    int lt_used[33];
-} HqpSps;
-typedef struct HqpRps HqpRps;
-typedef struct {
-    int valid, sps_id, dep_slices, out_flag, extra_bits, cabac_init, init_qp;
-    int cu_qp_delta, num_ref_l0, num_ref_l1, wp, wbp, lists_mod;
-} HqpPps;
-typedef struct { const uint8_t* p; int n; int pos; int err; } HqpBr;
-
-static HqpSps g_hqp_sps[16];
-static HqpPps g_hqp_pps[HQP_MAX_PPS];
-static IntelHevcSliceQpStats g_hqp;
-static CRITICAL_SECTION g_hqp_cs;
-static LONG g_hqp_cs_init = 0;
-
-static void hqp_lock(void) {
-    if (InterlockedCompareExchange(&g_hqp_cs_init, 1, 0) == 0) { InitializeCriticalSection(&g_hqp_cs); InterlockedExchange(&g_hqp_cs_init, 2); }
-    while (g_hqp_cs_init != 2) Sleep(0);
-    EnterCriticalSection(&g_hqp_cs);
-}
-static void hqp_unlock(void) { LeaveCriticalSection(&g_hqp_cs); }
-
-static int hqp_bit(HqpBr* b) {
-    if (b->pos >= b->n * 8) { b->err = 1; return 0; }
-    int v = (b->p[b->pos >> 3] >> (7 - (b->pos & 7))) & 1; b->pos++; return v;
-}
-static uint32_t hqp_bits(HqpBr* b, int n) { uint32_t v = 0; while (n-- > 0) v = (v << 1) | (uint32_t)hqp_bit(b); return v; }
-static void hqp_skip(HqpBr* b, int n) { b->pos += n; if (b->pos > b->n * 8) b->err = 1; }
-static uint32_t hqp_ue(HqpBr* b) {
-    int lz = 0; while (!hqp_bit(b)) { if (b->err || ++lz > 31) { b->err = 1; return 0; } }
-    return ((1u << lz) - 1u) + hqp_bits(b, lz);
-}
-static int32_t hqp_se(HqpBr* b) { uint32_t k = hqp_ue(b); return (k & 1) ? (int32_t)((k + 1) >> 1) : -(int32_t)(k >> 1); }
-static int hqp_ceil_log2(int v) { int r = 0; while ((1 << r) < v) r++; return r; }
-
-// Strip emulation prevention bytes from at most cap bytes of NAL payload (after the 2-byte header).
-static int hqp_rbsp(const uint8_t* src, int n, uint8_t* dst, int cap) {
-    int o = 0, zeros = 0;
-    for (int i = 0; i < n && o < cap; i++) {
-        if (zeros >= 2 && src[i] == 3) { zeros = 0; continue; }
-        dst[o++] = src[i];
-        zeros = src[i] == 0 ? zeros + 1 : 0;
-    }
-    return o;
-}
-
-static void hqp_skip_ptl(HqpBr* b, int max_sub) {
-    hqp_skip(b, 2 + 1 + 5 + 32 + 4 + 43 + 1 + 8);
-    int pp[8] = {0}, lp[8] = {0};
-    for (int i = 0; i < max_sub; i++) { pp[i] = hqp_bit(b); lp[i] = hqp_bit(b); }
-    if (max_sub > 0) for (int i = max_sub; i < 8; i++) hqp_skip(b, 2);
-    for (int i = 0; i < max_sub; i++) { if (pp[i]) hqp_skip(b, 88); if (lp[i]) hqp_skip(b, 8); }
-}
-static void hqp_skip_scaling(HqpBr* b) {
-    for (int s = 0; s < 4; s++)
-        for (int m = 0; m < 6; m += (s == 3) ? 3 : 1) {
-            if (!hqp_bit(b)) hqp_ue(b);
-            else { int n = 1 << (4 + (s << 1)); if (n > 64) n = 64; if (s > 1) hqp_se(b); for (int k = 0; k < n; k++) hqp_se(b); }
-        }
-}
-static int hqp_rps_used(const HqpRps* r) {
-    int n = 0;
-    for (int i = 0; i < r->n_neg; i++) n += r->u0[i];
-    for (int i = 0; i < r->n_pos; i++) n += r->u1[i];
-    return n;
-}
-static int hqp_rps_uses_future(const HqpRps* r) {
-    for (int i = 0; i < r->n_pos; i++) if (r->u1[i]) return 1;
-    return 0;
-}
-// st_ref_pic_set(idx) with full DeltaPoc derivation (H.265 7.3.7 / 7.4.8).
-// sets[] holds the SPS candidate sets; the result goes to *out.
-static void hqp_st_rps(HqpBr* b, int idx, int num, const HqpRps* sets, HqpRps* out) {
-    memset(out, 0, sizeof(*out));
-    int inter = idx ? hqp_bit(b) : 0;
-    if (inter) {
-        int dim1 = (idx == num) ? (int)hqp_ue(b) : 0;
-        int sign = hqp_bit(b);
-        int delta_rps = (1 - 2 * sign) * ((int)hqp_ue(b) + 1);
-        int ref = idx - (dim1 + 1);
-        if (ref < 0 || ref >= idx) { b->err = 1; return; }
-        const HqpRps* r = &sets[ref];
-        int nd = r->n_neg + r->n_pos;
-        uint8_t used[33], use_delta[33];
-        for (int j = 0; j <= nd; j++) {
-            used[j] = (uint8_t)hqp_bit(b);
-            use_delta[j] = used[j] ? 1 : (uint8_t)hqp_bit(b);
-        }
-        int i = 0;
-        for (int j = r->n_pos - 1; j >= 0; j--) {
-            int d = r->s1[j] + delta_rps;
-            if (d < 0 && use_delta[r->n_neg + j] && i < 16) { out->s0[i] = d; out->u0[i++] = used[r->n_neg + j]; }
-        }
-        if (delta_rps < 0 && use_delta[nd] && i < 16) { out->s0[i] = delta_rps; out->u0[i++] = used[nd]; }
-        for (int j = 0; j < r->n_neg; j++) {
-            int d = r->s0[j] + delta_rps;
-            if (d < 0 && use_delta[j] && i < 16) { out->s0[i] = d; out->u0[i++] = used[j]; }
-        }
-        out->n_neg = i;
-        i = 0;
-        for (int j = r->n_neg - 1; j >= 0; j--) {
-            int d = r->s0[j] + delta_rps;
-            if (d > 0 && use_delta[j] && i < 16) { out->s1[i] = d; out->u1[i++] = used[j]; }
-        }
-        if (delta_rps > 0 && use_delta[nd] && i < 16) { out->s1[i] = delta_rps; out->u1[i++] = used[nd]; }
-        for (int j = 0; j < r->n_pos; j++) {
-            int d = r->s1[j] + delta_rps;
-            if (d > 0 && use_delta[r->n_neg + j] && i < 16) { out->s1[i] = d; out->u1[i++] = used[r->n_neg + j]; }
-        }
-        out->n_pos = i;
-        if (out->n_neg + out->n_pos > 16) b->err = 1;
-        return;
-    }
-    int nn = (int)hqp_ue(b), np = (int)hqp_ue(b);
-    if (nn > 16 || np > 16 || nn + np > 16) { b->err = 1; return; }
-    int poc = 0;
-    for (int i = 0; i < nn; i++) { poc -= (int)hqp_ue(b) + 1; out->s0[i] = poc; out->u0[i] = (uint8_t)hqp_bit(b); }
-    poc = 0;
-    for (int i = 0; i < np; i++) { poc += (int)hqp_ue(b) + 1; out->s1[i] = poc; out->u1[i] = (uint8_t)hqp_bit(b); }
-    out->n_neg = nn; out->n_pos = np;
-}
-
-static void hqp_parse_sps(const uint8_t* d, int n) {
-    HqpBr b = {d, n, 0, 0};
-    HqpSps s; memset(&s, 0, sizeof(s));
-    hqp_skip(&b, 4);
-    int max_sub = (int)hqp_bits(&b, 3);
-    hqp_skip(&b, 1);
-    hqp_skip_ptl(&b, max_sub);
-    s.sps_id = (int)hqp_ue(&b);
-    if (b.err || s.sps_id > 15) { g_hqp.parse_errors++; return; }
-    // A new SPS with this id replaces the old one even if it fails to parse below:
-    // slices referencing it then yield no sample instead of using stale values.
-    g_hqp_sps[s.sps_id].valid = 0;
-    s.chroma = (int)hqp_ue(&b);
-    if (s.chroma == 3) s.sep_colour = hqp_bit(&b);
-    s.width = (int)hqp_ue(&b); s.height = (int)hqp_ue(&b);
-    if (hqp_bit(&b)) for (int i = 0; i < 4; i++) hqp_ue(&b);
-    s.bit_depth = (int)hqp_ue(&b) + 8; hqp_ue(&b);
-    s.log2_poc_lsb = (int)hqp_ue(&b) + 4;
-    int ordering = hqp_bit(&b);
-    for (int i = ordering ? 0 : max_sub; i <= max_sub; i++) { hqp_ue(&b); hqp_ue(&b); hqp_ue(&b); }
-    int min_cb = (int)hqp_ue(&b), diff_cb = (int)hqp_ue(&b);
-    s.ctb = 1 << (min_cb + 3 + diff_cb);
-    hqp_ue(&b); hqp_ue(&b); hqp_ue(&b); hqp_ue(&b);
-    if (hqp_bit(&b) && hqp_bit(&b)) hqp_skip_scaling(&b);
-    hqp_bit(&b);
-    s.sao = hqp_bit(&b);
-    if (hqp_bit(&b)) { hqp_skip(&b, 8); hqp_ue(&b); hqp_ue(&b); hqp_bit(&b); }
-    s.num_st_rps = (int)hqp_ue(&b);
-    if (s.num_st_rps >= HQP_MAX_ST_RPS) { g_hqp.parse_errors++; return; }
-    for (int i = 0; i < s.num_st_rps && !b.err; i++) hqp_st_rps(&b, i, s.num_st_rps, s.rps, &s.rps[i]);
-    s.long_term_present = hqp_bit(&b);
-    if (s.long_term_present) {
-        s.num_lt = (int)hqp_ue(&b);
-        if (s.num_lt > 32) { g_hqp.parse_errors++; return; }
-        for (int i = 0; i < s.num_lt; i++) { hqp_skip(&b, s.log2_poc_lsb); s.lt_used[i] = hqp_bit(&b); }
-    }
-    s.temporal_mvp = hqp_bit(&b);
-    if (b.err || s.ctb < 8 || s.width <= 0 || s.height <= 0) { g_hqp.parse_errors++; return; }
-    s.valid = 1;
-    g_hqp_sps[s.sps_id] = s;
-    g_hqp.bit_depth_luma = s.bit_depth;
-}
-
-static void hqp_parse_pps(const uint8_t* d, int n) {
-    HqpBr b = {d, n, 0, 0};
-    HqpPps p; memset(&p, 0, sizeof(p));
-    int id = (int)hqp_ue(&b);
-    if (b.err || id >= HQP_MAX_PPS) { g_hqp.parse_errors++; return; }
-    g_hqp_pps[id].valid = 0; // replaced even if the rest fails to parse
-    p.sps_id = (int)hqp_ue(&b);
-    p.dep_slices = hqp_bit(&b); p.out_flag = hqp_bit(&b); p.extra_bits = (int)hqp_bits(&b, 3);
-    hqp_bit(&b); p.cabac_init = hqp_bit(&b);
-    p.num_ref_l0 = (int)hqp_ue(&b) + 1; p.num_ref_l1 = (int)hqp_ue(&b) + 1;
-    p.init_qp = hqp_se(&b);
-    hqp_bit(&b); hqp_bit(&b);
-    p.cu_qp_delta = hqp_bit(&b);
-    if (p.cu_qp_delta) hqp_ue(&b);
-    hqp_se(&b); hqp_se(&b); hqp_bit(&b);
-    p.wp = hqp_bit(&b); p.wbp = hqp_bit(&b);
-    hqp_bit(&b);
-    int tiles = hqp_bit(&b); hqp_bit(&b);
-    if (tiles) {
-        int c = (int)hqp_ue(&b), r = (int)hqp_ue(&b);
-        if (!hqp_bit(&b)) { for (int i = 0; i < c; i++) hqp_ue(&b); for (int i = 0; i < r; i++) hqp_ue(&b); }
-        hqp_bit(&b);
-    }
-    hqp_bit(&b);
-    if (hqp_bit(&b)) { hqp_bit(&b); if (!hqp_bit(&b)) { hqp_se(&b); hqp_se(&b); } }
-    if (hqp_bit(&b)) hqp_skip_scaling(&b);
-    p.lists_mod = hqp_bit(&b);
-    if (b.err || p.sps_id > 15) { g_hqp.parse_errors++; return; }
-    p.valid = 1;
-    g_hqp_pps[id] = p;
-    if (p.cu_qp_delta) g_hqp.cu_qp_delta_enabled = 1;
-}
-
-// Returns slice QP (>=0) for an independent slice, -2 for a dependent slice segment, -1 on error.
-static int hqp_parse_slice(const uint8_t* d, int n, int nal_type, int* first_out, int* addr_out, int* ctus_out, int* type_out, int* future_out) {
-    HqpBr b = {d, n, 0, 0};
-    int first = hqp_bit(&b);
-    if (nal_type >= 16 && nal_type <= 23) hqp_bit(&b);
-    int pps_id = (int)hqp_ue(&b);
-    if (pps_id >= HQP_MAX_PPS || !g_hqp_pps[pps_id].valid) return -1;
-    const HqpPps* p = &g_hqp_pps[pps_id];
-    const HqpSps* s = &g_hqp_sps[p->sps_id];
-    if (!s->valid) return -1;
-    int ctus = ((s->width + s->ctb - 1) / s->ctb) * ((s->height + s->ctb - 1) / s->ctb);
-    int dependent = 0, addr = 0;
-    if (!first) {
-        if (p->dep_slices) dependent = hqp_bit(&b);
-        int bits = hqp_ceil_log2(ctus);
-        addr = (int)hqp_bits(&b, bits);
-    }
-    *first_out = first; *addr_out = addr; *ctus_out = ctus;
-    if (dependent) return b.err ? -1 : -2;
-    hqp_skip(&b, p->extra_bits);
-    int st = (int)hqp_ue(&b);
-    if (b.err || st > 2) return -1;
-    // IRAP pictures may only contain I slices (H.265 7.4.7.1).
-    if (nal_type >= 16 && nal_type <= 23 && st != 2) return -1;
-    *type_out = st;
-    *future_out = 0;
-    if (p->out_flag) hqp_bit(&b);
-    if (s->sep_colour) hqp_skip(&b, 2);
-    int total_curr = 0, tmvp = 0;
-    if (nal_type != 19 && nal_type != 20) {
-        hqp_skip(&b, s->log2_poc_lsb);
-        HqpRps slice_rps;
-        const HqpRps* cur;
-        if (!hqp_bit(&b)) {
-            hqp_st_rps(&b, s->num_st_rps, s->num_st_rps, s->rps, &slice_rps);
-            if (b.err) return -1;
-            cur = &slice_rps;
-        } else {
-            int idx = s->num_st_rps > 1 ? (int)hqp_bits(&b, hqp_ceil_log2(s->num_st_rps)) : 0;
-            if (idx >= s->num_st_rps) return -1;
-            cur = &s->rps[idx];
-        }
-        total_curr += hqp_rps_used(cur);
-        *future_out = hqp_rps_uses_future(cur);
-        if (s->long_term_present) {
-            int nls = s->num_lt > 0 ? (int)hqp_ue(&b) : 0;
-            int nlp = (int)hqp_ue(&b);
-            if (nls > s->num_lt || nls + nlp > 32) return -1;
-            for (int i = 0; i < nls + nlp; i++) {
-                if (i < nls) {
-                    int li = s->num_lt > 1 ? (int)hqp_bits(&b, hqp_ceil_log2(s->num_lt)) : 0;
-                    if (li < 33 && s->lt_used[li]) total_curr++;
-                } else {
-                    hqp_skip(&b, s->log2_poc_lsb);
-                    if (hqp_bit(&b)) total_curr++;
-                }
-                if (hqp_bit(&b)) hqp_ue(&b);
-            }
-        }
-        if (s->temporal_mvp) tmvp = hqp_bit(&b);
-    }
-    if (s->sao) { hqp_bit(&b); if (s->chroma) hqp_bit(&b); }
-    if (st < 2) {
-        int l0 = p->num_ref_l0, l1 = p->num_ref_l1;
-        if (hqp_bit(&b)) { l0 = (int)hqp_ue(&b) + 1; if (st == 0) l1 = (int)hqp_ue(&b) + 1; }
-        if (l0 > 16 || l1 > 16) return -1;
-        if (p->lists_mod && total_curr > 1) {
-            int bits = hqp_ceil_log2(total_curr);
-            if (hqp_bit(&b)) hqp_skip(&b, bits * l0);
-            if (st == 0 && hqp_bit(&b)) hqp_skip(&b, bits * l1);
-        }
-        if (st == 0) hqp_bit(&b);
-        if (p->cabac_init) hqp_bit(&b);
-        if (tmvp) {
-            int col_l0 = st == 0 ? hqp_bit(&b) : 1;
-            if ((col_l0 && l0 > 1) || (!col_l0 && l1 > 1)) hqp_ue(&b);
-        }
-        if ((p->wp && st == 1) || (p->wbp && st == 0)) {
-            int chroma = s->chroma != 0;
-            hqp_ue(&b); if (chroma) hqp_se(&b);
-            for (int list = 0; list < (st == 0 ? 2 : 1); list++) {
-                int nr = list ? l1 : l0, lf[16], cf[16];
-                for (int i = 0; i < nr; i++) lf[i] = hqp_bit(&b);
-                for (int i = 0; i < nr; i++) cf[i] = chroma ? hqp_bit(&b) : 0;
-                for (int i = 0; i < nr; i++) {
-                    if (lf[i]) { hqp_se(&b); hqp_se(&b); }
-                    if (cf[i]) { hqp_se(&b); hqp_se(&b); hqp_se(&b); hqp_se(&b); }
-                }
-            }
-        }
-        hqp_ue(&b);
-    }
-    int qp = 26 + p->init_qp + hqp_se(&b);
-    int qp_min = -6 * (s->bit_depth - 8);
-    if (b.err || qp < qp_min || qp > 51) return -1;
-    return qp;
-}
-
-#define HQP_MAX_SLICES 64
-
-// Index of the next 00 00 01 start code at or after i, or len. A start code at
-// i, i+1 or i+2 needs d[i+2] <= 1, so larger bytes allow skipping three.
-static uint32_t hqp_next_start_code(const uint8_t* d, uint32_t len, uint32_t i) {
-    while (i + 2 < len) {
-        uint8_t c = d[i + 2];
-        if (c > 1) { i += 3; continue; }
-        if (c == 1 && d[i + 1] == 0 && d[i] == 0) return i;
-        i++;
-    }
-    return len;
-}
-
-typedef struct {
-    double weighted;  // CTU-weighted mean of slice base QPs (exact per-CTU base QP average)
-    int min, max, slices, frame_type;
-} HqpFrame;
-
-// Parse one encoded access unit. Returns 1 with a sample, 0 when the frame has
-// no trustworthy Slice QP (any slice failed, missing parameter sets, broken
-// segment layout). Never returns a partial-frame estimate.
-static int hqp_process_au(const uint8_t* data, uint32_t len, HqpFrame* out) {
-    int sq[HQP_MAX_SLICES], sa[HQP_MAX_SLICES], ns = 0, ctus = 0, bad = 0, seen_vcl = 0;
-    int has_b = 0, has_p = 0, last_qp = -1; // has_b: inter slice using a future reference
-    uint8_t rbsp[1024];
-    uint32_t i = hqp_next_start_code(data, len, 0);
-    while (i < len) {
-        uint32_t start = i + 3;
-        uint32_t end = hqp_next_start_code(data, len, start);
-        i = end;
-        if (end <= start + 2) continue;
-        int nal_type = (data[start] >> 1) & 0x3F;
-        if (data[start] & 0x80) { bad = 1; continue; }          // forbidden_zero_bit
-        if ((data[start + 1] >> 3) != 0) continue;              // nuh_layer_id != 0: not part of base layer
-        const uint8_t* pl = data + start + 2;
-        int pl_n = (int)(end - start - 2);
-        if (nal_type == 33 || nal_type == 34) {
-            int n = hqp_rbsp(pl, pl_n, rbsp, sizeof(rbsp));
-            if (nal_type == 33) hqp_parse_sps(rbsp, n); else hqp_parse_pps(rbsp, n);
-        } else if (nal_type <= 21 && !(nal_type >= 10 && nal_type <= 15)) {
-            int n = hqp_rbsp(pl, pl_n, rbsp, 256); // slice headers are far shorter than 256 bytes
-            int first = 0, addr = 0, st = -1, seg_ctus = 0, future = 0;
-            int qp = hqp_parse_slice(rbsp, n, nal_type, &first, &addr, &seg_ctus, &st, &future);
-            if (!seen_vcl && !first) bad = 1;                    // picture must start with its first segment
-            seen_vcl = 1;
-            if (qp == -1) { g_hqp.parse_errors++; bad = 1; continue; }
-            if (ctus && seg_ctus != ctus) bad = 1;
-            ctus = seg_ctus;
-            if (qp == -2) {                                      // dependent segment inherits the slice QP
-                if (last_qp < 0) { bad = 1; continue; }
-                qp = last_qp;
-            } else {
-                // Frame type by prediction structure, not slice_type syntax: Intel codes P frames as\r
-                // generalized-B slices (slice_type=0) that reference only past pictures.\r
-                if (st != 2) { if (future) has_b = 1; else has_p = 1; }
-                last_qp = qp;
-            }
-            if (ns >= HQP_MAX_SLICES || (ns && addr <= sa[ns - 1]) || (!ns && addr != 0)) { bad = 1; continue; }
-            sq[ns] = qp; sa[ns] = addr; ns++;
-        }
-    }
-    if (bad || ns == 0 || ctus <= 0) return 0;
-    double wsum = 0.0; int mn = sq[0], mx = sq[0];
-    for (int k = 0; k < ns; k++) {
-        int span = (k + 1 < ns ? sa[k + 1] : ctus) - sa[k];
-        if (span <= 0) return 0;
-        wsum += (double)sq[k] * span;
-        if (sq[k] < mn) mn = sq[k];
-        if (sq[k] > mx) mx = sq[k];
-    }
-    out->weighted = wsum / (double)ctus;
-    out->min = mn; out->max = mx; out->slices = ns;
-    out->frame_type = has_b ? 0 : (has_p ? 1 : 2);
-    return 1;
-}
-
-static void hevc_slice_qp_reset(int disabled) {
-    hqp_lock();
-    memset(&g_hqp, 0, sizeof(g_hqp));
-    memset(g_hqp_sps, 0, sizeof(g_hqp_sps));
-    memset(g_hqp_pps, 0, sizeof(g_hqp_pps));
-    g_hqp.disabled = disabled;
-    g_hqp.vpl_last_qp = -1;
-    g_hqp.last_frame_type = -1;
-    hqp_unlock();
-}
-
-// Caller holds the lock. Returns 1 when the frame produced a sample.
-static int hqp_account_au(const uint8_t* data, uint32_t len, int vpl_qp, HqpFrame* f) {
-    memset(f, 0, sizeof(*f));
-    int ok = hqp_process_au(data, len, f);
-    if (!ok) {
-        g_hqp.rejected_frames++;
-        g_hqp.frames_without_slice_qp++;
-    } else {
-        if (g_hqp.frames == 0) { g_hqp.run_min = f->min; g_hqp.run_max = f->max; }
-        if (f->min < g_hqp.run_min) g_hqp.run_min = f->min;
-        if (f->max > g_hqp.run_max) g_hqp.run_max = f->max;
-        g_hqp.frames++;
-        g_hqp.slices += (uint32_t)f->slices;
-        if (f->slices > g_hqp.max_slices_per_frame) g_hqp.max_slices_per_frame = f->slices;
-        g_hqp.cur_frame_min = f->min; g_hqp.cur_frame_max = f->max; g_hqp.cur_frame_slices = f->slices;
-        g_hqp.cur_frame_weighted = f->weighted;
-        g_hqp.run_weighted_sum += f->weighted;
-        g_hqp.run_avg = g_hqp.run_weighted_sum / (double)g_hqp.frames;
-        g_hqp.last_frame_type = f->frame_type;
-        g_hqp.type_frames[f->frame_type]++;
-        g_hqp.type_sum[f->frame_type] += f->weighted;
-        g_hqp.valid = 1;
-        if (vpl_qp >= 0) {
-            // Cross-check only meaningful for single-slice frames.
-            if (vpl_qp == 0) g_hqp.vpl_zero++;
-            else if (f->slices == 1 && vpl_qp == f->min) g_hqp.vpl_match++;
-            else g_hqp.vpl_mismatch++;
-        }
-    }
-    if (vpl_qp >= 0) { g_hqp.vpl_reported++; g_hqp.vpl_last_qp = vpl_qp; }
-    return ok;
-}
-
-static int g_hqp_trace = -1;
-
-static void hevc_slice_qp_record(IntelNativeContext* ctx, int slot, int vpl_qp) {
-    if (ctx->codec_id != INTEL_CODEC_HEVC || ctx->quant_telemetry_disabled) return;
-    if (g_hqp_trace < 0) g_hqp_trace = getenv("TELEM_INTEL_QP_TRACE") != NULL;
-    LARGE_INTEGER t0, t1;
-    QueryPerformanceCounter(&t0);
-    hqp_lock();
-    HqpFrame f;
-    int ok = hqp_account_au(ctx->encode_pool[slot].bs.Data + ctx->encode_pool[slot].bs.DataOffset,
-                            ctx->encode_pool[slot].bs.DataLength, vpl_qp, &f);
-    QueryPerformanceCounter(&t1);
-    double us = (double)(t1.QuadPart - t0.QuadPart) * 1e6 / (double)ctx->freq.QuadPart;
-    g_hqp.parse_us_total += us;
-    if (us > g_hqp.parse_us_max) g_hqp.parse_us_max = us;
-    if (g_hqp_trace)
-        fprintf(stderr, "[INTEL HEVC QP] frame=%d ok=%d type=%c slice_qp=%.2f min=%d max=%d slices=%d vpl_qp=%d bytes=%u parse_us=%.1f\n",
-                ctx->encode_pool[slot].frame_idx, ok, ok ? "BPI"[f.frame_type] : '-', ok ? f.weighted : -1.0,
-                f.min, f.max, f.slices, vpl_qp, ctx->encode_pool[slot].bs.DataLength, us);
-    hqp_unlock();
-}
-
-// Test hook: parse an Annex B HEVC stream (one or more access units) with fresh
-// parser state, splitting access units at first_slice_segment_in_pic_flag=1.
-// Results land in the normal stats (read with intel_native_get_hevc_slice_qp).
-// per_frame (optional, capacity max_frames) receives each frame's weighted QP or -1.
-__declspec(dllexport) int intel_native_hevc_slice_qp_selftest(const uint8_t* data, uint32_t len,
-                                                              double* per_frame, int max_frames) {
-    if (!data) return -1;
-    hevc_slice_qp_reset(0);
-    hqp_lock();
-    int frames = 0, au_has_vcl = 0;
-    uint32_t au_start = hqp_next_start_code(data, len, 0);
-    for (uint32_t p = au_start; p < len; p = hqp_next_start_code(data, len, p + 3)) {
-        if (p + 5 >= len) continue;
-        int t = (data[p + 3] >> 1) & 0x3F;
-        int is_vcl = t <= 21 && !(t >= 10 && t <= 15);
-        // A new picture starts at a first-slice VCL NAL, or at a parameter set /
-        // AUD / prefix SEI that follows VCL data of the current picture.
-        if (au_has_vcl && ((is_vcl && (data[p + 5] & 0x80)) || (t >= 32 && t <= 35) || t == 39)) {
-            HqpFrame f;
-            int ok = hqp_account_au(data + au_start, p - au_start, -1, &f);
-            if (per_frame && frames < max_frames) per_frame[frames] = ok ? f.weighted : -1.0;
-            frames++;
-            au_start = p; au_has_vcl = 0;
-        }
-        if (is_vcl) au_has_vcl = 1;
-    }
-    if (au_has_vcl) {
-        HqpFrame f;
-        int ok = hqp_account_au(data + au_start, len - au_start, -1, &f);
-        if (per_frame && frames < max_frames) per_frame[frames] = ok ? f.weighted : -1.0;
-        frames++;
-    }
-    hqp_unlock();
-    return frames;
-}
-
-__declspec(dllexport) int intel_native_get_hevc_slice_qp(IntelHevcSliceQpStats* out) {
-    if (!out) return -1;
-    hqp_lock();
-    *out = g_hqp;
-    hqp_unlock();
-    return 0;
-}
-
-static void record_slot_qp(IntelNativeContext* ctx, int slot) {
-    if (ctx->codec_id == INTEL_CODEC_HEVC) {
-        int vpl_qp = -1;
-        if (g_encoder_info.qp_supported && ctx->encode_pool[slot].frame_info.QP != 0xffff)
-            vpl_qp = ctx->encode_pool[slot].frame_info.QP;
-        hevc_slice_qp_record(ctx, slot, vpl_qp);
-        // oneVPL HEVC frame-info QP is only cross-checked above, never published as QP.
-        if (vpl_qp == 0) g_encoder_info.qp_unverified_zero++;
-        ctx->encode_pool[slot].frame_info.QP = 0xffff;
-        ctx->encode_pool[slot].frame_info.FrameOrder = 0xffffffffu;
-        return;
-    }
-    if (!ctx->quant_telemetry_disabled && ctx->codec_id != INTEL_CODEC_AV1 &&
-        g_encoder_info.qp_supported && ctx->encode_pool[slot].frame_info.QP != 0xffff) {
-        int qp = ctx->encode_pool[slot].frame_info.QP;
-        if (getenv("TELEM_INTEL_QP_TRACE")) fprintf(stderr, "[INTEL QP SAMPLE] frame=%d qp=%d bytes=%u\n", ctx->encode_pool[slot].frame_idx, qp, ctx->encode_pool[slot].bs.DataLength);
-        // This Windows HEVC runtime sometimes clears QP to zero while its
-        // encoded headers retain nonzero slice QP. Do not present ambiguous
-        // feedback as a lossless frame or replace it with an estimated value.
-        if (ctx->codec_id == INTEL_CODEC_HEVC && qp == 0) {
-            g_encoder_info.qp_unverified_zero++;
-            ctx->encode_pool[slot].frame_info.QP = 0xffff;
-            return;
-        }
-        if (qp <= 63) record_quant_sample(ctx, qp);
-        ctx->encode_pool[slot].frame_info.QP = 0xffff;
-    }
-}
-
 static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
     IntelNativeContext* ctx = (IntelNativeContext*)lpParam;
     LARGE_INTEGER freq = ctx->freq;
@@ -1935,14 +1316,10 @@ static DWORD WINAPI encode_drain_thread_func(LPVOID lpParam) {
             }
 
             if (ctx->encode_pool[tail].bs.DataLength > 0) {
-                record_slot_qp(ctx, tail);
+
                 ctx->stats.encoded_frames++;
                 ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
-                if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1 && g_encoder_info.qp_supported) {
-                    int q = av1_extract_base_q_idx(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset,
-                                                   ctx->encode_pool[tail].bs.DataLength);
-                    record_quant_sample(ctx, q);
-                }
+
                 if (ctx->fOutIVF) {
                     if (ctx->codec_id == INTEL_CODEC_AV1) {
                         uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
@@ -2005,14 +1382,10 @@ static void sync_oldest_encode_slot(IntelNativeContext* ctx) {
     }
 
     if (ctx->encode_pool[tail].bs.DataLength > 0) {
-        record_slot_qp(ctx, tail);
+
         ctx->stats.encoded_frames++;
         ctx->stats.total_bytes_encoded += ctx->encode_pool[tail].bs.DataLength;
-        if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1 && g_encoder_info.qp_supported) {
-            int q = av1_extract_base_q_idx(ctx->encode_pool[tail].bs.Data + ctx->encode_pool[tail].bs.DataOffset,
-                                           ctx->encode_pool[tail].bs.DataLength);
-            record_quant_sample(ctx, q);
-        }
+
         if (ctx->fOutIVF) {
             if (ctx->codec_id == INTEL_CODEC_AV1) {
                 uint32_t frame_hdr[3] = { ctx->encode_pool[tail].bs.DataLength, (uint32_t)ctx->stats.encoded_frames, 0 };
@@ -2087,10 +1460,6 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
     g_pipe.stats.d3d11_mt_protection_active = saved_mt_active;
     g_pipe.stats.d3d11_mt_qi_hresult = saved_mt_qi_hr;
     g_pipe.cancelled = false;
-    char env_quant_buf[32] = {0};
-    DWORD env_len = GetEnvironmentVariableA("TELEM_INTEL_QUANT_TELEMETRY", env_quant_buf, sizeof(env_quant_buf));
-    g_pipe.quant_telemetry_disabled = (env_len > 0 && (strcmp(env_quant_buf, "0") == 0 || _stricmp(env_quant_buf, "off") == 0 || _stricmp(env_quant_buf, "false") == 0));
-    hevc_slice_qp_reset(g_pipe.quant_telemetry_disabled ? 1 : 0);
     const char* env_depth = getenv("TELEM_INTEL_MFX_ASYNC_DEPTH");
     int mfx_depth = (env_depth && atoi(env_depth) > 0) ? atoi(env_depth) : (force_serial_7d ? 1 : 8);
     if (mfx_depth > ENCODE_POOL_SIZE) mfx_depth = ENCODE_POOL_SIZE;
@@ -2268,33 +1637,6 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
         abs(g_encoder_info.target_kbps - target_kbps) > actual_mult || g_encoder_info.buffer_kb <= 0 ||
         hrd.NalHrdConformance != MFX_CODINGOPTION_ON) return -42;
     g_encoder_info.valid = 1;
-    if (query && codec_id != INTEL_CODEC_AV1) {
-        mfxExtAVCEncodedFrameInfo info = {0};
-        info.Header.BufferId = MFX_EXTBUFF_ENCODED_FRAME_INFO; info.Header.BufferSz = sizeof(info);
-        mfxExtBuffer* query_ext = (mfxExtBuffer*)&info;
-        mfxVideoParam support = {0}; support.mfx.CodecId = initPar.mfx.CodecId;
-        support.ExtParam = &query_ext; support.NumExtParam = 1;
-        g_encoder_info.query_status = query(g_pipe.session, NULL, &support);
-        g_encoder_info.qp_supported = g_encoder_info.query_status == MFX_ERR_NONE;
-    }
-    fprintf(stderr, "[INTEL QP] source=oneVPL encoded-frame-info supported=%d query_status=%d aggregation=one_luma_qp_per_encoded_frame\n",
-            g_encoder_info.qp_supported, g_encoder_info.query_status);
-    if (query && codec_id == INTEL_CODEC_HEVC) {
-        // Diagnostic only: documented (experimental) oneVPL frame-level encode
-        // statistics (mfxExtEncodeStatsOutput, 'ENSB', mfxencodestats.h) carry
-        // the average frame QP. Mirror of the header layout without enabling
-        // ONEVPL_EXPERIMENTAL for the whole translation unit.
-        struct { mfxExtBuffer Header; mfxU16 EncodeStatsFlags; int Mode; void* Container; mfxU32 reserved[8]; } stats_ext;
-        memset(&stats_ext, 0, sizeof(stats_ext));
-        stats_ext.Header.BufferId = MFX_MAKEFOURCC('E','N','S','B');
-        stats_ext.Header.BufferSz = sizeof(stats_ext);
-        stats_ext.EncodeStatsFlags = 0x8; // MFX_ENCODESTATS_LEVEL_FRAME
-        mfxExtBuffer* stats_q = (mfxExtBuffer*)&stats_ext;
-        mfxVideoParam stats_par = initPar;
-        stats_par.ExtParam = &stats_q; stats_par.NumExtParam = 1;
-        mfxStatus stats_sts = query(g_pipe.session, &stats_par, &stats_par);
-        fprintf(stderr, "[INTEL QP] oneVPL encode-stats(frame) query_status=%d flags_after=%u\n", stats_sts, stats_ext.EncodeStatsFlags);
-    }
 
     // Allocate encoder slot bitstream buffers
     size_t bs_size = 16 * 1024 * 1024;
@@ -2303,15 +1645,7 @@ __declspec(dllexport) int intel_native_pipeline_init_multi_ex(
         memset(&g_pipe.encode_pool[i].bs, 0, sizeof(mfxBitstream));
         g_pipe.encode_pool[i].bs.Data = g_pipe.encode_pool[i].pBsBuffer;
         g_pipe.encode_pool[i].bs.MaxLength = (uint32_t)bs_size;
-        if (g_encoder_info.qp_supported) {
-            g_pipe.encode_pool[i].frame_info.Header.BufferId = MFX_EXTBUFF_ENCODED_FRAME_INFO;
-            g_pipe.encode_pool[i].frame_info.Header.BufferSz = sizeof(mfxExtAVCEncodedFrameInfo);
-            g_pipe.encode_pool[i].frame_info.QP = 0xffff;
-            g_pipe.encode_pool[i].frame_info.FrameOrder = 0xffffffffu;
-            g_pipe.encode_pool[i].frame_ext[0] = (mfxExtBuffer*)&g_pipe.encode_pool[i].frame_info;
-            g_pipe.encode_pool[i].bs.ExtParam = g_pipe.encode_pool[i].frame_ext;
-            g_pipe.encode_pool[i].bs.NumExtParam = 1;
-        }
+
         g_pipe.encode_pool[i].syncp = NULL;
         g_pipe.encode_pool[i].in_use = false;
         g_pipe.encode_pool[i].frame_idx = -1;

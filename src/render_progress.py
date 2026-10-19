@@ -89,12 +89,12 @@ class RenderProgressState:
     prep_total: int = 0
     prep_pct: float = 0.0
     prep_label: str = ""
+    # Legacy snapshot fields are accepted for compatibility, never populated or displayed.
     qp: float | None = None
     avg_qp: float | None = None
     is_cqp: bool = False
     is_av1: bool = False
-    # Tryb sterowania bitrate raportowany przez enkoder (np. "VBR"); gdy ustawiony,
-    # compression_text jest jedynym źródłem tekstu QP we wszystkich elementach GUI.
+    # Accepted rate-control metadata remains independent of retired QP diagnostics.
     rate_control: str = ""
     quant_metric: str = ""
     quant_min: int | None = None
@@ -153,42 +153,15 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         frame = f"{snapshot.prep_done} / {snapshot.prep_total}" if snapshot.prep_total else "--"
         pct = f"{snapshot.percent:.1f}%" if snapshot.prep_total or snapshot.percent > 0 else "--"
         fps = "--"
-        qp_str = "--"
     elif snapshot.progress_mode == "indeterminate":
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct = "--"
         fps = "--"
-        qp_str = "--"
     else:
         frame = f"{snapshot.frame} / {snapshot.total_frames}" if snapshot.total_frames else "--"
         pct_val = snapshot.global_percent if (snapshot.global_percent is not None and snapshot.global_percent > 0) else snapshot.percent
         pct = f"{pct_val:.1f}%" if (snapshot.total_frames or pct_val > 0) else "--"
         fps = f"{snapshot.fps:.1f}" if snapshot.fps > 0 else "--"
-        q_label = "Q" if (getattr(snapshot, "is_av1", False) or getattr(snapshot, "quant_metric", "") == "base_q_idx") else "QP"
-        cur_qp = getattr(snapshot, "qp", None)
-        avg_qp = getattr(snapshot, "avg_qp", None)
-        is_cqp = getattr(snapshot, "is_cqp", False)
-        comp_txt = getattr(snapshot, "compression_text", "")
-
-        if comp_txt:
-            qp_str = comp_txt
-        elif is_cqp:
-            if avg_qp is not None:
-                qp_str = f"{q_label} avg: {avg_qp:.1f}"
-            elif cur_qp is not None:
-                qp_str = f"{q_label} (target): {int(round(cur_qp))}"
-            else:
-                qp_str = f"{q_label} avg: N/A"
-        elif cur_qp is not None:
-            if avg_qp is not None and abs(cur_qp - avg_qp) > 0.05:
-                qp_str = f"{q_label}: {cur_qp:.0f} (avg: {avg_qp:.1f})"
-            else:
-                qp_str = f"{q_label}: {cur_qp:.1f}"
-        elif avg_qp is not None:
-            qp_str = f"{q_label} avg: {avg_qp:.1f}"
-        else:
-            qp_str = f"{q_label} avg: N/A"
-
     if snapshot.eta_s is None or not (0 <= snapshot.eta_s <= 3600000):
         eta_txt = "--:--"
     else:
@@ -206,9 +179,8 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
     else:
         status = "Renderowanie..."
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
-    qp_field = qp_str if (qp_str.startswith(("QP", "Q ", "RC:"))) else f"QP: {qp_str}"
     return (
-        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   {qp_field}   |   Czas: {elapsed_txt} "
+        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   Czas: {elapsed_txt} "
         f"  |   ETA: {eta_txt}   |   {status}"
     )
 

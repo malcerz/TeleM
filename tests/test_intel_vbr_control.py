@@ -34,63 +34,38 @@ def test_profiles_change_only_preset_not_vbr_limits(monkeypatch, profile, tu, pr
     assert "-global_quality" not in cmd and "-qp" not in cmd
 
 
-def test_ffmpeg_telemetry_uses_real_distinct_samples_and_rejects_unknown_hevc():
-    tracker=IntelQsvTracker("h264")
-    for line in ["frame=0","stream_0_0_q=0", "frame=10", "stream_0_0_q=23", "stream_0_0_q=23",
-                 "frame=20", "stream_0_0_q=31", "TargetUsage: 4; RateControlMethod: VBR"]:
-        tracker.feed_progress_line(line)
-    data=tracker.get_hud_state_dict()
-    assert data["quant_avg"] == 27 and data["quant_samples"] == 2
-    assert data["quant_min"] == 23 and data["quant_max"] == 31
-    assert data["rate_control"] == "VBR" and not data["is_cqp"]
-    hevc=IntelQsvTracker("hevc")
-    hevc.feed_progress_line("frame=10"); hevc.feed_progress_line("stream_0_0_q=0")
-    assert hevc.get_hud_state_dict()["quant_samples"] == 0
-    assert "QP: --" in hevc.get_hud_state_dict()["compression_text"]
+def test_ffmpeg_telemetry_keeps_vbr_but_ignores_all_qp_samples():
+    for codec in ("hevc", "h264", "av1"):
+        tracker = IntelQsvTracker(codec)
+        for line in ["frame=10", "stream_0_0_q=23", "frame=20", "stream_0_0_q=31",
+                     "TargetUsage: 7; RateControlMethod: VBR", "TargetKbps: 40000; MaxKbps: 50000"]:
+            tracker.feed_progress_line(line)
+        state = tracker.get_hud_state_dict()
+        assert state["rate_control"] == "VBR" and not state["is_cqp"]
+        assert state["encoder_accepted"]["TargetUsage"] == 7
+        assert state["encoder_accepted"]["MaxKbps"] == 50000
+        assert not any("qp" in key or "quant" in key for key in state if key != "is_cqp")
 
 
-def test_unverified_native_hevc_feedback_is_not_published_as_real_qp():
-    from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
-    data = _withhold_unverified_hevc_qp(dict(quant_current=1, quant_avg=5.5,
-        quant_min=1, quant_max=31, quant_samples=500, quant_sum=2750, avg_qp=5.5))
-    assert data["quant_current"] is None and data["avg_qp"] is None
-    assert data["quant_samples"] == 0 and not data["compression_active"]
-    assert data["qp_unverified_feedback"]["quant_samples"] == 500
-    assert "QP: --" in data["compression_text"] and data["quant_reason"]
-
-
-def _fake_slice_qp_lib(**values):
+def test_native_qp_parser_and_per_frame_feedback_are_absent():
+    from pathlib import Path
     import ctypes
-    from src.ffmpeg.intel_native_exporter import IntelHevcSliceQpStats
-
-    class Lib:
-        def intel_native_get_hevc_slice_qp(self, ptr):
-            stats = ctypes.cast(ptr, ctypes.POINTER(IntelHevcSliceQpStats)).contents
-            for key, value in values.items():
-                setattr(stats, key, value)
-            return 0
-    return Lib()
-
-
-def test_hevc_slice_qp_is_published_under_slice_keys_only():
-    from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
-    lib = _fake_slice_qp_lib(valid=1, frames=300, slices=300, max_slices_per_frame=1, cu_qp_delta_enabled=1,
-                             cur_frame_weighted=26.0, cur_frame_min=26, cur_frame_max=26,
-                             run_avg=26.0, run_min=26, run_max=26,
-                             vpl_reported=300, vpl_zero=93, vpl_mismatch=207, parse_us_total=3000.0)
-    data = _withhold_unverified_hevc_qp(dict(quant_current=1, quant_avg=2.0), lib)
-    assert data["avg_qp"] is None and data["quant_avg"] is None and data["quant_current"] is None
-    assert not data["compression_active"]
-    assert data["slice_qp_available"] and data["slice_qp_avg"] == 26.0 and data["slice_qp_min"] == 26
-    assert data["slice_qp_cu_qp_delta_enabled"] and "cu_qp_delta" in data["slice_qp_note"]
-    assert data["compression_text"].startswith("Slice QP: 26 |") and "próbki: 300" in data["compression_text"]
-    assert data["slice_qp_valid_samples"] == 300 and data["slice_qp_rejected_samples"] == 0
-    assert data["vpl_hevc_frame_qp_crosscheck"]["zero"] == 93
-    assert data["slice_qp_parse_us_per_frame"] == 10.0
+    from src.ffmpeg.intel_native_exporter import _load_native_intel_dll, IntelNativePipelineStats
+    source = (Path(__file__).resolve().parents[1] / "src/native/intel/d3d11_intel_pipeline/telem_intel_native.c").read_text()
+    for removed in ("record_slot_qp", "hevc_slice_qp_record", "av1_extract_base_q_idx",
+                    "MFX_EXTBUFF_ENCODED_FRAME_INFO", "TELEM_INTEL_QUANT_TELEMETRY"):
+        assert removed not in source
+    lib = _load_native_intel_dll()
+    assert not hasattr(lib, "intel_native_get_hevc_slice_qp")
+    assert not hasattr(lib, "intel_native_hevc_slice_qp_selftest")
+    assert hasattr(lib, "intel_native_configure_vbr")
+    # Reserved old statistics slots remain for binary-layout compatibility only.
+    assert ctypes.sizeof(IntelNativePipelineStats) > 0
 
 
-def test_hevc_slice_qp_absent_shows_reason():
-    from src.ffmpeg.intel_native_exporter import _withhold_unverified_hevc_qp
-    data = _withhold_unverified_hevc_qp({}, _fake_slice_qp_lib(valid=0, disabled=1))
-    assert not data["slice_qp_available"] and data["slice_qp_reason"] == "telemetry disabled"
-    assert "Slice QP: --" in data["compression_text"] and "QP: --" in data["compression_text"]
+def test_progress_does_not_display_legacy_saved_quantizer_data():
+    from src.render_progress import RenderProgressState, format_render_progress_status
+    state = RenderProgressState(generation_id=1, state="rendering", frame=10, total_frames=100,
+                                fps=55, qp=22, avg_qp=24, compression_text="QP: 22")
+    text = format_render_progress_status(state)
+    assert "55.0" in text and "QP" not in text and "Quantizer" not in text

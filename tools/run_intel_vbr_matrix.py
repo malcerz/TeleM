@@ -158,8 +158,7 @@ def main():
                     if backend=="native": assert "encoder_accepted" in item["stats"] and "target_usage" in item["stats"]["encoder_accepted"]
                     all_results.append(item)
                     (out/f"summary_{args.phase}.json").write_text(json.dumps(all_results,indent=2),encoding="utf-8")
-                    print("DONE",name,"fps=",item["effective_fps"],"Mbps=",round(item["stream"]["avg_video_mbps"],2),
-                          "qp=",item.get("stats",{}).get("quant_avg"),flush=True)
+                    print("DONE",name,"fps=",item["effective_fps"],"Mbps=",round(item["stream"]["avg_video_mbps"],2),flush=True)
 
 
 if __name__=="__main__": main()

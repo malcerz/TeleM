@@ -1,0 +1,31 @@
+C:\_DEV\SportCamHUD\src\native\intel\d3d11_intel_pipeline\telem_intel_native.c:2393:24: warning: comparison of distinct pointer types ('ID3D11VideoProcessorOutputView *' (aka 'struct ID3D11VideoProcessorOutputView *') and 'ID3D11Texture2D *' (aka 'struct ID3D11Texture2D *')) [-Wcompare-distinct-pointer-types]
+ 2393 |     if (pTargetOutView != pEncTex) {
+      |         ~~~~~~~~~~~~~~ ^  ~~~~~~~
+1 warning generated.
+{
+  "command": [
+    "C:\\_DEV\\SportCamHUD\\scratch\\intel_vbr_deps\\llvm-mingw-20261006-ucrt-x86_64\\bin\\clang.exe",
+    "-shared",
+    "-O2",
+    "-mavx2",
+    "-mfma",
+    "-Wno-deprecated-declarations",
+    "-IC:\\_DEV\\SportCamHUD\\scratch\\intel_native_no_qp_20261019\\include",
+    "-IC:\\_DEV\\SportCamHUD\\scratch\\intel_vbr_deps\\ffmpeg",
+    "-IC:\\_DEV\\SportCamHUD\\scratch\\intel_vbr_deps\\libvpl\\api",
+    "C:\\_DEV\\SportCamHUD\\src\\native\\intel\\d3d11_intel_pipeline\\telem_intel_native.c",
+    "-LC:\\_DEV\\SportCamHUD\\scratch\\intel_native_no_qp_20261019",
+    "-lavformat",
+    "-lavcodec",
+    "-lavutil",
+    "-ld3d11",
+    "-ldxgi",
+    "-ldxguid",
+    "-lole32",
+    "-o",
+    "C:\\_DEV\\SportCamHUD\\scratch\\intel_native_no_qp_20261019\\telem_intel_native.dll"
+  ],
+  "source_sha256": "92c499a64999f1c940a7b2c150419de66c25c1f88f609ec2bc6087a33bb60688",
+  "dll_sha256": "f8369476b18066e8a66775f18f6e1de220a97c1bd9ac211b92007e177ccffec1",
+  "compiler": "clang version 23.1.3 (https://github.com/llvm/llvm-project.git 0d261d1ca552c95a8f007e061c787ac7132fbcbc)\nTarget: x86_64-w64-windows-gnu\nThread model: posix\nInstalledDir: C:/_DEV/SportCamHUD/scratch/intel_vbr_deps/llvm-mingw-20261006-ucrt-x86_64/bin\nConfiguration file: C:/_DEV/SportCamHUD/scratch/intel_vbr_deps/llvm-mingw-20261006-ucrt-x86_64/bin/x86_64-w64-windows-gnu.cfg\n"
+}

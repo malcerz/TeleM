@@ -1,0 +1,27 @@
+[
+  {
+    "name": "before_qp_on",
+    "sha256_video_packets": "SHA256=2f6a37c20a6c208566999eb6269b0a622fee78a48ab9a791993d87e7eedd15f8",
+    "returncode": 0
+  },
+  {
+    "name": "before_qp_off",
+    "sha256_video_packets": "SHA256=2f6a37c20a6c208566999eb6269b0a622fee78a48ab9a791993d87e7eedd15f8",
+    "returncode": 0
+  },
+  {
+    "name": "after_qp_removed",
+    "sha256_video_packets": "SHA256=2f6a37c20a6c208566999eb6269b0a622fee78a48ab9a791993d87e7eedd15f8",
+    "returncode": 0
+  },
+  {
+    "name": "control_old_dll_current_gui",
+    "sha256_video_packets": "SHA256=2f6a37c20a6c208566999eb6269b0a622fee78a48ab9a791993d87e7eedd15f8",
+    "returncode": 0
+  },
+  {
+    "name": "after_qp_removed_repeat",
+    "sha256_video_packets": "SHA256=2f6a37c20a6c208566999eb6269b0a622fee78a48ab9a791993d87e7eedd15f8",
+    "returncode": 0
+  }
+]

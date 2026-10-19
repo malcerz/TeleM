@@ -703,7 +703,7 @@ def _report_stream_progress(
     on_render_progress: Optional[Callable] = None,
     target_fps: Optional[float] = None,
     audit: PipelineAuditRecorder | None = None,
-    compression_tracker: Optional[Any] = None,
+    rate_control_tracker: Optional[Any] = None,
     profile_name: str = "",
 ) -> None:
     """Report streaming progress and the latest export timestamp for preview."""
@@ -739,8 +739,8 @@ def _report_stream_progress(
             "fps_instant": float(fps),
             "fps_average": float(fps),
         }
-        if compression_tracker is not None:
-            hud_state.update(compression_tracker.get_hud_state_dict())
+        if rate_control_tracker is not None:
+            hud_state.update(rate_control_tracker.get_hud_state_dict())
         if target_fps and target_fps > 0 and done > 0:
             frame = min(max(0, total - 1), done - 1)
             hud_state.update({"frame": frame, "ts": frame / target_fps})
@@ -1021,7 +1021,7 @@ def stream_overlay_to_ffmpeg(
     nvidia_backend: str = "legacy_cuda",
     nvidia_codec: str = "HEVC",
     nvidia_quality: str = "Fast",
-    enable_compression_analysis: bool = True,
+    enable_compression_analysis: bool = False,
     max_frames: Optional[int] = None,
     codec: str = "av1",
     encoder_profile: str = "balanced",
@@ -1825,7 +1825,7 @@ def stream_overlay_to_ffmpeg(
 intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         nvidia_codec=nvidia_codec,
         nvidia_quality=nvidia_quality,
-        enable_compression_analysis=enable_compression_analysis,
+        enable_compression_analysis=False,
         is_10bit=is_10bit_source,
         max_frames=max_frames,
         intel_output_duration_s=(min(duration_s, total_overlay_frames / generation_fps) if encoder == "intel" else None),
@@ -2045,33 +2045,20 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
     if active_process_holder is not None:
         active_process_holder["process"] = process
 
-    compression_tracker = None
+    rate_control_tracker = None
     nv_profile_name = ""
     if encoder == "intel":
         from src.ffmpeg.intel_telemetry import IntelQsvTracker
-        compression_tracker = IntelQsvTracker(codec)
-    if encoder == "nv":
-        from src.ffmpeg.compression_tracker import CompressionTracker
-        from src.ffmpeg.nvidia_config import resolve_nvidia_profile
-        try:
-            nv_profile_name = resolve_nvidia_profile(nvidia_codec, nvidia_quality)
-        except Exception:
-            nv_profile_name = "HEVC_FAST"
-        is_av1 = "av1" in str(nvidia_codec).lower()
-        compression_tracker = CompressionTracker(
-            is_av1=is_av1,
-            is_active=enable_compression_analysis,
-        )
-
+        rate_control_tracker = IntelQsvTracker(codec)
     def _report_progress_step(piped: int) -> None:
-        if encoder == "intel" and compression_tracker is not None:
-            observed_rc = compression_tracker.get_hud_state_dict().get("rate_control_raw")
+        if encoder == "intel" and rate_control_tracker is not None:
+            observed_rc = rate_control_tracker.get_hud_state_dict().get("rate_control_raw")
             if observed_rc and observed_rc != "VBR":
                 raise RuntimeError(f"Intel QSV changed rate control to {observed_rc}; only VBR is permitted")
         _report_stream_progress(
             piped, total_overlay_frames, start_time,
             progress_cb, on_render_progress, target_fps, pipeline_audit,
-            compression_tracker=compression_tracker,
+            rate_control_tracker=rate_control_tracker,
             profile_name=nv_profile_name,
         )
 
@@ -2083,8 +2070,8 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             for line in process.stdout:
                 line_str = line.strip()
                 stdout_lines.append(line_str)
-                if compression_tracker is not None:
-                    compression_tracker.feed_progress_line(line_str)
+                if rate_control_tracker is not None:
+                    rate_control_tracker.feed_progress_line(line_str)
         except Exception:
             pass
 
@@ -2805,8 +2792,8 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             f"csv={audit_result['artifacts']['csv']}", flush=True,
         )
 
-    if encoder == "intel" and compression_tracker is not None:
-        state = compression_tracker.get_hud_state_dict()
+    if encoder == "intel" and rate_control_tracker is not None:
+        state = rate_control_tracker.get_hud_state_dict()
         diagnostic_keys = ("ratecontrol method", "TargetUsage:", "TargetKbps:", "BufferSizeInKB:", "InitialDelayInKB:", "NalHrdConformance:", "GopPicSize:", "NumSlice:")
         state["encoder_diagnostics"] = [line for line in stdout_lines if any(key in line for key in diagnostic_keys)]
         for line in state["encoder_diagnostics"]:

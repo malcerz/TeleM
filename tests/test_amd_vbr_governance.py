@@ -108,7 +108,7 @@ def test_progress_status_formats_vbr_and_na():
         compression_text="QP avg: N/A",
     )
     status_text = format_render_progress_status(state)
-    assert "QP avg: N/A" in status_text
+    assert "QP" not in status_text
     assert "28" not in status_text
 
 
@@ -129,7 +129,7 @@ def test_progress_status_formats_dynamic_qp_when_available():
         compression_text="QP: 24 (avg: 25.8)",
     )
     status_text = format_render_progress_status(state)
-    assert "QP: 24 (avg: 25.8)" in status_text
+    assert "QP" not in status_text
 
 
 def test_last_export_stats_handles_vbr():

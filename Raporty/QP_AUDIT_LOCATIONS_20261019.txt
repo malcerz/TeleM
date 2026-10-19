@@ -1,0 +1,352 @@
+src/ffmpeg/intel_telemetry.py:1:"""Intel QSV observations only: never infer QP or RC mode from bitrate."""
+src/ffmpeg/intel_telemetry.py:42:            reason = ("FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable"
+src/ffmpeg/intel_telemetry.py:46:                      "quant_metric": "QP", "quant_samples": len(values), "compression_active": bool(values),
+src/ffmpeg/intel_telemetry.py:47:                      "qp_source": "FFmpeg QSV oneVPL frame-info via packet quality side data (progress sampled)" if self.codec == "h264" else "unavailable in this FFmpeg HEVC runtime",
+src/ffmpeg/intel_telemetry.py:48:                      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+src/ffmpeg/intel_telemetry.py:49:                      "quant_reason": "" if values else reason,
+src/ffmpeg/intel_telemetry.py:50:                      "compression_text": "QP: -- (" + reason + ")"}
+src/ffmpeg/intel_telemetry.py:53:                result.update(quant_current=values[-1], current_qp=values[-1], quant_avg=mean, avg_qp=mean,
+src/ffmpeg/intel_telemetry.py:54:                              quant_min=min(values), quant_max=max(values),
+src/ffmpeg/intel_telemetry.py:55:                              compression_text=f"QP: {values[-1]:.1f} | Avg: {mean:.1f} | Min: {min(values):.1f} | Max: {max(values):.1f} (próbki progress)")
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:316:    int quant_current;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:317:    int quant_min;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:318:    int quant_max;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:319:    uint32_t quant_samples;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:320:    uint64_t quant_sum;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:321:    double quant_avg;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:523:    bool quant_telemetry_disabled;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1313:static void record_quant_sample(IntelNativeContext* ctx, int q) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1314:    if (q < 0 || !ctx || ctx->quant_telemetry_disabled) return;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1315:    if (ctx->stats.quant_samples == 0) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1316:        ctx->stats.quant_min = q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1317:        ctx->stats.quant_max = q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1319:        if (q < ctx->stats.quant_min) ctx->stats.quant_min = q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1320:        if (q > ctx->stats.quant_max) ctx->stats.quant_max = q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1322:    ctx->stats.quant_current = q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1323:    ctx->stats.quant_sum += (uint64_t)q;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1324:    ctx->stats.quant_samples++;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1325:    ctx->stats.quant_avg = (double)ctx->stats.quant_sum / (double)ctx->stats.quant_samples;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1331:    int buffer_kb, initial_delay_kb, multiplier, qp_supported;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1332:    int init_status, query_status, get_status, qp_unverified_zero;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1347:// HEVC Slice QP from the encoded Annex B bitstream (headers only).
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1348:// Parses VPS/SPS/PPS and slice_segment_header() up to slice_qp_delta:
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1349:// SliceQpY = 26 + init_qp_minus26 + slice_qp_delta. CABAC data (per-CU
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1350:// cu_qp_delta) is never touched, so this is the slice base QP, not the
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1351:// per-CU or frame-average QP. Runs in the drain thread on bs.Data which is
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1358:    int cu_qp_delta_enabled;    // PPS flag: per-CU QP deltas present inside slices
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1365:    double cur_frame_weighted;  // CTU-weighted mean of slice base QPs in last frame
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1367:    double run_weighted_sum;    // sum of per-frame CTU-weighted slice QP
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1370:    // oneVPL mfxExtAVCEncodedFrameInfo.QP cross-check (HEVC)
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1379:    double type_sum[3];         // sum of per-frame CTU-weighted Slice QP per type
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1380:    uint32_t rejected_frames;   // encoded frames with no trustworthy Slice QP sample
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1384:#define HQP_MAX_ST_RPS 65
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1385:#define HQP_MAX_PPS 64
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1390:    struct HqpRps { int n_neg, n_pos; int32_t s0[16], s1[16]; uint8_t u0[16], u1[16]; } rps[HQP_MAX_ST_RPS];
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1396:    int cu_qp_delta, num_ref_l0, num_ref_l1, wp, wbp, lists_mod;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1400:static HqpSps g_hqp_sps[16];
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1401:static HqpPps g_hqp_pps[HQP_MAX_PPS];
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1403:static CRITICAL_SECTION g_hqp_cs;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1404:static LONG g_hqp_cs_init = 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1406:static void hqp_lock(void) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1407:    if (InterlockedCompareExchange(&g_hqp_cs_init, 1, 0) == 0) { InitializeCriticalSection(&g_hqp_cs); InterlockedExchange(&g_hqp_cs_init, 2); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1408:    while (g_hqp_cs_init != 2) Sleep(0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1409:    EnterCriticalSection(&g_hqp_cs);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1411:static void hqp_unlock(void) { LeaveCriticalSection(&g_hqp_cs); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1413:static int hqp_bit(HqpBr* b) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1417:static uint32_t hqp_bits(HqpBr* b, int n) { uint32_t v = 0; while (n-- > 0) v = (v << 1) | (uint32_t)hqp_bit(b); return v; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1418:static void hqp_skip(HqpBr* b, int n) { b->pos += n; if (b->pos > b->n * 8) b->err = 1; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1419:static uint32_t hqp_ue(HqpBr* b) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1420:    int lz = 0; while (!hqp_bit(b)) { if (b->err || ++lz > 31) { b->err = 1; return 0; } }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1421:    return ((1u << lz) - 1u) + hqp_bits(b, lz);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1423:static int32_t hqp_se(HqpBr* b) { uint32_t k = hqp_ue(b); return (k & 1) ? (int32_t)((k + 1) >> 1) : -(int32_t)(k >> 1); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1424:static int hqp_ceil_log2(int v) { int r = 0; while ((1 << r) < v) r++; return r; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1427:static int hqp_rbsp(const uint8_t* src, int n, uint8_t* dst, int cap) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1437:static void hqp_skip_ptl(HqpBr* b, int max_sub) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1438:    hqp_skip(b, 2 + 1 + 5 + 32 + 4 + 43 + 1 + 8);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1440:    for (int i = 0; i < max_sub; i++) { pp[i] = hqp_bit(b); lp[i] = hqp_bit(b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1441:    if (max_sub > 0) for (int i = max_sub; i < 8; i++) hqp_skip(b, 2);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1442:    for (int i = 0; i < max_sub; i++) { if (pp[i]) hqp_skip(b, 88); if (lp[i]) hqp_skip(b, 8); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1444:static void hqp_skip_scaling(HqpBr* b) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1447:            if (!hqp_bit(b)) hqp_ue(b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1448:            else { int n = 1 << (4 + (s << 1)); if (n > 64) n = 64; if (s > 1) hqp_se(b); for (int k = 0; k < n; k++) hqp_se(b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1451:static int hqp_rps_used(const HqpRps* r) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1457:static int hqp_rps_uses_future(const HqpRps* r) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1463:static void hqp_st_rps(HqpBr* b, int idx, int num, const HqpRps* sets, HqpRps* out) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1465:    int inter = idx ? hqp_bit(b) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1467:        int dim1 = (idx == num) ? (int)hqp_ue(b) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1468:        int sign = hqp_bit(b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1469:        int delta_rps = (1 - 2 * sign) * ((int)hqp_ue(b) + 1);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1476:            used[j] = (uint8_t)hqp_bit(b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1477:            use_delta[j] = used[j] ? 1 : (uint8_t)hqp_bit(b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1504:    int nn = (int)hqp_ue(b), np = (int)hqp_ue(b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1507:    for (int i = 0; i < nn; i++) { poc -= (int)hqp_ue(b) + 1; out->s0[i] = poc; out->u0[i] = (uint8_t)hqp_bit(b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1509:    for (int i = 0; i < np; i++) { poc += (int)hqp_ue(b) + 1; out->s1[i] = poc; out->u1[i] = (uint8_t)hqp_bit(b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1513:static void hqp_parse_sps(const uint8_t* d, int n) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1516:    hqp_skip(&b, 4);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1517:    int max_sub = (int)hqp_bits(&b, 3);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1518:    hqp_skip(&b, 1);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1519:    hqp_skip_ptl(&b, max_sub);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1520:    s.sps_id = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1524:    g_hqp_sps[s.sps_id].valid = 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1525:    s.chroma = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1526:    if (s.chroma == 3) s.sep_colour = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1527:    s.width = (int)hqp_ue(&b); s.height = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1528:    if (hqp_bit(&b)) for (int i = 0; i < 4; i++) hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1529:    s.bit_depth = (int)hqp_ue(&b) + 8; hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1530:    s.log2_poc_lsb = (int)hqp_ue(&b) + 4;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1531:    int ordering = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1532:    for (int i = ordering ? 0 : max_sub; i <= max_sub; i++) { hqp_ue(&b); hqp_ue(&b); hqp_ue(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1533:    int min_cb = (int)hqp_ue(&b), diff_cb = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1535:    hqp_ue(&b); hqp_ue(&b); hqp_ue(&b); hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1536:    if (hqp_bit(&b) && hqp_bit(&b)) hqp_skip_scaling(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1537:    hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1538:    s.sao = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1539:    if (hqp_bit(&b)) { hqp_skip(&b, 8); hqp_ue(&b); hqp_ue(&b); hqp_bit(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1540:    s.num_st_rps = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1541:    if (s.num_st_rps >= HQP_MAX_ST_RPS) { g_hqp.parse_errors++; return; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1542:    for (int i = 0; i < s.num_st_rps && !b.err; i++) hqp_st_rps(&b, i, s.num_st_rps, s.rps, &s.rps[i]);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1543:    s.long_term_present = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1545:        s.num_lt = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1547:        for (int i = 0; i < s.num_lt; i++) { hqp_skip(&b, s.log2_poc_lsb); s.lt_used[i] = hqp_bit(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1549:    s.temporal_mvp = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1552:    g_hqp_sps[s.sps_id] = s;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1556:static void hqp_parse_pps(const uint8_t* d, int n) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1559:    int id = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1560:    if (b.err || id >= HQP_MAX_PPS) { g_hqp.parse_errors++; return; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1561:    g_hqp_pps[id].valid = 0; // replaced even if the rest fails to parse
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1562:    p.sps_id = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1563:    p.dep_slices = hqp_bit(&b); p.out_flag = hqp_bit(&b); p.extra_bits = (int)hqp_bits(&b, 3);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1564:    hqp_bit(&b); p.cabac_init = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1565:    p.num_ref_l0 = (int)hqp_ue(&b) + 1; p.num_ref_l1 = (int)hqp_ue(&b) + 1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1566:    p.init_qp = hqp_se(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1567:    hqp_bit(&b); hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1568:    p.cu_qp_delta = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1569:    if (p.cu_qp_delta) hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1570:    hqp_se(&b); hqp_se(&b); hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1571:    p.wp = hqp_bit(&b); p.wbp = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1572:    hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1573:    int tiles = hqp_bit(&b); hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1575:        int c = (int)hqp_ue(&b), r = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1576:        if (!hqp_bit(&b)) { for (int i = 0; i < c; i++) hqp_ue(&b); for (int i = 0; i < r; i++) hqp_ue(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1577:        hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1579:    hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1580:    if (hqp_bit(&b)) { hqp_bit(&b); if (!hqp_bit(&b)) { hqp_se(&b); hqp_se(&b); } }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1581:    if (hqp_bit(&b)) hqp_skip_scaling(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1582:    p.lists_mod = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1585:    g_hqp_pps[id] = p;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1586:    if (p.cu_qp_delta) g_hqp.cu_qp_delta_enabled = 1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1589:// Returns slice QP (>=0) for an independent slice, -2 for a dependent slice segment, -1 on error.
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1590:static int hqp_parse_slice(const uint8_t* d, int n, int nal_type, int* first_out, int* addr_out, int* ctus_out, int* type_out, int* future_out) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1592:    int first = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1593:    if (nal_type >= 16 && nal_type <= 23) hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1594:    int pps_id = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1595:    if (pps_id >= HQP_MAX_PPS || !g_hqp_pps[pps_id].valid) return -1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1596:    const HqpPps* p = &g_hqp_pps[pps_id];
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1597:    const HqpSps* s = &g_hqp_sps[p->sps_id];
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1602:        if (p->dep_slices) dependent = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1603:        int bits = hqp_ceil_log2(ctus);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1604:        addr = (int)hqp_bits(&b, bits);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1608:    hqp_skip(&b, p->extra_bits);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1609:    int st = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1615:    if (p->out_flag) hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1616:    if (s->sep_colour) hqp_skip(&b, 2);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1619:        hqp_skip(&b, s->log2_poc_lsb);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1622:        if (!hqp_bit(&b)) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1623:            hqp_st_rps(&b, s->num_st_rps, s->num_st_rps, s->rps, &slice_rps);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1627:            int idx = s->num_st_rps > 1 ? (int)hqp_bits(&b, hqp_ceil_log2(s->num_st_rps)) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1631:        total_curr += hqp_rps_used(cur);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1632:        *future_out = hqp_rps_uses_future(cur);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1634:            int nls = s->num_lt > 0 ? (int)hqp_ue(&b) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1635:            int nlp = (int)hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1639:                    int li = s->num_lt > 1 ? (int)hqp_bits(&b, hqp_ceil_log2(s->num_lt)) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1642:                    hqp_skip(&b, s->log2_poc_lsb);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1643:                    if (hqp_bit(&b)) total_curr++;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1645:                if (hqp_bit(&b)) hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1648:        if (s->temporal_mvp) tmvp = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1650:    if (s->sao) { hqp_bit(&b); if (s->chroma) hqp_bit(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1653:        if (hqp_bit(&b)) { l0 = (int)hqp_ue(&b) + 1; if (st == 0) l1 = (int)hqp_ue(&b) + 1; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1656:            int bits = hqp_ceil_log2(total_curr);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1657:            if (hqp_bit(&b)) hqp_skip(&b, bits * l0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1658:            if (st == 0 && hqp_bit(&b)) hqp_skip(&b, bits * l1);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1660:        if (st == 0) hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1661:        if (p->cabac_init) hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1663:            int col_l0 = st == 0 ? hqp_bit(&b) : 1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1664:            if ((col_l0 && l0 > 1) || (!col_l0 && l1 > 1)) hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1668:            hqp_ue(&b); if (chroma) hqp_se(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1671:                for (int i = 0; i < nr; i++) lf[i] = hqp_bit(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1672:                for (int i = 0; i < nr; i++) cf[i] = chroma ? hqp_bit(&b) : 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1674:                    if (lf[i]) { hqp_se(&b); hqp_se(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1675:                    if (cf[i]) { hqp_se(&b); hqp_se(&b); hqp_se(&b); hqp_se(&b); }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1679:        hqp_ue(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1681:    int qp = 26 + p->init_qp + hqp_se(&b);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1682:    int qp_min = -6 * (s->bit_depth - 8);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1683:    if (b.err || qp < qp_min || qp > 51) return -1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1687:#define HQP_MAX_SLICES 64
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1691:static uint32_t hqp_next_start_code(const uint8_t* d, uint32_t len, uint32_t i) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1702:    double weighted;  // CTU-weighted mean of slice base QPs (exact per-CTU base QP average)
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1707:// no trustworthy Slice QP (any slice failed, missing parameter sets, broken
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1709:static int hqp_process_au(const uint8_t* data, uint32_t len, HqpFrame* out) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1710:    int sq[HQP_MAX_SLICES], sa[HQP_MAX_SLICES], ns = 0, ctus = 0, bad = 0, seen_vcl = 0;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1713:    uint32_t i = hqp_next_start_code(data, len, 0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1716:        uint32_t end = hqp_next_start_code(data, len, start);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1725:            int n = hqp_rbsp(pl, pl_n, rbsp, sizeof(rbsp));
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1726:            if (nal_type == 33) hqp_parse_sps(rbsp, n); else hqp_parse_pps(rbsp, n);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1728:            int n = hqp_rbsp(pl, pl_n, rbsp, 256); // slice headers are far shorter than 256 bytes
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1730:            int qp = hqp_parse_slice(rbsp, n, nal_type, &first, &addr, &seg_ctus, &st, &future);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1736:            if (qp == -2) {                                      // dependent segment inherits the slice QP
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1745:            if (ns >= HQP_MAX_SLICES || (ns && addr <= sa[ns - 1]) || (!ns && addr != 0)) { bad = 1; continue; }
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1764:static void hevc_slice_qp_reset(int disabled) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1765:    hqp_lock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1767:    memset(g_hqp_sps, 0, sizeof(g_hqp_sps));
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1768:    memset(g_hqp_pps, 0, sizeof(g_hqp_pps));
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1772:    hqp_unlock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1776:static int hqp_account_au(const uint8_t* data, uint32_t len, int vpl_qp, HqpFrame* f) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1778:    int ok = hqp_process_au(data, len, f);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1808:static int g_hqp_trace = -1;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1810:static void hevc_slice_qp_record(IntelNativeContext* ctx, int slot, int vpl_qp) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1811:    if (ctx->codec_id != INTEL_CODEC_HEVC || ctx->quant_telemetry_disabled) return;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1812:    if (g_hqp_trace < 0) g_hqp_trace = getenv("TELEM_INTEL_QP_TRACE") != NULL;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1815:    hqp_lock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1817:    int ok = hqp_account_au(ctx->encode_pool[slot].bs.Data + ctx->encode_pool[slot].bs.DataOffset,
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1823:    if (g_hqp_trace)
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1824:        fprintf(stderr, "[INTEL HEVC QP] frame=%d ok=%d type=%c slice_qp=%.2f min=%d max=%d slices=%d vpl_qp=%d bytes=%u parse_us=%.1f\n",
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1827:    hqp_unlock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1833:// per_frame (optional, capacity max_frames) receives each frame's weighted QP or -1.
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1834:__declspec(dllexport) int intel_native_hevc_slice_qp_selftest(const uint8_t* data, uint32_t len,
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1837:    hevc_slice_qp_reset(0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1838:    hqp_lock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1840:    uint32_t au_start = hqp_next_start_code(data, len, 0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1841:    for (uint32_t p = au_start; p < len; p = hqp_next_start_code(data, len, p + 3)) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1849:            int ok = hqp_account_au(data + au_start, p - au_start, -1, &f);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1858:        int ok = hqp_account_au(data + au_start, len - au_start, -1, &f);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1862:    hqp_unlock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1868:    hqp_lock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1870:    hqp_unlock();
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1877:        if (g_encoder_info.qp_supported && ctx->encode_pool[slot].frame_info.QP != 0xffff)
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1878:            vpl_qp = ctx->encode_pool[slot].frame_info.QP;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1879:        hevc_slice_qp_record(ctx, slot, vpl_qp);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1880:        // oneVPL HEVC frame-info QP is only cross-checked above, never published as QP.
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1881:        if (vpl_qp == 0) g_encoder_info.qp_unverified_zero++;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1882:        ctx->encode_pool[slot].frame_info.QP = 0xffff;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1886:    if (!ctx->quant_telemetry_disabled && ctx->codec_id != INTEL_CODEC_AV1 &&
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1887:        g_encoder_info.qp_supported && ctx->encode_pool[slot].frame_info.QP != 0xffff) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1888:        int qp = ctx->encode_pool[slot].frame_info.QP;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1889:        if (getenv("TELEM_INTEL_QP_TRACE")) fprintf(stderr, "[INTEL QP SAMPLE] frame=%d qp=%d bytes=%u\n", ctx->encode_pool[slot].frame_idx, qp, ctx->encode_pool[slot].bs.DataLength);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1890:        // This Windows HEVC runtime sometimes clears QP to zero while its
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1891:        // encoded headers retain nonzero slice QP. Do not present ambiguous
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1894:            g_encoder_info.qp_unverified_zero++;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1895:            ctx->encode_pool[slot].frame_info.QP = 0xffff;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1898:        if (qp <= 63) record_quant_sample(ctx, qp);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1899:        ctx->encode_pool[slot].frame_info.QP = 0xffff;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1941:                if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1 && g_encoder_info.qp_supported) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:1944:                    record_quant_sample(ctx, q);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2011:        if (!ctx->quant_telemetry_disabled && ctx->codec_id == INTEL_CODEC_AV1 && g_encoder_info.qp_supported) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2014:            record_quant_sample(ctx, q);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2090:    char env_quant_buf[32] = {0};
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2091:    DWORD env_len = GetEnvironmentVariableA("TELEM_INTEL_QUANT_TELEMETRY", env_quant_buf, sizeof(env_quant_buf));
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2092:    g_pipe.quant_telemetry_disabled = (env_len > 0 && (strcmp(env_quant_buf, "0") == 0 || _stricmp(env_quant_buf, "off") == 0 || _stricmp(env_quant_buf, "false") == 0));
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2093:    hevc_slice_qp_reset(g_pipe.quant_telemetry_disabled ? 1 : 0);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2278:        g_encoder_info.qp_supported = g_encoder_info.query_status == MFX_ERR_NONE;
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2280:    fprintf(stderr, "[INTEL QP] source=oneVPL encoded-frame-info supported=%d query_status=%d aggregation=one_luma_qp_per_encoded_frame\n",
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2281:            g_encoder_info.qp_supported, g_encoder_info.query_status);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2285:        // the average frame QP. Mirror of the header layout without enabling
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2296:        fprintf(stderr, "[INTEL QP] oneVPL encode-stats(frame) query_status=%d flags_after=%u\n", stats_sts, stats_ext.EncodeStatsFlags);
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2306:        if (g_encoder_info.qp_supported) {
+src/native/intel/d3d11_intel_pipeline/telem_intel_native.c:2309:            g_pipe.encode_pool[i].frame_info.QP = 0xffff;
+src/ffmpeg/intel_native_exporter.py:149:        ("quant_current", ctypes.c_int),
+src/ffmpeg/intel_native_exporter.py:150:        ("quant_min", ctypes.c_int),
+src/ffmpeg/intel_native_exporter.py:151:        ("quant_max", ctypes.c_int),
+src/ffmpeg/intel_native_exporter.py:152:        ("quant_samples", ctypes.c_uint32),
+src/ffmpeg/intel_native_exporter.py:153:        ("quant_sum", ctypes.c_uint64),
+src/ffmpeg/intel_native_exporter.py:154:        ("quant_avg", ctypes.c_double),
+src/ffmpeg/intel_native_exporter.py:182:        "initial_delay_kb", "multiplier", "qp_supported", "init_status", "query_status", "get_status", "qp_unverified_zero")]
+src/ffmpeg/intel_native_exporter.py:191:        ("cu_qp_delta_enabled", ctypes.c_int),
+src/ffmpeg/intel_native_exporter.py:220:_HEVC_QP_UNAVAILABLE_REASON = (
+src/ffmpeg/intel_native_exporter.py:221:    "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); "
+src/ffmpeg/intel_native_exporter.py:222:    "oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; "
+src/ffmpeg/intel_native_exporter.py:223:    "no reliable frame/CU QP without full entropy decoding"
+src/ffmpeg/intel_native_exporter.py:235:def _hevc_slice_qp_fields(sq: Optional[IntelHevcSliceQpStats]) -> dict[str, Any]:
+src/ffmpeg/intel_native_exporter.py:236:    """Slice QP is reported under its own keys; it is never a frame-average or CU QP."""
+src/ffmpeg/intel_native_exporter.py:238:        return {"slice_qp_available": False, "slice_qp_reason": "native parser unavailable"}
+src/ffmpeg/intel_native_exporter.py:239:    counts = {"slice_qp_valid_samples": int(sq.frames), "slice_qp_rejected_samples": int(sq.rejected_frames),
+src/ffmpeg/intel_native_exporter.py:240:              "slice_qp_parse_errors": int(sq.parse_errors)}
+src/ffmpeg/intel_native_exporter.py:244:        return {"slice_qp_available": False, "slice_qp_reason": why, **counts}
+src/ffmpeg/intel_native_exporter.py:245:    cu_note = ("cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base"
+src/ffmpeg/intel_native_exporter.py:246:               if sq.cu_qp_delta_enabled else "cu_qp_delta_enabled_flag=0: Slice QP equals the QP of every CU in the slice")
+src/ffmpeg/intel_native_exporter.py:252:        "slice_qp_available": True,
+src/ffmpeg/intel_native_exporter.py:253:        # Current frame: slice base QPs of the last encoded frame (one value when all slices agree).
+src/ffmpeg/intel_native_exporter.py:254:        "slice_qp_current": sq.cur_frame_min if sq.cur_frame_min == sq.cur_frame_max else None,
+src/ffmpeg/intel_native_exporter.py:255:        "slice_qp_current_min": sq.cur_frame_min,
+src/ffmpeg/intel_native_exporter.py:256:        "slice_qp_current_max": sq.cur_frame_max,
+src/ffmpeg/intel_native_exporter.py:257:        "slice_qp_current_ctu_weighted": sq.cur_frame_weighted,
+src/ffmpeg/intel_native_exporter.py:258:        "slice_qp_current_frame_type": {2: "I", 1: "P", 0: "B"}.get(sq.last_frame_type),
+src/ffmpeg/intel_native_exporter.py:259:        "slice_qp_avg": sq.run_avg,
+src/ffmpeg/intel_native_exporter.py:260:        "slice_qp_min": sq.run_min,
+src/ffmpeg/intel_native_exporter.py:261:        "slice_qp_max": sq.run_max,
+src/ffmpeg/intel_native_exporter.py:263:        "slice_qp_frames": int(sq.frames),
+src/ffmpeg/intel_native_exporter.py:264:        "slice_qp_slices": int(sq.slices),
+src/ffmpeg/intel_native_exporter.py:265:        "slice_qp_max_slices_per_frame": sq.max_slices_per_frame,
+src/ffmpeg/intel_native_exporter.py:266:        "slice_qp_by_frame_type": types,
+src/ffmpeg/intel_native_exporter.py:267:        "slice_qp_cu_qp_delta_enabled": bool(sq.cu_qp_delta_enabled),
+src/ffmpeg/intel_native_exporter.py:268:        "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+src/ffmpeg/intel_native_exporter.py:269:        "slice_qp_aggregation": ("per frame: slice base QP weighted by the CTUs each slice covers "
+src/ffmpeg/intel_native_exporter.py:270:                                 "(= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; "
+src/ffmpeg/intel_native_exporter.py:272:        "slice_qp_note": cu_note,
+src/ffmpeg/intel_native_exporter.py:273:        "slice_qp_parse_us_per_frame": sq.parse_us_total / max(1, sq.frames + sq.rejected_frames),
+src/ffmpeg/intel_native_exporter.py:274:        "slice_qp_parse_us_max": sq.parse_us_max,
+src/ffmpeg/intel_native_exporter.py:275:        "vpl_hevc_frame_qp_crosscheck": {
+src/ffmpeg/intel_native_exporter.py:283:    if not fields.get("slice_qp_available"):
+src/ffmpeg/intel_native_exporter.py:284:        return f"Slice QP: -- ({fields.get('slice_qp_reason', '')})"
+src/ffmpeg/intel_native_exporter.py:285:    cur = fields.get("slice_qp_current")
+src/ffmpeg/intel_native_exporter.py:286:    cur_txt = str(cur) if cur is not None else f"{fields['slice_qp_current_min']}-{fields['slice_qp_current_max']}"
+src/ffmpeg/intel_native_exporter.py:287:    return (f"Slice QP: {cur_txt} | Avg: {fields['slice_qp_avg']:.1f} | Min: {fields['slice_qp_min']} | "
+src/ffmpeg/intel_native_exporter.py:288:            f"Max: {fields['slice_qp_max']} | próbki: {fields['slice_qp_valid_samples']}"
+src/ffmpeg/intel_native_exporter.py:289:            f" (odrzucone: {fields['slice_qp_rejected_samples']})")
+src/ffmpeg/intel_native_exporter.py:736:    """HEVC: frame/CU QP stays unavailable; Slice QP is attached under its own keys."""
+src/ffmpeg/intel_native_exporter.py:738:    result["qp_unverified_feedback"] = {key: state.get(key) for key in
+src/ffmpeg/intel_native_exporter.py:739:        ("quant_current", "quant_avg", "quant_min", "quant_max", "quant_samples", "quant_sum")}
+src/ffmpeg/intel_native_exporter.py:740:    for key in ("quant_current", "quant_avg", "quant_min", "quant_max", "current_qp", "mean_qp", "avg_qp", "qp_avg"):
+src/ffmpeg/intel_native_exporter.py:742:    slice_fields = _hevc_slice_qp_fields(_read_hevc_slice_qp(native_lib)) if native_lib is not None else {}
+src/ffmpeg/intel_native_exporter.py:744:    # compression_active implies classical QP fields (formatted by progress/GUI code); Slice QP is shown
+src/ffmpeg/intel_native_exporter.py:745:    # only through compression_text and the slice_qp_* keys.
+src/ffmpeg/intel_native_exporter.py:746:    result.update(quant_samples=0, quant_sum=0, compression_active=False,
+src/ffmpeg/intel_native_exporter.py:747:                  qp_source="unavailable", qp_aggregation="unavailable", quant_reason=_HEVC_QP_UNAVAILABLE_REASON,
+src/ffmpeg/intel_native_exporter.py:749:                  else "Slice QP: -- (parser niedostępny)")
+src/ffmpeg/intel_native_exporter.py:771:                if self._stats.quant_samples > 0:
+src/ffmpeg/intel_native_exporter.py:772:                    cur = self._stats.quant_current
+src/ffmpeg/intel_native_exporter.py:773:                    avg = self._stats.quant_avg
+src/ffmpeg/intel_native_exporter.py:774:                    qmin = self._stats.quant_min
+src/ffmpeg/intel_native_exporter.py:775:                    qmax = self._stats.quant_max
+src/ffmpeg/intel_native_exporter.py:776:                    samples = self._stats.quant_samples
+src/ffmpeg/intel_native_exporter.py:780:                        else f"QP: {cur} | Avg: {avg:.1f} | Min: {qmin} | Max: {qmax} (oneVPL; próbki={samples}, pominięte={info.qp_unverified_zero})"
+src/ffmpeg/intel_native_exporter.py:786:                        "qp_source": "oneVPL encoded-frame luma QP",
+src/ffmpeg/intel_native_exporter.py:787:                        "qp_rejected_samples": info.qp_unverified_zero,
+src/ffmpeg/intel_native_exporter.py:788:                        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+src/ffmpeg/intel_native_exporter.py:790:                        "quant_metric": "base_q_idx" if self.is_av1 else "QP",
+src/ffmpeg/intel_native_exporter.py:791:                        "quant_current": cur,
+src/ffmpeg/intel_native_exporter.py:792:                        "quant_avg": avg,
+src/ffmpeg/intel_native_exporter.py:793:                        "quant_min": qmin,
+src/ffmpeg/intel_native_exporter.py:794:                        "quant_max": qmax,
+src/ffmpeg/intel_native_exporter.py:795:                        "quant_samples": samples,
+src/ffmpeg/intel_native_exporter.py:799:                        "qp_avg": avg,
+src/ffmpeg/intel_native_exporter.py:808:                        "compression_text": "QP: -- (brak próbek enkodera oneVPL)",
+src/ffmpeg/intel_native_exporter.py:809:                        "quant_reason": "oneVPL did not report encoded-frame QP; no estimate substituted",
+src/ffmpeg/intel_native_exporter.py:2021:            "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+src/ffmpeg/intel_native_exporter.py:2022:            "quant_current": stats.quant_current if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2023:            "quant_avg": stats.quant_avg if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2024:            "quant_min": stats.quant_min if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2025:            "quant_max": stats.quant_max if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2026:            "quant_samples": stats.quant_samples,
+src/ffmpeg/intel_native_exporter.py:2027:            "quant_sum": stats.quant_sum,
+src/ffmpeg/intel_native_exporter.py:2028:            "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,
+src/ffmpeg/intel_native_exporter.py:2424:        "qp_source": "oneVPL encoded-frame luma QP" if accepted.qp_supported else "unavailable",
+src/ffmpeg/intel_native_exporter.py:2425:        "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+src/ffmpeg/intel_native_exporter.py:2426:        "qp_rejected_samples": accepted.qp_unverified_zero,
+src/ffmpeg/intel_native_exporter.py:2428:        "quant_metric": "base_q_idx" if codec_id == 0 else "QP",
+src/ffmpeg/intel_native_exporter.py:2429:        "quant_current": stats.quant_current if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2430:        "quant_avg": stats.quant_avg if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2431:        "quant_min": stats.quant_min if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2432:        "quant_max": stats.quant_max if stats.quant_samples else None,
+src/ffmpeg/intel_native_exporter.py:2433:        "quant_samples": stats.quant_samples,
+src/ffmpeg/intel_native_exporter.py:2434:        "quant_sum": stats.quant_sum,
+src/ffmpeg/intel_native_exporter.py:2435:        "avg_qp": stats.quant_avg if stats.quant_samples > 0 else None,

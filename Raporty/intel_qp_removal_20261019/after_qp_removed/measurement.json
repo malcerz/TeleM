@@ -1,0 +1,812 @@
+{
+  "command": [
+    "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+    "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+    "--test-intel-export",
+    "--intel-path",
+    "native",
+    "--codec",
+    "hevc",
+    "--profile",
+    "fast",
+    "--frames",
+    "1800",
+    "--bitrate",
+    "40M",
+    "--video",
+    "C:\\GoPro\\GX010378.MP4",
+    "--fit",
+    "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "--layout",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+    "--watchdog-seconds",
+    "900",
+    "--output",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qp_removal_20261019\\after_qp_removed\\output.mp4",
+    "--result-json",
+    "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qp_removal_20261019\\after_qp_removed\\harness.json"
+  ],
+  "qp_off": false,
+  "head": "aa42e65cf8231f80d13c077bfc6db561bb1f2a61",
+  "dll_sha256": "f8369476b18066e8a66775f18f6e1de220a97c1bd9ac211b92007e177ccffec1",
+  "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+  "exit_code": 0,
+  "process_wall_seconds": 57.16816120001022,
+  "harness": {
+    "codec": "hevc",
+    "profile": "fast",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qp_removal_20261019\\after_qp_removed\\output.mp4",
+    "bitrate": "40M",
+    "max_frames": 1800,
+    "success": true,
+    "error": "",
+    "elapsed_s": 51.02,
+    "total_frames": 1800,
+    "effective_fps": 35.28,
+    "ram_used_gb": 8.93,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "60.060000",
+            "nb_frames": "1800",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "60.053333",
+            "nb_frames": "2815"
+          }
+        ],
+        "format": {
+          "duration": "60.060000",
+          "size": "309129763"
+        }
+      },
+      "actual_video_frames": 1800
+    },
+    "output_size_bytes": 309129763,
+    "stats": {
+      "audio_live_mux": true,
+      "cancelled": false,
+      "codec": "hevc",
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 7,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.30449769998085685,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.36293919998570345,
+      "frame_render_seconds": 48.50316620001104,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 60.06,
+        "has_audio": true,
+        "size_bytes": 309129763,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "rate_control": "VBR",
+      "real_export_fps": 37.110979365293275,
+      "render_fps": 37.110979365293275,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 49.76436030000332,
+      "user_effective_fps": 36.170463945456966,
+      "verify_seconds": 0.05642060001264326,
+      "video_encode_pass_count": 1
+    }
+  },
+  "resource_samples": [
+    {
+      "wall_s": 0.016874900000402704,
+      "process_tree_cpu_percent_machine": 0.0,
+      "process_tree_cpu_percent_one_core": 0.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 0.5232187999936286,
+      "process_tree_cpu_percent_machine": 6.683333333333334,
+      "process_tree_cpu_percent_one_core": 80.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 1.0299018000077922,
+      "process_tree_cpu_percent_machine": 7.966666666666666,
+      "process_tree_cpu_percent_one_core": 95.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 1.535983200010378,
+      "process_tree_cpu_percent_machine": 1.8,
+      "process_tree_cpu_percent_one_core": 21.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 2.042493899993133,
+      "process_tree_cpu_percent_machine": 0.5166666666666667,
+      "process_tree_cpu_percent_one_core": 6.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 2.54934470000444,
+      "process_tree_cpu_percent_machine": 0.0,
+      "process_tree_cpu_percent_one_core": 0.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 3.0557834999926854,
+      "process_tree_cpu_percent_machine": 0.0,
+      "process_tree_cpu_percent_one_core": 0.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 3.563014400016982,
+      "process_tree_cpu_percent_machine": 4.366666666666666,
+      "process_tree_cpu_percent_one_core": 52.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 4.068706699996255,
+      "process_tree_cpu_percent_machine": 1.5416666666666667,
+      "process_tree_cpu_percent_one_core": 18.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 4.576334700017469,
+      "process_tree_cpu_percent_machine": 3.591666666666667,
+      "process_tree_cpu_percent_one_core": 43.1,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 5.083474300015951,
+      "process_tree_cpu_percent_machine": 8.208333333333334,
+      "process_tree_cpu_percent_one_core": 98.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 5.589800000016112,
+      "process_tree_cpu_percent_machine": 7.966666666666666,
+      "process_tree_cpu_percent_one_core": 95.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 6.09508930001175,
+      "process_tree_cpu_percent_machine": 0.0,
+      "process_tree_cpu_percent_one_core": 0.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 6.603058800013969,
+      "process_tree_cpu_percent_machine": 3.3333333333333335,
+      "process_tree_cpu_percent_one_core": 40.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 7.110609900002601,
+      "process_tree_cpu_percent_machine": 8.725,
+      "process_tree_cpu_percent_one_core": 104.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 7.617370799998753,
+      "process_tree_cpu_percent_machine": 1.2833333333333334,
+      "process_tree_cpu_percent_one_core": 15.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 8.125960000004852,
+      "process_tree_cpu_percent_machine": 7.691666666666667,
+      "process_tree_cpu_percent_one_core": 92.30000000000001,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 8.634872800001176,
+      "process_tree_cpu_percent_machine": 8.966666666666667,
+      "process_tree_cpu_percent_one_core": 107.60000000000001,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 9.142735500005074,
+      "process_tree_cpu_percent_machine": 7.691666666666666,
+      "process_tree_cpu_percent_one_core": 92.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 9.652394600008847,
+      "process_tree_cpu_percent_machine": 9.450000000000001,
+      "process_tree_cpu_percent_one_core": 113.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 10.164932000014232,
+      "process_tree_cpu_percent_machine": 6.866666666666666,
+      "process_tree_cpu_percent_one_core": 82.39999999999999,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 10.682250800018664,
+      "process_tree_cpu_percent_machine": 29.76666666666667,
+      "process_tree_cpu_percent_one_core": 357.20000000000005,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 11.217903200013097,
+      "process_tree_cpu_percent_machine": 22.858333333333334,
+      "process_tree_cpu_percent_one_core": 274.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 11.741073999990476,
+      "process_tree_cpu_percent_machine": 23.983333333333334,
+      "process_tree_cpu_percent_one_core": 287.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 12.261910600005649,
+      "process_tree_cpu_percent_machine": 26.39166666666667,
+      "process_tree_cpu_percent_one_core": 316.70000000000005,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 12.785186099994462,
+      "process_tree_cpu_percent_machine": 18.89166666666667,
+      "process_tree_cpu_percent_one_core": 226.70000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 13.30670650000684,
+      "process_tree_cpu_percent_machine": 25.71666666666667,
+      "process_tree_cpu_percent_one_core": 308.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 13.843439299991587,
+      "process_tree_cpu_percent_machine": 20.708333333333332,
+      "process_tree_cpu_percent_one_core": 248.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 14.357170000002952,
+      "process_tree_cpu_percent_machine": 15.116666666666665,
+      "process_tree_cpu_percent_one_core": 181.39999999999998,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 14.882413700019242,
+      "process_tree_cpu_percent_machine": 25.191666666666663,
+      "process_tree_cpu_percent_one_core": 302.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 15.396061400009785,
+      "process_tree_cpu_percent_machine": 19.641666666666666,
+      "process_tree_cpu_percent_one_core": 235.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 15.910809099994367,
+      "process_tree_cpu_percent_machine": 23.03333333333333,
+      "process_tree_cpu_percent_one_core": 276.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 16.434704400016926,
+      "process_tree_cpu_percent_machine": 20.5,
+      "process_tree_cpu_percent_one_core": 246.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 16.959465799998725,
+      "process_tree_cpu_percent_machine": 19.09166666666667,
+      "process_tree_cpu_percent_one_core": 229.10000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 17.48400870000478,
+      "process_tree_cpu_percent_machine": 17.883333333333336,
+      "process_tree_cpu_percent_one_core": 214.60000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 18.005612800014205,
+      "process_tree_cpu_percent_machine": 18.7,
+      "process_tree_cpu_percent_one_core": 224.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 18.52967260000878,
+      "process_tree_cpu_percent_machine": 19.875,
+      "process_tree_cpu_percent_one_core": 238.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 19.04094510001596,
+      "process_tree_cpu_percent_machine": 17.96666666666667,
+      "process_tree_cpu_percent_one_core": 215.60000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 19.56550729999435,
+      "process_tree_cpu_percent_machine": 27.2,
+      "process_tree_cpu_percent_one_core": 326.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 20.088591900013853,
+      "process_tree_cpu_percent_machine": 17.933333333333334,
+      "process_tree_cpu_percent_one_core": 215.20000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 20.607866000005743,
+      "process_tree_cpu_percent_machine": 26.941666666666663,
+      "process_tree_cpu_percent_one_core": 323.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 21.127972599992063,
+      "process_tree_cpu_percent_machine": 22.325,
+      "process_tree_cpu_percent_one_core": 267.9,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 21.65008829999715,
+      "process_tree_cpu_percent_machine": 22.5,
+      "process_tree_cpu_percent_one_core": 270.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 22.169387000001734,
+      "process_tree_cpu_percent_machine": 19.733333333333334,
+      "process_tree_cpu_percent_one_core": 236.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 22.690130100003444,
+      "process_tree_cpu_percent_machine": 18.508333333333333,
+      "process_tree_cpu_percent_one_core": 222.1,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 23.209175800002413,
+      "process_tree_cpu_percent_machine": 23.88333333333333,
+      "process_tree_cpu_percent_one_core": 286.59999999999997,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 23.734227900014957,
+      "process_tree_cpu_percent_machine": 22.100000000000005,
+      "process_tree_cpu_percent_one_core": 265.20000000000005,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 24.255334200017387,
+      "process_tree_cpu_percent_machine": 27.691666666666663,
+      "process_tree_cpu_percent_one_core": 332.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 24.77670849999413,
+      "process_tree_cpu_percent_machine": 27.25,
+      "process_tree_cpu_percent_one_core": 327.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 25.2987887999916,
+      "process_tree_cpu_percent_machine": 17.95,
+      "process_tree_cpu_percent_one_core": 215.4,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 25.823247199994512,
+      "process_tree_cpu_percent_machine": 26.09166666666667,
+      "process_tree_cpu_percent_one_core": 313.1,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 26.339431900007185,
+      "process_tree_cpu_percent_machine": 22.624999999999996,
+      "process_tree_cpu_percent_one_core": 271.49999999999994,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 26.862981200014474,
+      "process_tree_cpu_percent_machine": 21.708333333333332,
+      "process_tree_cpu_percent_one_core": 260.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 27.375433300010627,
+      "process_tree_cpu_percent_machine": 26.766666666666666,
+      "process_tree_cpu_percent_one_core": 321.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 27.895853399997577,
+      "process_tree_cpu_percent_machine": 19.308333333333334,
+      "process_tree_cpu_percent_one_core": 231.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 28.417949299997417,
+      "process_tree_cpu_percent_machine": 19.016666666666666,
+      "process_tree_cpu_percent_one_core": 228.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 28.944205400010105,
+      "process_tree_cpu_percent_machine": 27.724999999999998,
+      "process_tree_cpu_percent_one_core": 332.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 29.467582200013567,
+      "process_tree_cpu_percent_machine": 27.083333333333332,
+      "process_tree_cpu_percent_one_core": 325.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 29.99445260001812,
+      "process_tree_cpu_percent_machine": 26.45833333333334,
+      "process_tree_cpu_percent_one_core": 317.50000000000006,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 30.51881239999784,
+      "process_tree_cpu_percent_machine": 29.275000000000002,
+      "process_tree_cpu_percent_one_core": 351.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 31.041162000008626,
+      "process_tree_cpu_percent_machine": 28.191666666666663,
+      "process_tree_cpu_percent_one_core": 338.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 31.56535290001193,
+      "process_tree_cpu_percent_machine": 31.308333333333337,
+      "process_tree_cpu_percent_one_core": 375.70000000000005,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 32.091454700013855,
+      "process_tree_cpu_percent_machine": 27.166666666666668,
+      "process_tree_cpu_percent_one_core": 326.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 32.61272730000201,
+      "process_tree_cpu_percent_machine": 20.75,
+      "process_tree_cpu_percent_one_core": 249.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 33.13609079999151,
+      "process_tree_cpu_percent_machine": 18.900000000000002,
+      "process_tree_cpu_percent_one_core": 226.80000000000004,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 33.656898899993394,
+      "process_tree_cpu_percent_machine": 23.25,
+      "process_tree_cpu_percent_one_core": 279.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 34.18053760001203,
+      "process_tree_cpu_percent_machine": 23.900000000000002,
+      "process_tree_cpu_percent_one_core": 286.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 34.70331599999918,
+      "process_tree_cpu_percent_machine": 24.891666666666666,
+      "process_tree_cpu_percent_one_core": 298.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 35.22572240000591,
+      "process_tree_cpu_percent_machine": 27.150000000000002,
+      "process_tree_cpu_percent_one_core": 325.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 35.751001800002996,
+      "process_tree_cpu_percent_machine": 21.083333333333332,
+      "process_tree_cpu_percent_one_core": 253.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 36.27422530000331,
+      "process_tree_cpu_percent_machine": 29.275000000000002,
+      "process_tree_cpu_percent_one_core": 351.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 36.79651829999057,
+      "process_tree_cpu_percent_machine": 22.0,
+      "process_tree_cpu_percent_one_core": 264.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 37.325164700014284,
+      "process_tree_cpu_percent_machine": 23.241666666666664,
+      "process_tree_cpu_percent_one_core": 278.9,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 37.86320399999386,
+      "process_tree_cpu_percent_machine": 31.108333333333334,
+      "process_tree_cpu_percent_one_core": 373.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 38.38990880001802,
+      "process_tree_cpu_percent_machine": 22.308333333333334,
+      "process_tree_cpu_percent_one_core": 267.7,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 38.91236079999362,
+      "process_tree_cpu_percent_machine": 20.39166666666667,
+      "process_tree_cpu_percent_one_core": 244.70000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 39.43774399999529,
+      "process_tree_cpu_percent_machine": 31.225000000000005,
+      "process_tree_cpu_percent_one_core": 374.70000000000005,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 39.96364900001208,
+      "process_tree_cpu_percent_machine": 28.95833333333334,
+      "process_tree_cpu_percent_one_core": 347.50000000000006,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 40.491725400002906,
+      "process_tree_cpu_percent_machine": 30.125,
+      "process_tree_cpu_percent_one_core": 361.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 41.01524770000833,
+      "process_tree_cpu_percent_machine": 19.633333333333336,
+      "process_tree_cpu_percent_one_core": 235.60000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 41.5269743000099,
+      "process_tree_cpu_percent_machine": 24.516666666666666,
+      "process_tree_cpu_percent_one_core": 294.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 42.04839380001067,
+      "process_tree_cpu_percent_machine": 24.125,
+      "process_tree_cpu_percent_one_core": 289.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 42.575720199994976,
+      "process_tree_cpu_percent_machine": 29.233333333333334,
+      "process_tree_cpu_percent_one_core": 350.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 43.09917349999887,
+      "process_tree_cpu_percent_machine": 21.108333333333338,
+      "process_tree_cpu_percent_one_core": 253.30000000000004,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 43.617169300006935,
+      "process_tree_cpu_percent_machine": 20.25,
+      "process_tree_cpu_percent_one_core": 243.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 44.142646699998295,
+      "process_tree_cpu_percent_machine": 28.383333333333336,
+      "process_tree_cpu_percent_one_core": 340.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 44.665365900000324,
+      "process_tree_cpu_percent_machine": 28.61666666666667,
+      "process_tree_cpu_percent_one_core": 343.40000000000003,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 45.19124539999757,
+      "process_tree_cpu_percent_machine": 27.541666666666668,
+      "process_tree_cpu_percent_one_core": 330.5,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 45.7109080000082,
+      "process_tree_cpu_percent_machine": 23.433333333333334,
+      "process_tree_cpu_percent_one_core": 281.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 46.23257759999251,
+      "process_tree_cpu_percent_machine": 24.524999999999995,
+      "process_tree_cpu_percent_one_core": 294.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 46.75469100000919,
+      "process_tree_cpu_percent_machine": 26.858333333333334,
+      "process_tree_cpu_percent_one_core": 322.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 47.27686830001767,
+      "process_tree_cpu_percent_machine": 25.016666666666666,
+      "process_tree_cpu_percent_one_core": 300.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 47.79879990001791,
+      "process_tree_cpu_percent_machine": 23.433333333333334,
+      "process_tree_cpu_percent_one_core": 281.2,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 48.322334299999056,
+      "process_tree_cpu_percent_machine": 26.36666666666667,
+      "process_tree_cpu_percent_one_core": 316.40000000000003,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 48.846206799993524,
+      "process_tree_cpu_percent_machine": 24.65833333333333,
+      "process_tree_cpu_percent_one_core": 295.9,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 49.36618670000462,
+      "process_tree_cpu_percent_machine": 23.0,
+      "process_tree_cpu_percent_one_core": 276.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 49.88905289999093,
+      "process_tree_cpu_percent_machine": 25.916666666666668,
+      "process_tree_cpu_percent_one_core": 311.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 50.41025410001748,
+      "process_tree_cpu_percent_machine": 28.191666666666663,
+      "process_tree_cpu_percent_one_core": 338.29999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 50.93460440001218,
+      "process_tree_cpu_percent_machine": 25.375000000000004,
+      "process_tree_cpu_percent_one_core": 304.50000000000006,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 51.45780450000893,
+      "process_tree_cpu_percent_machine": 19.89166666666667,
+      "process_tree_cpu_percent_one_core": 238.70000000000002,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 51.98063350000302,
+      "process_tree_cpu_percent_machine": 25.883333333333336,
+      "process_tree_cpu_percent_one_core": 310.6,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 52.50545900000725,
+      "process_tree_cpu_percent_machine": 26.566666666666663,
+      "process_tree_cpu_percent_one_core": 318.79999999999995,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 53.02889230000437,
+      "process_tree_cpu_percent_machine": 17.666666666666668,
+      "process_tree_cpu_percent_one_core": 212.00000000000003,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 53.5538870000164,
+      "process_tree_cpu_percent_machine": 21.825,
+      "process_tree_cpu_percent_one_core": 261.9,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 54.06568560001324,
+      "process_tree_cpu_percent_machine": 23.525000000000002,
+      "process_tree_cpu_percent_one_core": 282.3,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 54.59194969999953,
+      "process_tree_cpu_percent_machine": 18.666666666666668,
+      "process_tree_cpu_percent_one_core": 224.00000000000003,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 55.12560990001657,
+      "process_tree_cpu_percent_machine": 18.916666666666668,
+      "process_tree_cpu_percent_one_core": 227.0,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 55.65119709999999,
+      "process_tree_cpu_percent_machine": 20.233333333333334,
+      "process_tree_cpu_percent_one_core": 242.8,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 56.16007030001492,
+      "process_tree_cpu_percent_machine": 5.825,
+      "process_tree_cpu_percent_one_core": 69.9,
+      "video_encode_percent": null
+    },
+    {
+      "wall_s": 56.667432200018084,
+      "process_tree_cpu_percent_machine": 0.5166666666666667,
+      "process_tree_cpu_percent_one_core": 6.2,
+      "video_encode_percent": null
+    }
+  ],
+  "gpu_counter_error": "",
+  "progress": [
+    "[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s",
+    "[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s",
+    "[DIRECT PROGRESS] frame=100/1800 fps=16.5 elapsed=6.1s",
+    "[DIRECT PROGRESS] frame=300/1800 fps=25.2 elapsed=11.9s",
+    "[DIRECT PROGRESS] frame=500/1800 fps=30.0 elapsed=16.7s",
+    "[DIRECT PROGRESS] frame=1000/1800 fps=34.7 elapsed=28.8s",
+    "[DIRECT PROGRESS] frame=1500/1800 fps=36.5 elapsed=41.1s",
+    "[DIRECT PROGRESS] frame=1800/1800 fps=37.3 elapsed=48.3s",
+    "[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.0s",
+    "[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.3s",
+    "[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=0.4s",
+    "[DIRECT PROGRESS] frame=1800/1800 fps=0.0 elapsed=49.8s"
+  ],
+  "cpu_active_mean_percent_machine": 20.44308176100629,
+  "gpu_encode_active_mean_percent": null
+}

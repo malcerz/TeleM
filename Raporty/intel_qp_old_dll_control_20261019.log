@@ -1,0 +1,12 @@
+{
+  "qp_off": false,
+  "head": "aa42e65cf8231f80d13c077bfc6db561bb1f2a61",
+  "dll_sha256": "dab0df7c0ff7daccd2a6a845255232e7024a92c6ac2d0eafde1ca497da07285e",
+  "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+  "exit_code": 0,
+  "process_wall_seconds": 55.49808779999148,
+  "gpu_counter_error": "",
+  "cpu_active_mean_percent_machine": 20.657119741100324,
+  "gpu_encode_active_mean_percent": null
+}
+RESULT True effective_fps 36.54 stats {'encoder_drain_seconds': 0.30233289999887347, 'finalization_seconds': 0.35406919999513775, 'frame_render_seconds': 47.3803603000124, 'mux_seconds': 0.0, 'post_render_full_mux_seconds': 0.0, 'real_export_fps': 37.99042448395077, 'render_fps': 37.99042448395077, 'total_wall_seconds': 48.728503499994986, 'user_effective_fps': 36.93936547836289, 'verify_seconds': 0.050978099985513836}

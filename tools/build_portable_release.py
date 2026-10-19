@@ -39,8 +39,8 @@ REPO = Path(__file__).resolve().parents[1]
 EXPECTED_SHA256 = {
     # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), QP feedback,
     # map style, HLG preserve (HEVC Main10) and HLG->SDR, tone-mapped HLG export-preview tap.
-    "runtime/amd/bin/telem_amd_native.dll": "bbca75fbd0dfc5d7cbb61922e92f8d5f049b4305dd18335315667e6e5e54ca5f",
-    "runtime/intel/bin/telem_intel_native.dll": "a3b5d6777c7bd8cc90cdbb126a6a186bfd2c49d098e8ccec4ea34f5386a1b58a",
+    "runtime/amd/bin/telem_amd_native.dll": "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb",
+    "runtime/intel/bin/telem_intel_native.dll": "5d3a967e0cb016fcbc8d4f74a4b26e2b9da53f5f776ad29d5b655f1a9bae056c",
 }
 FORBIDDEN_SHA256 = {
     "41658018ae4979071837dfef4e412c40a855771266380cf84595a66bf89c0cca",  # old Intel non-quantizer DLL

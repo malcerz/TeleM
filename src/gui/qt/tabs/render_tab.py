@@ -148,8 +148,6 @@ class RenderTab(QWidget):
         self._preview_snapshot_labels: set[str] = set()
         self._pending_hud_switch_log = False
         self._render_generation_id = 0
-        self._last_export_qp = None
-        self._last_export_qp_generation_id = 0
         self._render_state_enabled = False
         self._render_state: RenderProgressState | None = None
         self._export_preview_native = False
@@ -432,10 +430,6 @@ class RenderTab(QWidget):
         )
         layout_nvidia.addRow("Profil encodera:", self.cmb_nvidia_quality)
 
-        self.chk_compression_analysis = QCheckBox("Analiza kompresji podczas eksportu")
-        self.chk_compression_analysis.setChecked(True)
-        self.chk_compression_analysis.setToolTip("Pomiary QP/Quantizer w czasie rzeczywistym podczas renderowania NVENC")
-        layout_nvidia.addRow(self.chk_compression_analysis)
 
         # ── CPU Options (libx265) ──────────────────────────────────
         self.widget_cpu_options = QWidget()
@@ -518,7 +512,6 @@ class RenderTab(QWidget):
                 self._populate_nvidia_codecs(preserve_selection=True)
                 self.cmb_nvidia_codec.setEnabled(True)
                 self.cmb_nvidia_quality.setEnabled(True)
-                self.chk_compression_analysis.setEnabled(True)
             if hasattr(self, "widget_cpu_options"):
                 self.widget_cpu_options.setVisible(is_cpu)
 
@@ -700,13 +693,6 @@ class RenderTab(QWidget):
         self.lbl_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_stats.setWordWrap(False)
         bottom_layout.addWidget(self.lbl_stats)
-        self.lbl_compression_stats = QLabel("")
-        self.lbl_compression_stats.setStyleSheet("QLabel { color: #0066cc; font-size: 11px; font-weight: bold; }")
-        self.lbl_compression_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.lbl_compression_stats.setWordWrap(False)
-        self.lbl_compression_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.lbl_compression_stats.setVisible(False)
-        bottom_layout.addWidget(self.lbl_compression_stats)
 
         vbox.addWidget(bottom_widget)
 
@@ -1162,14 +1148,11 @@ class RenderTab(QWidget):
             self._log_preview_resource_snapshot("E_before_next_render_preview_off")
             self._preview_had_lifecycle = False
 
-        self.lbl_compression_stats.setText("")
-        self.lbl_compression_stats.setVisible(False)
 
         from src.render_progress import next_render_generation_id
         self._render_generation_id = next_render_generation_id()
         options["_render_generation_id"] = self._render_generation_id
         self._last_export_fps = None
-        self._reset_export_qp_state(self._render_generation_id)
 
         if job is not None:
             self._active_queue_job_id = job.job_id
@@ -1308,11 +1291,6 @@ class RenderTab(QWidget):
         )
         self.signals.sig_render_requested.emit(options)
         return True
-
-    def _reset_export_qp_state(self, generation_id: int) -> None:
-        """Clear QP state before a new export and bind it to that generation."""
-        self._last_export_qp = None
-        self._last_export_qp_generation_id = int(generation_id or 0)
 
     def _start_render_from_options(self, options: dict, job: ExportJob | None = None) -> bool:
         """Alias dla _start_render (wsteczna kompatybilność)."""
@@ -1573,32 +1551,7 @@ class RenderTab(QWidget):
             avg_fps = getattr(job, "average_fps", 0.0)
             fps_str = f"{avg_fps:.1f} FPS" if (avg_fps and avg_fps > 0) else "brak danych"
 
-            # Check if this is an AV1 job or standard QP job
-            job_codec = getattr(job, "codec", "").lower()
-            if not job_codec and hasattr(job, "options") and isinstance(job.options, dict):
-                job_codec = str(job.options.get("codec", "")).lower()
-
-            is_av1 = (job_codec == "av1") or (getattr(job, "quant_metric", "") == "base_q_idx")
-            q_avg = getattr(job, "quant_avg", None)
-            q_min = getattr(job, "quant_min", None)
-            q_max = getattr(job, "quant_max", None)
-            if q_avg is None and is_av1:
-                q_avg = getattr(job, "average_qp", None)
-
-            if is_av1:
-                q_avg_str = f"{q_avg:.1f}" if q_avg is not None else "brak danych"
-                if q_min is not None and q_max is not None:
-                    range_str = f"{q_min}–{q_max}"
-                else:
-                    range_str = "brak danych"
-                quality_details = (
-                    f"\n   |_ Średni Quantizer: {q_avg_str}"
-                    f"\n   |_ Zakres Quantizer: {range_str}"
-                )
-            else:
-                avg_qp = getattr(job, "average_qp", None)
-                qp_str = f"{avg_qp:.1f}" if avg_qp is not None else "brak danych"
-                quality_details = f"\n   |_ Średnie QP: {qp_str}"
+            quality_details = ""
 
             if getattr(job, "is_expanded", False):
                 prefix = "▼ "
@@ -2407,7 +2360,6 @@ class RenderTab(QWidget):
                 if hasattr(self, "cmb_encoder_profile")
                 else "balanced"
             ) or "balanced",
-            "compression_analysis": self.chk_compression_analysis.isChecked(),
             "preserve_original_gpmf": self.chk_original_gpmf.isChecked(),
             "_gui_hud_preview_checkbox": self.chk_hud_preview.isChecked(),
         }
@@ -2664,34 +2616,16 @@ class RenderTab(QWidget):
             item_label = "HUD" if snapshot.state == "preparing" else "Frame"
             completed_val = snapshot.prep_done if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.frame
             total_val = snapshot.prep_total if snapshot.state == "preparing" and snapshot.prep_total > 0 else snapshot.total_frames
-            qp_val = getattr(snapshot, "qp", None)
-            avg_qp_val = getattr(snapshot, "avg_qp", None)
-            is_cqp_val = getattr(snapshot, "is_cqp", False)
-            is_av1_snap = getattr(snapshot, "is_av1", False)
-            quant_metric_snap = getattr(snapshot, "quant_metric", "")
-            rate_text_snap = (
-                getattr(snapshot, "compression_text", "")
-                if getattr(snapshot, "rate_control", "") else ""
-            )
+
             self._set_stats(
                 completed_val, total_val, snapshot.elapsed_s,
                 snapshot.fps, status, final_eta=eta,
                 item_label=item_label,
                 is_indeterminate=is_indeterminate,
-                qp=qp_val,
-                avg_qp=avg_qp_val,
-                is_cqp=is_cqp_val,
+
                 global_pct=snapshot.global_percent,
-                is_av1=is_av1_snap,
-                quant_metric=quant_metric_snap,
-                rate_text=rate_text_snap,
+
             )
-        comp_txt = getattr(snapshot, "compression_text", "")
-        if comp_txt:
-            if snapshot.completed:
-                comp_txt = re.sub(r"\s*\|\s*q teraz:\s*[\d\.]+", "", comp_txt)
-            self.lbl_compression_stats.setText(comp_txt)
-            self.lbl_compression_stats.setVisible(True)
         if snapshot.completed:
             self._is_indeterminate = False
             self.progress.setRange(0, 100)
@@ -2753,46 +2687,6 @@ class RenderTab(QWidget):
             self._update_finalize_status_label()
             return
 
-        qp_val = None
-        avg_qp_val = None
-        is_cqp = False
-        if isinstance(hud_state, dict):
-            for k in ("current_qp", "quant_current", "qp_last"):
-                v = hud_state.get(k)
-                if v is not None:
-                    try:
-                        fv = float(v)
-                        if fv >= 0:
-                            qp_val = fv
-                            break
-                    except (ValueError, TypeError):
-                        pass
-            for k in ("avg_qp", "qp_avg", "mean_qp", "quant_avg"):
-                v = hud_state.get(k)
-                if v is not None:
-                    try:
-                        fv = float(v)
-                        if fv >= 0:
-                            avg_qp_val = fv
-                            break
-                    except (ValueError, TypeError):
-                        pass
-            if qp_val is None and avg_qp_val is None and "qp" in hud_state and hud_state["qp"] is not None:
-                try:
-                    fv = float(hud_state["qp"])
-                    if fv >= 0:
-                        qp_val = fv
-                except (ValueError, TypeError):
-                    pass
-            is_cqp = bool(
-                hud_state.get("is_cqp")
-                or (
-                    hud_state.get("quant_min") is not None
-                    and hud_state.get("quant_min") == hud_state.get("quant_max")
-                    and hud_state.get("quant_samples", 0) > 1
-                )
-            )
-
         if hud_state is not None and isinstance(hud_state, dict) and "global_pct" in hud_state:
             overall = max(self._render_target, float(hud_state.get("global_pct", 0.0)))
             self._render_target = min(99.9, overall)
@@ -2805,21 +2699,11 @@ class RenderTab(QWidget):
                 completed = hud_state.get("work_done", completed)
                 total = hud_state.get("work_total", total)
                 item_label = "HUD"
-            is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
-            quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
-            rate_text_hud = (
-                str(hud_state.get("compression_text", "") or "")
-                if hud_state.get("rate_control") else ""
-            )
+
             self._set_stats(
                 completed, total, elapsed, fps, status,
                 item_label=item_label,
-                qp=qp_val,
-                avg_qp=avg_qp_val,
-                is_cqp=is_cqp,
-                is_av1=is_av1_hud,
-                quant_metric=quant_m_hud,
-                rate_text=rate_text_hud,
+
             )
             if phase == "render" and "ts" in hud_state and self.chk_hud_preview.isChecked():
                 self._hud_ts = hud_state.get("ts")
@@ -2846,9 +2730,9 @@ class RenderTab(QWidget):
         # Nigdy nie cofaj paska
         if overall > self._render_target:
             self._render_target = overall
-        is_av1_hud = bool(hud_state.get("is_av1", False) or hud_state.get("quant_metric") == "base_q_idx") if isinstance(hud_state, dict) else False
-        quant_m_hud = str(hud_state.get("quant_metric", "")) if isinstance(hud_state, dict) else ""
-        self._set_stats(completed, total, elapsed, fps, status, qp=qp_val, is_av1=is_av1_hud, quant_metric=quant_m_hud)
+
+
+        self._set_stats(completed, total, elapsed, fps, status)
 
         # HUD Preview — latest-state, tylko dla raportów klatek (mają "ts")
         if hud_state is not None and isinstance(hud_state, dict) and "ts" in hud_state and self.chk_hud_preview.isChecked():
@@ -2950,6 +2834,7 @@ class RenderTab(QWidget):
                    is_cqp: bool = False, global_pct: float | None = None,
                    is_av1: bool = False, quant_metric: str = "",
                    rate_text: str = "") -> None:
+        """Render timing/progress; deprecated quantizer kwargs are ignored."""
         total = max(total, 0)
         if not is_indeterminate and total and completed >= 0:
             if global_pct is not None and global_pct > 0:
@@ -2973,33 +2858,11 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if (elapsed is not None and 0 < elapsed <= 3600000) else "--:--"
         fps_txt = f"{fps:.1f}" if (fps > 0.05 and not is_indeterminate) else "--"
-        q_label = "Q" if (is_av1 or quant_metric == "base_q_idx") else "QP"
-        if is_indeterminate:
-            qp_txt = f"{q_label}: --"
-        elif rate_text:
-            # Enkoder z jawnym trybem RC (AMD VBR) — ten sam tekst co w linii kompresji.
-            qp_txt = rate_text
-        elif is_cqp:
-            if avg_qp is not None:
-                qp_txt = f"{q_label} avg: {avg_qp:.1f}"
-            elif qp is not None:
-                qp_txt = f"{q_label} (target): {int(round(qp))}"
-            else:
-                qp_txt = f"{q_label}: --"
-        elif qp is not None:
-            if avg_qp is not None and abs(qp - avg_qp) > 0.05:
-                qp_txt = f"{q_label}: {qp:.0f} (avg: {avg_qp:.1f})"
-            else:
-                qp_txt = f"{q_label}: {qp:.1f}"
-        elif avg_qp is not None:
-            qp_txt = f"{q_label} avg: {avg_qp:.1f}"
-        else:
-            qp_txt = f"{q_label}: --"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
             f"{item_label}: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
-            f"   |   {qp_txt}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+            f"   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
             f"   |   {status}"
         )
 
@@ -3008,14 +2871,6 @@ class RenderTab(QWidget):
             return
 
         _stats = dict(_stats or {})
-        render_generation = int(
-            _stats.get("generation_id", _stats.get("_render_generation_id", self._render_generation_id)) or 0
-        )
-        is_av1_stats = (
-            _stats.get("codec") == "av1"
-            or _stats.get("quant_metric") == "base_q_idx"
-        )
-
         is_queue_job = bool(
             getattr(self, "_active_queue_job_id", None)
             or getattr(self, "_current_render_queue_job_id", None)
@@ -3035,16 +2890,6 @@ class RenderTab(QWidget):
             or (self._render_total / elapsed if elapsed > 0 and self._render_total else 0.0)
         ) if _stats else (self._render_total / elapsed if elapsed > 0 and self._render_total else 0.0)
 
-        from src.ffmpeg.export_stats import resolve_render_avg_qp
-        qp = resolve_render_avg_qp(
-            _stats,
-            generation_id=render_generation,
-            live_qp=getattr(self, "_last_export_qp", None),
-            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
-        )
-        if qp is not None and not is_av1_stats:
-            _stats["avg_qp"] = qp
-
         if is_queue_job:
             # QUEUE JOB: ZERO POPUPS! Record isolated stats directly to the queue job.
             if q_job_id and self._export_queue:
@@ -3057,13 +2902,9 @@ class RenderTab(QWidget):
                     output_path=output,
                     elapsed_s=elapsed,
                     average_fps=avg_fps,
-                    average_qp=qp,
+
                     codec=_stats.get("codec", "") if _stats else "",
-                    quant_metric=_stats.get("quant_metric", "") if _stats else "",
-                    quant_avg=_stats.get("quant_avg") if _stats else None,
-                    quant_min=_stats.get("quant_min") if _stats else None,
-                    quant_max=_stats.get("quant_max") if _stats else None,
-                    quant_samples=_stats.get("quant_samples") if _stats else None,
+
                     frame_render_elapsed_s=frame_render_s,
                     finalization_elapsed_s=fin_s,
                     effective_fps=eff_fps,
@@ -3090,10 +2931,10 @@ class RenderTab(QWidget):
         self._render_display = 100.0
         self._render_timer.stop()
         self.progress.setValue(100)
-        is_av1_fin = (_stats.get("codec") == "av1" or _stats.get("quant_metric") == "base_q_idx") if _stats else False
-        quant_m_fin = _stats.get("quant_metric", "") if _stats else ""
+
+
         self._set_stats(self._render_total, self._render_total, elapsed, avg_fps,
-                        "Gotowe", final_eta="00:00", qp=qp, is_av1=is_av1_fin, quant_metric=quant_m_fin)
+                        "Gotowe", final_eta="00:00")
         self._end_render()
         self._show_export_finished_popup(_stats, output, elapsed)
 
@@ -3108,34 +2949,12 @@ class RenderTab(QWidget):
         )
         fps_str = f"{avg_fps:.1f} FPS" if (avg_fps and avg_fps > 0) else "brak danych"
         
-        from src.ffmpeg.export_stats import resolve_render_avg_qp
-        qp = resolve_render_avg_qp(
-            stats,
-            generation_id=int(stats.get("generation_id", 0) or 0),
-            live_qp=getattr(self, "_last_export_qp", None),
-            live_generation_id=int(getattr(self, "_last_export_qp_generation_id", 0) or 0),
-        )
-            
-        qp_str = f"{qp:.1f}" if qp is not None else "brak danych"
         self._last_export_fps = avg_fps
-        self._last_export_qp = qp
-
-        is_av1 = (stats.get("codec") == "av1") or (stats.get("quant_metric") == "base_q_idx")
-        if is_av1:
-            q_val = stats.get("quant_avg") if stats.get("quant_samples", 0) > 0 else stats.get("avg_qp")
-            q_str = f"{q_val:.1f}" if q_val is not None else "brak danych"
-            q_min = stats.get("quant_min")
-            q_max = stats.get("quant_max")
-            range_info = f"\nZakres Quantizer: {q_min}–{q_max}" if (q_min is not None and q_max is not None and stats.get("quant_samples", 0) > 0) else ""
-            quality_line = f"Średni Quantizer: {q_str}{range_info}"
-        else:
-            quality_line = f"Średnie QP: {qp_str}"
 
         msg = (
             f"Plik zapisany:\n{output}\n\n"
             f"Czas eksportu: {time_str}\n"
             f"Średnia wydajność: {fps_str}\n"
-            f"{quality_line}"
         )
         QMessageBox.information(self, "Eksport zakończony", msg)
 

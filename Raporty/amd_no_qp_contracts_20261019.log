@@ -1,0 +1,197 @@
+..FFF.F.......F..............F                                           [100%]
+================================== FAILURES ===================================
+_______________ test_native_dll_exports_qp_stats_and_safe_null ________________
+
+    def test_native_dll_exports_qp_stats_and_safe_null():
+        """Verify that the production DLL exports telem_amd_get_encoder_qp_stats and zeros out outputs on NULL handle."""
+        dll_path = Path("runtime/amd/bin/telem_amd_native.dll")
+        if not dll_path.exists():
+            pytest.skip(f"Native DLL not found at {dll_path}")
+    
+>       dll = ctypes.CDLL(str(dll_path))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_amd_vbr_governance.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\ctypes\__init__.py:422: in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <CDLL 'C:\_DEV\SportCamHUD\runtime\amd\bin\telem_amd_native.dll', handle 0 at 0x1685d8e3a10>
+name = 'C:\\_DEV\\SportCamHUD\\runtime\\amd\\bin\\telem_amd_native.dll'
+mode = 0, handle = None, winmode = 4352
+
+    def _load_library(self, name, mode, handle, winmode):
+        if winmode is None:
+            import nt as _nt
+            winmode = _nt._LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
+            # WINAPI LoadLibrary searches for a DLL if the given name
+            # is not fully qualified with an explicit drive. For POSIX
+            # compatibility, and because the DLL search path no longer
+            # contains the working directory, begin by fully resolving
+            # any name that contains a path separator.
+            if name is not None and ('/' in name or '\\' in name):
+                name = _nt._getfullpathname(name)
+                winmode |= _nt._LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
+        self._name = name
+        if handle is not None:
+            return handle
+>       return _LoadLibrary(self._name, winmode)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: Could not find module 'C:\_DEV\SportCamHUD\runtime\amd\bin\telem_amd_native.dll' (or one of its dependencies). Try using the full path with constructor syntax.
+
+C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\ctypes\__init__.py:440: FileNotFoundError
+___________________ test_progress_status_formats_vbr_and_na ___________________
+
+    def test_progress_status_formats_vbr_and_na():
+        """Verify that status line correctly displays QP avg: N/A without fake 28.0 when no QP samples exist."""
+        state = RenderProgressState(
+            generation_id=1,
+            state="rendering",
+            frame=50,
+            total_frames=100,
+            percent=50.0,
+            fps=40.0,
+            elapsed_s=1.25,
+            eta_s=1.25,
+            qp=None,
+            avg_qp=None,
+            is_cqp=False,
+            compression_text="QP avg: N/A",
+        )
+        status_text = format_render_progress_status(state)
+>       assert "QP avg: N/A" in status_text
+E       AssertionError: assert 'QP avg: N/A' in 'Frame: 50 / 100   |   50.0%   |   FPS: 40.0   |   Czas: 00:01   |   ETA: 00:01   |   Renderowanie...'
+
+tests\test_amd_vbr_governance.py:111: AssertionError
+___________ test_progress_status_formats_dynamic_qp_when_available ____________
+
+    def test_progress_status_formats_dynamic_qp_when_available():
+        """Verify that when real QP feedback is present, dynamic QP and average are displayed."""
+        state = RenderProgressState(
+            generation_id=1,
+            state="rendering",
+            frame=50,
+            total_frames=100,
+            percent=50.0,
+            fps=42.0,
+            elapsed_s=1.2,
+            eta_s=1.2,
+            qp=24.0,
+            avg_qp=25.8,
+            is_cqp=False,
+            compression_text="QP: 24 (avg: 25.8)",
+        )
+        status_text = format_render_progress_status(state)
+>       assert "QP: 24 (avg: 25.8)" in status_text
+E       AssertionError: assert 'QP: 24 (avg: 25.8)' in 'Frame: 50 / 100   |   50.0%   |   FPS: 42.0   |   Czas: 00:01   |   ETA: 00:01   |   Renderowanie...'
+
+tests\test_amd_vbr_governance.py:132: AssertionError
+_________________ test_amd_native_dll_exports_qp_stats_symbol _________________
+
+    def test_amd_native_dll_exports_qp_stats_symbol():
+        """Verify that the compiled telem_amd_native.dll exports telem_amd_get_encoder_qp_stats and handles null handle."""
+        dll_path = Path("runtime/amd/bin/telem_amd_native.dll")
+        if not dll_path.exists():
+            pytest.skip(f"Native DLL not found at {dll_path}")
+    
+>       dll = ctypes.CDLL(str(dll_path))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_amd_qp_governance.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\ctypes\__init__.py:422: in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <CDLL 'C:\_DEV\SportCamHUD\runtime\amd\bin\telem_amd_native.dll', handle 0 at 0x168756165d0>
+name = 'C:\\_DEV\\SportCamHUD\\runtime\\amd\\bin\\telem_amd_native.dll'
+mode = 0, handle = None, winmode = 4352
+
+    def _load_library(self, name, mode, handle, winmode):
+        if winmode is None:
+            import nt as _nt
+            winmode = _nt._LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
+            # WINAPI LoadLibrary searches for a DLL if the given name
+            # is not fully qualified with an explicit drive. For POSIX
+            # compatibility, and because the DLL search path no longer
+            # contains the working directory, begin by fully resolving
+            # any name that contains a path separator.
+            if name is not None and ('/' in name or '\\' in name):
+                name = _nt._getfullpathname(name)
+                winmode |= _nt._LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
+        self._name = name
+        if handle is not None:
+            return handle
+>       return _LoadLibrary(self._name, winmode)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: Could not find module 'C:\_DEV\SportCamHUD\runtime\amd\bin\telem_amd_native.dll' (or one of its dependencies). Try using the full path with constructor syntax.
+
+C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\ctypes\__init__.py:440: FileNotFoundError
+___________________ test_qp_formatting_constant_vs_dynamic ____________________
+
+    def test_qp_formatting_constant_vs_dynamic():
+        """Verify that constant QP is clearly indicated as avg/target, not frozen instantaneous."""
+        from src.render_progress import RenderProgressState, format_render_progress_status
+    
+        # Case A: Constant QP mode (e.g. AMD HEVC CQP 28)
+        snap_cqp = RenderProgressState(
+            generation_id=1,
+            state="rendering",
+            frame=50,
+            total_frames=100,
+            fps=36.0,
+            elapsed_s=1.5,
+            qp=28.0,
+            avg_qp=28.0,
+            is_cqp=True,
+        )
+        status_cqp = format_render_progress_status(snap_cqp)
+>       assert "QP avg: 28.0" in status_cqp
+E       AssertionError: assert 'QP avg: 28.0' in 'Frame: 50 / 100   |   0.0%   |   FPS: 36.0   |   Czas: 00:01   |   ETA: --:--   |   Renderowanie...'
+
+tests\test_amd_qp_governance.py:226: AssertionError
+_______________________ test_portable_runtime_manifest ________________________
+
+app_root = WindowsPath('C:/_DEV/SportCamHUD')
+
+    def test_portable_runtime_manifest(app_root: Path) -> None:
+        """Verify that runtime_manifest.json exists and all required files are present and match checksums."""
+        manifest_path = app_root / "runtime" / "runtime_manifest.json"
+        assert manifest_path.is_file(), f"Missing manifest: {manifest_path}"
+    
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    
+        for section in ["common", "amd", "intel", "nvidia"]:
+            assert section in manifest, f"Manifest missing section: {section}"
+    
+        # Verify required files
+        for section in ["common", "amd", "intel"]:
+            for entry in manifest[section]:
+                if not entry.get("required", False):
+                    continue
+                rel_path = entry["path"]
+                full_path = app_root / "runtime" / rel_path
+                assert full_path.is_file(), f"Manifest file missing on disk: {full_path}"
+    
+                expected_size = entry.get("size")
+                if expected_size:
+                    actual_size = full_path.stat().st_size
+>                   assert actual_size == expected_size, (
+                        f"Size mismatch for {rel_path}: expected {expected_size}, got {actual_size}"
+                    )
+E                   AssertionError: Size mismatch for intel/bin/telem_intel_native.dll: expected 278528, got 246272
+E                   assert 246272 == 278528
+
+tests\test_vendor_runtime_isolation.py:258: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_amd_vbr_governance.py::test_native_dll_exports_qp_stats_and_safe_null
+FAILED tests/test_amd_vbr_governance.py::test_progress_status_formats_vbr_and_na
+FAILED tests/test_amd_vbr_governance.py::test_progress_status_formats_dynamic_qp_when_available
+FAILED tests/test_amd_qp_governance.py::test_amd_native_dll_exports_qp_stats_symbol
+FAILED tests/test_amd_qp_governance.py::test_qp_formatting_constant_vs_dynamic
+FAILED tests/test_vendor_runtime_isolation.py::test_portable_runtime_manifest
+6 failed, 24 passed in 1.40s

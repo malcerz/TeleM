@@ -3032,23 +3032,6 @@ def export_amd_native_d3d11(
             POINTER(ctypes.c_double),
         ]
 
-    if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
-        native_dll.telem_amd_get_encoder_qp_stats.restype = None
-        native_dll.telem_amd_get_encoder_qp_stats.argtypes = [
-            c_void_p,
-            POINTER(c_double),
-            POINTER(ctypes.c_int64),
-            POINTER(ctypes.c_int64),
-            POINTER(c_uint64),
-            POINTER(ctypes.c_int64),
-            POINTER(c_int),
-        ]
-    if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
-        native_dll.telem_amd_get_encoder_qp_feedback_diag.restype = c_int
-        native_dll.telem_amd_get_encoder_qp_feedback_diag.argtypes = [
-            c_void_p,
-            POINTER(TelemAMDQPFeedbackDiag),
-        ]
 
     native_dll.telem_amd_set_diagnostics.restype = c_int
     native_dll.telem_amd_set_diagnostics.argtypes = [c_void_p, c_int]
@@ -7026,39 +7009,9 @@ def export_amd_native_d3d11(
             m, s = divmod(int(elapsed), 60)
             em, es = divmod(int(eta), 60)
 
-            qp_avg_val = c_double(0.0)
-            qp_min_val = ctypes.c_int64(0)
-            qp_max_val = ctypes.c_int64(0)
-            qp_samples_val = c_uint64(0)
-            qp_last_val = ctypes.c_int64(0)
-            qp_supp_val = c_int(0)
-            if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
-                native_dll.telem_amd_get_encoder_qp_stats(
-                    h_context,
-                    byref(qp_avg_val),
-                    byref(qp_min_val),
-                    byref(qp_max_val),
-                    byref(qp_samples_val),
-                    byref(qp_last_val),
-                    byref(qp_supp_val),
-                )
-
-            has_qp = qp_samples_val.value > 0
-            cur_qp = float(qp_last_val.value) if (has_qp and qp_last_val.value >= 0) else None
-            avg_qp = float(qp_avg_val.value) if has_qp else None
-            is_cqp = False
-            # Jeden tekst statusu dla wszystkich elementów GUI; brak próbek
-            # QP ze sterownika AMF -> N/A (nigdy wartość zgadywana).
-            if has_qp and cur_qp is not None:
-                qp_txt = f"RC: VBR | QP: {cur_qp:.0f} | QP avg: {avg_qp:.1f}"
-            elif has_qp:
-                qp_txt = f"RC: VBR | QP avg: {avg_qp:.1f}"
-            else:
-                qp_txt = "RC: VBR | QP avg: N/A"
-
             stats_str = (
                 f"Frame: {prepared.frame_idx+1}/{expected_progress_frames} | {pct}% | "
-                f"{fps:.1f} FPS | {qp_txt} | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
+                f"{fps:.1f} FPS | {m:02d}:{s:02d} elapsed, ETA {em:02d}:{es:02d}"
             )
             if progress_cb:
                 progress_dispatcher.submit(progress_cb, pct, stats_str)
@@ -7066,17 +7019,7 @@ def export_amd_native_d3d11(
                 prepared.frame_idx + 1,
                 elapsed,
                 fps,
-                current_qp=cur_qp,
-                avg_qp=avg_qp,
-                qp_avg=avg_qp,
-                quant_current=cur_qp,
-                quant_avg=avg_qp,
-                quant_min=int(qp_min_val.value) if has_qp else None,
-                quant_max=int(qp_max_val.value) if has_qp else None,
-                quant_samples=int(qp_samples_val.value),
-                is_cqp=is_cqp,
                 rate_control="VBR",
-                compression_text=qp_txt,
             )
         return True
 
@@ -7447,44 +7390,6 @@ def export_amd_native_d3d11(
             byref(c_hardware_decode_confirmed),
             byref(c_decoder_format),
         )
-
-        c_qp_avg = c_double(0.0)
-        c_qp_min = ctypes.c_int64(0)
-        c_qp_max = ctypes.c_int64(0)
-        c_qp_samples = c_uint64(0)
-        c_qp_last = ctypes.c_int64(0)
-        c_qp_supp = c_int(0)
-        if hasattr(native_dll, "telem_amd_get_encoder_qp_stats"):
-            native_dll.telem_amd_get_encoder_qp_stats(
-                h_context,
-                byref(c_qp_avg),
-                byref(c_qp_min),
-                byref(c_qp_max),
-                byref(c_qp_samples),
-                byref(c_qp_last),
-                byref(c_qp_supp),
-            )
-            if c_qp_samples.value > 0:
-                print(f"[AMD ENCODER] Hardware QP stats: avg={c_qp_avg.value:.1f} min={c_qp_min.value} max={c_qp_max.value} samples={c_qp_samples.value}", flush=True)
-            else:
-                print("[AMD ENCODER] Note: Hardware QP statistics feedback is not supported by current AMF driver/hardware (QP avg: N/A)", flush=True)
-        if hasattr(native_dll, "telem_amd_get_encoder_qp_feedback_diag"):
-            qp_diag = TelemAMDQPFeedbackDiag()
-            if native_dll.telem_amd_get_encoder_qp_feedback_diag(h_context, byref(qp_diag)):
-                print(
-                    "[AMD ENCODER] QP feedback diag: "
-                    f"encoder_set={qp_diag.encoder_set_result} surface_flag={qp_diag.surface_flag_enabled} "
-                    f"surface_set={qp_diag.surface_set_result} ok={qp_diag.surface_set_ok} fail={qp_diag.surface_set_fail} "
-                    f"outputs={qp_diag.output_buffers} "
-                    f"get_results(frame/avg/min/max)={qp_diag.last_frame_qp_result}/{qp_diag.last_avg_qp_result}/"
-                    f"{qp_diag.last_min_qp_result}/{qp_diag.last_max_qp_result} "
-                    f"samples(frame/avg/min/max)={qp_diag.frame_qp_samples}/{qp_diag.avg_qp_samples}/"
-                    f"{qp_diag.min_qp_samples}/{qp_diag.max_qp_samples} "
-                    f"intra={qp_diag.intra_samples} inter={qp_diag.inter_samples} "
-                    f"last(frameQP/avgQP/minQP/maxQP)={qp_diag.last_frame_qp}/{qp_diag.last_avg_qp}/"
-                    f"{qp_diag.last_min_qp}/{qp_diag.last_max_qp}",
-                    flush=True,
-                )
 
         # ETAP 8V-A: Explicitly close native context to flush GPU timestamp CSV and frame accounting trace
         print("[ENCODER CLOSE BEGIN]", flush=True)
@@ -8930,7 +8835,6 @@ def export_amd_native_d3d11(
                     "dropped": int(c_dropped.value),
                     "submitted": int(c_sub.value),
                     "received": int(c_rec.value),
-                    "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
                 },
                 "direct_mux": {
                     "enabled": direct_mux_enabled,
@@ -8974,22 +8878,12 @@ def export_amd_native_d3d11(
     _last_amd_export_stats = {
         "codec": codec,
         "is_av1": False,
-        "quant_metric": "QP",
-        "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
-        "qp_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
-        "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
-        "qp_min": int(c_qp_min.value) if 'c_qp_min' in locals() and c_qp_samples.value > 0 else None,
-        "qp_max": int(c_qp_max.value) if 'c_qp_max' in locals() and c_qp_samples.value > 0 else None,
-        "qp_last": int(c_qp_last.value) if 'c_qp_last' in locals() and c_qp_samples.value > 0 else None,
-        "qp_samples": int(c_qp_samples.value) if 'c_qp_samples' in locals() else 0,
         "amf_stats": {
             "input_full": int(c_input_full.value) if 'c_input_full' in locals() else 0,
             "retries": int(c_retries.value) if 'c_retries' in locals() else 0,
             "dropped": int(c_dropped.value) if 'c_dropped' in locals() else 0,
             "submitted": int(c_sub.value) if 'c_sub' in locals() else 0,
             "received": int(c_rec.value) if 'c_rec' in locals() else 0,
-            "avg_qp": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
-            "quant_avg": float(c_qp_avg.value) if 'c_qp_avg' in locals() and c_qp_samples.value > 0 else None,
         },
     }
 
