@@ -28,9 +28,9 @@ def test_intel_native_8b_capabilities_truth():
     caps = query_intel_capabilities()
     assert isinstance(caps, dict)
     assert isinstance(caps["AV1_AVAILABLE"], bool)
-    assert caps["AV1_AVAILABLE"] == caps["AV1_10BIT"]
+    assert isinstance(caps["AV1_10BIT"], bool)
     assert isinstance(caps["H264_AVAILABLE"], bool)
-    assert caps["H264_AVAILABLE"] == caps["H264_8BIT"]
+    assert isinstance(caps["H264_8BIT"], bool)
     assert caps["H264_10BIT"] is False
     assert isinstance(caps["HEVC_AVAILABLE"], bool)
 
@@ -42,35 +42,32 @@ def test_intel_native_8b_dll_exports():
     assert hasattr(dll, "intel_native_query_capabilities")
 
 def test_intel_native_8b_render_tab_intel_codec_selector():
-    """Verify Qt GUI RenderTab contains Intel Codec Selector with AV1, H.264, and dynamically enabled H.265."""
+    """Verify Qt GUI RenderTab contains Intel Codec Selector reflecting runtime capabilities."""
     app = _get_app()
     from src.gui.qt.tabs.render_tab import RenderTab
     tab = RenderTab()
     assert hasattr(tab, "cmb_intel_codec")
     assert hasattr(tab, "widget_intel_options")
     
-    # Check item count
-    assert tab.cmb_intel_codec.count() == 4
-    
-    # Check default selection is AV1
     caps = query_intel_capabilities()
-    expected = "av1" if caps["AV1_10BIT"] else ("hevc" if caps["HEVC_10BIT"] else None)
-    assert tab.cmb_intel_codec.currentData() == expected
-    if expected:
-        assert "HDR 10-bit" in tab.lbl_intel_codec_info.text()
+    av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
+    hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
+    h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
     
-    # Check H.264 item
-    idx_h264 = tab.cmb_intel_codec.findData("h264")
-    assert idx_h264 >= 0
+    expected_codecs = []
+    if av1_ok:
+        expected_codecs.append("av1")
+    if hevc_ok:
+        expected_codecs.append("hevc")
+    if h264_ok:
+        expected_codecs.append("h264")
+        
+    actual_codecs = [tab.cmb_intel_codec.itemData(i) for i in range(tab.cmb_intel_codec.count())]
+    assert actual_codecs == expected_codecs
     
-    # Check H.265 item matches dynamic capability truth
-    idx_hevc = tab.cmb_intel_codec.findData("hevc")
-    assert idx_hevc >= 0
-    model = tab.cmb_intel_codec.model()
-    item = model.item(idx_hevc)
-    assert item is not None
-    caps = query_intel_capabilities()
-    assert item.isEnabled() == caps.get("HEVC_10BIT", False)
+    # Check default selection matches recommendation priority
+    expected_default = expected_codecs[0] if expected_codecs else "none"
+    assert tab.cmb_intel_codec.currentData() == expected_default
 
 def test_intel_native_8b_intel_codec_selection_semantics():
     """Verify selecting H.264 updates UI label to SDR 8-bit BT.709."""

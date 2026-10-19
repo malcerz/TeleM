@@ -1,0 +1,850 @@
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:3: trailing whitespace.
++**Data sporządzenia:** 2026-10-01  
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:4: trailing whitespace.
++**Środowisko:** Windows 11 Build 26200  
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:5: trailing whitespace.
++**Sprzęt testowy:** Intel Core i5-12400 / Intel UHD Graphics 730 / NVIDIA Quadro P400 (Pascal GP107, 2 GB VRAM, Driver 582.78, NVENC API 13.0)  
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:6: trailing whitespace.
++**Binary FFmpeg NVIDIA:** `runtime\nvidia\ffmpeg\ffmpeg.exe` (FFmpeg n8.1.2-21-gce3c09c101, NVENC SDK 13.0)  
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:7: trailing whitespace.
++**Reprezentacja robocza:** `C:\_DEV\BikeRideHUD-main-new`  
+Raporty/RAPORT_NVIDIA_P400_QUALITY_CAPABILITY_PROFILES.md:8: trailing whitespace.
++**Wydanie portable:** `C:\_DEV\BikeRideHUD-portable`  
+src/ffmpeg/backend_capabilities.py:177: trailing whitespace.
++    
+src/ffmpeg/backend_capabilities.py:228: trailing whitespace.
++    
+src/ffmpeg/backend_capabilities.py:313: trailing whitespace.
++    
+src/ffmpeg/backend_capabilities.py:336: trailing whitespace.
++    
+src/ffmpeg/backend_capabilities.py:376: trailing whitespace.
++    
+src/ffmpeg/backend_capabilities.py:423: trailing whitespace.
++    
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:46: trailing whitespace.
++    AMF_VIDEO_CONVERTER_COLOR_PROFILE_601       = 0,    // studio range 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:47: trailing whitespace.
++    AMF_VIDEO_CONVERTER_COLOR_PROFILE_709       = 1,    // studio range 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:48: trailing whitespace.
++    AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020      = 2,    // studio range 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:138: trailing whitespace.
++    amf_uint16  maxContentLightLevel;       // nit value 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:139: trailing whitespace.
++    amf_uint16  maxFrameAverageLightLevel;  // nit value 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:175: trailing whitespace.
++#define AMF_VIDEO_COLOR_TRANSFER_CHARACTERISTIC         L"ColorTransferChar"    // amf_int64(AMF_COLOR_TRANSFER_CHARACTERISTIC_ENUM); default = AMF_COLOR_TRANSFER_CHARACTERISTIC_UNDEFINED, ISO/IEC 23001-8_2013 Section 7.2 See ColorSpace.h for enum 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ColorSpace.h:176: trailing whitespace.
++#define AMF_VIDEO_COLOR_PRIMARIES                       L"ColorPrimaries"       // amf_int64(AMF_COLOR_PRIMARIES_ENUM); default = AMF_COLOR_PRIMARIES_UNDEFINED, ISO/IEC 23001-8_2013 Section 7.1 See ColorSpace.h for enum 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:80: trailing whitespace.
++        // AMFDataAllocatorCB interface 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:103: trailing whitespace.
++        // AMFDataAllocatorCB interface 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:404: trailing whitespace.
++    AMF_STREAM_CODEC_ID_MPEG2       = 1,  // AMFVideoDecoderUVD_MPEG2      
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:405: trailing whitespace.
++    AMF_STREAM_CODEC_ID_MPEG4       = 2,  // AMFVideoDecoderUVD_MPEG4      
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:406: trailing whitespace.
++    AMF_STREAM_CODEC_ID_WMV3        = 3,  // AMFVideoDecoderUVD_WMV3       
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:407: trailing whitespace.
++    AMF_STREAM_CODEC_ID_VC1         = 4,  // AMFVideoDecoderUVD_VC1        
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:408: trailing whitespace.
++    AMF_STREAM_CODEC_ID_H264_AVC    = 5,  // AMFVideoDecoderUVD_H264_AVC   
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:409: trailing whitespace.
++    AMF_STREAM_CODEC_ID_H264_MVC    = 6,  // AMFVideoDecoderUVD_H264_MVC   
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:410: trailing whitespace.
++    AMF_STREAM_CODEC_ID_H264_SVC    = 7,  // AMFVideoDecoderUVD_H264_SVC   
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:411: trailing whitespace.
++    AMF_STREAM_CODEC_ID_MJPEG       = 8,  // AMFVideoDecoderUVD_MJPEG      
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:412: trailing whitespace.
++    AMF_STREAM_CODEC_ID_H265_HEVC   = 9,  // AMFVideoDecoderHW_H265_HEVC   
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:413: trailing whitespace.
++    AMF_STREAM_CODEC_ID_H265_MAIN10 = 10, // AMFVideoDecoderHW_H265_MAIN10 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:415: trailing whitespace.
++    AMF_STREAM_CODEC_ID_VP9_10BIT   = 12, // AMFVideoDecoderHW_VP9_10BIT   
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/Component.h:416: trailing whitespace.
++    AMF_STREAM_CODEC_ID_AV1         = 13, // AMFVideoDecoderHW_AV1 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:66: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:98: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/components/ComponentCaps.h:116: trailing whitespace.
++   
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/AudioBuffer.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/AudioBuffer.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/AudioBuffer.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/AudioBuffer.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:95: trailing whitespace.
++        AMF_ARGUMENT_SAMPLER_LINEAR        = 0x10000000, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:96: trailing whitespace.
++        AMF_ARGUMENT_SAMPLER_NORM_COORD    = 0x20000000, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:141: trailing whitespace.
++        // AMFComputeKernel interface 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:176: trailing whitespace.
++        // AMFComputeSyncPoint interface 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Compute.h:240: trailing whitespace.
++        // AMFCompute interface 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/ComputeFactory.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/ComputeFactory.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/ComputeFactory.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/ComputeFactory.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:55: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:109: trailing whitespace.
++        virtual AMF_RESULT          AMF_STD_CALL AllocAudioBuffer(AMF_MEMORY_TYPE type, AMF_AUDIO_FORMAT format, amf_int32 samples, amf_int32 sampleRate, amf_int32 channels, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:114: trailing whitespace.
++        virtual AMF_RESULT          AMF_STD_CALL CreateSurfaceFromHostNative(AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, amf_int32 hPitch, amf_int32 vPitch, void* pData, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:120: trailing whitespace.
++        virtual AMF_RESULT          AMF_STD_CALL CreateSurfaceFromOpenCLNative(AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, void** pClPlanes, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:157: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:191: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:206: trailing whitespace.
++       
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:251: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *AllocAudioBuffer)(AMFContext* pThis, AMF_MEMORY_TYPE type, AMF_AUDIO_FORMAT format, amf_int32 samples, amf_int32 sampleRate, amf_int32 channels, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:256: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *CreateSurfaceFromHostNative)(AMFContext* pThis, AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, amf_int32 hPitch, amf_int32 vPitch, void* pData, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:262: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *CreateSurfaceFromOpenCLNative)(AMFContext* pThis, AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, void** pClPlanes, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:286: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:301: trailing whitespace.
++       
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:346: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *AllocAudioBuffer)(AMFContext1* pThis, AMF_MEMORY_TYPE type, AMF_AUDIO_FORMAT format, amf_int32 samples, amf_int32 sampleRate, amf_int32 channels, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:351: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *CreateSurfaceFromHostNative)(AMFContext1* pThis, AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, amf_int32 hPitch, amf_int32 vPitch, void* pData, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Context.h:357: trailing whitespace.
++        AMF_RESULT          (AMF_STD_CALL *CreateSurfaceFromOpenCLNative)(AMFContext1* pThis, AMF_SURFACE_FORMAT format, amf_int32 width, amf_int32 height, void** pClPlanes, 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Debug.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Debug.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Debug.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Debug.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Interface.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Interface.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Interface.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Interface.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Plane.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Plane.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Plane.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Plane.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorage.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorage.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorage.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorage.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorageEx.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorageEx.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorageEx.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/PropertyStorageEx.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:76: trailing whitespace.
++// device opencl 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:78: trailing whitespace.
++// device opengl 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:80: trailing whitespace.
++// device XV 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Result.h:125: trailing whitespace.
++    
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Trace.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Trace.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Trace.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Trace.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:428: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:538: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:566: trailing whitespace.
++        String temp = GetValue<String, AMF_VARIANT_STRING>(AMFVariantGetString); 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:577: trailing whitespace.
++    // AMF_INLINE implementation of helper functions 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:836: trailing whitespace.
++    
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:846: trailing whitespace.
++    
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:855: trailing whitespace.
++        
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:861: trailing whitespace.
++    
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:967: trailing whitespace.
++        { 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:1254: trailing whitespace.
++          } 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Variant.h:1388: trailing whitespace.
++        { 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Version.h:1: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Version.h:9: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Version.h:10: trailing whitespace.
++// MIT license 
+src/native/amd/d3d11_amf_pipeline/include/AMF/core/Version.h:11: trailing whitespace.
++// 
+src/native/amd/d3d11_amf_pipeline/run_etap3a_opt_pipeline.py:380: trailing whitespace.
++Zaimplementowano i w pełni zweryfikowano optymalizację ścieżki pamięci klatek HUD z Pythona/Pillow do trwałej tekstury Direct3D 11 (`ID3D11Texture2D`). 
+src/native/amd/d3d11_amf_pipeline/src/telem_amd_native.cpp:2954: trailing whitespace.
++                std::cout << "[DUMP STATS] stage: " << stage 
+src/native/amd/d3d11_amf_pipeline/src/telem_amd_native.cpp:2956: trailing whitespace.
++                          << " yPitch: " << yPitch << " uvPitch: " << uvPitch 
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:141: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:144: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:147: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:151: trailing whitespace.
++        
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:171: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:190: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:193: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:196: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:205: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:208: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:212: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:227: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:232: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:235: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:239: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:242: trailing whitespace.
++        
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:246: trailing whitespace.
++        
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:248: trailing whitespace.
++        
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:251: trailing whitespace.
++        
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:257: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:261: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:265: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:280: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:284: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/run_d3d11_poc.py:290: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.cpp:68: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.cpp:91: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.cpp:170: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.cpp:173: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:15: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:19: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:39: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:43: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:46: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:48: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:56: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:65: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:73: trailing whitespace.
++    
+src/native/amd/d3d11_compositor/src/d3d11_compositor.h:79: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:32: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:35: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:38: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:42: trailing whitespace.
++        
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:57: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:66: trailing whitespace.
++        
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:97: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:101: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:105: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:124: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:128: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/run_etap2b_pipeline.py:149: trailing whitespace.
++        
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.cpp:53: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:14: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:18: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:22: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:25: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:40: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:45: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:51: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:56: trailing whitespace.
++    
+src/native/amd/d3d11_videoprocessor/src/d3d11_vp_pipeline.h:59: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/nvEncodeAPI.h:4679: new blank line at EOF.
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:23: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:46: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:300: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:390: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:432: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:437: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:447: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:455: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/include/telem_nvenc_api.h:461: trailing whitespace.
++    
+src/native/nvidia/d3d11_nvenc_pipeline/run_nvenc_pipeline.py:70: trailing whitespace.
++        
+src/native/nvidia/d3d11_nvenc_pipeline/run_nvenc_pipeline.py:76: trailing whitespace.
++        
+src/native/nvidia/d3d11_nvenc_pipeline/run_nvenc_pipeline.py:83: trailing whitespace.
++        
+src/native/nvidia/d3d11_nvenc_pipeline/src/indicators/bar_indicator.cpp:202: trailing whitespace.
++        
+src/native/nvidia/d3d11_nvenc_pipeline/src/indicators/map_indicator.cpp:80: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI.h:4679: new blank line at EOF.
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:134: trailing whitespace.
++static const GUID NV_ENC_CODEC_HEVC_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:144: trailing whitespace.
++static const GUID NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:160: trailing whitespace.
++static const GUID  NV_ENC_H264_PROFILE_HIGH_444_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:172: trailing whitespace.
++static const GUID NV_ENC_H264_PROFILE_PROGRESSIVE_HIGH_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:176: trailing whitespace.
++static const GUID NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:180: trailing whitespace.
++static const GUID NV_ENC_HEVC_PROFILE_MAIN_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:201: trailing whitespace.
++static const GUID NV_ENC_PRESET_BD_GUID  = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:205: trailing whitespace.
++static const GUID NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID  = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:209: trailing whitespace.
++static const GUID NV_ENC_PRESET_LOW_LATENCY_HQ_GUID  = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:217: trailing whitespace.
++static const GUID NV_ENC_PRESET_LOSSLESS_DEFAULT_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:221: trailing whitespace.
++static const GUID NV_ENC_PRESET_LOSSLESS_HP_GUID = 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:319: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:378: trailing whitespace.
++     * This indicates that the encoder device supplied by the client is not 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:389: trailing whitespace.
++     * This indicates that device passed to the API call is no longer available and 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:390: trailing whitespace.
++     * needs to be reinitialized. The clients need to destroy the current encoder  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:391: trailing whitespace.
++     * session by freeing the allocated input output buffers and destroying the device 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:420: trailing whitespace.
++     * This indicates that the API call failed because it was unable to allocate 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:424: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:439: trailing whitespace.
++     * This indicates that the ::NvEncLockBitstream() failed to lock the output 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:440: trailing whitespace.
++     * buffer. This happens when the client makes a non blocking lock call to 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:448: trailing whitespace.
++     * This indicates that the size of the user buffer passed by the client is 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:468: trailing whitespace.
++     * ::NvEncEncodePicture() API might be buffering the input frame for re-ordering. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:469: trailing whitespace.
++     * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:471: trailing whitespace.
++     * API on the output bitstream buffer if ::NvEncEncodePicture() returned the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:481: trailing whitespace.
++     * This indicates that the HW encoder is busy encoding and is unable to encode  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:497: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:503: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:535: trailing whitespace.
++    NV_ENC_PIC_FLAG_FORCEIDR           = 0x2,   /**< Encode the current picture as an IDR picture. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:539: trailing whitespace.
++    NV_ENC_PIC_FLAG_EOS                = 0x8,   /**< Indicates end of the input stream */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:644: trailing whitespace.
++    /** 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:724: trailing whitespace.
++ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:736: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:741: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:769: trailing whitespace.
++        
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:779: trailing whitespace.
++     * Indicates Dynamic rate control mode Change Support.    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:791: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:836: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:873: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:887: trailing whitespace.
++    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:938: trailing whitespace.
++#define NV_ENC_CREATE_INPUT_BUFFER_VER NVENCAPI_STRUCT_VERSION(1) 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:959: trailing whitespace.
++ * Structs needed for ME only mode. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:967: trailing whitespace.
++/** 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:993: trailing whitespace.
++/** 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1028: trailing whitespace.
++ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1031: trailing whitespace.
++ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1100: trailing whitespace.
++    uint32_t outputPictureTimingSEI    :1;                          /**< [in]: Set to 1 to write SEI picture timing syntax in the bitstream */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1130: trailing whitespace.
++    uint32_t                            maxNumRefFrames;            /**< [in]: Specifies the DPB size used for encoding. Setting it to 0 will let driver use the default dpb size. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1148: trailing whitespace.
++    uint32_t                            maxTemporalLayers;          /**< [in]: Specifies the max temporal layer used for hierarchical coding. */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1193: trailing whitespace.
++    NV_ENC_CONFIG_HEVC_VUI_PARAMETERS   hevcVUIParameters;          /**< [in]: Specifies the HEVC video usability info pamameters */    
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1297: trailing whitespace.
++ */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1326: trailing whitespace.
++ */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1333: trailing whitespace.
++    uint32_t forceIntraRefreshWithFrameCnt;              /**< [in]: Forces an intra refresh with duration equal to intraRefreshFrameCnt. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1334: trailing whitespace.
++                                                                    When outputRecoveryPointSEI is set this is value is used for recovery_frame_cnt in recovery point SEI message 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1336: trailing whitespace.
++    uint32_t constrainedFrame           :1;              /**< [in]: Set to 1 if client wants to encode this frame with each slice completely independent of other slices in the frame. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1372: trailing whitespace.
++    uint32_t forceIntraRefreshWithFrameCnt;              /**< [in]: Forces an intra refresh with duration equal to intraRefreshFrameCnt. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1373: trailing whitespace.
++                                                                    When outputRecoveryPointSEI is set this is value is used for recovery_frame_cnt in recovery point SEI message 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1375: trailing whitespace.
++    uint32_t constrainedFrame           :1;              /**< [in]: Set to 1 if client wants to encode this frame with each slice completely independent of other slices in the frame. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1382: trailing whitespace.
++    uint8_t* sliceTypeData;                              /**< [in]: Array which specifies the slice type used to force intra slice for a particular slice. Currently supported only for NV_ENC_CONFIG_H264::sliceMode == 3. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1383: trailing whitespace.
++                                                                    Client should allocate array of size sliceModeData where sliceModeData is specified in field of ::_NV_ENC_CONFIG_H264 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1441: trailing whitespace.
++                                                                                           The total number of candidates per MB per direction = 1*meHintCountsPerBlock[Lx].numCandsPerBlk16x16 + 2*meHintCountsPerBlock[Lx].numCandsPerBlk16x8 + 2*meHintCountsPerBlock[Lx].numCandsPerBlk8x8  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1482: trailing whitespace.
++{ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1489: trailing whitespace.
++    uint32_t                frameIdx;                    /**< [out]: Frame no. for which the bitstream is being retrieved. */ 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1655: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1670: trailing whitespace.
++ *  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1671: trailing whitespace.
++ * \param [in] encoder  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1673: trailing whitespace.
++ * \param [out] encodeGUIDCount 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1729: trailing whitespace.
++ * The function returns the number of profile GUIDs supported for a given codec. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1730: trailing whitespace.
++ * The client must first enumerate the codec guids supported by the NvEncodeAPI 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1735: trailing whitespace.
++ * \param [in] encoder  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1737: trailing whitespace.
++ * \param [in] encodeGUID 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1762: trailing whitespace.
++ * can populate the profile guids. The client can determine the array size using 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1772: trailing whitespace.
++ *   Number of GUIDs to be retrieved. Should be set to the number retrieved using 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1803: trailing whitespace.
++ *   Encode GUID, corresponding to which the number of supported input formats 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1825: trailing whitespace.
++ * Returns an array of supported input formats  The client must use the input 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1827: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1828: trailing whitespace.
++ * \param [in] encoder 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1831: trailing whitespace.
++ *   Encode GUID, corresponding to which the number of supported input formats 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1859: trailing whitespace.
++ * The function returns the capability value for a given encoder attribute. The 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1860: trailing whitespace.
++ * client must validate the encodeGUID using ::NvEncGetEncodeGUIDs() API before 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1861: trailing whitespace.
++ * calling this function. The encoder attribute being queried are enumerated in 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1869: trailing whitespace.
++ *   Used to specify attribute being queried. Refer ::NV_ENC_CAPS_PARAM for  more 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1891: trailing whitespace.
++ * The function returns the number of preset GUIDs available for a given codec. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1892: trailing whitespace.
++ * The client must validate the codec guid using ::NvEncGetEncodeGUIDs() API 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1898: trailing whitespace.
++ *   Encode GUID, corresponding to which the number of supported presets is to 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1921: trailing whitespace.
++ * The function returns an array of encode preset guids available for a given codec. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1923: trailing whitespace.
++ * or target device. The preset guid chosen can be directly used in 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1924: trailing whitespace.
++ * NV_ENC_INITIALIZE_PARAMS::presetGUID parameter to ::NvEncEncodePicture() API. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1925: trailing whitespace.
++ * Alternately client can  also use the preset guid to retrieve the encoding config 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1928: trailing whitespace.
++ * as per its use case and send it to NvEncodeAPI interface as part of 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1933: trailing whitespace.
++ * \param [in] encoder 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1941: trailing whitespace.
++ *   Array of supported Encode preset GUIDs from the NvEncodeAPI interface 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1944: trailing whitespace.
++ *   Receives the number of preset GUIDs returned by the NvEncodeAPI 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1965: trailing whitespace.
++ * The function returns a preset config structure for a given preset guid. Before  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1966: trailing whitespace.
++ * using this function the client must enumerate the preset guids available for 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1968: trailing whitespace.
++ * upon its use case and can be then used to initialize the encoder using 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1969: trailing whitespace.
++ * ::NvEncInitializeEncoder() API. The client can use this function only if it 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1970: trailing whitespace.
++ * wants to modify the NvEncodeAPI preset configuration, otherwise it can 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1972: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1974: trailing whitespace.
++ *   Pointer to the NvEncodeAPI interface. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:1979: trailing whitespace.
++ *   Preset GUID, corresponding to which the Encoding configurations is to be 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2009: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2011: trailing whitespace.
++ * NV_ENC_INITIALIZE_PARAMS::presetGUID field. If the client doesn't pass 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2013: trailing whitespace.
++ * will be selected based on the preset guid. The preset guid must have been 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2047: trailing whitespace.
++ * ::NV_ENC_SUCCESS from encode picture. The NvEncodeAPI interface can return 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2058: trailing whitespace.
++ * to 0. In this case the client is  required to send the picture in encoding 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2060: trailing whitespace.
++ * If the client doesn't want to take the picture type decision it can enable 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2061: trailing whitespace.
++ * picture type decision module in the NvEncodeAPI interface by setting 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2062: trailing whitespace.
++ * NV_ENC_INITIALIZE_PARAMS::enablePTD to 1 and send the input pictures in display 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2064: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2067: trailing whitespace.
++ * \param [in] createEncodeParams 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2090: trailing whitespace.
++ * the input buffer format before allocating the input buffer resources. The 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2091: trailing whitespace.
++ * NV_ENC_INPUT_PTR returned by the NvEncodeAPI interface in the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2093: trailing whitespace.
++ * ::NvEncEncodePicture() API. The number of input buffers to be allocated by the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2111: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2127: trailing whitespace.
++ * \param [in] inputBuffer 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2147: trailing whitespace.
++ * \brief Allocates an output bitstream buffer 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2149: trailing whitespace.
++ * This function is used to allocate an output bitstream buffer and returns a 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2150: trailing whitespace.
++ * NV_ENC_OUTPUT_PTR to bitstream  buffer to the client in the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2152: trailing whitespace.
++ * The client can only call this function after the encoder session has been 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2153: trailing whitespace.
++ * initialized using ::NvEncInitializeEncoder() API. The minimum number of output 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2155: trailing whitespace.
++ * B frames being used for encoding. The client can only access the output 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2182: trailing whitespace.
++ * \brief Release a bitstream buffer. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2212: trailing whitespace.
++ * This function is used to submit an input picture buffer for encoding. The 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2225: trailing whitespace.
++ * If the client has enabled asynchronous mode of encoding by setting 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2229: trailing whitespace.
++ * API commands from the main thread and then queue output buffers to be processed 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2230: trailing whitespace.
++ * to a secondary worker thread. Before the locking the output buffers in the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2234: trailing whitespace.
++ * submitted for encoding. The NvEncodeAPI interface is responsible for any 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2240: trailing whitespace.
++  Suppose the client allocated 4 input buffers(I1,I2..), 4 output buffers(O1,O2..) 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2241: trailing whitespace.
++  and 4 completion events(E1, E2, ...). The NvEncodeAPI interface will need to 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2242: trailing whitespace.
++  keep a copy of the input buffers for re-ordering and it allocates following 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2244: trailing whitespace.
++  and the client is not responsible for the allocating or freeing the memory of 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2247: trailing whitespace.
++  a) The client main thread will queue the following encode frame calls. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2248: trailing whitespace.
++  Note the picture type is unknown to the client, the decision is being taken by 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2249: trailing whitespace.
++  NvEncodeAPI interface. The client should pass ::_NV_ENC_PIC_PARAMS parameter  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2250: trailing whitespace.
++  consisting of allocated input buffer, output buffer and output events in successive 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2257: trailing whitespace.
++  b) NvEncodeAPI SW will receive the following encode Commands from the client. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2258: trailing whitespace.
++  The left side shows input from client in the form (Input buffer, Output Buffer, 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2265: trailing whitespace.
++  c) NvEncodeAPI interface will make a copy of the input buffers to its internal  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2266: trailing whitespace.
++   buffersfor re-ordering. These copies are done as part of nvEncEncodePicture  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2267: trailing whitespace.
++   function call from the client and NvEncodeAPI interface is responsible for  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2269: trailing whitespace.
++   I1 --> NvI1  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2270: trailing whitespace.
++   I2 --> NvI2 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2281: trailing whitespace.
++   Note they are in the same order in which client calls ::NvEncEncodePicture() API 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2284: trailing whitespace.
++  e) NvEncodeAPI interface  will do the re-ordering such that Encoder HW will receive 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2290: trailing whitespace.
++  f) After the encoding operations are completed, the events will be signalled 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2296: trailing whitespace.
++  g) The client must lock the bitstream data using ::NvEncLockBitstream() API in 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2304: trailing whitespace.
++  -Note the client will receive the events signalling and output buffer in the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2306: trailing whitespace.
++  -Note the LockBitstream will have picture type field which will notify the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2308: trailing whitespace.
++  -Note the input, output buffer and the output completion event are free to be 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2315: trailing whitespace.
++ * The client can enable synchronous mode of encoding by setting 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2318: trailing whitespace.
++ * some ::NvEncEncodePicture() API calls when NV_ENC_INITIALIZE_PARAMS::enablePTD 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2319: trailing whitespace.
++ * is set to 1, but the client must not treat it as a fatal error. The NvEncodeAPI 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2320: trailing whitespace.
++ * interface might not be able to submit an input picture buffer for encoding 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2321: trailing whitespace.
++ * immediately due to re-ordering for B frames. The NvEncodeAPI interface cannot 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2322: trailing whitespace.
++ * submit the input picture which is decided to be encoded as B frame as it waits 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2325: trailing whitespace.
++ * must not call ::NvEncLockBitstream() API on the output buffers whose 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2326: trailing whitespace.
++ * ::NvEncEncodePicture() API returns ::NV_ENC_ERR_NEED_MORE_INPUT. The client must 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2327: trailing whitespace.
++ * wait for the NvEncodeAPI interface to return ::NV_ENC_SUCCESS before locking the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2333: trailing whitespace.
++ Suppose the client allocated 4 input buffers(I1,I2..), 4 output buffers(O1,O2..) 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2334: trailing whitespace.
++ and 4 completion events(E1, E2, ...). The NvEncodeAPI interface will need to 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2335: trailing whitespace.
++ keep a copy of the input buffers for re-ordering and it allocates following 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2337: trailing whitespace.
++ and the client is not responsible for the allocating or freeing the memory of 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2342: trailing whitespace.
++ HW and returns ::NV_ENC_SUCCESS. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2349: trailing whitespace.
++ The error is not fatal and it notifies client that it cannot read the encoded 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2352: trailing whitespace.
++  
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2354: trailing whitespace.
++ The NvEncodeAPI decides to encode I3 as P frame and it first submits I3 for 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2394: trailing whitespace.
++ * The client can only access the encoded data by calling this function. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2395: trailing whitespace.
++ * The pointer to client accessible encoded data is returned in the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2398: trailing whitespace.
++ * The NvEncodeAPI interface also returns the output picture type and picture structure 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2402: trailing whitespace.
++ * ::NV_ENC_ERR_LOCK_BUSY if client is operating in synchronous mode. This is not 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2403: trailing whitespace.
++ * a fatal failure if NV_ENC_LOCK_BITSTREAM::doNotWait is set to 1. In the above case the client can 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2465: trailing whitespace.
++ * NV_ENC_LOCK_INPUT_BUFFER::inputBuffer field. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2466: trailing whitespace.
++ * The NvEncodeAPI interface returns pointer to client accessible input buffer 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2467: trailing whitespace.
++ * memory in NV_ENC_LOCK_INPUT_BUFFER::bufferDataPtr field. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2553: trailing whitespace.
++ * This function can be used to retrieve the sequence and picture header out of 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2554: trailing whitespace.
++ * band. The client must call this function only after the encoder has been 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2555: trailing whitespace.
++ * initialized using ::NvEncInitializeEncoder() function. The client must 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2557: trailing whitespace.
++ * header and pass the pointer to the memory in NV_ENC_SEQUENCE_PARAM_PAYLOAD::spsppsBuffer. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2559: trailing whitespace.
++ * The NvEncodeAPI interface will copy the bitstream header payload and returns 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2562: trailing whitespace.
++ * The client must call  ::NvEncGetSequenceParams() function from the same thread which is 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2580: trailing whitespace.
++ * ::NV_ENC_ERR_GENERIC \n 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2590: trailing whitespace.
++ * This function is used to register the completion event with NvEncodeAPI 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2591: trailing whitespace.
++ * interface. The event is required when the client has configured the encoder to 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2593: trailing whitespace.
++ * event with every output buffer. The NvEncodeAPI interface will signal the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2594: trailing whitespace.
++ * completion of the encoding process using this event. Only after the event is 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2647: trailing whitespace.
++// NvEncMapInputResource 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2683: trailing whitespace.
++// NvEncUnmapInputResource 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2722: trailing whitespace.
++ * function. The client must flush the encoder before freeing any resources. In order 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2723: trailing whitespace.
++ * to flush the encoder the client must pass a NULL encode picture packet and either 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2724: trailing whitespace.
++ * wait for the ::NvEncEncodePicture() function to return in synchronous mode or wait 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2729: trailing whitespace.
++ * registered. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2749: trailing whitespace.
++ * \brief Invalidate reference frames 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2751: trailing whitespace.
++ * Invalidates reference frame based on the time stamp provided by the client. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2756: trailing whitespace.
++ * This is useful for low latency application for error resiliency. The client 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2757: trailing whitespace.
++ * is recommended to set NV_ENC_CONFIG_H264::maxNumRefFrames to a large value so 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2783: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2786: trailing whitespace.
++ * this API first. 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2788: trailing whitespace.
++ * If the creation of encoder session fails, the client must call ::NvEncDestroyEncoder API 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2811: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2822: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2843: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2845: trailing whitespace.
++ * The client is expected to unregister any resource that it has registered with the 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2876: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2878: trailing whitespace.
++ * The client should call this API to change/reconfigure the parameter passed during 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2885: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2888: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:2998: trailing whitespace.
++ *  Defines API function pointers 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:3099: trailing whitespace.
++ * 
+src/native/nvidia/nvidia_d3d11_prototype/nvEncodeAPI_v6_rtss_reference.h:3118: new blank line at EOF.
+tests/test_dynamic_export_backends.py:663: new blank line at EOF.
+tests/test_intel_native_8b.py:64: trailing whitespace.
++        
+tests/test_intel_native_8c.py:76: trailing whitespace.
++    

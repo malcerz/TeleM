@@ -31,7 +31,7 @@ def main():
         subprocess.run([str(tool/"llvm-dlltool.exe"),"-m","i386:x86-64","-d",str(definition),"-l",str(out/("lib"+name+".a"))],check=True)
     generated=out/"include/libavutil"; generated.mkdir(parents=True,exist_ok=True)
     (generated/"avconfig.h").write_text("#define AV_HAVE_BIGENDIAN 0\n#define AV_HAVE_FAST_UNALIGNED 1\n")
-    source=root/"src/native/d3d11_intel_pipeline/telem_intel_native.c"
+    source=root/"src/native/intel/d3d11_intel_pipeline/telem_intel_native.c"
     cmd=[str(tool/"clang.exe"),"-shared","-O2","-mavx2","-mfma","-Wno-deprecated-declarations",
          "-I"+str(out/"include"),"-I"+str(args.ffmpeg_headers.resolve()),"-I"+str(args.vpl_headers.resolve()),
          str(source),"-L"+str(out),"-lavformat","-lavcodec","-lavutil","-ld3d11","-ldxgi","-ldxguid","-lole32",

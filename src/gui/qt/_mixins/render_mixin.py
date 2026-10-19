@@ -69,8 +69,11 @@ class RenderMixin:
             return stats
         from src.ffmpeg.gpmf_export import attach_original_gpmf
 
-        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
-        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        from src.runtime_paths import get_common_ffmpeg_exe, get_common_ffprobe_exe
+        common_ffmpeg = get_common_ffmpeg_exe()
+        common_ffprobe = get_common_ffprobe_exe()
+        ffmpeg_exe = self.ffmpeg_exe or (str(common_ffmpeg) if common_ffmpeg.exists() else find_executable("ffmpeg"))
+        ffprobe_exe = self.ffprobe_exe or (str(common_ffprobe) if common_ffprobe.exists() else find_executable("ffprobe"))
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione do dołączenia GPMF")
         input_paths = options.get("video_paths") or getattr(self, "video_paths", [])
@@ -907,17 +910,29 @@ class RenderMixin:
             except Exception:
                 continue
 
-        encoder = options.get("encoder", detect_best_encoder())
-        if encoder == "auto":
-            encoder = detect_best_encoder()
+        from src.ffmpeg.backend_capabilities import (
+            query_backend_capabilities,
+            resolve_auto_backend,
+            validate_backend_available,
+        )
+        caps = query_backend_capabilities()
+
+        requested_encoder = str(options.get("encoder", "auto")).strip().lower()
+        if requested_encoder == "nvidia":
+            requested_encoder = "nv"
+
+        if requested_encoder == "auto":
+            encoder = resolve_auto_backend(caps)
+            options["encoder"] = encoder
+        else:
+            encoder = requested_encoder
+
         requested_render_mode = normalize_render_mode(options.get("render_mode", "gpu"))
         if requested_render_mode is RenderMode.CPU:
-            # Existing software renderer remains the canonical CPU-only path.
+            # Explicit software renderer mode forces CPU
             encoder = "cpu"
+            options["encoder"] = "cpu"
         elif requested_render_mode is RenderMode.HYBRID:
-            # A CPU producer must never create independently encoded chunks.
-            # Until a backend advertises its verified handoff to the one final
-            # native encoder, Hybrid safely continues as GPU-only.
             decision = choose_hybrid_mode(
                 requested=requested_render_mode,
                 backend=str(encoder),
@@ -929,19 +944,15 @@ class RenderMixin:
                 f"cpu_workers={decision.cpu_workers} reason={decision.reason}",
                 flush=True,
             )
-        # Validate that the requested hardware encoder actually works on this GPU
-        if encoder == "nv" and not _test_encoder("hevc_nvenc"):
-            encoder = detect_best_encoder()
-        elif encoder == "amd" and not (_test_encoder("hevc_amf") or _test_encoder("h264_amf")):
+
+        # Explicit Selection Contract & Export Safety Gate:
+        # REQUESTED_BACKEND == EFFECTIVE_BACKEND (or BLOCKED)
+        # SILENT_CROSS_VENDOR_FALLBACK=NO
+        is_avail, reason = validate_backend_available(encoder, caps)
+        if not is_avail:
             raise RuntimeError(
-                "AMD hardware encoder is unavailable; automatic CPU x265 fallback is disabled"
+                f"UNSUPPORTED_BACKEND_RENDER_START=BLOCKED: Backend '{encoder}' is not available on this machine ({reason}). SILENT_CROSS_VENDOR_FALLBACK=NO."
             )
-        elif encoder == "intel":
-            # INTEL_FORCE: no silent cross-GPU fallback.  If the user explicitly
-            # requested Intel, the full controlled resolution (adapter + QSV) is
-            # performed by stream_overlay_to_ffmpeg, which raises a controlled
-            # error (IntelBackendError) when no usable Intel GPU/QSV exists.
-            pass
 
         resolution = options.get("resolution", "source")
         raw_output = options.get("output", "output.mp4")
@@ -1068,8 +1079,16 @@ class RenderMixin:
         video_bitrate = options.get("bitrate", "40M")
         hud_option = options.get("hud_resolution_scale", "Auto")
 
-        ffmpeg_exe = self.ffmpeg_exe or find_executable("ffmpeg")
-        ffprobe_exe = self.ffprobe_exe or find_executable("ffprobe")
+        if encoder in ("nv", "nvidia"):
+            from src.runtime_paths import get_nvidia_ffmpeg_exe, get_nvidia_ffprobe_exe
+            ffmpeg_exe = str(get_nvidia_ffmpeg_exe())
+            ffprobe_exe = str(get_nvidia_ffprobe_exe())
+        else:
+            from src.runtime_paths import get_common_ffmpeg_exe, get_common_ffprobe_exe
+            common_ffmpeg = get_common_ffmpeg_exe()
+            common_ffprobe = get_common_ffprobe_exe()
+            ffmpeg_exe = self.ffmpeg_exe or (str(common_ffmpeg) if common_ffmpeg.exists() else find_executable("ffmpeg"))
+            ffprobe_exe = self.ffprobe_exe or (str(common_ffprobe) if common_ffprobe.exists() else find_executable("ffprobe"))
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione")
 
@@ -1347,7 +1366,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             nvidia_codec=options.get("nvidia_codec", "HEVC"),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
             enable_compression_analysis=bool(options.get("compression_analysis", True)),
-codec=options.get("intel_codec", "av1"),
+            codec=options.get("intel_codec") or "hevc",
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
         )

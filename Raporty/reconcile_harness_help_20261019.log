@@ -1,0 +1,77 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 14.11 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono PL' -> resolved='C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono PL' -> 'C:\Users\MalcerzSur\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 00000210c1fdab80] Current codec type is unsupported
+[av1_qsv @ 00000210c1fdab80] Current profile is unsupported
+[av1_qsv @ 00000210c1fdab80] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 00000210c1209680] [enc:av1_qsv @ 00000210c11e4100] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 00000210c23f18c0] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 00000210c23f18c0] Task finished with error: Function not implemented
+[vf#0:0 @ 00000210c23f18c0] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 00000210c1209680] [enc:av1_qsv @ 00000210c11e4100] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 00000210c1209680] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 00000210c1209680] Terminating thread with error: Invalid argument
+[out#0/null @ 00000210c19da8c0] Nothing was written into output file, because at least one of its streams received no packets.
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 612, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 3200, "preview_generation_id": 0, "preview_stop_event": {"id": 2150206078832, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 579776512, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713069100752, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 213278720, "thread_count": 24}
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[ExportQueue] Initialized
+usage: SportCamHUD.py [-h] [--test-intel-export]
+                      [--codec {av1,h264,hevc,hevc_sdr}]
+                      [--intel-path {native,ffmpeg}]
+                      [--profile {fast,balanced,quality}] [--layout LAYOUT]
+                      [--fail-executor-init] [--fail-native-init]
+                      [--watchdog-seconds WATCHDOG_SECONDS] [--preview-hud]
+                      [--mode {direct,queue}] [--video VIDEO] [--fit FIT]
+                      [--bitrate BITRATE] [--frames FRAMES] [--output OUTPUT]
+                      [--result-json RESULT_JSON] [--gpmf]
+
+SportCamHUD Intel Export Benchmark
+
+options:
+  -h, --help            show this help message and exit
+  --test-intel-export
+  --codec {av1,h264,hevc,hevc_sdr}
+  --intel-path {native,ffmpeg}
+  --profile {fast,balanced,quality}
+  --layout LAYOUT
+  --fail-executor-init  Harness-only failure injection for FFmpeg cleanup
+  --fail-native-init    Harness-only -11 injection before the native pipe
+                        writer connects
+  --watchdog-seconds WATCHDOG_SECONDS
+  --preview-hud
+  --mode {direct,queue}
+  --video VIDEO
+  --fit FIT
+  --bitrate BITRATE
+  --frames FRAMES
+  --output OUTPUT
+  --result-json RESULT_JSON
+  --gpmf                Preserve original GPMF stream

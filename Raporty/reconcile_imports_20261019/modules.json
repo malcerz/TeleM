@@ -1,0 +1,2452 @@
+[
+  {
+    "interpreter": "315",
+    "module": "src",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.benchmark",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.export_paths",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_capabilities",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_child_process",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_export_log",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_hevc_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.amd_pipeline_watchdog",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.backend_capabilities",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.command_builder",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.compression_tracker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.detection",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.displaymatrix",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.encoder_profile",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.export_stats",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.finalization_tracker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.frame_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.gpmf_export",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.hdr_color",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.hybrid_render",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.intel_backend",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.intel_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.intel_multirect_planner",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.intel_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.intel_telemetry",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.live_av_mux",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.live_mux_common",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.mp4_audio_feed",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.nvidia_child_process",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.nvidia_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.nvidia_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.nvidia_native_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.nvidia_payload_dump",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.output_error",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.pipeline_audit",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.render_errors",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.second_pass",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.shared_memory",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.shm_image",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.streaming",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg.worker_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.ffmpeg_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.autoplacement",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.export_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.export_queue",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.indicator_schemas",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.layout_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.map_context",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.map_prefetch",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.map_preload",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.map_viewport_prefetch",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.preview_transform",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.cut_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.indicator_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.playback_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.preset_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.preview_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.project_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.render_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt._mixins.sync_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.application",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.controller",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.garmin_login",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.hardware_info",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.license_dialog",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.main_window",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.models",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.mp4_inspector",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.mpv_hwdec",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.property_pages",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.signals",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.tabs",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.tabs.load_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.tabs.project_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.tabs.render_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.tabs.settings_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.data_stream_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.discrete_slider",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.icon_picker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.property_editor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.seek_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.telemetry_sync_panel",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.trim_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.qt.widgets.video_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.gui.telemetry_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.availability",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.chart",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.chart_builder",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.chart_utils",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.common_text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.compositor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.custom_text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.dispatcher",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.effects",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.font_fallback",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.frame_data",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.gauge",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.gpu_compositor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.helpers",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.icons",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.lean",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.map_prepare",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.moving_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.profiling",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.raster_ownership",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.registry",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.rotated_paste",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.segment_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.static_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.text_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.time_display",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.indicators.widget_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.activity_matcher",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.activity_provider",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.auto_telemetry_preflight",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.coordinator",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.credential_store",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.garmin_auth",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.garmin_connect",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.remote_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.integrations.strava",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.load_progress",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.map_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.moving_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.multifile",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap2c_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": "c.native.amd.d3d11_amf_pipeline.run_etap2c_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1390, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1350, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1309, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 915, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 747, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 549, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap2c_pipeline.py\", line 16, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 543, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 422, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 440, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap3a_opt_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": ".d3d11_amf_pipeline.run_etap3a_opt_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1390, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1350, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1309, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 915, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 747, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 549, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap3a_opt_pipeline.py\", line 23, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 543, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 422, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 440, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap3a_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": "c.native.amd.d3d11_amf_pipeline.run_etap3a_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1390, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1350, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1309, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 915, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 747, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 549, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap3a_pipeline.py\", line 24, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 543, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 422, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\ctypes\\__init__.py\", line 440, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_compositor.run_d3d11_poc",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_pipeline.run_d3d11va_surface_test",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.amd.d3d11_videoprocessor.run_etap2b_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.nvidia.d3d11_nvenc_pipeline.run_nvenc_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.nvenc_api",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8c",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8d",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8e",
+    "passed": false,
+    "returncode": 1,
+    "error": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import sys,importlib; sys.path.insert(0,'C:\\\\_DEV\\\\SportCamHUD'); importlib.import_module('src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8e'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1390, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1350, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1309, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 915, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 747, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 549, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\nvidia\\nvidia_d3d11_prototype\\prototype_nvidia_stage8e.py\", line 69, in <module>\n    IID_ID3D11Multithread = str_to_guid(\"9B7E4E00-342C-4106-A19F-4F2704F689F0\")\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\nvidia\\nvidia_d3d11_prototype\\prototype_nvidia_stage8e.py\", line 67, in str_to_guid\n    return GUID(d1, d2, d3, (wintypes.BYTE * 8)(*(b0_1 + b2_7)))\nTypeError: incompatible types, c_ubyte_Array_8 instance instead of c_byte_Array_8 instance\n"
+  },
+  {
+    "interpreter": "315",
+    "module": "src.overlay_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.process_lifecycle",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.qp_analyzer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.render_logging",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.render_preparation",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.render_progress",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.render_telemetry_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.runtime_paths",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.startup_timeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_active_time",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_cache_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_dji",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_dji_worker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_extract",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_file_validation",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_gpmf_new",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_heading",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_imu",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_native_gpmf",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_precompute",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_processed_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_resolver",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_slope",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_smartsync_imu",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_states_fast",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.telemetry_sync",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.version",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "315",
+    "module": "src.video_helpers",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.benchmark",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.export_paths",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_capabilities",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_child_process",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_export_log",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_hevc_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.amd_pipeline_watchdog",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.backend_capabilities",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.command_builder",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.compression_tracker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.detection",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.displaymatrix",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.encoder_profile",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.export_stats",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.finalization_tracker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.frame_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.gpmf_export",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.hdr_color",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.hybrid_render",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.intel_backend",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.intel_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.intel_multirect_planner",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.intel_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.intel_telemetry",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.live_av_mux",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.live_mux_common",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.mp4_audio_feed",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.nvidia_child_process",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.nvidia_config",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.nvidia_native_exporter",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.nvidia_native_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.nvidia_payload_dump",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.output_error",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.pipeline_audit",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.render_errors",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.second_pass",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.shared_memory",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.shm_image",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.streaming",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg.worker_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.ffmpeg_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.autoplacement",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.export_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.export_queue",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.indicator_schemas",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.layout_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.map_context",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.map_prefetch",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.map_preload",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.map_viewport_prefetch",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.preview_transform",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.cut_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.indicator_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.playback_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.preset_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.preview_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.project_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.render_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt._mixins.sync_mixin",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.application",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.controller",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.garmin_login",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.hardware_info",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.license_dialog",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.main_window",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.models",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.mp4_inspector",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.mpv_hwdec",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.property_pages",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.signals",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.tabs",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.tabs.load_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.tabs.project_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.tabs.render_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.tabs.settings_tab",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.data_stream_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.discrete_slider",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.icon_picker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.property_editor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.seek_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.telemetry_sync_panel",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.trim_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.qt.widgets.video_preview",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.gui.telemetry_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.availability",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.chart",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.chart_builder",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.chart_utils",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.common_text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.compositor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.custom_text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.dispatcher",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.effects",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.font_fallback",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.frame_data",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.gauge",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.gpu_compositor",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.helpers",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.icons",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.lean",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.map_prepare",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.moving_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.profiling",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.raster_ownership",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.registry",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.rotated_paste",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.segment_bar",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.static_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.text",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.text_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.time_display",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.indicators.widget_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.activity_matcher",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.activity_provider",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.auto_telemetry_preflight",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.coordinator",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.credential_store",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.garmin_auth",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.garmin_connect",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.remote_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.integrations.strava",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.load_progress",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.map_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.moving_map",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.multifile",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap2c_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": "tive.amd.d3d11_amf_pipeline.run_etap2c_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 759, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap2c_pipeline.py\", line 16, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 554, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 433, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 451, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap3a_opt_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": "11_amf_pipeline.run_etap3a_opt_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 759, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap3a_opt_pipeline.py\", line 23, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 554, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 433, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 451, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_amf_pipeline.run_etap3a_pipeline",
+    "passed": false,
+    "returncode": 1,
+    "error": "tive.amd.d3d11_amf_pipeline.run_etap3a_pipeline'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 759, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\amd\\d3d11_amf_pipeline\\run_etap3a_pipeline.py\", line 24, in <module>\n    amf_dll = ctypes.windll.LoadLibrary(\"amfrt64.dll\")\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 554, in LoadLibrary\n    return self._dlltype(name)\n           ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 433, in __init__\n    self._handle = self._load_library(name, mode, handle, winmode)\n                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\ctypes\\__init__.py\", line 451, in _load_library\n    return _LoadLibrary(self._name, winmode)\nFileNotFoundError: Could not find module 'amfrt64.dll' (or one of its dependencies). Try using the full path with constructor syntax.\n"
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_compositor.run_d3d11_poc",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_pipeline.run_d3d11va_surface_test",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.amd.d3d11_videoprocessor.run_etap2b_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.nvidia.d3d11_nvenc_pipeline.run_nvenc_pipeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.nvenc_api",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8c",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8d",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8e",
+    "passed": false,
+    "returncode": 1,
+    "error": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import sys,importlib; sys.path.insert(0,'C:\\\\_DEV\\\\SportCamHUD'); importlib.import_module('src.native.nvidia.nvidia_d3d11_prototype.prototype_nvidia_stage8e'); print(\"IMPORT_OK\")\n                                                                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 759, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\nvidia\\nvidia_d3d11_prototype\\prototype_nvidia_stage8e.py\", line 69, in <module>\n    IID_ID3D11Multithread = str_to_guid(\"9B7E4E00-342C-4106-A19F-4F2704F689F0\")\n  File \"C:\\_DEV\\SportCamHUD\\src\\native\\nvidia\\nvidia_d3d11_prototype\\prototype_nvidia_stage8e.py\", line 67, in str_to_guid\n    return GUID(d1, d2, d3, (wintypes.BYTE * 8)(*(b0_1 + b2_7)))\nTypeError: incompatible types, c_ubyte_Array_8 instance instead of c_byte_Array_8 instance\n"
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.overlay_renderer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.process_lifecycle",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.qp_analyzer",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.render_logging",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.render_preparation",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.render_progress",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.render_telemetry_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.runtime_paths",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.startup_timeline",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_active_time",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_cache_manager",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_dji",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_dji_worker",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_extract",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_file_validation",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_gpmf_new",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_heading",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_imu",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_native_gpmf",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_precompute",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_processed_cache",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_resolver",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_slope",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_smartsync_imu",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_states_fast",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.telemetry_sync",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.version",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  },
+  {
+    "interpreter": "314_portable",
+    "module": "src.video_helpers",
+    "passed": true,
+    "returncode": 0,
+    "error": ""
+  }
+]

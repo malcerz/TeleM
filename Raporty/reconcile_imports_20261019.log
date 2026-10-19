@@ -1,0 +1,5 @@
+315 175 171 PASS
+314_portable 175 171 PASS
+315 [('numpy', True), ('PySide6.QtWidgets', True), ('src.telemetry_smartsync_imu', True), ('telem_gpmf_native', False), ('telemetry_parser', False)]
+314_portable [('numpy', True), ('PySide6.QtWidgets', True), ('src.telemetry_smartsync_imu', True), ('telem_gpmf_native', False), ('telemetry_parser', True)]
+314_system [('numpy', False), ('PySide6.QtWidgets', False), ('src.telemetry_smartsync_imu', False), ('telem_gpmf_native', False), ('telemetry_parser', True)]

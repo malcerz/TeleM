@@ -29,7 +29,7 @@ class StagingBenchmarkResults(ctypes.Structure):
 
 def test_intel_native_7f_dll_symbols():
     """Verify telem_intel_native.dll exports all required 7F symbols."""
-    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"Missing DLL at {dll_path}"
@@ -62,7 +62,7 @@ def test_intel_7f_timing_rational_contract():
 
 def test_intel_7f_staging_microbenchmark_parity():
     """Verify staging direct pack produces bit-identical output to scratch pack."""
-    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()
     dll = ctypes.CDLL(str(dll_path))

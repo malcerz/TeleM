@@ -1,0 +1,4426 @@
+[
+  {
+    "codec": "hevc",
+    "profile": "fast",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_fast.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 3.28,
+    "total_frames": 30,
+    "effective_fps": 9.14,
+    "ram_used_gb": 9.44,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5601588"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5601588,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": null,
+      "cancelled": false,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | pr\u00f3bki: 30 (odrzucone: 0)",
+      "current_qp": null,
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 12,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 7,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.175273400003789,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.2083353000052739,
+      "frame_render_seconds": 2.427186199987773,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mean_qp": null,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5601588,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "unavailable",
+      "qp_avg": null,
+      "qp_rejected_samples": 12,
+      "qp_source": "unavailable",
+      "qp_unverified_feedback": {
+        "quant_avg": null,
+        "quant_current": null,
+        "quant_max": null,
+        "quant_min": null,
+        "quant_samples": 0,
+        "quant_sum": 0
+      },
+      "quant_avg": null,
+      "quant_current": null,
+      "quant_max": null,
+      "quant_metric": "QP",
+      "quant_min": null,
+      "quant_reason": "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; no reliable frame/CU QP without full entropy decoding",
+      "quant_samples": 0,
+      "quant_sum": 0,
+      "rate_control": "VBR",
+      "real_export_fps": 12.359991170084573,
+      "render_fps": 12.359991170084573,
+      "slice_qp_aggregation": "per frame: slice base QP weighted by the CTUs each slice covers (= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; min/max: over all slices of valid frames",
+      "slice_qp_available": true,
+      "slice_qp_avg": 26.0,
+      "slice_qp_by_frame_type": {
+        "B": {
+          "avg": null,
+          "frames": 0
+        },
+        "I": {
+          "avg": 26.0,
+          "frames": 1
+        },
+        "P": {
+          "avg": 26.0,
+          "frames": 29
+        }
+      },
+      "slice_qp_cu_qp_delta_enabled": true,
+      "slice_qp_current": 26,
+      "slice_qp_current_ctu_weighted": 26.0,
+      "slice_qp_current_frame_type": "P",
+      "slice_qp_current_max": 26,
+      "slice_qp_current_min": 26,
+      "slice_qp_frames": 30,
+      "slice_qp_max": 26,
+      "slice_qp_max_slices_per_frame": 1,
+      "slice_qp_min": 26,
+      "slice_qp_note": "cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base",
+      "slice_qp_parse_errors": 0,
+      "slice_qp_parse_us_max": 195.1,
+      "slice_qp_parse_us_per_frame": 52.07000000000001,
+      "slice_qp_rejected_samples": 0,
+      "slice_qp_slices": 30,
+      "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+      "slice_qp_valid_samples": 30,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 2.9445138000010047,
+      "user_effective_fps": 10.188439259476306,
+      "verify_seconds": 0.03223200002685189,
+      "video_encode_pass_count": 1,
+      "vpl_hevc_frame_qp_crosscheck": {
+        "last": 0,
+        "match_slice_qp": 0,
+        "mismatch": 18,
+        "reported": 30,
+        "zero": 12
+      }
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_native_hevc_fast",
+    "phase": "smoke",
+    "process_wall_s": 9.078203199984273,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "hevc",
+      "--profile",
+      "fast",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_fast.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_fast.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 44.49819780219781,
+      "peak_0.1s_mbps": 60.2736,
+      "peak_1s_mbps": 44.542696,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "hevc",
+    "profile": "balanced",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_balanced.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 3.59,
+    "total_frames": 30,
+    "effective_fps": 8.35,
+    "ram_used_gb": 9.72,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5723131"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5723131,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": null,
+      "cancelled": false,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | pr\u00f3bki: 30 (odrzucone: 0)",
+      "current_qp": null,
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 5,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 4,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.29977290000533685,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.3347955000062939,
+      "frame_render_seconds": 2.5819380000175443,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mean_qp": null,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5723131,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "unavailable",
+      "qp_avg": null,
+      "qp_rejected_samples": 5,
+      "qp_source": "unavailable",
+      "qp_unverified_feedback": {
+        "quant_avg": null,
+        "quant_current": null,
+        "quant_max": null,
+        "quant_min": null,
+        "quant_samples": 0,
+        "quant_sum": 0
+      },
+      "quant_avg": null,
+      "quant_current": null,
+      "quant_max": null,
+      "quant_metric": "QP",
+      "quant_min": null,
+      "quant_reason": "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; no reliable frame/CU QP without full entropy decoding",
+      "quant_samples": 0,
+      "quant_sum": 0,
+      "rate_control": "VBR",
+      "real_export_fps": 11.619179081680564,
+      "render_fps": 11.619179081680564,
+      "slice_qp_aggregation": "per frame: slice base QP weighted by the CTUs each slice covers (= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; min/max: over all slices of valid frames",
+      "slice_qp_available": true,
+      "slice_qp_avg": 26.0,
+      "slice_qp_by_frame_type": {
+        "B": {
+          "avg": null,
+          "frames": 0
+        },
+        "I": {
+          "avg": 26.0,
+          "frames": 1
+        },
+        "P": {
+          "avg": 26.0,
+          "frames": 29
+        }
+      },
+      "slice_qp_cu_qp_delta_enabled": true,
+      "slice_qp_current": 26,
+      "slice_qp_current_ctu_weighted": 26.0,
+      "slice_qp_current_frame_type": "P",
+      "slice_qp_current_max": 26,
+      "slice_qp_current_min": 26,
+      "slice_qp_frames": 30,
+      "slice_qp_max": 26,
+      "slice_qp_max_slices_per_frame": 1,
+      "slice_qp_min": 26,
+      "slice_qp_note": "cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base",
+      "slice_qp_parse_errors": 0,
+      "slice_qp_parse_us_max": 179.4,
+      "slice_qp_parse_us_per_frame": 59.55999999999999,
+      "slice_qp_rejected_samples": 0,
+      "slice_qp_slices": 30,
+      "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+      "slice_qp_valid_samples": 30,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 3.2470644999993965,
+      "user_effective_fps": 9.239114283071856,
+      "verify_seconds": 0.03420279998681508,
+      "video_encode_pass_count": 1,
+      "vpl_hevc_frame_qp_crosscheck": {
+        "last": 0,
+        "match_slice_qp": 0,
+        "mismatch": 25,
+        "reported": 30,
+        "zero": 5
+      }
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_native_hevc_balanced",
+    "phase": "smoke",
+    "process_wall_s": 10.068026900000405,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "hevc",
+      "--profile",
+      "balanced",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_balanced.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_balanced.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 45.469530469530476,
+      "peak_0.1s_mbps": 59.00136,
+      "peak_1s_mbps": 45.515,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "hevc",
+    "profile": "quality",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_quality.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 5.31,
+    "total_frames": 30,
+    "effective_fps": 5.64,
+    "ram_used_gb": 9.49,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5696443"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5696443,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": null,
+      "cancelled": false,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | pr\u00f3bki: 30 (odrzucone: 0)",
+      "current_qp": null,
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 3,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 1,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.3937414000101853,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.4419433000148274,
+      "frame_render_seconds": 3.901744200004032,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mean_qp": null,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5696443,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "unavailable",
+      "qp_avg": null,
+      "qp_rejected_samples": 3,
+      "qp_source": "unavailable",
+      "qp_unverified_feedback": {
+        "quant_avg": null,
+        "quant_current": null,
+        "quant_max": null,
+        "quant_min": null,
+        "quant_samples": 0,
+        "quant_sum": 0
+      },
+      "quant_avg": null,
+      "quant_current": null,
+      "quant_max": null,
+      "quant_metric": "QP",
+      "quant_min": null,
+      "quant_reason": "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; no reliable frame/CU QP without full entropy decoding",
+      "quant_samples": 0,
+      "quant_sum": 0,
+      "rate_control": "VBR",
+      "real_export_fps": 7.688868993505263,
+      "render_fps": 7.688868993505263,
+      "slice_qp_aggregation": "per frame: slice base QP weighted by the CTUs each slice covers (= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; min/max: over all slices of valid frames",
+      "slice_qp_available": true,
+      "slice_qp_avg": 26.0,
+      "slice_qp_by_frame_type": {
+        "B": {
+          "avg": null,
+          "frames": 0
+        },
+        "I": {
+          "avg": 26.0,
+          "frames": 1
+        },
+        "P": {
+          "avg": 26.0,
+          "frames": 29
+        }
+      },
+      "slice_qp_cu_qp_delta_enabled": true,
+      "slice_qp_current": 26,
+      "slice_qp_current_ctu_weighted": 26.0,
+      "slice_qp_current_frame_type": "P",
+      "slice_qp_current_max": 26,
+      "slice_qp_current_min": 26,
+      "slice_qp_frames": 30,
+      "slice_qp_max": 26,
+      "slice_qp_max_slices_per_frame": 1,
+      "slice_qp_min": 26,
+      "slice_qp_note": "cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base",
+      "slice_qp_parse_errors": 0,
+      "slice_qp_parse_us_max": 232.1,
+      "slice_qp_parse_us_per_frame": 103.53666666666668,
+      "slice_qp_rejected_samples": 0,
+      "slice_qp_slices": 30,
+      "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+      "slice_qp_valid_samples": 30,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 4.898907700000564,
+      "user_effective_fps": 6.123814090230063,
+      "verify_seconds": 0.04728940001223236,
+      "video_encode_pass_count": 1,
+      "vpl_hevc_frame_qp_crosscheck": {
+        "last": 31,
+        "match_slice_qp": 0,
+        "mismatch": 27,
+        "reported": 30,
+        "zero": 3
+      }
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_native_hevc_quality",
+    "phase": "smoke",
+    "process_wall_s": 11.097585100011202,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "hevc",
+      "--profile",
+      "quality",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_quality.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_hevc_quality.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 45.25623176823177,
+      "peak_0.1s_mbps": 58.23168,
+      "peak_1s_mbps": 45.301488,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "fast",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_fast.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 3.78,
+    "total_frames": 30,
+    "effective_fps": 7.93,
+    "ram_used_gb": 9.46,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5133137"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5133137,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": 22.4,
+      "cancelled": false,
+      "codec": "h264",
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 0,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 7,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.15216789999976754,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.26451879998785444,
+      "frame_render_seconds": 2.6978838000213727,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5133137,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+      "qp_rejected_samples": 0,
+      "qp_source": "oneVPL encoded-frame luma QP",
+      "quant_avg": 22.4,
+      "quant_current": 23,
+      "quant_max": 23,
+      "quant_metric": "QP",
+      "quant_min": 19,
+      "quant_samples": 30,
+      "quant_sum": 672,
+      "rate_control": "VBR",
+      "real_export_fps": 11.119826583992364,
+      "render_fps": 11.119826583992364,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 3.316974699991988,
+      "user_effective_fps": 9.044386138993602,
+      "verify_seconds": 0.11163649999070913,
+      "video_encode_pass_count": 1
+    },
+    "sampled_q": {},
+    "name": "smoke_native_h264_fast",
+    "phase": "smoke",
+    "process_wall_s": 10.085580599989044,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "h264",
+      "--profile",
+      "fast",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_fast.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_fast.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 40.754893106893114,
+      "peak_0.1s_mbps": 56.83816,
+      "peak_1s_mbps": 40.795648,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "balanced",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_balanced.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 4.26,
+    "total_frames": 30,
+    "effective_fps": 7.04,
+    "ram_used_gb": 9.61,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5034634"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5034634,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": 22.4,
+      "cancelled": false,
+      "codec": "h264",
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 0,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 4,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.19150749998516403,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.34754610000527464,
+      "frame_render_seconds": 3.053492599981837,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5034634,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+      "qp_rejected_samples": 0,
+      "qp_source": "oneVPL encoded-frame luma QP",
+      "quant_avg": 22.4,
+      "quant_current": 23,
+      "quant_max": 23,
+      "quant_metric": "QP",
+      "quant_min": 19,
+      "quant_samples": 30,
+      "quant_sum": 672,
+      "rate_control": "VBR",
+      "real_export_fps": 9.82481503317822,
+      "render_fps": 9.82481503317822,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 3.747392999997828,
+      "user_effective_fps": 8.005565469118768,
+      "verify_seconds": 0.15435830000205897,
+      "video_encode_pass_count": 1
+    },
+    "sampled_q": {
+      "13": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "14": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "15": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "16": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "17": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "18": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "19": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "20": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "21": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "22": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "23": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "24": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "25": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "26": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "27": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "28": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "29": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      },
+      "30": {
+        "q_cur": 22,
+        "q_avg": 22.0,
+        "q_samples": 11
+      }
+    },
+    "name": "smoke_native_h264_balanced",
+    "phase": "smoke",
+    "process_wall_s": 10.097501100011868,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "h264",
+      "--profile",
+      "balanced",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_balanced.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_balanced.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 39.967656343656344,
+      "peak_0.1s_mbps": 56.60064,
+      "peak_1s_mbps": 40.007624,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "quality",
+    "intel_path": "native",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_quality.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 7.8,
+    "total_frames": 30,
+    "effective_fps": 3.85,
+    "ram_used_gb": 9.68,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30",
+            "side_data_list": [
+              {}
+            ]
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.981333",
+            "nb_frames": "46"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "4858277"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 4858277,
+    "stats": {
+      "audio_live_mux": true,
+      "avg_qp": 22.366666666666667,
+      "cancelled": false,
+      "codec": "h264",
+      "encoder_accepted": {
+        "buffer_kb": 10000,
+        "get_status": 0,
+        "init_status": 0,
+        "initial_delay_kb": 5000,
+        "max_kbps": 50000,
+        "multiplier": 1,
+        "qp_supported": 1,
+        "qp_unverified_zero": 0,
+        "query_status": 0,
+        "rate_control": 2,
+        "target_kbps": 40000,
+        "target_usage": 1,
+        "valid": 1
+      },
+      "encoder_drain_seconds": 0.3028478000196628,
+      "final_mp4_full_remux_count": 0,
+      "finalization_seconds": 0.48119109999970533,
+      "frame_render_seconds": 5.783811700006481,
+      "generation_id": 1,
+      "gpmf_live_mux": false,
+      "is_cqp": false,
+      "mux_process_count": 1,
+      "mux_seconds": 0.0,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 4858277,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "post_render_full_mux_seconds": 0.0,
+      "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+      "qp_rejected_samples": 0,
+      "qp_source": "oneVPL encoded-frame luma QP",
+      "quant_avg": 22.366666666666667,
+      "quant_current": 23,
+      "quant_max": 23,
+      "quant_metric": "QP",
+      "quant_min": 19,
+      "quant_samples": 30,
+      "quant_sum": 671,
+      "rate_control": "VBR",
+      "real_export_fps": 5.186890852613058,
+      "render_fps": 5.186890852613058,
+      "temp_ivf_bytes": 0,
+      "temp_ivf_path": null,
+      "total_overlay_frames": 0,
+      "total_wall_seconds": 6.973774899990531,
+      "user_effective_fps": 4.301830849177644,
+      "verify_seconds": 0.1771844000031706,
+      "video_encode_pass_count": 1
+    },
+    "sampled_q": {
+      "13": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "14": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "15": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "16": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "17": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "18": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "19": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "20": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "21": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "22": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "23": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "24": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "25": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "26": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "27": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "28": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "29": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      },
+      "30": {
+        "q_cur": 21,
+        "q_avg": 21.90909090909091,
+        "q_samples": 11
+      }
+    },
+    "name": "smoke_native_h264_quality",
+    "phase": "smoke",
+    "process_wall_s": 18.25003779999679,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "native",
+      "--codec",
+      "h264",
+      "--profile",
+      "quality",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_quality.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_quality.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "\n00000000:       -65536           0           0\n00000001:            0      -65536           0\n00000002:            0           0  1073741824\n",
+            "rotation": -180
+          }
+        ]
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.981333",
+        "nb_frames": "46",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "GoPro AAC"
+        }
+      },
+      "avg_video_mbps": 38.55821778221779,
+      "peak_0.1s_mbps": 54.53368,
+      "peak_1s_mbps": 38.596776,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.01966699999999988
+    }
+  },
+  {
+    "codec": "hevc",
+    "profile": "fast",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_fast.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 18.04,
+    "total_frames": 30,
+    "effective_fps": 1.66,
+    "ram_used_gb": 9.59,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5787433"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5787433,
+    "stats": {
+      "avg_qp": null,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "QP: -- (FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable)",
+      "encoder_accepted": {
+        "TargetUsage": 7,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[hevc_qsv @ 0000021f8a7f9d00] Using the variable bitrate (VBR) ratecontrol method",
+        "[hevc_qsv @ 0000021f8a7f9d00] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+        "[hevc_qsv @ 0000021f8a7f9d00] TargetUsage: 7; RateControlMethod: VBR",
+        "[hevc_qsv @ 0000021f8a7f9d00] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[hevc_qsv @ 0000021f8a7f9d00] NumSlice: 1; NumRefFrame: 3",
+        "[hevc_qsv @ 0000021f8a7f9d00] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5787433,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "unavailable in this FFmpeg HEVC runtime",
+      "quant_metric": "QP",
+      "quant_reason": "FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable",
+      "quant_samples": 0,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_ffmpeg_hevc_fast",
+    "phase": "smoke",
+    "process_wall_s": 29.584965000016382,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "hevc",
+      "--profile",
+      "fast",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_fast.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_fast.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 hevc_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 45.98689310689311,
+      "peak_0.1s_mbps": 69.94136,
+      "peak_1s_mbps": 46.03288,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  },
+  {
+    "codec": "hevc",
+    "profile": "balanced",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_balanced.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 16.57,
+    "total_frames": 30,
+    "effective_fps": 1.81,
+    "ram_used_gb": 9.27,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5707603"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5707603,
+    "stats": {
+      "avg_qp": null,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "QP: -- (FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable)",
+      "encoder_accepted": {
+        "TargetUsage": 4,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[hevc_qsv @ 000001b0fedffa80] Using the variable bitrate (VBR) ratecontrol method",
+        "[hevc_qsv @ 000001b0fedffa80] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+        "[hevc_qsv @ 000001b0fedffa80] TargetUsage: 4; RateControlMethod: VBR",
+        "[hevc_qsv @ 000001b0fedffa80] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[hevc_qsv @ 000001b0fedffa80] NumSlice: 1; NumRefFrame: 3",
+        "[hevc_qsv @ 000001b0fedffa80] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5707603,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "unavailable in this FFmpeg HEVC runtime",
+      "quant_metric": "QP",
+      "quant_reason": "FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable",
+      "quant_samples": 0,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_ffmpeg_hevc_balanced",
+    "phase": "smoke",
+    "process_wall_s": 28.474745900020935,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "hevc",
+      "--profile",
+      "balanced",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_balanced.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_balanced.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 hevc_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 45.34888311688312,
+      "peak_0.1s_mbps": 68.73712,
+      "peak_1s_mbps": 45.394232,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  },
+  {
+    "codec": "hevc",
+    "profile": "quality",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_quality.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 10.85,
+    "total_frames": 30,
+    "effective_fps": 2.76,
+    "ram_used_gb": 9.43,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5714450"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5714450,
+    "stats": {
+      "avg_qp": null,
+      "codec": "hevc",
+      "compression_active": false,
+      "compression_text": "QP: -- (FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable)",
+      "encoder_accepted": {
+        "TargetUsage": 1,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[hevc_qsv @ 000002347f527900] Using the variable bitrate (VBR) ratecontrol method",
+        "[hevc_qsv @ 000002347f527900] GopPicSize: 248; GopRefDist: 4; GopOptFlag:; IdrInterval: 1",
+        "[hevc_qsv @ 000002347f527900] TargetUsage: 1; RateControlMethod: VBR",
+        "[hevc_qsv @ 000002347f527900] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[hevc_qsv @ 000002347f527900] NumSlice: 1; NumRefFrame: 3",
+        "[hevc_qsv @ 000002347f527900] NalHrdConformance: ON; VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5714450,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "unavailable in this FFmpeg HEVC runtime",
+      "quant_metric": "QP",
+      "quant_reason": "FFmpeg QSV reports encoded-frame QP side data only for H.264; HEVC quality is unavailable",
+      "quant_samples": 0,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_ffmpeg_hevc_quality",
+    "phase": "smoke",
+    "process_wall_s": 19.278979800001252,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "hevc",
+      "--profile",
+      "quality",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_quality.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_hevc_quality.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "hevc",
+        "profile": "Main 10",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p10le",
+        "color_transfer": "arib-std-b67",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 hevc_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 45.403604395604404,
+      "peak_0.1s_mbps": 68.1452,
+      "peak_1s_mbps": 45.449008,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 1,
+        "cpb_size_scale": 6,
+        "bit_rate_value_minus1[0]": 390624,
+        "cpb_size_value_minus1[0]": 78124,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "fast",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_fast.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 10.13,
+    "total_frames": 30,
+    "effective_fps": 2.96,
+    "ram_used_gb": 9.28,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5144326"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5144326,
+    "stats": {
+      "avg_qp": 23.428571428571427,
+      "codec": "h264",
+      "compression_active": true,
+      "compression_text": "QP: 25.0 | Avg: 23.4 | Min: 22.0 | Max: 25.0 (pr\u00f3bki progress)",
+      "current_qp": 25.0,
+      "encoder_accepted": {
+        "TargetUsage": 7,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[h264_qsv @ 00000246741b6980] Using the variable bitrate (VBR) ratecontrol method",
+        "[h264_qsv @ 00000246741b6980] GopPicSize: 256; GopRefDist: 3; GopOptFlag: closed; IdrInterval: 0",
+        "[h264_qsv @ 00000246741b6980] TargetUsage: 7; RateControlMethod: VBR",
+        "[h264_qsv @ 00000246741b6980] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[h264_qsv @ 00000246741b6980] NumSlice: 1; NumRefFrame: 2",
+        "[h264_qsv @ 00000246741b6980] NalHrdConformance: ON; SingleSeiNalUnit: ON; VuiVclHrdParameters: OFF VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5144326,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "FFmpeg QSV oneVPL frame-info via packet quality side data (progress sampled)",
+      "quant_avg": 23.428571428571427,
+      "quant_current": 25.0,
+      "quant_max": 25.0,
+      "quant_metric": "QP",
+      "quant_min": 22.0,
+      "quant_reason": "",
+      "quant_samples": 7,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "27": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "28": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "29": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "30": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      }
+    },
+    "name": "smoke_ffmpeg_h264_fast",
+    "phase": "smoke",
+    "process_wall_s": 16.25231499999063,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "h264",
+      "--profile",
+      "fast",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_fast.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_fast.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 h264_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 40.848287712287714,
+      "peak_0.1s_mbps": 57.53784,
+      "peak_1s_mbps": 40.889136,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "balanced",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_balanced.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 11.44,
+    "total_frames": 30,
+    "effective_fps": 2.62,
+    "ram_used_gb": 9.5,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5077363"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5077363,
+    "stats": {
+      "avg_qp": 24.142857142857142,
+      "codec": "h264",
+      "compression_active": true,
+      "compression_text": "QP: 25.0 | Avg: 24.1 | Min: 23.0 | Max: 25.0 (pr\u00f3bki progress)",
+      "current_qp": 25.0,
+      "encoder_accepted": {
+        "TargetUsage": 4,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[h264_qsv @ 000002428cdd7c80] Using the variable bitrate (VBR) ratecontrol method",
+        "[h264_qsv @ 000002428cdd7c80] GopPicSize: 256; GopRefDist: 3; GopOptFlag: closed; IdrInterval: 0",
+        "[h264_qsv @ 000002428cdd7c80] TargetUsage: 4; RateControlMethod: VBR",
+        "[h264_qsv @ 000002428cdd7c80] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[h264_qsv @ 000002428cdd7c80] NumSlice: 1; NumRefFrame: 2",
+        "[h264_qsv @ 000002428cdd7c80] NalHrdConformance: ON; SingleSeiNalUnit: ON; VuiVclHrdParameters: OFF VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5077363,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "FFmpeg QSV oneVPL frame-info via packet quality side data (progress sampled)",
+      "quant_avg": 24.142857142857142,
+      "quant_current": 25.0,
+      "quant_max": 25.0,
+      "quant_metric": "QP",
+      "quant_min": 23.0,
+      "quant_reason": "",
+      "quant_samples": 7,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "27": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "28": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "29": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      },
+      "30": {
+        "q_cur": 23.0,
+        "q_avg": 23.0,
+        "q_samples": 1
+      }
+    },
+    "name": "smoke_ffmpeg_h264_balanced",
+    "phase": "smoke",
+    "process_wall_s": 18.267752300016582,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "h264",
+      "--profile",
+      "balanced",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_balanced.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_balanced.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 h264_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 40.31311888111889,
+      "peak_0.1s_mbps": 57.13576,
+      "peak_1s_mbps": 40.353432,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  },
+  {
+    "codec": "h264",
+    "profile": "quality",
+    "intel_path": "ffmpeg",
+    "mode": "direct",
+    "video": "C:\\GoPro\\GX010378.MP4",
+    "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+    "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_quality.mp4",
+    "bitrate": "40M",
+    "max_frames": 30,
+    "success": true,
+    "error": "",
+    "elapsed_s": 11.24,
+    "total_frames": 30,
+    "effective_fps": 2.67,
+    "ram_used_gb": 9.27,
+    "pipe_forwarders_after_export": [],
+    "validation": {
+      "valid": true,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 3840,
+            "height": 2160,
+            "avg_frame_rate": "30000/1001",
+            "duration": "1.001000",
+            "nb_frames": "30"
+          },
+          {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "avg_frame_rate": "0/0",
+            "duration": "0.960000",
+            "nb_frames": "45"
+          }
+        ],
+        "format": {
+          "duration": "1.001000",
+          "size": "5220825"
+        }
+      },
+      "actual_video_frames": 30
+    },
+    "output_size_bytes": 5220825,
+    "stats": {
+      "avg_qp": 23.833333333333332,
+      "codec": "h264",
+      "compression_active": true,
+      "compression_text": "QP: 25.0 | Avg: 23.8 | Min: 22.0 | Max: 25.0 (pr\u00f3bki progress)",
+      "current_qp": 25.0,
+      "encoder_accepted": {
+        "TargetUsage": 1,
+        "BufferSizeInKB": 10000,
+        "InitialDelayInKB": 5000,
+        "TargetKbps": 40000,
+        "MaxKbps": 50000,
+        "BRCParamMultiplier": 1
+      },
+      "encoder_diagnostics": [
+        "[h264_qsv @ 000001e7e7515b00] Using the variable bitrate (VBR) ratecontrol method",
+        "[h264_qsv @ 000001e7e7515b00] GopPicSize: 256; GopRefDist: 3; GopOptFlag: closed; IdrInterval: 0",
+        "[h264_qsv @ 000001e7e7515b00] TargetUsage: 1; RateControlMethod: VBR",
+        "[h264_qsv @ 000001e7e7515b00] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1",
+        "[h264_qsv @ 000001e7e7515b00] NumSlice: 1; NumRefFrame: 3",
+        "[h264_qsv @ 000001e7e7515b00] NalHrdConformance: ON; SingleSeiNalUnit: ON; VuiVclHrdParameters: OFF VuiNalHrdParameters: ON"
+      ],
+      "generation_id": 1,
+      "is_cqp": false,
+      "output_validation": {
+        "duration_s": 1.001,
+        "has_audio": true,
+        "size_bytes": 5220825,
+        "state": "valid"
+      },
+      "png_duration": 0,
+      "qp_aggregation": "arithmetic mean of distinct progress-frame samples; not all frames",
+      "qp_source": "FFmpeg QSV oneVPL frame-info via packet quality side data (progress sampled)",
+      "quant_avg": 23.833333333333332,
+      "quant_current": 25.0,
+      "quant_max": 25.0,
+      "quant_metric": "QP",
+      "quant_min": 22.0,
+      "quant_reason": "",
+      "quant_samples": 6,
+      "rate_control": "VBR",
+      "rate_control_raw": "VBR",
+      "total_overlay_frames": 0
+    },
+    "sampled_q": {
+      "1": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "2": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "3": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "4": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "5": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "6": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "7": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "8": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "9": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "10": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "11": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "12": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "13": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "14": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "15": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "16": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "17": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "18": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "19": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "20": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "21": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "22": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "23": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "24": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "25": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "26": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "27": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "28": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "29": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      },
+      "30": {
+        "q_cur": null,
+        "q_avg": null,
+        "q_samples": 0
+      }
+    },
+    "name": "smoke_ffmpeg_h264_quality",
+    "phase": "smoke",
+    "process_wall_s": 18.253115200001048,
+    "command": [
+      "C:\\Users\\MalcerzSur\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+      "C:\\_DEV\\SportCamHUD\\SportCamHUD.py",
+      "--test-intel-export",
+      "--intel-path",
+      "ffmpeg",
+      "--codec",
+      "h264",
+      "--profile",
+      "quality",
+      "--frames",
+      "30",
+      "--bitrate",
+      "40M",
+      "--video",
+      "C:\\GoPro\\GX010378.MP4",
+      "--fit",
+      "C:\\GoPro\\2026-10-15_15-03-50.fit",
+      "--layout",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\intel_vbr_qp_20261017\\layout.json",
+      "--watchdog-seconds",
+      "900",
+      "--output",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_quality.mp4",
+      "--result-json",
+      "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_ffmpeg_h264_quality.json"
+    ],
+    "gpu_encode_samples": [],
+    "gpu_counter_error": "Driver exposes no PID-scoped VideoEncode counter; VideoDecode/VideoProcessing cannot be substituted",
+    "gpu_encode_mean": null,
+    "gpu_encode_active_mean": null,
+    "layout_sha256": "820e3bc6379ecdbe25469eebf02576a3870afde41f452684bb63320b0e312044",
+    "stream": {
+      "video": {
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "pix_fmt": "yuv420p",
+        "color_transfer": "bt709",
+        "avg_frame_rate": "30000/1001",
+        "duration": "1.001000",
+        "nb_frames": "30",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.8.101 h264_qsv"
+        }
+      },
+      "audio": {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "0.960000",
+        "nb_frames": "45",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      },
+      "avg_video_mbps": 41.459660339660346,
+      "peak_0.1s_mbps": 56.73152,
+      "peak_1s_mbps": 41.50112,
+      "hrd": {
+        "nal_hrd_parameters_present_flag": 1,
+        "bit_rate_scale": 4,
+        "cpb_size_scale": 2,
+        "bit_rate_value_minus1[0]": 48827,
+        "cpb_size_value_minus1[0]": 1249999,
+        "cbr_flag[0]": 0
+      },
+      "decode_ok": true,
+      "decode_error": "",
+      "av_duration_delta_s": 0.040999999999999925
+    }
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "module": "numpy",
+    "passed": true,
+    "stdout": "2.5.1\n",
+    "stderr": ""
+  },
+  {
+    "module": "PySide6.QtWidgets",
+    "passed": true,
+    "stdout": "loaded\n",
+    "stderr": ""
+  },
+  {
+    "module": "src.telemetry_smartsync_imu",
+    "passed": true,
+    "stdout": "loaded\n",
+    "stderr": ""
+  },
+  {
+    "module": "telem_gpmf_native",
+    "passed": false,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import sys,importlib; sys.path.insert(0,'C:\\\\_DEV\\\\SportCamHUD'); sys.path.insert(0,'C:\\\\_DEV\\\\SportCamHUD\\\\runtime\\\\common\\\\telemetry\\\\gpmf'); sys.path.insert(0,'C:\\\\_DEV\\\\SportCamHUD\\\\runtime\\\\telemetry_parser'); m=importlib.import_module('telem_gpmf_native'); print(getattr(m,\"__version__\",\"loaded\"))\n                                                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\_DEV\\SportCamHUD\\scratch\\intel_portable_validation\\python\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 924, in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 816, in module_from_spec\n  File \"<frozen importlib._bootstrap_external>\", line 1053, in create_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\nImportError: DLL load failed while importing telem_gpmf_native: Nie mo\ufffdna odnale\ufffd\ufffd okre\ufffdlonego modu\ufffdu.\n"
+  },
+  {
+    "module": "telemetry_parser",
+    "passed": true,
+    "stdout": "loaded\n",
+    "stderr": ""
+  }
+]

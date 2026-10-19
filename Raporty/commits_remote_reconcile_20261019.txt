@@ -1,0 +1,10 @@
+ae5771755a2960367b3dabaeec1c0bdda0e4c6ac Fix NVENC Quality and Max Quality profiles via dynamic capability probing on Quadro P400
+f65fa7328345b04fb364fac6a5e361a495842e24 feat(nvidia): enable CUDA/NVENC pipeline on Quadro P400 with isolated FFmpeg 8.1 SDK 13.0
+d8534efbe8021a33e59f28ce1063b546ea7d9fdf fix(capabilities): enforce AMD production DLL contract and no fake CPU fallback
+f14a479950274f0bf7693538f27ba5c1501641ca docs: add report RAPORT_DYNAMIC_EXPORT_BACKENDS_AND_NVIDIA_UI.md
+ef350bb5661326ac20b9654cf478899901fa9170 feat(render): dynamic capability-filtered export backends and DiscreteSlider NVIDIA UI
+ce1167e5abe7d3cfd6cde9a88b7d898e42247b47 docs: add report RAPORT_INTEL_CODEC_CAPABILITY_GUI_FILTER.md
+bc2b1731e1e45a6ec8c7308262b06f28bc643b0e feat(intel): filter GUI codecs by runtime hardware capabilities
+2fb624a594e114259b0559684fd90a1de1191a41 docs(report): update commit hash and push result in runtime separation report
+f672b3f803fc5759afc04830c0dbfd695e999609 Merge remote-tracking branch 'origin/main' into main
+f0dfc016f7f2e907ce1a428febc44e2bb766acae refactor(runtime): isolate AMD Intel and NVIDIA runtimes

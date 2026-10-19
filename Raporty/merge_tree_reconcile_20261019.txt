@@ -1,0 +1,105 @@
+4d089497412e1f924981b23cc1b4f9011b7bafe6
+100644 4fbfff7d9921660e6fbb2677bed3094481cf9517 1	.gitignore
+100644 b9f3ccbeb9bf8a278af456753c62fc34b8f9b9ef 2	.gitignore
+100644 139315852c7d8493fb54e14557c1826e0fdd23bc 3	.gitignore
+100644 7d7ed25eeae29d214693010232b89846d3176e63 1	AGENTS.md
+100644 7cfae99e404c0e109fdb52ab962fde755e8ce041 2	AGENTS.md
+100644 360fbb5fdbc485698acfd45c2be3d55205ecb708 3	AGENTS.md
+100644 ba216549a1cef357751b395279dda6b069033ac0 2	runtime/runtime_manifest.json
+100644 867da8d7aed6e8537c4f57c6ebd74f2f676304bd 3	runtime/runtime_manifest.json
+100644 7e871a4229100629f13f7813ca0379ed09b18441 1	src/ffmpeg/amd_native_exporter.py
+100644 d0e61d69212dc56ca00d834993f4579555b85c1f 2	src/ffmpeg/amd_native_exporter.py
+100644 245ca4853ecf87f851535564f4c24562078a4e71 3	src/ffmpeg/amd_native_exporter.py
+100644 925102e9ef634f551281cc2a5fe358635ba29ff4 1	src/ffmpeg/intel_native_exporter.py
+100644 be584d2a3a144b3574288a3a90390009201252da 2	src/ffmpeg/intel_native_exporter.py
+100644 7e31a8606c313de2941aa414416a7cce74b71552 3	src/ffmpeg/intel_native_exporter.py
+100644 cf29097f2a0e8e6ef2cfb6818e94ade86adb79f4 1	src/ffmpeg/nvidia_config.py
+100644 43f0635768883d7456ed61e26c6cabafedf61cf3 2	src/ffmpeg/nvidia_config.py
+100644 39867e6521d61cb15c661ee8534e5b7ea64226e3 3	src/ffmpeg/nvidia_config.py
+100644 8371898fd9cff681f6a85a9b3402a867f932a099 1	src/ffmpeg/streaming.py
+100644 4ce4d39ef24472fac22a3478506c19773552fd1d 2	src/ffmpeg/streaming.py
+100644 5161ce7bbe6eceeec279c07ce0c5496f50a45521 3	src/ffmpeg/streaming.py
+100644 e0f3d8687dc49df57034e14917bd569f77bbd11d 1	src/gui/qt/tabs/render_tab.py
+100644 68e3fc09371ebe38ec8316bc1be299f4534a2901 2	src/gui/qt/tabs/render_tab.py
+100644 766e06c5b6e0b11a8a402e87ea2525567c98806d 3	src/gui/qt/tabs/render_tab.py
+100644 5612fa9db1371a86458c806665d8119441cea95d 2	src/native/common/gpmf/telem_gpmf_native.pyd
+100644 e22dde5cca382cd4cb633a0937e6ed748ebc78d9 2	src/runtime_paths.py
+100644 8744098f89fa895fdcaf595b62518ceb37b50525 3	src/runtime_paths.py
+100644 b6ae908cbbe276c96a94ca4fdeb3c898116c6d94 1	src/telemetry_dji.py
+100644 651d45c300ff4299e0c12b6647d21ac22cc745b2 2	src/telemetry_dji.py
+100644 601b194122e0e51ea79b5efdc8f60cc484b4a111 3	src/telemetry_dji.py
+100644 ad4c8d4dc0ebe262daf214142364b2331703df85 1	tests/test_intel_hw_decode_zero_copy.py
+100644 e7d3d6412406bc153656c164d2db66a13b14c80a 2	tests/test_intel_hw_decode_zero_copy.py
+100644 5527c204661ad4e1aa1f6f51a5c149616bb05e3b 3	tests/test_intel_hw_decode_zero_copy.py
+100644 238ad87a2195bb927226319bf792e80caeb250b4 1	tests/test_intel_multirect_addressing.py
+100644 95e2dbc51f0d8d5a2db139c493ed7acf00294d81 2	tests/test_intel_multirect_addressing.py
+100644 d95e3a0db45086f1c3dd06317106eb891611a710 3	tests/test_intel_multirect_addressing.py
+100644 70d87675ff20efcc45c04811296c976fbfe430aa 1	tests/test_intel_native_7f.py
+100644 6bd1deec6bacc6fb5907b2c5b89cd312c344dd2c 2	tests/test_intel_native_7f.py
+100644 b57a046d14f81b1d496338905d9d0f1a34dc5e8b 3	tests/test_intel_native_7f.py
+100644 1975d9381f7ddaf7aef49a2f5a334d15ba74ebbd 1	tests/test_intel_native_7g.py
+100644 c0868b835654ac647ae7aecd61382e1b6b8ad697 2	tests/test_intel_native_7g.py
+100644 1b3d8bdcdcfa9cb0c26c4207c1fbc4f9b3f26cb1 3	tests/test_intel_native_7g.py
+100644 5076f7ec95a522baf128c339629e06651bdd2342 1	tests/test_intel_native_7h.py
+100644 9dd140d62bff207533954003ab7cb6e5697fe09e 2	tests/test_intel_native_7h.py
+100644 a0fe136d3ed5d6f92570fe562221c8658fbf2565 3	tests/test_intel_native_7h.py
+100644 44b64d2dbfc612d91c6422dd4ba1142b52e6c375 1	tests/test_intel_native_8a.py
+100644 18792012c2b90d0c94bcf559bbaf7c2f77c06701 2	tests/test_intel_native_8a.py
+100644 9485dbd84c82eb85459defa2408c92fd03327868 3	tests/test_intel_native_8a.py
+100644 e8154341f0457c50fdd2e3113a31e6c7024aa98b 1	tests/test_intel_native_8b.py
+100644 c2c4c2e94bbe77864deecf3736efc71fa742d2de 2	tests/test_intel_native_8b.py
+100644 703c62bcaf57f9e81829ef83ddc2edc1ffa04af2 3	tests/test_intel_native_8b.py
+100644 8664a86eb016db04f4ff92f27cddd712fe467068 1	tests/test_intel_native_8c.py
+100644 f1f84e64f95775547b4daea16c19f427b0a72388 2	tests/test_intel_native_8c.py
+100644 0de893f26ec2994da65fe4c0bbadef3efc3dc838 3	tests/test_intel_native_8c.py
+100644 7db1c02329ac7fd3bcd51df91f1aa966f722e387 1	tests/test_intel_pipeline_async.py
+100644 8569a888127e9cb27db0cbf6b02c3010364d26bf 2	tests/test_intel_pipeline_async.py
+100644 9619899183e7ebdb1b3fb94a9cff30ffc94016c6 3	tests/test_intel_pipeline_async.py
+
+Auto-merging .gitignore
+CONFLICT (content): Merge conflict in .gitignore
+Auto-merging AGENTS.md
+CONFLICT (content): Merge conflict in AGENTS.md
+Auto-merging runtime/runtime_manifest.json
+CONFLICT (add/add): Merge conflict in runtime/runtime_manifest.json
+Auto-merging src/ffmpeg/amd_native_exporter.py
+CONFLICT (content): Merge conflict in src/ffmpeg/amd_native_exporter.py
+Auto-merging src/ffmpeg/command_builder.py
+Auto-merging src/ffmpeg/detection.py
+Auto-merging src/ffmpeg/intel_backend.py
+Auto-merging src/ffmpeg/intel_native_exporter.py
+CONFLICT (content): Merge conflict in src/ffmpeg/intel_native_exporter.py
+Auto-merging src/ffmpeg/nvidia_config.py
+CONFLICT (content): Merge conflict in src/ffmpeg/nvidia_config.py
+Auto-merging src/ffmpeg/streaming.py
+CONFLICT (content): Merge conflict in src/ffmpeg/streaming.py
+Auto-merging src/gui/qt/_mixins/project_mixin.py
+Auto-merging src/gui/qt/_mixins/render_mixin.py
+Auto-merging src/gui/qt/application.py
+Auto-merging src/gui/qt/tabs/render_tab.py
+CONFLICT (content): Merge conflict in src/gui/qt/tabs/render_tab.py
+CONFLICT (file location): src/native/gpmf/telem_gpmf_native.pyd added in main inside a directory that was renamed in origin/main, suggesting it should perhaps be moved to src/native/common/gpmf/telem_gpmf_native.pyd.
+Auto-merging src/runtime_paths.py
+CONFLICT (add/add): Merge conflict in src/runtime_paths.py
+Auto-merging src/telemetry_dji.py
+CONFLICT (content): Merge conflict in src/telemetry_dji.py
+Auto-merging src/telemetry_native_gpmf.py
+Auto-merging src/video_helpers.py
+Auto-merging tests/test_intel_hw_decode_zero_copy.py
+CONFLICT (content): Merge conflict in tests/test_intel_hw_decode_zero_copy.py
+Auto-merging tests/test_intel_multirect_addressing.py
+CONFLICT (content): Merge conflict in tests/test_intel_multirect_addressing.py
+Auto-merging tests/test_intel_native_7f.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_7f.py
+Auto-merging tests/test_intel_native_7g.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_7g.py
+Auto-merging tests/test_intel_native_7h.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_7h.py
+Auto-merging tests/test_intel_native_8a.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_8a.py
+Auto-merging tests/test_intel_native_8b.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_8b.py
+Auto-merging tests/test_intel_native_8c.py
+CONFLICT (content): Merge conflict in tests/test_intel_native_8c.py
+Auto-merging tests/test_intel_pipeline_async.py
+CONFLICT (content): Merge conflict in tests/test_intel_pipeline_async.py

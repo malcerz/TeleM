@@ -1,0 +1,146 @@
+6218eafed79d68a52afb045c6c0c4dce72c6a130 docs(raport): git safety point and local commit report
+d79a682cbc9746b181cb8790c5706b14b8c7f0fa docs(raport): SmartSync DJI IMU restore report
+535fb7aca1c02978e59c94e5fff032687d8438c1 feat(sync): telemetry sync panel, async SmartSync and per-material persistence
+6d41d1e226fbf9de01c28452e419e159b290137b feat(sync): telemetry sync contract and SmartSync IMU offset estimation
+67dfce79d4dcbb85ac94f19f9e96e12cfe0d56b7 docs(raport): Intel QSV/VBR/QP, GUI recovery and DJI sync-loss audit reports
+6fa9a1d5a2cbd2a1275f839e7fd5c3e88f3076ee fix(gui): generation-tagged project load state, clear project and license panel
+835d857c33178a533a6054748dd0cd5a95d9aa2b feat(intel): QSV HEVC slice QP / VBR control, runtime capabilities and live A/V mux
+e21d625c0f6458bf43af5d1f1c06173e797f7536 chore(release): checkpoint stable AMD GPU Pitch and map streaming
+efd837efa36d0b0dc51cad05ac9243c4ddaa2219 fix(map): chronological tile streaming and prefetch for export without startup freeze
+2236ff64e04137b10dfb7247c5cb770a5d2878be feat(amd): enable native GPU Pitch by default and update portable SHA256
+fafc7986b4a31062b9d96863a76d882d90222ff1 feat(amd): finalize native GPU Track-Up Pitch
+81af3603bf8967d2734c637bfb972d6f247f4037 perf(map): skip unused Track-Up rotation overscan without changing pixels
+1385e0d59b600ee304488f111a5c9e67a033bcbf fix(gui): drop the HLG description paragraph from the export tab
+939137636dc87790f4673de679f6c768abb69d28 fix(map): keep the selected map shape when pitch is applied
+1404441c291bb678235235ced8bf4896de2498b8 fix(gui): keep the Mapa indicator tile compact after preset load
+29bbd7d7c3911a2e0aeca52325dfadb73f927df7 fix(packaging): ship the ETAP 5Z.4 HDR AMD runtime
+2004bf69cbbfa906dd4bebdffc9477863a3bba2b fix(amd): tone-map the HLG preserve export preview tap
+b05db3bdd9696be2f9db081e7a180d129f9ae5b7 fix(preview): apply correct HLG to SDR presentation
+f62331b58be479e785f22cd7832f5368b8136368 test(amd): validate multi-file HDR cancellation and retry
+1875bfb358ea414d9ecec97966b0195e482efd9a fix(export): reject uncertain HDR metadata safely
+a94781f6fe659969a106dc7498134b92995f66b6 feat(amd): HLG to SDR tonemapping and HEVC Main10 HLG preservation
+1a389f85248f336899ba42e50962f87ab3c9eb7c feat(export): detect HLG and persist HDR export mode
+f3ba1bc3494f6089d2f317271d2afe8eb0dad5ff fix(packaging): include current AMD runtime and native dependencies
+baf157b4fa500b613576bb61a9418ed9048d0f3c fix(amd): restore lean overlay visual parity
+f520f1d05f6bbf110ffaaeb872aae08cd25e1787 fix(hud): prevent indicator type alias collisions
+dc38959c45cf35af6549ddb4e4972856096f167a fix(hud): unify decimal precision resolution
+aa1ee2fc19ba8ed54c105a6eec07d3c1983c1b66 fix(hud): fallback missing Polish glyphs without changing primary font
+8af7934006def51b4f13f1a6181890e3a77a3451 fix(hud): honor map shape corner radius and border
+f35cd4c68158add6932276985e9ed12e41f07780 test(hud): verify segmented fonts and AMD preview parity
+62960ef4780b83fbe48df1d413a20865514ceb0b fix(hud): apply text unit offsets
+cbe0dd4968f38ee5dad4a8d0260a87ba5b7d7b0e docs(raport): fix encoding of AMD real QP report
+5427ce8b285f633fb71e7b165ce9f3fb9efbbc8a ﻿docs(raport): record AMD real QP fix commit SHA
+d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea fix(amd): request HEVC QP statistics feedback on input surface
+f14e45f13cc9f8a44b571e382ec2148ad217aebc feat(logging): configurable AMD export log beside output MP4
+25eb07e6afa0a1d46bfe76020954baa708f823b3 fix(settings): finalize unified preferences persistence
+7272c5fb8ed03928ef7b789ab188efa1d985467f fix(gui): restore consistent AMD VBR QP status in queue
+1f7f8e040b9ab138e7a26aa410821815d0c3b6b7 fix(settings): unify persistence and save skip-pauses option
+05bf51bd505a716152dbbf1bfddda7d2a6363679 fix(amd): lossless direct-copy AAC with sync-preserving clip boundaries
+e76d6b1da0bcf1487e5061d16b05d7916adefb3b fix(amd): use bitrate-targeted VBR instead of constant QP
+6dc1eb395551b78b36b7a24f98be49701562c522 fix(hud): render degree unit as font-independent graphic
+2c26191f69e40dfa316faa793b20c0ab132cd347 fix(render): correct QP reporting in export status
+a1c152218d85d5da10457964bacdfa5bc926eed9 fix(amd): eliminate multi-file finalization stall by removing global copyts from live mux
+a66b0536ac49d72bf146c9e5cf36fa01dbd31fa8 fix(telemetry): verify content collision, timezone normalization and multi-dir search
+cf1ab2dd340c6c5bc7d57f0b71c575bd4959670b fix(telemetry): locate and persist FIT GPX beside source video
+38a45c8814bf15d7cc5c5d77924115da6d6cef6f fix(gui): remove YouTube upload controls
+0c1498a73a8643e8c20569ac7c1f34655563d1b7 fix(amd): restore dynamic lean and compass rendering
+499e470daa8a642fc3b6e306fee5f624b1b805c0 fix(logging): preserve AMD export diagnostics
+7d9d10dd7c07bf7d3c202312eee53169525abb4a perf(amd): eliminate delayed audio demux during live mux finalization
+6e0992c93042a6ed91482e668bfcb85296e050f0 fix(gui): resolve RenderProgressState scope error in export startup
+7f124902b57e0a0ca05f4a198f12346b0d5b3f54 fix(gui): prevent render preparation deadlock
+f2daa7c3681551be4b965ffb40943b6e05d50829 fix(preview): restore video preview
+93b72921a83acf4bfaf257592fff7ee57560e057 fix(garmin): correct Qt WebEngine availability detection
+8e761c3b80f192ec447909bfad1501d4dda324ff test(compass): validate final rose raster rotation
+eaa8fb00e6fe535d44039b7b44a0fc118ee3940f fix(bar): isolate public cache ownership without compositor copies
+8465744675c5e75b1ce19a6edde7792ee6da7adc test: align fixtures with current renderer GUI and live mux contracts
+8a0c67fc416997557e72a58d288f72b3be0a227d chore: remove shadowed bar cache reset and exclude bytecode from source archives
+4587b657f2a678fda2b869b08b91d1eaeb4a530a fix(compass): optimize rose dial shadow caching and recover 40+ fps pipeline
+7a1bfb20dde434c0ecdd2b988ce6a224a19cc198 fix(compass): restore original needle and rose dial and needle shadows
+c8074f7dbd5fb289415fff20981989f366d9a6fc fix(gauge): restore original dial and needle shadows
+e7582d8e2c212990987380ee10e5980f2dfd5867 perf(amd): preserve known-good 40fps native HUD pipeline
+33648682dc51147581397178455b0448abbfb0a7 feat(perf): ETAP 5H best-known safe AMD performance recovery, queue A/B matrix, and Bar/Ruler zero-copy caching
+63c747572dc9c018164070eabe7bfe5e6f5a1d4e feat(perf): ETAP 5G safe pipeline FPS recovery, queue smoothing, and redundant copy elimination
+38ad01cd06fd85069babd56f9355c16a522a683a docs(audit): correct 1080p clerical template typo to 3840x2160 4K UHD in ETAP 5E report
+46582e8fed9d50a4ec8d0e6221a754435cfd8f97 feat(audit): ETAP 5F artifact truth verification, 4K production gate, and safe memory architecture
+c0bf7607d428c24ca81e5768f03aa83c4f08aa97 fix(perf): ETAP 5E audit regression resolution, ring buffer slot leasing, and memory safety hardening
+67dbc8f9ececc3c110a3e1b09d6048d349307548 perf(amd): ETAP 5D staging ring buffer, row-table direct transfer, and bbox caching
+74165c198f09e5ca61172bc59371886671676101 feat(audit): ETAP 5C historical source recovery, degree fallback helpers, and telemetry provenance
+ba60bb5b68c29992dc68ad1b70302bc46ff05eb7 feat(perf): ETAP 5B visual parity audit, dirty region verification, and cache safety fixes
+c3271326bb68fc8f702ef5bc549a3718b360a628 fix(effects): restore high-perf HUD effects and gauge needle parity without D3D11 shaders (ETAP 4D)
+77a7973177d1d1660d183bcfe24f2d0dc69d78d7 Add ETAP 4B AMD real FPS diagnosis report
+54c805581bb1db3cc7f916e94f07feb36fd4481d Add ETAP 4B AMD diagnostics
+896775653782e56e18e71dc4e0f1aa33712746ca docs(report): AMD stage 4 FPS diagnosis
+70b3a6e19a32c4df0b1eccee4ce958e00afab215 fix(hud): keep effect cache pixels fresh
+bf6f28636b9816eac99602fbb7b8983cb9992a4e docs: report render error pipeline recovery
+063f5fdc740b98e3cbb62fb6e7e4dbe7127efb95 feat: restore typed render error pipeline
+395faf40bf2679c3502a9599125854c333035762 Record queue regression test results
+eb58f9f2c39bcf80831c7e571b1cd6fdff824162 Note lint findings in stage 2 report
+7b9cb3e38cd4d0f4f12b241b4ac90541fcdae058 Document default export directory stage 2
+4b52155c6c4066cc2b663edf8946f47b28090695 Restore global default export directory
+150dff536add20d5db6478dd3300185f8c5f2c6b Document AutoFIT DJI no-GPS recovery
+982cb2268ea4ccb0c790e5856286f079e9a6935a Recover AutoFIT and DJI no-GPS matching
+310555087e31405b25e6a288093c04ee8be7ae63 fix(hud): unify indicator effects to 0-100% scale and resolve AMD rendering FPS regression
+570f60e20b57cc938dae84a04af68a55b7b60509 fix(hud): compass source and selectable rose; configurable faded effects
+fa8ba86f2f10e04d7629e1c3d2487487834b52c7 fix(nvidia): resolve hardcoded FPS with rational parser and implement single-pass live audio mux without cache
+2460ad78bd4eb2f6806c15f87dfd60c62c176718 fix(load): fix late-attach lifecycle, benchmark load stages and update v1.14 performance report
+e53adb60f02eeefc66ca024a2900d6c9132f9b05 CHORE: Update sync_portable and check_parity for SportCamHUD-portable directory
+216e3f86323eeb4f42c68ac00ccf97d3a2826296 FEAT(v1.14): Fix GPMF date/camera metadata & optimize MP4 load performance with lightweight cache
+a07e51cb1473a9783608e0846722a6de918ed4d9 FIX: Needs_selection popup via BlockingQueuedConnection, accurate firmware check, dynamic break condition for GPMF
+b27db2ba2cf687c266c8b8639c8d597d02a15406 FEAT: Add metadata_only to GPMF native parser & display record date/camera in UI
+f6ada939decd880ec656dab3b66a5c9dc7b2e1b9 FIX: Complete AutoFIT logic (local dirs, time window fallback, GUI sync)
+318b0bec99e4785c525e6dd8024a13f5810307a3 FIX: Update and fix telemetry auto-search GUI status messages
+1fe9ad065d52fd00ca90d49b53b493b905325e8a FIX: Implement robust FIT auto-match and test regressions
+38a0b1e1cb1c6a033843161593ac6236b92d7034 DOCS: Generate v1.13 verification report
+abec8a276970dfe5ff994e2a4b9338dd18c394aa DOCS: Generate v1.13 SportCamHUD summary report
+ee10510cbba671fedfe6e68920a3826b8319f883 CHORE: Revert physical clone paths in sync scripts
+037b17d8e371c102870ed4f7a9eabf288b90dbd6 REBRANDING: Complete rename to SportCamHUD, add AppData migration, bump version to 1.13
+420b28fa18ed0cd0d17c60b8ba7fb270c41a40a4 GPMF METADATA: Extract and display camera name and record date in video info
+1f5e8649059380a35fbcd4909249f286cc00f0ec AUTOFIT: Single coordinator architecture, GPS distance fallback, late telemetry attach
+6e9b87721eda81bac5837d2aa5ed27d15b1a5379 AUDIO: Completely remove audio pre-extraction and cache
+b606ada975499a676305bc9f846d07bacb7be2f3 Report encoded packet startup timing in AMD acceptance runner
+041527ae83a1075079f93cb206c585d8f376eb41 Measure real AMD acceptance and update startup timeline test contract
+2429ac772dd63002d569e63d5fa826fa6abea145 Fix AMD queue jobs losing frozen trim ranges and bump to 1.12
+459424ade9a6fa486c4d65debf19d5aaf2a24468 docs: record v1.11 push verification
+20a013d4dcf1f152785cc255da6158a266a7a86a docs: record v1.11 corrective acceptance results
+a515c77370575c4bf70b3cb0d889e70db118af19 fix: require measured SmartSync result in integrity harness
+0d7eb672f3d6f90d91ab533345e4cb72dfde0de2 fix: correct v1.11 version and decimal bump
+f8c80b73b745a04c0f62d2dd3fdd8afbd7897826 v1.11: Release Gate Fixes - Sync Integrity Harness Strict Rejection, FIT Rollback state, Render Prep Fallback, and Queue Parity Bench
+c778950fc6853e69791391f8e4a223eb5aac9f08 chore: Update report HEAD hash
+e4dde4fe19e22400a76d2e65a86e3a7b519d4292 fix: V1.10 Final Audit - FIT contract, Sync false pass, Queue regression
+b1e6507409d5ebfef61388aa84c585ab0d435f42 feat: Release v1.09 - AMD Cache Key Parity and Real FIT Benchmark Integrity
+2ab85d8280c640b7ea6566deac1bce9ed5d8ebce chore: Remove accidentally tracked cache artifacts and update .gitignore
+0f7af96ba971f093bdf170e1d3f989dd76525bc9 fix(api): Remove obsolete ExportOutputCategory and correctly serialize OutputWriteError without enum dependency
+73e3ceb14300e9d98d4f84ce88de8fc51d109987 fix(amd): Resolve canonical timeline before cache_key generation, strictly verify key in worker, and log 34.8 FPS benchmark
+bd3887b6932c37592152b367a689fe220c129f22 chore(release): v1.07 cache safety verification and FPS benchmark result
+911df23ab46d77aa272e97b901aac87d0e7173c4 fix(amd): Restore cache key propagation, fix lazy stringification, and add chart bounds checks. Bump to v1.06
+b2b8fb7bcb1375e3aa1b17d8f7db5081f0f023a8 docs: add report for AMD render startup regression restore (v1.05)
+9c4b9842f6e9c6cef1c324441fdffe09824e1b32 fix: restore lightning-fast AMD render startup and eliminate 60s IPC/re-compute bottlenecks (v1.05)
+0ffaa503a7ab496288cc70b7383eb457b753e291 fix: export error ipc serialization, cleanup git tracked scratch artifacts, strict amd real mp4 integration harness, sync parity, bump to 1.04
+354c8d2e9700408e537ef30e5f3ccba1ce4cdef4 docs: release report 1.03
+c52248ba5e9fff326fa74d7d50bbcfcbf45fb8ca fix: export error backward compatibility, portable sync manifest, real AMD testing harness and version bump to 1.03
+bd3045df3f04351391011d4fc456d51098301c98 docs: add versioning and export compatibility audit report
+33a3848db7e69c531a3e29ec8a922774eb52b5fe fix: app version calculation, dynamic build hash and storage error compatibility tests
+2d01625ac3bef784f59bb4f4437be94d3e84f812 docs: generate audit report for GPMF and Portable
+23a95188d63f04d38b1fee1996407a931bb29d2e test: add parity checker script
+d9d079a03c5bdd56892fcf864201cc6315e37516 fix: restore missing integration and runtime modules
+d95c6fb8b98808469110191649ab970dbdddf382 feat: add centralized app version and window title
+163cf63842e705626d68a56de0143a977509acc0 fix: recover native GPMF loading optimizations
+c4328f8c9efdf80f1a3c254008d5339066e3ee9a fix: restore missing integration and output error modules
+3adc9ad5b3ea4773280f5a9845bddbf2a1b35a05 Fix GUI freeze during first HUD composite & async MPV hwdec check
+02f4117362e9a45df50af780641feaf6015c259b fix(gui): remove dummy cache hazard, add prewarm generation safety, vectorize telemetry loops
+35e9e19f70daa91f212ff8a1a35e832c5d03d68f feat(telemetry): auto search FIT/GPX immediately upon MP4 selection without clicking Load
+5926e866c95de8193bc8ce400cead62a6ed6a3fe docs: update commit hash in RAPORT_PREVIEW_MAP_DISAPPEAR_REAL_FIX.md
+368e7927481689778cba9b0aceb2a61629067a51 fix(map): resolve preview map disappearance on cache miss and scrubbing
+f503f87fdaed388128ce1e912640ba022479e827 docs(report): update RAPORT_REMOTE_GARMIN_STRAVA_AUTO_TELEMETRY.md with final metrics and commit hash
+15d8b0b4d7d703f3021f916e287380720f8eec7d feat(integrations): add automatic telemetry download from Garmin Connect and Strava
+2552765928e73a5b07106c3224133167b79e129d fix(preview): resolve preview map stability, bottom panel layout/ordering, and AMD preview parity
+e9f7a0a606bcd06d1587191fafc5cb0d8e59f6c8 fix(amd): eliminate queue export regression and restore ~100% GPU utilization parity
+d42efcf192f277d03ed61b2ab64b886b25069672 feat: automatic hiding of indicators without project data and bump version to 1.0
+b33d3dfae0a893a3bd94ce537510a40ce0cf43d1 docs(report): add comprehensive report on DJI loading GUI freeze fix
+a2bb11f01dc5a54ba2b4ff11c567c143afadf2fd fix(dji): isolate telemetry parsing into separate worker process to prevent GUI freeze
+600c2a6b18261ab71a289ef7364c7033ea9b8e25 docs(report): update commit hash in intel queue native fallback fix report
+89b11847e3d886bdbcdb1912534e830db01030d6 fix(intel): resolve native queue fallback and hwdownload nv12 bug
+29098dfa8188f12856323a0e59e6384683e53d0b docs(report): update commit hash in cleanroom runtime report
+c14ca2d2253287cebb6f12790cc56a4d24d7e06d feat(portable): cleanroom minimal production packaging and report
+ac33188463a24164be3701a1e99634da531d3420 docs: add comprehensive report on Intel AV1 live mux optimization
+d8aec6826c591cbf49f3a6d094679a25570b4a72 feat(intel): live mux audio, gpmf and av1 video without intermediate ivf file

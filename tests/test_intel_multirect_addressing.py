@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 
 def _load_native():
-    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"DLL not found: {dll_path}"

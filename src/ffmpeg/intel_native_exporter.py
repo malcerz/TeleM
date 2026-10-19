@@ -289,38 +289,131 @@ def _hevc_compression_text(fields: dict[str, Any]) -> str:
             f" (odrzucone: {fields['slice_qp_rejected_samples']})")
 
 _LIB_NATIVE_INTEL: Optional[ctypes.CDLL] = None
+_INTEL_CAPS_CACHE: Optional[dict[str, Any]] = None
 
 
-def query_intel_capabilities(ffmpeg_exe: str | None = None) -> dict[str, Any]:
-    """Query runtime oneVPL/QSV hardware encoder capabilities on Intel GPU."""
+def invalidate_intel_capabilities_cache() -> None:
+    """Clear cached Intel capability detection results to allow re-probing."""
+    global _INTEL_CAPS_CACHE
+    _INTEL_CAPS_CACHE = None
     try:
+        from src.ffmpeg.intel_backend import _QSV_CODECS_CACHE
+        _QSV_CODECS_CACHE.clear()
+    except Exception:
+        pass
+
+
+def query_intel_capabilities(ffmpeg_exe: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+    """Query runtime oneVPL/QSV hardware encoder capabilities on Intel GPU."""
+    global _INTEL_CAPS_CACHE
+    if _INTEL_CAPS_CACHE is not None and not force_refresh and ffmpeg_exe is None:
+        return dict(_INTEL_CAPS_CACHE)
+
+    try:
+        from src.runtime_paths import get_ffmpeg_exe
+        try:
+            ffmpeg_exe = ffmpeg_exe or str(get_ffmpeg_exe())
+        except Exception:
+            ffmpeg_exe = "ffmpeg"
         from src.ffmpeg.intel_backend import probe_qsv_codecs
-        if ffmpeg_exe is None:
-            from src.runtime_paths import get_ffmpeg_exe
-            ffmpeg_exe = str(get_ffmpeg_exe())
         qsv = probe_qsv_codecs(ffmpeg_exe)
-        return {
+        caps = {
             "AV1_AVAILABLE": bool(qsv.get("av1_qsv", False)),
             "AV1_10BIT": bool(qsv.get("av1_qsv", False)),
             "H264_AVAILABLE": bool(qsv.get("h264_qsv", False)),
             "H264_8BIT": bool(qsv.get("h264_qsv", False)),
             "H264_10BIT": False,
             "HEVC_AVAILABLE": bool(qsv.get("hevc_qsv", False)),
-            "HEVC_8BIT": bool(qsv.get("hevc_qsv", False)),
             "HEVC_10BIT": bool(qsv.get("hevc_main10", False)),
+            "HEVC_8BIT": bool(qsv.get("hevc_qsv", False)),
         }
+        _INTEL_CAPS_CACHE = caps
+        return dict(caps)
     except Exception as exc:
-        render_print(f"[INTEL_CAPABILITY] probe failed: {exc}", flush=True)
-        return {
+        render_print(f"[INTEL CAPABILITIES] probe_failed={exc}", flush=True)
+        _INTEL_CAPS_CACHE = None
+        fallback = {
             "AV1_AVAILABLE": False,
             "AV1_10BIT": False,
             "H264_AVAILABLE": False,
             "H264_8BIT": False,
             "H264_10BIT": False,
             "HEVC_AVAILABLE": False,
-            "HEVC_8BIT": False,
             "HEVC_10BIT": False,
+            "HEVC_8BIT": False,
         }
+        return fallback
+
+
+def resolve_supported_intel_codec(requested: Optional[str] = None, caps: Optional[dict[str, Any]] = None) -> str:
+    """Resolve requested Intel codec against runtime capabilities.
+
+    If requested codec is unsupported or not provided, falls back to the best available codec:
+    Priority: 1. AV1 10-bit -> 2. HEVC 10-bit -> 3. H.264 8-bit.
+    Logs structured fallback when a requested codec is downgraded.
+    """
+    if caps is None:
+        caps = query_intel_capabilities()
+
+    av1_ok = bool(caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT"))
+    hevc_ok = bool(caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT"))
+    h264_ok = bool(caps.get("H264_AVAILABLE") and caps.get("H264_8BIT"))
+
+    best = None
+    if av1_ok:
+        best = "av1"
+    elif hevc_ok:
+        best = "hevc"
+    elif h264_ok:
+        best = "h264"
+    else:
+        best = "none"
+
+    if not requested:
+        return best
+
+    req_norm = str(requested).strip().lower()
+    if req_norm in ("av1", "av1_qsv"):
+        if av1_ok:
+            return "av1"
+        fallback = best
+        render_print(
+            f"[INTEL CODEC FALLBACK]\n"
+            f"requested=av1\n"
+            f"available=0\n"
+            f"resolved={fallback}\n"
+            f"reason=hardware_capability",
+            flush=True,
+        )
+        return fallback
+    elif req_norm in ("hevc", "hevc_qsv", "h265"):
+        if hevc_ok:
+            return "hevc"
+        fallback = best
+        render_print(
+            f"[INTEL CODEC FALLBACK]\n"
+            f"requested=hevc\n"
+            f"available=0\n"
+            f"resolved={fallback}\n"
+            f"reason=hardware_capability",
+            flush=True,
+        )
+        return fallback
+    elif req_norm in ("h264", "h264_qsv", "avc"):
+        if h264_ok:
+            return "h264"
+        fallback = best
+        render_print(
+            f"[INTEL CODEC FALLBACK]\n"
+            f"requested=h264\n"
+            f"available=0\n"
+            f"resolved={fallback}\n"
+            f"reason=hardware_capability",
+            flush=True,
+        )
+        return fallback
+    else:
+        return best
 
 
 def validate_intel_codec(codec: str, ffmpeg_exe: str | None = None) -> str:
@@ -364,22 +457,16 @@ def _load_native_intel_dll() -> ctypes.CDLL:
     if _LIB_NATIVE_INTEL is not None:
         return _LIB_NATIVE_INTEL
 
-    from src.runtime_paths import (
-        get_intel_native_dll,
-        activate_vendor_dll_directory,
-        log_runtime_diagnostic,
-    )
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll, log_runtime_diagnostic
 
     dll_path = get_intel_native_dll()
     if not dll_path.exists():
-        raise FileNotFoundError(
-            f"telem_intel_native.dll not found at: {dll_path}"
-        )
+        raise FileNotFoundError(f"telem_intel_native.dll not found in Intel runtime: {dll_path}")
 
-    # Isolated DLL search path: only common + intel
+    # Isolated Intel DLL search path
     activate_vendor_dll_directory("intel")
-    log_runtime_diagnostic("intel", dll_path)
 
+    log_runtime_diagnostic("intel", dll_path)
     lib = ctypes.CDLL(str(dll_path))
 
     # 7C Legacy API
@@ -892,6 +979,36 @@ def export_intel_native_d3d11(
         codec_id = 0
         codec_name = "AV1"
         temp_ext = ".ivf"
+
+    # Export safety gate against runtime capabilities (Phase 9)
+    caps = query_intel_capabilities()
+    if codec_name == "AV1" and not (caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")):
+        print(
+            "[STREAM INTEL] UNSUPPORTED_CODEC_RENDER_START=BLOCKED codec=av1 reason=hardware_capability",
+            flush=True,
+        )
+        raise RuntimeError(
+            "UNSUPPORTED_CODEC_RENDER_START=BLOCKED: AV1 10-bit hardware encode is not available "
+            "on this Intel GPU/driver/runtime."
+        )
+    elif codec_name == "HEVC" and not (caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")):
+        print(
+            "[STREAM INTEL] UNSUPPORTED_CODEC_RENDER_START=BLOCKED codec=hevc reason=hardware_capability",
+            flush=True,
+        )
+        raise RuntimeError(
+            "UNSUPPORTED_CODEC_RENDER_START=BLOCKED: HEVC 10-bit hardware encode is not available "
+            "on this Intel GPU/driver/runtime."
+        )
+    elif codec_name == "H264" and not (caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")):
+        print(
+            "[STREAM INTEL] UNSUPPORTED_CODEC_RENDER_START=BLOCKED codec=h264 reason=hardware_capability",
+            flush=True,
+        )
+        raise RuntimeError(
+            "UNSUPPORTED_CODEC_RENDER_START=BLOCKED: H.264 8-bit hardware encode is not available "
+            "on this Intel GPU/driver/runtime."
+        )
 
     # 3. Resolve and log Intel Encoder Profile configuration (Phase 6 single source of truth)
     from src.ffmpeg.intel_config import resolve_intel_encoder_config

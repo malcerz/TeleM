@@ -339,8 +339,9 @@ class TestExportOptions:
     def test_encoder_options(self, shared_setup):
         _, rt, _ = shared_setup
         items = [rt.cmb_encoder.itemText(i) for i in range(rt.cmb_encoder.count())]
-        # auto = wykryty najlepszy backend; intel = INTEL_FORCE (bez cross-GPU fallback)
-        assert items == ["auto", "amd", "nv", "intel", "cpu"]
+        from src.ffmpeg.backend_capabilities import get_available_backends
+        expected = get_available_backends()
+        assert items == expected
 
     def test_render_options_dict(self, shared_setup):
         _, rt, _ = shared_setup

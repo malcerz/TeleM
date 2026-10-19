@@ -1,0 +1,28 @@
+........s........F..s......s                                             [100%]
+================================== FAILURES ===================================
+__________________ test_nvidia_widgets_are_discrete_sliders ___________________
+
+    def test_nvidia_widgets_are_discrete_sliders() -> None:
+        _get_app()
+        tab = RenderTab()
+        assert isinstance(tab.cmb_nvidia_codec, DiscreteSlider)
+        assert isinstance(tab.cmb_nvidia_quality, DiscreteSlider)
+    
+        # Check quality items
+        quality_labels = [item[0] for item in tab.cmb_nvidia_quality._items]
+>       assert quality_labels == ["Fast", "Quality", "Max Quality"]
+E       AssertionError: assert ['Szybki', 'Z...ny', 'Jakość'] == ['Fast', 'Qua...'Max Quality']
+E         
+E         At index 0 diff: 'Szybki' != 'Fast'
+E         Use -v to get more diff
+
+tests\test_dynamic_export_backends.py:300: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 509, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 24284, "preview_generation_id": 0, "preview_stop_event": {"id": 1864349765936, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 556449792, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713069100752, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 197541888, "thread_count": 20}
+=========================== short test summary info ===========================
+FAILED tests/test_dynamic_export_backends.py::test_nvidia_widgets_are_discrete_sliders
+1 failed, 24 passed, 3 skipped in 3.51s

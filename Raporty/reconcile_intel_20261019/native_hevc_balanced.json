@@ -1,0 +1,320 @@
+{
+  "codec": "hevc",
+  "profile": "balanced",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_20261019\\native_hevc_balanced.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 3.81,
+  "total_frames": 30,
+  "effective_fps": 7.87,
+  "ram_used_gb": 9.55,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.981333",
+          "nb_frames": "46"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5723131"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5723131,
+  "stats": {
+    "audio_live_mux": true,
+    "avg_qp": null,
+    "cancelled": false,
+    "codec": "hevc",
+    "compression_active": false,
+    "compression_text": "Slice QP: 26 | Avg: 26.0 | Min: 26 | Max: 26 | pr\u00f3bki: 30 (odrzucone: 0)",
+    "current_qp": null,
+    "encoder_accepted": {
+      "buffer_kb": 10000,
+      "get_status": 0,
+      "init_status": 0,
+      "initial_delay_kb": 5000,
+      "max_kbps": 50000,
+      "multiplier": 1,
+      "qp_supported": 1,
+      "qp_unverified_zero": 5,
+      "query_status": 0,
+      "rate_control": 2,
+      "target_kbps": 40000,
+      "target_usage": 4,
+      "valid": 1
+    },
+    "encoder_drain_seconds": 0.2974953999801073,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.33664770002360456,
+    "frame_render_seconds": 2.783554900001036,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "is_cqp": false,
+    "mean_qp": null,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5723131,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "qp_aggregation": "unavailable",
+    "qp_avg": null,
+    "qp_rejected_samples": 5,
+    "qp_source": "unavailable",
+    "qp_unverified_feedback": {
+      "quant_avg": null,
+      "quant_current": null,
+      "quant_max": null,
+      "quant_min": null,
+      "quant_samples": 0,
+      "quant_sum": 0
+    },
+    "quant_avg": null,
+    "quant_current": null,
+    "quant_max": null,
+    "quant_metric": "QP",
+    "quant_min": null,
+    "quant_reason": "Intel HEVC sets slice_qp_delta=0 and applies rate control through per-CU cu_qp_delta (CABAC); oneVPL HEVC frame-info QP contradicts frame sizes and encode-stats are unsupported; no reliable frame/CU QP without full entropy decoding",
+    "quant_samples": 0,
+    "quant_sum": 0,
+    "rate_control": "VBR",
+    "real_export_fps": 10.777585166360051,
+    "render_fps": 10.777585166360051,
+    "slice_qp_aggregation": "per frame: slice base QP weighted by the CTUs each slice covers (= mean base QP over CTUs); avg: arithmetic mean of per-frame values over valid frames; min/max: over all slices of valid frames",
+    "slice_qp_available": true,
+    "slice_qp_avg": 26.0,
+    "slice_qp_by_frame_type": {
+      "B": {
+        "avg": null,
+        "frames": 0
+      },
+      "I": {
+        "avg": 26.0,
+        "frames": 1
+      },
+      "P": {
+        "avg": 26.0,
+        "frames": 29
+      }
+    },
+    "slice_qp_cu_qp_delta_enabled": true,
+    "slice_qp_current": 26,
+    "slice_qp_current_ctu_weighted": 26.0,
+    "slice_qp_current_frame_type": "P",
+    "slice_qp_current_max": 26,
+    "slice_qp_current_min": 26,
+    "slice_qp_frames": 30,
+    "slice_qp_max": 26,
+    "slice_qp_max_slices_per_frame": 1,
+    "slice_qp_min": 26,
+    "slice_qp_note": "cu_qp_delta_enabled_flag=1: real QP varies per CU inside slices; Slice QP is only the slice base",
+    "slice_qp_parse_errors": 0,
+    "slice_qp_parse_us_max": 270.7,
+    "slice_qp_parse_us_per_frame": 59.276666666666664,
+    "slice_qp_rejected_samples": 0,
+    "slice_qp_slices": 30,
+    "slice_qp_source": "HEVC slice_segment_header SliceQpY = 26 + init_qp_minus26 + slice_qp_delta (native, no QpBdOffset)",
+    "slice_qp_valid_samples": 30,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 3.439217600011034,
+    "user_effective_fps": 8.72291418836184,
+    "verify_seconds": 0.03848930000094697,
+    "video_encode_pass_count": 1,
+    "vpl_hevc_frame_qp_crosscheck": {
+      "last": 0,
+      "match_slice_qp": 0,
+      "mismatch": 25,
+      "reported": 30,
+      "zero": 5
+    }
+  },
+  "sampled_q": {
+    "1": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "2": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "3": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "4": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "5": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "6": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "7": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "8": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "9": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "10": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "11": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "12": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "13": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "14": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "15": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "16": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "17": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "18": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "19": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "20": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "21": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "22": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "23": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "24": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "25": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "26": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "27": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "28": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "29": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    },
+    "30": {
+      "q_cur": null,
+      "q_avg": null,
+      "q_samples": 0
+    }
+  }
+}

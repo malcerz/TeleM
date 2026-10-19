@@ -629,13 +629,14 @@ class ProjectMixin:
                     })
 
                 # Wykryj narzędzia
+                from src.runtime_paths import get_ffmpeg_exe, get_ffprobe_exe
                 ffprobe_exe = find_executable(
                     str(self.ffprobe_path),
-                    [str(self.base_dir / "ffprobe.exe"), "ffprobe.exe"],
+                    [str(get_ffprobe_exe()), str(self.base_dir / "ffprobe.exe"), "ffprobe.exe"],
                 )
                 ffmpeg_exe = find_executable(
                     "ffmpeg",
-                    [str(self.base_dir / "ffmpeg.exe"), "ffmpeg.exe"],
+                    [str(get_ffmpeg_exe()), str(self.base_dir / "ffmpeg.exe"), "ffmpeg.exe"],
                 )
                 if not current():
                     return

@@ -55,10 +55,10 @@ FORBIDDEN_SHA256 = {
 COMMIT_PATHS = [
     "SportCamHUD.py", "TeleMGP.py", "telemetry_fit.py", "telemetry_gpx.py",
     "pyproject.toml", "README.md", "Start_SportCamHUD.cmd", "def_layout.json",
-    "presets", "src",
+    "presets", "src", "runtime/common/telemetry/gpmf/telem_gpmf_native.pyd",
 ]
 # Inside src/native only the prebuilt GPMF parser is runtime; sources are not shipped.
-COMMIT_SRC_NATIVE_KEEP = {"src/native/gpmf/telem_gpmf_native.pyd"}
+COMMIT_SRC_NATIVE_KEEP = {"runtime/common/telemetry/gpmf/telem_gpmf_native.pyd"}
 COMMIT_EXCLUDE_DIRS = {"__pycache__", "bikeridehud.egg-info"}
 
 # Untracked runtime files from the working tree: (source, destination).
@@ -323,7 +323,7 @@ def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
     key_files = [
         "runtime/amd/bin/telem_amd_native.dll", "runtime/intel/bin/telem_intel_native.dll",
         "runtime/common/ffmpeg/ffmpeg.exe", "runtime/common/ffmpeg/ffprobe.exe", "libmpv-2.dll",
-        "src/native/gpmf/telem_gpmf_native.pyd",
+        "runtime/common/telemetry/gpmf/telem_gpmf_native.pyd",
         "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd",
         *[f"runtime/amd/bin/{n}" for n in VC_REDIST_DLLS],
     ]
@@ -348,7 +348,7 @@ def build(commit: str, target: Path, with_python: bool) -> dict[str, Any]:
         "ffmpeg_version": ffmpeg_version[0] if ffmpeg_version else None,
         "binary_sources": {dst: str(REPO / src) for src, dst in WORKTREE_FILES},
         "key_sha256": {k: sha256(target / k) for k in key_files},
-        "native_modules": ["src/native/gpmf/telem_gpmf_native.pyd",
+        "native_modules": ["runtime/common/telemetry/gpmf/telem_gpmf_native.pyd",
                            "runtime/common/telemetry/telemetry_parser/telemetry_parser/telemetry_parser.cp314-win_amd64.pyd"],
         "vc_redist_source": str(vc),
         "file_count": len(files) + 1,

@@ -1,0 +1,113 @@
+{
+  "codec": "h264",
+  "profile": "fast",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\GX010378.MP4",
+  "fit": "C:\\GoPro\\2026-10-15_15-03-50.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\reconcile_intel_matrix_20261019\\smoke_native_h264_fast.mp4",
+  "bitrate": "40M",
+  "max_frames": 30,
+  "success": true,
+  "error": "",
+  "elapsed_s": 3.78,
+  "total_frames": 30,
+  "effective_fps": 7.93,
+  "ram_used_gb": 9.46,
+  "pipe_forwarders_after_export": [],
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "1.001000",
+          "nb_frames": "30",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "0.981333",
+          "nb_frames": "46"
+        }
+      ],
+      "format": {
+        "duration": "1.001000",
+        "size": "5133137"
+      }
+    },
+    "actual_video_frames": 30
+  },
+  "output_size_bytes": 5133137,
+  "stats": {
+    "audio_live_mux": true,
+    "avg_qp": 22.4,
+    "cancelled": false,
+    "codec": "h264",
+    "encoder_accepted": {
+      "buffer_kb": 10000,
+      "get_status": 0,
+      "init_status": 0,
+      "initial_delay_kb": 5000,
+      "max_kbps": 50000,
+      "multiplier": 1,
+      "qp_supported": 1,
+      "qp_unverified_zero": 0,
+      "query_status": 0,
+      "rate_control": 2,
+      "target_kbps": 40000,
+      "target_usage": 7,
+      "valid": 1
+    },
+    "encoder_drain_seconds": 0.15216789999976754,
+    "final_mp4_full_remux_count": 0,
+    "finalization_seconds": 0.26451879998785444,
+    "frame_render_seconds": 2.6978838000213727,
+    "generation_id": 1,
+    "gpmf_live_mux": false,
+    "is_cqp": false,
+    "mux_process_count": 1,
+    "mux_seconds": 0.0,
+    "output_validation": {
+      "duration_s": 1.001,
+      "has_audio": true,
+      "size_bytes": 5133137,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "post_render_full_mux_seconds": 0.0,
+    "qp_aggregation": "arithmetic mean of returned frame luma QPs; coverage = quant_samples / rendered frames",
+    "qp_rejected_samples": 0,
+    "qp_source": "oneVPL encoded-frame luma QP",
+    "quant_avg": 22.4,
+    "quant_current": 23,
+    "quant_max": 23,
+    "quant_metric": "QP",
+    "quant_min": 19,
+    "quant_samples": 30,
+    "quant_sum": 672,
+    "rate_control": "VBR",
+    "real_export_fps": 11.119826583992364,
+    "render_fps": 11.119826583992364,
+    "temp_ivf_bytes": 0,
+    "temp_ivf_path": null,
+    "total_overlay_frames": 0,
+    "total_wall_seconds": 3.316974699991988,
+    "user_effective_fps": 9.044386138993602,
+    "verify_seconds": 0.11163649999070913,
+    "video_encode_pass_count": 1
+  },
+  "sampled_q": {}
+}

@@ -266,23 +266,11 @@ class RenderTab(QWidget):
         form.addRow("Tryb renderowania:", self.cmb_render_mode)
 
         self.cmb_encoder = QComboBox()
-        # auto = wykryty najlepszy backend, amd = AMD AMF, nv = NVIDIA NVENC,
-        # intel = Intel QuickSync (INTEL_FORCE — bez cross-GPU fallback),
-        # cpu = software
-        self.cmb_encoder.addItems(["auto", "amd", "nv", "intel", "cpu"])
         self.cmb_encoder.setToolTip(
             "auto = wykryty najlepszy backend, amd = AMD AMF (GPU), "
-            "cpu_x265 = CPU HEVC x265 (10-bit, GPU decode/compositor, brak limitu rozdzielczości AMF), "
             "nv = NVIDIA NVENC, intel = Intel QuickSync, cpu = software"
         )
-        try:
-            from src.ffmpeg_pipeline import detect_best_encoder
-            best_enc = detect_best_encoder()
-            idx = self.cmb_encoder.findText(best_enc)
-            if idx >= 0:
-                self.cmb_encoder.setCurrentIndex(idx)
-        except Exception:
-            pass
+        self._populate_encoders(preserve_selection=False)
         form.addRow("Encoder:", self.cmb_encoder)
 
         self.widget_amd_options = QWidget()
@@ -418,26 +406,16 @@ class RenderTab(QWidget):
         layout_nvidia.setSpacing(6)
 
         self.cmb_nvidia_backend = QComboBox()
-        self.cmb_nvidia_backend.addItem("NVIDIA CUDA", "legacy_cuda")
-        self.cmb_nvidia_backend.addItem("NVIDIA Native D3D11 (Experimental)", "native_d3d11")
         self.cmb_nvidia_backend.setToolTip(
             "NVIDIA CUDA: hybrydowy pipeline z workerami CPU i FFmpeg NVENC (Domyślny/Produkcyjny).\n"
             "NVIDIA Native D3D11 (Experimental): akcelerowany sprzętowo pipeline D3D11VA + Direct2D HUD + GPU map + NVENC."
         )
-
-        from src.ffmpeg.nvidia_config import is_nvidia_native_available
-        nv_native_ok, nv_native_reason = is_nvidia_native_available()
-        idx_native = self.cmb_nvidia_backend.findData("native_d3d11")
-        if not nv_native_ok and idx_native >= 0:
-            self.cmb_nvidia_backend.setItemText(idx_native, f"NVIDIA Native D3D11 (Experimental / niedostępny: {nv_native_reason})")
-        idx_legacy = self.cmb_nvidia_backend.findData("legacy_cuda")
-        if idx_legacy >= 0:
-            self.cmb_nvidia_backend.setCurrentIndex(idx_legacy)
-
+        self._populate_nvidia_backends()
         layout_nvidia.addRow("Backend NVIDIA:", self.cmb_nvidia_backend)
 
-        self.cmb_nvidia_codec = QComboBox()
-        self.cmb_nvidia_codec.addItems(["HEVC", "AV1", "H.264 (SDR)"])
+        self.cmb_nvidia_codec = DiscreteSlider()
+        self.cmb_nvidia_codec.setToolTip("Wybór sprzętowego kodeka wideo NVIDIA NVENC.")
+        self._populate_nvidia_codecs(preserve_selection=False)
         layout_nvidia.addRow("Kodek NVIDIA:", self.cmb_nvidia_codec)
 
         self.cmb_nvidia_quality = DiscreteSlider([
@@ -481,35 +459,9 @@ class RenderTab(QWidget):
         layout_intel.setSpacing(6)
 
         self.cmb_intel_codec = QComboBox()
-        self.cmb_intel_codec.addItem("AV1 — 10-bit HDR", "av1")
-        self.cmb_intel_codec.addItem("H.264 — 8-bit SDR", "h264")
-        self.cmb_intel_codec.addItem("H.265 — Main10 / HDR", "hevc")
-        self.cmb_intel_codec.addItem("H.265 — 8-bit SDR", "hevc_sdr")
-
-        try:
-            from src.ffmpeg.intel_native_exporter import query_intel_capabilities
-            intel_caps = query_intel_capabilities()
-        except Exception:
-            intel_caps = {}
-
-        for codec_name, cap_key in (("av1", "AV1_10BIT"), ("h264", "H264_8BIT"),
-                                    ("hevc", "HEVC_10BIT"), ("hevc_sdr", "HEVC_8BIT")):
-            idx = self.cmb_intel_codec.findData(codec_name)
-            item = self.cmb_intel_codec.model().item(idx)
-            available = bool(intel_caps.get(cap_key, False))
-            item.setEnabled(available)
-            if not available:
-                item.setText(item.text() + " — niedostępny")
-                item.setToolTip("Brak potwierdzonego kodowania na aktualnym sprzęcie/sterowniku/runtime Intel")
-
-        # Default to a proven HDR encoder. SDR must be selected explicitly.
-        default_codec = "av1" if intel_caps.get("AV1_10BIT") else ("hevc" if intel_caps.get("HEVC_10BIT") else None)
-        self.cmb_intel_codec.setCurrentIndex(self.cmb_intel_codec.findData(default_codec) if default_codec else -1)
-
         self.cmb_intel_codec.setToolTip(
             "Wybór sprzętowego enkodera Intel Quick Sync Video (oneVPL).\n"
-            "Dostępność potwierdzana rzeczywistym kodowaniem na Intel D3D11/QSV.\n"
-            "AV1: 10-bit HDR (HLG BT.2020).\n"
+            "AV1: 10-bit HDR (HLG BT.2020, rekomendowany na obsługiwanych GPU).\n"
             "H.264: 8-bit SDR (BT.709 tone-mapped z zachowaniem świateł).\n"
             "H.265: Main10 HDR lub jawnie wybrany 8-bit SDR."
         )
@@ -517,26 +469,8 @@ class RenderTab(QWidget):
         self.lbl_intel_codec_info = QLabel("Format: HDR 10-bit (HLG / BT.2020)")
         self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
 
-        def _on_intel_codec_changed(_idx: int) -> None:
-            c = self.cmb_intel_codec.currentData()
-            if c is None:
-                self.lbl_intel_codec_info.setText("Wybierz obsługiwany kodek. Zmiana HDR na SDR wymaga Twojego wyboru.")
-            elif c in ("h264", "hevc_sdr"):
-                self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
-                self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
-            elif c == "hevc":
-                if intel_caps.get("HEVC_10BIT", False):
-                    self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
-                    self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
-                else:
-                    self.lbl_intel_codec_info.setText("Niedostępny na aktualnym sterowniku/runtime Intel")
-                    self.lbl_intel_codec_info.setStyleSheet("color: #ff7777; font-size: 11px; font-weight: normal;")
-            else:
-                self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
-                self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
-
-        self.cmb_intel_codec.currentIndexChanged.connect(_on_intel_codec_changed)
-        _on_intel_codec_changed(self.cmb_intel_codec.currentIndex())
+        self._populate_intel_codecs(preserve_selection=False)
+        self.cmb_intel_codec.currentIndexChanged.connect(self._on_intel_codec_changed)
 
         row_intel_codec = QVBoxLayout()
         row_intel_codec.setSpacing(2)
@@ -567,8 +501,8 @@ class RenderTab(QWidget):
             enc = self.cmb_encoder.currentText().strip().lower()
             if enc == "auto":
                 try:
-                    from src.ffmpeg_pipeline import detect_best_encoder
-                    enc = detect_best_encoder().lower()
+                    from src.ffmpeg.backend_capabilities import resolve_auto_backend
+                    enc = resolve_auto_backend().lower()
                 except Exception:
                     enc = ""
             is_amd = enc in ("amd", "amd_native")
@@ -578,12 +512,15 @@ class RenderTab(QWidget):
             self.widget_amd_options.setVisible(is_amd)
             self.widget_nvidia_options.setVisible(is_nv)
             self.widget_intel_options.setVisible(is_intel)
-            if hasattr(self, "widget_cpu_options"):
-                self.widget_cpu_options.setVisible(is_cpu)
+            if is_intel:
+                self._populate_intel_codecs(preserve_selection=True)
             if is_nv:
+                self._populate_nvidia_codecs(preserve_selection=True)
                 self.cmb_nvidia_codec.setEnabled(True)
                 self.cmb_nvidia_quality.setEnabled(True)
                 self.chk_compression_analysis.setEnabled(True)
+            if hasattr(self, "widget_cpu_options"):
+                self.widget_cpu_options.setVisible(is_cpu)
 
             # Dynamic AMF Hardware Capability Detection (no blanket vendor disable)
             if hasattr(self, "cmb_resolution"):
@@ -1024,6 +961,23 @@ class RenderTab(QWidget):
         options["gpx_path"] = job.gpx_path
         options["layout"] = copy.deepcopy(job.layout)
 
+        # Phase 17: Backend availability check before starting queue job
+        from src.ffmpeg.backend_capabilities import query_backend_capabilities, validate_backend_available
+        job_enc = str(job.options.get("encoder", "auto")).strip().lower()
+        if job_enc != "auto":
+            caps = query_backend_capabilities()
+            is_avail, reason = validate_backend_available(job_enc, caps)
+            if not is_avail:
+                error_msg = f"UNSUPPORTED_BACKEND_QUEUE_START=BLOCKED: Backend '{job_enc}' is not available on this machine ({reason}). QUEUE_CROSS_VENDOR_SILENT_FALLBACK=NO."
+                print(f"[QUEUE DISPATCH BLOCKED] {error_msg}", flush=True)
+                job.render_status = "error"
+                job.render_error = error_msg
+                if self._export_queue:
+                    self._export_queue.notify_render_done(
+                        job.job_id, success=False, error_message=error_msg
+                    )
+                return
+
         # Canonical entrypoint
         success = self._start_render(options, job=job)
         if not success:
@@ -1104,14 +1058,16 @@ class RenderTab(QWidget):
                 try:
                     from src.multifile import build_timeline_from_paths
                     from src.video_helpers import find_executable
-                    ffmpeg_exe = find_executable(
-                        "ffmpeg",
-                        [str(ctrl.base_dir / "ffmpeg.exe"), "ffmpeg.exe"] if hasattr(ctrl, "base_dir") else []
-                    )
-                    ffprobe_exe = find_executable(
-                        "ffprobe",
-                        [str(ctrl.base_dir / "ffprobe.exe"), "ffprobe.exe"] if hasattr(ctrl, "base_dir") else []
-                    )
+                    from src.runtime_paths import get_ffmpeg_exe, get_ffprobe_exe
+                    extra_ffmpeg = [str(get_ffmpeg_exe())]
+                    extra_ffprobe = [str(get_ffprobe_exe())]
+                    if hasattr(ctrl, "base_dir"):
+                        extra_ffmpeg.append(str(ctrl.base_dir / "ffmpeg.exe"))
+                        extra_ffprobe.append(str(ctrl.base_dir / "ffprobe.exe"))
+                    extra_ffmpeg.append("ffmpeg.exe")
+                    extra_ffprobe.append("ffprobe.exe")
+                    ffmpeg_exe = find_executable("ffmpeg", extra_ffmpeg)
+                    ffprobe_exe = find_executable("ffprobe", extra_ffprobe)
                     timeline = build_timeline_from_paths(
                         ctrl.video_paths,
                         ffmpeg_exe=ffmpeg_exe,
@@ -2443,7 +2399,7 @@ class RenderTab(QWidget):
             "bitrate": self.edit_bitrate.text().strip(),
             "output": self.edit_output.text().strip(),
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
-            "nvidia_codec": self.cmb_nvidia_codec.currentText(),
+            "nvidia_codec": self.cmb_nvidia_codec.currentData() or self.cmb_nvidia_codec.currentText(),
             "nvidia_quality": self.cmb_nvidia_quality.currentData() or self.cmb_nvidia_quality.currentText() or "P3",
             "intel_codec": self.cmb_intel_codec.currentData() or "",
             "encoder_profile": (
@@ -4266,3 +4222,181 @@ class RenderTab(QWidget):
                 self.set_amd_encoder_quality(str(amd_q))
         if hasattr(self, "cmb_hdr_mode") and settings.get("amd_hdr_mode"):
             self._on_amd_hdr_mode_restored(str(settings.get("amd_hdr_mode")))
+        if "encoder" in settings and hasattr(self, "cmb_encoder"):
+            self._populate_encoders(preserve_selection=False, requested_encoder=settings.get("encoder"))
+
+        if "nvidia_codec" in settings and hasattr(self, "cmb_nvidia_codec"):
+            self._populate_nvidia_codecs(preserve_selection=False, requested_codec=settings.get("nvidia_codec"))
+
+        if "nvidia_quality" in settings and hasattr(self, "cmb_nvidia_quality"):
+            q = settings.get("nvidia_quality")
+            idx = self.cmb_nvidia_quality.findText(q)
+            if idx >= 0:
+                self.cmb_nvidia_quality.setCurrentIndex(idx)
+
+        if "intel_codec" in settings and hasattr(self, "cmb_intel_codec"):
+            self._populate_intel_codecs(preserve_selection=False, requested_codec=settings.get("intel_codec"))
+
+    def _resolve_current_intel_codec(self) -> str:
+        """Resolve currently supported Intel codec or fallback."""
+        from src.ffmpeg.intel_native_exporter import resolve_supported_intel_codec
+        return resolve_supported_intel_codec()
+
+    def _populate_intel_codecs(self, preserve_selection: bool = True, requested_codec: Optional[str] = None) -> None:
+        """Refresh hardware capabilities without silently replacing HDR by SDR."""
+        from src.ffmpeg.intel_native_exporter import query_intel_capabilities
+        caps = query_intel_capabilities()
+        self._intel_caps = caps
+        previous = self.cmb_intel_codec.currentData()
+        target = requested_codec if requested_codec is not None else (previous if preserve_selection else None)
+        if target is None:
+            target = "av1" if caps.get("AV1_10BIT") else ("hevc" if caps.get("HEVC_10BIT") else None)
+        self.cmb_intel_codec.blockSignals(True)
+        self.cmb_intel_codec.clear()
+        for label, codec, key in (
+            ("AV1 — 10-bit HDR", "av1", "AV1_10BIT"),
+            ("H.265 — Main10 / HDR", "hevc", "HEVC_10BIT"),
+            ("H.264 — 8-bit SDR", "h264", "H264_8BIT"),
+            ("H.265 — 8-bit SDR", "hevc_sdr", "HEVC_8BIT"),
+        ):
+            available = bool(caps.get(key, False))
+            if available and codec == ("av1" if caps.get("AV1_10BIT") else "hevc" if caps.get("HEVC_10BIT") else None):
+                label += " (Zalecany)"
+            self.cmb_intel_codec.addItem(label if available else label + " — niedostępny", codec)
+            item = self.cmb_intel_codec.model().item(self.cmb_intel_codec.count() - 1)
+            item.setEnabled(available)
+            if not available:
+                item.setToolTip("Brak potwierdzonego kodowania na aktualnym sprzęcie/sterowniku/runtime Intel")
+        self.cmb_intel_codec.setCurrentIndex(self.cmb_intel_codec.findData(target) if target else -1)
+        self.cmb_intel_codec.blockSignals(False)
+        self._on_intel_codec_changed()
+
+    def _on_intel_codec_changed(self, _idx: int = -1) -> None:
+        if not hasattr(self, "lbl_intel_codec_info") or not hasattr(self, "cmb_intel_codec"):
+            return
+        c = self.cmb_intel_codec.currentData()
+        if c in ("h264", "hevc_sdr"):
+            self.lbl_intel_codec_info.setText("Format: SDR 8-bit (BT.709 tone-mapped)")
+            self.lbl_intel_codec_info.setStyleSheet("color: #aaffaa; font-size: 11px; font-weight: normal;")
+        elif c in ("hevc", "av1"):
+            self.lbl_intel_codec_info.setText("Format: HDR 10-bit (HLG / BT.2020)")
+            self.lbl_intel_codec_info.setStyleSheet("color: #72b0ff; font-size: 11px; font-weight: normal;")
+        else:
+            self.lbl_intel_codec_info.setText("Brak dostępnego kodera sprzętowego Intel")
+            self.lbl_intel_codec_info.setStyleSheet("color: #ff7777; font-size: 11px; font-weight: normal;")
+
+    def _populate_encoders(self, preserve_selection: bool = True, requested_encoder: Optional[str] = None) -> None:
+        """Populate cmb_encoder dynamically with genuinely usable backends on this host."""
+        if not hasattr(self, "cmb_encoder"):
+            return
+
+        from src.ffmpeg.backend_capabilities import (
+            query_backend_capabilities,
+            get_available_backends,
+            resolve_supported_backend,
+        )
+        caps = query_backend_capabilities()
+
+        current_val = requested_encoder or (
+            self.cmb_encoder.currentText().strip().lower() if (preserve_selection and self.cmb_encoder.count() > 0) else None
+        )
+
+        available_backends = get_available_backends(caps)
+
+        # Resolve selection
+        if not available_backends:
+            display_backends = ["none"]
+            effective_val = "none"
+        else:
+            display_backends = available_backends
+            if current_val and current_val not in available_backends:
+                effective_val = resolve_supported_backend(current_val, caps)
+            elif current_val:
+                effective_val = current_val
+            else:
+                effective_val = "auto"
+
+        self.cmb_encoder.blockSignals(True)
+        self.cmb_encoder.clear()
+        for b in display_backends:
+            self.cmb_encoder.addItem(b, b)
+
+        idx = self.cmb_encoder.findText(effective_val)
+        if idx >= 0:
+            self.cmb_encoder.setCurrentIndex(idx)
+        elif self.cmb_encoder.count() > 0:
+            self.cmb_encoder.setCurrentIndex(0)
+        self.cmb_encoder.blockSignals(False)
+
+        if hasattr(self, "widget_amd_options"):
+            self._update_backend_visibility()
+
+    def _populate_nvidia_codecs(self, preserve_selection: bool = True, requested_codec: Optional[str] = None) -> None:
+        """Populate cmb_nvidia_codec with genuinely available NVENC codecs."""
+        if not hasattr(self, "cmb_nvidia_codec"):
+            return
+
+        from src.ffmpeg.backend_capabilities import query_backend_capabilities
+        caps = query_backend_capabilities()
+
+        current_val = requested_codec or (
+            (self.cmb_nvidia_codec.currentData() or self.cmb_nvidia_codec.currentText())
+            if preserve_selection and self.cmb_nvidia_codec.count() > 0
+            else None
+        )
+
+        items: list[tuple[str, str]] = []
+        if caps.nvidia_h264_nvenc:
+            items.append(("H.264", "H.264"))
+        if caps.nvidia_hevc_nvenc:
+            items.append(("H.265", "HEVC"))
+        if caps.nvidia_av1_nvenc:
+            items.append(("AV1", "AV1"))
+
+        if not items:
+            items = [("Brak NVENC", "none")]
+
+        self.cmb_nvidia_codec.blockSignals(True)
+        self.cmb_nvidia_codec.clear()
+        self.cmb_nvidia_codec.addItems(items)
+
+        target_idx = -1
+        if current_val:
+            c_norm = str(current_val).strip().upper()
+            if "AV1" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("AV1")
+            elif "264" in c_norm or "AVC" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("H.264")
+            elif "HEVC" in c_norm or "265" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("HEVC")
+
+        if target_idx < 0:
+            idx_hevc = self.cmb_nvidia_codec.findData("HEVC")
+            target_idx = idx_hevc if idx_hevc >= 0 else 0
+
+        self.cmb_nvidia_codec.setCurrentIndex(target_idx)
+        self.cmb_nvidia_codec.blockSignals(False)
+
+    def _populate_nvidia_backends(self) -> None:
+        """Populate cmb_nvidia_backend with only genuinely usable NVIDIA backends."""
+        if not hasattr(self, "cmb_nvidia_backend"):
+            return
+
+        from src.ffmpeg.backend_capabilities import query_backend_capabilities
+        caps = query_backend_capabilities()
+
+        items: list[tuple[str, str]] = []
+        if caps.nvidia_legacy_cuda:
+            items.append(("NVIDIA CUDA", "legacy_cuda"))
+        if caps.nvidia_native_d3d11:
+            items.append(("NVIDIA Native D3D11", "native_d3d11"))
+
+        if not items:
+            items = [("NVIDIA (niedostępny)", "none")]
+
+        self.cmb_nvidia_backend.blockSignals(True)
+        self.cmb_nvidia_backend.clear()
+        for label, data in items:
+            self.cmb_nvidia_backend.addItem(label, data)
+        self.cmb_nvidia_backend.setCurrentIndex(0)
+        self.cmb_nvidia_backend.blockSignals(False)

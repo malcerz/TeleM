@@ -91,7 +91,7 @@ def test_intel_native_7h_realtime_4k30_guardrail():
 
 def test_intel_native_7h_production_pipeline_integrity():
     """Verify production pipeline parameters match 7H contracts."""
-    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()
     assert dll_path.exists(), f"Missing DLL at {dll_path}"

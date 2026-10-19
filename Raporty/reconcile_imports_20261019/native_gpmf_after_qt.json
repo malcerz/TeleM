@@ -1,0 +1,14 @@
+[
+  {
+    "interpreter": "314",
+    "passed": true,
+    "stdout": "<module 'telem_gpmf_native' from 'C:\\\\_DEV\\\\SportCamHUD\\\\runtime\\\\common\\\\telemetry\\\\gpmf\\\\telem_gpmf_native.pyd'>\n",
+    "stderr": ""
+  },
+  {
+    "interpreter": "315",
+    "passed": false,
+    "stdout": "None\n",
+    "stderr": ""
+  }
+]

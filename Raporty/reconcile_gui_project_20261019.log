@@ -1,0 +1,84 @@
+[GPU CAPABILITIES]
+Adapter: Unknown
+Vendor: UNKNOWN
+DeviceId: 0x0000
+Driver: Unknown
+Encoder: UNKNOWN 
+HEVC Main10: UNKNOWN
+Max encode: UNKNOWN
+Cache: MISS
+Probe: 16.90 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[Controller] Akceleracja GPU aktywna: Intel(R) Iris(R) Xe Graphics
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 000001924faed900] Current codec type is unsupported
+[av1_qsv @ 000001924faed900] Current profile is unsupported
+[av1_qsv @ 000001924faed900] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 000001924f7f4540] [enc:av1_qsv @ 000001924c456900] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001924ec93100] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 000001924ec93100] Task finished with error: Function not implemented
+[vf#0:0 @ 000001924ec93100] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 000001924f7f4540] [enc:av1_qsv @ 000001924c456900] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 000001924f7f4540] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 000001924f7f4540] Terminating thread with error: Invalid argument
+[out#0/null @ 000001924c559e40] Nothing was written into output file, because at least one of its streams received no packets.
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 516, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 12832, "preview_generation_id": 0, "preview_stop_event": {"id": 2200889680720, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 582148096, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140713069100752, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 208805888, "thread_count": 24}
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[Controller] MPV zinicjalizowany pomyślnie (GPU: Intel, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[ExportQueue] Initialized
+[GarminConnect] GARMIN_AUTH=CONNECTED
+[TELEMETRY CACHE] source=tiny.mp4 key=tiny_4feda5211bea078e status=STORED path=C:\_DEV\SportCamHUD\scratch\project-probe-local\SportCamHUD\cache\media\tiny_4feda5211bea078e\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-19 11:00:35.500155+00:00..2026-10-19 11:00:35.800155+00:00
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[HDR] source color kind=sdr error=-
+[HDR GUI] source kind=sdr hdr_selector=HIDDEN mode=preserve_hlg
+[MultiFile] project_duration=0.300000 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=0.3s
+[MultiFile] Clip 1/1
+  path=tiny.mp4
+  global=0.000-0.300
+  absolute=2026-10-19T11:00:35.500-2026-10-19T11:00:35.800
+  source=filesystem_mtime_hint reliable=False quality=fallback
+  detail=filesystem mtime hint=2026-10-19T11:00:35.500; low confidence; no trustworthy GPMF/MP4 timestamp
+[MPV HW] OSTRZEŻENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzętowej). Sprawdź GPU/sterowniki.
+          hwdec-current=None, codec=None
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-19 11:00:44.048731+00:00..2026-10-19 11:10:44.048731+00:00
+Traceback (most recent call last):
+  File "C:\_DEV\SportCamHUD\src\gui\qt\_mixins\project_mixin.py", line 659, in bg_load
+    candidate_state = self._probe_candidate_video_state(
+        candidate_video_path, ffprobe_exe,
+        default_fps=self.fps if hasattr(self, "fps") else 30.0,
+    )
+  File "C:\_DEV\SportCamHUD\src\gui\qt\_mixins\project_mixin.py", line 335, in _probe_candidate_video_state
+    info = ffprobe_stream_info(ffprobe_exe, Path(video_path))
+  File "C:\_DEV\SportCamHUD\src\video_helpers.py", line 272, in ffprobe_stream_info
+    out = run([
+        ffprobe_exe, '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=r_frame_rate,avg_frame_rate,width,height:format=duration',
+        '-of', 'json', str(input_file)
+    ])
+  File "C:\_DEV\SportCamHUD\src\video_helpers.py", line 29, in run
+    raise RuntimeError((p.stderr or p.stdout).strip())
+RuntimeError: [mov,mp4,m4a,3gp,3g2,mj2 @ 0000024de33ee380] moov atom not found
+C:\_DEV\SportCamHUD\Raporty\gui_recovery_20261018\project_probe\invalid.mp4: Invalid data found when processing input
+[PROC] job created handle=2180
+[PROC] assigned TeleM parent pid=12832 to job (in_prior_job=True)
+[PROC] GUI closeEvent complete
+PASS real Qt load button + real ffprobe: startup/ready/clear/invalid-video

@@ -121,8 +121,8 @@ def get_nvidia_native_dll() -> Path:
     return get_nvidia_runtime_dir() / "bin" / "telem_nvenc_native.dll"
 
 
-def get_ffmpeg_exe() -> Path:
-    """Return canonical path to ffmpeg.exe (common runtime first, root fallback)."""
+def get_common_ffmpeg_exe() -> Path:
+    """Return canonical path to common ffmpeg.exe (Intel, AMD, CPU)."""
     common_exe = get_common_runtime_dir() / "ffmpeg" / "ffmpeg.exe"
     if common_exe.exists():
         return common_exe
@@ -132,8 +132,8 @@ def get_ffmpeg_exe() -> Path:
     return common_exe
 
 
-def get_ffprobe_exe() -> Path:
-    """Return canonical path to ffprobe.exe (common runtime first, root fallback)."""
+def get_common_ffprobe_exe() -> Path:
+    """Return canonical path to common ffprobe.exe (Intel, AMD, CPU)."""
     common_exe = get_common_runtime_dir() / "ffmpeg" / "ffprobe.exe"
     if common_exe.exists():
         return common_exe
@@ -143,12 +143,54 @@ def get_ffprobe_exe() -> Path:
     return common_exe
 
 
+def get_nvidia_ffmpeg_exe() -> Path:
+    """Return canonical path to NVIDIA vendor-isolated ffmpeg.exe (falling back to common if absent)."""
+    override = os.environ.get("TELEM_NVIDIA_FFMPEG_EXE", "").strip()
+    if override:
+        return Path(override).resolve()
+    nv_exe = get_nvidia_runtime_dir() / "ffmpeg" / "ffmpeg.exe"
+    if nv_exe.exists():
+        return nv_exe
+    return get_common_ffmpeg_exe()
+
+
+def get_nvidia_ffprobe_exe() -> Path:
+    """Return canonical path to NVIDIA vendor-isolated ffprobe.exe (falling back to common if absent)."""
+    override = os.environ.get("TELEM_NVIDIA_FFPROBE_EXE", "").strip()
+    if override:
+        return Path(override).resolve()
+    nv_probe = get_nvidia_runtime_dir() / "ffmpeg" / "ffprobe.exe"
+    if nv_probe.exists():
+        return nv_probe
+    return get_common_ffprobe_exe()
+
+
+def get_ffmpeg_exe(vendor: Optional[str] = None) -> Path:
+    """Return canonical path to ffmpeg.exe, routing to vendor-specific binary if requested."""
+    if vendor and str(vendor).strip().lower() in ("nv", "nvidia"):
+        return get_nvidia_ffmpeg_exe()
+    return get_common_ffmpeg_exe()
+
+
+def get_ffprobe_exe(vendor: Optional[str] = None) -> Path:
+    """Return canonical path to ffprobe.exe, routing to vendor-specific binary if requested."""
+    if vendor and str(vendor).strip().lower() in ("nv", "nvidia"):
+        return get_nvidia_ffprobe_exe()
+    return get_common_ffprobe_exe()
+
+
 def get_telemetry_parser_dir() -> Path:
     """Return canonical directory containing the DJI telemetry parser runtime."""
     common_p = get_common_runtime_dir() / "telemetry" / "telemetry_parser"
     if common_p.exists():
         return common_p
     return get_runtime_dir() / "telemetry_parser"
+
+
+def get_native_source_dir(vendor: str) -> Path:
+    """Return canonical source directory for a vendor native pipeline."""
+    v = vendor.lower()
+    return get_app_root() / "src" / "native" / v
 
 
 def compute_file_sha256(file_path: Path | str) -> str:

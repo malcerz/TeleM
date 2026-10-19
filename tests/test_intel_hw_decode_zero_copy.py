@@ -5,10 +5,10 @@ import pytest
 from pathlib import Path
 
 def test_intel_hw_decode_default_state_and_exports():
-    from src.runtime_paths import get_intel_native_dll, activate_vendor_dll_directory
+    from src.runtime_paths import activate_vendor_dll_directory, get_intel_native_dll
     activate_vendor_dll_directory("intel")
     dll_path = get_intel_native_dll()
-    assert dll_path.exists(), "telem_intel_native.dll must exist"
+    assert dll_path.exists(), f"telem_intel_native.dll must exist at {dll_path}"
 
     lib = ctypes.CDLL(str(dll_path))
     assert hasattr(lib, "intel_native_pipeline_init_multi_ex")
