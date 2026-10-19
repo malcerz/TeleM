@@ -88,3 +88,9 @@ Końcowy working tree ma zachować wyłącznie zastaną prywatną pracę i kopie
 
 ## 10. Werdykt
 QP measurement/analysis w produkcyjnym eksporcie: USUNIĘTE. VBR, jakość i funkcje w testowanym Intel: PASS. Bitowo identyczny strumień testowy: PASS. Powrót do ponad 55 FPS: NIE OSIĄGNIĘTY. Wydajność końcowa: 53.031 FPS render / 51.380 FPS z finalizacją, 35.033 s dla 1800 klatek; ustabilizowany odcinek 52.632 FPS. Sprzętowe AMD/NVIDIA i globalny brak regresji: NOT PROVEN / NOT TESTED zgodnie z powyższym zakresem.
+
+## 11. Potwierdzenie lokalnego commitu
+Commit poprawki: 98848d712ecbb34c821d878207bed79b55aaaacc — perf: remove production QP diagnostics while preserving encoder rate control.
+Rodzic: aa42e65cf8231f80d13c077bfc6db561bb1f2a61. Źródła, dwie DLL i dowody są w tym commicie; prywatny def_layout.json i backupy nie są jego częścią. Uzupełnienie niniejszego raportu jest osobnym commitem dokumentacyjnym.
+Working tree po commicie: M def_layout.json; nieśledzone C, pusty RAPORT_INTEL_HEVC_SLICE_QP_20261017.md w root, font PL, dwie zastane kopie Intel i nowe kopie bezpieczeństwa Intel/AMD .bak_before_qp_removal_20261019. Nie ma niezacommitowanych zmian źródeł aplikacji. Nie wykonano push.
+Kontrola git diff --check źródeł i końcowej niezacommitowanej pracy PASS. Staged kontrola obejmująca surowe logi zgłaszała whitespace w wyjściu pytest/FFmpeg oraz patchach audytowych; zachowano oryginalne logi zamiast zmieniać ich zapis. Nie uznano tego za błąd źródeł ani testów wykonania. Stan źródeł sprzed poprawki i wszystkich wcześniejszych commitów pozostał osiągalny.

@@ -37,7 +37,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 # Pinned production native builds (verified before copy).
 EXPECTED_SHA256 = {
-    # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), QP feedback,
+    # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), without QP diagnostics,
     # map style, HLG preserve (HEVC Main10) and HLG->SDR, tone-mapped HLG export-preview tap.
     "runtime/amd/bin/telem_amd_native.dll": "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb",
     "runtime/intel/bin/telem_intel_native.dll": "5d3a967e0cb016fcbc8d4f74a4b26e2b9da53f5f776ad29d5b655f1a9bae056c",
