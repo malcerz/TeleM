@@ -1,0 +1,18 @@
+{"variant": "C_TR", "rep": 51, "dll": "1eb0f478", "success": true, "wall": 20.33, "render_fps": 34.581, "steady_500_1500_fps": null, "user_effective_fps": 30.287, "native_step_ms": 18.06, "sync_ms": 19.241, "hud_upload_ms": 3.633, "blt_ms": 1.818, "dma_copy_ms": 0.365, "slot_wait_ms": 10.164, "hud_wait_ms": 5.84, "first_frame_latency_s": 2.502, "gpu": {"3D_eng0": 37.1, "LegacyOverlay_eng10": 0.0, "VideoDecode_eng1": 14.4, "Copy_eng2": 0.0, "VideoProcessing_eng3": 4.2, "VideoDecode_eng4": 9.7, "3D_eng10": 0.0, "3D_eng11": 0.0, "3D_eng12": 0.0, "3D_eng1": 0.0, "3D_eng2": 0.0, "3D_eng3": 0.0, "3D_eng4": 0.0, "3D_eng5": 0.0, "3D_eng6": 0.0, "3D_eng7": 0.0, "3D_eng8": 0.0, "3D_eng9": 0.0}, "cpu_freq": 2408.0, "temp": 51.9, "discharge_mw": 0.0, "ac": 1, "ac_after": 1, "standby": false}
+{"variant": "C_TR_Q", "rep": 51, "dll": "1eb0f478", "success": true, "wall": 19.29, "render_fps": 35.841, "steady_500_1500_fps": null, "user_effective_fps": 31.311, "native_step_ms": 17.27, "sync_ms": 18.642, "hud_upload_ms": 3.575, "blt_ms": 2.045, "dma_copy_ms": 0.284, "slot_wait_ms": 9.297, "hud_wait_ms": 5.57, "first_frame_latency_s": 2.392, "gpu": {"3D_eng0": 32.8, "LegacyOverlay_eng10": 0.0, "VideoDecode_eng1": 12.4, "Copy_eng2": 0.0, "VideoProcessing_eng3": 3.6, "VideoDecode_eng4": 8.0, "3D_eng10": 0.0, "3D_eng11": 0.0, "3D_eng12": 0.0, "3D_eng1": 0.0, "3D_eng2": 0.0, "3D_eng3": 0.0, "3D_eng4": 0.0, "3D_eng5": 0.0, "3D_eng6": 0.0, "3D_eng7": 0.0, "3D_eng8": 0.0, "3D_eng9": 0.0}, "cpu_freq": 2408.0, "temp": 51.9, "discharge_mw": 0.0, "ac": 1, "ac_after": 1, "standby": false}
+{"variant": "C_TR_CANCEL", "rep": 51, "dll": "1eb0f478", "success": true, "wall": 16.7, "render_fps": null, "steady_500_1500_fps": null, "user_effective_fps": null, "native_step_ms": null, "sync_ms": null, "hud_upload_ms": null, "blt_ms": null, "dma_copy_ms": null, "slot_wait_ms": null, "hud_wait_ms": null, "first_frame_latency_s": null, "gpu": {"3D_eng0": 18.6, "LegacyOverlay_eng10": 0.0, "VideoDecode_eng1": 5.9, "Copy_eng2": 0.0, "VideoProcessing_eng3": 1.8, "VideoDecode_eng4": 4.4, "3D_eng10": 0.0, "3D_eng11": 0.0, "3D_eng12": 0.0, "3D_eng1": 0.0, "3D_eng2": 0.0, "3D_eng3": 0.0, "3D_eng4": 0.0, "3D_eng5": 0.0, "3D_eng6": 0.0, "3D_eng7": 0.0, "3D_eng8": 0.0, "3D_eng9": 0.0}, "cpu_freq": 2408.0, "temp": 51.9, "discharge_mw": 0.0, "ac": 1, "ac_after": 1, "standby": false}
+Traceback (most recent call last):
+  File "C:\_DEV\SportCamHUD\tools\benchmark_intel_qsv_pipeline.py", line 375, in <module>
+    main()
+    ~~~~^^
+  File "C:\_DEV\SportCamHUD\tools\benchmark_intel_qsv_pipeline.py", line 371, in main
+    run(v, rep, args.settle, tag="cand_" if args.all_candidate else "")
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\_DEV\SportCamHUD\tools\benchmark_intel_qsv_pipeline.py", line 219, in run
+    out.mkdir(parents=True, exist_ok=False)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MalcerzSur\AppData\Local\Python\pythoncore-3.15-64\Lib\pathlib\__init__.py", line 1210, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileExistsError: [WinError 183] Nie można utworzyć pliku, który już istnieje: 'C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\C_TR_r51'
+EXIT=1

@@ -1558,7 +1558,19 @@ def export_intel_native_d3d11(
                 try:
                     from src.ffmpeg.shared_memory import WorkerInitBlob, _init_worker_with_shm_blob
                     init_blob = WorkerInitBlob(init_args)
-                    cleanup.callback(init_blob.close)
+
+                    def _close_init_blob(blob=init_blob):
+                        blob.close()
+                        if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+                            from multiprocessing import shared_memory as _shm
+                            try:
+                                _shm.SharedMemory(name=blob.name, create=False).close()
+                                released = "NO"
+                            except FileNotFoundError:
+                                released = "YES"
+                            render_print(f"[HUD STARTUP TRACE] init_blob_closed name={blob.name} released={released}", flush=True)
+
+                    cleanup.callback(_close_init_blob)
                     hud_initializer = _init_worker_with_shm_blob
                     hud_initargs = (init_blob.name, init_blob.size, shm_names, frame_size)
                     render_print(f"[Intel][HUD] InitBlob=ON bytes={init_blob.size}", flush=True)

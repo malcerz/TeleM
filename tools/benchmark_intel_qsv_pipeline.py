@@ -142,9 +142,9 @@ def _ffmpeg_cmd(variant: str, out_mp4: Path):
             "-c:a", "copy", str(out_mp4), "-v", "verbose"]
 
 
-def _harness_cmd(variant: str, out_dir: Path, layout: Path):
+def _harness_cmd(variant: str, out_dir: Path, layout: Path, harness_args: list):
     path = "ffmpeg" if variant == "D" else "native"
-    return [sys.executable, str(ROOT / "SportCamHUD.py"), "--test-intel-export",
+    return [sys.executable, str(ROOT / "SportCamHUD.py"), "--test-intel-export", *harness_args,
             "--intel-path", path, "--codec", "hevc", "--profile", "fast",
             "--frames", str(FRAMES), "--bitrate", "40M", "--video", VIDEO, "--fit", FIT,
             "--layout", str(layout), "--watchdog-seconds", "300",
@@ -200,8 +200,10 @@ def _parse_ffmpeg_log(text: str, wall: float) -> dict:
 
 
 SUFFIX_ENV = {"ZC": {"TELEM_INTEL_VP_ZERO_COPY": "1"}, "TR": {"TELEM_HUD_STARTUP_TRACE": "1"}, "NOBLOB": {"TELEM_INTEL_HUD_INIT_BLOB": "0"},
+              "Q": {}, "CANCEL": {},
               "SKIP": {"TELEM_INTEL_DIAG_SKIP_VP_COPY": "1"}}
 CANDIDATE_DLL = None
+REQUIRE_AC = False
 
 
 def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
@@ -209,7 +211,9 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
     full_variant = variant
     parts = variant.split("_")
     extra_env = {}
+    suffixes = set()
     while len(parts) > 1 and parts[-1] in SUFFIX_ENV:
+        suffixes.add(parts[-1])
         extra_env.update(SUFFIX_ENV[parts.pop()])
     variant = "_".join(parts)
     out.mkdir(parents=True, exist_ok=False)
@@ -234,7 +238,12 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
     if variant in ("A", "A_def"):
         cmd = _ffmpeg_cmd(variant, out / "output.mp4")
     else:
-        cmd = _harness_cmd(variant, out, layout)
+        harness_args = []
+        if "Q" in suffixes:
+            harness_args += ["--mode", "queue"]
+        if "CANCEL" in suffixes:
+            harness_args += ["--cancel-after-frames", str(min(150, FRAMES // 2))]
+        cmd = _harness_cmd(variant, out, layout, harness_args)
 
     sampler = SystemSampler()
     stop = threading.Event()
@@ -243,11 +252,18 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
     bat_thread.start()
     samples = []
     power_before = _power_online()
+    if REQUIRE_AC and power_before["ac_line_status"] != 1:
+        raise SystemExit(f"AC power required but PowerLineStatus is not Online: {power_before}")
     started = time.perf_counter()
     with (out / "export.log").open("w", encoding="utf-8") as log:
         proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         known = {}
+        last_tick = time.time()
+        max_gap = 0.0
         while proc.poll() is None:
+            now = time.time()
+            max_gap = max(max_gap, now - last_tick)
+            last_tick = now
             if time.perf_counter() - started > 420:
                 proc.kill()
                 stop.set()
@@ -271,6 +287,8 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
     text = (out / "export.log").read_text(encoding="utf-8", errors="replace")
     summary = {"variant": full_variant, "extra_env": extra_env, "rep": rep, "command": cmd, "exit_code": proc.returncode,
                "process_wall_s": wall, "power_before": power_before, "power_after": _power_online(),
+               # A sampling gap > 10 s means the whole system was suspended (e.g. lid closed).
+               "max_sampling_gap_s": max_gap, "system_standby_suspected": max_gap > 10.0,
                "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "layout_sha256": hashlib.sha256(layout.read_bytes()).hexdigest()}
     if variant in ("A", "A_def"):
@@ -284,6 +302,8 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
         summary["harness_valid"] = harness.get("validation", {}).get("valid")
         summary["native"] = _parse_native_log(text)
         summary["success"] = proc.returncode == 0 and bool(harness.get("success"))
+        summary["cancelled"] = bool(harness.get("cancelled"))
+        summary["mp4_frames"] = harness.get("validation", {}).get("actual_video_frames")
     # Aggregate counters over the active encode window (drop first/last 3 s).
     active = [s for s in samples if 3.0 < s["wall_s"] < wall - 3.0] or samples
     agg = {}
@@ -319,7 +339,8 @@ def run(variant: str, rep: int, settle_s: float, tag: str = "") -> dict:
     else:
         short.update({k: summary["ffmpeg"].get(k) for k in ("fps_rtime", "fps_wall")})
     short.update({"gpu": agg["gpu_engines_mean"], "cpu_freq": agg["cpu_freq"], "temp": agg["thermal_max_c"],
-                  "discharge_mw": agg["battery_discharge_mw_mean"], "ac": summary["power_before"]["ac_line_status"]})
+                  "discharge_mw": agg["battery_discharge_mw_mean"], "ac": summary["power_before"]["ac_line_status"],
+                  "ac_after": summary["power_after"]["ac_line_status"], "standby": summary["system_standby_suspected"]})
     print(json.dumps(short), flush=True)
     return summary
 
@@ -333,8 +354,12 @@ def main():
     ap.add_argument("--warmup", action="store_true", help="run one discarded C warm-up first")
     ap.add_argument("--candidate-dll", type=Path, help="DLL used for _ZC/_SKIP variants")
     ap.add_argument("--all-candidate", action="store_true", help="use candidate DLL for every native variant")
+    ap.add_argument("--require-ac", action="store_true", help="abort unless PowerLineStatus is Online")
+    ap.add_argument("--frames", type=int, default=1800, help="frames per export (performance comparisons use 1800)")
     args = ap.parse_args()
-    global CANDIDATE_DLL
+    global CANDIDATE_DLL, REQUIRE_AC, FRAMES
+    FRAMES = args.frames
+    REQUIRE_AC = args.require_ac
     CANDIDATE_DLL = args.candidate_dll.resolve() if args.candidate_dll else None
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
     variants = [v.strip() for v in args.variants.split(",") if v.strip()]

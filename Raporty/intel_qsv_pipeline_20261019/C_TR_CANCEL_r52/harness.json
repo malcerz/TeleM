@@ -1,0 +1,19 @@
+{
+  "codec": "hevc",
+  "profile": "fast",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "C:\\GoPro\\2026-10-16\\GX010381.MP4",
+  "fit": "C:\\GoPro\\2026-10-16\\2026-10-16_13-06-05.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\intel_qsv_pipeline_20261019\\C_TR_CANCEL_r52\\output.mp4",
+  "bitrate": "40M",
+  "max_frames": 300,
+  "success": true,
+  "error": "",
+  "elapsed_s": 7.6,
+  "total_frames": 0,
+  "effective_fps": 0.0,
+  "ram_used_gb": 0.0,
+  "cancelled": true,
+  "output_exists": false
+}

@@ -52,54 +52,43 @@ def _rendering_tab(queue=False):
     return tab
 
 
-def test_amd_vbr_without_driver_qp_is_consistent_everywhere(qapp):
-    from src.gui.qt.tabs.render_tab import RenderTab
-
+# QP/quantizer diagnostics were removed from production (98848d7). Snapshots
+# may still carry legacy QP fields, but neither the status bar nor the render
+# tab may display them, for AMD (rate_control set) or other backends.
+def test_amd_vbr_status_never_shows_qp(qapp):
     text = "RC: VBR | QP avg: N/A"
-    hud = _hud_states(current_qp=None, avg_qp=None, qp_avg=None, quant_samples=0,
-                      is_cqp=False, rate_control="VBR", compression_text=text)
-    assert hud["rate_control"] == "VBR" and hud["compression_text"] == text
-
     snap = RenderProgressState(generation_id=1, state="rendering", phase="render", frame=4450,
                                total_frames=70995, fps=36.3, elapsed_s=120.0,
                                compression_text=text, rate_control="VBR")
     status_bar = format_render_progress_status(snap)
-    assert text in status_bar
-    assert "QP: --" not in status_bar and "28" not in status_bar.split("FPS")[1].split("Czas")[0]
+    assert "Frame: 4450 / 70995" in status_bar
+    assert "QP" not in status_bar
 
     for queue in (False, True):
         tab = _rendering_tab(queue=queue)
         tab._on_render_state(snap)
-        assert text in tab.lbl_stats.text(), f"queue={queue}"
-        assert "QP: --" not in tab.lbl_stats.text()
-        assert tab.lbl_compression_stats.text() == text
+        assert "QP" not in tab.lbl_stats.text(), f"queue={queue}"
 
 
-def test_amd_vbr_with_driver_qp(qapp):
-    from src.gui.qt.tabs.render_tab import RenderTab
-
-    text = "RC: VBR | QP: 24 | QP avg: 27.3"
+def test_amd_vbr_with_legacy_driver_qp_fields_not_displayed(qapp):
     snap = RenderProgressState(generation_id=1, state="rendering", phase="render", frame=10,
                                total_frames=100, fps=30.0, elapsed_s=1.0, qp=24.0, avg_qp=27.3,
-                               compression_text=text, rate_control="VBR")
-    assert text in format_render_progress_status(snap)
+                               compression_text="RC: VBR | QP: 24 | QP avg: 27.3", rate_control="VBR")
+    assert "QP" not in format_render_progress_status(snap)
     for queue in (False, True):
         tab = _rendering_tab(queue=queue)
         tab._on_render_state(snap)
-        assert text in tab.lbl_stats.text(), f"queue={queue}"
-        assert tab.lbl_compression_stats.text() == text
+        assert "QP" not in tab.lbl_stats.text(), f"queue={queue}"
 
 
-def test_non_amd_formatting_unchanged_without_rate_control(qapp):
-    """NVIDIA/Intel do not set rate_control: the classic QP line stays as before."""
-    from src.gui.qt.tabs.render_tab import RenderTab
-
+def test_non_amd_status_never_shows_qp(qapp):
+    """NVIDIA/Intel do not set rate_control; legacy QP fields are still not shown."""
     snap = RenderProgressState(generation_id=1, state="rendering", phase="render", frame=10,
                                total_frames=100, fps=30.0, elapsed_s=1.0, qp=24.0, avg_qp=27.2,
                                compression_text="QP śr: 27.2 | P90: 30 | q teraz: 24 | 50.0 Mbps")
     tab = _rendering_tab()
     tab._on_render_state(snap)
-    assert "QP: 24 (avg: 27.2)" in tab.lbl_stats.text()
+    assert "QP" not in tab.lbl_stats.text()
 
 
 def test_preparing_status_formatter_does_not_crash():
@@ -119,9 +108,8 @@ def test_render_mixin_snapshot_carries_rate_control_direct_and_queue():
     assert "_queue_job_id" not in child_cond
 
 
-def test_amd_exporter_never_invents_qp():
+def test_amd_exporter_reports_rate_control_without_qp():
     src = (Path(__file__).resolve().parents[1] / "src/ffmpeg/amd_native_exporter.py").read_text(encoding="utf-8")
-    block = src[src.index("has_qp = qp_samples_val.value > 0"):src.index("compression_text=qp_txt,")]
-    assert '"RC: VBR | QP avg: N/A"' in block
-    assert "28" not in block
-    assert 'rate_control="VBR"' in block
+    assert 'rate_control="VBR"' in src
+    assert "QP avg" not in src
+    assert "qp_samples_val" not in src

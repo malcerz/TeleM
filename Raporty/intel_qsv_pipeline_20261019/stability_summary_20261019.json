@@ -1,0 +1,434 @@
+[
+  {
+    "run": "C_TR_CANCEL_r51",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 16.7,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.06,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.57,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_CANCEL_r52",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 16.7,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.073,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.56,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_CANCEL_r53",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 18.9,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.033,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_CANCEL_r54",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 17.8,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.027,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_CANCEL_r55",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 17.7,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.028,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.65,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_CANCEL_r56",
+    "ok": true,
+    "exit": 0,
+    "cancelled": true,
+    "mp4_frames": null,
+    "valid": null,
+    "wall": 18.3,
+    "ffl": null,
+    "workers": 4,
+    "spread": 0.039,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": null,
+    "fin": null,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r51",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 19.3,
+    "ffl": 2.392,
+    "workers": 4,
+    "spread": 0.055,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.56,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.392,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r52",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 20.4,
+    "ffl": 2.329,
+    "workers": 4,
+    "spread": 0.061,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.56,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.406,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r53",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 23.7,
+    "ffl": 2.024,
+    "workers": 4,
+    "spread": 0.029,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.354,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r54",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 22.1,
+    "ffl": 2.042,
+    "workers": 4,
+    "spread": 0.029,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.391,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r55",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 23.1,
+    "ffl": 2.036,
+    "workers": 4,
+    "spread": 0.036,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.478,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_Q_r56",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 23.2,
+    "ffl": 2.09,
+    "workers": 4,
+    "spread": 0.049,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.68,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.373,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r51",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 20.3,
+    "ffl": 2.502,
+    "workers": 4,
+    "spread": 0.06,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.56,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.465,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r52",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 20.4,
+    "ffl": 2.457,
+    "workers": 4,
+    "spread": 0.064,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.56,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.41,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r53",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 20.4,
+    "ffl": 2.347,
+    "workers": 4,
+    "spread": 0.068,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.57,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.409,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r54",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 22.6,
+    "ffl": 2.096,
+    "workers": 4,
+    "spread": 0.039,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.766,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r55",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 21.5,
+    "ffl": 2.126,
+    "workers": 4,
+    "spread": 0.029,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.67,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.332,
+    "watchdog": false
+  },
+  {
+    "run": "C_TR_r56",
+    "ok": true,
+    "exit": 0,
+    "cancelled": false,
+    "mp4_frames": 300,
+    "valid": true,
+    "wall": 22.2,
+    "ffl": 2.126,
+    "workers": 4,
+    "spread": 0.031,
+    "released": [
+      "YES"
+    ],
+    "standby": false,
+    "gap": 0.68,
+    "ac": [
+      1,
+      1
+    ],
+    "audio": true,
+    "fin": 0.399,
+    "watchdog": false
+  }
+]

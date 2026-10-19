@@ -962,6 +962,8 @@ def main() -> None:
         parser.add_argument("--output", default=r"C:\GoPro\TO\test_intel_out.mp4")
         parser.add_argument("--result-json", default="")
         parser.add_argument("--gpmf", action="store_true", help="Preserve original GPMF stream")
+        parser.add_argument("--cancel-after-frames", type=int, default=0,
+                            help="Harness-only: press the GUI Cancel action after N rendered frames")
         test_args, _ = parser.parse_known_args(sys.argv[1:])
 
         video_path = Path(test_args.video).resolve()
@@ -1094,11 +1096,31 @@ def main() -> None:
         get_signals().sig_render_finished.connect(_on_render_finished_bench)
         get_signals().sig_error.connect(_on_render_error_bench)
 
+        cancel_state = {"requested": False}
+
         def _progress_bench(done, total, elapsed, fps, hud_state):
             if done in (100, 300, 500, 1000) or done == 0 or done % 500 == 0 or (total and done >= total):
                 print(f"[{test_args.mode.upper()} PROGRESS] frame={done}/{total} fps={fps:.1f} elapsed={elapsed:.1f}s", flush=True)
+            if test_args.cancel_after_frames and done >= test_args.cancel_after_frames and not cancel_state["requested"]:
+                cancel_state["requested"] = True
+                print(f"[BENCH CANCEL] requesting GUI cancel at frame={done}", flush=True)
+                QTimer.singleShot(0, window._render_tab._on_cancel)
 
         get_signals().sig_render_progress.connect(_progress_bench)
+
+        def _on_render_stopped_cancel_bench():
+            if not cancel_state["requested"]:
+                return
+            faulthandler.cancel_dump_traceback_later()
+            elapsed = max(0.001, time.perf_counter() - t_start[0])
+            bench_result.update(success=True, cancelled=True, elapsed_s=round(elapsed, 2),
+                                output_exists=out_path.exists())
+            print(f"[BENCH RESULT] mode={test_args.mode} cancelled=True elapsed={elapsed:.1f}s", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            QTimer.singleShot(500, window.close)
+
+        get_signals().sig_render_stopped.connect(_on_render_stopped_cancel_bench)
 
         def _trigger_test_export():
             rt = window._render_tab

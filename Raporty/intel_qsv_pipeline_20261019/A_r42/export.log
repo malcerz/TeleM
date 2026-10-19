@@ -1,0 +1,129 @@
+Routing option strict to both codec and muxer layer
+[vist#0:0/hevc @ 0000021de5232cc0] Selecting decoder 'hevc_qsv' because of requested hwaccel method qsv
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\GoPro\2026-10-16\GX010381.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-16T11:06:09.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:20:41.17, start: 0.000000, bitrate: 56289 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10), 1 reference frame (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67, left), 3840x2160 [SAR 1:1 DAR 16:9], 55843 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 13:06:09;06
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 13:06:09;06
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 13:06:09;06
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro MET
+[out#0/mp4 @ 0000021de5597280] Adding streams from explicit maps...
+[vost#0:0/hevc_qsv @ 0000021de334d800] Created video stream from input stream 0:0
+[QSV @ 0000021de32c2a00] Defaulting child_device_type to AV_HWDEVICE_TYPE_D3D11VA for oneVPL.Please explicitly set child device type via "-init_hw_device" option if needed.
+[D3D11VA @ 0000021de32c2bc0] Selecting d3d11va adapter 0
+[D3D11VA @ 0000021de32c2bc0] Using device 8086:46a8 (Intel(R) Iris(R) Xe Graphics).
+[QSV @ 0000021de32c2a00] Use Intel(R) oneVPL to create MFX session, API version is 2.17, the required implementation version is 1.3
+[QSV @ 0000021de32c2a00] Initialize MFX session: implementation version is 2.15
+[aost#0:1/copy @ 0000021df265b080] Created audio stream from input stream 0:1
+Stream mapping:
+  Stream #0:0 -> #0:0 (hevc (hevc_qsv) -> hevc (hevc_qsv))
+  Stream #0:1 -> #0:1 (copy)
+[vost#0:0/hevc_qsv @ 0000021de334d800] Starting thread...
+[vf#0:0 @ 0000021de3349100] Starting thread...
+[vist#0:0/hevc @ 0000021de5232cc0] [dec:hevc_qsv @ 0000021de520ab80] Starting thread...
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740] Starting thread...
+[hevc_qsv @ 0000021de3349840] Decoder: output is video memory surface
+[hevc_qsv @ 0000021de3349840] Use Intel(R) oneVPL to create MFX session with the specified MFX loader
+[hevc_qsv @ 0000021de3349840] Decoder: output is video memory surface
+[hevc_qsv @ 0000021de3349840] Use Intel(R) oneVPL to create MFX session with the specified MFX loader
+[graph -1 input from stream 0:0 @ 0000021df14e5400] w:3840 h:2160 pixfmt:qsv tb:1/30000 fr:30000/1001 sar:1/1 csp:bt2020nc range:pc alpha:unspecified
+[vost#0:0/hevc_qsv @ 0000021de334d800] [enc:hevc_qsv @ 0000021de32b3e40] Using input frames context (format qsv) with hevc_qsv encoder.
+[hevc_qsv @ 0000021de334ae80] Encoder: input is video memory surface
+[hevc_qsv @ 0000021de334ae80] Use Intel(R) oneVPL to create MFX session with the specified MFX loader
+[hevc_qsv @ 0000021de334ae80] Using the variable bitrate (VBR) ratecontrol method
+[hevc_qsv @ 0000021de334ae80] profile: hevc main10; level: 306
+[hevc_qsv @ 0000021de334ae80] GopPicSize: 60; GopRefDist: 1; GopOptFlag:; IdrInterval: 1
+[hevc_qsv @ 0000021de334ae80] TargetUsage: 7; RateControlMethod: VBR
+[hevc_qsv @ 0000021de334ae80] BufferSizeInKB: 10000; InitialDelayInKB: 5000; TargetKbps: 40000; MaxKbps: 50000; BRCParamMultiplier: 1
+[hevc_qsv @ 0000021de334ae80] NumSlice: 1; NumRefFrame: 1
+[hevc_qsv @ 0000021de334ae80] RateDistortionOpt: unknown
+[hevc_qsv @ 0000021de334ae80] RecoveryPointSEI: unknown
+[hevc_qsv @ 0000021de334ae80] VDENC: OFF
+[hevc_qsv @ 0000021de334ae80] NalHrdConformance: ON; VuiNalHrdParameters: ON
+[hevc_qsv @ 0000021de334ae80] FrameRateExtD: 1001; FrameRateExtN: 30000 
+[hevc_qsv @ 0000021de334ae80] IntRefType: 0; IntRefCycleSize: 0; IntRefQPDelta: 0
+[hevc_qsv @ 0000021de334ae80] MaxFrameSize: 0; MaxSliceSize: 0
+[hevc_qsv @ 0000021de334ae80] BitrateLimit: unknown; MBBRC: unknown; ExtBRC: OFF
+[hevc_qsv @ 0000021de334ae80] Trellis: auto
+[hevc_qsv @ 0000021de334ae80] RepeatPPS: OFF; NumMbPerSlice: 0; LookAheadDS: unknown
+[hevc_qsv @ 0000021de334ae80] AdaptiveI: unknown; AdaptiveB: unknown; BRefType:off
+[hevc_qsv @ 0000021de334ae80] MinQPI: 12; MaxQPI: 63; MinQPP: 12; MaxQPP: 63; MinQPB: 12; MaxQPB: 63
+[hevc_qsv @ 0000021de334ae80] DisableDeblockingIdc: 0 
+[hevc_qsv @ 0000021de334ae80] SkipFrame: no_skip
+[hevc_qsv @ 0000021de334ae80] PRefType: simple
+[hevc_qsv @ 0000021de334ae80] GPB: ON
+[hevc_qsv @ 0000021de334ae80] TransformSkip: ON 
+[hevc_qsv @ 0000021de334ae80] IntRefCycleDist: 0
+[hevc_qsv @ 0000021de334ae80] LowDelayBRC: OFF
+[hevc_qsv @ 0000021de334ae80] MaxFrameSizeI: 0; MaxFrameSizeP: 0
+[hevc_qsv @ 0000021de334ae80] ScenarioInfo: 0
+[hevc_qsv @ 0000021de334ae80] NumTileColumns: 1; NumTileRows: 1
+Output #0, mp4, to 'C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\A_r42\output.mp4':
+  Metadata:
+    firmware        : H26.02.04.01.00
+    encoder         : Lavf63.6.100
+  Stream #0:0(eng): Video: hevc, 1 reference frame (hev1 / 0x31766568), p010le(pc, bt2020nc/bt2020/arib-std-b67, progressive, left), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 40000 kb/s, 29.97 fps, 30k tbn (default)
+    Metadata:
+      encoder         : Lavc63.8.101 hevc_qsv
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro H.265
+      timecode        : 13:06:09;06
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+      CPB properties: bitrate max/min/avg: 50000000/0/40000000 buffer size: 80000000 vbv_delay: N/A
+  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro AAC
+      timecode        : 13:06:09;06
+[out#0/mp4 @ 0000021de5597280] Starting thread...
+frame=   21 fps=0.0 q=-0.0 size=    3584KiB time=00:00:01.45 bitrate=20239.3kbits/s speed=2.83x elapsed=0:00:00.51    frame=   61 fps= 59 q=-0.0 size=    9984KiB time=00:00:02.77 bitrate=29491.3kbits/s speed=2.69x elapsed=0:00:01.03    frame=   99 fps= 64 q=-0.0 size=   16640KiB time=00:00:04.05 bitrate=33630.4kbits/s speed=2.63x elapsed=0:00:01.54    frame=  137 fps= 66 q=-0.0 size=   23040KiB time=00:00:05.31 bitrate=35531.6kbits/s speed=2.58x elapsed=0:00:02.06    frame=  174 fps= 68 q=-0.0 size=   29184KiB time=00:00:06.54 bitrate=36503.8kbits/s speed=2.54x elapsed=0:00:02.57    frame=  212 fps= 68 q=-0.0 size=   35584KiB time=00:00:07.80 bitrate=37334.1kbits/s speed=2.52x elapsed=0:00:03.09    frame=  248 fps= 69 q=-0.0 size=   41728KiB time=00:00:09.02 bitrate=37880.8kbits/s speed= 2.5x elapsed=0:00:03.61    frame=  287 fps= 70 q=-0.0 size=   47360KiB time=00:00:10.32 bitrate=37574.9kbits/s speed= 2.5x elapsed=0:00:04.12    frame=  323 fps= 70 q=-0.0 size=   53504KiB time=00:00:11.52 bitrate=38047.3kbits/s speed=2.48x elapsed=0:00:04.63    frame=  358 fps= 70 q=-0.0 size=   59648KiB time=00:00:12.69 bitrate=38495.5kbits/s speed=2.46x elapsed=0:00:05.15    frame=  394 fps= 69 q=-0.0 size=   66304KiB time=00:00:13.88 bitrate=39110.2kbits/s speed=2.45x elapsed=0:00:05.67    frame=  430 fps= 69 q=-0.0 size=   72704KiB time=00:00:15.08 bitrate=39488.5kbits/s speed=2.44x elapsed=0:00:06.19    frame=  465 fps= 69 q=-0.0 size=   78592KiB time=00:00:16.25 bitrate=39605.4kbits/s speed=2.42x elapsed=0:00:06.71    frame=  501 fps= 69 q=-0.0 size=   84736KiB time=00:00:17.47 bitrate=39729.7kbits/s speed=2.42x elapsed=0:00:07.22    frame=  537 fps= 69 q=-0.0 size=   90880KiB time=00:00:18.66 bitrate=39883.4kbits/s speed=2.41x elapsed=0:00:07.73    frame=  571 fps= 69 q=-0.0 size=   96512KiB time=00:00:19.79 bitrate=39936.0kbits/s speed= 2.4x elapsed=0:00:08.24    frame=  605 fps= 69 q=-0.0 size=  102656KiB time=00:00:20.92 bitrate=40183.4kbits/s speed=2.39x elapsed=0:00:08.76    frame=  639 fps= 69 q=-0.0 size=  108288KiB time=00:00:22.05 bitrate=40215.3kbits/s speed=2.38x elapsed=0:00:09.27    frame=  677 fps= 69 q=-0.0 size=  114432KiB time=00:00:23.33 bitrate=40166.3kbits/s speed=2.38x elapsed=0:00:09.80    frame=  713 fps= 69 q=-0.0 size=  120064KiB time=00:00:24.53 bitrate=40091.0kbits/s speed=2.38x elapsed=0:00:10.31    frame=  747 fps= 69 q=-0.0 size=  125952KiB time=00:00:25.66 bitrate=40204.1kbits/s speed=2.37x elapsed=0:00:10.83    frame=  782 fps= 69 q=-0.0 size=  132096KiB time=00:00:26.83 bitrate=40321.8kbits/s speed=2.37x elapsed=0:00:11.34    frame=  819 fps= 69 q=-0.0 size=  138240KiB time=00:00:28.07 bitrate=40337.5kbits/s speed=2.37x elapsed=0:00:11.86    frame=  855 fps= 69 q=-0.0 size=  144640KiB time=00:00:29.26 bitrate=40482.3kbits/s speed=2.36x elapsed=0:00:12.37    frame=  890 fps= 69 q=-0.0 size=  150528KiB time=00:00:30.44 bitrate=40506.5kbits/s speed=2.36x elapsed=0:00:12.89    frame=  927 fps= 69 q=-0.0 size=  156416KiB time=00:00:31.68 bitrate=40447.0kbits/s speed=2.36x elapsed=0:00:13.39    frame=  966 fps= 69 q=-0.0 size=  162560KiB time=00:00:32.98 bitrate=40377.1kbits/s speed=2.37x elapsed=0:00:13.92    frame= 1004 fps= 70 q=-0.0 size=  169216KiB time=00:00:34.24 bitrate=40485.3kbits/s speed=2.37x elapsed=0:00:14.43    frame= 1039 fps= 70 q=-0.0 size=  175360KiB time=00:00:35.41 bitrate=40565.2kbits/s speed=2.37x elapsed=0:00:14.94    frame= 1076 fps= 70 q=-0.0 size=  181760KiB time=00:00:36.65 bitrate=40626.2kbits/s speed=2.37x elapsed=0:00:15.47    frame= 1111 fps= 69 q=-0.0 size=  187648KiB time=00:00:37.82 bitrate=40641.2kbits/s speed=2.37x elapsed=0:00:15.98    frame= 1145 fps= 69 q=-0.0 size=  193536KiB time=00:00:38.95 bitrate=40699.8kbits/s speed=2.36x elapsed=0:00:16.49    frame= 1180 fps= 69 q=-0.0 size=  199168KiB time=00:00:40.12 bitrate=40659.5kbits/s speed=2.36x elapsed=0:00:17.01    frame= 1218 fps= 69 q=-0.0 size=  205312KiB time=00:00:41.38 bitrate=40639.1kbits/s speed=2.36x elapsed=0:00:17.53    frame= 1256 fps= 70 q=-0.0 size=  211456KiB time=00:00:42.64 bitrate=40619.9kbits/s speed=2.36x elapsed=0:00:18.04    frame= 1293 fps= 70 q=-0.0 size=  217600KiB time=00:00:43.88 bitrate=40621.5kbits/s speed=2.36x elapsed=0:00:18.55    frame= 1328 fps= 70 q=-0.0 size=  223744KiB time=00:00:45.05 bitrate=40680.7kbits/s speed=2.36x elapsed=0:00:19.07    frame= 1359 fps= 69 q=-0.0 size=  229120KiB time=00:00:46.08 bitrate=40732.5kbits/s speed=2.35x elapsed=0:00:19.58    frame= 1390 fps= 69 q=-0.0 size=  233984KiB time=00:00:47.12 bitrate=40674.5kbits/s speed=2.34x elapsed=0:00:20.10    frame= 1426 fps= 69 q=-0.0 size=  239872KiB time=00:00:48.32 bitrate=40667.0kbits/s speed=2.34x elapsed=0:00:20.63    frame= 1462 fps= 69 q=-0.0 size=  246016KiB time=00:00:49.53 bitrate=40684.8kbits/s speed=2.34x elapsed=0:00:21.14    frame= 1497 fps= 69 q=-0.0 size=  252160KiB time=00:00:50.68 bitrate=40753.1kbits/s speed=2.34x elapsed=0:00:21.65    frame= 1536 fps= 69 q=-0.0 size=  258560KiB time=00:00:51.98 bitrate=40741.5kbits/s speed=2.34x elapsed=0:00:22.17    frame= 1574 fps= 69 q=-0.0 size=  264704KiB time=00:00:53.26 bitrate=40707.4kbits/s speed=2.35x elapsed=0:00:22.69    frame= 1609 fps= 69 q=-0.0 size=  271360KiB time=00:00:54.42 bitrate=40847.6kbits/s speed=2.35x elapsed=0:00:23.20    frame= 1647 fps= 69 q=-0.0 size=  277504KiB time=00:00:55.70 bitrate=40812.5kbits/s speed=2.35x elapsed=0:00:23.72    frame= 1683 fps= 69 q=-0.0 size=  283904KiB time=00:00:56.89 bitrate=40877.1kbits/s speed=2.35x elapsed=0:00:24.23    frame= 1719 fps= 69 q=-0.0 size=  289536KiB time=00:00:58.11 bitrate=40815.7kbits/s speed=2.35x elapsed=0:00:24.75    frame= 1755 fps= 69 q=-0.0 size=  295680KiB time=00:00:59.30 bitrate=40842.1kbits/s speed=2.35x elapsed=0:00:25.26    frame= 1791 fps= 69 q=-0.0 size=  301568KiB time=00:01:00.50 bitrate=40832.9kbits/s speed=2.35x elapsed=0:00:25.79    [vf#0:0 @ 0000021de3349100] All consumers returned EOF
+[vf#0:0 @ 0000021de3349100] Terminating thread with success
+[vist#0:0/hevc @ 0000021de5232cc0] [dec:hevc_qsv @ 0000021de520ab80] Decoder returned EOF, finishing
+[vist#0:0/hevc @ 0000021de5232cc0] [dec:hevc_qsv @ 0000021de520ab80] Terminating thread with success
+[vist#0:0/hevc @ 0000021de5232cc0] All consumers of this stream are done
+[vost#0:0/hevc_qsv @ 0000021de334d800] [enc:hevc_qsv @ 0000021de32b3e40] Encoder thread received EOF
+[vost#0:0/hevc_qsv @ 0000021de334d800] Terminating thread with success
+[out#0/mp4 @ 0000021de5597280] Muxer returned EOF
+[out#0/mp4 @ 0000021de5597280] Terminating thread with success
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740] Terminating thread with success
+[AVIOContext @ 0000021de5741480] Statistics: 311330817 bytes written, 2 seeks, 1191 writeouts
+[out#0/mp4 @ 0000021de5597280] Output file #0 (C:\_DEV\SportCamHUD\Raporty\intel_qsv_pipeline_20261019\A_r42\output.mp4):
+[out#0/mp4 @ 0000021de5597280]   Output stream #0:0 (video): 1800 frames encoded; 1800 packets muxed (308831974 bytes); 
+[out#0/mp4 @ 0000021de5597280]   Output stream #0:1 (audio): 3612 packets muxed (2440086 bytes); 
+[out#0/mp4 @ 0000021de5597280]   Total: 5412 packets (311272060 bytes) muxed
+[out#0/mp4 @ 0000021de5597280] video:301594KiB audio:2383KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.018875%
+frame= 1800 fps= 69 q=-0.0 Lsize=  304034KiB time=00:01:27.18 bitrate=28566.0kbits/s speed=3.36x elapsed=0:00:25.92    
+bench: utime=6.500s stime=2.781s rtime=25.923s
+bench: maxrss=1030000KiB
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740] Input file #0 (C:\GoPro\2026-10-16\GX010381.MP4):
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740]   Input stream #0:0 (video): 1816 packets read (341615226 bytes); 1804 frames decoded; 0 decode errors; 
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740]   Input stream #0:1 (audio): 4088 packets read (2761292 bytes); 
+[in#0/mov,mp4,m4a,3gp,3g2,mj2 @ 0000021de3341740]   Total: 5904 packets (344376518 bytes) demuxed
+[AVIOContext @ 0000021de334dc40] Statistics: 508008831 bytes read, 5 seeks
+
+Exiting with exit code 0

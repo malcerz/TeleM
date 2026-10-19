@@ -25,7 +25,9 @@ def qapp():
     return QApplication.instance() or QApplication(sys.argv)
 
 
-def test_live_qp_average_is_used_for_same_generation_popup(qapp, monkeypatch):
+# QP/quantizer diagnostics were removed from production (98848d7): the export
+# summary must not show QP even when a stale live value or terminal field exists.
+def test_finish_popup_never_shows_qp_even_with_live_value(qapp, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     from src.gui.qt.tabs.render_tab import RenderTab
     from src.render_progress import RenderProgressState
@@ -42,14 +44,16 @@ def test_live_qp_average_is_used_for_same_generation_popup(qapp, monkeypatch):
     tab._last_export_qp_generation_id = 14
     tab._render_state = RenderProgressState(generation_id=14, state="completed", completed=True)
 
-    tab._on_finished({"generation_id": 14, "avg_qp": None, "codec": "hevc"}, "out.mp4")
-    assert "Średnie QP: 27.6" in captured[0]
+    tab._on_finished({"generation_id": 14, "avg_qp": 27.6, "codec": "hevc"}, "out.mp4")
+    assert "Plik zapisany" in captured[0]
+    assert "QP" not in captured[0]
+    # The legacy helper keeps its semantics for old queue/stat files.
     assert resolve_render_avg_qp(
         {"avg_qp": None}, generation_id=14, live_qp=27.6, live_generation_id=14,
     ) == 27.6
 
 
-def test_missing_live_and_terminal_qp_stays_brak_danych(qapp, monkeypatch):
+def test_finish_popup_without_qp_has_no_qp_line(qapp, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     from src.gui.qt.tabs.render_tab import RenderTab
     from src.render_progress import RenderProgressState
@@ -66,7 +70,8 @@ def test_missing_live_and_terminal_qp_stays_brak_danych(qapp, monkeypatch):
     tab._last_export_qp_generation_id = 15
     tab._render_state = RenderProgressState(generation_id=15, state="completed", completed=True)
     tab._on_finished({"generation_id": 15, "avg_qp": None}, "out.mp4")
-    assert "Średnie QP: brak danych" in captured[0]
+    assert "Plik zapisany" in captured[0]
+    assert "QP" not in captured[0]
 
 
 def test_qp_fallback_is_reset_safe_and_missing_qp_stays_missing():
@@ -90,12 +95,8 @@ def test_live_average_capture_and_new_export_reset(qapp):
     assert live_render_avg_qp({"qp_avg": 27.6, "current_qp": 31}) == 27.6
     assert live_render_avg_qp({"compression_text": "QP avg: 27.6"}) == 27.6
     assert live_render_avg_qp({"is_av1": True, "mean_qp": 27.6}) is None
-    tab = RenderTab()
-    tab._last_export_qp = 27.6
-    tab._last_export_qp_generation_id = 7
-    tab._reset_export_qp_state(8)
-    assert tab._last_export_qp is None
-    assert tab._last_export_qp_generation_id == 8
+    # Per-export QP capture was removed from the render tab together with QP display.
+    assert not hasattr(RenderTab, "_reset_export_qp_state")
 
 
 def test_canonical_qp_fields_precede_live_fallback():

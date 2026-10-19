@@ -60,25 +60,16 @@ def test_intel_native_8c_render_tab_codec_selector():
     tab = RenderTab()
     
     caps = query_intel_capabilities()
-    av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
-    hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
-    h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
-    
-    expected_default = "av1" if av1_ok else ("hevc" if hevc_ok else ("h264" if h264_ok else "none"))
+    # Contract since bc2b173: default is AV1 10-bit, else HEVC Main10 (never SDR).
+    expected_default = "av1" if caps.get("AV1_10BIT") else ("hevc" if caps.get("HEVC_10BIT") else None)
     assert tab.cmb_intel_codec.currentData() == expected_default
-    
-    # Select H264 if available
-    if h264_ok:
-        idx_h264 = tab.cmb_intel_codec.findData("h264")
-        assert idx_h264 >= 0
-        tab.cmb_intel_codec.setCurrentIndex(idx_h264)
-        assert tab.cmb_intel_codec.currentData() == "h264"
-    
-    # Check AV1 is present only if AV1 is supported on HW
-    idx_av1 = tab.cmb_intel_codec.findData("av1")
-    if av1_ok:
-        assert idx_av1 >= 0
-        tab.cmb_intel_codec.setCurrentIndex(idx_av1)
-        assert tab.cmb_intel_codec.currentData() == "av1"
-    else:
-        assert idx_av1 == -1
+
+    # Every codec stays listed; selectable only when the runtime confirmed it.
+    model = tab.cmb_intel_codec.model()
+    for codec, key in (("h264", "H264_8BIT"), ("av1", "AV1_10BIT")):
+        idx = tab.cmb_intel_codec.findData(codec)
+        assert idx >= 0
+        assert model.item(idx).isEnabled() == bool(caps.get(key, False))
+        if caps.get(key):
+            tab.cmb_intel_codec.setCurrentIndex(idx)
+            assert tab.cmb_intel_codec.currentData() == codec

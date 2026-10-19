@@ -49,24 +49,18 @@ def test_intel_native_8b_render_tab_intel_codec_selector():
     assert hasattr(tab, "cmb_intel_codec")
     assert hasattr(tab, "widget_intel_options")
     
+    # Contract since bc2b173: every codec is listed in a fixed order; codecs the
+    # runtime cannot encode stay visible but disabled ("niedostępny").
     caps = query_intel_capabilities()
-    av1_ok = caps.get("AV1_AVAILABLE") and caps.get("AV1_10BIT")
-    hevc_ok = caps.get("HEVC_AVAILABLE") and caps.get("HEVC_10BIT")
-    h264_ok = caps.get("H264_AVAILABLE") and caps.get("H264_8BIT")
-    
-    expected_codecs = []
-    if av1_ok:
-        expected_codecs.append("av1")
-    if hevc_ok:
-        expected_codecs.append("hevc")
-    if h264_ok:
-        expected_codecs.append("h264")
-        
+    expected = [("av1", "AV1_10BIT"), ("hevc", "HEVC_10BIT"), ("h264", "H264_8BIT"), ("hevc_sdr", "HEVC_8BIT")]
     actual_codecs = [tab.cmb_intel_codec.itemData(i) for i in range(tab.cmb_intel_codec.count())]
-    assert actual_codecs == expected_codecs
-    
-    # Check default selection matches recommendation priority
-    expected_default = expected_codecs[0] if expected_codecs else "none"
+    assert actual_codecs == [codec for codec, _ in expected]
+    model = tab.cmb_intel_codec.model()
+    for i, (codec, key) in enumerate(expected):
+        assert model.item(i).isEnabled() == bool(caps.get(key, False)), codec
+
+    # Default: AV1 10-bit when available, otherwise HEVC Main10; never silently SDR.
+    expected_default = "av1" if caps.get("AV1_10BIT") else ("hevc" if caps.get("HEVC_10BIT") else None)
     assert tab.cmb_intel_codec.currentData() == expected_default
 
 def test_intel_native_8b_intel_codec_selection_semantics():
