@@ -395,6 +395,16 @@ def _resolve_cache_samples(
         "heading": "gpx_heading_samples",
         "slope": "gpx_slope_samples",
     }
+    if source in ("auto", "default", "") and field_name in ("temperature", "atemp"):
+        from types import SimpleNamespace
+        from src.telemetry_resolver import resolve_samples_from_sources
+        return resolve_samples_from_sources(
+            field_name, "auto",
+            gpmf=SimpleNamespace(temperature_samples=(
+                field_samples.get("temperature_samples") or WORKER_CACHE.get("temperature_samples") or [])),
+            fit_data=WORKER_CACHE.get("fit_data", {}),
+            gpx=SimpleNamespace(gpx_atemp_samples=WORKER_CACHE.get("gpx_atemp_samples", [])),
+        )
     if source == "gpmf":
         key = gpmf_map.get(field_name, "")
         if key and key in field_samples and field_samples[key]:

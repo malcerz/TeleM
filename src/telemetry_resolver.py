@@ -134,7 +134,7 @@ for _name in ('speed', 'enhanced_speed', 'ground_speed', 'alt', 'altitude',
               'enhanced_altitude', 'distance', 'dist', 'track'):
     FIELD_SEMANTICS[_name] = FieldSemantics('continuous', default_interpolation='linear', presentation_strategy='linear')
 for _name in ('temperature', 'atemp', 'garmin_temperature', 'device_temperature'):
-    FIELD_SEMANTICS[_name] = FieldSemantics('continuous', 1.0, 'auto', 'never_cross_gap', True, 'quantized_reconstruct')
+    FIELD_SEMANTICS[_name] = FieldSemantics('continuous', None, 'auto', 'never_cross_gap', True, 'quantized_reconstruct')
 
 
 def field_semantics(name: str) -> FieldSemantics:
@@ -271,6 +271,7 @@ class NumericPresentationPlan:
     timeline: Any = None
     field: str = ""
     source_start: datetime | None = None
+    source_samples: Any = None
 
     def __post_init__(self):
         if self.coverage_start is not None:
@@ -284,6 +285,10 @@ class NumericPresentationPlan:
         target = _normalize_datetime(target_dt)
         if target is None:
             return None
+        if self.strategy == 'quantized_reconstruct':
+            return interpolate_presentation_value(
+                self.source_samples if self.source_samples is not None else self.raw_samples,
+                target, self.field, policy='linear', active_time_mapper=active_time_mapper or self.timeline)
         if self.strategy == 'monotonic_depletion':
             if self.segments:
                 seg = self.segments[0]
@@ -629,7 +634,7 @@ def numeric_presentation_plan(samples, field, *, coverage_start=None, coverage_e
     key = (id(samples), canonical, len(samples), first_dt, last_dt,
            norm_cov_start,
            norm_cov_end,
-           norm_src_start)
+           norm_src_start, id(timeline), id(active_time_mapper))
     cached = _NUMERIC_PLAN_CACHE.get(key)
     if cached is not None:
         return cached[1]
@@ -642,6 +647,7 @@ def numeric_presentation_plan(samples, field, *, coverage_start=None, coverage_e
         timeline=timeline or active_time_mapper,
         field=canonical,
         source_start=norm_src_start,
+        source_samples=samples,
     )
     if len(_NUMERIC_PLAN_CACHE) >= 128:
         _NUMERIC_PLAN_CACHE.popitem(last=False)
@@ -678,10 +684,13 @@ def _presentation_meta(
     values: list[float] = []
     previous_t: datetime | None = None
     previous_v: float | None = None
+    observed_decimals = 0
     for sample in samples:
         try:
             dt, value = sample[0], float(sample[1])
             timestamp = _naive_dt(dt)
+            if math.isfinite(value):
+                observed_decimals = max(observed_decimals, _native_decimal_places(abs(value)))
             if previous_t is not None and timestamp > previous_t:
                 intervals.append((timestamp - previous_t).total_seconds())
             if previous_v is not None and math.isfinite(value):
@@ -703,7 +712,10 @@ def _presentation_meta(
     native_step = field_semantics(field_name).native_resolution
     if native_step is None:
         native_step = min(values) if values else None
-    result = (cadence, _native_decimal_places(native_step))
+    native_decimals = _native_decimal_places(native_step)
+    if field_semantics(field_name).native_resolution is None:
+        native_decimals = max(native_decimals, observed_decimals)
+    result = (cadence, native_decimals)
     if key is not None:
         if len(_PRESENTATION_META_CACHE) >= 128:
             _PRESENTATION_META_CACHE.popitem(last=False)
@@ -720,6 +732,13 @@ def _presentation_series_key(samples: list, field_name: str) -> tuple[Any, ...]:
     )
 
 
+def _uses_quantized_events(samples, field_name):
+    semantics = field_semantics(field_name)
+    return semantics.quantized and (
+        semantics.native_resolution is not None or
+        _presentation_meta(samples, field_name)[1] == 0)
+
+
 def _quantized_change_timeline(samples: list, field_name: str) -> QuantizedChangeTimeline | None:
     """Build one change-event stream per continuous telemetry segment.
 
@@ -727,7 +746,7 @@ def _quantized_change_timeline(samples: list, field_name: str) -> QuantizedChang
     Segment boundaries are created by the same cadence/gap gate used by the
     scalar resolver; a real outage can therefore never be crossed by a ramp.
     """
-    if not samples or not field_semantics(field_name).quantized:
+    if not samples or not _uses_quantized_events(samples, field_name):
         return None
     try:
         key = _presentation_series_key(samples, field_name)
@@ -744,6 +763,7 @@ def _quantized_change_timeline(samples: list, field_name: str) -> QuantizedChang
     events: list[tuple[datetime, Any]] = []
     previous_dt = None
     previous_bucket = None
+    boundaries = frozenset(getattr(samples, "segment_start_indices", ()))
 
     def finish(end_index: int) -> None:
         if events:
@@ -754,11 +774,19 @@ def _quantized_change_timeline(samples: list, field_name: str) -> QuantizedChang
             dt, value = sample[0], float(sample[1])
             dt_n = _naive_dt(dt)
         except (TypeError, ValueError, IndexError):
+            finish(index)
+            events = []
+            previous_dt = previous_bucket = None
+            seg_start = index + 1
             continue
         if not math.isfinite(value):
+            finish(index)
+            events = []
+            previous_dt = previous_bucket = None
+            seg_start = index + 1
             continue
-        if previous_dt is not None and threshold is not None:
-            if (dt_n - previous_dt).total_seconds() > threshold:
+        if previous_dt is not None:
+            if index in boundaries or (threshold is not None and (dt_n - previous_dt).total_seconds() > threshold):
                 finish(index)
                 seg_start = index
                 events = []
@@ -787,37 +815,26 @@ def _interpolate_quantized_change_events(
     if timeline is None:
         return None
     target_n = _naive_dt(target)
-    previous_segment_value = None
-    for start, end, events in timeline.segments:
-        first_t = events[0][0]
-        last_raw_t = _naive_dt(samples[end - 1][0])
-        if target_n < first_t:
-            return previous_segment_value
-        if target_n > last_raw_t:
-            previous_segment_value = events[-1][1]
-            continue
-        event_index = bisect_right(events, target_n, key=lambda item: item[0]) - 1
-        if event_index < 0:
-            return None
-        left_t, left_value = events[event_index]
-        if event_index + 1 >= len(events):
+    index = bisect_right(timeline.segments, target_n,
+                         key=lambda segment: segment[2][0][0]) - 1
+    if index < 0:
+        return None
+    start, end, events = timeline.segments[index]
+    event_index = bisect_right(events, target_n, key=lambda item: item[0]) - 1
+    left_t, left_value = events[event_index]
+    if target_n > _naive_dt(samples[end - 1][0]) or event_index + 1 >= len(events):
+        return left_value
+    right_t, right_value = events[event_index + 1]
+    span = (right_t - left_t).total_seconds()
+    if span <= 0:
+        return left_value
+    if active_time_mapper is not None:
+        right_s = _map_wall_to_seconds(active_time_mapper, right_t)
+        left_s = _map_wall_to_seconds(active_time_mapper, left_t)
+        if right_s is None or left_s is None or right_s - left_s + 1e-6 < span:
             return left_value
-        right_t, right_value = events[event_index + 1]
-        if target_n == right_t:
-            return right_value
-        span = (right_t - left_t).total_seconds()
-        if span <= 0:
-            return left_value
-        if active_time_mapper is not None:
-            _right_s = _map_wall_to_seconds(active_time_mapper, right_t)
-            _left_s = _map_wall_to_seconds(active_time_mapper, left_t)
-            if _right_s is not None and _left_s is not None:
-                active_span = _right_s - _left_s
-                if active_span + 1e-6 < span:
-                    return left_value
-        fraction = (target_n - left_t).total_seconds() / span
-        return float(left_value) + (float(right_value) - float(left_value)) * fraction
-    return previous_segment_value
+    fraction = (target_n - left_t).total_seconds() / span
+    return float(left_value) + (float(right_value) - float(left_value)) * fraction
 
 
 def interpolate_presentation_value(
@@ -862,7 +879,7 @@ def interpolate_presentation_value(
     # Exact raw samples are exact for ordinary fields. Quantized duplicate
     # samples resolve against their plateau change event instead.
     if target == _naive_dt(left_dt) and not (
-        field_semantics(field_name).quantized and policy_name != "step"
+        _uses_quantized_events(samples, field_name) and policy_name != "step"
     ):
         return left_value
     if os.environ.get('TELEM_PRESENTATION_INTERP_DEBUG') == '1':
@@ -885,7 +902,7 @@ def interpolate_presentation_value(
             requested_decimals = 0
         if requested_decimals <= native_decimals:
             return left_value
-    if field_semantics(field_name).quantized:
+    if _uses_quantized_events(samples, field_name):
         quantized_value = _interpolate_quantized_change_events(
             samples, target, field_name, active_time_mapper
         )
@@ -951,7 +968,9 @@ def presentation_value(
         # unless a coverage-aware plan is explicitly requested.
         use_plan = True
     if (metadata.presentation_strategy == 'quantized_reconstruct' and
-            effective_precision > _native_decimal_places(metadata.native_resolution)):
+            configured_policy != 'step' and
+            (configured_policy == 'linear' or
+             effective_precision > _presentation_meta(samples, canonical)[1])):
         # Native-resolution display remains STEP; only a request for finer
         # presentation precision opts into the generic plan.
         use_plan = True

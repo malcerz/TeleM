@@ -342,7 +342,7 @@ def prepare_overlay_frame_data(
             return callback(field, source, dt, indicator_key)
     from src.telemetry_extract import (
         interpolate_speed, interpolate_distance, interpolate_altitude,
-        interpolate_iso, interpolate_exposure, interpolate_temperature,
+        interpolate_iso, interpolate_exposure,
     )
 
     # ── Time strings ──────────────────────────────────────────────────
@@ -450,8 +450,10 @@ def prepare_overlay_frame_data(
         iso_value = interpolate_iso(iso_samples or [], target_dt) if iso_samples else None
     if exposure_value is None and exposure_source == "gpmf":
         exposure_value = interpolate_exposure(exposure_samples or [], target_dt) if exposure_samples else None
-    if temp_value is None and temp_source == "gpmf":
-        temp_value = interpolate_temperature(temperature_samples or [], target_dt) if temperature_samples else None
+    if resolve_cache_value is None and temp_source == "gpmf":
+        temp_value = resolve_current_presentation(
+            temperature_samples or [], target_dt, "temperature",
+            layout.get("indicators", {}).get("temp_text", {}))
     profiler.record(
         "telemetry.interpolation_lookups",
         (time.perf_counter() - section_started) * 1000.0,
@@ -608,7 +610,7 @@ def prepare_overlay_frame_data(
 
     power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
     temp_resolved = profiled_resolve("temperature", configured_source("temp_text"), "temp_text") if "temperature" in standard_resolve_fields else None
-    if temp_resolved is not None:
+    if resolve_cache_value is not None and "temperature" in standard_resolve_fields:
         temp_value = temp_resolved
     atemp_value = profiled_resolve("atemp", configured_source("atemp_text"), "atemp_text") if "atemp" in standard_resolve_fields else None
     hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None

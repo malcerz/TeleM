@@ -185,3 +185,145 @@ def test_compositor_temp_text_formatting():
     )
     assert res_img is not None
     assert res_img.size == (1920, 1080)
+
+
+@pytest.mark.parametrize('policy', ['auto', 'linear'])
+@pytest.mark.parametrize('decimals', [1, 2])
+def test_canonical_temperature_plateau(policy, decimals):
+    from src.telemetry_resolver import resolve_current_presentation
+    raw=[(_dt(i),19.) for i in range(60)]+[(_dt(60),20.)]
+    snapshot=list(raw)
+    for sec,expected in [(0,19),(15,19.25),(30,19.5),(45,19.75),(60,20)]:
+        assert resolve_current_presentation(raw,_dt(sec),'temperature',
+            {'decimals':decimals,'interpolation_policy':policy}) == pytest.approx(expected)
+    assert raw==snapshot
+
+
+def test_explicit_step_overrides_reconstruction():
+    from src.telemetry_resolver import resolve_current_presentation
+    raw=[(_dt(59),19.),(_dt(60),20.)]
+    assert resolve_current_presentation(raw,_dt(59.5),'temperature',
+        {'decimals':1,'interpolation_policy':'step'})==19.
+
+
+@pytest.mark.parametrize('policy', ['auto','linear','step'])
+def test_fractional_native_samples_never_requantized(policy):
+    from src.telemetry_resolver import resolve_current_presentation
+    raw=[(_dt(i),v) for i,v in enumerate([19.2,19.3,19.4,19.5,19.6,19.7,19.8,21.029297,40.904297])]
+    for t,v in raw:
+        assert interpolate_presentation_value(raw,t,'temperature',precision=1,policy=policy)==v
+        assert resolve_current_presentation(raw,t,'temperature',{'decimals':1,'interpolation_policy':policy})==v
+
+
+@pytest.mark.parametrize('source,expected',[('fit',None),('gpmf',21.029297),('auto',21.029297)])
+def test_source_contract_preview_final(source,expected):
+    raw=[(_dt(0),21.029297),(_dt(1),21.029297)]
+    layout={'indicators':{'temp_text':{'source':source,'decimals':2}}}
+    init_worker(320,180,'Arial',layout,{'temperature_samples':raw},fit_data={})
+    manager=TelemetryDataManager()
+    manager.fit_data={}
+    manager.temperature_samples=raw
+    manager.layout=layout
+    assert manager.resolve_value('temperature',_dt(.5),source=source,indicator_key='temp_text')==expected
+    assert _resolve_cache_value('temperature',source,_dt(.5),'temp_text')==expected
+
+
+@pytest.mark.parametrize('policy', ['auto','step','linear'])
+@pytest.mark.parametrize('decimals', [0,1,2])
+def test_gui_configuration_reaches_both_resolvers(policy, decimals):
+    raw=[(_dt(i),19.) for i in range(60)]+[(_dt(60),20.)]
+    cfg={'source':'fit','decimals':decimals,'interpolation_policy':policy}
+    layout={'indicators':{'temp_text':cfg}}
+    init_worker(320,180,'Arial',layout,{},fit_data={'temperature':raw})
+    manager=TelemetryDataManager()
+    manager.fit_data={'temperature':raw}
+    manager.layout=layout
+    expected=19. if policy=='step' or (policy=='auto' and decimals==0) else 19.5
+    assert manager.resolve_value('temperature',_dt(30),source='fit',indicator_key='temp_text')==expected
+    assert _resolve_cache_value('temperature','fit',_dt(30),'temp_text')==expected
+
+
+def test_quantized_plan_and_canonical_share_change_timeline():
+    from src.telemetry_resolver import numeric_presentation_plan, resolve_current_presentation
+    raw=[(_dt(i),19.) for i in range(60)]+[(_dt(60),20.)]
+    plan=numeric_presentation_plan(raw,'temperature')
+    assert plan is numeric_presentation_plan(raw,'temperature')
+    assert plan.value_at(_dt(30))==resolve_current_presentation(raw,_dt(30),'temperature',{'decimals':1})==19.5
+
+
+def test_temperature_segments_and_missing_samples():
+    from src.telemetry_resolver import resolve_current_presentation, NormalizedFitDistance
+    for raw in [
+        [(_dt(0),19),(_dt(1),19),(_dt(2),19),(_dt(70),20)],
+        [(_dt(0),19),(_dt(1),None),(_dt(2),20)],
+        NormalizedFitDistance([(_dt(0),19),(_dt(1),19),(_dt(2),20)],segment_start_indices=(2,)),
+    ]:
+        assert resolve_current_presentation(raw,_dt(-1),'temperature',{'decimals':1}) is None
+        assert resolve_current_presentation(raw,_dt(.5),'temperature',{'decimals':1})==19
+
+
+def test_temperature_no_ramp_over_real_clip_gap_or_cut():
+    from src.telemetry_resolver import resolve_current_presentation
+    from src.multifile import VideoClip, VideoTimeline
+    from pathlib import Path
+    raw=[(_dt(i),19.) for i in range(60)]+[(_dt(60),20.)]
+    timeline=VideoTimeline([
+        VideoClip(Path('a'),duration_s=20,absolute_start_dt=_dt(0),timestamp_reliable=True),
+        VideoClip(Path('b'),duration_s=20,absolute_start_dt=_dt(40),timestamp_reliable=True)])
+    assert resolve_current_presentation(raw,_dt(15),'temperature',{'decimals':1},timeline=timeline,active_time_mapper=timeline)==19.
+
+
+@pytest.mark.parametrize('source,expected',[('fit',None),('auto',21.029297),('gpmf',21.029297)])
+def test_legacy_final_frame_does_not_mix_sources(tmp_path,monkeypatch,source,expected):
+    from src.ffmpeg import frame_renderer
+    raw=[(_dt(0),21.029297),(_dt(1),21.029297)]
+    layout={'indicators':{'temp_text':{'enabled':True,'source':source,'decimals':2}}}
+    init_worker(320,180,'Arial',layout,{'temperature_samples':raw},fit_data={})
+    seen=[]
+    def compose(*args,**kwargs):
+        seen.append(args[14])
+        return Image.new('RGBA',(320,180))
+    monkeypatch.setattr(frame_renderer,'compose_overlay',compose)
+    frame_renderer.render_overlay_job((0,str(tmp_path),_dt(0),0,[],[],[],30))
+    assert seen==[expected]
+
+
+def test_auto_prefers_fit_and_tmpc_fractional_precision():
+    from src.telemetry_resolver import resolve_current_presentation
+    camera=[(_dt(0),16.910156),(_dt(1),21.029297),(_dt(2),40.904297)]
+    fit=[(_dt(0),19.2),(_dt(1),20.2)]
+    layout={'indicators':{'temp_text':{'source':'auto','decimals':2}}}
+    init_worker(320,180,'Arial',layout,{'temperature_samples':camera},fit_data={'temperature':fit})
+    manager=TelemetryDataManager()
+    manager.fit_data={'temperature':fit}
+    manager.temperature_samples=camera
+    manager.layout=layout
+    assert _resolve_cache_value('temperature','auto',_dt(0),'temp_text')==19.2
+    assert manager.resolve_value('temperature',_dt(0),source='auto',indicator_key='temp_text')==19.2
+    for t,v in camera:
+        assert resolve_current_presentation(camera,t,'temperature',{'decimals':2})==v
+
+
+def test_temperature_large_series_reuses_precomputed_event_index():
+    from src.telemetry_resolver import resolve_current_presentation, _quantized_change_timeline
+    raw=[(_dt(i),19.+(i//60)%2) for i in range(10000)]
+    events=_quantized_change_timeline(raw,'temperature')
+    for i in range(300):
+        assert resolve_current_presentation(raw,_dt(i/30),'temperature',{'decimals':1}) is not None
+    assert _quantized_change_timeline(raw,'temperature') is events
+
+
+def test_full_frame_speed_and_temperature_share_resolver(monkeypatch):
+    from src.ffmpeg import frame_renderer
+    raw=[(_dt(i),19.) for i in range(60)]+[(_dt(60),20.)]
+    layout={'indicators':{
+        'temp_text':{'enabled':True,'source':'fit','decimals':1},
+        'speed_text':{'enabled':True,'source':'fit','decimals':1}}}
+    init_worker(320,180,'Arial',layout,{},fit_data={'temperature':raw,'speed':[(_dt(0),2),(_dt(60),3)]})
+    seen=[]
+    def compose(*args,**kwargs):
+        seen.append(args[14])
+        return Image.new('RGBA',(320,180))
+    monkeypatch.setattr(frame_renderer,'compose_overlay',compose)
+    frame_renderer.render_overlay_frame(900,_dt(0),0,[],[],[],30)
+    assert seen==[19.5]

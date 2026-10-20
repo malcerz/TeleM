@@ -1245,17 +1245,9 @@ def interpolate_exposure(
 def interpolate_temperature(
     samples: list[tuple[datetime, Any]], target_dt: datetime
 ) -> Optional[float]:
-    """Canonical presentation interpolation for temperature with pre-first hold."""
-    if not samples or target_dt is None:
-        return None
-    try:
-        from src.telemetry_resolver import interpolate_presentation_value
-        val = interpolate_presentation_value(samples, target_dt, "temperature")
-        if val is not None:
-            return float(val)
-    except Exception:
-        pass
-    return _interpolate_step(samples, target_dt, allow_pre_first=True)
+    """Presentation-only temperature lookup; never backfill a future sample."""
+    from src.telemetry_resolver import resolve_current_presentation
+    return resolve_current_presentation(samples, target_dt, "temperature")
 
 
 def interpolate_gpmf_step(

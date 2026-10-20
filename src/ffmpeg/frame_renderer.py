@@ -18,7 +18,6 @@ from src.telemetry_extract import (
     interpolate_altitude,
     interpolate_iso,
     interpolate_exposure,
-    interpolate_temperature,
 )
 from src.ffmpeg.worker_cache import WORKER_CACHE, _resolve_cache_value
 from src.telemetry_resolver import resolve_distance_samples, distance_max_m
@@ -346,7 +345,6 @@ def render_overlay_job(job: tuple) -> int:
     max_distance_m = WORKER_CACHE.get("max_distance_m", 1000.0)
     iso_samples = WORKER_CACHE.get("iso_samples", [])
     exposure_samples = WORKER_CACHE.get("exposure_samples", [])
-    temperature_samples = WORKER_CACHE.get("temperature_samples", [])
     sample_t = (index * update_rate_step) / target_fps
     t0 = start_dt_utc if start_dt_utc is not None else speed_samples[0][0]
     current_dt_utc = t0 + timedelta(seconds=sample_t)
@@ -384,8 +382,6 @@ def render_overlay_job(job: tuple) -> int:
         return layout.get("indicators", {}).get(key, {}).get("source", "gpmf")
 
     temp_value = _resolve_cache_value("temperature", _source_for("temp_text"), current_dt_utc, "temp_text")
-    if temp_value is None:
-        temp_value = interpolate_temperature(temperature_samples, current_dt_utc)
 
     power_value = _resolve_cache_value("power", _source_for("power_text"), current_dt_utc, "power_text")
     atemp_value = _resolve_cache_value("atemp", _source_for("atemp_text"), current_dt_utc, "atemp_text")
