@@ -41,8 +41,8 @@
   "amd": [
     {
       "path": "amd/bin/telem_amd_native.dll",
-      "sha256": "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb",
-      "size": 1884160,
+      "sha256": "bbca75fbd0dfc5d7cbb61922e92f8d5f049b4305dd18335315667e6e5e54ca5f",
+      "size": 297984,
       "purpose": "AMD Native D3D11 VideoProcessor + AMF HEVC/AV1 encoding pipeline",
       "required": true,
       "origin": "Z:\\BikeRideHUD-main\\native\\d3d11_amf_pipeline\\bin\\telem_amd_native.dll",

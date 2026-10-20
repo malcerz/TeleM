@@ -37,12 +37,13 @@ REPO = Path(__file__).resolve().parents[1]
 
 # Pinned production native builds (verified before copy).
 EXPECTED_SHA256 = {
-    # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), without QP diagnostics,
+    # AMD Native D3D11/AMF, ABI 9: Native GPU Track-Up + Pitch (commit fafc798), with real AMF QP feedback (17.10.2026),
     # map style, HLG preserve (HEVC Main10) and HLG->SDR, tone-mapped HLG export-preview tap.
-    "runtime/amd/bin/telem_amd_native.dll": "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb",
+    "runtime/amd/bin/telem_amd_native.dll": "bbca75fbd0dfc5d7cbb61922e92f8d5f049b4305dd18335315667e6e5e54ca5f",
     "runtime/intel/bin/telem_intel_native.dll": "dafa1b9b42dc2af1df23411d5e5d9f9e66556512a3130eb5794e7483cc29c14c",
 }
 FORBIDDEN_SHA256 = {
+    "18a0503f4eec574b9a967fb0d1d5ddea6061b6fd3fbccf6c26f8bafd2c4827bb",  # AMD DLL with QP removed (2026-10-19)
     "41658018ae4979071837dfef4e412c40a855771266380cf84595a66bf89c0cca",  # old Intel non-quantizer DLL
     "380f86b044ab61eefb60c0e1d6fd386dcfe0e95d9c12dac756a93bf8e71ea50b",  # AMD DLL before QP feedback
     "6c43f398fbb1421c6dbb21928309f996e9967afea8040c2d42af6c72ba7f29ca",  # AMD DLL before map style
