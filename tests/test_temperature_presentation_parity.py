@@ -48,6 +48,16 @@ def test_temperature_quantized_interpolation_midpoint():
     assert val_mid == pytest.approx(19.5, abs=1e-4)
 
 
+def test_temperature_plateau_change_events_battery_parity():
+    """Verify temperature uses identical quantized change-event algorithm as battery."""
+    raw = [(_dt(i), 19.0) for i in range(60)] + [(_dt(60 + i), 20.0) for i in range(60)]
+    # Across the 19.0 plateau (0..60 s), change-event interpolation ramps smoothly:
+    assert interpolate_presentation_value(raw, _dt(30), "temperature", precision=0) == 19.0
+    assert interpolate_presentation_value(raw, _dt(30), "temperature", precision=1) == pytest.approx(19.5, abs=1e-4)
+    assert interpolate_presentation_value(raw, _dt(15), "temperature", precision=2) == pytest.approx(19.25, abs=1e-4)
+    assert interpolate_presentation_value(raw, _dt(45), "temperature", precision=2) == pytest.approx(19.75, abs=1e-4)
+
+
 def test_temperature_constant_does_not_artificially_fluctuate():
     """When temperature is constant 19.0, resolver must output 19.0 without false drift."""
     samples = [(_dt(i * 5), 19.0) for i in range(10)]

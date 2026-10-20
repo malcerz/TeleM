@@ -131,9 +131,10 @@ for _name in ('battery', 'battery_pct', 'battery_soc', 'garmin_battery_percent',
 for _name in ('battery_voltage', 'garmin_battery_voltage'):
     FIELD_SEMANTICS[_name] = FieldSemantics('continuous', .001, 'auto', 'never_cross_gap', True, 'quantized_reconstruct')
 for _name in ('speed', 'enhanced_speed', 'ground_speed', 'alt', 'altitude',
-              'enhanced_altitude', 'distance', 'dist', 'track',
-              'temperature', 'atemp', 'garmin_temperature', 'device_temperature'):
+              'enhanced_altitude', 'distance', 'dist', 'track'):
     FIELD_SEMANTICS[_name] = FieldSemantics('continuous', default_interpolation='linear', presentation_strategy='linear')
+for _name in ('temperature', 'atemp', 'garmin_temperature', 'device_temperature'):
+    FIELD_SEMANTICS[_name] = FieldSemantics('continuous', 1.0, 'auto', 'never_cross_gap', True, 'quantized_reconstruct')
 
 
 def field_semantics(name: str) -> FieldSemantics:
