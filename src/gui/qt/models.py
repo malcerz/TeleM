@@ -468,6 +468,8 @@ def _bar_ruler_fields() -> list[FieldSchema]:
     return [
         # Tab Text
         FieldSchema("show_value", "bool", "Wartość", tab="Text", default=True),
+        FieldSchema("value_font_scale", "float", "Rozmiar wartości (mnożnik)", tab="Text",
+                    min_val=0.5, max_val=5.0, step=0.05, default=1.0),
         FieldSchema("show_label", "bool", "Etykieta", tab="Text", default=True),
         FieldSchema("label_position", "choice", "Pozycja etykiety", tab="Text",
                     choices=[("auto", "Auto"), ("top", "Góra"), ("bottom", "Dół"),
@@ -661,6 +663,12 @@ def bar_indicator_fields(bar_style: str = "ruler") -> list[FieldSchema]:
                     choices=[("ruler", "Ruler"), ("segments", "Segments")], default="ruler"),
     ]
     header = _header_fields(allow_small_size=True, with_icon=(style in ("segment", "segments", "segmented", "segment_bar"))) + _form_field() + style_choice
+    header += [FieldSchema("value_position", "choice", "Pozycja wartości", tab="Text",
+                           choices=[("moving", "Ruchoma (dotychczasowa)"), ("top", "Statyczna u góry"),
+                                    ("bottom", "Statyczna u dołu")], default="moving")]
+    if style in ("slope", "grade", "vertical_slope"):
+        header += [FieldSchema("value_font_scale", "float", "Rozmiar wartości (mnożnik)", tab="Text",
+                               min_val=0.5, max_val=5.0, step=0.05, default=1.0)]
     if style in ("segment", "segments", "segmented", "segment_bar"):
         return header + _bar_segments_fields()
     if style in ("slope", "grade", "vertical_slope"):

@@ -183,6 +183,7 @@ def _draw_text_bounded(
     x, y = float(xy[0]), float(xy[1])
     if "°" in text_str:
         _, _, box = measure_text_with_graphic_degree(draw, text_str, font, stroke_width=stroke_width, anchor=anchor)
+        box = (box[0] + x, box[1] + y, box[2] + x, box[3] + y)
     else:
         try:
             box = draw.textbbox((x, y), text_str, font=font, anchor=anchor, stroke_width=stroke_width)
@@ -915,7 +916,7 @@ def _render_ruler_vertical(
     static_key = _static_cache_key(
         "bar_ruler_v3_vertical", font_path,
         title, title_fs, label_fs, value_fs, text_stroke,
-        show_label, show_range, show_tick_labels, tick_label_signed, range_units, decimals,
+        show_label, show_range, show_tick_labels, tick_label_signed, range_units, decimals, show_value,
         lo, hi, unit, major_step, major_divisions, minor_per_major,
         track_color, tick_color, zero_color, text_color, dim_text,
         track_width, tick_w, major_len, minor_len, marker_len, marker_radius,
@@ -2040,6 +2041,47 @@ def clear_bar_cache() -> None:
         _STATIC_CACHE.clear()
 
 
+def _add_static_value_band(img, text, cfg, position, style,
+                           canvas_w, canvas_h, font_path, fs, outline, ss):
+    """Keep static readouts bounded and separate from scale/title pixels."""
+    ss = max(1, int(ss))
+    segmented = style in {"segment", "segments", "segmented", "segment_bar"}
+    raw_size = float(cfg.get("size", 1.0))
+    ruler_scale = raw_size if not segmented and 0.0 < raw_size <= 1.0 and cfg.get("orientation") == "vertical" else 1.0
+    font_scale = (
+        float(cfg.get("value_font_size", cfg.get("value_font_scale", 1.70)))
+        if segmented else float(cfg.get("value_font_scale", 1.0))
+    )
+    font_px = max((10 if segmented else 4) * ss, int(round(font_scale * fs * ss * ruler_scale)))
+    if segmented:
+        font_path, font_px = _resolve_seg_font(cfg, "value", font_path, font_px)
+    font = load_font(font_path, font_px)
+    stroke = max(0, int(round(max(1, outline) * ss * ruler_scale)))
+    pad = max(2 * ss, int(round(6 * ss * min(canvas_w, canvas_h) / 1080)))
+    tw_raw, th_raw, box = measure_text_with_graphic_degree(ImageDraw.Draw(img), text, font, stroke_width=stroke)
+    tw, th = int(ceil(tw_raw)), int(ceil(th_raw))
+    band_h = th + 2 * pad
+    width = max(img.width, tw + 2 * pad)
+    result = Image.new("RGBA", (width, img.height + band_h), (0, 0, 0, 0))
+    result.paste(img, ((width - img.width) // 2, band_h if position == "top" else 0))
+    opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
+    color = cfg.get("value_color", cfg.get("text_color", "#FFFFFF")) if segmented else cfg.get("text_color", "#FFFFFF")
+    alignment = str(cfg.get("value_align", "left")) if segmented else "center"
+    text_x = pad if alignment == "left" else (width - tw - pad if alignment == "right" else (width - tw) / 2)
+    draw_text_with_graphic_degree(
+        ImageDraw.Draw(result),
+        (text_x - box[0], (0 if position == "top" else img.height) + pad - box[1]), text,
+        font=font, fill=_rgba(color, (255, 255, 255), int(255 * opacity)),
+        stroke_width=stroke, stroke_fill=(0, 0, 0, int(230 * opacity)),
+        anchor="la",
+    )
+    result._dynamic_key = _static_cache_key(
+        "bar_static_value_v1", getattr(img, "_dynamic_key", None), text,
+        position, font_path, font_px, stroke, color, opacity, width, band_h, alignment,
+    )
+    return result
+
+
 def _render_bar_indicator_borrowed(
     canvas_w, canvas_h, layout, font_path, key, value, unit, label,
     cfg, min_dim, outline, fs, font, val_min, val_max, ticks, thickness, size_px, ss,
@@ -2154,6 +2196,14 @@ def _render_bar_indicator_borrowed(
     if orientation not in ("horizontal", "vertical"):
         orientation = "horizontal"
 
+    value_position = str(cfg.get("value_position", "moving")).strip().lower()
+    static_value = value_position in ("top", "bottom") and bool(cfg.get("show_value", True))
+    value_cfg = cfg
+    if static_value:
+        # Reserve a separate text band outside the ruler/segment raster.  The
+        # marker and scale keep their existing geometry and cannot overlap it.
+        cfg = dict(cfg, show_value=False)
+
     if style in {"segment", "segments", "segmented", "segment_bar"}:
         img = _render_segments(
             canvas_w=canvas_w,
@@ -2208,6 +2258,25 @@ def _render_bar_indicator_borrowed(
             outline=int(outline),
             ss=max(1, int(ss)),
             formatted_val=formatted_text,
+        )
+
+    if static_value and img is not None:
+        if style in {"segment", "segments", "segmented", "segment_bar"}:
+            custom_unit = str(value_cfg.get("value_unit", ""))
+            if not bool(value_cfg.get("value_show_unit", True)):
+                for suffix in (custom_unit or str(unit or ""), str(unit or "")):
+                    if suffix and formatted_text.endswith(suffix):
+                        formatted_text = formatted_text[:-len(suffix)].strip()
+            elif custom_unit:
+                original_unit = str(unit or "")
+                number = (
+                    formatted_text[:-len(original_unit)].strip()
+                    if original_unit and formatted_text.endswith(original_unit) else formatted_text
+                )
+                formatted_text = f"{number} {custom_unit}"
+        img = _add_static_value_band(
+            img, formatted_text, value_cfg, value_position, style,
+            canvas_w, canvas_h, font_path, fs, outline, ss,
         )
 
     ss = max(1, int(ss))

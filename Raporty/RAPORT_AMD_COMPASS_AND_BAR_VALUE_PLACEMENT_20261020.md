@@ -54,9 +54,66 @@ Wraz z istniejącymi testami source/parity: **12 passed**.
 
 ## B. BAR
 
-Implementacja i walidacja w toku w kolejnym logicznym commicie.
+Wdrożono **moving / top / bottom**. Trybu `both` nie dodawano.
+`moving` jest domyślny i zachowuje poprzedni raster; dla Segments oznacza
+dotychczasowy sposób prezentacji tego stylu (jego tekst nie podążał za markerem).
+Nowe ustawienia są wyłącznie w schemacie właściwości BAR, w zakładce Text:
 
-## Wstępne testy sprzętowe i ograniczenia
+- `Pozycja wartości`: Ruchoma (dotychczasowa), Statyczna u góry, Statyczna u dołu.
+- Ruler i legacy Slope: `Rozmiar wartości (mnożnik)`, istniejący
+  `value_font_scale` 0.5–5.0, domyślnie 1.0.
+- Segments: zachowany istniejący `value_font_size`, własny font, kolor,
+  `value_align`, `value_show_unit`, `value_unit`.
+
+Zmiany plików i funkcji:
+
+- `src/gui/qt/models.py`: `bar_indicator_fields`, `_bar_ruler_fields`.
+- `src/indicators/bar.py`: `_render_bar_indicator_borrowed` wyłącza poprzedni
+  odczyt tylko w top/bottom; `_add_static_value_band` dodaje osobny przezroczysty
+  pas z tekstem. Poziomy i pionowy ruler oraz Segments korzystają z tego samego
+  rozwiązania. Margines i raster rosną do wymiarów rzeczywistych glifów; nie ma
+  nakładania tekstu na skalę lub tytuł. Zachowano ścieżkę efektów compositora,
+  outline i kolor. Nie dodawano osobnego systemu offsetów.
+- Klucz statycznego cache pionowego rulera uwzględnia teraz `show_value`, aby
+  przełączenie moving → top/bottom nie przywracało tekstu ruchomego ze starej bazy.
+- `_draw_text_bounded`: dla tekstu z `°` dodano pozycję rysowania do bbox
+  zwracanego względem (0,0). Bez tego clamp BAR mógł ucinać jednostkę na brzegu.
+  Zmiana dotyczy tylko BAR z graficznym stopniem; zwykły tekst nie zmienia się.
+- `tests/test_bar_value_placement.py`: nowe testy opcji, obu orientacji i stylów,
+  jednostek, części dziesiętnych, rozmiaru fonta, ukrytego odczytu, przełączeń
+  cache i geometrii pasów. Test bazowy potwierdza identyczność moving z poprzednim
+  ustawieniem bez `value_position`.
+
+### Temperatura i stopnie
+
+Kanoniczne jednostki telemetrii temperatury to `°C` (m.in. FIT_UNIT_HINTS i
+domyślne wartości compositora). Zarówno text, jak i BAR respektują jednak jawne
+`cfg.unit`. Użytkownik ma w `fit_temperature_text` zapisane **`unit: "C"`**,
+podobnie w `temp_text`. Dlatego widoczne `10.5 C` nie oznacza zgubienia stopnia
+przez BAR: to zapisany override. Nie zmieniano globalnie jednostek ani presetu
+użytkownika. Wybranie `°C` w istniejącym polu jednostki daje `10.5 °C` także
+z fontem bez glifu stopnia, dzięki istniejącemu graficznemu rysowaniu symbolu.
+Wspólna ścieżka compositora przekazuje ten sam sformatowany tekst do text/BAR;
+BAR zachowuje część dziesiętną, jednostkę i opcje ukrywania/własnej jednostki.
+
+### Preview / Final i geometria
+
+Test `test_temperature_preview_final_pixel_parity` porównuje scalar Preview
+`resolve_current_presentation` z rzeczywistą kolumną Final i raster compositora:
+moving/top/bottom × horizontal/vertical × 540p/1080p/4K × 2 czasy.
+Wyniki dla każdej pary: **max_diff=0, MAE=0, different_pixels=0**.
+Istniejący test kompasu sprawdza obie tarcze, jasne tło i te same 3 rozdzielczości.
+Testy nie zastępują sprzętowego harnessu: wyniki sprzętowe poniżej.
+
+Przejrzano wygenerowane rastry i klatki MP4. Fixture eksportu pionowego top
+umieszczono x=85%, y=70%, poziomego bottom x=75%, y=80%, żeby cała skala mieściła
+się na ekranie. Nie zmieniano pozycji w `def_layout.json`. Przełączanie orientacji
+przy oryginalnym x=94.4% mogłoby umieścić część poziomej skali poza ekranem,
+tak jak przy innych zbyt blisko krawędzi położonych widgetach.
+
+Podgląd wszystkich trybów: [bar_modes.png](amd_compass_bar_20261020/bar_modes.png).
+
+## Testy sprzętowe i ograniczenia
 
 Kanoniczne pliki `Video/GX020079.MP4` i `.fit` są nieobecne w checkoutcie.
 Przed użyciem zgłoszono parę zastępczą istniejącego materiału użytkownika:
@@ -70,12 +127,96 @@ Pierwszy start harnessu zablokował własny plik loga, ponieważ stdout skierowa
 do tej samej nazwy co log eksportera; poprawiono uruchomienie na `.stdout.log`.
 Nie zmieniano storage preflight.
 
-## Status etapu A
+Druga para, zgłoszona przed użyciem: `F:\GoPro\2026-10-16\GX010380.MP4`
++ `2026-10-16_06-22-14.fit`, start 60 s, oryginalny layout użytkownika.
 
-PASS: naprawiony i przetestowany wybór źródła kompasu AMD oraz brak fallbacku
-do starego streamu/dystansu. NOT PROVEN: przyczyna pierwotnego zgłoszenia GPMF;
-reprodukcja wymaga wskazania konkretnego projektu i czasu. NOT PROVEN: 40 FPS.
-QP/VBR/VBV/HRD/live mux/finalizacja/DLL i kod Intel/NVIDIA pozostały niezmienione.
+| Przebieg | Tryb | Klatki | Źródło kompasu | true_fps z profilu | Efektywne FPS harnessu |
+|---|---|---:|---|---:|---:|
+| before | direct | 120 | GPMF | 13.853 | 8.07 |
+| after_moving | direct | 120 | GPMF | 14.103 | 7.07 |
+| top_fit | queue | 180 | FIT | 15.429 | 10.11 |
+| bottom_fit | queue | 180 | FIT | 15.450 | 10.14 |
+| night_gpmf | direct | 120 | GPMF | 27.667 | 8.22 |
 
-Commit A: `fix(amd): honor selected compass source in final telemetry cache`.
-Identyfikatory i końcowe wyniki zostaną uzupełnione przy etapie B.
+Każdy wynik harnessu ma `success=true`. ffprobe z `-count_frames` potwierdził
+720/720 klatek wideo łącznie i strumień AAC w każdym MP4. Wszystkie wideo HEVC,
+3840×2160, HLG. AMD nadal używa VBR 40/60 Mb/s i live mux; logi zawierają sprzętowe
+QP (np. 180 próbek dla eksportu 180 klatek), finalizacja zakończona.
+Nie zmieniano QP/VBR/VBV/HRD, audio pipeline, finalizatora ani ustawień profili.
+Nie dodawano ekstrakcji audio lub końcowego muxu. Testy kontraktów QP i muxu
+wchodzą do zestawu poniżej. Nie jest to pełna macierz profili/bitrate/HDR.
+
+Dowód aktualizacji kompasu:
+
+- `before` i `after_moving`: heading 56.99115–62.49794°, **119/119** zmian między
+  sąsiednimi klatkami; w MP4 odczyty i tarcza zmieniają się.
+- `top_fit` i `bottom_fit`: heading 56.52432–68.17220°, **179/179** zmian między
+  sąsiednimi klatkami. MP4 pokazuje m.in. 057° → 068°, obrót róży jest widoczny.
+  Tekst stopni jest zaokrąglany do liczby całkowitej zgodnie ze starym wyglądem;
+  brak zmiany cyfry w sąsiedniej klatce nie oznacza braku aktualizacji heading.
+- `night_gpmf`: wszystkie 120 wartości to brak kursu (`None`), MP4 pokazuje
+  `--°` i nieruchomą tarczę. To **nie jest PASS testu ruchu kompasu**. Nie wolno
+  podstawiać kursu FIT w miejsce wybranego GPMF, aby ukryć brak danych. Preview
+  tego nocnego fragmentu w rzeczywistej sesji GUI nie zostało osobno nagrane.
+
+Surowe wartości każdej klatki, ścieżki cache, ustawienia profili i dane ffprobe:
+[export_evidence.json](amd_compass_bar_20261020/export_evidence.json).
+Klatki MP4: `before_inspection.png`, `after_moving_inspection.png`,
+`top_fit_inspection.png`, `bottom_fit_inspection.png`, `night_gpmf_inspection.png`.
+Skrypty odtwarzania i analizy: `run_exports.py`, `inspect_exports.py` w tym samym
+katalogu; używają istniejącego harnessu, nie zastępują go testem ad-hoc.
+
+### Wydajność
+
+Porównywalna para before/after_moving ma te same wejścia, czas, 120 klatek,
+rozdzielczość, layout i parametry enkodera. true_fps 13.853 → 14.103 (+1.81%).
+Efektywne FPS obejmuje koszt przygotowania, GUI i preview i spadło 8.07 → 7.07.
+Tak krótki pojedynczy pomiar nie dowodzi ani poprawy, ani braku regresji
+długiego eksportu. Top/bottom zmieniają workload i nie są bazą porównania FPS.
+Materiał dzienny to 8K → 4K QUALITY, nie workload deklarowanych ok. 40 FPS.
+**40 FPS oraz długi benchmark 1131 klatek: NOT TESTED / NOT PROVEN.**
+Zmiana kompasu działa raz w przygotowaniu; top/bottom dodaje raster/tekst do
+istniejącego cache BAR. Nie zmieniano algorytmów mapy, chartów lub GPU compositora.
+
+## Końcowy zestaw testów
+
+**201 passed in 11.25s**, `Raporty/amd_compass_bar_20261020/pytest_final.log`.
+18 plików testowych: nowy AMD selected-source i BAR placement, istniejące
+compass source/rendering/migration, bar orientation/integration/cache/ruler
+ticks/size/rasterizer parity/distance, AMD final temperature, common render
+preparation, AMD live mux/audio finalization/direct MP4/VBR-QP/QP governance.
+`git diff --check`: PASS. Testy geom./obrazu uzupełniono ręczną oceną wygenerowanych
+rastrów i wybranych klatek MP4; nie wykonano osobnej interaktywnej sesji GUI
+przeklikiwania wszystkich nowych ustawień. Harness używa normalnego GUI,
+zarówno direct, jak i queue, z `--preview-hud`.
+
+## Backend isolation, ryzyka i stan końcowy
+
+DLL AMD po testach: SHA-256 dokładnie jak na początku. Nie przebudowywano i nie
+podmieniano DLL. Kod natywny, Intel, NVIDIA, mapa, SmartSync, storage preflight,
+audio, QP i profile nie zostały edytowane. Wspólna zmiana przygotowania jest
+ograniczona do kontraktu źródła kompasu; brakującego streamu nie zastępuje już
+innym źródłem. Wspólny renderer BAR celowo udostępnia opcję Preview/Final.
+
+PASS: BAR moving/top/bottom, font, jednostki, geometria rastra, testy Preview/Final,
+krótkie eksporty AMD direct/queue, QP feedback, AAC i finalizacja, hash DLL.
+NOT PROVEN: pierwotne zamrożenie z ustawieniem GPMF; brak wskazania projektu/czasu
+poza dwoma zweryfikowanymi materiałami. NOT PROVEN: brak regresji długookresowej
+wydajności i wymagany poziom ok. 40 FPS. **Nie oznaczono całego zadania COMPLETE.**
+
+`def_layout.json` zachowano byte-for-byte: Git blob
+`a13f79c0fbcd92be18c5705a112f07343e73ae50` (ten sam skrót w początkowym diffie),
+SHA-256 `86EC156A0D4EE062719F6D8D2BF34CB1B5CD6F174CBA5DA8794C01ABB31266B2`.
+Nie dodano go do commitów. Wszystkie zastane pliki nieśledzone pozostawiono.
+Surowe logi, MP4 i zrzuty tego zadania pozostają lokalnymi artefaktami w katalogu
+raportu; do commitu dołączono skrypty, fixture layoutów, zbiorcze evidence i test log.
+
+## Commity i git status
+
+- A: `3af3c47` — `fix(amd): honor selected compass source in final telemetry cache`.
+- B: `feat(bar): add static value placement and preserve unit formatting` —
+  commit zawierający końcową wersję tego raportu; identyfikator:
+  `git log -1 --format=%h -- src/indicators/bar.py`.
+- Gałąź `main`; brak push. Końcowy status ma zachowane `M def_layout.json`,
+  zastane pliki nieśledzone oraz lokalne surowe artefakty testów. Nie jest czysty
+  z powodu zachowanych danych użytkownika, nie z powodu niezacommitowanego kodu.
