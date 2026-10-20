@@ -766,7 +766,7 @@ def extract_temperature_samples(
             temp_val = parse_float_maybe(raw)
             if temp_val is None:
                 continue
-            temp_val = int(round(temp_val))
+            temp_val = float(temp_val)
 
             dt = _parse_timestamp(flat, prefix)
             if dt is None:
@@ -1243,9 +1243,18 @@ def interpolate_exposure(
 
 
 def interpolate_temperature(
-    samples: list[tuple[datetime, int]], target_dt: datetime
-) -> Optional[int]:
-    """Step interpolation of temperature at a given timestamp."""
+    samples: list[tuple[datetime, Any]], target_dt: datetime
+) -> Optional[float]:
+    """Canonical presentation interpolation for temperature with pre-first hold."""
+    if not samples or target_dt is None:
+        return None
+    try:
+        from src.telemetry_resolver import interpolate_presentation_value
+        val = interpolate_presentation_value(samples, target_dt, "temperature")
+        if val is not None:
+            return float(val)
+    except Exception:
+        pass
     return _interpolate_step(samples, target_dt, allow_pre_first=True)
 
 

@@ -410,11 +410,13 @@ def _resolve_cache_samples(
             return resolve_distance_samples("fit", fit_data=fit_data)
         aliases = {
             "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
-            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature", "garmin_temperature"),
+            "cad": ("cad", "cadence"),
+            "temperature": ("temperature", "atemp", "garmin_temperature", "device_temperature"),
+            "atemp": ("atemp", "temperature", "garmin_temperature", "device_temperature"),
             "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
             "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
             "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
-            "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
+            "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature", "atemp"),
         }.get(field_name, (field_name,))
         for name in aliases:
             if fit_data.get(name):

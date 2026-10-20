@@ -379,10 +379,13 @@ def render_overlay_job(job: tuple) -> int:
 
     iso_value = interpolate_iso(iso_samples, current_dt_utc)
     exposure_value = interpolate_exposure(exposure_samples, current_dt_utc)
-    temp_value = interpolate_temperature(temperature_samples, current_dt_utc)
 
     def _source_for(key: str) -> str:
         return layout.get("indicators", {}).get(key, {}).get("source", "gpmf")
+
+    temp_value = _resolve_cache_value("temperature", _source_for("temp_text"), current_dt_utc, "temp_text")
+    if temp_value is None:
+        temp_value = interpolate_temperature(temperature_samples, current_dt_utc)
 
     power_value = _resolve_cache_value("power", _source_for("power_text"), current_dt_utc, "power_text")
     atemp_value = _resolve_cache_value("atemp", _source_for("atemp_text"), current_dt_utc, "atemp_text")

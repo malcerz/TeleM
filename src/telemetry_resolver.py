@@ -31,11 +31,12 @@ SOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
         "heart_rate": ("heart_rate", "hr"),
         "cad": ("cad", "cadence"),
         "cadence": ("cadence", "cad"),
-        "atemp": ("atemp", "temperature", "garmin_temperature"),
+        "temperature": ("temperature", "atemp", "garmin_temperature", "device_temperature"),
+        "atemp": ("atemp", "temperature", "garmin_temperature", "device_temperature"),
         "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
         "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
         "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
-        "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
+        "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature", "atemp"),
         "heading": ("heading",),
         "slope": ("slope",),
     },
@@ -44,7 +45,8 @@ SOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
         "curVpower": ("curVpower", "curVPower", "curvpower", "power"),
         "hr": ("hr", "heart_rate"),
         "cad": ("cad", "cadence"),
-        "atemp": ("atemp",),
+        "temperature": ("atemp", "temperature"),
+        "atemp": ("atemp", "temperature"),
         "battery": ("battery",),
     },
 }
@@ -156,8 +158,9 @@ def presentation_default_precision(field: str, cfg: Mapping | None = None) -> in
         return 1  # form schema default
     if 'voltage' in canon:
         return 2
-    if not field.startswith('fit_') and canon in (
-            'speed', 'enhanced_speed', 'ground_speed', 'distance', 'dist', 'alt', 'altitude'):
+    if canon in (
+            'speed', 'enhanced_speed', 'ground_speed', 'distance', 'dist', 'alt', 'altitude',
+            'temperature', 'atemp', 'garmin_temperature', 'device_temperature'):
         return 1
     return 0
 
@@ -847,7 +850,9 @@ def interpolate_presentation_value(
                 return None
             return 0.0
         if field_semantics(field_name).presentation_strategy == 'monotonic_depletion' and samples:
-            return round(float(samples[0][1]), 2)
+            src_start = getattr(samples, 'source_start', None)
+            if src_start is not None and target >= _naive_dt(src_start):
+                return round(float(samples[0][1]), 2)
         return None
     if idx >= len(samples):
         return samples[-1][1]

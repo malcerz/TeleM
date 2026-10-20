@@ -95,7 +95,7 @@ def canonical_defaults(schema: list[FieldSchema]) -> dict[str, Any]:
 # source values remain untouched.
 def indicator_default_decimals(indicator_key: str, cfg: Mapping[str, Any] | None = None) -> int | None:
     """Return an explicit canonical decimal default for known indicators."""
-    from src.telemetry_resolver import is_integer_only_field
+    from src.telemetry_resolver import is_integer_only_field, canonical_telemetry_field
     if is_integer_only_field(indicator_key, cfg):
         return 0
     key = str(indicator_key or "").strip().lower()
@@ -103,6 +103,9 @@ def indicator_default_decimals(indicator_key: str, cfg: Mapping[str, Any] | None
         return 0
     if "garmin_battery" in key or key == "battery_text":
         return 2
+    canon = canonical_telemetry_field(key).lower()
+    if canon in ("temperature", "atemp", "garmin_temperature", "device_temperature") or "temp" in key:
+        return 1
     return None
 
 

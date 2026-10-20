@@ -25,6 +25,7 @@ from src.telemetry_resolver import (
 
 _STANDARD_RESOLVE_CONSUMERS: dict[str, str] = {
     "power_text": "power",
+    "temp_text": "temperature",
     "atemp_text": "atemp",
     "hr_text": "hr",
     "cad_text": "cad",
@@ -606,6 +607,9 @@ def prepare_overlay_frame_data(
         return layout.get("indicators", {}).get(indicator_key, {}).get("source", default)
 
     power_value = profiled_resolve("power", configured_source("power_text"), "power_text") if "power" in standard_resolve_fields else None
+    temp_resolved = profiled_resolve("temperature", configured_source("temp_text"), "temp_text") if "temperature" in standard_resolve_fields else None
+    if temp_resolved is not None:
+        temp_value = temp_resolved
     atemp_value = profiled_resolve("atemp", configured_source("atemp_text"), "atemp_text") if "atemp" in standard_resolve_fields else None
     hr_value = profiled_resolve("hr", configured_source("hr_text"), "hr_text") if "hr" in standard_resolve_fields else None
     cad_value = profiled_resolve("cad", configured_source("cad_text"), "cad_text") if "cad" in standard_resolve_fields else None
