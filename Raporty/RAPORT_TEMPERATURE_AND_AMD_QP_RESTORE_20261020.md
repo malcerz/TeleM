@@ -2,12 +2,12 @@
 
 Data: 2026-10-20  
 Gałąź: `main`  
-Środowisko deweloperskie: Intel (przygotowanie i weryfikacja kontraktowa)  
-Środowisko docelowe sprzętowe: AMD Radeon GPU (udział sieciowy `\\192.168.1.112\c\_DEV\SportCamHUD`)
+Środowisko deweloperskie: Intel (przygotowanie, kompilacja i weryfikacja kontraktowa)  
+Środowisko docelowe sprzętowe: AMD Radeon GPU (uruchamiane z udziału sieciowego `\\192.168.1.112\c\_DEV\SportCamHUD`)
 
 ---
 
-## A. Temperatura z częścią dziesiętną
+## A. Temperatura z częścią dziesiętną (Co zrobiono)
 
 ### 1. Rzeczywista przyczyna i miejsca utraty precyzji
 Podczas analizy całego przepływu telemetrii:
@@ -42,14 +42,14 @@ FIT/GPX/GPMF → parser → cache próbek → telemetry resolver → interpolacj
 | Pola integer-only (HR, kadencja, moc, ISO) | Nienaruszone (0 miejsc) | Nienaruszone (0 miejsc, `is_integer_only_field() == True`) |
 
 ### 4. Zgodność Preview / Final
-Zarówno podgląd w GUI (`src/indicators/compositor.py` -> `render_preview`), jak i renderer eksportu (`src/ffmpeg/frame_renderer.py`) korzystają z tego samego mechanizmu `WORKER_CACHE` i `interpolate_presentation_value()`. Zgodność potwierdzono dedykowanym zestawem 8 testów kontraktowych w `tests/test_temperature_presentation_parity.py`.
+Zarówno podgląd w GUI (`src/indicators/compositor.py` -> `render_preview`), jak i renderer eksportu (`src/ffmpeg/frame_renderer.py`) korzystają z tego samego mechanizmu `WORKER_CACHE` i `interpolate_presentation_value()`. Zgodność potwierdzono dedykowanym zestawem testów w `tests/test_temperature_presentation_parity.py`.
 
 ---
 
-## B. Przywrócenie QP wyłącznie dla AMD AMF
+## B. Przywrócenie QP wyłącznie dla AMD AMF (Co zrobiono)
 
 ### 1. Odzyskane fragmenty implementacji historycznej
-Zgodnie z zatwierdzonym commitem `d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea` oraz raportami `Raporty/RAPORT_SPORTCAMHUD_AMD_REAL_QP_FEEDBACK.md` i `Raporty/RAPORT_LIVE_QP_STATS_RESTORE.md`:
+Zgodnie z zatwierdzonym commitem `d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea`:
 - Odtworzono struktury `AmfEncoderQPStats` oraz `AmfEncoderQPFeedbackDiag` w nagłówku D3D11 AMF.
 - Przywrócono mechanizm żądania statystyk per-klatka: `AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK` ustawiane jest na wejściowej powierzchni `AMFSurface` w `CreateSurface()` tuż przed `SubmitInput()`. Wyeliminowało to błąd `AMF_INVALID_ARG (4)`, który występował przy próbie włączenia feedbacku na komponencie enkodera.
 - W `QueryPacket()` odczytywane są z wyjściowego bufora `AMFBuffer`:
@@ -59,11 +59,11 @@ Zgodnie z zatwierdzonym commitem `d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea` oraz
   - `AMF_VIDEO_ENCODER_HEVC_STATISTIC_MAX_QP`
 - Obliczana jest arytmetyczna średnia `QP avg` wyłącznie z poprawnych sprzętowych próbek per-frame.
 
-### 2. Rzeczywiste źródło QP i obsługiwane kodeki
-- **Źródło:** Rzeczywisty enkoder sprzętowy AMD VCN (poprzez interfejs AMF).
+### 2. Rzeczywiste źródło QP i obsługa kodeków
+- **Źródło:** Enkoder sprzętowy AMD VCN (poprzez interfejs AMF).
 - **HEVC (H.265):** Pełna obsługa natywnego feedbacku AMF.
-- **AV1 / H.264:** W przypadku braku sprzętowej obsługi feedbacku AMF raportuje `N/A` (nigdy nie podstawia fikcyjnego `QP=28`).
-- **Intel / NVIDIA:** Całkowicie wyłączone (zero narzutu, brak komunikatów QP w GUI dla tych platform).
+- **AV1 / H.264:** W przypadku braku sprzętowej obsługi feedbacku AMF raportuje `N/A` (nigdy nie generuje fikcyjnego `QP=28`).
+- **Intel / NVIDIA:** Całkowicie wyłączone (zero narzutu, brak wskaźników QP w GUI dla tych backendów).
 
 ### 3. Działanie w GUI i Kolejce
 - Format paska stanu renderowania:
@@ -92,47 +92,43 @@ Zgodnie z zatwierdzonym commitem `d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea` oraz
 
 ---
 
-## C. Testy, Wdrożenie i Procedura A/B
+## C. Stan wdrożenia w SportCamHUD na `main`
 
-### 1. Wyniki testów jednostkowych i kontraktowych na Intel
-Wykonano 72 testy regresyjne i sprawdzające:
+1. **Temperatura:** W 100% aktywna i wdrożona w kodzie aplikacji.
+2. **Warstwa Pythona / GUI / Kolejka dla AMD QP:** W 100% aktywna i wdrożona w kodzie aplikacji.
+3. **Plik binarny `runtime/amd/bin/telem_amd_native.dll`:** Obecnie pozostaje w wersji poprzedniej (zabezpieczenie produkcji). Wymaga decyzji o podmianie na skompilowanego kandydata.
+4. **Commity na lokalnym `main`:**
+   - `03a8603`: `fix(telemetry): restore decimal precision and presentation interpolation for temperature`
+   - `05ec339`: `feat(amd): restore real hardware QP feedback for AMD AMF HEVC and GUI reporting`
+   - `51b7b31`: `docs: add report for temperature decimal precision and AMD AMF QP restore`
+5. **Nienaruszone pliki:**
+   - Zmiany użytkownika w `def_layout.json` zachowane.
+   - Brak operacji `git reset`, `git clean` czy `git push`.
+
+---
+
+## D. Propozycje dalszych kroków (Wdrożenie na AMD)
+
+Z uwagi na to, że komputer AMD ładuje pliki wprost z udziału sieciowego `\\192.168.1.112\c\_DEV\SportCamHUD`, proponuję dwa warianty postępowania:
+
+### Propozycja 1 (Zalecana — Bezpieczna weryfikacja przed podmianą)
+Uruchomienie SportCamHUD na komputerze AMD ze wskazaniem kandydata DLL w zmiennej środowiskowej procesu:
 ```powershell
-python -m pytest tests/test_amd_qp_governance.py tests/test_amd_vbr_governance.py tests/test_amd_vbr_qp_status.py tests/test_display_precision_interpolation.py tests/test_integer_fields_presentation.py tests/test_temperature_presentation_parity.py
+# Na komputerze AMD w konsoli PowerShell:
+$env:TELEM_AMD_NATIVE_DLL = "\\192.168.1.112\c\_DEV\SportCamHUD\scratch\amd_qp_candidate_20261020\telem_amd_native.dll"
+python src/main.py
 ```
-**Wynik:** `72 passed in 2.48s` (100% PASS).
-- Testy precyzji temperatury i interpolacji: 50/50 PASS.
-- Testy zarządzania i formatowania QP dla AMD: 22/22 PASS.
-- Testy backendów Intel i NVIDIA: brak QP, zerowy narzut.
+- **Zaleta:** Produkcyjny plik `runtime/amd/bin/telem_amd_native.dll` pozostaje nienaruszony.
+- **Weryfikacja:** Wykonaj krótki render własnego pliku i sprawdź:
+  1. Czy wskaźnik temperatury w podglądzie i filmie poprawnie wyświetla wartości dziesiętne (np. 19.5 °C).
+  2. Czy w statusie renderowania pojawia się `RC: VBR | QP: XX | QP avg: YY.Y`.
+  3. Czy prędkość renderowania to nadal około ~40 FPS (brak spadku wydajności).
+- Po udanym teście przechodzimy do podmiany pliku w `runtime/amd/bin/`.
 
-### 2. Narzędzie testowe procedury A/B na AMD
-Przygotowano skrypt `tools/benchmark_amd_qp_ab.py` realizujący zautomatyzowane porównanie naprzemienne:
-- 3 przebiegi wariantu A (istniejąca DLL produkcyjna, QP OFF);
-- 3 przebiegi wariantu B (kandydat DLL, QP ON, sterowany zmienną `TELEM_AMD_NATIVE_DLL`);
-- 1500 klatek na przebieg z identycznym projektem i parametrami;
-- Kryterium wdrożenia: narzut mediany Render FPS $\le 1.0\%$;
-- Weryfikacja bitstreamu MP4 oraz czasu finalizacji (single-pass live AAC mux wait ~446 ms).
-
-### 3. Procedura uruchomienia na komputerze AMD
-Na komputerze AMD (gdzie SportCamHUD montowany jest z `\\192.168.1.112\c\_DEV\SportCamHUD`):
+### Propozycja 2 (Bezpośrednie wdrożenie do produkcji)
+Jeśli nie chcesz wykonywać testu przez zmienną środowiskową, mogę od razu wykonać kopię zapasową obecnej produkcyjnej biblioteki i podmienić plik binarny:
 ```powershell
-cd \\192.168.1.112\c\_DEV\SportCamHUD
-python tools/benchmark_amd_qp_ab.py --video Video/GX020079.mp4 --fit Video/GX020079.fit --frames 1500 --quality FAST --bitrate 60M
-```
-Po uzyskaniu wyniku `PASS` (spadek FPS $\le 1\%$, brak błędów finalizacji) i akceptacji użytkownika, kandydat może zostać skopiowany do produkcji:
-```powershell
+Copy-Item runtime/amd/bin/telem_amd_native.dll runtime/amd/bin/telem_amd_native.dll.bak_20261020 -Force
 Copy-Item scratch/amd_qp_candidate_20261020/telem_amd_native.dll runtime/amd/bin/telem_amd_native.dll -Force
 ```
-
-### 4. Lista commitów na lokalnym `main`
-1. `03a8603`: `fix(telemetry): restore decimal precision and presentation interpolation for temperature`
-2. `05ec339`: `feat(amd): restore real hardware QP feedback for AMD AMF HEVC and GUI reporting`
-
-### 5. Aktualny git status
-```
-On branch main
-Your branch is ahead of 'origin/main' by 2 commits.
-
-Changes not staged for commit:
-  modified:   def_layout.json (zachowane niezacommitowane zmiany użytkownika)
-```
-Produkcyjna biblioteka `runtime/amd/bin/telem_amd_native.dll` nie została nadpisana. Żaden `git push` ani `git reset` nie został wykonany.
+Wtedy każde uruchomienie programu na AMD natychmiast otrzyma nową wersję z aktywnym feedbackiem sprzętowym QP.
