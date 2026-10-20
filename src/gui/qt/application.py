@@ -870,7 +870,9 @@ def main() -> None:
             bench_result["hdr_selector_visible"] = bool(rt.widget_hdr_mode.isVisibleTo(rt))
             bench_result["source_color"] = getattr(_controller, "source_color_summary", None)
             rt.chk_hud_preview.setChecked(bool(test_args.preview_hud))
-            rt.chk_compression_analysis.setChecked(False)
+            # The QP diagnostics checkbox was removed from RenderTab (98848d7).
+            if hasattr(rt, "chk_compression_analysis"):
+                rt.chk_compression_analysis.setChecked(False)
             rt.edit_output.setText(str(out_path))
             rt._user_edited_output = True
 
