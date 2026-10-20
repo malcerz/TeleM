@@ -1,5 +1,8 @@
 # AMD compass / BAR value placement — 2026-10-20
 
+**Uzupełnienie po odpowiedzi użytkownika:** wskazano `GX010380.MP4` z
+`F:\GoPro\2026-10-16`. Szczegółowa weryfikacja znajduje się na końcu raportu.
+
 ## Stan początkowy i zakres
 
 Repozytorium `C:\_DEV\SportCamHUD`, `main`, HEAD `16cab38`.
@@ -14,7 +17,7 @@ AGENTS.md i BENCHMARKS.md. Produkcyjna DLL AMD ma SHA-256
 Eksport sprzed zmian kodu na istniejącym materiale użytkownika pokazuje
 058° → 062° → 061° → 059° (klatki 0/30/60/119).
 Nie można uczciwie przypisać temu konkretnemu zgłoszeniu potwierdzonej przyczyny.
-Użytkownika poproszono o projekt i przedział czasu występowania błędu.
+Użytkownik następnie wskazał GX010380.MP4; czas występowania nie został podany.
 
 Potwierdzono osobny, rzeczywisty błąd ścieżki AMD final przy budowaniu cache:
 `amd_native_exporter.py` przekazywał `heading_samples` GPMF, następnie GPX,
@@ -200,8 +203,9 @@ innym źródłem. Wspólny renderer BAR celowo udostępnia opcję Preview/Final.
 
 PASS: BAR moving/top/bottom, font, jednostki, geometria rastra, testy Preview/Final,
 krótkie eksporty AMD direct/queue, QP feedback, AAC i finalizacja, hash DLL.
-NOT PROVEN: pierwotne zamrożenie z ustawieniem GPMF; brak wskazania projektu/czasu
-poza dwoma zweryfikowanymi materiałami. NOT PROVEN: brak regresji długookresowej
+NOT PROVEN: pierwotne zamrożenie z ustawieniem GPMF; po wskazaniu GX010380.MP4
+potwierdzono brak kursu do 79.317 s i poprawny ruch kompasu w późniejszym eksporcie
+(szczegóły poniżej). NOT PROVEN: brak regresji długookresowej
 wydajności i wymagany poziom ok. 40 FPS. **Nie oznaczono całego zadania COMPLETE.**
 
 `def_layout.json` zachowano byte-for-byte: Git blob
@@ -214,9 +218,89 @@ raportu; do commitu dołączono skrypty, fixture layoutów, zbiorcze evidence i 
 ## Commity i git status
 
 - A: `3af3c47` — `fix(amd): honor selected compass source in final telemetry cache`.
-- B: `feat(bar): add static value placement and preserve unit formatting` —
-  commit zawierający końcową wersję tego raportu; identyfikator:
-  `git log -1 --format=%h -- src/indicators/bar.py`.
+- B: `f6c3ffe` — `feat(bar): add static value placement and preserve unit formatting`.
 - Gałąź `main`; brak push. Końcowy status ma zachowane `M def_layout.json`,
   zastane pliki nieśledzone oraz lokalne surowe artefakty testów. Nie jest czysty
   z powodu zachowanych danych użytkownika, nie z powodu niezacommitowanego kodu.
+
+## Uzupełnienie: GX010380.MP4 wskazany przez użytkownika
+
+### Obserwacja rzeczywistego managera Preview
+
+Uruchomiono normalny harness AMD przez `diagnose_night.py`. Skrypt tylko w procesie
+testowym obserwuje `RenderPreparationService.prepare`, zachowując oryginalne
+wywołanie. Odczytuje realny `TelemetryDataManager` po normalnym załadowaniu filmu
+i FIT. Nie zmienia jego danych, eksportera, runtime ani DLL.
+Materiały: dokładnie `F:\GoPro\2026-10-16\GX010380.MP4` i wcześniej jawnie
+wskazany `2026-10-16_06-22-14.fit` z tego samego katalogu.
+
+- Początek filmu w managerze: `2026-10-16 04:22:16.182130` UTC.
+- GPMF: 21 142 próbki kursu, z czego 20 633 poprawne.
+- Pierwsza próbka GPMF: `04:22:47.100000`, kurs `None` (brak).
+- **Pierwszy poprawny kurs GPMF: `04:23:35.499000`, czyli 79.316870 s filmu.**
+- FIT ma poprawny kurs wcześniej, od `04:22:24`, ale preset użytkownika wybiera
+  `gpmf`. Nie zmieniano źródła w jego presecie ani nie podstawiano FIT.
+
+Dodatkowy eksport 60–63 s (90 klatek) potwierdza: `TelemetryDataManager.resolve_value`
+używany przez Preview i Final zwracają `None` w każdej klatce. To rzeczywisty brak
+kursu w wybranym streamie, a nie utrwalenie pierwszej liczby w Final. Istniejący
+kompas w tym stanie pokazuje `--°` i nieruchomą tarczę. Takiego braku danych nie
+naprawiano przez wymyślanie kierunku lub zmianę źródła użytkownika.
+
+### Sprzętowy eksport obejmujący przejście do poprawnego kursu
+
+`--start-seconds 75 --frames 900 --quality QUALITY --codec hevc --bitrate 40M
+--preview-hud --layout def_layout.json`, tryb direct, 3840×2160, HLG.
+Eksport obejmuje około 75–105 s filmu. `night_transition75.json`: `success=true`.
+
+- W klatkach 0–129 kurs jest nieobecny.
+- Pierwszy kurs w klatce 130: czas filmu 79.337667 s,
+  Preview `113.35252905635714°`, Final `113.35253143310547°`.
+- Zgodność managera Preview i Final sprawdzono we **wszystkich 900 klatkach**:
+  rozbieżności dostępności = 0; maks. błąd kąta `0.0000073772°` (float32).
+- W tym oknie jest 728 klatek z kursem, zakres 27.24560–189.61752°; pozostałe
+  zawierają brak kursu, w tym kolejne krótkie luki w samym źródle.
+- Rzeczywisty MP4 po przejściu pokazuje 113°, 091°, 117°, 058°, 061° i obrót róży.
+  Przejrzano klatki 0/130/150/300/600/899; dowód:
+  [night_transition75_compass.png](amd_compass_bar_20261020/night_transition75_compass.png).
+- ffprobe: **900 klatek HEVC**, 3840×2160, obecny AAC (1408 ramek audio).
+- Hardware QP: avg=21.3, min=14, max=26, 900 próbek; VBR 40/60 Mb/s,
+  `live_mux=yes`; Finalize=0.001 s.
+- true_fps=35.26856, efektywne FPS harnessu=24.91. Nadal nie jest to dowód
+  40 FPS ani porównanie before/after na kanonicznym workloadzie.
+
+Podsumowanie i próbki:
+[night_transition75_summary.json](amd_compass_bar_20261020/night_transition75_summary.json).
+Pełny zrzut wszystkich 900 wartości managera i cache, surowe próbki, MP4 i logi
+zostawiono lokalnie w `night_transition75.*`. Jest to dowód zarówno wartości
+per-frame, jak i zmiany widocznej w finalnym MP4.
+
+### Kontrola zastanego cache całego projektu
+
+Porównano również zastany przed zmianami cache
+`2b69b500cd63e2668e274b962f4551f75c4d4c4945e060c70361f35f8811a2bc`
+z bieżącym streamem GPMF i kanonicznym scalar resolverem Preview:
+**64 288 klatek, 0 rozbieżności** przy tolerancji float32, maks. błąd kąta
+`0.0000152572°`. 2453 klatki mają brak kursu zgodny ze źródłem.
+Zastany cache nie zamraża pierwszej próbki i nie zawiera kursu innego projektu
+w tej sprawdzonej sesji. Dowód:
+[night_original_cache_comparison.json](amd_compass_bar_20261020/night_original_cache_comparison.json).
+
+Dodano przenośny test regresji początkowej luki GPMF z pierwszym kursem po
+79.316870 s: pierwsza poprawna klatka eksportu od 75 s to 130, potem kurs zmienia
+się zgodnie z rzeczywistym managerem Preview. Zestaw compass follow-up:
+**13 passed in 1.90s** (`pytest_night_followup.log`). Poprzedni pełny zestaw:
+201 passed; dodatkowo jeden nowy test, bez kolejnej zmiany kodu produkcyjnego.
+
+### Wniosek i ograniczenie
+
+**Dla wskazanego GX010380.MP4 nie potwierdzono zamrożenia Final po pojawieniu się
+poprawnych danych.** Potwierdzono brak wybranego kursu GPMF do ok. 1:19.317,
+zgodny między Preview i Final, oraz poprawny obrót kompasu później. Nie zmieniano
+produkcji, aby maskować brak danych. Jeżeli zgłoszenie dotyczy nieruchomego
+kompasu także po 1:20, potrzebny jest dokładny czas i ustawienia tego eksportu;
+nie deklarujemy, że taki inny przypadek został odtworzony lub naprawiony.
+
+Po uzupełnieniu DLL i `def_layout.json` nadal mają identyczne skróty jak powyżej.
+Follow-up: `test(amd): verify GX010380 compass GPS gap and final parity` (lokalny
+commit testu, skryptu i dowodów; bez push). Nie dodano kolejnej poprawki produkcyjnej.

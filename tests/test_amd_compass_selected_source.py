@@ -45,3 +45,34 @@ def test_missing_selected_source_does_not_use_previous_project_or_distance():
             **explicit,
         )
         assert [cache.lookup(i)["extra_indicators"]["compass"][0] for i in range(3)] == [None]*3
+
+
+def test_gpmf_initial_gps_gap_transitions_to_live_heading_like_preview():
+    """GX010380 timing: the first valid course is 79.316870 s into the clip."""
+    from src.gui.telemetry_manager import TelemetryDataManager
+
+    base = datetime(2026, 10, 16, 4, 22, 16, 182130)
+    samples = [(base + timedelta(seconds=30.91787), None),
+               (base + timedelta(seconds=79.31687), 113.3695),
+               (base + timedelta(seconds=80.31687), 90.0),
+               (base + timedelta(seconds=105), 60.0)]
+    layout = {"indicators": {"compass": {"source": "gpmf", "enabled": True}}}
+    tm = TelemetryDataManager()
+    tm.heading_samples = samples
+    cache = RenderPreparationService.build_telemetry_cache_vectorized(
+        layout=layout, base_dt=base + timedelta(seconds=75),
+        start_dt_utc=base + timedelta(seconds=75), total_frames=900, target_fps=30000/1001,
+        field_samples={"heading_samples": samples},
+    )
+    values = []
+    for i in range(900):
+        frame = cache.lookup(i)
+        preview = tm.resolve_value("heading", frame["target_dt"], source="gpmf")
+        final = frame["extra_indicators"]["compass"][0]
+        if preview is None:
+            assert final is None
+        else:
+            assert final == pytest.approx(preview, abs=2e-5)
+        values.append(final)
+    assert next(i for i, value in enumerate(values) if value is not None) == 130
+    assert values[130] != values[899]
