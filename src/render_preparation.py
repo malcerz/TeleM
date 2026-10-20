@@ -107,6 +107,36 @@ def _vectorize_step(
     return out
 
 
+def _vectorize_presentation(
+    samples: list[tuple[datetime, Any]],
+    target_ts_arr: np.ndarray,
+    ref_dt: datetime,
+    field: str,
+    cfg: Optional[Mapping[str, Any]],
+    *,
+    active_time_mapper: Optional[Any] = None,
+    timeline: Optional[Any] = None,
+) -> np.ndarray:
+    """Per-frame canonical presentation (the Preview contract).
+
+    Used for fields whose presentation is not a plain STEP/linear lookup
+    (``quantized_reconstruct``: temperature, battery voltage), so the final
+    render shows the same value and precision as Preview.
+    """
+    out = np.full(len(target_ts_arr), np.nan, dtype=np.float64)
+    if not samples:
+        return out
+    from src.telemetry_resolver import resolve_current_presentation
+    for i, ts in enumerate(target_ts_arr):
+        value = resolve_current_presentation(
+            samples, ref_dt + timedelta(seconds=float(ts)), field, dict(cfg or {}),
+            active_time_mapper=active_time_mapper, timeline=timeline,
+        )
+        if value is not None:
+            out[i] = float(value)
+    return out
+
+
 def _vectorize_linear_channel(
     samples: list[tuple[datetime, Any]],
     target_ts_arr: np.ndarray,
@@ -369,6 +399,9 @@ class RenderPreparationService:
             "timeline": timeline_repr,
             "skip_pauses": skip_pauses,
         }
+        # Scalar presentation contract of the vectorized builder; bumping it
+        # invalidates disk caches built with the former STEP temperature.
+        key_dict["presentation_contract"] = "quantized_reconstruct_preview_timeline_v2"
         compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
         if compass_cfg and compass_cfg.get("enabled", True):
             key_dict["compass_heading_contract"] = "selected_source_cog_v1"
@@ -715,7 +748,47 @@ class RenderPreparationService:
         # 5. GPMF Auxiliary Fields (ISO, Exposure, Temperature)
         columns["iso"] = _vectorize_step(iso_samples or [], target_ts_arr, ref_dt)
         columns["exposure"] = _vectorize_step(exposure_samples or [], target_ts_arr, ref_dt)
-        columns["temp"] = _vectorize_step(temperature_samples or [], target_ts_arr, ref_dt)
+        # Temperature follows the Preview contract: the configured source
+        # (frame_data.configured_source, default AUTO) and the canonical
+        # presentation resolver with the indicator's decimals.
+        from types import SimpleNamespace
+        from src.telemetry_resolver import resolve_samples_from_sources
+        timeline_mapper = video_timeline if (video_timeline is not None and getattr(video_timeline, "clip_count", 0)) else None
+        # Preview (TelemetryDataManager.resolve_value) maps wall time through
+        # the full project timeline.  ``video_timeline`` here is the In/Out /
+        # cut subset, which would turn every ramp whose change events lie
+        # outside the exported range back into a STEP.
+        telemetry_obj = kwargs.get("telemetry")
+        preview_mapper = (
+            getattr(telemetry_obj, "timeline", None) or getattr(telemetry_obj, "video_timeline", None)
+        ) if telemetry_obj is not None else None
+
+        def _presentation_mapping(source: str) -> tuple[Any, Any]:
+            if preview_mapper is not None:
+                return preview_mapper, preview_mapper
+            return timeline_mapper or (active_mapper if source == "fit" else None), video_timeline
+
+        def _temperature_column(field: str, key: str) -> np.ndarray:
+            cfg = indicators.get(key, {}) if isinstance(indicators.get(key), dict) else {}
+            source = cfg.get("source", "auto")
+            samples = resolve_samples_from_sources(
+                field, source,
+                gpmf=SimpleNamespace(temperature_samples=temperature_samples or []),
+                fit_data=fit,
+                gpx=SimpleNamespace(gpx_atemp_samples=gpx_atemp_samples or []),
+            )
+            mapper, presentation_timeline = _presentation_mapping(source)
+            return _vectorize_presentation(
+                samples, target_ts_arr, ref_dt, field, cfg,
+                active_time_mapper=mapper, timeline=presentation_timeline,
+            )
+
+        def _consumed(key: str) -> bool:
+            cfg = indicators.get(key)
+            return isinstance(cfg, dict) and cfg.get("enabled", True)
+
+        columns["temp"] = (_temperature_column("temperature", "temp_text") if _consumed("temp_text")
+                           else _vectorize_step(temperature_samples or [], target_ts_arr, ref_dt))
 
         # 6. Standard Fields (Power, atemp, hr, cad, battery)
         pwr_samples = fit.get("power") or fit.get("curVpower") or gpx_power_samples or []
@@ -724,8 +797,11 @@ class RenderPreparationService:
             pwr_col[is_paused_arr] = 0.0
         columns["std_power"] = pwr_col
 
-        atemp_samples = fit.get("temperature") or fit.get("garmin_temperature") or gpx_atemp_samples or []
-        columns["std_atemp"] = _vectorize_linear_channel(atemp_samples, target_ts_arr, ref_dt)
+        if _consumed("atemp_text"):
+            columns["std_atemp"] = _temperature_column("atemp", "atemp_text")
+        else:
+            atemp_samples = fit.get("temperature") or fit.get("garmin_temperature") or gpx_atemp_samples or []
+            columns["std_atemp"] = _vectorize_linear_channel(atemp_samples, target_ts_arr, ref_dt)
 
         hr_samples = fit.get("heart_rate") or gpx_hr_samples or []
         columns["std_hr"] = _vectorize_step(hr_samples, target_ts_arr, ref_dt)
@@ -832,7 +908,16 @@ class RenderPreparationService:
             if samples is None:
                 samples = fit.get(name) or []
             sem = field_semantics(name)
-            if sem.semantic_type == "continuous" and sem.presentation_strategy == "linear":
+            if sem.presentation_strategy == "quantized_reconstruct" and _consumed(key):
+                # Same contract as Preview (TelemetryManager.resolve_value):
+                # integer FIT temperature with decimals>=1 is reconstructed,
+                # never shown as a raw STEP.
+                mapper, presentation_timeline = _presentation_mapping("fit")
+                f_col = _vectorize_presentation(
+                    samples, target_ts_arr, ref_dt, name, indicators.get(key, {}),
+                    active_time_mapper=mapper, timeline=presentation_timeline,
+                )
+            elif sem.semantic_type == "continuous" and sem.presentation_strategy == "linear":
                 f_col = _vectorize_linear_channel(samples, target_ts_arr, ref_dt)
             elif sem.presentation_strategy == "monotonic_depletion":
                 from src.telemetry_resolver import resolve_presentation_precision, presentation_default_precision
