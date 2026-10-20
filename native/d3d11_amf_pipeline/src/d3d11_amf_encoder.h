@@ -121,8 +121,8 @@ public:
     void SetQualityPreset(AMFQualityPreset preset) { m_qualityPreset = preset; }
     bool IsAVC() const { return m_codecType == AMFCodecType::AVC; }
     bool IsAV1() const { return m_codecType == AMFCodecType::AV1; }
-    const AMFEncoderQPStats& GetQPStats() const { static const AMFEncoderQPStats unavailable{}; return unavailable; }
-    const AMFEncoderQPFeedbackDiag& GetQPFeedbackDiag() const { static const AMFEncoderQPFeedbackDiag unavailable{}; return unavailable; }
+    const AMFEncoderQPStats& GetQPStats() const { return m_qpStats; }
+    const AMFEncoderQPFeedbackDiag& GetQPFeedbackDiag() const { return m_qpDiag; }
 
 private:
     HMODULE m_hAMFRT = nullptr;
@@ -140,4 +140,6 @@ private:
     bool m_colorFullRange = true;
     AMFQualityPreset m_qualityPreset = AMFQualityPreset::FAST;
     uint64_t m_bitrateBps = 0;
+    AMFEncoderQPStats m_qpStats;
+    AMFEncoderQPFeedbackDiag m_qpDiag;
 };

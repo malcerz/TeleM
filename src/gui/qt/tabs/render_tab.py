@@ -1551,7 +1551,7 @@ class RenderTab(QWidget):
             avg_fps = getattr(job, "average_fps", 0.0)
             fps_str = f"{avg_fps:.1f} FPS" if (avg_fps and avg_fps > 0) else "brak danych"
 
-            quality_details = ""
+            quality_details = f"\n   |_ Średnie QP: {job.average_qp:.1f}" if getattr(job, "average_qp", None) is not None else ""
 
             if getattr(job, "is_expanded", False):
                 prefix = "▼ "
@@ -2622,6 +2622,10 @@ class RenderTab(QWidget):
                 snapshot.fps, status, final_eta=eta,
                 item_label=item_label,
                 is_indeterminate=is_indeterminate,
+                rate_text=(
+                    getattr(snapshot, "compression_text", "")
+                    if getattr(snapshot, "rate_control", "") else ""
+                ),
 
                 global_pct=snapshot.global_percent,
 
@@ -2858,11 +2862,18 @@ class RenderTab(QWidget):
             eta_txt = "--:--"
         elapsed_txt = self._fmt_time(elapsed) if (elapsed is not None and 0 < elapsed <= 3600000) else "--:--"
         fps_txt = f"{fps:.1f}" if (fps > 0.05 and not is_indeterminate) else "--"
+        qp_part = ""
+        if rate_text:
+            qp_part = f"   |   {rate_text}"
+        elif qp is not None:
+            qp_part = f"   |   QP: {qp:.1f}"
+        elif avg_qp is not None:
+            qp_part = f"   |   QP avg: {avg_qp:.1f}"
         # Jedna linia — bez newline, bez łamania; stała wysokość labela
         # (Fixed + wordWrap=False) → brak przeskakiwania layoutu.
         self.lbl_stats.setText(
             f"{item_label}: {frame_txt}   |   {pct_txt}   |   FPS: {fps_txt}"
-            f"   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
+            f"{qp_part}   |   Czas: {elapsed_txt}   |   ETA: {eta_txt}"
             f"   |   {status}"
         )
 
@@ -2896,15 +2907,15 @@ class RenderTab(QWidget):
                 frame_render_s = _stats.get("frame_render_seconds", 0.0) if _stats else 0.0
                 fin_s = _stats.get("finalization_seconds", 0.0) if _stats else 0.0
                 eff_fps = _stats.get("user_effective_fps", 0.0) if _stats else 0.0
+                qp_val = _stats.get("avg_qp") if _stats else None
                 self._export_queue.notify_render_done(
                     q_job_id,
                     success=True,
                     output_path=output,
                     elapsed_s=elapsed,
                     average_fps=avg_fps,
-
+                    average_qp=float(qp_val) if qp_val is not None else None,
                     codec=_stats.get("codec", "") if _stats else "",
-
                     frame_render_elapsed_s=frame_render_s,
                     finalization_elapsed_s=fin_s,
                     effective_fps=eff_fps,
@@ -2933,8 +2944,9 @@ class RenderTab(QWidget):
         self.progress.setValue(100)
 
 
+        qp_fin = _stats.get("avg_qp") if _stats else None
         self._set_stats(self._render_total, self._render_total, elapsed, avg_fps,
-                        "Gotowe", final_eta="00:00")
+                        "Gotowe", final_eta="00:00", qp=float(qp_fin) if qp_fin is not None else None)
         self._end_render()
         self._show_export_finished_popup(_stats, output, elapsed)
 
@@ -2951,10 +2963,12 @@ class RenderTab(QWidget):
         
         self._last_export_fps = avg_fps
 
+        quality_line = f"\nŚrednie QP: {float(stats['avg_qp']):.1f}" if stats and stats.get("avg_qp") is not None else ""
         msg = (
             f"Plik zapisany:\n{output}\n\n"
             f"Czas eksportu: {time_str}\n"
-            f"Średnia wydajność: {fps_str}\n"
+            f"Średnia wydajność: {fps_str}"
+            f"{quality_line}\n"
         )
         QMessageBox.information(self, "Eksport zakończony", msg)
 

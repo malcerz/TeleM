@@ -16,16 +16,36 @@ void D3D11AMFEncoder::Shutdown() {
         FreeLibrary(m_hAMFRT);
         m_hAMFRT = nullptr;
     }
+    m_qpStats = {};
+    m_qpDiag = {};
 }
 
 D3D11AMFEncoder::~D3D11AMFEncoder() {
     Shutdown();
 }
 
-bool D3D11AMFEncoder::Initialize(ID3D11Device* pDevice, UINT width, UINT height, UINT fpsNum, UINT fpsDen) {
+bool D3D11AMFEncoder::Initialize(
+    ID3D11Device* pDevice,
+    UINT width,
+    UINT height,
+    UINT fpsNum,
+    UINT fpsDen,
+    AMFCodecType codecType,
+    AMFQualityPreset qualityPreset,
+    uint64_t bitrateBps
+) {
+    m_qpStats = {};
+    m_qpDiag = {};
+    {
+        const char* surfaceFlag = std::getenv("TELEM_AMD_QP_FEEDBACK_SURFACE");
+        m_qpDiag.surfaceFlagEnabled = !(surfaceFlag && std::strcmp(surfaceFlag, "0") == 0);
+    }
     m_device = pDevice;
     m_width = width;
     m_height = height;
+    m_codecType = codecType;
+    m_qualityPreset = qualityPreset;
+    m_bitrateBps = bitrateBps;
 
     // Load AMD AMF Runtime DLL
     m_hAMFRT = LoadLibraryW(L"amfrt64.dll");
@@ -61,30 +81,238 @@ bool D3D11AMFEncoder::Initialize(ID3D11Device* pDevice, UINT width, UINT height,
     m_sameDeviceUsed = true;
     std::cout << "[AMF] InitDX11 SUCCESS: Connected to SAME ID3D11Device." << std::endl;
 
-    // Create AMF HEVC Encoder Component
-    res = m_factory->CreateComponent(m_context, AMFVideoEncoder_HEVC, &m_encoder);
-    if (res != AMF_OK || !m_encoder) {
-        std::cerr << "[AMF] CreateComponent(AMFVideoEncoder_HEVC) failed: " << res << std::endl;
-        return false;
+    if (m_codecType == AMFCodecType::AVC) {
+        // Create AMF AVC/H.264 Encoder Component
+        res = m_factory->CreateComponent(m_context, AMFVideoEncoderVCE_AVC, &m_encoder);
+        if (res != AMF_OK || !m_encoder) {
+            std::cerr << "[AMF] CreateComponent(AMFVideoEncoderVCE_AVC) failed: " << res << std::endl;
+            return false;
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_USAGE, AMF_VIDEO_ENCODER_USAGE_TRANSCODING);
+
+        // Quality presets for AVC from AMF_VIDEO_ENCODER_QUALITY_PRESET_ENUM:
+        // BALANCED = 0, SPEED = 1, QUALITY = 2
+        amf_int64 avcPreset = AMF_VIDEO_ENCODER_QUALITY_PRESET_SPEED;
+        const char* presetName = "SPEED";
+        if (m_qualityPreset == AMFQualityPreset::BALANCED) {
+            avcPreset = AMF_VIDEO_ENCODER_QUALITY_PRESET_BALANCED;
+            presetName = "BALANCED";
+        } else if (m_qualityPreset == AMFQualityPreset::QUALITY) {
+            avcPreset = AMF_VIDEO_ENCODER_QUALITY_PRESET_QUALITY;
+            presetName = "QUALITY";
+        }
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_QUALITY_PRESET, avcPreset);
+
+        // Profile: High, Level 5.2
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_PROFILE, AMF_VIDEO_ENCODER_PROFILE_HIGH);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_PROFILE_LEVEL, AMF_H264_LEVEL__5_2);
+
+        // Rate control & Bitrate
+        if (m_bitrateBps > 0) {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_TARGET_BITRATE, (amf_int64)m_bitrateBps);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_PEAK_BITRATE, (amf_int64)(m_bitrateBps * 1.25));
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_VBV_BUFFER_SIZE, (amf_int64)m_bitrateBps);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_INITIAL_VBV_BUFFER_FULLNESS, (amf_int64)64);
+        } else {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CONSTANT_QP);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_QP_I, (amf_int64)26);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_QP_P, (amf_int64)26);
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_FRAMESIZE, AMFConstructSize(width, height));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
+
+        // Color metadata: BT.709 8-bit SDR
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_OUTPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_OUTPUT_MATRIX_COEFF, AMF_COLOR_MATRIX_COEFF_BT_709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_OUTPUT_FULL_RANGE_COLOR, false);
+
+        res = m_encoder->Init(amf::AMF_SURFACE_NV12, width, height);
+        if (res != AMF_OK) {
+            std::cerr << "[AMF] AVC Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
+            return false;
+        }
+
+        std::cout << "[AMF] H.264/AVC Hardware Encoder initialized successfully (" 
+                  << width << "x" << height << " preset=" << presetName 
+                  << " raw_amf_preset=" << avcPreset << ")." << std::endl;
+    } else if (m_codecType == AMFCodecType::AV1) {
+        // Create AMF AV1 Encoder Component
+        res = m_factory->CreateComponent(m_context, AMFVideoEncoder_AV1, &m_encoder);
+        if (res != AMF_OK || !m_encoder) {
+            std::cerr << "[AMF] CreateComponent(AMFVideoEncoder_AV1) failed: " << res << std::endl;
+            return false;
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_USAGE, AMF_VIDEO_ENCODER_AV1_USAGE_TRANSCODING);
+
+        // Quality presets for AV1 from AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET_ENUM:
+        // HIGH_QUALITY = 0, QUALITY = 30, BALANCED = 70, SPEED = 100
+        amf_int64 av1Preset = AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET_SPEED;
+        const char* presetName = "SPEED";
+        if (m_qualityPreset == AMFQualityPreset::BALANCED) {
+            av1Preset = AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET_BALANCED;
+            presetName = "BALANCED";
+        } else if (m_qualityPreset == AMFQualityPreset::QUALITY) {
+            av1Preset = AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET_QUALITY;
+            presetName = "QUALITY";
+        }
+
+        // Developer override for AV1 quality preset:
+        // TELEM_AMD_AV1_QUALITY_PRESET=HIGH_QUALITY (or 0)
+        const char* av1Override = std::getenv("TELEM_AMD_AV1_QUALITY_PRESET");
+        if (av1Override && m_qualityPreset == AMFQualityPreset::QUALITY) {
+            if (_stricmp(av1Override, "HIGH_QUALITY") == 0 || std::strcmp(av1Override, "0") == 0) {
+                av1Preset = AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET_HIGH_QUALITY;
+                presetName = "HIGH_QUALITY (override)";
+            }
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_QUALITY_PRESET, av1Preset);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_PROFILE, AMF_VIDEO_ENCODER_AV1_PROFILE_MAIN);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_ALIGNMENT_MODE, AMF_VIDEO_ENCODER_AV1_ALIGNMENT_MODE_NO_RESTRICTIONS);
+
+        // Rate control & Bitrate
+        if (m_bitrateBps > 0) {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_TARGET_BITRATE, (amf_int64)m_bitrateBps);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_PEAK_BITRATE, (amf_int64)(m_bitrateBps * 1.25));
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_VBV_BUFFER_SIZE, (amf_int64)m_bitrateBps);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_INITIAL_VBV_BUFFER_FULLNESS, (amf_int64)64);
+        } else {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_CONSTANT_QP);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_Q_INDEX_INTRA, (amf_int64)112);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_Q_INDEX_INTER, (amf_int64)112);
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_FRAMESIZE, AMFConstructSize(width, height));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
+
+        // Color metadata: BT.709 8-bit SDR (NV12 production pipeline)
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_COLOR_BIT_DEPTH, AMF_COLOR_BIT_DEPTH_8);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_MATRIX_COEFF, AMF_COLOR_MATRIX_COEFF_BT_709);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_FULL_RANGE_COLOR, false);
+
+        res = m_encoder->Init(amf::AMF_SURFACE_NV12, width, height);
+        if (res != AMF_OK) {
+            std::cerr << "[AMF] AV1 Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
+            return false;
+        }
+
+        std::cout << "[AMF] AV1 Hardware Encoder initialized successfully (" 
+                  << width << "x" << height << " preset=" << presetName 
+                  << " raw_amf_preset=" << av1Preset << ")." << std::endl;
+    } else {
+        // Create AMF HEVC Encoder Component
+        res = m_factory->CreateComponent(m_context, AMFVideoEncoder_HEVC, &m_encoder);
+        if (res != AMF_OK || !m_encoder) {
+            std::cerr << "[AMF] CreateComponent(AMFVideoEncoder_HEVC) failed: " << res << std::endl;
+            return false;
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_USAGE, AMF_VIDEO_ENCODER_HEVC_USAGE_TRANSCODING);
+
+        // Quality presets for HEVC from AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET_ENUM:
+        // QUALITY = 0, BALANCED = 5, SPEED = 10
+        amf_int64 hevcPreset = AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET_SPEED;
+        const char* presetName = "SPEED";
+        if (m_qualityPreset == AMFQualityPreset::BALANCED) {
+            hevcPreset = AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET_BALANCED;
+            presetName = "BALANCED";
+        } else if (m_qualityPreset == AMFQualityPreset::QUALITY) {
+            hevcPreset = AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET_QUALITY;
+            presetName = "QUALITY";
+        }
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET, hevcPreset);
+
+        // Rate control: PEAK_CONSTRAINED_VBR based on target bitrate from GUI slider
+        uint64_t targetBitrate = m_bitrateBps;
+        if (targetBitrate == 0) {
+            targetBitrate = 40000000ULL; // 40 Mbps default if unspecified
+        }
+        uint64_t peakBitrate = static_cast<uint64_t>(targetBitrate * 1.5);
+        if (peakBitrate < targetBitrate) {
+            peakBitrate = targetBitrate;
+        }
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR);
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, static_cast<amf_int64>(targetBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_PEAK_BITRATE, static_cast<amf_int64>(peakBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_VBV_BUFFER_SIZE, static_cast<amf_int64>(targetBitrate));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INITIAL_VBV_BUFFER_FULLNESS, static_cast<amf_int64>(64));
+        // Component-level request kept for compatibility; per AMF HEVC API the
+        // effective request is the per-frame flag set on the input surface.
+        m_qpDiag.encoderSetResult = static_cast<int>(
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true));
+
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMFConstructSize(width, height));
+        m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
+
+        // ETAP 5Z.2: colour signalling.  The SDR pipeline (0) sets nothing so
+        // its bitstream stays identical to the previous production build.
+        amf::AMF_SURFACE_FORMAT inputFormat = amf::AMF_SURFACE_NV12;
+        if (m_colorPipeline == 2) {
+            const amf_int64 profile = m_colorFullRange
+                ? AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_2020 : AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020;
+            const AMF_RESULT r1 = m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_PROFILE, AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10);
+            const AMF_RESULT r2 = m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, AMF_COLOR_BIT_DEPTH_10);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PROFILE, profile);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_ARIB_STD_B67);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT2020);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, profile);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_ARIB_STD_B67);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT2020);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, (amf_int64)(m_colorFullRange
+                ? AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_FULL : AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_STUDIO));
+            inputFormat = amf::AMF_SURFACE_P010;
+            std::cout << "[AMF HDR] HEVC Main10 HLG: profile_set=" << r1 << " bitdepth_set=" << r2
+                      << " primaries=BT2020 transfer=ARIB_STD_B67 matrix=BT2020NC range="
+                      << (m_colorFullRange ? "FULL" : "STUDIO") << std::endl;
+        } else if (m_colorPipeline == 1) {
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_INPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, AMF_VIDEO_CONVERTER_COLOR_PROFILE_709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, AMF_COLOR_TRANSFER_CHARACTERISTIC_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, AMF_COLOR_PRIMARIES_BT709);
+            m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, (amf_int64)AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE_STUDIO);
+            std::cout << "[AMF HDR] HEVC Main SDR from HLG tone mapping: primaries=BT709 transfer=BT709 "
+                         "matrix=BT709 range=STUDIO" << std::endl;
+        }
+
+        res = m_encoder->Init(inputFormat, width, height);
+        if (res != AMF_OK) {
+            std::cerr << "[AMF] HEVC VBR Encoder Init(" << (inputFormat == amf::AMF_SURFACE_P010 ? "AMF_SURFACE_P010" : "AMF_SURFACE_NV12")
+                      << ") failed: " << res << std::endl;
+            return false;
+        }
+        if (m_colorPipeline == 2) {
+            amf_int64 profileGot = -1, depthGot = -1;
+            m_encoder->GetProperty(AMF_VIDEO_ENCODER_HEVC_PROFILE, &profileGot);
+            m_encoder->GetProperty(AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, &depthGot);
+            std::cout << "[AMF HDR] after Init: profile=" << profileGot << " color_bit_depth=" << depthGot << std::endl;
+            if (profileGot != AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10 || depthGot != AMF_COLOR_BIT_DEPTH_10) {
+                std::cerr << "[AMF HDR] encoder did not keep Main10/10-bit; refusing HDR export" << std::endl;
+                return false;
+            }
+        }
+
+        std::cout << "[AMF] HEVC Hardware Encoder initialized successfully (" 
+                  << width << "x" << height << " preset=" << presetName 
+                  << " rc=VBR target=" << targetBitrate << " peak=" << peakBitrate
+                  << " raw_amf_preset=" << hevcPreset << ")." << std::endl;
+        std::cout << "[AMF QP] statistics feedback: encoder SetProperty result="
+                  << m_qpDiag.encoderSetResult << " surface_flag="
+                  << (m_qpDiag.surfaceFlagEnabled ? "ON" : "OFF (TELEM_AMD_QP_FEEDBACK_SURFACE=0)")
+                  << std::endl;
     }
-
-    // Configure Encoder Properties matching prompt requirements:
-    // HEVC, quality = speed, rate control = CQP, QP P = 28, QP I = 28, 3840x2160 @ 29.97 FPS
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_USAGE, AMF_VIDEO_ENCODER_HEVC_USAGE_TRANSCODING);
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET, AMF_VIDEO_ENCODER_HEVC_QUALITY_PRESET_SPEED);
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD, AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_CONSTANT_QP);
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QP_I, 28);
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_QP_P, 28);
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMFConstructSize(width, height));
-    m_encoder->SetProperty(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, AMFConstructRate(fpsNum, fpsDen));
-
-    res = m_encoder->Init(amf::AMF_SURFACE_NV12, width, height);
-    if (res != AMF_OK) {
-        std::cerr << "[AMF] Encoder Init(AMF_SURFACE_NV12) failed: " << res << std::endl;
-        return false;
-    }
-
-    std::cout << "[AMF] HEVC Hardware Encoder initialized successfully (3840x2160 CQP 28/28 Speed)." << std::endl;
     return true;
 }
 
@@ -100,6 +328,17 @@ bool D3D11AMFEncoder::CreateSurface(ID3D11Texture2D* pNV12Texture, int64_t pts, 
         return false;
     }
     outSurface->SetPts(pts);
+    if (m_codecType == AMFCodecType::HEVC && m_qpDiag.surfaceFlagEnabled) {
+        // AMF HEVC API: statistics feedback is requested per input frame on the
+        // AMFSurface before SubmitInput (FFmpeg amfenc.c does the same).
+        const AMF_RESULT fbRes = outSurface->SetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTICS_FEEDBACK, true);
+        m_qpDiag.surfaceSetResult = static_cast<int>(fbRes);
+        if (fbRes == AMF_OK) {
+            m_qpDiag.surfaceSetOk++;
+        } else {
+            m_qpDiag.surfaceSetFail++;
+        }
+    }
     return true;
 }
 
@@ -169,8 +408,66 @@ bool D3D11AMFEncoder::QueryPacket(
             outPts = pBuffer->GetPts();
 
             int64_t dataType = 0;
-            pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE, &dataType);
-            outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR);
+            if (m_codecType == AMFCodecType::AVC) {
+                pBuffer->GetProperty(AMF_VIDEO_ENCODER_OUTPUT_DATA_TYPE, &dataType);
+                outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_OUTPUT_DATA_TYPE_IDR);
+            } else if (m_codecType == AMFCodecType::AV1) {
+                pBuffer->GetProperty(AMF_VIDEO_ENCODER_AV1_OUTPUT_FRAME_TYPE, &dataType);
+                outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_AV1_OUTPUT_FRAME_TYPE_KEY);
+            } else {
+                pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE, &dataType);
+                outIsKeyframe = (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR);
+
+                m_qpDiag.outputBuffers++;
+                m_qpDiag.lastPts = outPts;
+                int64_t frameQp = -1;
+                int64_t avgQp = -1;
+                int64_t minQp = -1;
+                int64_t maxQp = -1;
+                const AMF_RESULT frameRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_FRAME_QP, &frameQp);
+                const AMF_RESULT avgRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_AVERAGE_QP, &avgQp);
+                const AMF_RESULT minRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_MIN_QP, &minQp);
+                const AMF_RESULT maxRes = pBuffer->GetProperty(AMF_VIDEO_ENCODER_HEVC_STATISTIC_MAX_QP, &maxQp);
+                m_qpDiag.lastFrameQpResult = static_cast<int>(frameRes);
+                m_qpDiag.lastAvgQpResult = static_cast<int>(avgRes);
+                m_qpDiag.lastMinQpResult = static_cast<int>(minRes);
+                m_qpDiag.lastMaxQpResult = static_cast<int>(maxRes);
+                if (frameRes == AMF_OK) { m_qpDiag.frameQpSamples++; m_qpDiag.lastFrameQp = frameQp; }
+                if (minRes == AMF_OK) { m_qpDiag.minQpSamples++; m_qpDiag.lastMinQp = minQp; }
+                if (maxRes == AMF_OK) { m_qpDiag.maxQpSamples++; m_qpDiag.lastMaxQp = maxQp; }
+                if (avgRes == AMF_OK) {
+                    m_qpDiag.avgQpSamples++;
+                    m_qpDiag.lastAvgQp = avgQp;
+                    if (dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_IDR ||
+                        dataType == AMF_VIDEO_ENCODER_HEVC_OUTPUT_DATA_TYPE_I) {
+                        m_qpDiag.intraSamples++;
+                    } else {
+                        m_qpDiag.interSamples++;
+                    }
+                    // HEVC QP range is 0..51; anything else is not a valid sample.
+                    if (avgQp >= 0 && avgQp <= 51) {
+                        m_qpStats.supported = true;
+                        m_qpStats.samples++;
+                        m_qpStats.sum += static_cast<double>(avgQp);
+                        m_qpStats.lastQp = avgQp;
+                        if (m_qpStats.minQp < 0 || avgQp < m_qpStats.minQp) m_qpStats.minQp = avgQp;
+                        if (m_qpStats.maxQp < 0 || avgQp > m_qpStats.maxQp) m_qpStats.maxQp = avgQp;
+                    }
+                }
+                static const bool s_qpTrace = [] {
+                    const char* v = std::getenv("TELEM_AMD_QP_TRACE");
+                    return v && std::strcmp(v, "1") == 0;
+                }();
+                if (s_qpTrace && m_qpDiag.outputBuffers <= 120) {
+                    std::cout << "[AMF QP TRACE] out=" << m_qpDiag.outputBuffers << " pts=" << outPts
+                              << " type=" << dataType
+                              << " frameQP=" << frameQp << "(r" << frameRes << ")"
+                              << " avgQP=" << avgQp << "(r" << avgRes << ")"
+                              << " minQP=" << minQp << "(r" << minRes << ")"
+                              << " maxQP=" << maxQp << "(r" << maxRes << ")"
+                              << " bytes=" << size << std::endl;
+                }
+            }
 
             return true;
         }

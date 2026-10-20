@@ -223,7 +223,7 @@ def test_qp_formatting_constant_vs_dynamic():
         is_cqp=True,
     )
     status_cqp = format_render_progress_status(snap_cqp)
-    assert "QP" not in status_cqp
+    assert "QP avg: 28.0" in status_cqp
     assert "QP: 28.0" not in status_cqp, "Constant QP must clearly indicate avg, not frozen instantaneous"
 
     # Case B: Dynamic QP with instantaneous and average
@@ -239,7 +239,7 @@ def test_qp_formatting_constant_vs_dynamic():
         is_cqp=False,
     )
     status_dyn = format_render_progress_status(snap_dyn)
-    assert "QP" not in status_dyn
+    assert "QP: 24 (avg: 27.2)" in status_dyn
 
     # Case C: Only average QP available
     snap_avg_only = RenderProgressState(
@@ -254,7 +254,7 @@ def test_qp_formatting_constant_vs_dynamic():
         is_cqp=False,
     )
     status_avg = format_render_progress_status(snap_avg_only)
-    assert "QP" not in status_avg
+    assert "QP avg: 28.0" in status_avg
 
 
 def test_qp_per_frame_tracker_emits_current_and_avg():

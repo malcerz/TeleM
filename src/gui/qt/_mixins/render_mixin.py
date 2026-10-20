@@ -238,6 +238,8 @@ class RenderMixin:
                 int(getattr(self, "_render_generation_counter", 0)), generation_id
             )
             self._active_render_generation_id = generation_id
+            self._last_export_qp = None
+            self._last_export_qp_generation_id = generation_id
             self._render_session_start = time.monotonic()
             self._render_primary_error = ""
             self._render_cleanup_errors = []
@@ -385,8 +387,13 @@ class RenderMixin:
 
                     rate_control=str(hud_state.get("rate_control", getattr(latest, "rate_control", "")) or "") if isinstance(hud_state, dict) else getattr(latest, "rate_control", ""),
                     is_av1=bool(hud_state.get("is_av1", getattr(latest, "is_av1", False))) if isinstance(hud_state, dict) else getattr(latest, "is_av1", False),
-
+                    compression_text=str(hud_state.get("compression_text", getattr(latest, "compression_text", "")) or "") if isinstance(hud_state, dict) else getattr(latest, "compression_text", ""),
+                    avg_qp=float(hud_state.get("avg_qp")) if isinstance(hud_state, dict) and hud_state.get("avg_qp") is not None else getattr(latest, "avg_qp", None),
+                    qp=float(hud_state.get("current_qp")) if isinstance(hud_state, dict) and hud_state.get("current_qp") is not None else getattr(latest, "qp", None),
                 )
+                if isinstance(hud_state, dict) and hud_state.get("avg_qp") is not None:
+                    self._last_export_qp = float(hud_state["avg_qp"])
+                    self._last_export_qp_generation_id = generation_id
             elif phase == "finalize":
                 prev_global = float(getattr(latest, "global_percent", 0.0))
                 hud_global = hud_state.get("global_pct") if isinstance(hud_state, dict) else None
@@ -558,7 +565,7 @@ class RenderMixin:
                         output_path=output,
                         elapsed_s=elapsed,
                         average_fps=fps,
-
+                        average_qp=float(stats.get("avg_qp")) if stats and stats.get("avg_qp") is not None else None,
                         codec=codec,
 
                         frame_render_elapsed_s=frame_render_s,

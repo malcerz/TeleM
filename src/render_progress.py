@@ -178,9 +178,40 @@ def format_render_progress_status(snapshot: RenderProgressState) -> str:
         status = snapshot.finalization_stage or "Finalizacja..."
     else:
         status = "Renderowanie..."
+    cur_qp = getattr(snapshot, "qp", None)
+    avg_qp = getattr(snapshot, "avg_qp", None)
+    is_cqp = getattr(snapshot, "is_cqp", False)
+    comp_txt = getattr(snapshot, "compression_text", "") or ""
+
+    qp_str = ""
+    if comp_txt:
+        qp_str = comp_txt
+    elif is_cqp:
+        q_label = "Q" if (getattr(snapshot, "is_av1", False) or getattr(snapshot, "quant_metric", "") == "base_q_idx") else "QP"
+        if avg_qp is not None:
+            qp_str = f"{q_label} avg: {avg_qp:.1f}"
+        elif cur_qp is not None:
+            qp_str = f"{q_label} (target): {int(round(cur_qp))}"
+        else:
+            qp_str = f"{q_label} avg: N/A"
+    elif cur_qp is not None or avg_qp is not None:
+        q_label = "Q" if (getattr(snapshot, "is_av1", False) or getattr(snapshot, "quant_metric", "") == "base_q_idx") else "QP"
+        if cur_qp is not None:
+            if avg_qp is not None and abs(cur_qp - avg_qp) > 0.05:
+                qp_str = f"{q_label}: {cur_qp:.0f} (avg: {avg_qp:.1f})"
+            else:
+                qp_str = f"{q_label}: {cur_qp:.1f}"
+        elif avg_qp is not None:
+            qp_str = f"{q_label} avg: {avg_qp:.1f}"
+
+    qp_part = ""
+    if qp_str:
+        qp_field = qp_str if (qp_str.startswith(("QP", "Q ", "RC:"))) else f"QP: {qp_str}"
+        qp_part = f"   |   {qp_field}"
+
     item_label = "HUD" if snapshot.state == "preparing" else "Frame"
     return (
-        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}   |   Czas: {elapsed_txt} "
+        f"{item_label}: {frame}   |   {pct}   |   FPS: {fps}{qp_part}   |   Czas: {elapsed_txt} "
         f"  |   ETA: {eta_txt}   |   {status}"
     )
 

@@ -52,33 +52,36 @@ def _rendering_tab(queue=False):
     return tab
 
 
-# QP/quantizer diagnostics were removed from production (98848d7). Snapshots
-# may still carry legacy QP fields, but neither the status bar nor the render
-# tab may display them, for AMD (rate_control set) or other backends.
-def test_amd_vbr_status_never_shows_qp(qapp):
+# AMD AMF QP metrics restored for AMD only (commit d66bc7002c39b4f7b21e33a4c0cf8cdd38bc77ea).
+# Status bar and tab display real QP or N/A when rate_control is VBR (AMD).
+# Non-AMD backends (Intel/NVIDIA) never show QP.
+def test_amd_vbr_without_driver_qp_shows_na(qapp):
     text = "RC: VBR | QP avg: N/A"
     snap = RenderProgressState(generation_id=1, state="rendering", phase="render", frame=4450,
                                total_frames=70995, fps=36.3, elapsed_s=120.0,
                                compression_text=text, rate_control="VBR")
     status_bar = format_render_progress_status(snap)
     assert "Frame: 4450 / 70995" in status_bar
-    assert "QP" not in status_bar
+    assert "RC: VBR | QP avg: N/A" in status_bar
+    assert "QP: --" not in status_bar
 
     for queue in (False, True):
         tab = _rendering_tab(queue=queue)
         tab._on_render_state(snap)
-        assert "QP" not in tab.lbl_stats.text(), f"queue={queue}"
+        assert "RC: VBR | QP avg: N/A" in tab.lbl_stats.text(), f"queue={queue}"
 
 
-def test_amd_vbr_with_legacy_driver_qp_fields_not_displayed(qapp):
+def test_amd_vbr_with_driver_qp_displayed(qapp):
+    text = "RC: VBR | QP: 24 | QP avg: 27.3"
     snap = RenderProgressState(generation_id=1, state="rendering", phase="render", frame=10,
                                total_frames=100, fps=30.0, elapsed_s=1.0, qp=24.0, avg_qp=27.3,
-                               compression_text="RC: VBR | QP: 24 | QP avg: 27.3", rate_control="VBR")
-    assert "QP" not in format_render_progress_status(snap)
+                               compression_text=text, rate_control="VBR")
+    status_bar = format_render_progress_status(snap)
+    assert text in status_bar
     for queue in (False, True):
         tab = _rendering_tab(queue=queue)
         tab._on_render_state(snap)
-        assert "QP" not in tab.lbl_stats.text(), f"queue={queue}"
+        assert text in tab.lbl_stats.text(), f"queue={queue}"
 
 
 def test_non_amd_status_never_shows_qp(qapp):
@@ -108,8 +111,8 @@ def test_render_mixin_snapshot_carries_rate_control_direct_and_queue():
     assert "_queue_job_id" not in child_cond
 
 
-def test_amd_exporter_reports_rate_control_without_qp():
+def test_amd_exporter_reports_rate_control_with_real_qp():
     src = (Path(__file__).resolve().parents[1] / "src/ffmpeg/amd_native_exporter.py").read_text(encoding="utf-8")
     assert 'rate_control="VBR"' in src
-    assert "QP avg" not in src
-    assert "qp_samples_val" not in src
+    assert "telem_amd_get_encoder_qp_stats" in src
+    assert "qp_samples_val" in src

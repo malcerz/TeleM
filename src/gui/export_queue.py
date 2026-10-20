@@ -620,6 +620,8 @@ class ExportQueue:
             job.average_fps = average_fps
         if codec:
             job.codec = codec
+        if average_qp is not None:
+            job.average_qp = average_qp
         if frame_render_elapsed_s > 0:
             job.frame_render_elapsed_s = frame_render_elapsed_s
         if finalization_elapsed_s > 0:
@@ -629,7 +631,7 @@ class ExportQueue:
 
         if already_done:
             # Already finalized state machine, but persist updated stats if any
-            if elapsed_s > 0 or average_fps > 0:
+            if elapsed_s > 0 or average_fps > 0 or average_qp is not None:
                 self._persist()
                 self._notify_updated(job)
             return
@@ -669,7 +671,7 @@ class ExportQueue:
             job_id=job.job_id,
             output_path=job.output_path,
             input_videos=job.video_paths,
-            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} elapsed={job.render_elapsed_s:.1f}s",
+            extra=f"success={success} error={job.render_error} fps={job.average_fps:.1f} qp={job.average_qp} elapsed={job.render_elapsed_s:.1f}s",
         )
         self._persist()
         self._notify_updated(job)
