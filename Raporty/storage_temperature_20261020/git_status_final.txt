@@ -1,0 +1,21 @@
+ M Raporty/RAPORT_STORAGE_AND_TEMPERATURE_CORRECTNESS_20261020.md
+ M def_layout.json
+?? C
+?? RAPORT_INTEL_HEVC_SLICE_QP_20261017.md
+?? Raporty/RAPORT_INTEL_C_R3_HANG_AND_VIDEO_ONLY_1799_20261019.md
+?? Raporty/intel_qsv_pipeline_20261019/C_r31/
+?? Raporty/intel_qsv_pipeline_20261019/C_r32/
+?? Raporty/intel_qsv_pipeline_20261019/C_r33/
+?? Raporty/intel_qsv_pipeline_20261019/C_r34/
+?? Raporty/intel_qsv_pipeline_20261019/C_r35/
+?? Raporty/intel_qsv_pipeline_20261019/C_r36/
+?? Raporty/intel_qsv_pipeline_20261019/run_hang_repro.log
+?? Raporty/storage_temperature_20261020/
+?? runtime/amd/bin/telem_amd_native.dll.bak_18a0503f_20261020
+?? runtime/amd/bin/telem_amd_native.dll.bak_before_qp_removal_20261019
+?? runtime/intel/bin/telem_intel_native.dll.bak_before_flush_fix_20261019
+?? runtime/intel/bin/telem_intel_native.dll.bak_before_qp_removal_20261019
+?? runtime/intel/bin/telem_intel_native.dll.bak_before_qsv_perf_20261019
+?? runtime/intel/bin/telem_intel_native.dll.bak_pre_hevc_slice_qp
+?? runtime/intel/bin/telem_intel_native.dll.bak_slice_qp_v1
+?? "third_party/Digital-7 Mono PL.ttf"

@@ -1,0 +1,24 @@
+........................................................................ [ 28%]
+........................................................................ [ 56%]
+..................ssss.................................................. [ 84%]
+...................F..................F.                                 [100%]
+================================== FAILURES ===================================
+_________________ test_gauge_schema_exposes_only_used_fields __________________
+tests\test_gauge_rendering.py:139: in test_gauge_schema_exposes_only_used_fields
+    assert used in names
+E   AssertionError: assert 'thickness' in {'auto_scale', 'decimals', 'font', 'font_size', 'form', 'major_tick_length', ...}
+_______ test_render_tab_preview_target_size_uses_video_rect_for_native ________
+tests\test_preview_resize_and_geometry.py:157: in test_render_tab_preview_target_size_uses_video_rect_for_native
+    assert len(sizes_called) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+---------------------------- Captured stdout call -----------------------------
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 474, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 14240, "preview_generation_id": 0, "preview_stop_event": {"id": 1847656329968, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 563040256, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712768093904, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 204857344, "thread_count": 17}
+=========================== short test summary info ===========================
+FAILED tests/test_gauge_rendering.py::test_gauge_schema_exposes_only_used_fields
+FAILED tests/test_preview_resize_and_geometry.py::test_render_tab_preview_target_size_uses_video_rect_for_native
+2 failed, 250 passed, 4 skipped in 9.15s

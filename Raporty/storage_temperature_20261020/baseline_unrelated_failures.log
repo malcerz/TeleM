@@ -1,0 +1,36 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_________________ test_gauge_schema_exposes_only_used_fields __________________
+tests\test_gauge_rendering.py:139: in test_gauge_schema_exposes_only_used_fields
+    assert used in names
+E   AssertionError: assert 'thickness' in {'auto_scale', 'decimals', 'font', 'font_size', 'form', 'major_tick_length', ...}
+_______ test_render_tab_preview_target_size_uses_video_rect_for_native ________
+tests\test_preview_resize_and_geometry.py:157: in test_render_tab_preview_target_size_uses_video_rect_for_native
+    assert len(sizes_called) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+---------------------------- Captured stdout call -----------------------------
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=True detail=encoded=3
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[av1_qsv @ 000001833e794800] Current codec type is unsupported
+[av1_qsv @ 000001833e794800] Current profile is unsupported
+[av1_qsv @ 000001833e794800] some encoding parameters are not supported by the QSV runtime. Please double check the input parameters.
+[vost#0:0/av1_qsv @ 0000018341acb140] [enc:av1_qsv @ 00000183416b4d40] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001833e642c40] Error sending frames to consumers: Function not implemented
+[vf#0:0 @ 000001833e642c40] Task finished with error: Function not implemented
+[vf#0:0 @ 000001833e642c40] Terminating thread with error: Function not implemented
+[vost#0:0/av1_qsv @ 0000018341acb140] [enc:av1_qsv @ 00000183416b4d40] Could not open encoder before EOF
+[vost#0:0/av1_qsv @ 0000018341acb140] Task finished with error: Invalid argument
+[vost#0:0/av1_qsv @ 0000018341acb140] Terminating thread with error: Invalid argument
+[out#0/null @ 000001833e641940] Nothing was written into output file, because at least one of its streams received no packets.
+[AUTO ENCODER]
+available=['intel', 'cpu']
+selected=intel
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 475, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 18200, "preview_generation_id": 0, "preview_stop_event": {"id": 1517406231824, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 504573952, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140712748433104, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 144019456, "thread_count": 17}
+=========================== short test summary info ===========================
+FAILED tests/test_gauge_rendering.py::test_gauge_schema_exposes_only_used_fields
+FAILED tests/test_preview_resize_and_geometry.py::test_render_tab_preview_target_size_uses_video_rect_for_native
+2 failed in 3.87s

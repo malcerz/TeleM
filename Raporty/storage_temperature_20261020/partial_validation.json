@@ -1,0 +1,18 @@
+{
+  "valid_partial": true,
+  "duration_s": 2.002,
+  "sha256_preserved": "afb76aebf3541042e52ab20fbf6decf1d2cdabd7816a4ce31e59b5cf7c28f89e",
+  "invalid_partial_valid": false,
+  "invalid_probe": {
+    "error": "ffprobe_failed",
+    "stderr": "[mov,mp4,m4a,3gp,3g2,mj2 @ 000001bf7b5ec100] moov atom not found\nC:\\Users\\MalcerzSur\\AppData\\Local\\Temp\\tmpa82w713h\\invalid.mp4: Invalid data found when processing input\n"
+  },
+  "real_media_preflight": {
+    "duration_s": 146.61313333333334,
+    "required_bytes": 1972383789,
+    "finalization_reserve_bytes": 536870912,
+    "video_bitrate_bps": 40000000,
+    "budget_bitrate_bps": 60000000,
+    "audio_bitrate_bps": 253302
+  }
+}
