@@ -1,0 +1,319 @@
+tests/test_activity_range_cache.py	3 passed in 0.14s
+tests/test_activity_ux_timeline.py	1 failed, 25 passed in 1.08s
+tests/test_altitude_bar_rotation.py	6 passed in 0.46s
+tests/test_amd_above_dirty_mode_etap10q.py	12 passed in 0.93s
+tests/test_amd_above_exact_tight_bbox_etap10r.py	14 passed in 0.85s
+tests/test_amd_above_upload_buffer_etap10s.py	7 passed in 2.91s
+tests/test_amd_background_preview_audit.py	3 passed in 3.57s
+tests/test_amd_benchmark_governance.py	4 passed in 0.74s
+tests/test_amd_chart_map_split.py	3 passed in 1.02s
+tests/test_amd_child_process.py	12 passed in 6.72s
+tests/test_amd_child_spawn_real.py	2 skipped in 0.91s
+tests/test_amd_common_text_governance.py	4 passed in 0.58s
+tests/test_amd_decode_gui_switch.py	2 failed, 5 passed in 43.30s
+tests/test_amd_direct_mp4_mux.py	14 passed in 2.47s
+tests/test_amd_etap5k_batched_abi.py	1 passed, 2 skipped in 0.83s
+tests/test_amd_etap5m_chart_lifecycle.py	1 passed in 0.57s
+tests/test_amd_exact_frame_count.py	42 passed in 0.13s
+tests/test_amd_final_temperature_parity.py	6 failed, 5 passed in 0.67s
+tests/test_amd_gpu_frame_tap_preview.py	1 passed in 0.61s
+tests/test_amd_gui_range_contract.py	6 passed in 0.57s
+tests/test_amd_live_mux_audio_finalization.py	15 passed in 2.86s
+tests/test_amd_map_pillow_pointer.py	2 passed in 0.82s
+tests/test_amd_native_above_dirty_bbox.py	6 passed in 0.90s
+tests/test_amd_native_etap1.py	4 passed in 0.82s
+tests/test_amd_native_etap2.py	1 failed, 3 passed in 0.89s
+tests/test_amd_native_etap3.py	5 passed in 0.83s
+tests/test_amd_native_etap4.py	2 failed, 4 passed in 0.91s
+tests/test_amd_native_etap5b.py	4 failed in 0.50s
+tests/test_amd_native_ordered_map.py	4 passed in 0.87s
+tests/test_amd_native_ordered_map_clear.py	8 passed in 0.86s
+tests/test_amd_native_overlay_handoff.py	2 passed in 0.89s
+tests/test_amd_pipeline_watchdog.py	2 failed, 3 passed in 1.21s
+tests/test_amd_qp_governance.py	10 passed in 0.86s
+tests/test_amd_queue_parity_and_performance.py	4 passed in 0.55s
+tests/test_amd_queue_trim_snapshot.py	5 passed in 0.92s
+tests/test_amd_vbr_governance.py	6 passed in 0.87s
+tests/test_amd_vbr_qp_status.py	6 passed in 2.40s
+tests/test_app_bootstrap_contract.py	3 passed in 1.10s
+tests/test_auto_telemetry_preflight_suite.py	15 passed in 6.25s
+tests/test_auto_telemetry_source_order.py	1 error in 0.47s
+tests/test_autofit_no_gps_recovery.py	2 failed, 7 passed in 0.47s
+tests/test_autofit_pre_load.py	5 passed in 4.81s
+tests/test_bar_cache_ownership.py	1 failed, 2 passed in 1.02s
+tests/test_bar_integration.py	12 passed in 0.80s
+tests/test_bar_orientation_contract.py	27 passed in 0.52s
+tests/test_bar_ruler_opt_parity_etap3b.py	3 passed in 0.49s
+tests/test_bar_ruler_size_thickness_etap3.py	5 passed in 0.49s
+tests/test_bar_ruler_tick_contract.py	12 passed in 1.20s
+tests/test_battery_solar_optimization.py	6 passed in 0.75s
+tests/test_cache_and_parity_validation.py	7 passed in 0.61s
+tests/test_central_telemetry_cache.py	13 passed in 1.25s
+tests/test_chart_axis_cache.py	2 passed in 0.51s
+tests/test_chart_decimals_preview_dim.py	9 passed in 0.50s
+tests/test_chart_fixed_timeline_reveal.py	3 passed in 0.61s
+tests/test_chart_label_clipping_bounds.py	40 passed in 0.99s
+tests/test_chart_rendering.py	1 failed, 7 passed in 0.58s
+tests/test_chart_seek_history.py	3 failed in 0.51s
+tests/test_chart_static_assembly_etap5d.py	3 passed in 0.54s
+tests/test_chart_transparency_axes_autoscale.py	3 passed in 0.44s
+tests/test_common_render_preparation.py	3 passed in 0.48s
+tests/test_compass_and_shadow_outline.py	11 passed in 1.08s
+tests/test_compass_migration_policy.py	6 passed in 0.45s
+tests/test_compass_rendering.py	9 passed in 0.78s
+tests/test_compass_source_parity_hotfix.py	1 failed, 6 passed in 2.10s
+tests/test_compositing_etap5e.py	11 passed in 2.26s
+tests/test_config_cache_only.py	3 passed in 1.02s
+tests/test_controller_properties.py	5 passed in 0.58s
+tests/test_cut_feature.py	13 passed in 0.68s
+tests/test_data_stream_bar_map_tile.py	1 passed in 0.65s
+tests/test_decimal_precision_5x.py	19 passed in 0.48s
+tests/test_default_export_dir_settings.py	13 passed in 3.07s
+tests/test_directional_map_marker.py	2 passed in 0.46s
+tests/test_display_precision_interpolation.py	9 passed in 0.71s
+tests/test_distance_bar_scale_contract.py	22 passed in 0.63s
+tests/test_distance_optimization.py	6 passed in 0.56s
+tests/test_dji_action2_capability_probe.py	4 passed in 0.29s
+tests/test_dji_action2_none_fix.py	7 failed, 2 passed in 2.07s
+tests/test_dji_gui_worker.py	5 passed in 1.74s
+tests/test_dji_telemetry.py	6 passed, 1 skipped in 0.63s
+tests/test_dynamic_export_backends.py	17 passed, 2 skipped in 3.08s
+tests/test_effects_percent_amd_parity.py	7 passed in 0.52s
+tests/test_encoder_profiles_intel.py	7 passed in 1.90s
+tests/test_etap10k2_acceptance.py	2 failed, 6 passed in 1.12s
+tests/test_etap10k3_fit_speed.py	1 failed, 5 errors in 1.04s
+tests/test_etap10k_fit_gui.py	4 failed, 3 passed in 1.43s
+tests/test_etap10m2_chart_time_axis.py	4 passed in 0.52s
+tests/test_etap10m_chart_dynamic.py	3 passed in 0.72s
+tests/test_etap10n2_distance_marker.py	6 passed in 0.43s
+tests/test_etap10n3_distance_marker.py	6 passed in 0.46s
+tests/test_etap10n_slope_altitude.py	5 passed in 0.54s
+tests/test_etap10t2_segment_gui_hardening.py	8 failed, 25 passed in 2.73s
+tests/test_etap10t_segment_bar_map_visuals.py	2 failed, 25 passed in 4.17s
+tests/test_etap1_source_resolver.py	6 passed in 0.65s
+tests/test_etap4d_imu.py	2 passed in 0.49s
+tests/test_etap5b2_chart_precompute_regression.py	1 skipped in 0.63s
+tests/test_etap5d_real_gui_regressions.py	7 passed in 0.61s
+tests/test_etap5e1_chart_prefix.py	2 failed, 2 passed in 0.52s
+tests/test_etap5e3_dynamic_prefix.py	1 failed, 1 passed in 0.50s
+tests/test_etap5e5_transparent_roi.py	5 passed in 0.40s
+tests/test_etap5e6_dynamic_layers.py	1 passed in 0.47s
+tests/test_etap5e_preview_export_parity.py	4 passed in 0.76s
+tests/test_etap5f_bar_cache_and_immutability.py	9 passed in 0.58s
+tests/test_etap5f_pipeline_audit.py	2 passed in 0.65s
+tests/test_etap5g_zero_copy_shm.py	3 passed in 0.59s
+tests/test_etap5h_writer_queue.py	2 passed in 0.58s
+tests/test_etap6_chart_window.py	7 passed in 0.52s
+tests/test_etap6b_contract.py	7 passed in 0.69s
+tests/test_etap6d_chart_history.py	3 passed in 0.62s
+tests/test_etap6e_step_lookup.py	1 failed, 2 passed in 0.19s
+tests/test_etap8e_full_activity_charts.py	4 passed in 0.60s
+tests/test_etap8k_fused_production.py	3 passed in 0.10s
+tests/test_etap8m3_runtime_layout_and_parity.py	3 passed in 1.25s
+tests/test_etap8m4_chart_time_scope.py	10 passed in 0.50s
+tests/test_etap8m5_gauge_parity.py	1 failed, 10 passed in 0.69s
+tests/test_etap8m6_chart_labels.py	10 passed in 0.50s
+tests/test_etap8m7_chart_frame_clipping.py	1 failed, 9 passed in 0.83s
+tests/test_etap8m_resolution_and_map.py	6 passed in 0.93s
+tests/test_etap8n_multi_region_above.py	11 passed in 0.84s
+tests/test_etap8o_precomputed_telemetry.py	10 passed in 0.74s
+tests/test_etap8p_b_fast_builder.py	1 failed, 11 passed in 0.71s
+tests/test_etap8q_dirty_text_cache.py	1 failed, 12 passed in 0.61s
+tests/test_etap8s_flush_batching.py	1 failed, 5 passed in 0.61s
+tests/test_etap8t_b_async_pipeline.py	12 passed in 1.17s
+tests/test_etap8u_b_exact_map.py	2 passed, 8 skipped in 0.46s
+tests/test_etap8u_c_universal_map.py	5 passed, 2 skipped in 0.46s
+tests/test_etap_5sa_verification.py	4 passed in 0.62s
+tests/test_export_finalization_lifecycle.py	8 passed in 0.64s
+tests/test_export_gpmf_and_qp_summary.py	6 failed, 15 passed in 2.25s
+tests/test_export_lifecycle_p1_fixes.py	TIMEOUT_OR_EMPTY
+tests/test_export_orientation.py	8 passed in 0.71s
+tests/test_export_preview_video_restore.py	8 passed in 2.15s
+tests/test_export_queue_basic.py	1 failed, 23 passed in 1.04s
+tests/test_export_queue_lifecycle.py	9 passed in 3.05s
+tests/test_fast_telemetry_materialization.py	7 passed in 0.54s
+tests/test_finalization_tracker.py	6 passed in 2.09s
+tests/test_fit_available_fields_catalog.py	2 passed in 0.13s
+tests/test_fit_curvpower_and_developer_fields.py	3 passed, 1 skipped in 0.48s
+tests/test_fit_device_status.py	5 passed, 1 skipped in 0.64s
+tests/test_fit_gpx_file_validation.py	17 passed in 0.96s
+tests/test_fit_merged_distance_preview_parity.py	5 passed in 0.98s
+tests/test_fit_registration.py	1 error in 0.66s
+tests/test_font_fallback_5x.py	27 passed in 0.55s
+tests/test_font_persistence_v2.py	1 failed, 5 passed in 1.07s
+tests/test_font_selection.py	9 passed in 0.56s
+tests/test_fps_arithmetic.py	1 passed in 0.09s
+tests/test_gauge_needle_width_parity.py	10 passed in 0.96s
+tests/test_gauge_rendering.py	1 failed, 11 passed in 0.81s
+tests/test_generic_widget_cache.py	4 passed in 0.42s
+tests/test_golden_parity_etap4.py	3 failed, 1 passed in 0.67s
+tests/test_gopro_battery_iso_decimal_ui.py	10 passed in 0.54s
+tests/test_gopro_battery_startup.py	1 failed, 1 passed in 0.64s
+tests/test_gpmf_cache.py	3 failed in 1.13s
+tests/test_gpmf_native_perf_and_cache_clear.py	9 passed in 1.18s
+tests/test_gpmf_stream_first_sample_availability.py	4 passed in 0.65s
+tests/test_gpmf_temp_and_battery_timing.py	1 passed, 1 skipped in 0.53s
+tests/test_gpmf_timing.py	1 failed, 4 passed, 1 skipped in 0.19s
+tests/test_gpu_compositor.py	5 passed in 0.81s
+tests/test_gpu_runtime_capabilities.py	9 passed in 0.61s
+tests/test_graphic_degree_unit.py	10 passed in 0.50s
+tests/test_gui_bar_drag_hotfix.py	3 passed in 0.72s
+tests/test_gui_etap4a1_indicator_interaction.py	8 failed, 5 passed in 1.16s
+tests/test_gui_freeze_dummy_cache_safety.py	10 passed in 1.34s
+tests/test_gui_logic_degree_export_settings_cleanup.py	3 failed, 3 passed in 3.25s
+tests/test_gui_recovery_states.py	36 passed in 5.50s
+tests/test_gui_v3_runtime_acceptance.py	6 passed in 3.35s
+tests/test_gui_v4_fullscreen_and_next_frame.py	7 passed in 4.58s
+tests/test_gui_v5_autosave_preview_and_aa.py	6 passed in 3.80s
+tests/test_hdr_export_mode.py	32 passed, 1 skipped in 1.22s
+tests/test_hud_compute_gpu_parity.py	5 skipped in 0.98s
+tests/test_hud_prep_progress.py	2 passed in 0.11s
+tests/test_hud_resolution_scale.py	2 passed in 0.60s
+tests/test_hybrid_render_contract.py	10 passed in 0.62s
+tests/test_icon_font_gauge_fixes.py	2 failed, 7 passed in 1.19s
+tests/test_icon_library_expanded.py	6 passed in 1.06s
+tests/test_icon_picker_widget.py	3 passed in 0.88s
+tests/test_indicator_auto_scale.py	10 passed in 0.63s
+tests/test_indicator_availability.py	1 failed, 8 passed in 1.30s
+tests/test_indicator_config_parity.py	6 failed, 46 passed in 2.20s
+tests/test_indicator_control_surface_ab.py	1 error in 0.40s
+tests/test_indicator_drag.py	5 failed, 2 passed in 1.11s
+tests/test_indicator_effects_hotfix.py	5 passed in 2.51s
+tests/test_indicator_exhaustive_proof.py	no tests ran in 0.58s
+tests/test_indicator_icons.py	2 passed in 0.88s
+tests/test_inline_gpmf_amd_real.py	1 skipped in 0.62s
+tests/test_inline_gpmf_export.py	5 passed, 2 skipped in 0.64s
+tests/test_integer_fields_presentation.py	33 passed in 0.49s
+tests/test_integration_real_data.py	17 skipped in 0.11s
+tests/test_intel_3g9_lazy_payload.py	3 passed, 3 warnings in 0.97s
+tests/test_intel_auto_hud_policy.py	8 passed in 0.58s
+tests/test_intel_av1_quantizer.py	2 failed, 4 passed in 1.10s
+tests/test_intel_backend.py	13 passed in 0.65s
+tests/test_intel_chart_fastpath_policy.py	22 passed in 0.41s
+tests/test_intel_codec_capability_filter.py	8 passed, 1 skipped in 2.25s
+tests/test_intel_direct_shm_default.py	17 passed in 0.57s
+tests/test_intel_encoder_flush_contract.py	6 passed in 0.17s
+tests/test_intel_finalization.py	10 passed in 0.77s
+tests/test_intel_gui_production_defaults.py	3 passed in 0.57s
+tests/test_intel_hevc_slice_qp_native.py	5 skipped in 2.77s
+tests/test_intel_hud_init_blob.py	3 passed in 0.63s
+tests/test_intel_hw_decode_zero_copy.py	4 passed in 0.63s
+tests/test_intel_live_mux.py	4 passed in 0.60s
+tests/test_intel_multirect_addressing.py	6 failed in 0.18s
+tests/test_intel_native_1a.py	3 passed in 0.60s
+tests/test_intel_native_7d.py	3 passed in 0.66s
+tests/test_intel_native_7e.py	3 passed in 0.64s
+tests/test_intel_native_7f.py	1 failed, 2 passed in 0.17s
+tests/test_intel_native_7g.py	2 failed, 3 passed, 1 skipped in 1.17s
+tests/test_intel_native_7h.py	6 passed in 0.77s
+tests/test_intel_native_7i.py	5 passed in 0.68s
+tests/test_intel_native_7j.py	3 passed in 0.68s
+tests/test_intel_native_7k.py	1 failed, 3 passed in 0.71s
+tests/test_intel_native_8a.py	5 passed in 1.14s
+tests/test_intel_native_8b.py	5 passed in 2.01s
+tests/test_intel_native_8c.py	4 passed in 1.96s
+tests/test_intel_pipeline_async.py	5 passed in 1.07s
+tests/test_intel_proof.py	15 passed in 0.73s
+tests/test_intel_queue_native_fallback_hwdownload.py	5 passed in 0.67s
+tests/test_intel_runtime_capabilities.py	10 passed, 1 skipped in 3.01s
+tests/test_intel_telemetry_freeze.py	4 failed, 2 passed in 0.59s
+tests/test_intel_vbr_control.py	1 failed, 10 passed in 0.46s
+tests/test_interpolation.py	1 failed, 12 passed in 0.16s
+tests/test_layout_manager.py	14 passed in 0.38s
+tests/test_layout_ownership_and_lean_calibration.py	[PROC] render thread exit
+tests/test_lean_gpu_bridge.py	3 passed in 0.36s
+tests/test_lean_imu_contract.py	1 failed, 18 passed in 0.41s
+tests/test_lean_indicator_contract.py	13 passed in 0.41s
+tests/test_lean_indicator_opt.py	5 passed in 0.32s
+tests/test_lean_parity_5xl.py	4 passed in 0.72s
+tests/test_lean_pivot_contract.py	9 passed in 0.40s
+tests/test_lean_preview_bar_label.py	5 passed in 0.36s
+tests/test_lean_tight_rotation.py	20 passed in 1.04s
+tests/test_live_av_mux.py	9 passed, 1 skipped in 0.45s
+tests/test_load_progress.py	1 passed in 0.09s
+tests/test_load_tab_layout_action2.py	5 passed in 3.53s
+tests/test_map_cold_warm_preload.py	1 failed, 3 passed in 0.44s
+tests/test_map_deflayout_lifecycle.py	2 passed in 0.77s
+tests/test_map_first_render_parity.py	3 passed in 2.96s
+tests/test_map_overview_first.py	2 passed in 0.43s
+tests/test_map_perspective.py	11 passed in 0.34s
+tests/test_map_pitch_keeps_shape.py	14 passed in 0.44s
+tests/test_map_preload_etap1.py	14 passed in 4.22s
+tests/test_map_preload_etap1b_runtime.py	2 skipped in 0.75s
+tests/test_map_render_cache_coverage.py	1 failed, 3 passed in 0.51s
+tests/test_map_style_5w.py	15 passed in 0.38s
+tests/test_map_sync.py	38 passed in 1.20s
+tests/test_mp4_audio_feed.py	15 passed, 9 skipped in 2.02s
+tests/test_mp4_inspector.py	21 passed in 3.88s
+tests/test_mpv_hdr_preview_options.py	5 passed in 1.41s
+tests/test_mpv_hwdec.py	9 passed in 3.36s
+tests/test_multifile_avg_speed.py	2 passed, 1 skipped in 0.11s
+tests/test_multifile_etap3_clip_time.py	23 passed in 0.15s
+tests/test_multifile_etap4a_preview.py	15 passed in 0.70s
+tests/test_multifile_etap4b_render.py	13 passed in 0.33s
+tests/test_multifile_hud_lifecycle.py	3 passed in 0.64s
+tests/test_multifile_preview_runtime_state.py	24 passed in 0.68s
+tests/test_multifile_timeline.py	31 passed in 0.15s
+tests/test_nvidia_etap5b4_precise_text_bbox.py	4 passed in 0.35s
+tests/test_nvidia_map_region_bounds.py	1 passed in 0.38s
+tests/test_nvidia_regression_chart_preview.py	3 passed in 0.38s
+tests/test_output_write_error.py	10 passed in 0.34s
+tests/test_overlay_profiling_etap5a.py	2 passed in 0.28s
+tests/test_pixel_indicator_style.py	4 passed in 0.40s
+tests/test_presentation_architecture.py	34 passed in 0.48s
+tests/test_preview_map_cache_miss.py	11 passed, 3 skipped in 5.14s
+tests/test_preview_map_panel_parity.py	7 passed in 1.86s
+tests/test_preview_range_markers_removal.py	1 failed, 4 passed in 1.66s
+tests/test_preview_resize_and_geometry.py	1 failed, 4 passed in 3.79s
+tests/test_preview_transform.py	8 passed in 0.32s
+tests/test_process_lifecycle.py	3 passed in 0.15s
+tests/test_property_editor_scroll.py	4 passed in 1.08s
+tests/test_qp_analyzer.py	15 passed in 4.47s
+tests/test_real_12fit_distance.py	5 skipped in 0.74s
+tests/test_real_gui_startup_and_child_hash.py	5 passed in 1.15s
+tests/test_registry_alias_5x.py	1 failed, 23 passed in 0.39s
+tests/test_remote_telemetry_integrations.py	11 passed, 2 skipped in 0.81s
+tests/test_render_cancel_process_lifecycle.py	3 passed in 10.95s
+tests/test_render_error_pipeline_etap3.py	4 passed in 0.34s
+tests/test_render_no_legacy_json.py	3 failed in 2.01s
+tests/test_render_progress_single_source.py	TIMEOUT_OR_EMPTY
+tests/test_render_progress_state_scope_hotfix.py	5 passed in 2.25s
+tests/test_render_tab.py	20 passed in 5.07s
+tests/test_render_tab_controls_cleanup.py	9 passed in 1.94s
+tests/test_render_tab_hdr_info_label.py	7 passed in 1.71s
+tests/test_rt_quality_display.py	2 failed in 0.87s
+tests/test_segment_font_contract_5w.py	4 passed in 0.74s
+tests/test_settings_and_amd_export_logging.py	21 passed in 8.73s
+tests/test_settings_skip_pauses_persistence.py	11 passed in 2.77s
+tests/test_skip_pauses_parity.py	2 failed, 1 passed in 1.00s
+tests/test_slope_rendering.py	3 failed, 13 passed in 0.51s
+tests/test_solar_bar_title_clean.py	3 failed in 0.40s
+tests/test_solar_pct.py	5 failed, 1 passed in 0.41s
+tests/test_static_indicator_cache.py	1 failed, 5 passed in 0.49s
+tests/test_storage_export_correctness.py	17 passed in 0.67s
+tests/test_telemetry_heading.py	11 passed in 0.33s
+tests/test_telemetry_manager.py	28 passed, 1 skipped in 0.42s
+tests/test_telemetry_processed_cache.py	7 passed in 0.54s
+tests/test_telemetry_slope.py	6 passed in 0.32s
+tests/test_telemetry_source_rollback.py	4 passed in 0.34s
+tests/test_telemetry_states_rate_aware.py	2 failed in 0.81s
+tests/test_telemetry_status_transitions.py	1 failed, 2 passed in 0.39s
+tests/test_telemetry_sync_presets.py	3 passed in 1.59s
+tests/test_telemetry_sync_smartsync.py	22 passed in 2.23s
+tests/test_temperature_presentation_parity.py	38 passed in 0.50s
+tests/test_text_indicator_opt_etap3c.py	4 passed in 1.06s
+tests/test_text_size_compatibility.py	5 passed in 0.33s
+tests/test_text_unit_offsets.py	21 passed, 9 errors in 1.55s
+tests/test_time_display_icon_size.py	21 passed in 0.49s
+tests/test_time_display_optimization.py	5 passed in 0.58s
+tests/test_tmpc_native_and_cache.py	1 passed, 4 skipped in 0.68s
+tests/test_track_up_map.py	1 failed, 3 passed in 1.04s
+tests/test_track_up_viewport_parity.py	9 passed in 2.00s
+tests/test_v108_cache_timeline_integrity.py	1 skipped in 0.31s
+tests/test_v110_cache_key_fit_contract.py	2 passed in 0.33s
+tests/test_v114_load_performance.py	11 passed, 1 skipped in 3.94s
+tests/test_vendor_runtime_isolation.py	14 passed in 1.09s
+tests/test_video_helpers.py	1 failed, 30 passed in 1.09s
+tests/test_video_orientation_governance.py	4 failed, 6 passed in 0.70s
+tests/test_widgets.py	1 error in 0.45s
+tests/test_youtube_upload_ui_disabled.py	5 passed in 1.77s

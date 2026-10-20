@@ -1,0 +1,19 @@
+{
+ "frames": 46436,
+ "build_s": 2.23,
+ "compared": 401,
+ "max_abs_diff": 0.0,
+ "text_mismatch": 0,
+ "final_has_fraction": true,
+ "sample_final_text": [
+  "22.9",
+  "18.9",
+  "16.3",
+  "15.3",
+  "14.0",
+  "13.2",
+  "12.3",
+  "12.0",
+  "12.0"
+ ]
+}

@@ -1,0 +1,270 @@
+[GPU CAPABILITIES]
+Adapter: AMD Radeon (TM) Graphics
+Vendor: AMD
+DeviceId: 0x15e7
+Driver: 31.0.21925.1001
+Encoder: AMF HEVC
+HEVC Main10: NO
+Max encode: 4096x4096
+Cache: HIT
+Probe: 52.55 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono PL' -> resolved='C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono PL' -> 'C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Akceleracja GPU aktywna: gfx90c
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=False detail=[D3D11VA @ 00000292f782f240] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=False detail=[D3D11VA @ 0000023b861cdac0] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=False detail=[D3D11VA @ 0000022871c2db40] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[D3D11VA @ 0000023dae01fa00] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 646, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 30208, "preview_generation_id": 0, "preview_stop_event": {"id": 2021272002800, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 746938368, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140731537500992, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 213852160, "thread_count": 26}
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[Controller] MPV zinicjalizowany pomyœlnie (GPU: AMD, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010368.MP4 (mode=direct)
+[GarminConnect] GARMIN_AUTH=CONNECTED
+[TELEMETRY CACHE] source=GX010368.MP4 key=GX010368_cb47df8dea33e5d1 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010368_cb47df8dea33e5d1\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-12 13:32:00.728717+00:00..2026-10-12 13:57:50.143250+00:00
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'F:/GoPro/2026-10-12/GX010368.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-13T08:20:00.000000Z
+    firmware        : H26.02.02.02.00
+  Duration: 00:25:49.55, start: 0.000000, bitrate: 238808 kb/s
+  Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 7680x4320 [SAR 1:1 DAR 16:9], 238381 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-13T08:20:00.000000Z
+        handler_name    : GoPro H.265
+        vendor_id       : [0][0][0][0]
+        encoder         : GoPro H.265 encoder
+        timecode        : 15:31:03:25
+      Side data:
+        displaymatrix: rotation of -180.00 degrees
+  Stream #0:1[0x2](eng): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-13T08:20:00.000000Z
+        handler_name    : GoPro AAC
+        vendor_id       : [0][0][0][0]
+  Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74)
+      Metadata:
+        creation_time   : 2026-10-13T08:20:00.000000Z
+        timecode        : 15:31:03:25
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-13T08:20:00.000000Z
+        handler_name    : GoPro MET
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=53.7ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010368.MP4
+[TMPC Cache] read_count=1548
+[TELEMETRY CACHE] source=GX010368.MP4 key=GX010368_cb47df8dea33e5d1 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010368_cb47df8dea33e5d1\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[GPMF LOAD]
+SOURCE=F:\GoPro\2026-10-12\GX010368.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=True
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=15492
+ACC_SAMPLES=307822
+GYRO_SAMPLES=307823
+ISO_SAMPLES=46436
+TEMP_SAMPLES=1548
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=285.06
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=285.21 thread=Thread-21 (bg_load)/31796 input_bytes=46255597772 records=0
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=285.28 thread=Thread-21 (bg_load)/31796 input_bytes=46255597772 records=0
+[TMPC Telemetry] temperature_samples=1548
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[8213.30]
+normalized_final=8213.30
+session_total=8213.30
+match=True
+[MultiFile] project_duration=1549.414533 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=1549.4s
+[MultiFile] Clip 1/1
+  path=GX010368.MP4
+  global=0.000-1549.415
+  absolute=2026-10-12T13:32:00.728-2026-10-12T13:57:50.143
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=resolved from native gpmf light metadata (2026-10-12 13:32:00.729)
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=False reason="field 'garmin_battery_voltage' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=False reason="field 'garmin_temperature' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=1677
+[BENCH] Loaded custom benchmark layout: def_layout.json
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=389264.858886s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=389264.876543s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-20 19:26:47.054 (1792517207.0547) thread=MainThread/11140 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_baseline.mp4 input_videos=[] encoder=amd render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=389264.923346s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=46.803ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=389264.923408s
+[AMD EXPORT LOG] enabled=True path=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_baseline.log
+[AMD RENDER MAP CONTRACT]
+REQUIRED_TILES=0
+CACHED_TILES=0
+MISSING_TILES=0
+BACKGROUND_PREFETCH_ACTIVE=False
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[MPV HW] Dekodowanie sprzêtowe aktywne: d3d11va
+          interop=d3d11va, vo=gpu-next, gpu_ctx=d3d11, fmt=d3d11
+[RENDER PREP] MISS key=78b24fe1ec50 frames=900. Building vectorized...
+[RENDER PREP] Vectorized build complete: frames=900 build_ms=387.15 mem_mib=0.36
+PARENT_CACHE_KEY=78b24fe1ec501ab196ac647379acbe411c6a3495b25eefaff165e09b07909ca5
+[FFMPEG START] ts=2026-10-20 19:26:53.409 (1792517213.4099) thread=TeleM-RenderWorker/34032 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_baseline.mp4 input_videos=['F:\\GoPro\\2026-10-12\\GX010368.MP4'] encoder=amd mode=child
+[STARTUP TIMELINE] event='snapshot end' t=389271.279601s
+[STARTUP TIMELINE] stage='snapshot' duration=6356.193ms notes=
+
+[AMD DIRECT JOB CONFIG]
+  encoder = amd
+  amd_codec = hevc
+  amd_decode_mode = gpu
+  amd_encoder_quality = FAST
+  amd_hdr_mode = preserve_hlg
+  bitrate = 40M
+  resolution = 4k
+  update_rate = Full
+  hud_resolution_scale = 1.0
+  rotation = auto
+  compression_analysis = False
+  preview_enabled = False
+  video_paths = ['F:\\GoPro\\2026-10-12\\GX010368.MP4']
+  fit_path = F:\GoPro\2026-10-12\Afternoon_Ride.fit
+  gpx_path = 
+  layout_sha256 = ada4253e008e2a893adc85569133aaf8e317f9532f39080e15cd25a3badf65c6
+DIRECT_CONFIG_SHA256=243349ae1e6d64dcb2c8eb5cb8ac594cc0d39f0e9efc0780fb449a6c72c01820
+DIRECT_LAYOUT_SHA=ada4253e008e2a893adc85569133aaf8e317f9532f39080e15cd25a3badf65c6
+DIRECT_CHILD_CONFIG_HASH=638132f45b0bc3c5f0a235942640e52a44fb9f8bdedf5652c958e602f7630353
+[PLAYER/PREVIEW STATE before spawn] mode=DIRECT
+  QMediaPlayer: PlaybackState.StoppedState
+  MPV: pause=True core_idle=True
+  Export Preview: export_preview_hevc=False
+  AMD Frame Tap: active=False
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_CHILD_SPAWN=NO
+[AMD CHILD JOB PICKLE] size_bytes=47086933 time_ms=759.826 parent_private_peak_delta_bytes=60858368 parent_private_retained_delta_bytes=2113536
+[AMD CHILD JOB TYPES] {'cache_key': 'builtins.str', 'fit_path': 'pathlib.WindowsPath', 'gpx_path': 'builtins.NoneType', 'sync_offset_s': 'builtins.float', 'ffmpeg_exe': 'builtins.str', 'input_files': 'builtins.list', 'output_file': 'pathlib.WindowsPath', 'duration_s': 'builtins.float', 'start_dt_utc': 'datetime.datetime', 'video_timeline': 'src.multifile.VideoTimeline', 'inline_gpmf_plan': 'builtins.NoneType', 'tz_offset_hours': 'builtins.int', 'speed_samples': 'builtins.list', 'track_samples': 'builtins.list', 'alt_samples': 'builtins.list', 'font_path': 'builtins.str', 'layout': 'builtins.dict', 'field_samples': 'builtins.dict', 'target_fps': 'builtins.float', 'update_rate_step': 'builtins.int', 'max_distance_m': 'numpy.float64', 'workers': 'builtins.NoneType', 'iso_samples': 'builtins.list', 'exposure_samples': 'builtins.list', 'temperature_samples': 'builtins.list', 'gpx_speed_samples': 'builtins.list', 'gpx_track_samples': 'builtins.list', 'gpx_alt_samples': 'builtins.list', 'gpx_power_samples': 'builtins.list', 'gpx_atemp_samples': 'builtins.list', 'gpx_hr_samples': 'builtins.list', 'gpx_cad_samples': 'builtins.list', 'fit_data': 'telemetry_fit.FitDataset', 'gps_track': 'builtins.list', 'encoder': 'builtins.str', 'gpu': 'builtins.int', 'resolution_name': 'builtins.str', 'video_bitrate': 'builtins.str', 'rotation_degrees': 'builtins.int', 'container_rotation': 'builtins.int', 'overlay_w': 'builtins.int', 'overlay_h': 'builtins.int', 'render_w': 'builtins.int', 'render_h': 'builtins.int', 'hud_resolution_scale': 'builtins.float', 'amd_decode_mode': 'builtins.str', 'amd_codec': 'builtins.str', 'amd_encoder_quality': 'builtins.str', 'amd_hdr_mode': 'builtins.str', 'generation_id': 'builtins.int', 'nvidia_backend': 'builtins.str', 'nvidia_codec': 'builtins.str', 'nvidia_quality': 'builtins.str', 'enable_compression_analysis': 'builtins.bool', 'codec': 'builtins.str', 'encoder_profile': 'builtins.str', 'max_frames': 'builtins.NoneType'}
+[AMD CHILD JOB LAZY] [{'path': 'render_job.field_samples.accel_x_samples', 'state': 'lazy', 'count': 307822, 'array_bytes': 4925152}, {'path': 'render_job.field_samples.accel_y_samples', 'state': 'lazy', 'count': 307822, 'array_bytes': 4925152}, {'path': 'render_job.field_samples.accel_z_samples', 'state': 'lazy', 'count': 307822, 'array_bytes': 4925152}, {'path': 'render_job.field_samples.accel_magnitude_samples', 'state': 'lazy', 'count': 307822, 'array_bytes': 4925152}, {'path': 'render_job.field_samples.gyro_x_samples', 'state': 'lazy', 'count': 307823, 'array_bytes': 4925168}, {'path': 'render_job.field_samples.gyro_y_samples', 'state': 'lazy', 'count': 307823, 'array_bytes': 4925168}, {'path': 'render_job.field_samples.gyro_z_samples', 'state': 'lazy', 'count': 307823, 'array_bytes': 4925168}, {'path': 'render_job.field_samples.gyro_magnitude_samples', 'state': 'lazy', 'count': 307823, 'array_bytes': 4925168}]
+[AMD CHILD SPAWN] parent_pid=30208 generation=1
+[PROC] job created handle=6468
+[PROC] assigned TeleM parent pid=30208 to job (in_prior_job=True)
+[PROC] assigned pid=9624
+[AMD CHILD JOB RESTORED] generation=1 child_pid=9624 startup_ms=1124.750
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[FIRST FRAME] ts=2026-10-20 19:26:55.801 (1792517215.8017) thread=TeleM-RenderWorker/34032 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_baseline.mp4 input_videos=['F:\\GoPro\\2026-10-12\\GX010368.MP4'] frame=1/8
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[DIRECT PROGRESS] frame=0/8 fps=0.0 elapsed=1.5s
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=1.7s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=46.4s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=47.9s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=48.0s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=48.2s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=48.2s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=48.2s
+[DIRECT PROGRESS] frame=900/900 fps=0.0 elapsed=46.8s
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+[AMD CHILD LIFECYCLE] event=terminal_received pid=9624 kind=complete
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+[AMD CHILD LIFECYCLE] event=ipc_eof pid=9624 error=EOFError: 
+[AMD CHILD LIFECYCLE] event=process_exit pid=9624 exitcode=0 terminal=complete
+[PROC] registry empty
+
+[AMD DIRECT STAGE TIMINGS]
+  producer_prepare    : avg=15.979 ms | median=14.691 ms
+  queue_wait          : avg= 0.000 ms | median= 0.000 ms
+  decode              : avg= 0.000 ms | median= 0.000 ms
+  VP_Blt              : avg= 0.000 ms | median= 0.000 ms
+  HUD_upload          : avg= 0.000 ms | median= 0.000 ms
+  GPU_copy            : avg= 0.000 ms | median= 0.000 ms
+  AMF_submit          : avg= 0.000 ms | median= 0.000 ms
+  AMF_query           : avg= 0.000 ms | median= 0.000 ms
+  frame_total         : avg= 0.000 ms | median= 0.000 ms
+DIRECT_NATIVE_FPS=19.25
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[PROC] render thread exit
+[BENCH LIFECYCLE] {"t": 57.693, "event": "render_finished", "path": "C:\\_DEV\\SportCamHUD\\Raporty\\amd_parity_intel_freeze_20261020\\amd_smoke\\day_baseline.mp4", "queue": [{"job_id": "5911db59", "status": "done", "hdr_mode": "preserve_hlg", "bitrate": "40M", "quality": "BALANCED", "error": ""}, {"job_id": "b046dfbe", "status": "done", "hdr_mode": "preserve_hlg", "bitrate": "60M", "quality": "QUALITY", "error": ""}, {"job_id": "86cf2791", "status": "done", "hdr_mode": "preserve_hlg", "bitrate": "60M", "quality": "QUALITY", "error": ""}, {"job_id": "14e240b4", "status": "done", "hdr_mode": "preserve_hlg", "bitrate": "60M", "quality": "QUALITY", "error": ""}, {"job_id": "b0580fe3", "status": "done", "hdr_mode": "preserve_hlg", "bitrate": "72M", "quality": "QUALITY", "error": ""}]}
+
+[BENCH RESULT] mode=direct success=True frames=900 elapsed=57.7s fps=15.6
+  JOB1_FPS=15.60 (native=19.245785837417355)
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0

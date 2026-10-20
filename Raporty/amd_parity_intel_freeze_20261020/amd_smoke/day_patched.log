@@ -1,0 +1,153 @@
+
+==============================================================================
+[AMD EXPORT LOG] session_start=2026-10-20 19:25:33 pid=33784 job_id=- generation=1 mode=DIRECT
+[AMD EXPORT LOG] output=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4
+[AMD EXPORT LOG] log=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.log
+==============================================================================
+[AMD CHILD HANDLE] phase=entry pid=27956 stdout={'label': 'stdout', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 1, 'handle': {'fd': 1, 'fileno_valid': True, 'handle': 12, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}} stderr={'label': 'stderr', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 2, 'handle': {'fd': 2, 'fileno_valid': True, 'handle': 16, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}} fd1={'fd': 1, 'fileno_valid': True, 'handle': 12, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1} fd2={'fd': 2, 'fileno_valid': True, 'handle': 16, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}
+[AMD CHILD HANDLE] phase=after_redirect pid=27956 stdout={'label': 'stdout', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 5, 'handle': {'fd': 5, 'fileno_valid': True, 'handle': 16, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} stderr={'label': 'stderr', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 6, 'handle': {'fd': 6, 'fileno_valid': True, 'handle': 1192, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} fd1={'fd': 1, 'fileno_valid': True, 'handle': 1152, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1} fd2={'fd': 2, 'fileno_valid': True, 'handle': 12, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}
+[AMD CHILD START] child_pid=27956
+[AMD EXPORT LOG] child_pid=27956 log=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.log
+[AMD CHILD JOB RESTORED] generation=1 job_id= worker_pid=27956 parent_pid=33784
+[AMD CHILD CONFIG] inputs=None output=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4 encoder=amd profile=None
+CHILD_CACHE_KEY=2cdb02baaba99bc4694b0f2f1748f3795edc980e8e77d4422df60643eae7f36a
+[AMD CHILD RENDER START] generation=1
+[AMD RANGE PLAN] gui_cuts=2 source_clips=1 effective_segments=1 requested_frames=900 duration_s=30.030000
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.0
+[AMD EXPORT PROGRESS] frame=0/1 elapsed=0.0s fps=0.00
+RENDER PATH: mode=single exporter=amd_native_exporter decode=selected_native_mode video_frame_path=GPU hud=amd_native map=amd_native encode=AMF fallback_reason=none
+[AMD DECODE] requested=GPU effective=GPU source=GUI backend=D3D11VA
+  DECODE_MODE      = GPU (D3D11VA / VCN)
+[RUNTIME]
+backend=amd
+app_root=C:\_DEV\SportCamHUD
+vendor_runtime=C:\_DEV\SportCamHUD\runtime\amd\bin
+native_dll=C:\_DEV\SportCamHUD\runtime\amd\bin\telem_amd_native.dll
+sha256=bbca75fbd0dfc5d7cbb61922e92f8d5f049b4305dd18335315667e6e5e54ca5f
+[AMD HDR] source GX010368.MP4: hlg hevc/Main 10 yuv420p10le 10-bit bt2020/arib-std-b67/bt2020nc range=full 7680x4320@30000/1001 rot=180 reason=color_transfer=arib-std-b67 + BT.2020 + full
+[AMF] InitDX11 SUCCESS: Connected to SAME ID3D11Device.
+[AMF HDR] HEVC Main10 HLG: profile_set=0 bitdepth_set=0 primaries=BT2020 transfer=ARIB_STD_B67 matrix=BT2020NC range=FULL
+[AMF HDR] after Init: profile=2 color_bit_depth=10
+[AMF] HEVC Hardware Encoder initialized successfully (1280x720 preset=SPEED rc=VBR target=8000000 peak=12000000 raw_amf_preset=10).
+[AMF QP] statistics feedback: encoder SetProperty result=4 surface_flag=ON
+[AMF HDR PROBE] HEVC Main10 P010 encode SUPPORTED
+[AMD HDR] source_kind=hlg hdr_mode=preserve_hlg pipeline=HLG_PRESERVE source_range=FULL dll_color_features=0x3 main10_probe=True
+[AMD ENCODER] codec=HEVC quality=FAST component=AMFVideoEncoderHW_HEVC input_surface=P010 bit_depth=10 rc=VBR target_bitrate=40000000 peak_bitrate=60000000 live_mux=yes
+[AMD CHILD NATIVE INIT] telem_amd_create
+[AMD AAC PLAN] seg=1 src=GX010368.MP4 in=600.000000 video=[0.000000,30.030000) packets=28125+1408 first_src=600.000000 audio=[0.000000,30.037333) sync_ms=+0.000 end_residual_ms=+7.333
+[AMD SINGLE-PASS A/V MUX] audio=aac_pipe_copy segments=1 video_ts=setts
+[AMD DIRECT MUX] mode=single clips=1 video=pipe audio=aac_pipe_copy output=.part
+[AMD DIRECT MUX] topology=single_pass_av
+[AMD DIRECT MUX FFMPEG] pid=29292 command=C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe -y -f hevc -r 30000/1001 -bsf:v setts=ts=N*1001/30000/TB:duration=1001/30000/TB -thread_queue_size 512 -i - -thread_queue_size 512 -f aac -i \\.\pipe\telem_amf_audio_27956_b894094e.aac -map 0:v -map 1:a:0 -t 30.030000 -c copy -f mp4 C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4.part
+[AMD HDR] native pipeline applied=HLG_PRESERVE requested=HLG_PRESERVE
+[RENDER PREP] HIT (disk memmap) key=2cdb02baaba9 frames=900 load_ms=282.11
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[MEMORY FRAME 0 BEFORE VP BLT]
+  process_private_mb=3247.57
+  system_commit_mb=51451.27
+  GPU_dedicated_used_mb=1284.50
+  GPU_shared_used_mb=0.00
+  decode_surface_count=11
+  decode_surface_bytes_total=1094860800
+  postscale_surface_count=8
+  postscale_surface_bytes_total=99532800
+  encoder_surface_count=4
+  encoder_surface_bytes_total=49766400
+[AMD FIRST PACKET] frame=2 encoded_bytes=262144 pipe_write_ok=1 pump_read_bytes=262144 ffmpeg_stdin_bytes=262144 output_size=0
+[AMD EXPORT PROGRESS] frame=144/900 elapsed=8.8s fps=0.00
+[AMD EXPORT PROGRESS] frame=351/900 elapsed=19.1s fps=0.00
+[AMD EXPORT PROGRESS] frame=558/900 elapsed=29.4s fps=0.00
+[AMD EXPORT PROGRESS] frame=765/900 elapsed=39.8s fps=0.00
+[MAP CACHE AUDIT] PREFETCH required tiles = 49 | PREFETCH cached tiles = 49 | RENDER requested tiles = 123 | RENDER cache hits = 344 | RENDER cache misses = 0 | frames with miss = 0
+
+[FINALIZATION BEGIN]
+[AMD FINALIZATION DIAGNOSTICS: END OF FRAME LOOP] total_frames=900 decoded=900 vp=900 submitted=900 received_packets=898 pending_packets=2 queue_in_flight=2 max_in_flight=2
+[DRAIN BEGIN]
+[DRAIN END] elapsed_ms=108.30 ok=1
+[AMD ENCODER] Hardware QP stats: avg=27.0 min=14 max=31 samples=900
+[AMD ENCODER] QP feedback diag: encoder_set=4 surface_flag=1 surface_set=0 ok=900 fail=0 outputs=900 get_results(frame/avg/min/max)=0/0/0/0 samples(frame/avg/min/max)=900/900/900/900 intra=30 inter=870 last(frameQP/avgQP/minQP/maxQP)=27/27/27/27
+[ENCODER CLOSE BEGIN]
+[ENCODER CLOSE END] elapsed_ms=196.95
+[PUMP JOIN BEGIN]
+[PUMP JOIN END] elapsed_ms=0.01
+[AMD FINALIZATION DIAGNOSTICS: ENTRY TO ZAPIS MP4]
+  timestamp=1792517190.499081
+  total_frames=900
+  part_size_bytes=150968734 (143.98 MB)
+  pump_thread_alive=False
+  mux_process_alive=False
+  proc_mux_pid=29292
+  stdin_open=False
+  received_packets=900/900
+  drain_ms=108.30
+  encoder_close_ms=196.95
+  pump_join_ms=0.01
+  output_drive=C:
+  output_path=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4.part
+  ffmpeg_cmd=C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe -y -f hevc -r 30000/1001 -bsf:v setts=ts=N*1001/30000/TB:duration=1001/30000/TB -thread_queue_size 512 -i - -thread_queue_size 512 -f aac -i \\.\pipe\telem_amf_audio_27956_b894094e.aac -map 0:v -map 1:a:0 -t 30.030000 -c copy -f mp4 C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4.part
+[MUX WAIT BEGIN]
+[MUX WAIT END] elapsed_ms=1.10 rc=0
+[AMD AAC FEED] bytes=960630 completed=True error=None
+[AMD DIRECT MUX DIAGNOSTICS] ffmpeg_pid=29292 returncode=0 pump_exit_reason=pipe_closed_error_109 pipe_read_bytes=149990469 ffmpeg_stdin_bytes=149990469 chunks=1842
+[AMD DIRECT MUX STDERR] ffmpeg version 2026-08-17-git-426841da9d-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 16.1.0 (Rev2, Built by MSYS2 project)
+configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+libavutil      61.  5.100 / 61.  5.100
+libavcodec     63.  8.101 / 63.  8.101
+libavformat    63.  6.100 / 63.  6.100
+libavdevice    63.  2.100 / 63.  2.100
+libavfilter    12.  3.101 / 12.  3.101
+libswscale     10.  2.100 / 10.  2.100
+libswresample   7.  2.100 /  7.  2.100
+[in#0/hevc @ 000001ba53f4bac0] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, hevc, from 'fd:':
+Duration: N/A, bitrate: N/A
+Stream #0:0: Video: hevc (Main 10), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 29.97 fps, 29.97 tbr, 1200k tbn
+Input #1, aac, from '\\.\pipe\telem_amf_audio_27956_b894094e.aac':
+Duration: N/A, bitrate: 255 kb/s
+Stream #1:0: Audio: aac (LC), 48000 Hz, stereo, fltp, 255 kb/s
+Stream mapping:
+Stream #0:0 -> #0:0 (copy)
+Stream #1:0 -> #0:1 (copy)
+Output #0, mp4, to 'C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4.part':
+Metadata:
+encoder         : Lavf63.6.100
+Stream #0:0: Video: hevc (Main 10) (hev1 / 0x31766568), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 29.97 fps, 29.97 tbr, 30k tbn
+Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 255 kb/s
+[in#1/aac @ 000001ba55eb0240] Error during demuxing: Invalid argument
+[out#0/mp4 @ 000001ba53f41200] video:146475KiB audio:938KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.011683%
+[FFPROBE BEGIN]
+[FFPROBE END] elapsed_ms=44.38
+[OS.REPLACE BEGIN]
+[OS.REPLACE END] elapsed_ms=0.66
+[FINALIZATION END]
+[AMD FINALIZATION SUMMARY TIMINGS] drain_ms=108.30 encoder_close_ms=196.95 pump_join_ms=0.01 mux_wait_ms=1.10 ffprobe_ms=44.38 replace_ms=0.66 final_size_mb=143.98 MB (150968734 bytes)
+=== RENDER COMPLETE ===
+Frames: 900
+HUD prepare: 1.542 s
+Video encode: 45.785 s
+Finalize: 0.002 s
+Total: 48.137 s
+Render FPS: 19.657
+Effective FPS: 18.697
+[AMD CHILD COMPLETE] status=complete child_pid=27956
+[AMD CHILD HANDLE] phase=before_restore pid=27956 stdout={'label': 'stdout', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 5, 'handle': {'fd': 5, 'fileno_valid': True, 'handle': 16, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} stderr={'label': 'stderr', 'type': '_io.TextIOWrapper', 'usable': True, 'fileno': 6, 'handle': {'fd': 6, 'fileno_valid': True, 'handle': 1192, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 0}} fd1={'fd': 1, 'fileno_valid': True, 'handle': 1152, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1} fd2={'fd': 2, 'fileno_valid': True, 'handle': 12, 'get_file_type': 1, 'handle_valid': True, 'handle_flags': 1}
+[AMD EXPORT LOG] session_end=2026-10-20 19:26:31 pid=33784 status=completed
+[AMD EXPORT LOG] detail=output=C:\_DEV\SportCamHUD\Raporty\amd_parity_intel_freeze_20261020\amd_smoke\day_patched.mp4

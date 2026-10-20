@@ -1,0 +1,193 @@
+[GPU CAPABILITIES]
+Adapter: AMD Radeon (TM) Graphics
+Vendor: AMD
+DeviceId: 0x15e7
+Driver: 31.0.21925.1001
+Encoder: AMF HEVC
+HEVC Main10: NO
+Max encode: 4096x4096
+Cache: HIT
+Probe: 44.59 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono PL' -> resolved='C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono PL' -> 'C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf'
+[Controller] Akceleracja GPU aktywna: gfx90c
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=False detail=[D3D11VA @ 000001b00077ef00] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=False detail=[D3D11VA @ 000002afa604e480] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=False detail=[D3D11VA @ 0000024af0d5f100] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[D3D11VA @ 0000013602880900] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 646, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 2668, "preview_generation_id": 0, "preview_stop_event": {"id": 1915359338880, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 746274816, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140731537500992, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 213676032, "thread_count": 26}
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[Controller] MPV zinicjalizowany pomyœlnie (GPU: AMD, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010380.MP4 (mode=direct)
+[GarminConnect] GARMIN_AUTH=CONNECTED
+[TELEMETRY CACHE] source=GX010380.MP4 key=GX010380_1e98c7de7f22101c status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010380_1e98c7de7f22101c\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-16 04:22:16.182130+00:00..2026-10-16 04:58:01.258397+00:00
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'F:/GoPro/2026-10-16/GX010380.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-16T06:36:22.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:35:45.14, start: 0.000000, bitrate: 45835 kb/s
+  Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 45390 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-16T06:36:22.000000Z
+        handler_name    : GoPro H.265
+        vendor_id       : [0][0][0][0]
+        encoder         : GoPro H.265 encoder
+        timecode        : 06:21:53:02
+      Side data:
+        displaymatrix: rotation of -180.00 degrees
+  Stream #0:1[0x2](eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T06:36:22.000000Z
+        handler_name    : GoPro AAC
+        vendor_id       : [0][0][0][0]
+  Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74)
+      Metadata:
+        creation_time   : 2026-10-16T06:36:22.000000Z
+        timecode        : 06:21:53:02
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T06:36:22.000000Z
+        handler_name    : GoPro MET
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=56.9ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010380.MP4
+[TMPC Cache] read_count=2143
+[TELEMETRY CACHE] source=GX010380.MP4 key=GX010380_1e98c7de7f22101c status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010380_1e98c7de7f22101c\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[GPMF LOAD]
+SOURCE=F:\GoPro\2026-10-16\GX010380.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=True
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=21142
+ACC_SAMPLES=426311
+GYRO_SAMPLES=426311
+ISO_SAMPLES=64288
+TEMP_SAMPLES=2143
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=412.68
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=412.80 thread=Thread-21 (bg_load)/23252 input_bytes=12290531812 records=0
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=412.87 thread=Thread-21 (bg_load)/23252 input_bytes=12290531812 records=0
+[TMPC Telemetry] temperature_samples=2143
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[12162.27]
+normalized_final=12162.27
+session_total=12162.27
+match=True
+[MultiFile] project_duration=2145.076267 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=2145.1s
+[MultiFile] Clip 1/1
+  path=GX010380.MP4
+  global=0.000-2145.076
+  absolute=2026-10-16T04:22:16.182-2026-10-16T04:58:01.258
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=resolved from valid processed telemetry cache (.telemetry.npz)
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=gpmf"
+[MAP GPS SOURCE]
+requested=auto
+selected=fit
+points=2128
+[BENCH] Loaded custom benchmark layout: def_layout.json
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+Traceback (most recent call last):
+  File "C:\_DEV\SportCamHUD\src\gui\qt\application.py", line 932, in _poll_ready_bench
+    _trigger_test_export()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\_DEV\SportCamHUD\src\gui\qt\application.py", line 873, in _trigger_test_export
+    rt.chk_compression_analysis.setChecked(False)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RenderTab' object has no attribute 'chk_compression_analysis'
+[MPV HW] Dekodowanie sprzêtowe aktywne: d3d11va
+          interop=d3d11va, vo=gpu-next, gpu_ctx=d3d11, fmt=d3d11
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\Digital-7 Mono PL.ttf
+renderer=_render_gauge_indicator

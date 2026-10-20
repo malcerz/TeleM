@@ -1,0 +1,78 @@
+{
+ "scene": "night",
+ "hud_free_fraction": 0.7175308641975309,
+ "renderings": {
+  "mpv_src": {
+   "label": "Preview: libmpv + SportCamHUD options, SOURCE MP4",
+   "mean_luma_8bit_hudfree": 93.98,
+   "p10_p50_p90": [
+    30.5,
+    74.4,
+    180.2
+   ],
+   "vs_preview_source_MAE": 0.0,
+   "vs_preview_source_max_diff": 0.0,
+   "vs_preview_source_diff_pixels_gt2": 0
+  },
+  "mpv_fin": {
+   "label": "Preview options (libmpv) applied to FINAL MP4",
+   "mean_luma_8bit_hudfree": 94.03,
+   "p10_p50_p90": [
+    30.7,
+    74.5,
+    180.0
+   ],
+   "vs_preview_source_MAE": 1.552,
+   "vs_preview_source_max_diff": 200.7,
+   "vs_preview_source_diff_pixels_gt2": 1395489
+  },
+  "plA": {
+   "label": "libplacebo bt.2390, no peak detect (= preview settings), FINAL",
+   "mean_luma_8bit_hudfree": 99.51,
+   "p10_p50_p90": [
+    38.4,
+    83.5,
+    177.2
+   ],
+   "vs_preview_source_MAE": 7.769,
+   "vs_preview_source_max_diff": 188.8,
+   "vs_preview_source_diff_pixels_gt2": 5647879
+  },
+  "plB": {
+   "label": "libplacebo defaults (= stock mpv/libplacebo player), FINAL",
+   "mean_luma_8bit_hudfree": 82.2,
+   "p10_p50_p90": [
+    30.9,
+    69.3,
+    144.9
+   ],
+   "vs_preview_source_MAE": 12.036,
+   "vs_preview_source_max_diff": 191.1,
+   "vs_preview_source_diff_pixels_gt2": 4355255
+  },
+  "plC": {
+   "label": "FINAL misread as LIMITED range, then preview tonemap",
+   "mean_luma_8bit_hudfree": 94.93,
+   "p10_p50_p90": [
+    24.9,
+    76.3,
+    186.5
+   ],
+   "vs_preview_source_MAE": 6.258,
+   "vs_preview_source_max_diff": 199.2,
+   "vs_preview_source_diff_pixels_gt2": 5152375
+  },
+  "plD": {
+   "label": "FINAL without HLG tone mapping (HLG code values shown as SDR)",
+   "mean_luma_8bit_hudfree": 90.33,
+   "p10_p50_p90": [
+    36.4,
+    75.1,
+    158.9
+   ],
+   "vs_preview_source_MAE": 8.129,
+   "vs_preview_source_max_diff": 186.9,
+   "vs_preview_source_diff_pixels_gt2": 5209805
+  }
+ }
+}

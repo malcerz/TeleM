@@ -1,0 +1,13 @@
+frames compared=401 max_abs_diff=0.993 mean=0.394 text_mismatch=305
+final fractional parts unique: [0.    0.001 0.002 0.004 0.005 0.007 0.009 0.011 0.012 0.013]
+frame=0 preview=22.918 final=23.000 text preview=22.9 final=23.0
+frame=4640 preview=19.676 final=20.000 text preview=19.7 final=20.0
+frame=9280 preview=17.051 final=18.000 text preview=17.1 final=18.0
+frame=13920 preview=15.769 final=16.000 text preview=15.8 final=16.0
+frame=18560 preview=14.837 final=15.000 text preview=14.8 final=15.0
+frame=23200 preview=14.047 final=15.000 text preview=14.0 final=15.0
+frame=27840 preview=13.380 final=14.000 text preview=13.4 final=14.0
+frame=32480 preview=12.666 final=13.000 text preview=12.7 final=13.0
+frame=37120 preview=12.350 final=12.701 text preview=12.4 final=12.7
+frame=41760 preview=12.000 final=12.000 text preview=12.0 final=12.0
+frame=46400 preview=12.000 final=12.000 text preview=12.0 final=12.0
