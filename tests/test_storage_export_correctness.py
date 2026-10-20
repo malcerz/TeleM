@@ -96,3 +96,11 @@ def test_actual_gui_pipeline_blocks_before_render_initialization(tmp_path, monke
         RenderMixin._render_pipeline(owner,options)
     assert error.value.code=='ENOSPC'
     assert not hasattr(owner,'_active_storage_monitor')
+
+
+@pytest.mark.parametrize('rate', ['0/0','1/0','invalid'])
+def test_invalid_output_fps_is_not_silently_defaulted(tmp_path,rate):
+    with pytest.raises(StorageError) as caught:
+        preflight_export_storage(tmp_path/'out.mp4',['a'],
+            {'bitrate':'60M','target_fps':rate},probe=lambda p:probe(100))
+    assert caught.value.code=='STORAGE_ESTIMATE_FAILED'

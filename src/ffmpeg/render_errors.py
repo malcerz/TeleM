@@ -601,7 +601,7 @@ def preflight_export_storage(output_path, source_paths, options, *, probe, timel
     No source copies or intermediate audio files are needed by live mux.
     """
     from src.multifile import VideoClip, VideoTimeline
-    from src.video_helpers import parse_fps
+    from fractions import Fraction
     try:
         infos = [probe(path) for path in source_paths]
         if not infos:
@@ -614,7 +614,7 @@ def preflight_export_storage(output_path, source_paths, options, *, probe, timel
             rate = video.get('avg_frame_rate') or video.get('r_frame_rate')
             if not rate or rate == '0/0':
                 raise ValueError('Missing source fps')
-            fps = parse_fps(rate)
+            fps = float(Fraction(str(rate)))
             if not math.isfinite(duration) or duration <= 0 or not math.isfinite(fps) or fps <= 0:
                 raise ValueError("Invalid source duration/fps")
             clips.append(VideoClip(Path(path), duration_s=duration, fps=fps,
@@ -624,7 +624,7 @@ def preflight_export_storage(output_path, source_paths, options, *, probe, timel
         effective = timeline if timeline is not None and timeline.clip_count else VideoTimeline(clips)
         if cut_regions:
             effective = effective.subset_excluding(list(cut_regions))
-        fps = parse_fps(str(options.get('target_fps') or clips[0].fps))
+        fps = float(Fraction(str(options.get('target_fps') or clips[0].fps)))
         if not math.isfinite(fps) or fps <= 0:
             raise ValueError("Invalid output fps")
         duration = effective.output_frame_count(fps) / fps
