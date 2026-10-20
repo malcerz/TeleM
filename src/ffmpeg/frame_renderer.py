@@ -316,6 +316,7 @@ def render_overlay_frame(
             start_dt_utc=data["start_dt_utc"],
             elapsed_seconds=data["elapsed_seconds"],
             avg_speed_kmh=data["avg_speed_kmh"],
+            auto_ranges=data.get("auto_ranges"),
             breakdown=breakdown,
             rot180=rot180,
 target_image=target_image,

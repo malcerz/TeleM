@@ -66,6 +66,10 @@ def init_worker(
     it to map ``global_time -> absolute target_dt``.  It is pickle-friendly
     (plain dataclasses + datetimes) so it can be passed to process-pool workers.
     """
+    # Per-export state derived from a previous init must not survive into
+    # this export (the Intel exporter initialises the cache in-process).
+    for stale_key in ("_lean_roll", "_lean_roll_source", "_prev_frame_data", "_prev_atlas_img"):
+        WORKER_CACHE.pop(stale_key, None)
     WORKER_CACHE["video_width"] = video_width
     WORKER_CACHE["video_height"] = video_height
     WORKER_CACHE["font_path"] = font_path
@@ -274,11 +278,17 @@ def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
         axis = "x"
     smoothing_s = max(0.0, float(smoothing_s or 0.0))
     cache_key = f"{axis}_{smoothing_s:.2f}"
+    fs = WORKER_CACHE.get("field_samples", {}) or {}
+    # The roll timeline belongs to one field_samples object; a long-lived
+    # process (Intel in-process export, GUI render prep) must not reuse the
+    # timeline of a previous project or of an IMU-less first call.
+    if WORKER_CACHE.get("_lean_roll_source") is not fs:
+        WORKER_CACHE["_lean_roll"] = {}
+        WORKER_CACHE["_lean_roll_source"] = fs
     cache: dict = WORKER_CACHE.setdefault("_lean_roll", {})
     if cache_key in cache:
         return cache[cache_key]
     from src.telemetry_imu import compute_roll_timeline, merge_axis_samples, smooth_roll_samples
-    fs = WORKER_CACHE.get("field_samples", {}) or {}
     accel = merge_axis_samples(
         fs.get("accel_x_samples", []), fs.get("accel_y_samples", []),
         fs.get("accel_z_samples", []),

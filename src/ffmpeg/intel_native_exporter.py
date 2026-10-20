@@ -1433,6 +1433,31 @@ def export_intel_native_d3d11(
     )
     _range_cache["max_distance_m"] = distance_max_m(distance_stream)
 
+    def _hud_init_args(telemetry_cache):
+        return (
+            overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
+            iso_samples, exposure_samples, temperature_samples,
+            gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
+            gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
+            fit_data,
+            gps_track,
+            start_dt_utc, tz_offset_hours,
+            speed_samples, track_samples, alt_samples,
+            target_fps, 1, total_frames,
+            None, effective_rotation, None, None,
+            hud_rotate_180,
+            telemetry_cache,
+            video_timeline,
+        )
+
+    # build_telemetry_cache resolves heading (compass), IMU roll (lean) and
+    # per-source samples through WORKER_CACHE.  This exporter runs in the GUI
+    # process, so initialise it with THIS export's telemetry first (as the
+    # AMD exporter does); otherwise those channels resolve to None for every
+    # frame or to another project's data.
+    from src.ffmpeg.worker_cache import init_worker
+    init_worker(*_hud_init_args(None), skip_chart_build=True)
+
     telemetry_cache = None
     try:
         telemetry_cache = build_telemetry_cache(
@@ -1467,21 +1492,7 @@ def export_intel_native_d3d11(
     except Exception as exc:
         render_print(f"[STREAM INTEL] Precomputed telemetry cache failed: {exc}", flush=True)
 
-    init_args = (
-        overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
-        iso_samples, exposure_samples, temperature_samples,
-        gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
-        gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
-        fit_data,
-        gps_track,
-        start_dt_utc, tz_offset_hours,
-        speed_samples, track_samples, alt_samples,
-        target_fps, 1, total_frames,
-        None, effective_rotation, None, None,
-        hud_rotate_180,
-        telemetry_cache,
-        video_timeline,
-    )
+    init_args = _hud_init_args(telemetry_cache)
 
     frames_rendered = 0
     hud_starvation_count = 0
