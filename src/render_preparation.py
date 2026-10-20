@@ -404,7 +404,7 @@ class RenderPreparationService:
         key_dict["presentation_contract"] = "quantized_reconstruct_preview_timeline_v2"
         compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
         if compass_cfg and compass_cfg.get("enabled", True):
-            key_dict["compass_heading_contract"] = "selected_source_cog_v1"
+            key_dict["compass_heading_contract"] = "selected_source_cog_v2_no_fallback"
         # Per-clip telemetry sync corrections change the sampled activity data
         # just like the global offset; only added when present so existing
         # keys stay valid.
@@ -844,27 +844,20 @@ class RenderPreparationService:
         if "compass" in heading_keys:
             compass_samples = kwargs.get("compass_heading_samples")
             if compass_samples is None:
-                from src.ffmpeg.worker_cache import _resolve_cache_samples
                 compass_source = str(indicators["compass"].get("source", "gpmf")).strip().lower()
-                compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
-                if compass_source == "fit":
-                    compass_samples = fit.get("heading") or []
-            if not compass_samples:
-                from src.ffmpeg.worker_cache import WORKER_CACHE
-                fs_h = kwargs.get("field_samples") or WORKER_CACHE.get("field_samples", {}) or {}
-                compass_samples = (
-                    (fit.get("heading") if isinstance(fit, dict) else None)
-                    or fs_h.get("heading_samples")
-                    or fs_h.get("gpx_heading_samples")
-                )
-                if not compass_samples and gps_track and len(gps_track) >= 2:
-                    try:
-                        from src.telemetry_heading import derive_heading_samples
-                        compass_samples = derive_heading_samples(gps_track, speed_samples)
-                    except Exception:
-                        pass
-                if not compass_samples:
-                    compass_samples = heading_samples
+                if "field_samples" in kwargs:
+                    from types import SimpleNamespace
+                    from src.telemetry_resolver import resolve_samples_from_sources
+                    fields = SimpleNamespace(**(kwargs.get("field_samples") or {}))
+                    compass_samples = resolve_samples_from_sources(
+                        "heading", compass_source, gpmf=fields, fit_data=fit, gpx=fields,
+                    )
+                elif compass_source == "fit":
+                    from src.telemetry_resolver import resolve_samples_from_sources
+                    compass_samples = resolve_samples_from_sources("heading", "fit", gpmf=None, fit_data=fit)
+                else:
+                    from src.ffmpeg.worker_cache import _resolve_cache_samples
+                    compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
             columns["heading_compass"] = _vectorize_heading(
                 compass_samples or [], target_ts_arr, ref_dt, preserve_missing=True,
             )
@@ -1563,14 +1556,6 @@ class RenderPreparationService:
             else:
                 attr = "gpx_heading_samples" if source == "gpx" else "heading_samples"
                 compass_samples = getattr(telemetry, attr, []) or []
-            if not compass_samples and telemetry is not None:
-                compass_samples = getattr(telemetry, "heading_samples", None)
-            if not compass_samples and getattr(telemetry, "gps_track", None) and len(telemetry.gps_track) >= 2:
-                try:
-                    from src.telemetry_heading import derive_heading_samples
-                    compass_samples = derive_heading_samples(telemetry.gps_track, speed_s)
-                except Exception:
-                    pass
         return cls.get_or_build(
             compass_heading_samples=compass_samples,
             field_samples=field_samples,

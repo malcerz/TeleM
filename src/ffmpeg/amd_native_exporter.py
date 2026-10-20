@@ -791,6 +791,19 @@ def _indicator_overlaps_map_heuristic(cfg: dict[str, Any], map_cfg: dict[str, An
         return True
 
 
+def _amd_compass_samples(layout, field_samples, fit_data):
+    """Use the same selected-source contract as Preview, once per export."""
+    from types import SimpleNamespace
+    from src.telemetry_resolver import resolve_samples_from_sources
+
+    cfg = layout.get("indicators", {}).get("compass", {})
+    fields = SimpleNamespace(**(field_samples or {}))
+    source = str(cfg.get("source", "gpmf") or "gpmf").strip().lower()
+    return resolve_samples_from_sources(
+        "heading", source, gpmf=fields, fit_data=fit_data or {}, gpx=fields,
+    )
+
+
 def _amd_layout_roles(
     layout: dict[str, Any],
     gpu_map_enabled: bool,
@@ -4705,15 +4718,7 @@ def export_amd_native_d3d11(
     if telemetry_mode == "PRECOMPUTED":
         from src.render_preparation import RenderPreparationService
         _pre_t0 = time.perf_counter()
-        _compass_samples = None
-        if field_samples:
-            _compass_samples = field_samples.get("heading_samples") or field_samples.get("gpx_heading_samples")
-        if not _compass_samples and gps_track and len(gps_track) >= 2:
-            try:
-                from src.telemetry_heading import derive_heading_samples
-                _compass_samples = derive_heading_samples(gps_track, speed_samples)
-            except Exception:
-                pass
+        _compass_samples = _amd_compass_samples(semantic_layout, field_samples, fit_data)
         telemetry_cache = RenderPreparationService.get_or_build(
             compass_heading_samples=_compass_samples,
             field_samples=field_samples,
