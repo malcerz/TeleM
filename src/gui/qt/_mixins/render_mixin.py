@@ -515,11 +515,13 @@ class RenderMixin:
 
                 cancel_reason=(
                     getattr(self, "_render_cancel_reason", RenderCancelReason.NONE)
-                    if kind == "cancelled" else RenderCancelReason.NONE
+                    if kind == "cancelled" or getattr(self.render_cancel_event, "storage_stop_requested", False)
+                    else RenderCancelReason.NONE
                 ),
                 cancel_source=(
                     getattr(self, "_render_cancel_source", "")
-                    if kind == "cancelled" else ""
+                    if kind == "cancelled" or getattr(self.render_cancel_event, "storage_stop_requested", False)
+                    else ""
                 ),
             )
             self._render_latest_state = snapshot
@@ -689,7 +691,7 @@ class RenderMixin:
                 output_path = Path(render_error.output_path) if render_error.output_path else None
                 if output_path is not None:
                     ffprobe = self.ffprobe_exe or find_executable("ffprobe")
-                    candidates = [Path(str(output_path) + ".part"), Path(str(output_path) + ".part.mp4")]
+                    candidates = [output_path, Path(str(output_path) + ".part"), Path(str(output_path) + ".part.mp4")]
                     for candidate in candidates:
                         if candidate.is_file():
                             render_error.partial_output_possible = True
@@ -918,42 +920,30 @@ class RenderMixin:
             source_error.stage = "preflight_sources"
             raise source_error
 
-        # A bitrate-based free-space estimate is only a cautionary preflight.
-        # Constant-QP exports deliberately skip it because their final size is unknown.
-        qp_mode = options.get("qp") is not None or any(
-            "qp" in str(value).lower()
-            for key, value in options.items()
-            if any(token in str(key).lower() for token in ("rate", "quality", "mode", "bitrate", "qp"))
+        from src.ffmpeg.render_errors import preflight_export_storage, probe_export_storage_media
+        storage_plan = preflight_export_storage(
+            output_path, source_paths, options,
+            probe=lambda path: probe_export_storage_media(
+                self.ffprobe_exe or find_executable("ffprobe"), path),
+            timeline=getattr(self, "video_timeline", None),
+            cut_regions=getattr(self, "_cut_regions", ()),
         )
-        bitrate_value = options.get("bitrate")
-        if bitrate_value and not qp_mode:
-            try:
-                source_info_for_storage = ffprobe_stream_info(
-                    self.ffprobe_exe or find_executable("ffprobe"), self.video_path
-                )
-                duration = float(source_info_for_storage.get("format", {}).get("duration", 0.0) or 0.0)
-                if duration > 0:
-                    ok, storage_error = check_preflight_storage(
-                        output_path,
-                        duration_s=duration,
-                        video_bitrate_bps=parse_bitrate_to_bps(bitrate_value),
-                        codec=str(options.get("codec", "hevc")),
-                        has_audio=True,
-                        is_vbr=True,
-                    )
-                    if not ok and storage_error is not None:
-                        storage_error.output_path = str(output_path)
-                        storage_error.job_id = str(options.get("_queue_job_id") or "")
-                        storage_error.stage = "preflight_storage"
-                        raise storage_error
-            except (OSError, ValueError, TypeError):
-                # Preflight probes are advisory; actual write failures remain authoritative.
-                pass
+        options["_storage_plan"] = storage_plan
 
         def _storage_failure(free_bytes: int, reserve_bytes: int) -> None:
-            self.render_cancel_event.set()
+            self.render_cancel_event.storage_stop_requested = True
+            self._set_render_cancel(
+                generation_id=int(options.get("_render_generation_id", 0) or 0),
+                reason=(RenderCancelReason.STORAGE_LOW_SPACE if free_bytes >= 0
+                        else RenderCancelReason.STORAGE_UNAVAILABLE),
+                source="runtime_storage_monitor",
+            )
 
-        monitor = RuntimeStorageMonitor(str(output_path), on_low_space_callback=_storage_failure)
+        monitor = RuntimeStorageMonitor(
+            str(output_path),
+            finalization_reserve_bytes=storage_plan["finalization_reserve_bytes"],
+            on_low_space_callback=_storage_failure,
+        )
         self._active_storage_monitor = monitor
         monitor.start()
         video_bitrate = options.get("bitrate", "40M")

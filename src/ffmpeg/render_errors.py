@@ -19,6 +19,7 @@ import enum
 import errno
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -445,6 +446,7 @@ def estimate_required_export_space(
     codec: str = "hevc",
     has_audio: bool = True,
     is_vbr: bool = True,
+    audio_bitrate_bps: int = 384_000,
 ) -> tuple[int, int]:
     """Oblicza szacowane wymagane miejsce na dysku oraz rezerwę finalizacji.
     
@@ -458,7 +460,7 @@ def estimate_required_export_space(
     """
     eff_dur = max(0.5, float(duration_s))
     video_bytes = (float(video_bitrate_bps) / 8.0) * eff_dur
-    audio_bitrate_bps = 384_000 if has_audio else 0
+    audio_bitrate_bps = audio_bitrate_bps if has_audio else 0
     audio_bytes = (float(audio_bitrate_bps) / 8.0) * eff_dur
     base_file_bytes = video_bytes + audio_bytes
 
@@ -478,6 +480,7 @@ def check_preflight_storage(
     codec: str = "hevc",
     has_audio: bool = True,
     is_vbr: bool = True,
+    audio_bitrate_bps: int = 384_000,
 ) -> tuple[bool, Optional[StorageError]]:
     """Sprawdza czy docelowy nośnik posiada wystarczającą ilość wolnego miejsca.
     
@@ -537,6 +540,7 @@ def check_preflight_storage(
         codec=codec,
         has_audio=has_audio,
         is_vbr=is_vbr,
+        audio_bitrate_bps=audio_bitrate_bps,
     )
 
     free_bytes = usage.free
@@ -546,8 +550,10 @@ def check_preflight_storage(
         req_gb = req_bytes / (1024 ** 3)
         msg_user = (
             f"Za mało miejsca na dysku {drive_name}.\n\n"
-            f"Wymagane z zapasem: {req_gb:.1f} GB\n"
-            f"Dostępne: {free_gb:.1f} GB\n\n"
+            f"Szacowany rozmiar pliku: {(video_bitrate_bps + (audio_bitrate_bps if has_audio else 0)) * duration_s / 8 / 1024**3:.2f} GB\n"
+            f"Wymagane z zapasem: {req_gb:.2f} GB\n"
+            f"Dostępne: {free_gb:.2f} GB\n"
+            f"Brakuje: {(req_bytes - free_bytes) / 1024**3:.2f} GB\n\n"
             f"Zwolnij miejsce na dysku lub wybierz inny folder docelowy."
         )
         msg_tech = (
@@ -572,6 +578,80 @@ def check_preflight_storage(
         return False, err
 
     return True, None
+
+
+
+def probe_export_storage_media(ffprobe_exe, path):
+    """One bounded read of all stream durations/counts and copied audio rates."""
+    result = subprocess.run(
+        [str(ffprobe_exe), '-v', 'error', '-show_entries',
+         'stream=codec_type,duration,avg_frame_rate,r_frame_rate,nb_frames,bit_rate:format=duration',
+         '-of', 'json', str(path)], capture_output=True, text=True,
+        timeout=30, check=True,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+    return json.loads(result.stdout)
+
+
+def preflight_export_storage(output_path, source_paths, options, *, probe, timeline=None,
+                             cut_regions=()):
+    """Fail closed using the same clip/range CFR plan as the renderer.
+
+    Activity pause/chart settings and HUD update rate do not alter video time.
+    No source copies or intermediate audio files are needed by live mux.
+    """
+    from src.multifile import VideoClip, VideoTimeline
+    from src.video_helpers import parse_fps
+    try:
+        infos = [probe(path) for path in source_paths]
+        if not infos:
+            raise ValueError("No source clips")
+        clips = []
+        audio_bps = 0
+        for path, info in zip(source_paths, infos):
+            video = next(x for x in info['streams'] if x.get('codec_type') == 'video')
+            duration = float(video.get('duration') or info['format']['duration'])
+            rate = video.get('avg_frame_rate') or video.get('r_frame_rate')
+            if not rate or rate == '0/0':
+                raise ValueError('Missing source fps')
+            fps = parse_fps(rate)
+            if not math.isfinite(duration) or duration <= 0 or not math.isfinite(fps) or fps <= 0:
+                raise ValueError("Invalid source duration/fps")
+            clips.append(VideoClip(Path(path), duration_s=duration, fps=fps,
+                                   frame_count=int(video.get('nb_frames') or 0)))
+            audio_bps = max(audio_bps, sum(int(x.get('bit_rate') or 384000)
+                for x in info['streams'] if x.get('codec_type') == 'audio'))
+        effective = timeline if timeline is not None and timeline.clip_count else VideoTimeline(clips)
+        if cut_regions:
+            effective = effective.subset_excluding(list(cut_regions))
+        fps = parse_fps(str(options.get('target_fps') or clips[0].fps))
+        if not math.isfinite(fps) or fps <= 0:
+            raise ValueError("Invalid output fps")
+        duration = effective.output_frame_count(fps) / fps
+        bitrate = parse_bitrate_to_bps(options.get('bitrate'), default_bps=0)
+        if bitrate <= 0 or not math.isfinite(duration) or duration <= 0:
+            raise ValueError("Invalid output bitrate/duration")
+        # AMF VBR peak is 1.5 x target. Budget against peak, not average.
+        peak = max(bitrate, int(bitrate * 1.5))
+        ok, error = check_preflight_storage(output_path, duration, peak,
+                                           has_audio=bool(audio_bps),
+                                           audio_bitrate_bps=audio_bps)
+        required, reserve = estimate_required_export_space(duration, peak,
+                    has_audio=bool(audio_bps), audio_bitrate_bps=audio_bps)
+        if not ok:
+            error.details.update(duration_s=duration, budget_bitrate_bps=peak,
+                                 target_bitrate_bps=bitrate, source_count=len(source_paths))
+            raise error
+        return dict(duration_s=duration, required_bytes=required,
+                    finalization_reserve_bytes=reserve, video_bitrate_bps=bitrate,
+                    budget_bitrate_bps=peak, audio_bitrate_bps=audio_bps)
+    except StorageError:
+        raise
+    except Exception as exc:
+        raise StorageError(code="STORAGE_ESTIMATE_FAILED",
+            user_message="Nie można bezpiecznie oszacować miejsca dla całego eksportu.",
+            technical_message=str(exc), output_path=str(output_path),
+            stage="preflight_storage") from exc
 
 
 def check_preflight_sources(video_paths: list[Union[str, Path]]) -> tuple[bool, Optional[SourceReadError]]:
@@ -664,8 +744,12 @@ class RuntimeStorageMonitor:
         while not self._thread_stop_event.is_set():
             try:
                 if not self.target_dir.exists():
-                    self.last_error = FileNotFoundError(f"Output directory disappeared: {self.target_dir}")
+                    self.last_error = StorageError(code="DEVICE_UNAVAILABLE",
+                        user_message="Dysk docelowy stał się niedostępny podczas eksportu.",
+                        output_path=str(self.target_path), stage="runtime_storage_monitor")
                     self.stop_requested_low_space.set()
+                    if self.on_low_space_callback:
+                        self.on_low_space_callback(-1, self.finalization_reserve_bytes)
                     break
                 usage = shutil.disk_usage(str(self.target_dir))
                 self.last_free_bytes = usage.free
@@ -688,9 +772,14 @@ class RuntimeStorageMonitor:
                     break
             except Exception as exc:
                 # W przypadku odłączenia nośnika/awarii dysku
-                self.last_error = exc
+                self.last_error = StorageError(code="DISK_QUERY_FAILED",
+                    user_message="Nie można odczytać stanu dysku podczas eksportu.",
+                    technical_message=str(exc), output_path=str(self.target_path),
+                    stage="runtime_storage_monitor")
                 log.error("[STORAGE MONITOR] Query error: %s", exc)
                 self.stop_requested_low_space.set()
+                if self.on_low_space_callback:
+                    self.on_low_space_callback(-1, self.finalization_reserve_bytes)
                 break
 
             self._thread_stop_event.wait(self.poll_interval_s)

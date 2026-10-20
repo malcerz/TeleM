@@ -7155,6 +7155,8 @@ def export_amd_native_d3d11(
                                 raise producer_error[0]
                             continue
                     if cancel_evt.is_set():
+                        if getattr(cancel_evt, "storage_stop_requested", False):
+                            break  # existing flush/drain closes a recoverable partial MP4
                         print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                         _cleanup_native_resources()
                         _abort_direct_mux(preserve_stage_a=False, preserve_partial_output=False)
@@ -7184,6 +7186,8 @@ def export_amd_native_d3d11(
             _ft_prev_end: float | None = None
             for f_idx in range(total_frames):
                 if cancel_event is not None and cancel_event.is_set():
+                    if getattr(cancel_event, "storage_stop_requested", False):
+                        break  # stop new frames, retain the normal encoder drain
                     print(f"[AMD NATIVE D3D11] {cancel_message()}", flush=True)
                     _cleanup_native_resources()
                     _abort_direct_mux(preserve_stage_a=False, preserve_partial_output=False)
@@ -7639,7 +7643,8 @@ def export_amd_native_d3d11(
         while True:
             rc = proc_mux.poll()
             now = time.perf_counter()
-            if cancel_event is not None and cancel_event.is_set():
+            if (cancel_event is not None and cancel_event.is_set()
+                    and not getattr(cancel_event, "storage_stop_requested", False)):
                 proc_mux.kill()
                 break
 

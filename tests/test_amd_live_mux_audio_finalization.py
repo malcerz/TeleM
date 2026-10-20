@@ -511,3 +511,28 @@ def test_watchdog_terminates_on_genuine_stall(tmp_path, monkeypatch):
 
     assert mock_proc.kill.called
 
+
+
+def test_storage_stop_uses_existing_drain_and_preserves_partial(tmp_path,monkeypatch):
+    from threading import Event
+    dll=_setup_mock_dll(monkeypatch)
+    out=tmp_path/'storage_partial.mp4'
+    source=tmp_path/'source.mp4'
+    source.write_bytes(b'fake')
+    proc=MagicMock(returncode=0,stderr=[])
+    proc.poll.return_value=0
+    proc.wait.return_value=0
+    def popen(*args,**kwargs):
+        Path(str(out)+'.part').write_bytes(b'mocked mux output')
+        return proc
+    install_mux_popen(monkeypatch,popen)
+    stop=Event()
+    stop.storage_stop_requested=True
+    stop.set()
+    export_amd_native_d3d11(ffmpeg_exe='ffmpeg',input_files=[str(source)],
+        output_file=str(out),duration_s=5,video_width=1920,video_height=1080,
+        start_dt_utc=None,tz_offset_hours=0,speed_samples=[],track_samples=[],
+        alt_samples=[],font_path='',layout={},field_samples={},cancel_event=stop)
+    dll.telem_amd_flush.assert_called_once()
+    proc.kill.assert_not_called()
+    assert out.exists() or Path(str(out)+'.part').exists()
