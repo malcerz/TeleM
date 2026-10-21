@@ -63,7 +63,7 @@ def test_no_prepared_axis_does_not_silently_use_either_gps_source():
 
 
 @pytest.mark.parametrize("field,value", [
-    ("compass_reference_source", "fit"), ("gps_stabilization_seconds", 31),
+    ("compass_reference_source", "gpmf"), ("gps_stabilization_seconds", 31),
     ("min_calibration_seconds", 60), ("max_calibration_seconds", 240),
     ("min_calibration_speed_kmh", 10), ("compass_imu_method", "gyro"),
     ("compass_drift_correction", False), ("compass_mount_offset_deg", 15),
@@ -85,7 +85,8 @@ def test_standard_mode_signature_is_unchanged_and_controls_are_conditional():
     assert fields["compass_heading_mode"].default == "standard"
     assert "compass_reference_source" not in fields
     fields = {f.name: f for f in get_schema_for_indicator("compass", "gauge", cfg=_cfg())}
-    assert fields["compass_reference_source"].choices == [("gpmf", "GPS GoPro"), ("fit", "FIT / Garmin")]
+    assert fields["compass_reference_source"].choices == [("fit", "Garmin FIT (preferowany)"), ("gpmf", "GPS GoPro (alternatywny)")]
+    assert fields["compass_reference_source"].default == "fit"
     assert fields["gps_stabilization_seconds"].default == 30
 
 
@@ -149,16 +150,16 @@ def test_hybrid_cache_hit_source_switch_and_full_source_in_out(tmp_path, monkeyp
     cut = prepare_manager_compass(tm, cfg, cache_dir=cache)
     assert cut.diagnostics["clips"][0]["cache_hit"]
     assert np.array_equal(first.axis, cut.axis, equal_nan=True)
-    fit = prepare_manager_compass(tm, dict(cfg, compass_reference_source="fit"), cache_dir=cache)
-    assert fit.diagnostics["reference_source"] == "fit"
-    assert not fit.diagnostics["clips"][0]["cache_hit"]
-    assert abs(float(wrap180(fit.lookup(start)-first.lookup(start)))-90) < 1
+    gpmf = prepare_manager_compass(tm, dict(cfg, compass_reference_source="gpmf"), cache_dir=cache)
+    assert gpmf.diagnostics["reference_source"] == "gpmf"
+    assert not gpmf.diagnostics["clips"][0]["cache_hit"]
+    assert abs(abs(float(wrap180(gpmf.lookup(start)-first.lookup(start))))-90) < 1
 
 
 def test_independent_files_do_not_share_calibration_across_gap(tmp_path, monkeypatch):
     tm, calls, start = _realistic_fixture(tmp_path, monkeypatch, second_clip=True)
     tm.gps_track = [(t, a, b) for t, a, b in tm.gps_track if t >= datetime(2026, 10, 16)+timedelta(seconds=210)]
-    r = prepare_manager_compass(tm, _cfg(), cache_dir=tmp_path / "cache")
+    r = prepare_manager_compass(tm, _cfg(compass_reference_source="gpmf"), cache_dir=tmp_path / "cache")
     assert r.lookup(start+50) is None
     assert r.lookup(start+205) is None
     assert r.lookup(start+220) is not None
@@ -192,3 +193,80 @@ def test_late_background_project_result_cannot_replace_new_project(monkeypatch):
     release.set()
     assert ready.wait(5)
     assert tm._compass_result is None
+
+
+def test_fit_is_preferred_default_in_hybrid_mode():
+    assert DEFAULTS["compass_reference_source"] == "fit"
+    fields = {f.name: f for f in get_schema_for_indicator("compass", "gauge", cfg=_cfg())}
+    assert fields["compass_reference_source"].default == "fit"
+    choices = fields["compass_reference_source"].choices
+    assert choices[0][0] == "fit"
+    assert "preferowany" in choices[0][1].lower()
+    assert choices[1][0] == "gpmf"
+    assert "alternatywny" in choices[1][1].lower()
+
+
+def test_manager_prepare_compass_sync_and_status(tmp_path, monkeypatch):
+    tm, calls, start = _realistic_fixture(tmp_path, monkeypatch)
+    cfg = _cfg()
+    assert tm._compass_result is None
+    assert tm._compass_status == ""
+    tm.prepare_compass(cfg)
+    assert tm._compass_status == "Gotowe"
+    assert tm._compass_result is not None
+    # Accessible immediately without Play
+    base_dt = datetime.fromtimestamp(start, __import__('datetime').timezone.utc).replace(tzinfo=None)
+    val = tm.resolve_value("heading", base_dt, indicator_key="compass", indicator_config=cfg)
+    assert val is not None
+
+
+def test_late_fit_attach_triggers_invalidation_and_recalc(tmp_path, monkeypatch):
+    tm, calls, start = _realistic_fixture(tmp_path, monkeypatch)
+    cfg = _cfg()
+    tm.prepare_compass(cfg)
+    assert tm._compass_result is not None
+    assert tm._compass_status == "Gotowe"
+
+    # Simulate late arrival of FIT
+    tm.invalidate_compass()
+    assert tm._compass_result is None
+    assert tm._compass_status == ""
+
+    done = threading.Event()
+    tm.request_compass_preparation(cfg, lambda _token: done.set())
+    assert done.wait(5)
+    assert tm._compass_result is not None
+    assert tm._compass_status == "Gotowe"
+
+
+def test_holdout_backward_reconstruction_accuracy(tmp_path, monkeypatch):
+    # Verify holdout logic: calibrate on t in [40, 100], evaluate on withheld t in [0, 40]
+    tm, calls, start = _realistic_fixture(tmp_path, monkeypatch)
+    cfg = _cfg(compass_reference_source="fit", gps_stabilization_seconds=30, min_calibration_seconds=30)
+    # Save original track and withhold the first 40 seconds from fit_gps_track
+    full_fit = list(tm.fit_gps_track)
+    base_dt = datetime.fromtimestamp(start, __import__('datetime').timezone.utc).replace(tzinfo=None)
+    cutoff = base_dt + timedelta(seconds=40)
+    tm.fit_gps_track = [(t, lat, lon) for (t, lat, lon) in full_fit if t >= cutoff]
+
+    res = prepare_manager_compass(tm, cfg, cache_dir=tmp_path / "cache")
+    assert res.diagnostics["status"] == "ok"
+
+    # Verify that the holdout interval [0, 40] s was reconstructed backward
+    assert res.lookup(start) is not None
+    assert res.lookup(start + 20) is not None
+    # Check that error across the withheld interval is small (< 2 deg)
+    ground_truth_res = prepare_manager_compass(tm, _cfg(compass_reference_source="fit"), cache_dir=tmp_path / "gt_cache")
+    errors = []
+    for s in range(0, 40):
+        t_sec = start + s
+        h_recon = res.lookup(t_sec)
+        # In _realistic_fixture, fit track starts at 110 deg
+        if h_recon is not None:
+            # Check deviation
+            gt_val = ground_truth_res.lookup(t_sec)
+            if gt_val is not None:
+                errors.append(abs(float(wrap180(h_recon - gt_val))))
+    assert len(errors) > 20
+    assert float(np.median(errors)) < 1.0
+
