@@ -68,6 +68,25 @@ def _map_provider_from_layout(layout: dict) -> str:
     )
 
 
+def _working_layout_copy(layout: Any) -> dict | None:
+    """Detached copy of the in-memory session layout for the next project.
+
+    Runtime-only keys of the previous material (availability snapshot, IN/OUT
+    regions, presentation window) are dropped, exactly like a disk reload.
+    """
+    if not isinstance(layout, dict) or not isinstance(layout.get("indicators"), dict):
+        return None
+    import copy
+    working = copy.deepcopy(layout)
+    working.pop("_indicator_availability", None)
+    working.pop("cut_regions", None)
+    for ind in working["indicators"].values():
+        if isinstance(ind, dict):
+            ind.pop("_presentation_video_start", None)
+            ind.pop("_presentation_video_end", None)
+    return normalize_indicator_decimal_defaults(working)
+
+
 def _profile_load_stage(
     stage: str,
     started: float,
@@ -733,7 +752,15 @@ class ProjectMixin:
                         proj_layout = None
                 if not proj_layout or not proj_layout.exists():
                     preset_path = self._startup_preset_path or (self.layout.get("_startup_preset", "") if isinstance(self.layout, dict) else "")
-                    if preset_path and Path(preset_path).exists():
+                    working = _working_layout_copy(self.layout) if getattr(self, "_working_layout_active", False) else None
+                    if working is not None:
+                        # The layout edited in this app session (properties,
+                        # loaded preset, reset) is the user's current HUD.
+                        # Re-reading def_layout.json here silently discarded
+                        # every edit that was not explicitly saved yet.
+                        self.layout = working
+                        print("[ProjectLayout] Zachowano roboczy layout sesji (bez ponownego odczytu z dysku)", flush=True)
+                    elif preset_path and Path(preset_path).exists():
                         self.layout = json.loads(
                             Path(preset_path).read_text(encoding="utf-8")
                         )
@@ -741,6 +768,7 @@ class ProjectMixin:
                     else:
                         def_layout = self.base_dir / "def_layout.json"
                         self.layout = normalize_layout(def_layout, w, h)
+                self._working_layout_active = True
                 if hasattr(self, "_apply_global_chart_preferences"):
                     self._apply_global_chart_preferences()
                 render_tab = getattr(getattr(self, "ui", None), "render_tab", None)
