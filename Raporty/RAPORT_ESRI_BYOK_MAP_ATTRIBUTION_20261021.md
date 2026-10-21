@@ -147,11 +147,15 @@ Nie zmieniono DLL, native AMD, QP/VBR, HLG/HDR, live mux, audio, finalizacji, ko
 
 ## 15. Lokalne commity
 
-`45f09db4024778ead8b226d1b13e7df4a252aee1` — `feat(esri): add BYOK settings and validated transport; attribution pending approval`. Osobny commit dokumentacji dodaje zrzuty i końcowy stan; jego własne SHA jest dostępne w `git log -1` (raport nie może zawierać własnego SHA). Nie wykonano push.
+- `45f09db4024778ead8b226d1b13e7df4a252aee1` — GUI i bezpieczny transport BYOK.
+- `d2e864c` — pierwszy raport i propozycja atrybucji.
+- `0c070eff4debc5d9398c4652bbb1396515acd498` — zatwierdzony dyskretny podpis Preview/Final, adapter AMD i testy.
+
+Końcowy commit aktualizuje wyłącznie identyfikatory i stan raportu; jego SHA jest dostępne w `git log -1` (raport nie może zawierać własnego SHA). Nie wykonano push.
 
 ## 16. Końcowy Git i warunki kontynuacji
 
-Gałąź `main`. Zmiany `def_layout.json` (88 dodanych / 54 usunięte linie) pozostają identyczne z początkiem zadania i poza commitami. Zachowano 103 zastane wpisy nieśledzone. Bez gałęzi/worktree/push.
+Końcowy stan po commicie dokumentacji: `## main...origin/main [ahead 42]`, jedyny zmodyfikowany śledzony plik: ` M def_layout.json`. Zmiany `def_layout.json` (88 dodanych / 54 usunięte linie) pozostają identyczne z początkiem zadania i poza commitami. Zachowano 103 zastane wpisy nieśledzone. Bez gałęzi/worktree/push.
 
 Po zatwierdzeniu wariantu wykonano implementację, testy i porównanie fixture. Do pełnego zakończenia nadal wymagane:
 
