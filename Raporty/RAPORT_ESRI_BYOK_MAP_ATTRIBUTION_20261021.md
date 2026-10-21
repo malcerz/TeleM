@@ -132,11 +132,11 @@ Nie zmieniono DLL, native AMD, eksportera, QP/VBR, HLG/HDR, live mux, audio, fin
 
 ## 15. Lokalne commity
 
-SHA implementacji zostanie uzupełnione po lokalnym commicie; commit raportu nie może zawierać własnego SHA. Nie wykonano push.
+`45f09db4024778ead8b226d1b13e7df4a252aee1` — `feat(esri): add BYOK settings and validated transport; attribution pending approval`. Osobny commit dokumentacji dodaje zrzuty i końcowy stan; jego własne SHA jest dostępne w `git log -1` (raport nie może zawierać własnego SHA). Nie wykonano push.
 
 ## 16. Końcowy Git i warunki kontynuacji
 
-Do uzupełnienia po commicie. Istniejące zmiany użytkownika pozostają poza staged/commit. Pełne zakończenie wymaga:
+Po commicie implementacji: `main`, jedyna zmiana śledzonego pliku to zastana ` M def_layout.json`; 103 zastane pliki/katalogi nieśledzone. Po commicie dokumentacji brak zmian implementacji w working tree. Gałąź będzie 40 commitów przed origin/main. Istniejące zmiany użytkownika pozostają poza staged/commit. Zrzuty PNG dodano jawnie mimo globalnego ignorowania PNG, ponieważ stanowią wymagany materiał raportu. Pełne zakończenie wymaga:
 
 1. Odpowiedzi na przedstawioną propozycję atrybucji (zgodnie z poleceniem użytkownika).
 2. Zapisania rzeczywistego klucza przez nowe GUI — nigdy w rozmowie ani w pliku.
