@@ -1,0 +1,537 @@
+{
+  "gpmf": {
+    "full": {
+      "status": "ok",
+      "segments": [
+        {
+          "status": "ok",
+          "attempts": [
+            {
+              "window_seconds": 30.0,
+              "status": "backward drift uncertainty requires a longer calibration",
+              "samples": 31
+            },
+            {
+              "window_seconds": 60,
+              "status": "ok",
+              "samples": 61
+            }
+          ],
+          "model": {
+            "offset_deg": -140.83655770159967,
+            "drift_deg_s": -0.17668316911998402,
+            "drift_applied": true,
+            "drift_standard_error": 0.011842345819258563,
+            "drift_rate_bound_deg_s": 0.029605864548146406,
+            "origin_ts": 1792124743.6990001,
+            "error_median_deg": 0.8903617770171053,
+            "error_p95_deg": 4.1407863635320785,
+            "error_max_deg": 4.8584355762183975,
+            "accepted_samples": 54,
+            "rejected_samples": 7,
+            "backward_uncertainty_deg": 7.408870516273945,
+            "turn_correlation": 0.8391421707959639,
+            "stable_fix_ts": 1792124683.199,
+            "calibration_start_ts": 1792124713.199,
+            "calibration_end_ts": 1792124773.199,
+            "window_seconds": 60.0
+          },
+          "reconstructed_start_ts": 1792124536.1821299
+        }
+      ],
+      "valid_percent": 96.21832285975348,
+      "reconstructed_percent": 11.04947134838794
+    },
+    "gps_quality": {
+      "independent_gps_samples": 2113,
+      "gps_rejected": 145
+    },
+    "holdouts": [
+      {
+        "withheld_seconds": [
+          90,
+          140
+        ],
+        "reference_available_from_seconds": 145,
+        "reference_samples": 0,
+        "reconstructed_samples": 0,
+        "coverage_percent": 0.0,
+        "median_error_deg": null,
+        "p95_error_deg": null,
+        "max_error_deg": null,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": -141.21878148390252,
+                "drift_deg_s": -0.17888827578716085,
+                "drift_applied": true,
+                "drift_standard_error": 0.012821325831532946,
+                "drift_rate_bound_deg_s": 0.03205331457883236,
+                "origin_ts": 1792124746.1990001,
+                "error_median_deg": 0.9965337292823335,
+                "error_p95_deg": 4.11904575013768,
+                "error_max_deg": 4.970842277253496,
+                "accepted_samples": 56,
+                "rejected_samples": 5,
+                "backward_uncertainty_deg": 7.891946424145963,
+                "turn_correlation": 0.8356023974991302,
+                "stable_fix_ts": 1792124686.199,
+                "calibration_start_ts": 1792124716.199,
+                "calibration_end_ts": 1792124776.199,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 96.21832285975348,
+          "reconstructed_percent": 11.189326272213624
+        }
+      },
+      {
+        "withheld_seconds": [
+          150,
+          200
+        ],
+        "reference_available_from_seconds": 205,
+        "reference_samples": 50,
+        "reconstructed_samples": 50,
+        "coverage_percent": 100.0,
+        "median_error_deg": 2.7034498011794597,
+        "p95_error_deg": 6.580488554768956,
+        "max_error_deg": 8.13974347783278,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": -152.2335921411471,
+                "drift_deg_s": -0.17516781807108905,
+                "drift_applied": true,
+                "drift_standard_error": 0.014138187264588428,
+                "drift_rate_bound_deg_s": 0.03534546816147107,
+                "origin_ts": 1792124806.1990001,
+                "error_median_deg": 1.2380639525095773,
+                "error_p95_deg": 3.8055826471395333,
+                "error_max_deg": 4.518318597793751,
+                "accepted_samples": 58,
+                "rejected_samples": 3,
+                "backward_uncertainty_deg": 10.274627254710248,
+                "turn_correlation": 0.9141152399767327,
+                "stable_fix_ts": 1792124746.199,
+                "calibration_start_ts": 1792124776.199,
+                "calibration_end_ts": 1792124836.199,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 96.21832285975348,
+          "reconstructed_percent": 13.98642474872732
+        }
+      },
+      {
+        "withheld_seconds": [
+          300,
+          360
+        ],
+        "reference_available_from_seconds": 365,
+        "reference_samples": 61,
+        "reconstructed_samples": 61,
+        "coverage_percent": 100.0,
+        "median_error_deg": 1.5014059319942135,
+        "p95_error_deg": 3.7189957977603285,
+        "max_error_deg": 4.57337857071326,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "GPS/IMU turn sign or scale mismatch",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": 177.97082900110843,
+                "drift_deg_s": -0.18812497419172997,
+                "drift_applied": true,
+                "drift_standard_error": 0.009288863372465928,
+                "drift_rate_bound_deg_s": 0.02322215843116482,
+                "origin_ts": 1792124967.1000006,
+                "error_median_deg": 0.864387971479232,
+                "error_p95_deg": 2.4721729445493565,
+                "error_max_deg": 2.9003543169361024,
+                "accepted_samples": 61,
+                "rejected_samples": 0,
+                "backward_uncertainty_deg": 10.30769359301442,
+                "turn_correlation": null,
+                "stable_fix_ts": 1792124907.1,
+                "calibration_start_ts": 1792124937.1,
+                "calibration_end_ts": 1792124997.1,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 96.21832285975348,
+          "reconstructed_percent": 21.487310496578218
+        }
+      },
+      {
+        "withheld_seconds": [
+          600,
+          660
+        ],
+        "reference_available_from_seconds": 665,
+        "reference_samples": 23,
+        "reconstructed_samples": 23,
+        "coverage_percent": 100.0,
+        "median_error_deg": 1.7905381096867643,
+        "p95_error_deg": 9.868220895758594,
+        "max_error_deg": 11.933821993288149,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": 124.51992627913124,
+                "drift_deg_s": -0.1593447966004926,
+                "drift_applied": true,
+                "drift_standard_error": 0.007550938916250657,
+                "drift_rate_bound_deg_s": 0.02,
+                "origin_ts": 1792125267.5333338,
+                "error_median_deg": 0.6658135941807757,
+                "error_p95_deg": 2.323139045766783,
+                "error_max_deg": 4.92064616907399,
+                "accepted_samples": 60,
+                "rejected_samples": 1,
+                "backward_uncertainty_deg": 14.810361522095159,
+                "turn_correlation": 0.9271488507160707,
+                "stable_fix_ts": 1792125207.1,
+                "calibration_start_ts": 1792125237.1,
+                "calibration_end_ts": 1792125297.1,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 98.08258899434986,
+          "reconstructed_percent": 35.4728028791467
+        }
+      }
+    ]
+  },
+  "fit": {
+    "full": {
+      "status": "ok",
+      "segments": [
+        {
+          "status": "ok",
+          "attempts": [
+            {
+              "window_seconds": 30.0,
+              "status": "ok",
+              "samples": 31
+            }
+          ],
+          "model": {
+            "offset_deg": -112.69610244928944,
+            "drift_deg_s": -0.1764928530578919,
+            "drift_applied": true,
+            "drift_standard_error": 0.0319671520158679,
+            "drift_rate_bound_deg_s": 0.07991788003966976,
+            "origin_ts": 1792124598.0370371,
+            "error_median_deg": 0.9324476258736638,
+            "error_p95_deg": 2.6991619305034646,
+            "error_max_deg": 2.9492519931984305,
+            "accepted_samples": 27,
+            "rejected_samples": 4,
+            "backward_uncertainty_deg": 5.6322126318520604,
+            "turn_correlation": 0.9798018296864668,
+            "stable_fix_ts": 1792124552.0,
+            "calibration_start_ts": 1792124582.0,
+            "calibration_end_ts": 1792124612.0,
+            "window_seconds": 30.0
+          },
+          "reconstructed_start_ts": 1792124536.1821299
+        }
+      ],
+      "valid_percent": 97.0994088798553,
+      "reconstructed_percent": 3.5346001081544745
+    },
+    "gps_quality": {
+      "independent_gps_samples": 2126,
+      "gps_rejected": 7
+    },
+    "holdouts": [
+      {
+        "withheld_seconds": [
+          90,
+          140
+        ],
+        "reference_available_from_seconds": 145,
+        "reference_samples": 50,
+        "reconstructed_samples": 50,
+        "coverage_percent": 100.0,
+        "median_error_deg": 2.8579463252065977,
+        "p95_error_deg": 5.605947445883439,
+        "max_error_deg": 8.478750779483562,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": -141.00589282154868,
+                "drift_deg_s": -0.16783167513603017,
+                "drift_applied": true,
+                "drift_standard_error": 0.013033883870905219,
+                "drift_rate_bound_deg_s": 0.03258470967726305,
+                "origin_ts": 1792124747.0,
+                "error_median_deg": 1.2340125400085782,
+                "error_p95_deg": 3.88926866979675,
+                "error_max_deg": 4.894585390391967,
+                "accepted_samples": 58,
+                "rejected_samples": 3,
+                "backward_uncertainty_deg": 7.8940233241566355,
+                "turn_correlation": 0.8841301940949837,
+                "stable_fix_ts": 1792124687.0,
+                "calibration_start_ts": 1792124717.0,
+                "calibration_end_ts": 1792124777.0,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 97.0994088798553,
+          "reconstructed_percent": 11.22662091856714
+        }
+      },
+      {
+        "withheld_seconds": [
+          150,
+          200
+        ],
+        "reference_available_from_seconds": 205,
+        "reference_samples": 50,
+        "reconstructed_samples": 50,
+        "coverage_percent": 100.0,
+        "median_error_deg": 3.1020152254089766,
+        "p95_error_deg": 7.270369962314426,
+        "max_error_deg": 10.523346338606956,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": -152.2256606761009,
+                "drift_deg_s": -0.22024996374068442,
+                "drift_applied": true,
+                "drift_standard_error": 0.016211165239116594,
+                "drift_rate_bound_deg_s": 0.04052791309779148,
+                "origin_ts": 1792124807.0,
+                "error_median_deg": 1.693788296520239,
+                "error_p95_deg": 4.821456956087417,
+                "error_max_deg": 6.588250806078264,
+                "accepted_samples": 61,
+                "rejected_samples": 0,
+                "backward_uncertainty_deg": 11.987996781396424,
+                "turn_correlation": 0.8648771401384573,
+                "stable_fix_ts": 1792124747.0,
+                "calibration_start_ts": 1792124777.0,
+                "calibration_end_ts": 1792124837.0,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 97.0994088798553,
+          "reconstructed_percent": 14.023719395080835
+        }
+      },
+      {
+        "withheld_seconds": [
+          300,
+          360
+        ],
+        "reference_available_from_seconds": 365,
+        "reference_samples": 60,
+        "reconstructed_samples": 60,
+        "coverage_percent": 100.0,
+        "median_error_deg": 1.4399435027934828,
+        "p95_error_deg": 4.58054953778142,
+        "max_error_deg": 5.50252927953926,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "GPS/IMU turn sign or scale mismatch",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": 177.7117957767313,
+                "drift_deg_s": -0.19429187189444813,
+                "drift_applied": true,
+                "drift_standard_error": 0.007350539388560048,
+                "drift_rate_bound_deg_s": 0.02,
+                "origin_ts": 1792124967.0,
+                "error_median_deg": 0.7599935705672465,
+                "error_p95_deg": 3.424784694385039,
+                "error_max_deg": 4.950628470180504,
+                "accepted_samples": 61,
+                "rejected_samples": 0,
+                "backward_uncertainty_deg": 9.27204212111369,
+                "turn_correlation": null,
+                "stable_fix_ts": 1792124907.0,
+                "calibration_start_ts": 1792124937.0,
+                "calibration_end_ts": 1792124997.0,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 97.0994088798553,
+          "reconstructed_percent": 21.482648665784026
+        }
+      },
+      {
+        "withheld_seconds": [
+          600,
+          660
+        ],
+        "reference_available_from_seconds": 665,
+        "reference_samples": 23,
+        "reconstructed_samples": 23,
+        "coverage_percent": 100.0,
+        "median_error_deg": 2.338123399165113,
+        "p95_error_deg": 11.134269837493733,
+        "max_error_deg": 12.08017123632294,
+        "calibration": {
+          "status": "ok",
+          "segments": [
+            {
+              "status": "ok",
+              "attempts": [
+                {
+                  "window_seconds": 30.0,
+                  "status": "backward drift uncertainty requires a longer calibration",
+                  "samples": 31
+                },
+                {
+                  "window_seconds": 60,
+                  "status": "ok",
+                  "samples": 61
+                }
+              ],
+              "model": {
+                "offset_deg": 124.54675769656461,
+                "drift_deg_s": -0.15563647785817308,
+                "drift_applied": true,
+                "drift_standard_error": 0.008231954447654807,
+                "drift_rate_bound_deg_s": 0.02057988611913702,
+                "origin_ts": 1792125267.0,
+                "error_median_deg": 0.7418623822994732,
+                "error_p95_deg": 2.2592136851820115,
+                "error_max_deg": 3.364284813033464,
+                "accepted_samples": 56,
+                "rejected_samples": 5,
+                "backward_uncertainty_deg": 15.20888275384073,
+                "turn_correlation": 0.9014057959242554,
+                "stable_fix_ts": 1792125207.0,
+                "calibration_start_ts": 1792125237.0,
+                "calibration_end_ts": 1792125297.0,
+                "window_seconds": 60.0
+              },
+              "reconstructed_start_ts": 1792124536.1821299
+            }
+          ],
+          "valid_percent": 98.96367501445168,
+          "reconstructed_percent": 35.46814104835251
+        }
+      }
+    ]
+  }
+}

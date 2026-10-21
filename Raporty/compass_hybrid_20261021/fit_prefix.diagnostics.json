@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "reference_source": "fit",
+  "clips": [
+    {
+      "status": "ok",
+      "segments": [
+        {
+          "status": "ok",
+          "attempts": [
+            {
+              "window_seconds": 30.0,
+              "status": "ok",
+              "samples": 31
+            }
+          ],
+          "model": {
+            "offset_deg": -112.69610244928944,
+            "drift_deg_s": -0.1764928530578919,
+            "drift_applied": true,
+            "drift_standard_error": 0.0319671520158679,
+            "drift_rate_bound_deg_s": 0.07991788003966976,
+            "origin_ts": 1792124598.0370371,
+            "error_median_deg": 0.9324476258736638,
+            "error_p95_deg": 2.6991619305034646,
+            "error_max_deg": 2.9492519931984305,
+            "accepted_samples": 27,
+            "rejected_samples": 4,
+            "backward_uncertainty_deg": 5.6322126318520604,
+            "turn_correlation": 0.9798018296864668,
+            "stable_fix_ts": 1792124552.0,
+            "calibration_start_ts": 1792124582.0,
+            "calibration_end_ts": 1792124612.0,
+            "window_seconds": 30.0
+          },
+          "reconstructed_start_ts": 1792124536.1821299
+        }
+      ],
+      "valid_percent": 97.0994088798553,
+      "reconstructed_percent": 3.5346001081544745,
+      "method": "GYRO+ACCL quaternion",
+      "imu_segments": 1,
+      "integration_hz": 100,
+      "CORI_rejection": {
+        "reason": "CORI gravity-frame consistency failed",
+        "gravity_p95_deg": 29.851720581584907
+      },
+      "independent_gps_samples": 2126,
+      "gps_rejected": 7,
+      "orientation_reader_cache_hit": true,
+      "memory_bytes": 6864256,
+      "rigid_mount_assumption": true,
+      "file": "F:\\GoPro\\2026-10-16\\GX010380.MP4",
+      "cache_key": "f24fcbcd2fad48a759bc39bcbb1bb88f2fe61ad60c8e29f805f03054430c64b3",
+      "cache_hit": false,
+      "reference_source": "fit"
+    }
+  ],
+  "prepare_seconds": 1.0669673000229523,
+  "axis_memory_bytes": 3432144,
+  "algorithm_version": 1,
+  "measured_cpu_seconds": 1.859375,
+  "measured_wall_seconds": 1.108292100019753,
+  "process_rss_increase_bytes": 68825088,
+  "process_rss_peak_bytes": 541913088
+}

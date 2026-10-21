@@ -1,0 +1,71 @@
+{
+  "status": "ok",
+  "reference_source": "gpmf",
+  "clips": [
+    {
+      "status": "ok",
+      "segments": [
+        {
+          "status": "ok",
+          "attempts": [
+            {
+              "window_seconds": 30.0,
+              "status": "backward drift uncertainty requires a longer calibration",
+              "samples": 31
+            },
+            {
+              "window_seconds": 60,
+              "status": "ok",
+              "samples": 61
+            }
+          ],
+          "model": {
+            "offset_deg": -140.83655770159967,
+            "drift_deg_s": -0.17668316911998402,
+            "drift_applied": true,
+            "drift_standard_error": 0.011842345819258563,
+            "drift_rate_bound_deg_s": 0.029605864548146406,
+            "origin_ts": 1792124743.6990001,
+            "error_median_deg": 0.8903617770171053,
+            "error_p95_deg": 4.1407863635320785,
+            "error_max_deg": 4.8584355762183975,
+            "accepted_samples": 54,
+            "rejected_samples": 7,
+            "backward_uncertainty_deg": 7.408870516273945,
+            "turn_correlation": 0.8391421707959639,
+            "stable_fix_ts": 1792124683.199,
+            "calibration_start_ts": 1792124713.199,
+            "calibration_end_ts": 1792124773.199,
+            "window_seconds": 60.0
+          },
+          "reconstructed_start_ts": 1792124536.1821299
+        }
+      ],
+      "valid_percent": 96.21832285975348,
+      "reconstructed_percent": 11.04947134838794,
+      "method": "GYRO+ACCL quaternion",
+      "imu_segments": 1,
+      "integration_hz": 100,
+      "CORI_rejection": {
+        "reason": "CORI gravity-frame consistency failed",
+        "gravity_p95_deg": 29.851720581584907
+      },
+      "independent_gps_samples": 2113,
+      "gps_rejected": 145,
+      "orientation_reader_cache_hit": true,
+      "memory_bytes": 6864256,
+      "rigid_mount_assumption": true,
+      "file": "F:\\GoPro\\2026-10-16\\GX010380.MP4",
+      "cache_key": "4bce8135e312f59f950751ea4e02342e84524a107b8a02f1e323cae633a29d4c",
+      "cache_hit": false,
+      "reference_source": "gpmf"
+    }
+  ],
+  "prepare_seconds": 22.696544200007338,
+  "axis_memory_bytes": 3432144,
+  "algorithm_version": 1,
+  "measured_cpu_seconds": 27.296875,
+  "measured_wall_seconds": 22.71090910001658,
+  "process_rss_increase_bytes": 160927744,
+  "process_rss_peak_bytes": 618536960
+}
