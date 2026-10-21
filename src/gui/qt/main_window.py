@@ -228,7 +228,11 @@ class MainWindow(QMainWindow):
             self._move_preview_to(slot)
             self.preview._notify_controller_preview_size()
             if hasattr(self, "_controller") and self._controller:
-                if hasattr(self._controller, "refresh_preview_geometry_and_hud"):
+                if self.preview.is_hud_preparing() and hasattr(self._controller, "_hud_prep_request_frame"):
+                    # The HUD finishes preparing only on a frame rendered at
+                    # the size of the now visible preview.
+                    self._controller._hud_prep_request_frame()
+                elif hasattr(self._controller, "refresh_preview_geometry_and_hud"):
                     self._controller.refresh_preview_geometry_and_hud()
         else:
             if hasattr(self, "preview") and self.preview and hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():

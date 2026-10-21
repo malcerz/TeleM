@@ -89,7 +89,12 @@ def main() -> int:
     now = lambda: round(time.perf_counter() - t0[0], 3)  # noqa: E731
     sig.sig_progress.connect(lambda p, m: ev.append({"t": now(), "ev": "progress", "pct": p, "msg": m}))
     sig.sig_project_load_state.connect(lambda d: ev.append({"t": now(), "ev": "load_state", "state": d.get("state"), "gen": d.get("generation")}))
-    sig.sig_preview_frame_ready.connect(lambda img: ev.append({"t": now(), "ev": "frame", "hud_cov": round(hud_coverage(img), 4)}))
+    def on_frame(img):
+        r = win.preview.get_physical_video_rect()
+        ev.append({"t": now(), "ev": "frame", "hud_cov": round(hud_coverage(img), 4),
+                   "size": [img.width(), img.height()], "preview_phys": [r.width(), r.height()],
+                   "preview_visible": win.preview.isVisible()})
+    sig.sig_preview_frame_ready.connect(on_frame)
     sig.sig_map_ready.connect(lambda: ev.append({"t": now(), "ev": "map_ready"}))
     sig.sig_compass_prepared.connect(lambda tok: ev.append({"t": now(), "ev": "compass_prepared"}))
     if hasattr(sig, "sig_hud_preparation"):

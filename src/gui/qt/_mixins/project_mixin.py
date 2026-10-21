@@ -635,25 +635,28 @@ class ProjectMixin:
             prep.finish("map", error=text)
 
     def _hud_prep_request_frame(self) -> None:
-        # _render_preview drops a None request while busy; queue a re-render
-        # of the current position first, so a render finishing right now
-        # still picks it up (worst case one extra render, never none).
-        self._preview_pending_seek = float(getattr(self, "last_preview_ts", 0.0) or 0.0)
-        if not getattr(self, "_preview_is_rendering", False):
-            self._preview_pending_seek = None
-            self.refresh_preview_geometry_and_hud()
-            # An unchanged preview size does not re-render (re-opening a
-            # project in the same window left the bare video until a seek).
-            if not getattr(self, "_preview_is_rendering", False):
-                self._render_preview()
+        self.refresh_preview_geometry_and_hud()
+        # An unchanged preview size does not re-render (re-opening a project
+        # in the same window left the bare video until a seek). A request
+        # while a render runs is coalesced into one follow-up render.
+        self._render_preview()
 
-    def _hud_prep_on_frame(self) -> None:
+    def _hud_prep_on_frame(self, size: tuple | None = None) -> None:
         """A Preview frame with the composed HUD of the ready project."""
         prep = self._hud_prep_current()
         if prep is None or not getattr(self, "project_ready", False):
             return
         if prep.state_of("hud_frame") != "active" or prep.state_of("compass") in ("pending", "active"):
             return  # e.g. hybrid compass still calibrating: not the full HUD yet
+        widget = getattr(self, "video_preview_widget", None)
+        try:
+            if widget is not None and not widget.isVisible():
+                return  # rendered for a hidden tab; the tab switch renders again
+        except RuntimeError:
+            pass
+        target = (getattr(self, "_preview_target_w", None), getattr(self, "_preview_target_h", None))
+        if size is not None and None not in target and tuple(size) != target:
+            return  # stale size; the resize re-render follows (coalesced)
         prep.finish("hud_frame")
 
     def _publish_project_load_state(self, state: str, generation: int) -> None:

@@ -609,20 +609,31 @@ class PreviewMixin:
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
         import threading
+        lock = self.__dict__.setdefault("_preview_schedule_lock", threading.Lock())
         # Ensure we only have one background render at a time to prevent queue buildup
-        if getattr(self, "_preview_is_rendering", False):
-            self._preview_pending_seek = seek_seconds
-            return
-        self._preview_is_rendering = True
-        self._preview_pending_seek = None
-        
+        with lock:
+            if getattr(self, "_preview_is_rendering", False):
+                # Coalesce into one follow-up render. A request without a
+                # seek (e.g. the preview resized when its tab became
+                # visible) used to be dropped here, leaving a HUD rendered
+                # at the old, smaller size until the next seek.
+                self._preview_pending_seek = seek_seconds
+                self._preview_rerender_pending = True
+                return
+            self._preview_is_rendering = True
+            self._preview_pending_seek = None
+            self._preview_rerender_pending = False
+
         def _worker():
             try:
                 self._render_preview_sync(seek_seconds)
             finally:
-                self._preview_is_rendering = False
-                pending = getattr(self, "_preview_pending_seek", None)
-                if pending is not None:
+                with lock:
+                    self._preview_is_rendering = False
+                    again = getattr(self, "_preview_rerender_pending", False)
+                    pending = getattr(self, "_preview_pending_seek", None)
+                    self._preview_rerender_pending = False
+                if again:
                     self._render_preview(pending)
                     
         threading.Thread(target=_worker, daemon=True).start()
@@ -1025,7 +1036,7 @@ class PreviewMixin:
 
                 self.signals.sig_preview_frame_ready.emit(qimg)
                 if overlay_data is not None and hasattr(self, "_hud_prep_on_frame"):
-                    self._hud_prep_on_frame()
+                    self._hud_prep_on_frame((qimg.width(), qimg.height()))
                 presentation_debug('preview_emitted', generation=self._presentation_generation,
                                    target_dt=target_dt)
                 self.signals.sig_bboxes_ready.emit(
