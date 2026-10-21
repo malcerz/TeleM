@@ -186,7 +186,7 @@ _BUILTIN_PROVIDERS: dict[str, MapProviderCapabilities] = {
     "satellite": MapProviderCapabilities(
         provider_id="satellite",
         name="Esri World Imagery (Satellite)",
-        service_url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        service_url="https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attribution_text="Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
         attribution_url="https://www.esri.com/en-us/legal/copyright-trademarks",
         requires_api_key=True,
@@ -313,6 +313,14 @@ class MapProviderRegistry:
         return caps.allows_route_prefetch
 
     @classmethod
+    def cache_generation(cls, style_or_id: str) -> int:
+        """Opaque revision, never a credential or credential hash."""
+        if cls.resolve_provider_id(style_or_id) == "satellite":
+            from src.integrations.esri import esri_client
+            return esri_client.generation
+        return 0
+
+    @classmethod
     def can_export_video(
         cls,
         style_or_id: str,
@@ -363,6 +371,11 @@ class MapProviderRegistry:
         url = caps.service_url
         if not url:
             return ""
+
+        # Esri transport owns authentication; this public helper must never
+        # expose a credential-bearing URL to callers or cache identities.
+        if caps.provider_id == "satellite":
+            return url.format(z=z, x=x, y=y)
 
         # Fetch API key from credential store if not explicitly supplied
         if api_key is None and caps.requires_api_key:

@@ -53,6 +53,8 @@ class AppSignals(QObject):
 
     # Zakładka Ustawienia: zmiana ustawień
     sig_settings_changed = Signal(str, object)
+    sig_map_credentials_changed = Signal()
+    sig_open_map_integrations = Signal()
     # (setting_name: str, value: Any)
 
     # Zakładka Ustawienia: jawny zapis ustawień globalnych do pliku

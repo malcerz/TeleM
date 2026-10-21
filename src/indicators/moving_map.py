@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import math
 from datetime import timezone
+from src.map_providers import MapProviderRegistry
 
 try:
     from PIL import Image
@@ -242,7 +243,7 @@ def render_map_working_image(
         track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
         track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
         cache_key = (
-            id(gps_track), effective_zoom, map_style, marker_style,
+            id(gps_track), effective_zoom, map_style, marker_style, MapProviderRegistry.cache_generation(map_style),
             track_color, track_width, track_aa, track_outline_w, track_outline_color,
         )
         renderers = _shared_map_renderers()
@@ -419,7 +420,7 @@ def render_map_unrotated_working_image(
         track_outline_w = max(0, int(cfg.get("track_outline_width", 0) or 0))
         track_outline_color = _parse_marker_color(cfg.get("track_outline_color", "#000000"))
         cache_key = (
-            id(gps_track), effective_zoom, map_style, marker_style,
+            id(gps_track), effective_zoom, map_style, marker_style, MapProviderRegistry.cache_generation(map_style),
             track_color, track_width, track_aa, track_outline_w, track_outline_color,
             map_w, working_size,
         )
@@ -618,7 +619,7 @@ def _render_moving_map_indicator(
         marker_style = str(cfg.get("map_marker_style", "dot")).strip().lower()
         if bool(cfg.get("arrow_marker", False)) and marker_style == "dot":
             marker_style = "directional"
-        cache_key = (track_id, effective_zoom, map_style, marker_style)
+        cache_key = (track_id, effective_zoom, map_style, marker_style, MapProviderRegistry.cache_generation(map_style))
         if not hasattr(_render_moving_map_indicator, "_map_renderers"):
             _render_moving_map_indicator._map_renderers = {}
         _cache = _render_moving_map_indicator._map_renderers

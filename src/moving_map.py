@@ -412,6 +412,9 @@ class TileCache:
         return False
 
     def has(self, z: int, x: int, y: int, style: str) -> bool:
+        if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+            from src.integrations.esri import esri_client
+            return esri_client.cached_image(z, x, y) is not None
         """Fast check if tile is present in memory or disk without decoding (respecting TTL)."""
         key = (z, x, y, style)
         with self._lock:
@@ -437,6 +440,8 @@ class TileCache:
 
         Returns a set of (z, x, y) tuples that exist in cache (excluding expired).
         """
+        if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+            return {t for t in tiles if self.has(*t, style)}
         # If has() has been mocked or overridden in tests, delegate cleanly
         if type(self).has is not TileCache.has or getattr(self.has, "_mock_return_value", None) is not None or getattr(TileCache.has, "_mock_return_value", None) is not None:
             return {t for t in tiles if self.has(t[0], t[1], t[2], style)}
@@ -482,6 +487,9 @@ class TileCache:
         return found
 
     def get(self, z, x, y, style) -> Image.Image | None:
+        if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+            from src.integrations.esri import esri_client
+            return esri_client.cached_image(z, x, y)
         lookup_started = time.perf_counter()
         key = (z, x, y, style)
         with MapTileStats._lock:
@@ -545,6 +553,10 @@ class TileCache:
         expires_at: float | None = None,
         etag: str | None = None,
     ):
+        if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+            # Esri transport owns session-only cache; never archive imagery.
+            type(self)._content_revision += 1
+            return
         key = (z, x, y, style)
         try:
             img = Image.open(io.BytesIO(data)).convert("RGBA")
@@ -581,6 +593,12 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
     if not is_map_network_allowed():
         print(f"[MAP CACHE MISS DURING RENDER] provider={style} z={z} x={x} y={y}", flush=True)
         return None
+    if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+        from src.integrations.esri import esri_client, EsriError
+        try:
+            return esri_client.tile(z, x, y)
+        except EsriError:
+            return None
     with MapTileStats._lock:
         MapTileStats.network_requests += 1
 
@@ -618,7 +636,7 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
             elif e.code == 429:
                 print(f"[MAP HTTP 429] Rate limit exceeded for provider='{style}' ({safe_url}).", flush=True)
             else:
-                print(f"[MAP HTTP {e.code}] Error fetching tile {z}/{x}/{y} from {safe_url}: {e}", flush=True)
+                print(f"[MAP HTTP {e.code}] Error fetching tile {z}/{x}/{y} from {safe_url}", flush=True)
             return None
         except Exception:
             return None

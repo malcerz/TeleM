@@ -315,23 +315,30 @@ def delete_strava_tokens() -> bool:
 
 def _map_api_key_target(provider_id: str) -> str:
     clean_id = str(provider_id or "").strip().lower()
+    if clean_id in ("satellite", "arcgis", "esri_satellite", "arcgis_satellite"):
+        clean_id = "esri"
     return f"{_TARGET_MAP_API_KEY_PREFIX}{clean_id}:api_key"
 
 
 def save_map_api_key(provider_id: str, api_key: str) -> bool:
     """Store an API key for a map provider securely in Windows Credential Manager."""
-    if not provider_id or not api_key:
+    if not provider_id or not api_key or not str(api_key).strip():
         return False
     return set_credential(_map_api_key_target(provider_id), str(api_key).strip())
 
 
 def get_map_api_key(provider_id: str) -> Optional[str]:
-    """Retrieve an API key for a map provider, checking Windows Credential Manager then env vars."""
+    """Read a map key; Esri uses Credential Manager only, other providers allow env fallbacks."""
     if not provider_id:
         return None
     val = get_credential(_map_api_key_target(provider_id))
     if val:
         return val
+
+    # BYOK Esri has one source of truth; deletion must not resurrect a key
+    # from an ambient environment variable.
+    if str(provider_id).strip().lower() in ("esri", "satellite", "arcgis", "esri_satellite", "arcgis_satellite"):
+        return None
 
     # Environment variable fallbacks
     clean = str(provider_id).strip().upper()

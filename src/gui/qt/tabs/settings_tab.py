@@ -20,6 +20,7 @@ class SettingsTab(QWidget):
 
     sig_garmin_status = Signal(str, str)
     sig_strava_status = Signal(str, str)
+    sig_esri_status = Signal(int, bool, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -29,6 +30,8 @@ class SettingsTab(QWidget):
         self._analysis_active = False
         self._garmin_dialog = None
         self._garmin_busy = False
+        self._esri_generation = 0
+        self.sig_esri_status.connect(self._update_esri_status)
         self.sig_garmin_status.connect(self._update_garmin_status)
         self.sig_strava_status.connect(self._update_strava_status)
         self._build_ui()
@@ -296,7 +299,88 @@ class SettingsTab(QWidget):
 
         vbox.addWidget(integ_group)
 
+        self.esri_group = QGroupBox("Integracje → Esri World Imagery")
+        esri_form = QFormLayout(self.esri_group)
+        self.edit_esri_key = QLineEdit()
+        self.edit_esri_key.setEchoMode(QLineEdit.Password)
+        self.edit_esri_key.setPlaceholderText("Wprowadź nowy klucz; zapisany klucz pozostaje ukryty")
+        esri_form.addRow("Klucz API Esri:", self.edit_esri_key)
+        esri_buttons = QHBoxLayout()
+        self.btn_esri_save = QPushButton("Zapisz")
+        self.btn_esri_test = QPushButton("Sprawdź połączenie")
+        self.btn_esri_delete = QPushButton("Usuń klucz")
+        self.btn_esri_save.clicked.connect(self._save_esri_key)
+        self.btn_esri_test.clicked.connect(self._test_esri_key)
+        self.btn_esri_delete.clicked.connect(self._delete_esri_key)
+        for button in (self.btn_esri_save, self.btn_esri_test, self.btn_esri_delete):
+            esri_buttons.addWidget(button)
+        esri_form.addRow(esri_buttons)
+        from src.integrations.esri import esri_client, INSTRUCTIONS
+        self.lbl_esri_status = QLabel(esri_client.status)
+        self.lbl_esri_status.setWordWrap(True)
+        esri_form.addRow("Status:", self.lbl_esri_status)
+        info = QLabel(f'<a href="{INSTRUCTIONS}">Jak uzyskać klucz Esri</a><br>'
+                      'Wymagane uprawnienie: premium:user:basemaps.<br>'
+                      'Klucz należy do Ciebie. Odpowiadasz za koszty swojego konta Esri.')
+        info.setOpenExternalLinks(True)
+        info.setWordWrap(True)
+        esri_form.addRow(info)
+        vbox.addWidget(self.esri_group)
+
         vbox.addStretch()
+
+    def _esri_changed(self):
+        from src.integrations.esri import esri_client
+        self._esri_generation += 1
+        esri_client.credentials_changed()
+        self.edit_esri_key.clear()
+        self.lbl_esri_status.setText(esri_client.status)
+        self.btn_esri_test.setEnabled(True)
+        self.signals.sig_map_credentials_changed.emit()
+
+    def _save_esri_key(self):
+        from src.integrations.credential_store import save_map_api_key
+        key = self.edit_esri_key.text().strip()
+        if not key:
+            self.lbl_esri_status.setText("Wprowadź klucz API Esri")
+            return
+        if save_map_api_key("esri", key):
+            self._esri_changed()
+        else:
+            self.lbl_esri_status.setText("Nie udało się zapisać klucza w Windows Credential Manager")
+
+    def _delete_esri_key(self):
+        from src.integrations.credential_store import delete_map_api_key
+        if delete_map_api_key("esri"):
+            self._esri_changed()
+        else:
+            self.lbl_esri_status.setText("Nie udało się usunąć klucza z Windows Credential Manager")
+
+    def _test_esri_key(self):
+        from src.integrations.esri import esri_client
+        if self.edit_esri_key.text().strip():
+            self.lbl_esri_status.setText("Najpierw zapisz wprowadzony klucz")
+            return
+        generation = self._esri_generation
+        self.btn_esri_test.setEnabled(False)
+        self.lbl_esri_status.setText("Sprawdzanie połączenia…")
+        def run():
+            ok, message = esri_client.test_connection()
+            self.sig_esri_status.emit(generation, ok, message)
+        threading.Thread(target=run, name="EsriConnectionTest", daemon=True).start()
+
+    def _update_esri_status(self, generation, ok, message):
+        if generation != self._esri_generation:
+            return
+        self.btn_esri_test.setEnabled(True)
+        self.lbl_esri_status.setText(message)
+        self.lbl_esri_status.setStyleSheet("color: #88cc88" if ok else "color: #eeaa77")
+        if ok:
+            self.signals.sig_map_credentials_changed.emit()
+
+    def focus_esri(self):
+        self.settings_scroll.ensureWidgetVisible(self.esri_group)
+        self.edit_esri_key.setFocus()
 
     def closeEvent(self, event):
         self.licenses_panel.stop_probe()

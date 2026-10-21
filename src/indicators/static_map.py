@@ -6,6 +6,7 @@ Extracted from ``overlay_renderer.py``.
 from __future__ import annotations
 
 import threading
+import os
 from datetime import timezone
 
 try:
@@ -44,6 +45,10 @@ def _static_target_index(gps_track, target_dt, current_position) -> int:
 def _tile_cached(z: int, x: int, y: int, style: str) -> bool:
     """True when the tile is present in either the shared SQLite cache or the
     style-namespaced file cache (used to decide Level 1 vs Level 2)."""
+    from src.map_providers import MapProviderRegistry
+    if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+        from src.integrations.esri import esri_client
+        return esri_client.cached_image(z, x, y) is not None
     try:
         from src.moving_map import get_shared_tile_cache
         if get_shared_tile_cache().get(z, x, y, style) is not None:

@@ -107,6 +107,12 @@ def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, downlo
     if Image is None:
         return None
 
+    if MapProviderRegistry.resolve_provider_id(style) == "satellite":
+        from src.moving_map import download_tile_shared, get_shared_tile_cache
+        if download:
+            return download_tile_shared(z, x, y, style)
+        return get_shared_tile_cache().get(z, x, y, style)
+
     cp = _cache_path(z, x, y, style)
     if cp.exists():
         try:
@@ -196,7 +202,7 @@ def viewport_tiles_for(
 
 
 def _tile_cache_key(zoom: int, tx1: int, tx2: int, ty1: int, ty2: int, style: str) -> str:
-    return f"{zoom}_{tx1}_{tx2}_{ty1}_{ty2}_{style}"
+    return f"{zoom}_{tx1}_{tx2}_{ty1}_{ty2}_{style}_{MapProviderRegistry.cache_generation(style)}"
 
 
 def _track_fingerprint(gps_track: list) -> int:

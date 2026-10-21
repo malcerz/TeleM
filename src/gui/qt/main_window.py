@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QProgressBar, QLabel, QMessageBox,
     QWidget,
@@ -91,6 +91,13 @@ class MainWindow(QMainWindow):
 
         self.map_status_label = QLabel("")
         self.status_bar.addPermanentWidget(self.map_status_label)
+        self.esri_status_label = QLabel()
+        self.esri_status_label.linkActivated.connect(lambda _: self._open_esri_settings())
+        self.status_bar.addPermanentWidget(self.esri_status_label)
+        self.signals.sig_open_map_integrations.connect(self._open_esri_settings)
+        self._esri_status_timer = QTimer(self)
+        self._esri_status_timer.timeout.connect(self._refresh_esri_status)
+        self._esri_status_timer.start(1000)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(300)
@@ -111,6 +118,23 @@ class MainWindow(QMainWindow):
         self.signals.sig_project_load_state.connect(self._on_project_load_state)
         self.signals.sig_project_cleared.connect(self._on_project_cleared)
         self._update_main_tabs_state()
+
+    def _open_esri_settings(self):
+        self.tabs.setCurrentWidget(self._settings_tab)
+        self._settings_tab.focus_esri()
+
+    def _refresh_esri_status(self):
+        from src.integrations.esri import esri_client
+        from src.map_providers import MapProviderRegistry
+        from html import escape
+        controller = getattr(self, "_controller", None)
+        layout = getattr(controller, "layout", {})
+        active = any(c.get("enabled", True) and
+                     MapProviderRegistry.resolve_provider_id(c.get("map_style", "")) == "satellite"
+                     for c in layout.get("indicators", {}).values() if isinstance(c, dict))
+        self.esri_status_label.setVisible(active)
+        if active:
+            self.esri_status_label.setText(f'Esri: {escape(esri_client.status)} · <a href="settings">Ustawienia → Integracje</a>')
 
     def _update_main_tabs_state(self) -> None:
         controller = getattr(self, "_controller", None)
