@@ -505,6 +505,10 @@ class PreviewMixin:
 
     def _build_prepare_cache(self) -> None:
         """Oblicza raz wartości zakresów (const dla całego wideo)."""
+        compass_cfg = self.layout.get("indicators", {}).get("compass", {})
+        self.telemetry._compass_cfg = dict(compass_cfg)
+        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            self.telemetry.request_compass_preparation(compass_cfg, self.signals.sig_compass_prepared.emit)
         spd = self.telemetry.speed_samples or []
         trk = self.telemetry.track_samples or []
         alt = self.telemetry.alt_samples or []
@@ -589,6 +593,16 @@ class PreviewMixin:
             "max_alt": max_a,
             "auto_ranges": auto_ranges,
         }
+
+    def _on_compass_prepared(self, token) -> None:
+        cfg = self.layout.get("indicators", {}).get("compass", {})
+        if cfg.get("compass_heading_mode", "standard") != "gps_imu":
+            return
+        if token != self.telemetry._compass_token or self.telemetry._compass_result is None:
+            result = self.telemetry.request_compass_preparation(cfg, self.signals.sig_compass_prepared.emit)
+            if result is None:
+                return
+        self._render_preview()
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
         import threading

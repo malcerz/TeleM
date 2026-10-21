@@ -349,6 +349,10 @@ class RenderPreparationService:
         ) if isinstance(layout, dict) else False
 
         raw = json.dumps({"indicators": items, "skip_pauses": skip_pauses}, sort_keys=True)
+        compass_cfg = indicators.get("compass", {})
+        if isinstance(compass_cfg, dict) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            from src.telemetry_compass_hybrid import parameters, ALGORITHM_VERSION
+            raw += json.dumps({"hybrid": parameters(compass_cfg), "version": ALGORITHM_VERSION}, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
     @classmethod
@@ -405,6 +409,18 @@ class RenderPreparationService:
         compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
         if compass_cfg and compass_cfg.get("enabled", True):
             key_dict["compass_heading_contract"] = "selected_source_cog_v2_no_fallback"
+            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                from src.telemetry_compass_hybrid import parameters, ALGORITHM_VERSION
+                from src.telemetry_compass_orientation import source_fingerprint, READER_VERSION
+                def hybrid_fingerprint(path):
+                    try:
+                        return source_fingerprint(path) if path else None
+                    except OSError:
+                        return str(path)
+                key_dict["compass_hybrid"] = {
+                    "parameters": parameters(compass_cfg), "version": ALGORITHM_VERSION, "reader": READER_VERSION,
+                    "files": [hybrid_fingerprint(p) for p in (*video_paths, fit_path)],
+                }
         # Per-clip telemetry sync corrections change the sampled activity data
         # just like the global offset; only added when present so existing
         # keys stay valid.
@@ -843,7 +859,7 @@ class RenderPreparationService:
         columns["heading"] = _vectorize_heading(heading_samples, target_ts_arr, ref_dt)
         if "compass" in heading_keys:
             compass_samples = kwargs.get("compass_heading_samples")
-            if compass_samples is None:
+            if compass_samples is None and indicators["compass"].get("compass_heading_mode", "standard") != "gps_imu":
                 compass_source = str(indicators["compass"].get("source", "gpmf")).strip().lower()
                 if "field_samples" in kwargs:
                     from types import SimpleNamespace
@@ -858,9 +874,16 @@ class RenderPreparationService:
                 else:
                     from src.ffmpeg.worker_cache import _resolve_cache_samples
                     compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
-            columns["heading_compass"] = _vectorize_heading(
-                compass_samples or [], target_ts_arr, ref_dt, preserve_missing=True,
-            )
+            if indicators["compass"].get("compass_heading_mode", "standard") == "gps_imu":
+                from src.telemetry_compass_hybrid import sample_array, sample_hybrid_axis, timestamp
+                prepared = (kwargs.get("field_samples") or {}).get("compass_hybrid_samples")
+                if prepared is None:
+                    prepared = kwargs.get("compass_heading_samples")
+                columns["heading_compass"] = sample_hybrid_axis(sample_array(prepared), timestamp(ref_dt)+target_ts_arr)
+            else:
+                columns["heading_compass"] = _vectorize_heading(
+                    compass_samples or [], target_ts_arr, ref_dt, preserve_missing=True,
+                )
         if "track_map" in heading_keys:
             map_cfg = indicators.get("track_map", {})
             smooth_s = float(map_cfg.get("map_rotation_smoothing_s", 0.0) or 0.0)
@@ -1549,7 +1572,10 @@ class RenderPreparationService:
         if compass_cfg.get("enabled", True) and compass_cfg:
             source = str(compass_cfg.get("source", "gpmf")).strip().lower()
             resolver = getattr(telemetry, "resolve_samples", None)
-            if callable(resolver):
+            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                compass_samples = telemetry.prepare_compass(compass_cfg).samples
+                field_samples = dict(field_samples or {}, compass_hybrid_samples=compass_samples)
+            elif callable(resolver):
                 compass_samples = resolver("heading", source)
             elif source == "fit":
                 compass_samples = fit_data.get("heading") or []

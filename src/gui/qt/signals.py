@@ -194,6 +194,7 @@ class AppSignals(QObject):
     # Overview map ready / progress.  Emitted from the MapPreload worker;
     # the controller marshals preview refresh via these (queued) signals.
     sig_map_ready = Signal()
+    sig_compass_prepared = Signal(object)
     # (loaded_tiles, required_tiles)
     sig_map_progress = Signal(int, int)
     # Lightweight status text (e.g. "Mapa: przygotowywanie 123/493", "Mapa: gotowa", "")

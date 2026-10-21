@@ -808,6 +808,7 @@ class ProjectMixin:
                             self.telemetry._coverage_start = proj_start
                     # Warm global multi-file battery presentation plan
                     try:
+                        self.telemetry.invalidate_compass()
                         self.telemetry.timeline = timeline
                         self.telemetry.update_battery_coverage(
                             self.telemetry.start_dt_utc,
@@ -1482,6 +1483,7 @@ class ProjectMixin:
         """Połącz próbki telemetrii kolejnego klipu z self.telemetry."""
         if not fields:
             return
+        self.telemetry.invalidate_compass()
         t0 = _time.perf_counter()
         # 1. Dystans kumulacyjny (track_samples)
         new_track = fields.get("track_samples") or []

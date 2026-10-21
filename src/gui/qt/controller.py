@@ -371,6 +371,7 @@ class AppController(
 
         s.sig_save_global_settings.connect(self._on_save_global_settings)
         s.sig_map_ready.connect(lambda: self._render_preview())
+        s.sig_compass_prepared.connect(self._on_compass_prepared)
         s.sig_schedule_mpv_hwdec_check.connect(self._schedule_mpv_hwdec_check)
 
     def _load_startup_preset(self) -> None:

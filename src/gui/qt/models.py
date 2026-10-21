@@ -119,6 +119,8 @@ def get_schema_for_indicator(
 ) -> list[FieldSchema]:
     """Build a form schema with the indicator's canonical numeric defaults."""
     from src.telemetry_resolver import is_integer_only_field
+    if indicator_key == "compass":
+        return compass_indicator_fields(cfg)
     schema = get_schema_for_form(
         form, bar_style=bar_style, chart_time_scope=chart_time_scope,
     )
@@ -428,10 +430,11 @@ def gauge_indicator_fields() -> list[FieldSchema]:
     ) + _effects_fields()
 
 
-def compass_indicator_fields() -> list[FieldSchema]:
+def compass_indicator_fields(cfg=None) -> list[FieldSchema]:
     """Compass: gauge layout controls plus compass-only styling fields."""
     return (
         _header_fields(with_icon=False, with_label=False, with_unit=False) + _form_field(["gauge"])
+        + _compass_heading_fields(cfg or {})
         + [
             FieldSchema("compass_rotation_mode", "choice", "Obracanie kompasu", tab="Compass",
                         choices=[("needle", "Wskazówka na stałej tarczy"),
@@ -461,6 +464,33 @@ def compass_indicator_fields() -> list[FieldSchema]:
             FieldSchema("compass_tick_width", "int", "Grubość ticków", tab="Compass", min_val=1, max_val=10, step=1, default=1),
         ]
     ) + _effects_fields()
+
+
+def _compass_heading_fields(cfg):
+    fields = [FieldSchema("compass_heading_mode", "choice", "Tryb kierunku", tab="Compass",
+                          choices=[("standard", "Standardowy"), ("gps_imu", "GPS/FIT + IMU — rekonstrukcja wstecz")],
+                          default="standard")]
+    if cfg.get("compass_heading_mode", "standard") != "gps_imu":
+        return fields
+    fields += [
+        FieldSchema("compass_reference_source", "choice", "Źródło kalibracji", tab="Compass",
+                    choices=[("gpmf", "GPS GoPro"), ("fit", "FIT / Garmin")], default="gpmf"),
+        FieldSchema("gps_stabilization_seconds", "float", "Stabilizacja GPS [s]", tab="Compass",
+                    min_val=30, max_val=300, step=1, default=30.),
+        FieldSchema("min_calibration_seconds", "float", "Minimalna kalibracja [s]", tab="Compass",
+                    min_val=30, max_val=300, step=1, default=30.),
+        FieldSchema("max_calibration_seconds", "float", "Maksymalna kalibracja [s]", tab="Compass",
+                    min_val=30, max_val=300, step=1, default=300.),
+        FieldSchema("min_calibration_speed_kmh", "float", "Minimalna prędkość [km/h]", tab="Compass",
+                    min_val=1, max_val=60, step=.5, default=8.),
+        FieldSchema("compass_drift_correction", "bool", "Korekta dryftu IMU", tab="Compass", default=True),
+        FieldSchema("compass_imu_method", "choice", "Metoda IMU", tab="Compass",
+                    choices=[("auto", "Auto: CORI / GYRO"), ("cori", "CORI + GRAV"), ("gyro", "GYRO + ACCL")], default="auto"),
+        FieldSchema("compass_mount_offset_deg", "float", "Offset kamery od kursu [°]", tab="Compass",
+                    section="Założenie: kamera sztywno zamontowana względem kierunku jazdy",
+                    min_val=-180, max_val=180, step=.5, default=0.),
+    ]
+    return fields
 
 
 def _bar_ruler_fields() -> list[FieldSchema]:

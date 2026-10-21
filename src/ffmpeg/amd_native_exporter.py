@@ -797,6 +797,8 @@ def _amd_compass_samples(layout, field_samples, fit_data):
     from src.telemetry_resolver import resolve_samples_from_sources
 
     cfg = layout.get("indicators", {}).get("compass", {})
+    if cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        return (field_samples or {}).get("compass_hybrid_samples") or []
     fields = SimpleNamespace(**(field_samples or {}))
     source = str(cfg.get("source", "gpmf") or "gpmf").strip().lower()
     return resolve_samples_from_sources(

@@ -1036,7 +1036,12 @@ class RenderMixin:
             {"phase": "prep", "pct": 0.0, "label": "Przygotowywanie HUD..."},
         )
 
+        compass_cfg = self.layout.get("indicators", {}).get("compass", {})
+        compass_hybrid_samples = None
+        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            compass_hybrid_samples = self.telemetry.prepare_compass(compass_cfg).samples
         field_samples = {
+            "compass_hybrid_samples": compass_hybrid_samples,
             "speed_samples": speed,
             "track_samples": track,
             "alt_samples": alt,

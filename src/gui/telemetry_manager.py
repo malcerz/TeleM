@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import median
 from pathlib import Path
 import time as _time
+import threading
 from typing import Any, Callable, Optional
 
 from src.telemetry_resolver import (
@@ -493,6 +494,12 @@ class TelemetryDataManager:
         self.gpx_gps_track: list[tuple[datetime, float, float]] = []
         self.fit_gps_track: list[tuple[datetime, float, float]] = []
         self.heading_samples: list[tuple[datetime, float | None]] = []
+        self._compass_result = None
+        self._compass_cfg = {}
+        self._compass_token = None
+        self._compass_generation = 0
+        self._compass_worker = None
+        self._compass_lock = threading.RLock()
 
         # FIT samples – dict-based (matches telemetry_fit.process_fit return type)
         self.fit_data: dict[str, SampleList] = {}
@@ -636,6 +643,7 @@ class TelemetryDataManager:
 
     def load_gpmf_records(self, records: list[dict], profile_cb=None, progress_cb=None) -> None:
         """Extract track, iso, exposure, temp from records (speed/alt come from exiftool flat dict)."""
+        self.invalidate_compass()
         self.records = records
 
         def _run(stage, fn, label=None):
@@ -1105,6 +1113,7 @@ class TelemetryDataManager:
         objects are built first and swapped in afterwards, so readers only
         ever see a complete old or new state.
         """
+        self.invalidate_compass()
         started = _time.perf_counter()
         self.telemetry_sync_offset_s = float(offset_s or 0.0)
         self.telemetry_sync_clip_offsets_s = {int(k): float(v) for k, v in (clip_offsets_s or {}).items()}
@@ -1157,6 +1166,7 @@ class TelemetryDataManager:
 
     def _finish_fit_commit(self, records: Optional[list[dict]]) -> None:
         """Coverage/battery bookkeeping after a FIT state commit."""
+        self.invalidate_compass()
         if self.start_dt_utc is None:
             if getattr(self.fit_data, "source_start", None) is not None:
                 self.start_dt_utc = self.fit_data.source_start
@@ -1236,6 +1246,7 @@ class TelemetryDataManager:
 
     def clear_source(self, source: str) -> None:
         """Clear samples for a specific source type."""
+        self.invalidate_compass()
         if source == "gpx":
             self.gpx_speed_samples.clear()
             self.gpx_alt_samples.clear()
@@ -1260,6 +1271,7 @@ class TelemetryDataManager:
 
     def clear_all(self) -> None:
         """Clear all telemetry data."""
+        self.invalidate_compass()
         self.records.clear()
         self.speed_samples.clear()
         self.alt_samples.clear()
@@ -1576,6 +1588,14 @@ class TelemetryDataManager:
             raw_cfg = self.layout.get("indicators", {}).get(indicator_key, {})
             if isinstance(raw_cfg, dict):
                 cfg = dict(raw_cfg)
+        if field_name == "heading" and indicator_key == "compass":
+            compass_cfg = cfg or self._compass_cfg
+            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                # No integration, file reads or cache hashing in the HUD loop.
+                from src.telemetry_compass_hybrid import parameters
+                token = (self._compass_generation, tuple(sorted(parameters(compass_cfg).items())))
+                result = self._compass_result if token == self._compass_token else None
+                return result.lookup(target_dt) if result is not None else None
         samples = self.resolve_samples(field_name, selected_source)
         if not samples:
             return None
@@ -1638,6 +1658,60 @@ class TelemetryDataManager:
     def _resolve_samples(self, field_name: str, prefer: str) -> SampleList:
         """Compatibility adapter for legacy internal callers."""
         return self.resolve_samples(field_name, prefer)
+
+    def invalidate_compass(self) -> None:
+        self._compass_generation += 1
+        self._compass_result = None
+        self._compass_cfg = {}
+        self._compass_token = None
+
+    def _compute_compass(self, cfg, snapshot, token):
+        from src.telemetry_compass_hybrid import prepare_manager_compass, HybridResult
+        with self._compass_lock:
+            try:
+                result = prepare_manager_compass(snapshot, cfg)
+            except Exception as exc:
+                result = HybridResult(diagnostics={"status": "unavailable", "reason": str(exc)})
+            if self._compass_token == token:
+                self._compass_result = result
+        return result
+
+    def prepare_compass(self, cfg):
+        """Synchronous export preparation, reusing an in-flight Preview job."""
+        from src.telemetry_compass_hybrid import parameters, snapshot_manager
+        self._compass_cfg = dict(cfg)
+        token = (self._compass_generation, tuple(sorted(parameters(cfg).items())))
+        if token != self._compass_token:
+            self._compass_result = None
+        self._compass_token = token
+        worker = self._compass_worker
+        if worker is not None and worker is not threading.current_thread():
+            worker.join()
+        if self._compass_token == token and self._compass_result is not None:
+            return self._compass_result
+        return self._compute_compass(dict(cfg), snapshot_manager(self), token)
+
+    def request_compass_preparation(self, cfg, on_ready):
+        """Preview requests one background job; late project results are ignored."""
+        from src.telemetry_compass_hybrid import parameters, snapshot_manager
+        self._compass_cfg = dict(cfg)
+        token = (self._compass_generation, tuple(sorted(parameters(cfg).items())))
+        if token == self._compass_token and self._compass_result is not None:
+            return self._compass_result
+        self._compass_token = token
+        self._compass_result = None
+        if self._compass_worker is not None:
+            return None
+        snapshot = snapshot_manager(self)
+
+        def work():
+            self._compute_compass(dict(cfg), snapshot, token)
+            self._compass_worker = None
+            on_ready(token)
+
+        self._compass_worker = threading.Thread(target=work, name="CompassPreparation", daemon=True)
+        self._compass_worker.start()
+        return None
 
     def _interpolate(self, samples: SampleList, target_dt: datetime) -> Optional[float]:
         if self._interpolate_fn:

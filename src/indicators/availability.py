@@ -256,6 +256,10 @@ def indicator_data_available(
     key = str(indicator_key).strip()
     cfg = dict(ind_cfg) if ind_cfg else {}
     data = _extract_telemetry_sources(telemetry, kwargs)
+    if key == "compass" and cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        # The optional derived stream may be preparing or rejected. Keep its
+        # existing '--°' unavailable state visible; diagnostics explain why.
+        return True, "hybrid compass (prepared result or unavailable state)"
 
     # ── 1. Time display ───────────────────────────────────────────────
     if key == "time_display":

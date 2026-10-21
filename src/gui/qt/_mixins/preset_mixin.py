@@ -130,6 +130,7 @@ class PresetMixin:
         if (
             (field_name == "form" and value != old_form)
             or (field_name == "field")
+            or (stream_key == "compass" and field_name == "compass_heading_mode")
             or (field_name == "bar_style" and cfg.get("form") in ("bar", "segment_bar"))
             or (field_name == "chart_time_scope" and cfg.get("form") == "chart")
         ):

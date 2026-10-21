@@ -312,6 +312,12 @@ def _resolve_cache_value(
     """Resolve one field from one explicit source using the shared contract."""
     from src.telemetry_resolver import canonical_telemetry_field, resolve_current_presentation
     field_name = canonical_telemetry_field(field_name)
+    if field_name == "heading" and indicator_key == "compass":
+        compass_cfg = indicator_config or WORKER_CACHE.get("layout", {}).get("indicators", {}).get("compass", {})
+        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            from src.telemetry_compass_hybrid import HybridResult, sample_array
+            samples = (WORKER_CACHE.get("field_samples") or {}).get("compass_hybrid_samples")
+            return HybridResult(sample_array(samples)).lookup(target_dt)
     if str(field_name).startswith("lean_roll_"):
         from src.telemetry_imu import interpolate_roll
         axis = str(field_name).split("_")[-1]

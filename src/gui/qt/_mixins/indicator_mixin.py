@@ -53,7 +53,7 @@ class IndicatorMixin:
         form = cfg.get("form", "text")
         bar_style = cfg.get("bar_style", "ruler")
         schema = (
-            compass_indicator_fields()
+            compass_indicator_fields(cfg)
             if stream_key == "compass"
             else get_schema_for_indicator(
                 stream_key,
@@ -337,7 +337,7 @@ class IndicatorMixin:
         # Dzięki temu model == Property Editor == Preview/Renderer od pierwszej
         # chwili, bez „przeskoku" przy pierwszej edycji właściwości.
         if key == "compass":
-            _schema = compass_indicator_fields()
+            _schema = compass_indicator_fields(defaults)
         else:
             _schema = get_schema_for_indicator(
                 key,
