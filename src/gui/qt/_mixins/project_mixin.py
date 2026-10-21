@@ -888,6 +888,15 @@ class ProjectMixin:
                 self.layout["_indicator_availability"] = {k: v[0] for k, v in avail.items()}
                 log_indicator_availability(avail)
 
+                compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
+                if compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                    ref_name = str(compass_cfg.get("compass_reference_source", "fit")).upper()
+                    self.signals.sig_progress.emit(78, f"Kalibracja kompasu z {ref_name}...")
+                    try:
+                        self.telemetry.prepare_compass(compass_cfg)
+                    except Exception as exc:
+                        print(f"[Compass Load] Hybrid compass precompute error: {exc}", flush=True)
+
                 # Odkryj strumienie danych
                 self.signals.sig_progress.emit(75, "Przygotowywanie danych...")
                 self.signals.sig_progress.emit(80, "Budowa interfejsu...")
@@ -1697,6 +1706,10 @@ class ProjectMixin:
                 if getattr(self.telemetry, "gps_track", None):
                     map_provider = _map_provider_from_layout(self.layout) if hasattr(self, "layout") else "light_all"
                     self._start_map_preload(self.telemetry.gps_track, source="fit", provider=map_provider)
+                compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
+                if compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                    self.telemetry.invalidate_compass()
+                    self.telemetry.request_compass_preparation(compass_cfg, self.signals.sig_compass_prepared.emit)
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
                 self.refresh_preview_geometry_and_hud()

@@ -474,7 +474,7 @@ def _compass_heading_fields(cfg):
         return fields
     fields += [
         FieldSchema("compass_reference_source", "choice", "Źródło kalibracji", tab="Compass",
-                    choices=[("gpmf", "GPS GoPro"), ("fit", "FIT / Garmin")], default="gpmf"),
+                    choices=[("fit", "Garmin FIT (preferowany)"), ("gpmf", "GPS GoPro (alternatywny)")], default="fit"),
         FieldSchema("gps_stabilization_seconds", "float", "Stabilizacja GPS [s]", tab="Compass",
                     min_val=30, max_val=300, step=1, default=30.),
         FieldSchema("min_calibration_seconds", "float", "Minimalna kalibracja [s]", tab="Compass",

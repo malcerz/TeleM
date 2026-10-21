@@ -500,6 +500,7 @@ class TelemetryDataManager:
         self._compass_generation = 0
         self._compass_worker = None
         self._compass_lock = threading.RLock()
+        self._compass_status = ""
 
         # FIT samples – dict-based (matches telemetry_fit.process_fit return type)
         self.fit_data: dict[str, SampleList] = {}
@@ -1664,14 +1665,22 @@ class TelemetryDataManager:
         self._compass_result = None
         self._compass_cfg = {}
         self._compass_token = None
+        self._compass_status = ""
 
     def _compute_compass(self, cfg, snapshot, token):
         from src.telemetry_compass_hybrid import prepare_manager_compass, HybridResult
         with self._compass_lock:
             try:
+                ref = str(cfg.get("compass_reference_source", "fit")).upper()
+                self._compass_status = f"Kalibracja z {ref}..."
                 result = prepare_manager_compass(snapshot, cfg)
+                if result.diagnostics.get("status") == "ok":
+                    self._compass_status = "Gotowe"
+                else:
+                    self._compass_status = result.diagnostics.get("reason", "Brak wiarygodnych danych")
             except Exception as exc:
                 result = HybridResult(diagnostics={"status": "unavailable", "reason": str(exc)})
+                self._compass_status = "Brak wiarygodnych danych"
             if self._compass_token == token:
                 self._compass_result = result
         return result
@@ -1700,6 +1709,8 @@ class TelemetryDataManager:
             return self._compass_result
         self._compass_token = token
         self._compass_result = None
+        ref = str(cfg.get("compass_reference_source", "fit")).upper()
+        self._compass_status = f"Kalibracja z {ref}..."
         if self._compass_worker is not None:
             return None
         snapshot = snapshot_manager(self)
