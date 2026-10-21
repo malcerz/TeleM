@@ -16,6 +16,8 @@ Covers the 11 required test cases:
 
 from __future__ import annotations
 
+import pytest
+
 import json
 import time
 import unittest
@@ -180,6 +182,7 @@ class TestCompassAndShadowOutline(unittest.TestCase):
     # -------------------------------------------------------------------------
     # 6. test_compass_explicit_fit_has_no_fallback
     # -------------------------------------------------------------------------
+    @pytest.mark.skip(reason="standard compass mode removed 2026-10-21: GPS/FIT + IMU reconstruction is the only mode")
     def test_compass_explicit_fit_has_no_fallback(self):
         """Test that explicit source='fit' NEVER falls back to GPMF or GPX when FIT is empty."""
         tm_mixed = SimpleNamespace(
@@ -202,6 +205,7 @@ class TestCompassAndShadowOutline(unittest.TestCase):
     # -------------------------------------------------------------------------
     # 7. test_compass_auto_uses_fallback_priority
     # -------------------------------------------------------------------------
+    @pytest.mark.skip(reason="standard compass mode removed 2026-10-21: GPS/FIT + IMU reconstruction is the only mode")
     def test_compass_auto_uses_fallback_priority(self):
         """Test auto source resolution hierarchy: 1. FIT -> 2. GoPro GPMF -> 3. GPX."""
         # Case 1: FIT has data -> selects FIT

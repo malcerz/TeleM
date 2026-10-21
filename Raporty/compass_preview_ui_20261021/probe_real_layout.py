@@ -87,9 +87,11 @@ def main() -> int:
     }
     from src.telemetry_compass_hybrid import parameters
     hyb_cfg = dict(cfg, compass_heading_mode="gps_imu")
-    hyb = tm.prepare_compass(hyb_cfg) if cfg.get("compass_heading_mode") != "gps_imu" else tm._compass_result
+    from src.telemetry_compass_hybrid import hybrid_enabled
+    app_hybrid = hybrid_enabled(cfg) if "gps_imu" in parameters({}).values() else cfg.get("compass_heading_mode") == "gps_imu"
+    hyb = tm._compass_result if app_hybrid else tm.prepare_compass(hyb_cfg)
     # prepare_compass with a different cfg replaces the manager token; restore.
-    if cfg.get("compass_heading_mode") != "gps_imu":
+    if not app_hybrid:
         tm.invalidate_compass()
     fit_h = tm.resolve_samples("heading", "fit")
     gpmf_h = tm.resolve_samples("heading", "gpmf")

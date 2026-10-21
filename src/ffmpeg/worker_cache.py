@@ -20,6 +20,7 @@ from src.telemetry_extract import (
 from src.telemetry_heading import interpolate_heading
 from src.telemetry_slope import interpolate_slope
 from src.telemetry_resolver import resolve_distance_samples, distance_max_m
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 WORKER_CACHE: dict[str, Any] = {}
 
@@ -314,7 +315,7 @@ def _resolve_cache_value(
     field_name = canonical_telemetry_field(field_name)
     if field_name == "heading" and indicator_key == "compass":
         compass_cfg = indicator_config or WORKER_CACHE.get("layout", {}).get("indicators", {}).get("compass", {})
-        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        if hybrid_enabled(compass_cfg):
             from src.telemetry_compass_hybrid import HybridResult, sample_array
             samples = (WORKER_CACHE.get("field_samples") or {}).get("compass_hybrid_samples")
             return HybridResult(sample_array(samples)).lookup(target_dt)

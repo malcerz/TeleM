@@ -20,6 +20,7 @@ from src.telemetry_resolver import (
 from src.telemetry_heading import derive_heading_samples, interpolate_heading
 from src.telemetry_slope import derive_slope_from_streams, interpolate_slope
 from src.render_logging import render_print
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 print = render_print
 
@@ -1591,7 +1592,7 @@ class TelemetryDataManager:
                 cfg = dict(raw_cfg)
         if field_name == "heading" and indicator_key == "compass":
             compass_cfg = cfg or self._compass_cfg
-            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            if hybrid_enabled(compass_cfg):
                 # No integration, file reads or cache hashing in the HUD loop.
                 from src.telemetry_compass_hybrid import parameters
                 token = (self._compass_generation, tuple(sorted(parameters(compass_cfg).items())))

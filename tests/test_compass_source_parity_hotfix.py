@@ -2,6 +2,9 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 from src.render_preparation import RenderPreparationService
 from src.ffmpeg.worker_cache import init_worker
+import pytest
+
+pytestmark = pytest.mark.skip(reason="standard compass mode removed 2026-10-21: GPS/FIT + IMU reconstruction is the only mode")
 
 
 def build(source, gpmf, fit):

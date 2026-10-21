@@ -74,6 +74,7 @@ from ctypes import c_float
 from src.ffmpeg.amd_config import make_benchmark_fingerprint, resolve_amd_config
 from src.render_logging import render_debug_enabled, render_debug_print, render_print
 from src.render_progress import RenderCancelReason, render_cancel_log_message
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 
 # Keep one renderer verbosity switch for exporter diagnostics.  Warnings and
@@ -797,7 +798,7 @@ def _amd_compass_samples(layout, field_samples, fit_data):
     from src.telemetry_resolver import resolve_samples_from_sources
 
     cfg = layout.get("indicators", {}).get("compass", {})
-    if cfg.get("compass_heading_mode", "standard") == "gps_imu":
+    if hybrid_enabled(cfg):
         return (field_samples or {}).get("compass_hybrid_samples") or []
     fields = SimpleNamespace(**(field_samples or {}))
     source = str(cfg.get("source", "gpmf") or "gpmf").strip().lower()

@@ -45,6 +45,7 @@ from src.video_helpers import (
     find_executable,
     parse_fps,
 )
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 
 def _canonical_project_video_paths(paths: list[str | Path]) -> list[Path]:
@@ -1042,7 +1043,7 @@ class ProjectMixin:
                 log_indicator_availability(avail)
 
                 compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
-                hybrid = compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu"
+                hybrid = compass_cfg.get("enabled", True) and hybrid_enabled(compass_cfg)
                 self._hud_prep_layout_stages(prep, compass_pending=hybrid)
                 if hybrid:
                     ref_name = str(compass_cfg.get("compass_reference_source", "fit")).upper()
@@ -1865,7 +1866,7 @@ class ProjectMixin:
             if fit_loaded:
                 self.fit_path = Path(telem_path)
                 compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
-                hybrid = compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu"
+                hybrid = compass_cfg.get("enabled", True) and hybrid_enabled(compass_cfg)
                 prep = self._hud_prep_begin(getattr(self, "_project_load_generation", 0), ("fit_sync",))
                 prep.start("fit_sync")
                 self._hud_prep_layout_stages(prep, compass_pending=hybrid)

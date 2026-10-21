@@ -18,7 +18,7 @@ import numpy as np
 
 ALGORITHM_VERSION = 1
 DEFAULTS = {
-    "compass_heading_mode": "standard",
+    "compass_heading_mode": "gps_imu",
     "compass_reference_source": "fit",
     "gps_stabilization_seconds": 30.0,
     "min_calibration_seconds": 30.0,
@@ -28,14 +28,20 @@ DEFAULTS = {
     "compass_mount_offset_deg": 0.0,
     "compass_imu_method": "auto",
 }
+# GPS/FIT + IMU reconstruction is the only compass mode. The IMU policy is
+# fixed to "auto" (CORI only when its gravity-frame check passes, else
+# GYRO+ACCL) and the camera offset to 0; values stored by older layouts
+# (standard mode, forced CORI/GYRO, offset) are ignored.
+FIXED = {"compass_heading_mode": "gps_imu", "compass_imu_method": "auto", "compass_mount_offset_deg": 0.0}
 
 
 def hybrid_enabled(cfg):
-    return cfg.get("compass_heading_mode", "standard") == "gps_imu"
+    """True for every configured compass (the reconstruction is the only mode)."""
+    return isinstance(cfg, dict) and bool(cfg)
 
 
 def parameters(cfg):
-    return {key: cfg.get(key, value) for key, value in DEFAULTS.items()}
+    return {key: FIXED.get(key, cfg.get(key, value)) for key, value in DEFAULTS.items()}
 
 
 def timestamp(value):

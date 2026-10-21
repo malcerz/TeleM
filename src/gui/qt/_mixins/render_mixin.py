@@ -39,6 +39,7 @@ from src.render_progress import (
 )
 from src.ffmpeg.hybrid_render import GpuTopology, RenderMode, choose_hybrid_mode, normalize_render_mode
 from src.export_paths import legacy_default_export_dir, load_default_export_dir, resolve_export_path
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 
 class RenderMixin:
@@ -1038,7 +1039,7 @@ class RenderMixin:
 
         compass_cfg = self.layout.get("indicators", {}).get("compass", {})
         compass_hybrid_samples = None
-        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        if hybrid_enabled(compass_cfg):
             compass_hybrid_samples = self.telemetry.prepare_compass(compass_cfg).samples
         field_samples = {
             "compass_hybrid_samples": compass_hybrid_samples,

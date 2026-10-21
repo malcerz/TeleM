@@ -21,6 +21,7 @@ from src.telemetry_resolver import (
     resolve_distance_samples,
     SOURCE_ALIASES,
 )
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 
 def _has_samples(val: Any) -> bool:
@@ -256,7 +257,7 @@ def indicator_data_available(
     key = str(indicator_key).strip()
     cfg = dict(ind_cfg) if ind_cfg else {}
     data = _extract_telemetry_sources(telemetry, kwargs)
-    if key == "compass" and cfg.get("compass_heading_mode", "standard") == "gps_imu":
+    if key == "compass" and hybrid_enabled(cfg):
         # The optional derived stream may be preparing or rejected. Keep its
         # existing '--°' unavailable state visible; diagnostics explain why.
         return True, "hybrid compass (prepared result or unavailable state)"

@@ -24,6 +24,7 @@ from src.overlay_renderer import (
 from src.video_helpers import extract_frame
 from src.benchmark import BenchmarkTracker
 from src.telemetry_resolver import distance_max_m, resolve_distance_samples
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 try:
     from PySide6.QtMultimedia import QMediaPlayer
@@ -507,7 +508,7 @@ class PreviewMixin:
         """Oblicza raz wartości zakresów (const dla całego wideo)."""
         compass_cfg = self.layout.get("indicators", {}).get("compass", {})
         self.telemetry._compass_cfg = dict(compass_cfg)
-        if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        if hybrid_enabled(compass_cfg):
             self.telemetry.request_compass_preparation(compass_cfg, self.signals.sig_compass_prepared.emit)
         spd = self.telemetry.speed_samples or []
         trk = self.telemetry.track_samples or []
@@ -596,7 +597,7 @@ class PreviewMixin:
 
     def _on_compass_prepared(self, token) -> None:
         cfg = self.layout.get("indicators", {}).get("compass", {})
-        if cfg.get("compass_heading_mode", "standard") != "gps_imu":
+        if not hybrid_enabled(cfg):
             return
         if token != self.telemetry._compass_token or self.telemetry._compass_result is None:
             result = self.telemetry.request_compass_preparation(cfg, self.signals.sig_compass_prepared.emit)

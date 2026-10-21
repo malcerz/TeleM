@@ -65,8 +65,7 @@ def test_no_prepared_axis_does_not_silently_use_either_gps_source():
 @pytest.mark.parametrize("field,value", [
     ("compass_reference_source", "gpmf"), ("gps_stabilization_seconds", 31),
     ("min_calibration_seconds", 60), ("max_calibration_seconds", 240),
-    ("min_calibration_speed_kmh", 10), ("compass_imu_method", "gyro"),
-    ("compass_drift_correction", False), ("compass_mount_offset_deg", 15),
+    ("min_calibration_speed_kmh", 10), ("compass_drift_correction", False),
 ])
 def test_every_semantic_parameter_invalidates_render_cache(field, value):
     cfg = _cfg()
@@ -77,14 +76,19 @@ def test_every_semantic_parameter_invalidates_render_cache(field, value):
     assert key(dict(cfg, compass_needle_color="#ABCDEF")) == key(cfg)
 
 
-def test_standard_mode_signature_is_unchanged_and_controls_are_conditional():
-    plain = {"indicators": {"compass": {"source": "gpmf"}}}
-    explicit = {"indicators": {"compass": {"source": "gpmf", "compass_heading_mode": "standard"}}}
-    assert RenderPreparationService.extract_semantic_data_signature(plain) == RenderPreparationService.extract_semantic_data_signature(explicit)
+def test_reconstruction_is_the_only_mode_and_fixed_controls_are_gone():
+    # Standard mode, IMU method and camera offset were removed (2026-10-21):
+    # stored legacy values must not change the result or its cache key.
+    def key(config):
+        return RenderPreparationService.compute_cache_key(video_paths=[], total_frames=10, target_fps=30,
+                                                           layout={"indicators": {"compass": config}})
+    cfg = _cfg()
+    for legacy in ({"compass_heading_mode": "standard"}, {"compass_imu_method": "cori"},
+                   {"compass_mount_offset_deg": 15}):
+        assert key(dict(cfg, **legacy)) == key(cfg)
     fields = {f.name: f for f in compass_indicator_fields()}
-    assert fields["compass_heading_mode"].default == "standard"
-    assert "compass_reference_source" not in fields
-    fields = {f.name: f for f in get_schema_for_indicator("compass", "gauge", cfg=_cfg())}
+    for removed in ("compass_heading_mode", "compass_imu_method", "compass_mount_offset_deg"):
+        assert removed not in fields
     assert fields["compass_reference_source"].choices == [("fit", "Garmin FIT (preferowany)"), ("gpmf", "GPS GoPro (alternatywny)")]
     assert fields["compass_reference_source"].default == "fit"
     assert fields["gps_stabilization_seconds"].default == 30

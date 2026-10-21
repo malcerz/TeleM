@@ -8,6 +8,8 @@ from src.render_preparation import RenderPreparationService
 from src.render_telemetry_cache import RenderTelemetryCache
 from src.telemetry_heading import interpolate_heading
 
+pytestmark = pytest.mark.skip(reason="standard compass mode removed 2026-10-21: GPS/FIT + IMU reconstruction is the only mode")
+
 
 @pytest.mark.parametrize("source", ["fit", "gpmf", "gpx", "auto"])
 def test_amd_selected_source_per_frame_and_disk_parity(source, tmp_path):

@@ -28,6 +28,7 @@ from src.telemetry_resolver import (
     field_semantics,
     resolve_distance_samples,
 )
+from src.telemetry_compass_hybrid import hybrid_enabled
 
 
 _HEADING_CONSUMER_KEYS = frozenset(("heading_text", "compass", "track_map"))
@@ -350,7 +351,7 @@ class RenderPreparationService:
 
         raw = json.dumps({"indicators": items, "skip_pauses": skip_pauses}, sort_keys=True)
         compass_cfg = indicators.get("compass", {})
-        if isinstance(compass_cfg, dict) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+        if isinstance(compass_cfg, dict) and hybrid_enabled(compass_cfg):
             from src.telemetry_compass_hybrid import parameters, ALGORITHM_VERSION
             raw += json.dumps({"hybrid": parameters(compass_cfg), "version": ALGORITHM_VERSION}, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
@@ -409,7 +410,7 @@ class RenderPreparationService:
         compass_cfg = (layout or {}).get("indicators", {}).get("compass", {})
         if compass_cfg and compass_cfg.get("enabled", True):
             key_dict["compass_heading_contract"] = "selected_source_cog_v2_no_fallback"
-            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            if hybrid_enabled(compass_cfg):
                 from src.telemetry_compass_hybrid import parameters, ALGORITHM_VERSION
                 from src.telemetry_compass_orientation import source_fingerprint, READER_VERSION
                 def hybrid_fingerprint(path):
@@ -859,7 +860,7 @@ class RenderPreparationService:
         columns["heading"] = _vectorize_heading(heading_samples, target_ts_arr, ref_dt)
         if "compass" in heading_keys:
             compass_samples = kwargs.get("compass_heading_samples")
-            if compass_samples is None and indicators["compass"].get("compass_heading_mode", "standard") != "gps_imu":
+            if compass_samples is None and not hybrid_enabled(indicators["compass"]):
                 compass_source = str(indicators["compass"].get("source", "gpmf")).strip().lower()
                 if "field_samples" in kwargs:
                     from types import SimpleNamespace
@@ -874,7 +875,7 @@ class RenderPreparationService:
                 else:
                     from src.ffmpeg.worker_cache import _resolve_cache_samples
                     compass_samples = _resolve_cache_samples("heading", compass_source, "compass")
-            if indicators["compass"].get("compass_heading_mode", "standard") == "gps_imu":
+            if hybrid_enabled(indicators["compass"]):
                 from src.telemetry_compass_hybrid import sample_array, sample_hybrid_axis, timestamp
                 prepared = (kwargs.get("field_samples") or {}).get("compass_hybrid_samples")
                 if prepared is None:
@@ -1572,7 +1573,7 @@ class RenderPreparationService:
         if compass_cfg.get("enabled", True) and compass_cfg:
             source = str(compass_cfg.get("source", "gpmf")).strip().lower()
             resolver = getattr(telemetry, "resolve_samples", None)
-            if compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+            if hybrid_enabled(compass_cfg):
                 compass_samples = telemetry.prepare_compass(compass_cfg).samples
                 field_samples = dict(field_samples or {}, compass_hybrid_samples=compass_samples)
             elif callable(resolver):
