@@ -200,6 +200,102 @@ def resolve_compass_mode(cfg: dict | None) -> str:
     return val if val in ("needle", "rose") else "needle"
 
 
+# ── Compass geometry v2 ───────────────────────────────────────────────────────
+# v1 (unversioned layouts): thickness/outline/shadow values are raw output
+# pixels, independent of "Rozmiar"; ``compass_tick_degrees`` is the minor tick
+# spacing (smaller = denser).
+# v2: those values are pixels at the reference radius below and scale with
+# the compass radius (Rozmiar × canvas); ``compass_subticks`` is the number of
+# minor ticks between two major ticks (larger = denser).
+COMPASS_GEOMETRY_VERSION = 2
+COMPASS_REFERENCE_MIN_DIM = 2160
+COMPASS_REFERENCE_SIZE_PCT = 8.0
+COMPASS_REFERENCE_RADIUS_PX = COMPASS_REFERENCE_SIZE_PCT / 100.0 * COMPASS_REFERENCE_MIN_DIM
+COMPASS_MAX_SUBTICKS = 14
+# v1 renderer fallbacks for the scaled fields (used when a key is missing).
+_COMPASS_V1_PX_DEFAULTS = {
+    "compass_ring_width": 1.5, "compass_tick_width": 1.0, "compass_needle_width": 3.0,
+    "compass_marker_size": 4.0, "outline_width": 2.0, "shadow_distance": 3.0,
+    "shadow_length": 0.0, "shadow_blur": 2.0,
+}
+
+
+def compass_geometry_version(cfg: dict | None) -> int:
+    try:
+        return int((cfg or {}).get("compass_geometry_version", 1) or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def compass_geometry_scale(cfg: dict | None, size_px: float) -> float:
+    """Multiplier from configured thickness to output pixels (1.0 for v1)."""
+    if compass_geometry_version(cfg) < 2:
+        return 1.0
+    return max(1e-3, float(size_px) / COMPASS_REFERENCE_RADIUS_PX)
+
+
+def _scaled_px(value: float, scale: float) -> float:
+    # Quantized so a migrated layout reproduces the exact v1 floats on the
+    # reference canvas (no float round-trip noise moving polygon edges).
+    return round(float(value) * scale, 4)
+
+
+def compass_tick_angles(cfg: dict | None) -> list[tuple[float, bool]]:
+    """(degrees, is_major) for every dial tick."""
+    cfg = cfg or {}
+    if compass_geometry_version(cfg) < 2:
+        tick = max(1, int(cfg.get("compass_tick_degrees", 15)))
+        major = max(tick, int(cfg.get("compass_major_tick_degrees", 45)))
+        return [(float(d), d % major == 0) for d in range(0, 360, tick)]
+    major = max(1, int(cfg.get("compass_major_tick_degrees", 45)))
+    try:
+        sub = int(cfg.get("compass_subticks", 2))
+    except (TypeError, ValueError):
+        sub = 2
+    sub = max(0, min(COMPASS_MAX_SUBTICKS, sub))
+    step = major / (sub + 1)
+    count = int(math.floor(360.0 / step + 1e-9))
+    return [(i * step, i % (sub + 1) == 0) for i in range(count) if i * step < 360.0 - 1e-9]
+
+
+def migrate_compass_geometry(cfg: dict | None) -> bool:
+    """Convert a v1 compass config to v2 in place.
+
+    The factor is chosen so the layout's own size on the reference 2160 px
+    canvas (the 4K Final) produces exactly the v1 pixel values; only smaller
+    canvases (Preview) and later "Rozmiar" changes now scale proportionally.
+    """
+    if not isinstance(cfg, dict) or compass_geometry_version(cfg) >= 2:
+        return False
+    if not (cfg.get("gauge_style") == "compass" or cfg.get("gauge_mode") == "compass"):
+        return False
+    try:
+        size = float(cfg.get("size", 0.1))
+    except (TypeError, ValueError):
+        size = 0.1
+    factor = COMPASS_REFERENCE_RADIUS_PX / s(size, COMPASS_REFERENCE_MIN_DIM)
+    for name, fallback in _COMPASS_V1_PX_DEFAULTS.items():
+        raw = cfg.get(name)
+        try:
+            value = fallback if raw is None else float(raw)
+        except (TypeError, ValueError):
+            value = fallback
+        cfg[name] = round(value * factor, 6)
+    tick = max(1, int(cfg.get("compass_tick_degrees", 15)))
+    major = max(tick, int(cfg.get("compass_major_tick_degrees", 45)))
+    cfg["compass_major_tick_degrees"] = major
+    cfg["compass_subticks"] = max(0, min(COMPASS_MAX_SUBTICKS, int(round(major / tick)) - 1))
+    cfg.pop("compass_tick_degrees", None)
+    cfg["compass_geometry_version"] = COMPASS_GEOMETRY_VERSION
+    return True
+
+
+def migrate_layout_compass_geometry(layout: dict | None) -> dict | None:
+    for cfg in ((layout or {}).get("indicators") or {}).values():
+        migrate_compass_geometry(cfg)
+    return layout
+
+
 def _paste_shift_max(dst, src, ox: int, oy: int) -> None:
     """Paste single-channel mask src into dst offset by (ox, oy) using maximum intensity."""
     h, w = dst.shape
@@ -250,11 +346,17 @@ def _render_compass_indicator(
     needle_rgb = parse_hex_color(cfg.get("compass_needle_color", "#FFD42A")) or (255, 212, 42)
     heading_rgb = parse_hex_color(cfg.get("compass_heading_color", "#FFFFFF")) or (255, 255, 255)
 
-    ring_width = max(1, int(round(float(cfg.get("compass_ring_width", 1.5)) * ss)))
-    tick_width = max(1, int(round(float(cfg.get("compass_tick_width", 1.0)) * ss)))
+    gscale = compass_geometry_scale(cfg, size_px)
+    # v2 keeps lines at least one output pixel wide after downsampling.
+    min_line = ss if compass_geometry_version(cfg) >= 2 else 1
+    ring_width = max(min_line, int(round(_scaled_px(cfg.get("compass_ring_width", 1.5), gscale) * ss)))
+    tick_width = max(min_line, int(round(_scaled_px(cfg.get("compass_tick_width", 1.0), gscale) * ss)))
     major_width = max(tick_width, int(round(tick_width * 1.6)))
-    tick_degrees = max(1, int(cfg.get("compass_tick_degrees", 15)))
-    major_degrees = max(tick_degrees, int(cfg.get("compass_major_tick_degrees", 45)))
+    tick_angles = compass_tick_angles(cfg)
+    tick_sig = (compass_geometry_version(cfg), cfg.get("compass_tick_degrees"),
+                cfg.get("compass_subticks"), cfg.get("compass_major_tick_degrees"))
+    needle_half_width = max(1.5, _scaled_px(cfg.get("compass_needle_width", 3.0), gscale))
+    marker_radius = max(2, int(round(_scaled_px(cfg.get("compass_marker_size", 4.0), gscale))))
     pixel_profile = str(cfg.get("tick_profile", "default")).strip().lower() == "pixel"
     major_len = max(4, int(round(radius * (0.14 if pixel_profile else 0.10))))
     minor_len = max(2, int(round(radius * (0.065 if pixel_profile else 0.055))))
@@ -275,11 +377,14 @@ def _render_compass_indicator(
     shadow_blur = float(s_blur_raw) if s_blur_raw is not None else 2.0
     shadow_color = parse_hex_color(cfg.get("shadow_color", "#000000")) or (0, 0, 0)
     shadow_angle = float(cfg.get("shadow_angle", 45.0))
+    shadow_distance = _scaled_px(shadow_distance, gscale)
+    shadow_length = _scaled_px(shadow_length, gscale)
+    shadow_blur = _scaled_px(shadow_blur, gscale)
 
     # Outline parameters
     outline_enabled = bool(cfg.get("outline_enabled", False))
     out_w_raw = cfg.get("outline_width", 2.0)
-    outline_width = float(out_w_raw) if out_w_raw is not None else 2.0
+    outline_width = _scaled_px(float(out_w_raw) if out_w_raw is not None else 2.0, gscale)
     outline_color = parse_hex_color(cfg.get("outline_color", "#000000")) or (0, 0, 0)
     out_op_raw = cfg.get("outline_opacity", 1.0)
     out_op_val = float(out_op_raw) if out_op_raw is not None else 1.0
@@ -314,7 +419,7 @@ def _render_compass_indicator(
         static_key = _static_cache_key(
             "compass_static_v4", out_size, img_size, radius, ring_r, font_path, fs, ss,
             ring_rgb, tick_rgb, cardinal_rgb, ring_width, tick_width, major_width,
-            tick_degrees, major_degrees, pixel_profile, compass_show_cardinals,
+            tick_sig, pixel_profile, compass_show_cardinals,
             shadow_enabled, shadow_distance, shadow_length, shadow_fade, shadow_opacity, shadow_blur, shadow_color,
             shadow_angle, outline_enabled, outline_width, outline_color, outline_opacity,
         )
@@ -336,9 +441,8 @@ def _render_compass_indicator(
             )
 
             # Ticks (at heading 0)
-            for degrees in range(0, 360, tick_degrees):
+            for degrees, major in tick_angles:
                 angle = screen_angle(degrees)
-                major = degrees % major_degrees == 0
                 length = major_len if major else minor_len
                 outer = ring_r - ring_width
                 inner = outer - length
@@ -445,8 +549,7 @@ def _render_compass_indicator(
             tip_y = _cy + math.sin(needle_angle) * needle_tip
             base_x = _cx + math.cos(needle_angle) * needle_base
             base_y = _cy + math.sin(needle_angle) * needle_base
-            half_width = max(1.5, float(cfg.get("compass_needle_width", 3.0)))
-            marker_radius = max(2, int(round(float(cfg.get("compass_marker_size", 4.0)))))
+            half_width = needle_half_width
             pts = [
                 (base_x + px * half_width, base_y + py * half_width),
                 (base_x - px * half_width, base_y - py * half_width),
@@ -508,11 +611,10 @@ def _render_compass_indicator(
         rose_base_key = _static_cache_key(
             "compass_rose_base_v5", out_size, img_size, radius, ring_r, font_path, fs, ss,
             ring_rgb, tick_rgb, cardinal_rgb, needle_rgb, ring_width, tick_width, major_width,
-            tick_degrees, major_degrees, pixel_profile, compass_show_cardinals,
+            tick_sig, pixel_profile, compass_show_cardinals,
             shadow_enabled, shadow_distance, shadow_length, shadow_fade, shadow_opacity, shadow_blur, shadow_color,
             shadow_angle, outline_enabled, outline_width, outline_color, outline_opacity,
-            float(cfg.get("compass_needle_length", 0.62)), float(cfg.get("compass_needle_width", 3.0)),
-            float(cfg.get("compass_marker_size", 4.0)),
+            float(cfg.get("compass_needle_length", 0.62)), needle_half_width, marker_radius,
         )
         rose_pack = _STATIC_CACHE.get(rose_base_key)
         if rose_pack is None:
@@ -533,9 +635,8 @@ def _render_compass_indicator(
             )
 
             # Ticks at heading 0
-            for degrees in range(0, 360, tick_degrees):
+            for degrees, major in tick_angles:
                 angle = screen_angle(degrees)
-                major = degrees % major_degrees == 0
                 length = major_len if major else minor_len
                 outer = ring_r - ring_width
                 inner = outer - length
@@ -609,8 +710,7 @@ def _render_compass_indicator(
             tip_y = _cy + math.sin(fixed_angle) * needle_tip
             base_x = _cx + math.cos(fixed_angle) * needle_base
             base_y = _cy + math.sin(fixed_angle) * needle_base
-            half_width = max(1.5, float(cfg.get("compass_needle_width", 3.0)))
-            marker_radius = max(2, int(round(float(cfg.get("compass_marker_size", 4.0)))))
+            half_width = needle_half_width
             pts = [
                 (base_x + px * half_width, base_y + py * half_width),
                 (base_x - px * half_width, base_y - py * half_width),

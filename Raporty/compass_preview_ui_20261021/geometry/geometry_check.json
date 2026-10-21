@@ -1,0 +1,164 @@
+{
+  "rev": "HEAD",
+  "legacy_parity": {
+    "user_rose@4k": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "user_rose@preview": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "default_like@4k": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "default_like@preview": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "user_needle@4k": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "user_needle@preview": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "effects_big@4k": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "effects_big@preview": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    }
+  },
+  "migration_parity_4k": {
+    "user_rose": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "default_like": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "user_needle": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    },
+    "effects_big": {
+      "max_diff": 0,
+      "mae": 0.0,
+      "different_pixels": 0,
+      "identical": true
+    }
+  },
+  "scaling": {
+    "50%": {
+      "4k": {
+        "raster": [
+          206,
+          206
+        ],
+        "ring_px": 1.1
+      },
+      "preview": {
+        "raster": [
+          58,
+          58
+        ],
+        "ring_px": 2.38
+      },
+      "4k_legacy_ring_px": 1.97
+    },
+    "100%": {
+      "4k": {
+        "raster": [
+          415,
+          415
+        ],
+        "ring_px": 1.86
+      },
+      "preview": {
+        "raster": [
+          115,
+          115
+        ],
+        "ring_px": 1.64
+      },
+      "4k_legacy_ring_px": 1.86
+    },
+    "200%": {
+      "4k": {
+        "raster": [
+          830,
+          830
+        ],
+        "ring_px": 3.74
+      },
+      "preview": {
+        "raster": [
+          228,
+          228
+        ],
+        "ring_px": 1.1
+      },
+      "4k_legacy_ring_px": 1.88
+    }
+  },
+  "subticks": {
+    "0": {
+      "ticks": 8,
+      "majors": 8,
+      "spacing_deg": 45.0
+    },
+    "1": {
+      "ticks": 16,
+      "majors": 8,
+      "spacing_deg": 22.5
+    },
+    "4": {
+      "ticks": 40,
+      "majors": 8,
+      "spacing_deg": 9.0
+    },
+    "8": {
+      "ticks": 72,
+      "majors": 8,
+      "spacing_deg": 5.0
+    },
+    "14": {
+      "ticks": 120,
+      "majors": 8,
+      "spacing_deg": 3.0
+    },
+    "99": {
+      "ticks": 120,
+      "majors": 8,
+      "spacing_deg": 3.0
+    }
+  }
+}

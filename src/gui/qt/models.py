@@ -448,8 +448,8 @@ def compass_indicator_fields(cfg=None) -> list[FieldSchema]:
             FieldSchema("compass_show_heading", "bool", "Wartość heading", tab="Compass", default=True),
             FieldSchema("compass_heading_format", "choice", "Format heading", tab="Compass",
                         choices=["03d", "d"], default="03d"),
-            FieldSchema("compass_tick_degrees", "int", "Subtick co", tab="Compass",
-                        min_val=5, max_val=90, step=5, default=15),
+            FieldSchema("compass_subticks", "int", "Subticki między głównymi", tab="Compass",
+                        min_val=0, max_val=14, step=1, default=2),
             FieldSchema("compass_major_tick_degrees", "int", "Główny tick co", tab="Compass",
                         min_val=15, max_val=90, step=15, default=45),
             FieldSchema("compass_tick_color", "color", "Kolor ticków", tab="Compass", default="#DDE7F2"),
@@ -457,11 +457,13 @@ def compass_indicator_fields(cfg=None) -> list[FieldSchema]:
             FieldSchema("compass_needle_color", "color", "Kolor wskazówki", tab="Compass", default="#FFD42A"),
             FieldSchema("compass_ring_color", "color", "Kolor tarczy", tab="Compass", default="#B8C7D9"),
             FieldSchema("compass_heading_color", "color", "Kolor wartości", tab="Compass", default="#FFFFFF"),
-            FieldSchema("compass_marker_size", "float", "Rozmiar markera", tab="Compass", min_val=1.0, max_val=20.0, step=0.5, default=4.0),
+            # Thickness / marker values are pixels at the reference size and
+            # scale with "Rozmiar" (gauge.compass_geometry_scale).
+            FieldSchema("compass_marker_size", "float", "Rozmiar markera", tab="Compass", min_val=0.5, max_val=40.0, step=0.5, default=4.0),
             FieldSchema("compass_needle_length", "float", "Dł. wskazówki", tab="Compass", min_val=0.2, max_val=2.0, step=0.05, default=0.9),
-            FieldSchema("compass_needle_width", "int", "Grubość wskazówki", tab="Compass", min_val=1, max_val=15, step=1, default=3),
-            FieldSchema("compass_ring_width", "int", "Grubość pierścienia", tab="Compass", min_val=1, max_val=15, step=1, default=2),
-            FieldSchema("compass_tick_width", "int", "Grubość ticków", tab="Compass", min_val=1, max_val=10, step=1, default=1),
+            FieldSchema("compass_needle_width", "float", "Grubość wskazówki", tab="Compass", min_val=0.5, max_val=30.0, step=0.5, default=3.0),
+            FieldSchema("compass_ring_width", "float", "Grubość pierścienia", tab="Compass", min_val=0.5, max_val=30.0, step=0.5, default=2.0),
+            FieldSchema("compass_tick_width", "float", "Grubość ticków", tab="Compass", min_val=0.5, max_val=20.0, step=0.5, default=1.0),
         ]
     ) + _effects_fields()
 

@@ -67,6 +67,8 @@ class PresetMixin:
             if not isinstance(loaded, dict):
                 raise ValueError("Nieprawidłowy format pliku")
             normalize_indicator_decimal_defaults(loaded)
+            from src.indicators.gauge import migrate_layout_compass_geometry
+            migrate_layout_compass_geometry(loaded)
             # Older presets may carry telemetry_sync_*: ignore them and keep
             # the sync of the material currently loaded.
             strip_sync_keys(loaded)

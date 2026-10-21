@@ -19,6 +19,7 @@ from PIL import Image
 from src.gui.indicator_schemas import BUILTIN_FIELDS
 from src.gui.layout_manager import normalize_layout
 from src.gui.qt.models import normalize_indicator_decimal_defaults
+from src.indicators.gauge import migrate_layout_compass_geometry
 from src.multifile import build_timeline_from_paths, format_timeline_diagnostics, timeline_absolute_end
 from src.telemetry_processed_cache import (
     apply_processed_cache,
@@ -746,6 +747,7 @@ class ProjectMixin:
                     try:
                         self.layout = json.loads(proj_layout.read_text(encoding="utf-8"))
                         normalize_indicator_decimal_defaults(self.layout)
+                        migrate_layout_compass_geometry(self.layout)
                         print(f"[ProjectLayout] Wczytano istniejący layout filmu z {proj_layout}", flush=True)
                     except Exception as e:
                         print(f"[ProjectLayout] Błąd odczytu {proj_layout}: {e}", flush=True)
@@ -765,6 +767,7 @@ class ProjectMixin:
                             Path(preset_path).read_text(encoding="utf-8")
                         )
                         normalize_indicator_decimal_defaults(self.layout)
+                        migrate_layout_compass_geometry(self.layout)
                     else:
                         def_layout = self.base_dir / "def_layout.json"
                         self.layout = normalize_layout(def_layout, w, h)

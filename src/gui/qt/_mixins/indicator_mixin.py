@@ -253,7 +253,8 @@ class IndicatorMixin:
             defaults["compass_show_cardinals"] = True
             defaults["compass_show_heading"] = True
             defaults["compass_heading_format"] = "03d"
-            defaults["compass_tick_degrees"] = 15
+            defaults["compass_geometry_version"] = 2
+            defaults["compass_subticks"] = 2
             defaults["compass_major_tick_degrees"] = 45
             defaults["compass_tick_color"] = "#DDE7F2"
             defaults["compass_cardinal_color"] = "#FFFFFF"

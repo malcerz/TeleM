@@ -133,7 +133,7 @@ BUILTIN_FIELDS: dict[str, list[tuple]] = {
         ("opacity", "float", 0.0, 1.0, 0.05),
         ("compass_show_cardinals", "bool", None, None, None),
         ("compass_show_heading", "bool", None, None, None),
-        ("compass_tick_degrees", "int", 5, 90, 5),
+        ("compass_subticks", "int", 0, 14, 1),
         ("compass_major_tick_degrees", "int", 15, 90, 15),
         ("compass_tick_color", "color", None, None, None),
         ("compass_cardinal_color", "color", None, None, None),

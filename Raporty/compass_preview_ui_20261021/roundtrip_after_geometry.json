@@ -1,0 +1,433 @@
+{
+  "scenario": "edit_save_restart",
+  "fields_tested": 47,
+  "fields_ok": 47,
+  "skipped_widgets": [],
+  "failures": [],
+  "rows": [
+    {
+      "field": "compass_heading_mode",
+      "expected": "gps_imu",
+      "live_model": "gps_imu",
+      "saved_json": "gps_imu",
+      "reloaded_model": "gps_imu",
+      "reloaded_gui": "gps_imu",
+      "ok": true
+    },
+    {
+      "field": "size",
+      "expected": 8.3,
+      "live_model": 8.3,
+      "saved_json": 8.3,
+      "reloaded_model": 8.3,
+      "reloaded_gui": 8.3,
+      "ok": true
+    },
+    {
+      "field": "x",
+      "expected": 94.6,
+      "live_model": 94.6,
+      "saved_json": 94.6,
+      "reloaded_model": 94.6,
+      "reloaded_gui": 94.6,
+      "ok": true
+    },
+    {
+      "field": "y",
+      "expected": 35.2,
+      "live_model": 35.2,
+      "saved_json": 35.2,
+      "reloaded_model": 35.2,
+      "reloaded_gui": 35.2,
+      "ok": true
+    },
+    {
+      "field": "rotation",
+      "expected": "90",
+      "live_model": "90",
+      "saved_json": "90",
+      "reloaded_model": "90",
+      "reloaded_gui": "90",
+      "ok": true
+    },
+    {
+      "field": "font",
+      "expected": "X",
+      "live_model": "X",
+      "saved_json": "X",
+      "reloaded_model": "X",
+      "reloaded_gui": "X",
+      "ok": true
+    },
+    {
+      "field": "source",
+      "expected": "gpx",
+      "live_model": "gpx",
+      "saved_json": "gpx",
+      "reloaded_model": "gpx",
+      "reloaded_gui": "gpx",
+      "ok": true
+    },
+    {
+      "field": "form",
+      "expected": "gauge",
+      "live_model": "gauge",
+      "saved_json": "gauge",
+      "reloaded_model": "gauge",
+      "reloaded_gui": "gauge",
+      "ok": true
+    },
+    {
+      "field": "compass_reference_source",
+      "expected": "fit",
+      "live_model": "fit",
+      "saved_json": "fit",
+      "reloaded_model": "fit",
+      "reloaded_gui": "fit",
+      "ok": true
+    },
+    {
+      "field": "gps_stabilization_seconds",
+      "expected": 33.0,
+      "live_model": 33.0,
+      "saved_json": 33.0,
+      "reloaded_model": 33.0,
+      "reloaded_gui": 33.0,
+      "ok": true
+    },
+    {
+      "field": "min_calibration_seconds",
+      "expected": 33.0,
+      "live_model": 33.0,
+      "saved_json": 33.0,
+      "reloaded_model": 33.0,
+      "reloaded_gui": 33.0,
+      "ok": true
+    },
+    {
+      "field": "max_calibration_seconds",
+      "expected": 297.0,
+      "live_model": 297.0,
+      "saved_json": 297.0,
+      "reloaded_model": 297.0,
+      "reloaded_gui": 297.0,
+      "ok": true
+    },
+    {
+      "field": "min_calibration_speed_kmh",
+      "expected": 9.5,
+      "live_model": 9.5,
+      "saved_json": 9.5,
+      "reloaded_model": 9.5,
+      "reloaded_gui": 9.5,
+      "ok": true
+    },
+    {
+      "field": "compass_drift_correction",
+      "expected": false,
+      "live_model": false,
+      "saved_json": false,
+      "reloaded_model": false,
+      "reloaded_gui": false,
+      "ok": true
+    },
+    {
+      "field": "compass_imu_method",
+      "expected": "cori",
+      "live_model": "cori",
+      "saved_json": "cori",
+      "reloaded_model": "cori",
+      "reloaded_gui": "cori",
+      "ok": true
+    },
+    {
+      "field": "compass_mount_offset_deg",
+      "expected": 1.5,
+      "live_model": 1.5,
+      "saved_json": 1.5,
+      "reloaded_model": 1.5,
+      "reloaded_gui": 1.5,
+      "ok": true
+    },
+    {
+      "field": "compass_rotation_mode",
+      "expected": "needle",
+      "live_model": "needle",
+      "saved_json": "needle",
+      "reloaded_model": "needle",
+      "reloaded_gui": "needle",
+      "ok": true
+    },
+    {
+      "field": "font_size",
+      "expected": 1.5,
+      "live_model": 1.5,
+      "saved_json": 1.5,
+      "reloaded_model": 1.5,
+      "reloaded_gui": 1.5,
+      "ok": true
+    },
+    {
+      "field": "tick_profile",
+      "expected": "default",
+      "live_model": "default",
+      "saved_json": "default",
+      "reloaded_model": "default",
+      "reloaded_gui": "default",
+      "ok": true
+    },
+    {
+      "field": "opacity",
+      "expected": 0.85,
+      "live_model": 0.85,
+      "saved_json": 0.85,
+      "reloaded_model": 0.85,
+      "reloaded_gui": 0.85,
+      "ok": true
+    },
+    {
+      "field": "compass_show_cardinals",
+      "expected": false,
+      "live_model": false,
+      "saved_json": false,
+      "reloaded_model": false,
+      "reloaded_gui": false,
+      "ok": true
+    },
+    {
+      "field": "compass_show_heading",
+      "expected": false,
+      "live_model": false,
+      "saved_json": false,
+      "reloaded_model": false,
+      "reloaded_gui": false,
+      "ok": true
+    },
+    {
+      "field": "compass_heading_format",
+      "expected": "d",
+      "live_model": "d",
+      "saved_json": "d",
+      "reloaded_model": "d",
+      "reloaded_gui": "d",
+      "ok": true
+    },
+    {
+      "field": "compass_subticks",
+      "expected": 10,
+      "live_model": 10,
+      "saved_json": 10,
+      "reloaded_model": 10,
+      "reloaded_gui": 10,
+      "ok": true
+    },
+    {
+      "field": "compass_major_tick_degrees",
+      "expected": 47,
+      "live_model": 47,
+      "saved_json": 47,
+      "reloaded_model": 47,
+      "reloaded_gui": 47,
+      "ok": true
+    },
+    {
+      "field": "compass_tick_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "compass_cardinal_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "compass_needle_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "compass_ring_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "compass_heading_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "compass_marker_size",
+      "expected": 10.0,
+      "live_model": 10.0,
+      "saved_json": 10.0,
+      "reloaded_model": 10.0,
+      "reloaded_gui": 10.0,
+      "ok": true
+    },
+    {
+      "field": "compass_needle_length",
+      "expected": 0.95,
+      "live_model": 0.95,
+      "saved_json": 0.95,
+      "reloaded_model": 0.95,
+      "reloaded_gui": 0.95,
+      "ok": true
+    },
+    {
+      "field": "compass_needle_width",
+      "expected": 7.5,
+      "live_model": 7.5,
+      "saved_json": 7.5,
+      "reloaded_model": 7.5,
+      "reloaded_gui": 7.5,
+      "ok": true
+    },
+    {
+      "field": "compass_ring_width",
+      "expected": 3.5,
+      "live_model": 3.5,
+      "saved_json": 3.5,
+      "reloaded_model": 3.5,
+      "reloaded_gui": 3.5,
+      "ok": true
+    },
+    {
+      "field": "compass_tick_width",
+      "expected": 2.5,
+      "live_model": 2.5,
+      "saved_json": 2.5,
+      "reloaded_model": 2.5,
+      "reloaded_gui": 2.5,
+      "ok": true
+    },
+    {
+      "field": "shadow_enabled",
+      "expected": false,
+      "live_model": false,
+      "saved_json": false,
+      "reloaded_model": false,
+      "reloaded_gui": false,
+      "ok": true
+    },
+    {
+      "field": "shadow_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "shadow_opacity",
+      "expected": 73.0,
+      "live_model": 73.0,
+      "saved_json": 73.0,
+      "reloaded_model": 73.0,
+      "reloaded_gui": 73.0,
+      "ok": true
+    },
+    {
+      "field": "shadow_fade",
+      "expected": 4.0,
+      "live_model": 4.0,
+      "saved_json": 4.0,
+      "reloaded_model": 4.0,
+      "reloaded_gui": 4.0,
+      "ok": true
+    },
+    {
+      "field": "outline_enabled",
+      "expected": true,
+      "live_model": true,
+      "saved_json": true,
+      "reloaded_model": true,
+      "reloaded_gui": true,
+      "ok": true
+    },
+    {
+      "field": "outline_color",
+      "expected": "#12AB34",
+      "live_model": "#12AB34",
+      "saved_json": "#12AB34",
+      "reloaded_model": "#12AB34",
+      "reloaded_gui": "#12AB34",
+      "ok": true
+    },
+    {
+      "field": "outline_opacity",
+      "expected": 97.0,
+      "live_model": 97.0,
+      "saved_json": 97.0,
+      "reloaded_model": 97.0,
+      "reloaded_gui": 97.0,
+      "ok": true
+    },
+    {
+      "field": "outline_fade",
+      "expected": 3.0,
+      "live_model": 3.0,
+      "saved_json": 3.0,
+      "reloaded_model": 3.0,
+      "reloaded_gui": 3.0,
+      "ok": true
+    },
+    {
+      "field": "outline_width",
+      "expected": 2.3,
+      "live_model": 2.3,
+      "saved_json": 2.3,
+      "reloaded_model": 2.3,
+      "reloaded_gui": 2.3,
+      "ok": true
+    },
+    {
+      "field": "shadow_distance",
+      "expected": 3.3,
+      "live_model": 3.3,
+      "saved_json": 3.3,
+      "reloaded_model": 3.3,
+      "reloaded_gui": 3.3,
+      "ok": true
+    },
+    {
+      "field": "shadow_length",
+      "expected": 0.3,
+      "live_model": 0.3,
+      "saved_json": 0.3,
+      "reloaded_model": 0.3,
+      "reloaded_gui": 0.3,
+      "ok": true
+    },
+    {
+      "field": "shadow_angle",
+      "expected": 60.0,
+      "live_model": 60.0,
+      "saved_json": 60.0,
+      "reloaded_model": 60.0,
+      "reloaded_gui": 60.0,
+      "ok": true
+    }
+  ],
+  "reloaded_compass_status": "Brak wiarygodnych danych"
+}

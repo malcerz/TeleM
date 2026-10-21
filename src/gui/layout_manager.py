@@ -386,6 +386,10 @@ def normalize_layout(layout_path: Path | str | None, video_width: int, video_hei
                                 ct[field] = round(float(ct[field]) * 100.0, 4)
             layout["version"] = 6
 
+    # Compass geometry v1 → v2 (thickness scales with Rozmiar, subtick count).
+    from src.indicators.gauge import migrate_layout_compass_geometry
+    migrate_layout_compass_geometry(layout)
+
     # Canonical numeric presentation defaults are applied after all legacy
     # migrations and user-indicator replacement.  Explicit ``decimals`` is
     # preserved; legacy ``decimal_places`` alone must not restore ISO `.0`.
