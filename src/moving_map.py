@@ -38,7 +38,7 @@ except ImportError:
 # ── Constants ───────────────────────────────────────────────────────────
 
 TILE_SIZE = 256
-USER_AGENT = "TeleMHUD/1.0 (moving-map)"
+USER_AGENT = os.environ.get("SPORTCAMHUD_USER_AGENT") or os.environ.get("TELEM_USER_AGENT") or "SportCamHUD/1.0 (+https://github.com/SportCamHUD; video-telemetry-overlay)"
 REQUEST_DELAY = 0.15          # fair-use delay between tile requests
 DEFAULT_ZOOM = 15
 DEFAULT_STYLE = "light_all"
@@ -90,16 +90,9 @@ def _rotate_track_up_viewport(image: Image.Image, angle: float, output: int) -> 
     return rotated.crop((offset, offset, offset + output, offset + output))
 
 
-MAP_STYLES: dict[str, str] = {
-    "light_all":       "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    "light_nolabels":  "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
-    "dark_all":        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    "dark_nolabels":   "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-    "voyager_all":     "https://a.basemaps.cartocdn.com/voyager_all/{z}/{x}/{y}.png",
-    "voyager_nolabels":"https://a.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}.png",
-    "osm":             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    "satellite":       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-}
+from src.map_providers import MAP_STYLES as _REGISTRY_MAP_STYLES, MapProviderRegistry, mask_url
+
+MAP_STYLES: dict[str, str] = dict(_REGISTRY_MAP_STYLES)
 
 
 # ── Coordinates ─────────────────────────────────────────────────────────
@@ -241,6 +234,17 @@ def iter_route_tiles_chronological(
                     seen.add(tile)
                     ordered.append(tile)
         t += step
+
+    # Ensure all supercover cells (including corner crossings) are covered
+    for cx, cy in iter_track_center_tiles(gps_track, zoom):
+        tx1, tx2, ty1, ty2 = tile_range_for_center_tile(cx, cy, render_size, render_size)
+        for ty in range(ty1, ty2):
+            for tx in range(tx1, tx2):
+                tile = (zoom, tx, ty)
+                if tile not in seen:
+                    seen.add(tile)
+                    ordered.append(tile)
+
     return ordered
 
 
@@ -383,19 +387,44 @@ class TileCache:
                 pass
             c.execute("CREATE TABLE IF NOT EXISTS tiles(z INT,x INT,y INT,"
                       "style TEXT,data BLOB,PRIMARY KEY(z,x,y,style))")
+            try:
+                cols = [r[1] for r in c.execute("PRAGMA table_info(tiles)").fetchall()]
+                if "cached_at" not in cols:
+                    c.execute("ALTER TABLE tiles ADD COLUMN cached_at REAL")
+                if "expires_at" not in cols:
+                    c.execute("ALTER TABLE tiles ADD COLUMN expires_at REAL")
+                if "etag" not in cols:
+                    c.execute("ALTER TABLE tiles ADD COLUMN etag TEXT")
+            except Exception:
+                pass
             c.commit()
 
+    @staticmethod
+    def _is_expired(style: str, cached_at: float | None, expires_at: float | None) -> bool:
+        now = time.time()
+        if expires_at is not None and now > expires_at:
+            return True
+        caps = MapProviderRegistry.get_capabilities(style)
+        if caps.cache_max_age is not None:
+            max_age_s = float(caps.cache_max_age) * 86400.0
+            if cached_at is not None and (now - cached_at) > max_age_s:
+                return True
+        return False
+
     def has(self, z: int, x: int, y: int, style: str) -> bool:
-        """Fast check if tile is present in memory or disk without decoding."""
+        """Fast check if tile is present in memory or disk without decoding (respecting TTL)."""
         key = (z, x, y, style)
         with self._lock:
             if key in self._mem:
                 return True
         try:
             with sqlite3.connect(str(self._db), timeout=5.0) as c:
-                r = c.execute("SELECT 1 FROM tiles WHERE z=? AND x=? "
+                r = c.execute("SELECT cached_at, expires_at FROM tiles WHERE z=? AND x=? "
                               "AND y=? AND style=? LIMIT 1", key).fetchone()
-                return r is not None
+                if r is None:
+                    return False
+                cached_at, expires_at = r[0], r[1]
+                return not self._is_expired(style, cached_at, expires_at)
         except Exception:
             return False
 
@@ -406,8 +435,12 @@ class TileCache:
     ) -> set[tuple[int, int, int]]:
         """Fast batch check if multiple tiles (z, x, y) are present in memory or disk.
 
-        Returns a set of (z, x, y) tuples that exist in cache.
+        Returns a set of (z, x, y) tuples that exist in cache (excluding expired).
         """
+        # If has() has been mocked or overridden in tests, delegate cleanly
+        if type(self).has is not TileCache.has or getattr(self.has, "_mock_return_value", None) is not None or getattr(TileCache.has, "_mock_return_value", None) is not None:
+            return {t for t in tiles if self.has(t[0], t[1], t[2], style)}
+
         found: set[tuple[int, int, int]] = set()
         if not tiles:
             return found
@@ -422,6 +455,10 @@ class TileCache:
         if not missing_from_mem:
             return found
 
+        now = time.time()
+        caps = MapProviderRegistry.get_capabilities(style)
+        max_age_s = float(caps.cache_max_age) * 86400.0 if caps.cache_max_age is not None else None
+
         chunk_size = 200
         try:
             with sqlite3.connect(str(self._db), timeout=5.0) as c:
@@ -431,8 +468,12 @@ class TileCache:
                     params: list[Any] = [style]
                     for cz, cx, cy in chunk:
                         params.extend([cz, cx, cy])
-                    q = f"SELECT z, x, y FROM tiles WHERE style=? AND (z, x, y) IN ({placeholders})"
-                    for rz, rx, ry in c.execute(q, params).fetchall():
+                    q = f"SELECT z, x, y, cached_at, expires_at FROM tiles WHERE style=? AND (z, x, y) IN ({placeholders})"
+                    for rz, rx, ry, cached_at, expires_at in c.execute(q, params).fetchall():
+                        if expires_at is not None and now > expires_at:
+                            continue
+                        if max_age_s is not None and cached_at is not None and (now - cached_at) > max_age_s:
+                            continue
                         found.add((int(rz), int(rx), int(ry)))
         except Exception:
             for t in missing_from_mem:
@@ -458,24 +499,32 @@ class TileCache:
         disk_started = time.perf_counter()
         try:
             with sqlite3.connect(str(self._db)) as c:
-                r = c.execute("SELECT data FROM tiles WHERE z=? AND x=? "
+                r = c.execute("SELECT data, cached_at, expires_at FROM tiles WHERE z=? AND x=? "
                               "AND y=? AND style=?", key).fetchone()
             MapTileStats.record_timing(
                 "tile_disk_read_ms", (time.perf_counter() - disk_started) * 1000.0,
             )
             if r:
-                decode_started = time.perf_counter()
-                img = Image.open(io.BytesIO(r[0])).convert("RGBA")
-                MapTileStats.record_timing(
-                    "tile_decode_ms", (time.perf_counter() - decode_started) * 1000.0,
-                )
-                self._put_mem(key, img)
-                with MapTileStats._lock:
-                    MapTileStats.disk_hits += 1
-                MapTileStats.record_timing(
-                    "tile_lookup_ms", (time.perf_counter() - lookup_started) * 1000.0,
-                )
-                return img.copy()
+                data_bytes, cached_at, expires_at = r[0], r[1], r[2]
+                if self._is_expired(style, cached_at, expires_at):
+                    with self._lock:
+                        if key in self._mem:
+                            self._mem.pop(key, None)
+                            if key in self._mem_order:
+                                self._mem_order.remove(key)
+                else:
+                    decode_started = time.perf_counter()
+                    img = Image.open(io.BytesIO(data_bytes)).convert("RGBA")
+                    MapTileStats.record_timing(
+                        "tile_decode_ms", (time.perf_counter() - decode_started) * 1000.0,
+                    )
+                    self._put_mem(key, img)
+                    with MapTileStats._lock:
+                        MapTileStats.disk_hits += 1
+                    MapTileStats.record_timing(
+                        "tile_lookup_ms", (time.perf_counter() - lookup_started) * 1000.0,
+                    )
+                    return img.copy()
         except Exception:
             pass
         with MapTileStats._lock:
@@ -485,17 +534,32 @@ class TileCache:
         )
         return None
 
-    def put(self, z, x, y, style, data: bytes):
+    def put(
+        self,
+        z: int,
+        x: int,
+        y: int,
+        style: str,
+        data: bytes,
+        cached_at: float | None = None,
+        expires_at: float | None = None,
+        etag: str | None = None,
+    ):
         key = (z, x, y, style)
         try:
             img = Image.open(io.BytesIO(data)).convert("RGBA")
             self._put_mem(key, img, content_changed=True)
-        except Exception: return
+        except Exception:
+            return
+        ts = cached_at if cached_at is not None else time.time()
         try:
             with sqlite3.connect(str(self._db)) as c:
-                c.execute("INSERT OR REPLACE INTO tiles VALUES(?,?,?,?,?)",
-                          (z, x, y, style, data)); c.commit()
-        except Exception: pass
+                c.execute("INSERT OR REPLACE INTO tiles(z,x,y,style,data,cached_at,expires_at,etag) "
+                          "VALUES(?,?,?,?,?,?,?,?)",
+                          (z, x, y, style, data, ts, expires_at, etag))
+                c.commit()
+        except Exception:
+            pass
 
     def _put_mem(self, key, img, content_changed=False):
         with self._lock:
@@ -519,16 +583,45 @@ def _download_tile_raw(z, x, y, style) -> bytes | None:
         return None
     with MapTileStats._lock:
         MapTileStats.network_requests += 1
-    url = MAP_STYLES.get(style, MAP_STYLES[DEFAULT_STYLE]).format(z=z, x=x, y=y)
+
+    url = MapProviderRegistry.format_tile_url(style, z=z, x=x, y=y)
+    if not url:
+        return None
+
     download_started = time.perf_counter()
     with _fetch_lock:
         e = time.time() - _last_fetch
-        if e < REQUEST_DELAY: time.sleep(REQUEST_DELAY - e)
+        if e < REQUEST_DELAY:
+            time.sleep(REQUEST_DELAY - e)
         try:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(req, timeout=2) as r:
+            with urllib.request.urlopen(req, timeout=3) as r:
                 data = r.read()
-        except Exception: return None
+                # Parse expiration and etag
+                cache_control = r.headers.get("Cache-Control", "")
+                expires_hdr = r.headers.get("Expires", "")
+                etag = r.headers.get("ETag", "")
+                expires_at = None
+                if "max-age=" in cache_control:
+                    try:
+                        m = re.search(r"max-age=(\d+)", cache_control)
+                        if m:
+                            expires_at = time.time() + float(m.group(1))
+                    except Exception:
+                        pass
+        except urllib.error.HTTPError as e:
+            safe_url = mask_url(url)
+            if e.code == 401:
+                print(f"[MAP HTTP 401] Unauthorized for provider='{style}' ({safe_url}). API key required or invalid.", flush=True)
+            elif e.code == 403:
+                print(f"[MAP HTTP 403] Forbidden for provider='{style}' ({safe_url}). Access denied.", flush=True)
+            elif e.code == 429:
+                print(f"[MAP HTTP 429] Rate limit exceeded for provider='{style}' ({safe_url}).", flush=True)
+            else:
+                print(f"[MAP HTTP {e.code}] Error fetching tile {z}/{x}/{y} from {safe_url}: {e}", flush=True)
+            return None
+        except Exception:
+            return None
         finally:
             MapTileStats.record_timing(
                 "tile_download_ms", (time.perf_counter() - download_started) * 1000.0,
@@ -591,7 +684,11 @@ class RouteTilePrefetcher:
         cache: TileCache | None = None,
         cancel_event: Any = None,
     ):
-        self._tiles = list(tiles)
+        if not MapProviderRegistry.can_prefetch(style):
+            print(f"[MAP POLICY] RouteTilePrefetcher disabled for provider '{style}' (bulk prefetch forbidden by policy).", flush=True)
+            self._tiles = []
+        else:
+            self._tiles = list(tiles)
         self._style = style
         self._cache = cache or get_shared_tile_cache()
         self._cancel_event = cancel_event
@@ -942,6 +1039,9 @@ class MovingMapRenderer:
 
     def precache_tiles(self, margin=2, zooms=None) -> int:
         """Download ALL tiles needed for the entire track for given zooms. Returns count."""
+        if not MapProviderRegistry.can_prefetch(self._style):
+            print(f"[MAP POLICY] Bulk track prefetch disabled for provider '{self._style}' to comply with usage policy.", flush=True)
+            return 0
         if zooms is None:
             zooms = [self._zoom]
             

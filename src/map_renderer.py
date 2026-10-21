@@ -23,20 +23,14 @@ except ImportError:
 # ── Tile server config ──────────────────────────────────────────────────────
 
 # CartoCDN basemap styles (free, no API key required)
-MAP_STYLES: dict[str, str] = {
-    "light_all":       "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    "light_nolabels":  "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
-    "dark_all":        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    "dark_nolabels":   "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-    "voyager_all":     "https://a.basemaps.cartocdn.com/voyager_all/{z}/{x}/{y}.png",
-    "voyager_nolabels":"https://a.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}.png",
-    "satellite":       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-}
+from src.map_providers import MAP_STYLES as _REGISTRY_MAP_STYLES, MapProviderRegistry, mask_url
+
+MAP_STYLES: dict[str, str] = dict(_REGISTRY_MAP_STYLES)
 DEFAULT_MAP_STYLE = "light_all"
 
 TILE_URL = MAP_STYLES[DEFAULT_MAP_STYLE]
 TILE_SIZE = 256
-USER_AGENT = "TeleMHUD/1.0"
+USER_AGENT = os.environ.get("SPORTCAMHUD_USER_AGENT") or os.environ.get("TELEM_USER_AGENT") or "SportCamHUD/1.0 (+https://github.com/SportCamHUD; video-telemetry-overlay)"
 REQUEST_DELAY = 0.15  # seconds between tile requests (fair use)
 CACHE_DIR = Path.home() / ".telem_map_tiles"
 _MAX_TILES_PER_RENDER = 20  # prevent runaway downloads
@@ -133,8 +127,9 @@ def download_tile(z: int, x: int, y: int, style: str = DEFAULT_MAP_STYLE, downlo
     if elapsed < REQUEST_DELAY:
         time.sleep(REQUEST_DELAY - elapsed)
 
-    url_template = MAP_STYLES.get(style, MAP_STYLES[DEFAULT_MAP_STYLE])
-    url = url_template.format(z=z, x=x, y=y)
+    url = MapProviderRegistry.format_tile_url(style, z=z, x=x, y=y)
+    if not url:
+        return None
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -231,9 +226,12 @@ def precache_map_tiles(
 ) -> int:
     """Download all unique map tiles needed for the entire GPS track.
 
-    Runs synchronously — call in a background thread for non-blocking pre-cache.
-    Returns the number of tiles downloaded.
+    Checks MapProviderRegistry.can_prefetch before downloading.
     """
+    if not MapProviderRegistry.can_prefetch(map_style):
+        print(f"[MAP POLICY] Bulk map prefetch disabled for provider '{map_style}' to comply with usage policy.", flush=True)
+        return 0
+
     if Image is None or not gps_track:
         return 0
 

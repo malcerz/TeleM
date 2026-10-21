@@ -112,12 +112,34 @@ def ensure_map_tiles_cached(
     # 3. Fast batch cache check
     t_chk0 = time.perf_counter()
     cache = get_shared_tile_cache()
-    cached_set = cache.has_many(route_tiles, map_style)
+    if hasattr(cache, "has_many"):
+        cached_set = cache.has_many(route_tiles, map_style)
+    else:
+        cached_set = {t for t in route_tiles if cache.has(t[0], t[1], t[2], map_style)}
     cache_check_ms = (time.perf_counter() - t_chk0) * 1000.0
 
     cached_count = len(cached_set)
     missing_route = [t for t in route_tiles if t not in cached_set]
     startup_missing = [t for t in startup_tiles if t not in cached_set]
+
+    from src.map_providers import MapProviderRegistry
+    if not MapProviderRegistry.can_prefetch(map_style):
+        print(
+            f"[MAP POLICY] Route prefetch disabled for '{map_style}' (prefetch prohibited by provider policy). Skipping background prefetch.",
+            flush=True,
+        )
+        set_active_route_prefetcher(None)
+        return {
+            "required": total_route_tiles,
+            "cached": cached_count,
+            "downloaded": 0,
+            "missing": len(missing_route),
+            "cache_check_ms": round(cache_check_ms, 2),
+            "initial_preload_ms": 0.0,
+            "render_size": render_size,
+            "prefetcher": None,
+            "prefetch_allowed": False,
+        }
 
     # 4. Synchronously pre-download startup fragment before frame 0
     initial_downloaded = 0
@@ -718,6 +740,11 @@ def _render_moving_map_indicator(
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
+            if bool(cfg.get("show_attribution", False)) or os.environ.get("TELEM_MAP_SHOW_ATTRIBUTION") == "1":
+                from src.map_attribution import MapAttributionRenderer
+                attr_img = MapAttributionRenderer.get_attribution_overlay(map_style, map_w, map_h)
+                if attr_img is not None:
+                    map_img = Image.alpha_composite(map_img, attr_img)
             map_img = apply_map_opacity(map_img, cfg.get("opacity"))
             return map_img, _pos_xy[0], _pos_xy[1], None
 

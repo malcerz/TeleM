@@ -123,7 +123,9 @@ def _render_static_map_indicator(
                 zooms_to_cache.append(zoom)
             zooms_to_cache.sort(key=lambda z: abs(z - zoom))
             
-            threading.Thread(target=precache_map_tiles, args=(gps_track, zoom, map_style, 2, zooms_to_cache), daemon=True).start()
+            from src.map_providers import MapProviderRegistry
+            if MapProviderRegistry.can_prefetch(map_style):
+                threading.Thread(target=precache_map_tiles, args=(gps_track, zoom, map_style, 2, zooms_to_cache), daemon=True).start()
             _is_first = True
         else:
             _is_first = False
@@ -179,6 +181,11 @@ def _render_static_map_indicator(
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
+        if bool(cfg.get("show_attribution", False)) or os.environ.get("TELEM_MAP_SHOW_ATTRIBUTION") == "1":
+            from src.map_attribution import MapAttributionRenderer
+            attr_img = MapAttributionRenderer.get_attribution_overlay(map_style, map_w, map_h)
+            if attr_img is not None:
+                map_img = Image.alpha_composite(map_img, attr_img)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:

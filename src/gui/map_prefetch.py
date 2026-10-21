@@ -96,6 +96,14 @@ class MapPrefetchJob:
         if self.progress_cb:
             self.progress_cb(cached, total, f"Mapa: przygotowywanie {cached}/{total}")
 
+        from src.map_providers import MapProviderRegistry
+        if not MapProviderRegistry.can_prefetch(style):
+            print(f"[MAP POLICY] MapPrefetchJob skipped for '{style}' (prefetch prohibited by provider policy).", flush=True)
+            self.completed = True
+            if self.done_cb:
+                self.done_cb(True, "Pobieranie trasy w tle wyłączone przez politykę dostawcy", cached, 0, total)
+            return
+
         if not missing:
             # All tiles already cached!
             self.completed = True
