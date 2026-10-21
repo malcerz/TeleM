@@ -69,6 +69,11 @@ def _map_provider_from_layout(layout: dict) -> str:
     )
 
 
+# HUD_PREPARING never waits forever for one indicator (see hud_preparation).
+_HUD_MAP_WAIT_S = 20.0
+_HUD_FRAME_WAIT_S = 30.0
+
+
 def _working_layout_copy(layout: Any) -> dict | None:
     """Detached copy of the in-memory session layout for the next project.
 
@@ -548,6 +553,109 @@ class ProjectMixin:
         accepted = self._request_telemetry_validation(result)
         return accepted, parsed
 
+    # ── HUD_PREPARING (src/gui/hud_preparation.py) ─────────────────────────
+    def _hud_prep_begin(self, generation: int, stages: tuple = ()) -> Any:
+        from src.gui.hud_preparation import HudPreparation
+        old = getattr(self, "_hud_prep", None)
+        if old is not None:
+            old.close()
+        prep = HudPreparation(generation, self.signals.sig_hud_preparation.emit)
+        self._hud_prep = prep
+        for key in stages:
+            prep.add(key)
+        return prep
+
+    def _hud_prep_current(self) -> Any:
+        prep = getattr(self, "_hud_prep", None)
+        if prep is None or prep.generation != getattr(self, "_project_load_generation", 0):
+            return None
+        return prep
+
+    def _hud_prep_close(self) -> None:
+        prep = getattr(self, "_hud_prep", None)
+        if prep is not None:
+            prep.close()
+
+    def _hud_prep_layout_stages(self, prep: Any, *, compass_pending: bool) -> None:
+        """Stages that depend on the active layout (known after its selection)."""
+        layout = getattr(self, "layout", None)
+        inds = layout.get("indicators", {}) if isinstance(layout, dict) else {}
+        if compass_pending:
+            prep.add("compass")
+        has_charts = any(isinstance(c, dict) and c.get("enabled", True) and c.get("form") == "chart"
+                         for c in inds.values())
+        if has_charts:
+            from src.gui.hud_preparation import STAGE_LABELS
+            prep.add("hud_frame", STAGE_LABELS["hud_frame_charts"])
+
+    def _hud_prep_finish_compass(self, prep: Any, result: Any) -> None:
+        diag = getattr(result, "diagnostics", None) or {}
+        if diag.get("status") == "ok":
+            prep.finish("compass")
+            return
+        reasons = [str(diag["reason"])] if diag.get("reason") else []
+        reasons += [str(c.get("reason")) for c in diag.get("clips") or []
+                    if isinstance(c, dict) and c.get("reason") and str(c.get("reason")) not in reasons]
+        prep.finish("compass", error="; ".join(reasons) or "Brak wiarygodnych danych kierunku")
+
+    def _hud_prep_watch_map(self, prep: Any) -> None:
+        """Map stage while the route tile prefetch for this project runs."""
+        cfg = (self.layout or {}).get("indicators", {}).get("track_map", {})
+        if not cfg or not cfg.get("enabled", True):
+            return
+        try:
+            from src.gui.map_prefetch import MapBackgroundPrefetchManager
+            if not MapBackgroundPrefetchManager.get_instance().is_active():
+                return
+        except Exception:
+            return
+        prep.start("map")
+
+        def give_up() -> None:
+            # The map renders its overview/placeholder meanwhile; never keep
+            # the whole HUD behind a slow tile download.
+            prep.finish("map", error=f"kafelki nadal pobierane w tle (>{_HUD_MAP_WAIT_S:.0f} s)")
+
+        timer = threading.Timer(_HUD_MAP_WAIT_S, give_up)
+        timer.daemon = True
+        timer.start()
+
+    def _hud_prep_on_map_progress(self, cur: int, total: int) -> None:
+        prep = self._hud_prep_current()
+        if prep is not None and prep.state_of("map") == "active":
+            prep.progress("map", cur, total)
+
+    def _hud_prep_on_map_status(self, text: str) -> None:
+        prep = self._hud_prep_current()
+        if prep is None or prep.state_of("map") != "active":
+            return
+        if text == "Mapa: gotowa":
+            prep.finish("map")
+        elif text and not text.startswith("Mapa: przygotowywanie"):
+            prep.finish("map", error=text)
+
+    def _hud_prep_request_frame(self) -> None:
+        # _render_preview drops a None request while busy; queue a re-render
+        # of the current position first, so a render finishing right now
+        # still picks it up (worst case one extra render, never none).
+        self._preview_pending_seek = float(getattr(self, "last_preview_ts", 0.0) or 0.0)
+        if not getattr(self, "_preview_is_rendering", False):
+            self._preview_pending_seek = None
+            self.refresh_preview_geometry_and_hud()
+            # An unchanged preview size does not re-render (re-opening a
+            # project in the same window left the bare video until a seek).
+            if not getattr(self, "_preview_is_rendering", False):
+                self._render_preview()
+
+    def _hud_prep_on_frame(self) -> None:
+        """A Preview frame with the composed HUD of the ready project."""
+        prep = self._hud_prep_current()
+        if prep is None or not getattr(self, "project_ready", False):
+            return
+        if prep.state_of("hud_frame") != "active" or prep.state_of("compass") in ("pending", "active"):
+            return  # e.g. hybrid compass still calibrating: not the full HUD yet
+        prep.finish("hud_frame")
+
     def _publish_project_load_state(self, state: str, generation: int) -> None:
         if generation != getattr(self, "_project_load_generation", 0):
             return
@@ -566,6 +674,7 @@ class ProjectMixin:
         self.project_ready = False
         self._project_loading = False
         self._preview_telemetry_loading = False
+        self._hud_prep_close()
         try:
             self._on_playback_stop()
             if self.is_using_mpv():
@@ -618,6 +727,9 @@ class ProjectMixin:
         self._load_cancel_event = threading.Event()
         load_cancel_event = self._load_cancel_event
         self.signals.sig_progress.emit(0, "Wczytywanie wideo...")
+        prep = self._hud_prep_begin(
+            generation, ("telemetry",) + (("fit_sync",) if fit_path else ()) + ("hud_data", "hud_frame"))
+        prep.start("telemetry")
 
         def bg_load() -> None:
             def current() -> bool:
@@ -625,6 +737,7 @@ class ProjectMixin:
 
             def failed() -> None:
                 if current():
+                    prep.close()
                     self.project_ready = previous_ready and list(self.video_paths) == previous_paths
                     self._project_loading = False
                     self._publish_project_load_state("failed", generation)
@@ -783,6 +896,9 @@ class ProjectMixin:
                 # Wczytaj/wygeneruj metadane (GPMF)
                 self.signals.sig_progress.emit(30, "Sprawdzanie metadanych...")
                 self._load_or_generate_telemetry()
+                prep.finish("telemetry")
+                if effective_fit_path:
+                    prep.start("fit_sync")
 
                 # New material starts from the file timestamps; the saved sync
                 # of this video set + activity is restored after the timeline.
@@ -894,6 +1010,8 @@ class ProjectMixin:
                         self._restore_telemetry_sync_for_project()
                     except Exception as exc:
                         print(f"[TelemetrySync] restore failed: {exc}", flush=True)
+                if effective_fit_path:
+                    prep.finish("fit_sync", error="" if self.fit_path else "nie udało się wczytać FIT")
 
                 # P0-FIX: cut_regions from the layout file are stale IN/OUT
                 # boundaries that were incorrectly persisted by a previous
@@ -920,13 +1038,18 @@ class ProjectMixin:
                 log_indicator_availability(avail)
 
                 compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
-                if compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                hybrid = compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu"
+                self._hud_prep_layout_stages(prep, compass_pending=hybrid)
+                if hybrid:
                     ref_name = str(compass_cfg.get("compass_reference_source", "fit")).upper()
                     self.signals.sig_progress.emit(78, f"Kalibracja kompasu z {ref_name}...")
+                    prep.start("compass")
                     try:
-                        self.telemetry.prepare_compass(compass_cfg)
+                        self._hud_prep_finish_compass(prep, self.telemetry.prepare_compass(compass_cfg))
                     except Exception as exc:
                         print(f"[Compass Load] Hybrid compass precompute error: {exc}", flush=True)
+                        prep.finish("compass", error=str(exc))
+                prep.start("hud_data")
 
                 # Odkryj strumienie danych
                 self.signals.sig_progress.emit(75, "Przygotowywanie danych...")
@@ -1009,6 +1132,8 @@ class ProjectMixin:
 
                 if not current():
                     return
+                prep.finish("hud_data")
+                prep.start("hud_frame")
                 self.project_ready = True
                 self._project_loading = False
                 self._publish_project_load_state("ready", generation)
@@ -1017,6 +1142,17 @@ class ProjectMixin:
                     self._trigger_map_background_prefetch(reason="telemetry_loaded")
                 except Exception:
                     pass
+                self._hud_prep_watch_map(prep)
+
+                def hud_frame_timeout() -> None:
+                    prep.finish("hud_frame", error=f"podgląd HUD nie został złożony w {_HUD_FRAME_WAIT_S:.0f} s")
+
+                timer = threading.Timer(_HUD_FRAME_WAIT_S, hud_frame_timeout)
+                timer.daemon = True
+                timer.start()
+                # A render started before project_ready could not complete
+                # the HUD stage; request the first ready frame now.
+                self._hud_prep_request_frame()
 
             except Exception as e:
                 if not current():
@@ -1597,7 +1733,10 @@ class ProjectMixin:
         total_clips = len(paths)
         print(f"[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla {total_clips} klip(ów)...", flush=True)
 
+        prep = self._hud_prep_current()
         for idx, p in enumerate(paths):
+            if prep is not None and total_clips > 1:
+                prep.progress("telemetry", idx, total_clips)
             pct_clip_start = 30 + int(35 * (idx / total_clips))
             self.signals.sig_progress.emit(pct_clip_start, f"Analiza telemetrii ({idx + 1}/{total_clips})...")
             t_clip_0 = _time.perf_counter()
@@ -1721,8 +1860,15 @@ class ProjectMixin:
             )
             if fit_loaded:
                 self.fit_path = Path(telem_path)
+                compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
+                hybrid = compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu"
+                prep = self._hud_prep_begin(getattr(self, "_project_load_generation", 0), ("fit_sync",))
+                prep.start("fit_sync")
+                self._hud_prep_layout_stages(prep, compass_pending=hybrid)
+                prep.add("hud_frame")
                 if hasattr(self, "_restore_telemetry_sync_for_project"):
                     self._restore_telemetry_sync_for_project()
+                prep.finish("fit_sync")
                 if getattr(self.telemetry, "fit_data", None):
                     fit_keys = self.telemetry.register_fit_fields(
                         self.layout, BUILTIN_FIELDS,
@@ -1737,12 +1883,14 @@ class ProjectMixin:
                 if getattr(self.telemetry, "gps_track", None):
                     map_provider = _map_provider_from_layout(self.layout) if hasattr(self, "layout") else "light_all"
                     self._start_map_preload(self.telemetry.gps_track, source="fit", provider=map_provider)
-                compass_cfg = (self.layout or {}).get("indicators", {}).get("compass", {})
-                if compass_cfg.get("enabled", True) and compass_cfg.get("compass_heading_mode", "standard") == "gps_imu":
+                if hybrid:
+                    prep.start("compass")
                     self.telemetry.invalidate_compass()
                     self.telemetry.request_compass_preparation(compass_cfg, self.signals.sig_compass_prepared.emit)
                 streams = self._discover_data_streams()
                 self.signals.sig_data_streams_ready.emit(streams)
+                prep.start("hud_frame")
+                self._hud_prep_watch_map(prep)
                 self.refresh_preview_geometry_and_hud()
         elif ext == ".gpx" and not getattr(self, "fit_path", None) and not getattr(self, "gpx_path", None):
             gpx_loaded = self.telemetry.load_gpx(

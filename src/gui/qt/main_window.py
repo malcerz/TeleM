@@ -242,8 +242,20 @@ class MainWindow(QMainWindow):
         s.sig_error.connect(self._on_error)
         s.sig_video_info_ready.connect(self._on_video_info)
         s.sig_map_status.connect(self._on_map_status)
+        s.sig_hud_preparation.connect(self._on_hud_preparation)
         s.sig_telemetry_validation_request.connect(self._on_telemetry_validation_request)
         s.sig_remote_activity_selection_request.connect(self._on_remote_activity_selection_request)
+
+    def _on_hud_preparation(self, state: object) -> None:
+        self.preview.set_preparing_state(state)
+        if not isinstance(state, dict) or state.get("active") or state.get("cancelled"):
+            return
+        errors = [e for e in (state.get("errors") or []) if e.get("error")]
+        if errors:
+            self.status_label.setText("HUD gotowy. Niedostępne: " + "; ".join(
+                f"{e.get('indicator')} ({e.get('error')})" for e in errors))
+        else:
+            self.status_label.setText("HUD gotowy")
 
     def _on_map_status(self, text: str) -> None:
         t0 = time.perf_counter()

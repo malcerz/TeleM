@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Qt, QEvent, QRect, QPoint
-from PySide6.QtGui import QImage, QPixmap, QPainter
+from PySide6.QtCore import Qt, QEvent, QRect, QRectF, QPoint, QTimer
+from PySide6.QtGui import QImage, QPixmap, QPainter, QColor, QFont, QPen
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
@@ -45,6 +45,92 @@ def preview_aspect_size(available_h: int, available_w: int) -> tuple[int, int]:
         w = max_w
         h = int(w * 9.0 / 16.0)
     return (w, h)
+
+
+def paint_hud_preparing(painter: QPainter, rect: QRect, state: dict, phase: float) -> None:
+    """HUD_PREPARING: dim the video rect and draw the centred progress panel.
+
+    Pure GUI painting over the existing preview (no video re-encode, no
+    per-frame telemetry work). ``phase`` (0..1) only animates the
+    indeterminate bar; a determinate bar shows the reported item count.
+    """
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.fillRect(rect, QColor(0, 0, 0, 150))
+
+    errors = [e for e in (state.get("errors") or []) if e.get("error")]
+    pw = max(220, min(rect.width() - 32, 460))
+    ph = 112 + 16 * min(len(errors), 3)
+    panel = QRect(rect.x() + (rect.width() - pw) // 2, rect.y() + (rect.height() - ph) // 2, pw, ph)
+    painter.setPen(QPen(QColor(70, 78, 90), 1))
+    painter.setBrush(QColor(22, 25, 30, 235))
+    painter.drawRoundedRect(QRectF(panel), 8, 8)
+
+    x, w = panel.x() + 18, panel.width() - 36
+    title_font = QFont(painter.font())
+    title_font.setPointSizeF(11.5)
+    title_font.setBold(True)
+    painter.setFont(title_font)
+    painter.setPen(QColor(235, 238, 242))
+    painter.drawText(QRect(x, panel.y() + 12, w, 22), Qt.AlignLeft | Qt.AlignVCenter,
+                     str(state.get("title") or "Przygotowywanie wskaźników..."))
+
+    body_font = QFont(painter.font())
+    body_font.setPointSizeF(9.5)
+    body_font.setBold(False)
+    painter.setFont(body_font)
+    painter.setPen(QColor(180, 190, 202))
+    idx, cnt = state.get("stage_index"), state.get("stage_count")
+    stage = str(state.get("stage_label") or "")
+    if idx and cnt:
+        stage = f"{stage}   (etap {idx} z {cnt})"
+    painter.drawText(QRect(x, panel.y() + 38, w, 20), Qt.AlignLeft | Qt.AlignVCenter, stage)
+
+    bar = QRect(x, panel.y() + 66, w, 10)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(55, 60, 68))
+    painter.drawRoundedRect(QRectF(bar), 5, 5)
+    painter.setBrush(QColor(63, 167, 255))
+    if state.get("determinate") and state.get("fraction") is not None:
+        fw = int(round(bar.width() * max(0.0, min(1.0, float(state["fraction"])))))
+        if fw > 0:
+            painter.drawRoundedRect(QRectF(bar.x(), bar.y(), fw, bar.height()), 5, 5)
+        painter.setPen(QColor(150, 160, 172))
+        painter.drawText(QRect(x, panel.y() + 80, w, 18), Qt.AlignRight | Qt.AlignVCenter,
+                         f"{int(state.get('done') or 0)} / {int(state.get('total') or 0)}")
+    else:
+        chunk = max(24, bar.width() // 4)
+        span = bar.width() + chunk
+        cx = bar.x() - chunk + int((phase % 1.0) * span)
+        painter.setClipRect(bar)
+        painter.drawRoundedRect(QRectF(cx, bar.y(), chunk, bar.height()), 5, 5)
+        painter.setClipping(False)
+
+    if errors:
+        painter.setPen(QColor(255, 180, 84))
+        for i, err in enumerate(errors[:3]):
+            painter.drawText(QRect(x, panel.y() + 98 + 16 * i, w, 16), Qt.AlignLeft | Qt.AlignVCenter,
+                             f"Niedostępne: {err.get('indicator')} — {err.get('error')}")
+    painter.restore()
+
+
+class _PreparingOverlay(QWidget):
+    """Overlay above the label/QVideoWidget preview (mpv paints in TopLevelHUDWindow)."""
+
+    def __init__(self, preview: "VideoPreview") -> None:
+        super().__init__(preview.stacked_widget)
+        self._preview = preview
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.hide()
+
+    def paintEvent(self, event) -> None:
+        state = self._preview._preparing_state
+        if not state or not state.get("active"):
+            return
+        painter = QPainter(self)
+        paint_hud_preparing(painter, self._preview.get_video_rect(), state, self._preview._preparing_phase)
+        painter.end()
 
 
 class TopLevelHUDWindow(QWidget):
@@ -106,6 +192,15 @@ class TopLevelHUDWindow(QWidget):
                 self.raise_()
 
     def paintEvent(self, event):
+        state = getattr(self.parent_preview_widget, "_preparing_state", None)
+        if state and state.get("active"):
+            # HUD_PREPARING: the video stays visible (mpv) under the dim; no
+            # stale or partial HUD is shown as if it were ready.
+            painter = QPainter(self)
+            paint_hud_preparing(painter, self.parent_preview_widget.get_video_rect(), state,
+                                self.parent_preview_widget._preparing_phase)
+            painter.end()
+            return
         if self.hud_pixmap and not self.hud_pixmap.isNull():
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
@@ -136,9 +231,15 @@ class VideoPreview(QWidget):
         self._pixmap_offset: tuple[int, int] = (0, 0)
         self._original_size: tuple[int, int] = (0, 0)
         self._is_playing = False
+        self._preparing_state: dict | None = None
+        self._preparing_phase = 0.0
         self._build_ui()
-        
+
         self.hud_overlay = TopLevelHUDWindow(self)
+        self._preparing_overlay = _PreparingOverlay(self)
+        self._preparing_timer = QTimer(self)
+        self._preparing_timer.setInterval(40)
+        self._preparing_timer.timeout.connect(self._on_preparing_tick)
         
         # Event filter na image_label do przechwytywania zdarzeń myszy
         self.image_label.installEventFilter(self)
@@ -247,8 +348,47 @@ class VideoPreview(QWidget):
                 flush=True,
             )
 
+    # ── HUD_PREPARING ────────────────────────────────────────────────────
+    def set_preparing_state(self, state: object) -> None:
+        """Snapshot from the controller (src/gui/hud_preparation.py)."""
+        if not isinstance(state, dict):
+            return
+        cur = self._preparing_state
+        if cur and cur.get("generation") == state.get("generation") and int(state.get("seq", 0)) < int(cur.get("seq", 0)):
+            return  # stale queued snapshot of the same load
+        if cur and int(state.get("generation", 0)) < int(cur.get("generation", 0)):
+            return  # late snapshot of a superseded load
+        self._preparing_state = state
+        if state.get("active"):
+            self._preparing_overlay.setGeometry(self.stacked_widget.rect())
+            self._preparing_overlay.setVisible(not self.is_using_mpv())
+            self._preparing_overlay.raise_()
+            if not self._preparing_timer.isActive():
+                self._preparing_timer.start()
+        else:
+            self._preparing_timer.stop()
+            self._preparing_overlay.hide()
+        self._preparing_overlay.update()
+        if self._hud_alive():
+            self.hud_overlay.update()
+
+    def is_hud_preparing(self) -> bool:
+        return bool(self._preparing_state and self._preparing_state.get("active"))
+
+    def _on_preparing_tick(self) -> None:
+        if not self.is_hud_preparing():
+            self._preparing_timer.stop()
+            return
+        self._preparing_phase = (self._preparing_phase + 0.02) % 1.0
+        if self._preparing_overlay.isVisible():
+            self._preparing_overlay.update()
+        elif self._hud_alive() and self.is_using_mpv():
+            self.hud_overlay.update()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self, "_preparing_overlay"):
+            self._preparing_overlay.setGeometry(self.stacked_widget.rect())
         self._notify_controller_preview_size()
         if self.is_using_mpv() and self._hud_alive():
             self.hud_overlay.sync_geometry()

@@ -1,0 +1,1532 @@
+{
+  "layout": "Raporty\\compass_preview_ui_20261021\\layout_user_hybrid.json",
+  "fit": "F:\\GoPro\\2026-10-16\\2026-10-16_06-22-14.fit",
+  "ready_s": 6.672,
+  "first_hud_frame_s": 9.148,
+  "final_state": {
+    "state": "HUD_READY",
+    "generation": 3,
+    "errors": [],
+    "stages": [
+      [
+        "telemetry",
+        "done"
+      ],
+      [
+        "fit_sync",
+        "done"
+      ],
+      [
+        "compass",
+        "done"
+      ],
+      [
+        "hud_data",
+        "done"
+      ],
+      [
+        "hud_frame",
+        "done"
+      ]
+    ],
+    "cancelled": false
+  },
+  "status_bar": "HUD gotowy",
+  "warm_second_open": {
+    "ready_s": 2.004,
+    "overlay_hidden_s": 4.71
+  },
+  "gap_ready_to_hud_s": 2.476,
+  "overlay_hidden_s": 9.155,
+  "screens": [
+    "overlay_on_0.png",
+    "hud_preparing_project_tab.png",
+    "overlay_off_2.png",
+    "hud_ready_project_tab.png"
+  ],
+  "events": [
+    {
+      "t": 0.0,
+      "ev": "load_state",
+      "state": "loading",
+      "gen": 1
+    },
+    {
+      "t": 0.001,
+      "ev": "progress",
+      "pct": 0,
+      "msg": "Wczytywanie wideo..."
+    },
+    {
+      "t": 0.004,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 1,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 1,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 0.004,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 2,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 2,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 0.004,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 3,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 3,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 0.004,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 4,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 0.004,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 5,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "active"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 0.036,
+      "ev": "overlay_visible",
+      "value": true
+    },
+    {
+      "t": 0.276,
+      "ev": "progress",
+      "pct": 15,
+      "msg": "Analiza strumienia..."
+    },
+    {
+      "t": 0.411,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Sprawdzanie metadanych..."
+    },
+    {
+      "t": 0.411,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Analiza telemetrii (1/1)..."
+    },
+    {
+      "t": 0.466,
+      "ev": "progress",
+      "pct": 37,
+      "msg": "Natywna analiza GPMF C++ (1/1)..."
+    },
+    {
+      "t": 5.629,
+      "ev": "progress",
+      "pct": 70,
+      "msg": "Metadane gotowe"
+    },
+    {
+      "t": 5.656,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 6,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "fit_sync",
+      "stage_label": "Synchronizacja FIT",
+      "stage_index": 2,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 5.625,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 5.671,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 7,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "fit_sync",
+      "stage_label": "Synchronizacja FIT",
+      "stage_index": 2,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 5.625,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "active"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.461,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 8,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 3,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.424,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.463,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 9,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.426,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.463,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 10,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.427,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.463,
+      "ev": "progress",
+      "pct": 78,
+      "msg": "Kalibracja kompasu z FIT..."
+    },
+    {
+      "t": 6.463,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 11,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.427,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "active"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.528,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 12,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 4,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.512,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.528,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 13,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 4,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.512,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "active"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.529,
+      "ev": "progress",
+      "pct": 75,
+      "msg": "Przygotowywanie danych..."
+    },
+    {
+      "t": 6.53,
+      "ev": "progress",
+      "pct": 80,
+      "msg": "Budowa interfejsu..."
+    },
+    {
+      "t": 6.67,
+      "ev": "progress",
+      "pct": 85,
+      "msg": "Przygotowywanie podgl\u0105du..."
+    },
+    {
+      "t": 6.671,
+      "ev": "progress",
+      "pct": 90,
+      "msg": "Pobieranie klatki..."
+    },
+    {
+      "t": 6.671,
+      "ev": "progress",
+      "pct": 95,
+      "msg": "Sk\u0142adanie podgl\u0105du..."
+    },
+    {
+      "t": 6.672,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 14,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_frame",
+      "stage_label": "Budowanie wykres\u00f3w i podgl\u0105du HUD",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.543,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 6.672,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 15,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_frame",
+      "stage_label": "Budowanie wykres\u00f3w i podgl\u0105du HUD",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 6.543,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "active"
+        ]
+      ]
+    },
+    {
+      "t": 6.672,
+      "ev": "load_state",
+      "state": "ready",
+      "gen": 1
+    },
+    {
+      "t": 6.672,
+      "ev": "progress",
+      "pct": 100,
+      "msg": "Gotowe"
+    },
+    {
+      "t": 6.854,
+      "ev": "screenshot",
+      "file": "hud_preparing_project_tab.png"
+    },
+    {
+      "t": 9.148,
+      "ev": "frame",
+      "hud_cov": 0.1801
+    },
+    {
+      "t": 9.149,
+      "ev": "hud_prep",
+      "state": "HUD_READY",
+      "active": false,
+      "cancelled": false,
+      "generation": 1,
+      "seq": 16,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "",
+      "stage_label": "Gotowe",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 9.139,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "done"
+        ]
+      ]
+    },
+    {
+      "t": 9.155,
+      "ev": "overlay_visible",
+      "value": false
+    },
+    {
+      "t": 12.267,
+      "ev": "hud_prep",
+      "state": "HUD_READY",
+      "active": false,
+      "cancelled": true,
+      "generation": 1,
+      "seq": 17,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "",
+      "stage_label": "Gotowe",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 12.264,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "done"
+        ]
+      ]
+    },
+    {
+      "t": 14.822,
+      "ev": "load_state",
+      "state": "cleared",
+      "gen": 2
+    },
+    {
+      "t": 15.325,
+      "ev": "second_open"
+    },
+    {
+      "t": 15.329,
+      "ev": "load_state",
+      "state": "loading",
+      "gen": 3
+    },
+    {
+      "t": 15.332,
+      "ev": "progress",
+      "pct": 0,
+      "msg": "Wczytywanie wideo..."
+    },
+    {
+      "t": 15.332,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 18,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 1,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 15.332,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 19,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 2,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 15.332,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 20,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 3,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 15.332,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 21,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "pending"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 15.332,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 22,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "telemetry",
+      "stage_label": "Wczytywanie telemetrii",
+      "stage_index": 1,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.0,
+      "stages": [
+        [
+          "telemetry",
+          "active"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 15.506,
+      "ev": "progress",
+      "pct": 15,
+      "msg": "Analiza strumienia..."
+    },
+    {
+      "t": 15.649,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Sprawdzanie metadanych..."
+    },
+    {
+      "t": 15.649,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Analiza telemetrii (1/1)..."
+    },
+    {
+      "t": 16.118,
+      "ev": "progress",
+      "pct": 70,
+      "msg": "Metadane gotowe"
+    },
+    {
+      "t": 16.19,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 23,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "fit_sync",
+      "stage_label": "Synchronizacja FIT",
+      "stage_index": 2,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.785,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 16.222,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 24,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "fit_sync",
+      "stage_label": "Synchronizacja FIT",
+      "stage_index": 2,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 0.785,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "active"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.103,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 25,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 3,
+      "stage_count": 4,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.725,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.103,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 26,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.726,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.103,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 27,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.726,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "pending"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.104,
+      "ev": "progress",
+      "pct": 78,
+      "msg": "Kalibracja kompasu z FIT..."
+    },
+    {
+      "t": 17.104,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 28,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "compass",
+      "stage_label": "Analiza IMU i kalibracja kompasu",
+      "stage_index": 3,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.726,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "active"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.172,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 29,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 4,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.823,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "pending"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.172,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 30,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_data",
+      "stage_label": "Przygotowanie danych HUD",
+      "stage_index": 4,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.823,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "active"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.173,
+      "ev": "progress",
+      "pct": 75,
+      "msg": "Przygotowywanie danych..."
+    },
+    {
+      "t": 17.173,
+      "ev": "progress",
+      "pct": 80,
+      "msg": "Budowa interfejsu..."
+    },
+    {
+      "t": 17.32,
+      "ev": "progress",
+      "pct": 85,
+      "msg": "Przygotowywanie podgl\u0105du..."
+    },
+    {
+      "t": 17.32,
+      "ev": "progress",
+      "pct": 90,
+      "msg": "Pobieranie klatki..."
+    },
+    {
+      "t": 17.32,
+      "ev": "progress",
+      "pct": 95,
+      "msg": "Sk\u0142adanie podgl\u0105du..."
+    },
+    {
+      "t": 17.33,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 31,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_frame",
+      "stage_label": "Budowanie wykres\u00f3w i podgl\u0105du HUD",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.859,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "pending"
+        ]
+      ]
+    },
+    {
+      "t": 17.33,
+      "ev": "hud_prep",
+      "state": "HUD_PREPARING",
+      "active": true,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 32,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "hud_frame",
+      "stage_label": "Budowanie wykres\u00f3w i podgl\u0105du HUD",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 1.859,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "active"
+        ]
+      ]
+    },
+    {
+      "t": 17.33,
+      "ev": "load_state",
+      "state": "ready",
+      "gen": 3
+    },
+    {
+      "t": 17.331,
+      "ev": "progress",
+      "pct": 100,
+      "msg": "Gotowe"
+    },
+    {
+      "t": 20.027,
+      "ev": "frame",
+      "hud_cov": 0.1339
+    },
+    {
+      "t": 20.029,
+      "ev": "hud_prep",
+      "state": "HUD_READY",
+      "active": false,
+      "cancelled": false,
+      "generation": 3,
+      "seq": 33,
+      "title": "Przygotowywanie wska\u017anik\u00f3w...",
+      "stage_key": "",
+      "stage_label": "Gotowe",
+      "stage_index": 5,
+      "stage_count": 5,
+      "determinate": false,
+      "done": null,
+      "total": null,
+      "fraction": null,
+      "errors": [],
+      "elapsed_s": 4.69,
+      "stages": [
+        [
+          "telemetry",
+          "done"
+        ],
+        [
+          "fit_sync",
+          "done"
+        ],
+        [
+          "compass",
+          "done"
+        ],
+        [
+          "hud_data",
+          "done"
+        ],
+        [
+          "hud_frame",
+          "done"
+        ]
+      ]
+    }
+  ]
+}

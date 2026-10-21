@@ -602,6 +602,9 @@ class PreviewMixin:
             result = self.telemetry.request_compass_preparation(cfg, self.signals.sig_compass_prepared.emit)
             if result is None:
                 return
+        prep = self._hud_prep_current() if hasattr(self, "_hud_prep_current") else None
+        if prep is not None and prep.state_of("compass") == "active":
+            self._hud_prep_finish_compass(prep, self.telemetry._compass_result)
         self._render_preview()
 
     def _render_preview(self, seek_seconds: float | None = None) -> None:
@@ -1021,6 +1024,8 @@ class PreviewMixin:
                     bt.stop_timer("frame_conversion")
 
                 self.signals.sig_preview_frame_ready.emit(qimg)
+                if overlay_data is not None and hasattr(self, "_hud_prep_on_frame"):
+                    self._hud_prep_on_frame()
                 presentation_debug('preview_emitted', generation=self._presentation_generation,
                                    target_dt=target_dt)
                 self.signals.sig_bboxes_ready.emit(

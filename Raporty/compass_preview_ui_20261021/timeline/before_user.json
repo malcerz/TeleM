@@ -1,0 +1,105 @@
+{
+  "layout": "C:\\_DEV\\SportCamHUD\\def_layout.json",
+  "fit": "F:\\GoPro\\2026-10-16\\2026-10-16_06-22-14.fit",
+  "ready_s": 6.294,
+  "first_hud_frame_s": 8.707,
+  "gap_ready_to_hud_s": 2.413,
+  "overlay_hidden_s": 0.024,
+  "screens": [],
+  "events": [
+    {
+      "t": 0.0,
+      "ev": "load_state",
+      "state": "loading",
+      "gen": 1
+    },
+    {
+      "t": 0.001,
+      "ev": "progress",
+      "pct": 0,
+      "msg": "Wczytywanie wideo..."
+    },
+    {
+      "t": 0.024,
+      "ev": "overlay_visible",
+      "value": false
+    },
+    {
+      "t": 0.207,
+      "ev": "progress",
+      "pct": 15,
+      "msg": "Analiza strumienia..."
+    },
+    {
+      "t": 0.328,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Sprawdzanie metadanych..."
+    },
+    {
+      "t": 0.328,
+      "ev": "progress",
+      "pct": 30,
+      "msg": "Analiza telemetrii (1/1)..."
+    },
+    {
+      "t": 0.388,
+      "ev": "progress",
+      "pct": 37,
+      "msg": "Natywna analiza GPMF C++ (1/1)..."
+    },
+    {
+      "t": 5.451,
+      "ev": "progress",
+      "pct": 70,
+      "msg": "Metadane gotowe"
+    },
+    {
+      "t": 6.25,
+      "ev": "progress",
+      "pct": 75,
+      "msg": "Przygotowywanie danych..."
+    },
+    {
+      "t": 6.251,
+      "ev": "progress",
+      "pct": 80,
+      "msg": "Budowa interfejsu..."
+    },
+    {
+      "t": 6.293,
+      "ev": "progress",
+      "pct": 85,
+      "msg": "Przygotowywanie podgl\u0105du..."
+    },
+    {
+      "t": 6.294,
+      "ev": "progress",
+      "pct": 90,
+      "msg": "Pobieranie klatki..."
+    },
+    {
+      "t": 6.294,
+      "ev": "progress",
+      "pct": 95,
+      "msg": "Sk\u0142adanie podgl\u0105du..."
+    },
+    {
+      "t": 6.294,
+      "ev": "load_state",
+      "state": "ready",
+      "gen": 1
+    },
+    {
+      "t": 6.295,
+      "ev": "progress",
+      "pct": 100,
+      "msg": "Gotowe"
+    },
+    {
+      "t": 8.707,
+      "ev": "frame",
+      "hud_cov": 0.1333
+    }
+  ]
+}

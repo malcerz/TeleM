@@ -197,6 +197,8 @@ class AppSignals(QObject):
     # the controller marshals preview refresh via these (queued) signals.
     sig_map_ready = Signal()
     sig_compass_prepared = Signal(object)
+    # HUD_PREPARING snapshot (src/gui/hud_preparation.py) for the Preview overlay
+    sig_hud_preparation = Signal(object)
     # (loaded_tiles, required_tiles)
     sig_map_progress = Signal(int, int)
     # Lightweight status text (e.g. "Mapa: przygotowywanie 123/493", "Mapa: gotowa", "")
