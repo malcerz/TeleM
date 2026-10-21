@@ -3079,8 +3079,8 @@ class RenderTab(QWidget):
         total_h = self.height()
         if total_w < 100 or total_h < 100:
             return
-        preview_w, preview_h = preview_aspect_size(total_h, total_w)
-        self.preview_slot.setFixedSize(preview_w, preview_h)
+        preview_w, preview_h = preview_aspect_size(total_h - 36, total_w)
+        self.preview_slot.setFixedSize(preview_w, preview_h + 32)
         self.hud_preview_label.setFixedSize(preview_w, preview_h)
 
     def showEvent(self, event) -> None:
@@ -3982,9 +3982,9 @@ class RenderTab(QWidget):
         if total_w < 100 or total_h < 100:
             return
 
-        preview_w, preview_h = preview_aspect_size(total_h, total_w)
+        preview_w, preview_h = preview_aspect_size(total_h - 36, total_w)
         self.left_panel.setFixedWidth(preview_w + 4)
-        self.preview_slot.setFixedSize(preview_w, preview_h)
+        self.preview_slot.setFixedSize(preview_w, preview_h + 32)
         self.hud_preview_label.setFixedSize(preview_w, preview_h)
 
 

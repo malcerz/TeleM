@@ -63,19 +63,50 @@ def _is_legacy_vertical_ruler(cfg: dict[str, Any]) -> bool:
     )
 
 
-def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
-    """Normalize any legacy Ruler rotation at runtime only.
+def _is_legacy_map_geometry(cfg: dict[str, Any]) -> bool:
+    """Check if map indicator uses v1 center-anchored coordinates."""
+    form = str(cfg.get("form", "text") or "text").strip().lower()
+    if form not in ("map", "static_map"):
+        return False
+    if str(cfg.get("map_anchor", "")).strip().lower() == "topleft":
+        return False
+    return int(cfg.get("map_geometry_version", 1) or 1) < 2
 
-    Older presets represented a vertical ruler as a horizontal ruler with
-    ``rotation=90``. The current vertical-ruler contract keeps text horizontal,
-    so migrate this semantic shape without mutating the saved layout.
+
+def _effective_indicator_cfg(key: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy Ruler rotation and legacy center-anchored map geometry at runtime only.
+
+    Migrates semantic shapes without mutating the saved layout file.
     """
     effective = cfg.copy()
-    if (
-        _is_legacy_vertical_ruler(effective)
-    ):
+    if _is_legacy_vertical_ruler(effective):
         effective["orientation"] = "vertical"
         effective["rotation"] = 0
+
+    if _is_legacy_map_geometry(effective):
+        try:
+            size_val = float(effective.get("size", 10.0))
+        except (TypeError, ValueError):
+            size_val = 10.0
+        try:
+            x_val = float(effective.get("x", 0.0))
+        except (TypeError, ValueError):
+            x_val = 0.0
+        try:
+            y_val = float(effective.get("y", 0.0))
+        except (TypeError, ValueError):
+            y_val = 0.0
+
+        half_w = size_val / 2.0
+        half_h = (size_val * (16.0 / 9.0)) / 2.0
+        new_x = x_val if x_val <= half_w else (x_val - half_w)
+        new_y = y_val if y_val <= half_h else (y_val - half_h)
+
+        effective["x"] = max(0.0, round(new_x, 4))
+        effective["y"] = max(0.0, round(new_y, 4))
+        effective["map_geometry_version"] = 2
+        effective["map_anchor"] = "topleft"
+
     return effective
 
 
@@ -669,8 +700,9 @@ def compose_overlay(
         if res:
             rotation = int(current_cfg.get("rotation", 0))
             is_text = current_cfg.get("form", "text") == "text"
+            is_map = current_cfg.get("form", "text") in ("map", "static_map")
 
-            if is_text:
+            if is_text or is_map:
                 if rotation in (90, 270):
                     center_x = rx + res.height / 2.0
                     center_y = ry + res.width / 2.0
@@ -678,7 +710,6 @@ def compose_overlay(
                     center_x = rx + res.width / 2.0
                     center_y = ry + res.height / 2.0
             else:
-
                 center_x = rx
                 center_y = ry
 

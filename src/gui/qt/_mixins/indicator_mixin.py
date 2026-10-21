@@ -209,9 +209,11 @@ class IndicatorMixin:
             defaults["map_orientation"] = "track_up"
             defaults["marker_size"] = 7
             defaults["marker_color"] = "#FFFFFF"
-            defaults["x"] = 90.57
-            defaults["y"] = 27.53
+            defaults["x"] = 82.0
+            defaults["y"] = 20.0
             defaults["map_shape"] = "square"
+            defaults["map_geometry_version"] = 2
+            defaults["map_anchor"] = "topleft"
 
             # Zachowaj / użyj aktywnego źródła GPS projektu (FIT > GPX > GPMF)
             ctx = getattr(self, "map_context", None)
@@ -498,6 +500,9 @@ class IndicatorMixin:
         cfg = self.layout["indicators"][key]
         cfg["x"] = round(x_norm, 2)
         cfg["y"] = round(y_norm, 2)
+        if cfg.get("form") in ("map", "static_map"):
+            cfg["map_geometry_version"] = 2
+            cfg["map_anchor"] = "topleft"
 
         form = cfg.get("form", "text")
         bar_style = cfg.get("bar_style", "ruler")

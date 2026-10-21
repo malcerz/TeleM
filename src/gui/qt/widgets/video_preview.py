@@ -720,7 +720,8 @@ class VideoPreview(QWidget):
         if ctrl is None:
             return True
         cfg = getattr(ctrl, "layout", {}).get("indicators", {}).get(key, {})
-        return str(cfg.get("form", "text") or "text") == "text"
+        form = str(cfg.get("form", "text") or "text")
+        return form in ("text", "map", "static_map")
 
     def _hit_test(self, nx: float, ny: float) -> str | None:
         """Sprawdza który wskaźnik został kliknięty."""

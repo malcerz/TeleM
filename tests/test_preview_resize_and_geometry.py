@@ -137,6 +137,7 @@ def test_render_tab_preview_target_size_uses_video_rect_for_native():
     tab._controller = ctrl
     tab._export_preview_native = True
     tab._rendering = True
+    tab._preview_is_foreground = lambda: True
     tab.chk_hud_preview.setChecked(True)
 
     sizes_called: list[tuple[int, int]] = []

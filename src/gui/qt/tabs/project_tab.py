@@ -139,7 +139,7 @@ class ProjectTab(QWidget):
         if total_w < 100 or total_h < 100:
             return
 
-        preview_w, preview_h = preview_aspect_size(total_h, total_w)
+        preview_w, preview_h = preview_aspect_size(total_h - 36, total_w)
         # left_panel ma prawy margines 4px — dodaj go do szerokości panelu
         self.left_panel.setFixedWidth(preview_w + 4)
-        self.preview_slot.setFixedSize(preview_w, preview_h)
+        self.preview_slot.setFixedSize(preview_w, preview_h + 32)

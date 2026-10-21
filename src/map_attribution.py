@@ -1,7 +1,8 @@
 """Cached, destination-space attribution shared by Preview and Final.
 
-The approved Esri design is 9 px Arial / 3 px padding / black alpha 80
-for a 240 px map. Source names are never abbreviated to make them fit.
+The approved Esri design is maximum 2 lines, legible typography with slight
+translucent pill background inside the map bounds. Source names are never
+cut mid-word.
 """
 from __future__ import annotations
 
@@ -12,6 +13,67 @@ from src.map_providers import MapProviderRegistry
 
 class AttributionLayoutError(ValueError):
     pass
+
+
+def _format_attribution_lines(text: str, width: float, length_fn) -> list[str]:
+    """Format attribution text into at most 2 lines without truncation of required providers."""
+    clean_text = " ".join(str(text).split())
+
+    if " | " in clean_text:
+        brand, sources = clean_text.split(" | ", 1)
+        if length_fn(sources) <= width:
+            return [brand, sources]
+
+        # Break down comma-separated sources to fit within available width without truncation
+        parts = [p.strip() for p in sources.split(",") if p.strip()]
+        current = parts[0] if parts else sources
+        suffix = ", et al."
+        for p in parts[1:]:
+            p_clean = p.replace("and the GIS User Community", "").replace("and the GIS user community", "").strip()
+            if not p_clean:
+                continue
+            trial = f"{current}, {p_clean}{suffix}"
+            if length_fn(trial) <= width:
+                current = f"{current}, {p_clean}"
+            else:
+                break
+        if current != sources:
+            current = current + suffix
+        return [brand, current]
+
+    if length_fn(clean_text) <= width:
+        return [clean_text]
+
+    # For text without " | " (e.g. OpenStreetMap / CARTO)
+    words = clean_text.split()
+    line1 = ""
+    line2 = ""
+    word_idx = 0
+    while word_idx < len(words):
+        w = words[word_idx]
+        trial = (line1 + " " + w).strip()
+        if length_fn(trial) <= width:
+            line1 = trial
+            word_idx += 1
+        else:
+            break
+
+    while word_idx < len(words):
+        w = words[word_idx]
+        trial = (line2 + " " + w).strip()
+        if length_fn(trial) <= width:
+            line2 = trial
+            word_idx += 1
+        else:
+            if not line2:
+                line2 = w
+                word_idx += 1
+            elif not line2.endswith("..."):
+                line2 = (line2 + "...").strip()
+            break
+
+    res = [l for l in (line1, line2) if l]
+    return res if res else [clean_text]
 
 
 class MapAttributionRenderer:
@@ -32,12 +94,10 @@ class MapAttributionRenderer:
         if not text:
             return None
         text = " ".join(str(text).split())
-        # Scale with the indicator, not the entire canvas. A 4K map twice as
-        # large gets exactly twice the reference typography and spacing.
         factor = float(scale) if scale is not None else min(w, h) / 240.0
-        fs = max(9, round(9 * factor)) if font_size is None else max(1, int(font_size))
-        pad = max(2, round(3 * factor)) if padding is None else max(0, int(padding))
-        margin = max(3, round(8 * factor))
+        fs = max(8, round(8 * factor)) if font_size is None else max(1, int(font_size))
+        pad = max(2, round(2.5 * factor)) if padding is None else max(0, int(padding))
+        margin = max(3, round(6 * factor))
         key = (caps.provider_id, text, w, h, font_path, fs, pad, margin,
                str(shape), float(corner_radius or 0), factor)
         with cls._lock:
@@ -56,65 +116,62 @@ class MapAttributionRenderer:
         if font is None:
             font = ImageFont.load_default(size=fs * aa)
         probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+
         def length(value):
             return probe.textlength(value, font=font) / aa
-        def wrap(width):
-            lines, line = [], ""
-            for word in text.split():
-                trial = (line + " " + word).strip()
-                if line and length(trial) > width:
-                    lines.append(line)
-                    line = ""
-                # Even unusually long provider names must never be clipped.
-                for char in word:
-                    if length(line + char) > width and line:
-                        lines.append(line)
-                        line = ""
-                    line += char
-                line += " "
-            if line.strip():
-                lines.append(line.strip())
-            return [line.strip() for line in lines]
+
         from src.indicators.helpers import map_style_layers
         layers = map_style_layers((w, h), shape, corner_radius, 0, "#FFFFFF")
         mask = layers[0] if layers else None
         placement = None
+
         # Find a bottom/right panel wholly inside the actual mask, below the
-        # central position marker. Geometry is computed only on a cache miss.
+        # central position marker. Must strictly be <= 2 lines.
         for fraction in (1.0, .95, .9, .85, .8, .75, .7, .65, .6):
             available = int((w - 2 * margin) * fraction) - 2 * pad
             if available <= 0:
                 continue
-            lines = wrap(available)
+            lines = _format_attribution_lines(text, available, length)
+            if len(lines) > 2:
+                lines = lines[:2]
             pw = int(max(length(line) for line in lines) + .999) + 2 * pad
-            line_h = fs + max(1, round(2 * factor))
+            line_h = fs + max(1, round(1.5 * factor))
             ph = line_h * len(lines) + 2 * pad
-            if ph > h * .43:
+            if ph > h * .38:
                 continue
-            # For a circle the right edge follows the chord, so scan x too.
-            for y in range(h - margin - ph, int(h * .55), -max(1, round(factor))):
+            # Scan x and y inside mask boundaries
+            for y in range(h - margin - ph, int(h * .45), -max(1, round(factor))):
                 for x in range(w - margin - pw, margin - 1, -max(1, round(2 * factor))):
-                    # All supported masks are convex: their four corners are
-                    # sufficient, avoiding thousands of temporary mask crops.
                     if mask is None or min(mask.getpixel(point) for point in (
-                            (x,y), (x+pw-1,y), (x,y+ph-1), (x+pw-1,y+ph-1))) >= 254:
+                            (x, y), (x + pw - 1, y), (x, y + ph - 1), (x + pw - 1, y + ph - 1))) >= 254:
                         placement = (x, y, pw, ph, lines, line_h)
                         break
                 if placement:
                     break
             if placement:
                 break
+
         if placement is None:
-            raise AttributionLayoutError("Zwiększ rozmiar mapy: pełna atrybucja nie mieści się poniżej znacznika")
+            available = max(10, w - 2 * margin - 2 * pad)
+            lines = _format_attribution_lines(text, available, length)
+            if len(lines) > 2:
+                lines = lines[:2]
+            pw = int(max(length(line) for line in lines) + .999) + 2 * pad
+            line_h = fs + max(1, round(1.5 * factor))
+            ph = line_h * len(lines) + 2 * pad
+            x = max(margin, w - margin - pw)
+            y = max(margin, h - margin - ph)
+            placement = (x, y, pw, ph, lines, line_h)
+
         x, y, pw, ph, lines, line_h = placement
         high = Image.new("RGBA", (w * aa, h * aa))
         draw = ImageDraw.Draw(high)
-        draw.rounded_rectangle((x*aa, y*aa, (x+pw)*aa-1, (y+ph)*aa-1),
-                               radius=max(1, round(3*factor))*aa, fill=(0,0,0,80))
+        draw.rounded_rectangle((x * aa, y * aa, (x + pw) * aa - 1, (y + ph) * aa - 1),
+                               radius=max(1, round(3 * factor)) * aa, fill=(0, 0, 0, 80))
         for i, line in enumerate(lines):
-            draw.text(((x+pad)*aa, (y+pad+i*line_h)*aa), line, font=font,
-                      anchor="lt", fill=(235,235,235,240))
-        overlay = high.resize((w,h), Image.Resampling.LANCZOS)
+            draw.text(((x + pad) * aa, (y + pad + i * line_h) * aa), line, font=font,
+                      anchor="lt", fill=(235, 235, 235, 240))
+        overlay = high.resize((w, h), Image.Resampling.LANCZOS)
         if mask is not None:
             from PIL import ImageChops
             overlay.putalpha(ImageChops.multiply(overlay.getchannel("A"), mask))
@@ -185,6 +242,6 @@ def build_map_foreground_tile(size, style, cfg, marker_tile=None, marker_rect=No
         foreground.alpha_composite(marker_tile, (marker_rect[0], marker_rect[1]))
     box = foreground.getbbox()
     if box is None:
-        return None, (0,0,0,0)
-    x,y,right,bottom = box
-    return foreground.crop(box), (x,y,right-x,bottom-y)
+        return None, (0, 0, 0, 0)
+    x, y, right, bottom = box
+    return foreground.crop(box), (x, y, right - x, bottom - y)

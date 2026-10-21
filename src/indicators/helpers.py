@@ -313,7 +313,13 @@ def _parse_marker_color(hex_color: str) -> tuple[int, int, int, int]:
 
 def s(value: float, base: int) -> int:
     """Scale a relative percentage value (0.0-100.0 range, where 50 is center/50%) to an absolute pixel size."""
-    return max(1, int(round((value / 100.0) * base)))
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        val = 0.0
+    if val <= 0.0:
+        return int(round((val / 100.0) * base))
+    return max(1, int(round((val / 100.0) * base)))
 
 
 

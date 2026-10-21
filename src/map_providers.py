@@ -357,7 +357,7 @@ class MapProviderRegistry:
         caps = cls.get_capabilities(style_or_id)
         if caps.provider_id == "satellite":
             from src.integrations.esri import esri_client
-            return esri_client.attribution, caps.attribution_url
+            return (esri_client.attribution or ("Powered by Esri | " + caps.attribution_text)), caps.attribution_url
         return caps.attribution_text, caps.attribution_url
 
     @classmethod

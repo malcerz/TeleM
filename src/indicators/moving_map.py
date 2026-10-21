@@ -317,9 +317,11 @@ def render_map_working_image(
         if apply_style:
             map_img = apply_map_attribution(map_img, map_style, cfg, shape_scale=min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
-        rx = s(cfg["x"], canvas_w)
-        ry = s(cfg["y"], canvas_h)
-        dst_bbox = (int(rx - map_w // 2), int(ry - map_w // 2), int(map_w), int(map_w))
+        from src.indicators.compositor import _effective_indicator_cfg
+        eff_cfg = _effective_indicator_cfg(key, cfg)
+        rx = s(eff_cfg["x"], canvas_w)
+        ry = s(eff_cfg["y"], canvas_h)
+        dst_bbox = (int(round(rx)), int(round(ry)), int(map_w), int(map_w))
         return map_img, dst_bbox
     except Exception:
         return None, None
@@ -503,10 +505,12 @@ def render_map_unrotated_working_image(
                 setattr(map_img, "_crop_key", crop_key)
             except Exception:
                 pass
-        rx = s(cfg["x"], canvas_w)
-        ry = s(cfg["y"], canvas_h)
-        dst_x = _quantize_map_val(int(rx - map_w // 2), align_spec)
-        dst_y = _quantize_map_val(int(ry - map_w // 2), align_spec)
+        from src.indicators.compositor import _effective_indicator_cfg
+        eff_cfg = _effective_indicator_cfg(key, cfg)
+        rx = s(eff_cfg["x"], canvas_w)
+        ry = s(eff_cfg["y"], canvas_h)
+        dst_x = _quantize_map_val(int(round(rx)), align_spec)
+        dst_y = _quantize_map_val(int(round(ry)), align_spec)
         dst_bbox = (dst_x, dst_y, int(map_w), int(map_w))
         return map_img, heading_val, dst_bbox, working_size
     except Exception:
