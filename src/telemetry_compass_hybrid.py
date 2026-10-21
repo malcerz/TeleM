@@ -19,7 +19,7 @@ import numpy as np
 ALGORITHM_VERSION = 1
 DEFAULTS = {
     "compass_heading_mode": "standard",
-    "compass_reference_source": "gpmf",
+    "compass_reference_source": "fit",
     "gps_stabilization_seconds": 30.0,
     "min_calibration_seconds": 30.0,
     "max_calibration_seconds": 300.0,
@@ -179,23 +179,76 @@ def gyro_attitude(gyro, accel, *, max_gap=.15, forward=(0., 1., 0.)):
         q = align_vectors(av[start], up)
         quats = np.empty((end-start, 4))
         quats[0] = q
-        for i in range(start+1, end):
-            dt = ts[i]-ts[i-1]
-            omega = (rates[i-1]+rates[i])*.5
-            angle = float(np.linalg.norm(omega) * dt)
-            dq = np.r_[math.cos(angle/2), omega * (math.sin(angle/2)*dt/angle if angle > 1e-12 else dt/2)]
-            q = multiply(q, dq)
-            q /= np.linalg.norm(q)
-            an = np.linalg.norm(av[i])
+        qw, qx, qy, qz = q
+        r_x = rates[start:end, 0]
+        r_y = rates[start:end, 1]
+        r_z = rates[start:end, 2]
+        ax = av[start:end, 0]
+        ay = av[start:end, 1]
+        az = av[start:end, 2]
+        ts_seg = ts[start:end]
+        for i in range(1, end-start):
+            dt = ts_seg[i]-ts_seg[i-1]
+            om_x = 0.5 * (r_x[i-1] + r_x[i])
+            om_y = 0.5 * (r_y[i-1] + r_y[i])
+            om_z = 0.5 * (r_z[i-1] + r_z[i])
+            angle = math.sqrt(om_x*om_x + om_y*om_y + om_z*om_z) * dt
+            half_ang = angle * 0.5
+            cos_half = math.cos(half_ang)
+            s = math.sin(half_ang) * dt / angle if angle > 1e-12 else dt * 0.5
+            dqw = cos_half
+            dqx = om_x * s
+            dqy = om_y * s
+            dqz = om_z * s
+
+            nw = qw*dqw - qx*dqx - qy*dqy - qz*dqz
+            nx = qw*dqx + qx*dqw + qy*dqz - qz*dqy
+            ny = qw*dqy - qx*dqz + qy*dqw + qz*dqx
+            nz = qw*dqz + qx*dqy - qy*dqx + qz*dqw
+
+            inv_norm = 1.0 / math.sqrt(nw*nw + nx*nx + ny*ny + nz*nz)
+            qw = nw * inv_norm
+            qx = nx * inv_norm
+            qy = ny * inv_norm
+            qz = nz * inv_norm
+
+            an = math.sqrt(ax[i]*ax[i] + ay[i]*ay[i] + az[i]*az[i])
             if 8.3 <= an <= 11.3:
-                # Compare both vectors at the *current* body orientation.
-                # Low-passing body XYZ without rotating its history would lag
-                # real pitch/roll and feed a false yaw correction into q.
-                expected = rotate(q * [1., -1., -1., -1.], up)
-                correction = np.cross(av[i]/an, expected)
-                q = multiply(q, np.r_[1., correction*(.25*dt)])
-                q /= np.linalg.norm(q)
-            quats[i-start] = q
+                # Expected gravity direction in body frame: rotate(q_conj, [0, 0, 1])
+                exp_x = 2.0 * (-qw*qy + qz*qx)
+                exp_y = 2.0 * (qw*qx + qz*qy)
+                exp_z = 1.0 - 2.0 * (qx*qx + qy*qy)
+
+                inv_an = 1.0 / an
+                c_ax = ax[i] * inv_an
+                c_ay = ay[i] * inv_an
+                c_az = az[i] * inv_an
+
+                corr_x = c_ay * exp_z - c_az * exp_y
+                corr_y = c_az * exp_x - c_ax * exp_z
+                corr_z = c_ax * exp_y - c_ay * exp_x
+
+                k = 0.25 * dt
+                dqw = 1.0
+                dqx = corr_x * k
+                dqy = corr_y * k
+                dqz = corr_z * k
+
+                nw = qw*dqw - qx*dqx - qy*dqy - qz*dqz
+                nx = qw*dqx + qx*dqw + qy*dqz - qz*dqy
+                ny = qw*dqy - qx*dqz + qy*dqw + qz*dqx
+                nz = qw*dqz + qx*dqy - qy*dqx + qz*dqw
+
+                inv_norm = 1.0 / math.sqrt(nw*nw + nx*nx + ny*ny + nz*nz)
+                qw = nw * inv_norm
+                qx = nx * inv_norm
+                qy = ny * inv_norm
+                qz = nz * inv_norm
+
+            quats[i, 0] = qw
+            quats[i, 1] = qx
+            quats[i, 2] = qy
+            quats[i, 3] = qz
         yaw = _yaw(quats, up, np.asarray(forward))
         if yaw is not None:
             result[start:end, 1] = yaw
@@ -582,22 +635,26 @@ def prepare_manager_compass(manager, cfg, *, cache_dir=None):
         cache_hit = result is not None
         if result is None:
             try:
-                orientation, orientation_meta = read_orientation(clip.path, base)
                 imu_signature = {k: signature[k] for k in ("algorithm", "reader", "source", "base_ts", "gyro", "accel")}
                 imu_signature["method"] = cfg["compass_imu_method"]
                 imu_key = hashlib.sha256(json.dumps(imu_signature, sort_keys=True).encode()).hexdigest()
                 attitude_path = cache_dir / "attitude" / f"{imu_key}.npz"
                 attitude = _load_result(attitude_path)
+                orientation_reader_cache_hit = False
+                orientation = {}
                 if attitude is None:
                     axis, imu_diag = None, {"reason": "CORI disabled by selection"}
+                    orientation_meta = {"cache_hit": False}
                     if cfg["compass_imu_method"] in ("auto", "cori"):
+                        orientation, orientation_meta = read_orientation(clip.path, base)
+                        orientation_reader_cache_hit = orientation_meta.get("cache_hit", False)
                         axis, imu_diag = cori_attitude(orientation.get("CORI", np.empty((0, 5))),
                                                       orientation.get("GRAV", np.empty((0, 4))))
                     if axis is None and cfg["compass_imu_method"] in ("auto", "gyro"):
                         reason = imu_diag
                         gyro_meta = orientation_meta.get("streams", {}).get("GYRO", {})
                         accel_meta = orientation_meta.get("streams", {}).get("ACCL", {})
-                        if gyro_meta.get("ORIN") == "ZXY" and gyro_meta.get("SIUN") == "rad/s" and accel_meta.get("ORIN") == "ZXY":
+                        if not gyro_meta or (gyro_meta.get("ORIN") == "ZXY" and gyro_meta.get("SIUN") == "rad/s" and accel_meta.get("ORIN") == "ZXY"):
                             axis, imu_diag = gyro_attitude(own_gyro, own_accel)
                             imu_diag["CORI_rejection"] = reason
                         else:
@@ -607,10 +664,10 @@ def prepare_manager_compass(manager, cfg, *, cache_dir=None):
                         axis = np.empty((0, 2))
                     attitude = HybridResult(axis, imu_diag)
                     _save_result(attitude_path, attitude)
-                quality = orientation.get("GPS_QUALITY") if source == "gpmf" else None
+                quality = orientation.get("GPS_QUALITY") if (source == "gpmf" and orientation) else None
                 observations, gps_diag = reference_observations(own_track, own_speed, quality)
                 result = reconstruct(attitude.axis, observations, cfg, attitude.diagnostics)
-                result.diagnostics.update(gps_diag, orientation_reader_cache_hit=orientation_meta.get("cache_hit"),
+                result.diagnostics.update(gps_diag, orientation_reader_cache_hit=orientation_reader_cache_hit,
                                           memory_bytes=int(attitude.axis.nbytes+result.axis.nbytes),
                                           rigid_mount_assumption=True)
                 _save_result(final_path, result)
