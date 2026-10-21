@@ -16,7 +16,7 @@ import time
 
 import numpy as np
 
-ALGORITHM_VERSION = 1
+ALGORITHM_VERSION = 2  # 2: end-of-data calibration windows for short files
 DEFAULTS = {
     "compass_heading_mode": "gps_imu",
     "compass_reference_source": "fit",
@@ -486,6 +486,28 @@ def calibrate_segment(imu, observations, cfg):
             return model, {"status": "ok", "attempts": attempts}
         if checkpoint == len(checkpoints):
             return None, {"status": "insufficient_quality", "attempts": attempts, "reason": reason}
+    # The data ended before the next checkpoint (short file). Calibration may
+    # use any later stretch: try windows that start later and run to the end
+    # of the data, under the same acceptance criteria as above.
+    if calibration_start is not None and len(candidate) >= 20:
+        vals = np.asarray(candidate)
+        end_ts = float(vals[-1, 0])
+        shift = 0.
+        while end_ts-(calibration_start+shift) >= minimum:
+            sub = vals[vals[:, 0] >= calibration_start+shift]
+            span = end_ts-(calibration_start+shift)
+            model = None
+            reason = "insufficient independent moving samples or temporal coverage"
+            if len(sub) >= max(20, int(span*.65)) and sub[-1, 0]-sub[0, 0] >= span*.8:
+                model, reason = _fit_anchor(sub[:, 0], sub[:, 1], sub[:, 2]+float(cfg["compass_mount_offset_deg"]),
+                                            drift_enabled=bool(cfg["compass_drift_correction"]), target_start=imu[0, 0])
+            attempts.append({"window_seconds": round(span, 3), "start_offset_s": shift, "to_end_of_data": True,
+                             "status": reason, "samples": len(sub)})
+            if model is not None:
+                model.update(stable_fix_ts=float(detected), calibration_start_ts=float(calibration_start+shift),
+                             calibration_end_ts=end_ts, window_seconds=float(span))
+                return model, {"status": "ok", "attempts": attempts}
+            shift += 15.
     return None, {"status": "insufficient_data", "attempts": attempts,
                   "reason": "No stable fix followed by a sufficiently long calibration"}
 

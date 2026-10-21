@@ -1,0 +1,234 @@
+{
+ "clips": [
+  {
+   "path": "F:\\GoPro\\2026-10-20\\GX010389.MP4",
+   "global_start": 0.0,
+   "duration": 215.98243333333335,
+   "abs_start": "2026-10-20 13:04:05.826757"
+  },
+  {
+   "path": "F:\\GoPro\\2026-10-20\\GX010390.MP4",
+   "global_start": 215.98243333333335,
+   "duration": 1787.0519333333334,
+   "abs_start": "2026-10-20 13:31:45.641286"
+  }
+ ],
+ "status": "Gotowe",
+ "diagnostics": {
+  "status": "ok",
+  "reference_source": "fit",
+  "clips": [
+   {
+    "status": "ok",
+    "segments": [
+     {
+      "status": "ok",
+      "attempts": [
+       {
+        "window_seconds": 30.0,
+        "status": "angular dispersion exceeds 10 degrees",
+        "samples": 30
+       },
+       {
+        "window_seconds": 60,
+        "status": "angular dispersion exceeds 10 degrees",
+        "samples": 60
+       },
+       {
+        "window_seconds": 107.0,
+        "start_offset_s": 0.0,
+        "to_end_of_data": true,
+        "status": "angular dispersion exceeds 10 degrees",
+        "samples": 104
+       },
+       {
+        "window_seconds": 92.0,
+        "start_offset_s": 15.0,
+        "to_end_of_data": true,
+        "status": "ok",
+        "samples": 90
+       }
+      ],
+      "model": {
+       "offset_deg": 171.9993639925603,
+       "drift_deg_s": 0.0,
+       "drift_applied": false,
+       "drift_standard_error": 0.023376156790962256,
+       "drift_rate_bound_deg_s": 0.06493478687070565,
+       "origin_ts": 1792501610.6374996,
+       "error_median_deg": 3.468446271054461,
+       "error_p95_deg": 9.327861054656307,
+       "error_max_deg": 15.373139053277612,
+       "accepted_samples": 72,
+       "rejected_samples": 18,
+       "backward_uncertainty_deg": 14.19650433027991,
+       "turn_correlation": 0.4893877385514051,
+       "stable_fix_ts": 1792501523.3,
+       "calibration_start_ts": 1792501568.3,
+       "calibration_end_ts": 1792501660.3,
+       "window_seconds": 92.0
+      },
+      "reconstructed_start_ts": 1792501445.826757
+     }
+    ],
+    "valid_percent": 100.0,
+    "reconstructed_percent": 99.30086119085101,
+    "method": "GYRO+ACCL quaternion",
+    "imu_segments": 1,
+    "integration_hz": 100,
+    "CORI_rejection": {
+     "reason": "CORI gravity-frame consistency failed",
+     "gravity_p95_deg": 24.02349541322485
+    },
+    "independent_gps_samples": 146,
+    "gps_rejected": 3,
+    "orientation_reader_cache_hit": true,
+    "memory_bytes": 691136,
+    "rigid_mount_assumption": true,
+    "file": "F:\\GoPro\\2026-10-20\\GX010389.MP4",
+    "cache_key": "c40a3aedc2cddbfd938b62e2436a61424c1f152cfc1203d52a01e404b7983671",
+    "cache_hit": false,
+    "reference_source": "fit"
+   },
+   {
+    "status": "ok",
+    "segments": [
+     {
+      "status": "ok",
+      "attempts": [
+       {
+        "window_seconds": 30.0,
+        "status": "insufficient independent moving samples or temporal coverage",
+        "samples": 13
+       },
+       {
+        "window_seconds": 60,
+        "status": "ok",
+        "samples": 43
+       }
+      ],
+      "model": {
+       "offset_deg": 95.95178667420872,
+       "drift_deg_s": 0.0,
+       "drift_applied": false,
+       "drift_standard_error": 0.04578685570350872,
+       "drift_rate_bound_deg_s": 0.184043898441897,
+       "origin_ts": 1792503179.8000002,
+       "error_median_deg": 3.372976641946053,
+       "error_p95_deg": 9.109607213928943,
+       "error_max_deg": 11.668584457457484,
+       "accepted_samples": 42,
+       "rejected_samples": 1,
+       "backward_uncertainty_deg": 16.40930752502368,
+       "turn_correlation": 0.8679535066916785,
+       "stable_fix_ts": 1792503112.3,
+       "calibration_start_ts": 1792503142.3,
+       "calibration_end_ts": 1792503202.3,
+       "window_seconds": 60.0
+      },
+      "reconstructed_start_ts": 1792503105.641286
+     }
+    ],
+    "valid_percent": 97.686690355614,
+    "reconstructed_percent": 5.408914132229093,
+    "method": "GYRO+ACCL quaternion",
+    "imu_segments": 1,
+    "integration_hz": 100,
+    "CORI_rejection": {
+     "reason": "CORI gravity-frame consistency failed",
+     "gravity_p95_deg": 49.054379213355574
+    },
+    "independent_gps_samples": 1785,
+    "gps_rejected": 0,
+    "orientation_reader_cache_hit": true,
+    "memory_bytes": 5718560,
+    "rigid_mount_assumption": true,
+    "file": "F:\\GoPro\\2026-10-20\\GX010390.MP4",
+    "cache_key": "cf4ebc3c41ced249737042b8dcab2fef787fe51c9df2620e908b7653df7513eb",
+    "cache_hit": false,
+    "reference_source": "fit"
+   }
+  ],
+  "prepare_seconds": 2.0138243999681436,
+  "axis_memory_bytes": 3204880,
+  "algorithm_version": 2
+ },
+ "samples": [
+  {
+   "t": 0,
+   "abs": "2026-10-20 13:04:05.826757",
+   "hybrid": 171.99935913085938,
+   "fit_heading": null
+  },
+  {
+   "t": 30,
+   "abs": "2026-10-20 13:04:35.826757",
+   "hybrid": 108.42533111572266,
+   "fit_heading": null
+  },
+  {
+   "t": 60,
+   "abs": "2026-10-20 13:05:05.826757",
+   "hybrid": 78.13258361816406,
+   "fit_heading": null
+  },
+  {
+   "t": 120,
+   "abs": "2026-10-20 13:06:05.826757",
+   "hybrid": 165.39891052246094,
+   "fit_heading": 168.17663158444049
+  },
+  {
+   "t": 180,
+   "abs": "2026-10-20 13:07:05.826757",
+   "hybrid": 121.17479705810547,
+   "fit_heading": 156.56828313356644
+  },
+  {
+   "t": 240,
+   "abs": "2026-10-20 13:32:09.658853",
+   "hybrid": 152.7811279296875,
+   "fit_heading": 188.53434512087665
+  },
+  {
+   "t": 300,
+   "abs": "2026-10-20 13:33:09.658853",
+   "hybrid": 62.16862106323242,
+   "fit_heading": 59.01278316366757
+  },
+  {
+   "t": 400,
+   "abs": "2026-10-20 13:34:49.658853",
+   "hybrid": 133.9368438720703,
+   "fit_heading": 136.41845008849515
+  },
+  {
+   "t": 500,
+   "abs": "2026-10-20 13:36:29.658853",
+   "hybrid": 202.94598388671875,
+   "fit_heading": 200.94708620109077
+  },
+  {
+   "t": 211.0,
+   "abs": "2026-10-20 13:07:36.809190",
+   "hybrid": 336.2157287597656,
+   "fit_heading": 61.534670576349825
+  },
+  {
+   "t": 221.0,
+   "abs": "2026-10-20 13:31:50.641286",
+   "hybrid": 139.01771545410156,
+   "fit_heading": 159.5696673073775
+  },
+  {
+   "t": 336.0,
+   "abs": "2026-10-20 13:33:45.641286",
+   "hybrid": 57.48402404785156,
+   "fit_heading": 57.4131111014352
+  }
+ ],
+ "fit_track_first": "2026-10-20 13:05:14.300000",
+ "fit_track_last": "2026-10-20 14:01:40.300000",
+ "gyro_n": 398056,
+ "gyro_first": "2026-10-20 13:04:05.826757+00:00"
+}

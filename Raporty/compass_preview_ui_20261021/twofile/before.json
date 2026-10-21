@@ -1,0 +1,201 @@
+{
+ "clips": [
+  {
+   "path": "F:\\GoPro\\2026-10-20\\GX010389.MP4",
+   "global_start": 0.0,
+   "duration": 215.98243333333335,
+   "abs_start": "2026-10-20 13:04:05.826757"
+  },
+  {
+   "path": "F:\\GoPro\\2026-10-20\\GX010390.MP4",
+   "global_start": 215.98243333333335,
+   "duration": 1787.0519333333334,
+   "abs_start": "2026-10-20 13:31:45.641286"
+  }
+ ],
+ "status": "Gotowe",
+ "diagnostics": {
+  "status": "ok",
+  "reference_source": "fit",
+  "clips": [
+   {
+    "status": "unavailable",
+    "segments": [
+     {
+      "status": "insufficient_data",
+      "attempts": [
+       {
+        "window_seconds": 30.0,
+        "status": "angular dispersion exceeds 10 degrees",
+        "samples": 30
+       },
+       {
+        "window_seconds": 60,
+        "status": "angular dispersion exceeds 10 degrees",
+        "samples": 60
+       }
+      ],
+      "reason": "No stable fix followed by a sufficiently long calibration"
+     }
+    ],
+    "valid_percent": 0.0,
+    "reconstructed_percent": 0.0,
+    "method": "GYRO+ACCL quaternion",
+    "imu_segments": 1,
+    "integration_hz": 100,
+    "CORI_rejection": {
+     "reason": "CORI gravity-frame consistency failed",
+     "gravity_p95_deg": 24.02349541322485
+    },
+    "independent_gps_samples": 146,
+    "gps_rejected": 3,
+    "orientation_reader_cache_hit": false,
+    "memory_bytes": 691136,
+    "rigid_mount_assumption": true,
+    "file": "F:\\GoPro\\2026-10-20\\GX010389.MP4",
+    "cache_key": "50cdadeba0d142572e0be97d89f4e6c037ceb9e198e40d8dbfc9acb150a1911b",
+    "cache_hit": true,
+    "reference_source": "fit"
+   },
+   {
+    "status": "ok",
+    "segments": [
+     {
+      "status": "ok",
+      "attempts": [
+       {
+        "window_seconds": 30.0,
+        "status": "insufficient independent moving samples or temporal coverage",
+        "samples": 13
+       },
+       {
+        "window_seconds": 60,
+        "status": "ok",
+        "samples": 43
+       }
+      ],
+      "model": {
+       "offset_deg": 95.95178667420872,
+       "drift_deg_s": 0.0,
+       "drift_applied": false,
+       "drift_standard_error": 0.04578685570350872,
+       "drift_rate_bound_deg_s": 0.184043898441897,
+       "origin_ts": 1792503179.8000002,
+       "error_median_deg": 3.372976641946053,
+       "error_p95_deg": 9.109607213928943,
+       "error_max_deg": 11.668584457457484,
+       "accepted_samples": 42,
+       "rejected_samples": 1,
+       "backward_uncertainty_deg": 16.40930752502368,
+       "turn_correlation": 0.8679535066916785,
+       "stable_fix_ts": 1792503112.3,
+       "calibration_start_ts": 1792503142.3,
+       "calibration_end_ts": 1792503202.3,
+       "window_seconds": 60.0
+      },
+      "reconstructed_start_ts": 1792503105.641286
+     }
+    ],
+    "valid_percent": 97.686690355614,
+    "reconstructed_percent": 5.408914132229093,
+    "method": "GYRO+ACCL quaternion",
+    "imu_segments": 1,
+    "integration_hz": 100,
+    "CORI_rejection": {
+     "reason": "CORI gravity-frame consistency failed",
+     "gravity_p95_deg": 49.054379213355574
+    },
+    "independent_gps_samples": 1785,
+    "gps_rejected": 0,
+    "orientation_reader_cache_hit": false,
+    "memory_bytes": 5718560,
+    "rigid_mount_assumption": true,
+    "file": "F:\\GoPro\\2026-10-20\\GX010390.MP4",
+    "cache_key": "4dabdf23ac7afd8cf203b172505bc286f7f846450217db5cd1bf21cc43d8244c",
+    "cache_hit": true,
+    "reference_source": "fit"
+   }
+  ],
+  "prepare_seconds": 0.07032570004230365,
+  "axis_memory_bytes": 3204880,
+  "algorithm_version": 1
+ },
+ "samples": [
+  {
+   "t": 0,
+   "abs": "2026-10-20 13:04:05.826757",
+   "hybrid": null,
+   "fit_heading": null
+  },
+  {
+   "t": 30,
+   "abs": "2026-10-20 13:04:35.826757",
+   "hybrid": null,
+   "fit_heading": null
+  },
+  {
+   "t": 60,
+   "abs": "2026-10-20 13:05:05.826757",
+   "hybrid": null,
+   "fit_heading": null
+  },
+  {
+   "t": 120,
+   "abs": "2026-10-20 13:06:05.826757",
+   "hybrid": null,
+   "fit_heading": 168.17663158444049
+  },
+  {
+   "t": 180,
+   "abs": "2026-10-20 13:07:05.826757",
+   "hybrid": null,
+   "fit_heading": 156.56828313356644
+  },
+  {
+   "t": 240,
+   "abs": "2026-10-20 13:32:09.658853",
+   "hybrid": 152.7811279296875,
+   "fit_heading": 188.53434512087665
+  },
+  {
+   "t": 300,
+   "abs": "2026-10-20 13:33:09.658853",
+   "hybrid": 62.16862106323242,
+   "fit_heading": 59.01278316366757
+  },
+  {
+   "t": 400,
+   "abs": "2026-10-20 13:34:49.658853",
+   "hybrid": 133.9368438720703,
+   "fit_heading": 136.41845008849515
+  },
+  {
+   "t": 500,
+   "abs": "2026-10-20 13:36:29.658853",
+   "hybrid": 202.94598388671875,
+   "fit_heading": 200.94708620109077
+  },
+  {
+   "t": 211.0,
+   "abs": "2026-10-20 13:07:36.809190",
+   "hybrid": null,
+   "fit_heading": 61.534670576349825
+  },
+  {
+   "t": 221.0,
+   "abs": "2026-10-20 13:31:50.641286",
+   "hybrid": 139.01771545410156,
+   "fit_heading": 159.5696673073775
+  },
+  {
+   "t": 336.0,
+   "abs": "2026-10-20 13:33:45.641286",
+   "hybrid": 57.48402404785156,
+   "fit_heading": 57.4131111014352
+  }
+ ],
+ "fit_track_first": "2026-10-20 13:05:14.300000",
+ "fit_track_last": "2026-10-20 14:01:40.300000",
+ "gyro_n": 398056,
+ "gyro_first": "2026-10-20 13:04:05.826757+00:00"
+}

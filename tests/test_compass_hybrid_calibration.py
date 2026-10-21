@@ -190,3 +190,25 @@ def test_canonical_sampling_preserves_missing_north_wrap_and_float32():
     assert r.lookup(.5) == 0
     assert r.lookup(2) is None
     assert r.lookup(4) is None
+
+
+def test_short_file_uses_a_later_window_to_the_end_of_its_data():
+    """A file ending before the next checkpoint still calibrates on a clean later stretch.
+
+    GX010389 case: 30/60 s windows right after stabilization contain a turn
+    where the reference course lags the IMU; the clip ends before 120 s.
+    """
+    from src.telemetry_compass_hybrid import DEFAULTS, calibrate_segment
+    t = np.arange(0.0, 200.0, 0.01)
+    true = 90 + 40 * np.sin(t / 15.0)
+    imu = np.column_stack((t, (true - 40.0) % 360))          # mount offset 40 deg
+    obs_t = np.arange(0.0, 200.0, 1.0)
+    heading = (90 + 40 * np.sin(obs_t / 15.0)) % 360
+    noisy = (obs_t >= 36) & (obs_t < 80)                       # turn lag right after stabilization
+    heading[noisy] = (heading[noisy] + np.where(obs_t[noisy] % 3 == 0, 45.0, -30.0)) % 360
+    obs = np.column_stack((obs_t, heading, np.full_like(obs_t, 15.0), np.ones_like(obs_t)))
+    cfg = dict(DEFAULTS)
+    model, info = calibrate_segment(imu, obs, cfg)
+    assert info["status"] == "ok", info
+    assert info["attempts"][-1].get("to_end_of_data") and info["attempts"][-1]["start_offset_s"] > 0
+    assert abs(((model["offset_deg"] - 40.0) + 180) % 360 - 180) < 2.0
