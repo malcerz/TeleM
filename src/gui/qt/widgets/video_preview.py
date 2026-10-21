@@ -537,6 +537,9 @@ class VideoPreview(QWidget):
                             self._drag_offset_norm = (0.0, 0.0)
                         self.signals.sig_indicator_clicked.emit(key)
                         return True
+                # Pusty obszar podglądu (także czarne marginesy skalowanego
+                # obrazu) → aktywacja Synchronizacji telemetrii.
+                self.signals.sig_preview_empty_clicked.emit()
                 return super().eventFilter(obj, event)
 
             if event.type() == QEvent.MouseMove and self._dragging_key:

@@ -100,6 +100,11 @@ class TelemetrySyncPanel(QWidget):
         else:
             self.signals.sig_sync_auto_requested.emit()
 
+    def focus_offset(self) -> None:
+        """Fokus na „Przesunięcie” gotowe do wpisania; wartość bez zmian."""
+        self.spin.setFocus(Qt.MouseFocusReason)
+        self.spin.selectAll()
+
     # ── kontroler → GUI ────────────────────────────────────────────────
     def on_progress(self, text: str) -> None:
         self.status.setText(text)

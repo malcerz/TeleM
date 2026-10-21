@@ -351,6 +351,7 @@ class AppController(
         s.sig_late_telemetry_matched.connect(self.late_attach_telemetry)
         s.sig_stream_clicked.connect(self._on_stream_clicked)
         s.sig_indicator_clicked.connect(self._on_stream_clicked)
+        s.sig_preview_empty_clicked.connect(self._on_preview_empty_clicked)
         s.sig_indicator_moved.connect(self._on_indicator_moved)
         s.sig_reset_layout.connect(self._on_reset_layout)
         s.sig_save_preset.connect(self._on_save_preset)

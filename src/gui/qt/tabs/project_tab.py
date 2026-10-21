@@ -86,6 +86,13 @@ class ProjectTab(QWidget):
         s = self.signals
         s.sig_data_streams_ready.connect(self.data_bar.on_streams_ready)
         s.sig_properties_ready.connect(self.property_editor.on_properties_ready)
+        s.sig_preview_empty_clicked.connect(self._on_preview_empty_clicked)
+
+    def _on_preview_empty_clicked(self) -> None:
+        # Podgląd jest współdzielony z Renderingiem — panel Synchronizacji
+        # istnieje tylko tutaj, więc reagujemy wyłącznie gdy Projekt jest widoczny.
+        if self.isVisible():
+            self.property_editor.show_sync_panel(focus_offset=True)
 
     def _connect_preview_signals(self) -> None:
         """Podłącz sygnały podglądu — tylko gdy zakładka posiada podgląd.

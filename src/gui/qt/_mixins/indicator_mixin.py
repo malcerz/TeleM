@@ -74,6 +74,14 @@ class IndicatorMixin:
                 f"Błąd renderowania podglądu: {e}"
             )
 
+    def _on_preview_empty_clicked(self) -> None:
+        """Kliknięcie pustego obszaru podglądu: odznacz wskaźnik.
+
+        Panel właściwości pokazuje wtedy Synchronizację telemetrii (UI robi
+        to samo w PropertyEditor). Przesunięcie nie jest zmieniane.
+        """
+        self._selected_stream_key = ""
+
     def _create_indicator(self, key: str) -> None:
         """Tworzy domyślny wskaźnik w layoucie."""
         defaults: dict[str, Any] = {

@@ -152,6 +152,8 @@ class AppSignals(QObject):
     # Kliknięcie / przeciągnięcie wskaźnika na podglądzie
     sig_indicator_clicked = Signal(str)
     # (stream_key: str)
+    # Kliknięcie podglądu poza wskaźnikami → panel Synchronizacji telemetrii
+    sig_preview_empty_clicked = Signal()
     sig_indicator_moved = Signal(str, float, float)
     # (stream_key: str, x_norm: float, y_norm: float)
 

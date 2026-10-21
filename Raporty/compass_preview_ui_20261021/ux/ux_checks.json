@@ -1,0 +1,73 @@
+{
+  "color": {
+    "dots_button_present": false,
+    "initial_model": "#ff0000",
+    "pick_ok": {
+      "hex": "#33CC99",
+      "swatch": "#33CC99",
+      "model": "#33CC99",
+      "preview_rerendered": true
+    },
+    "cancel": {
+      "hex": "#33CC99",
+      "model": "#33CC99"
+    },
+    "manual_hex": {
+      "swatch": "#FF8800",
+      "model": "#FF8800"
+    },
+    "invalid_hex": {
+      "model_while_invalid": "#FF8800",
+      "hex_after_finish": "#FF8800",
+      "swatch": "#FF8800"
+    },
+    "after_restart_model": "#FF8800",
+    "saved_json": "#FF8800"
+  },
+  "sync": {
+    "preview_widget": "QWidget",
+    "empty_click": {
+      "point_norm": [
+        10,
+        5
+      ],
+      "selected_key": "",
+      "sync_panel_visible": true,
+      "offset_has_focus": true,
+      "window_focus_widget": "QDoubleSpinBox",
+      "window_focus_is_offset": true,
+      "offset_text_selected": "0,00",
+      "offset_before": 0.0,
+      "offset_after": 0.0,
+      "offset_set_signals": []
+    },
+    "indicator_click": {
+      "selected_key": "compass",
+      "property_editor_key": "compass",
+      "sync_panel_visible": false
+    },
+    "drag": {
+      "x_before": 94.31,
+      "x_after": 91.32,
+      "selected_key": "compass"
+    },
+    "margin_click": {
+      "selected_key": "",
+      "sync_panel_visible": true,
+      "offset_after": 0.0
+    }
+  },
+  "checks": {
+    "no_dots_button": true,
+    "pick_ok": true,
+    "cancel_no_change": true,
+    "manual_hex": true,
+    "invalid_hex_rejected": true,
+    "persisted": true,
+    "empty_click_sync": true,
+    "offset_unchanged": true,
+    "indicator_click": true,
+    "drag": true,
+    "margin_click_sync": true
+  }
+}

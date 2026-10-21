@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QCheckBox, QComboBox,
     QDoubleSpinBox, QSpinBox, QLineEdit,
@@ -20,6 +21,43 @@ from PySide6.QtWidgets import (
 from src.gui.qt.models import FieldSchema
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.icon_picker import IconPickerWidget
+
+
+def _valid_hex_color(text: str) -> QColor | None:
+    text = (text or "").strip()
+    # Same forms the renderer parses (helpers.parse_hex_color): #RGB, #RRGGBB.
+    if not text.startswith("#") or len(text) not in (4, 7):
+        return None
+    color = QColor(text)
+    return color if color.isValid() else None
+
+
+class ColorSwatch(QLabel):
+    """Kolorowy kwadrat pola koloru — kliknięcie otwiera wybór koloru."""
+
+    clicked = Signal()
+
+    def __init__(self, color_name: str) -> None:
+        super().__init__()
+        self.color_name = ""
+        self.setFixedSize(24, 24)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Kliknij, aby wybrać kolor")
+        self.set_color(color_name)
+
+    def set_color(self, color_name: str) -> None:
+        self.color_name = color_name
+        self.setStyleSheet(
+            f"background-color: {color_name}; "
+            f"border: 1px solid #555; border-radius: 2px;"
+        )
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class PropertyEditor(QWidget):
@@ -102,6 +140,13 @@ class PropertyEditor(QWidget):
         layout.addWidget(self.sync_panel)
         self._sync_stretch = QWidget()
         layout.addWidget(self._sync_stretch, 1)
+
+    def show_sync_panel(self, focus_offset: bool = False) -> None:
+        """Pokaż Synchronizację telemetrii (bez wskaźnika), opcjonalnie z fokusem."""
+        if self._current_key:
+            self.on_properties_ready("", [], {})
+        if focus_offset:
+            self.sync_panel.focus_offset()
 
     def _on_delete_clicked(self) -> None:
         self.signals.sig_delete_indicator.emit(self._current_key)
@@ -487,26 +532,19 @@ class PropertyEditor(QWidget):
             current_color = str(value) if value else "#FFFFFF"
             edit = QLineEdit(current_color)
             edit.setMaximumWidth(90)
-            edit.textChanged.connect(
-                lambda txt, n=name: self._emit_change(n, txt)
-            )
             hbox.addWidget(edit)
 
-            color_swatch = QLabel()
-            color_swatch.setFixedSize(24, 24)
-            color_swatch.setStyleSheet(
-                f"background-color: {current_color}; "
-                f"border: 1px solid #555; border-radius: 2px;"
+            color_swatch = ColorSwatch(current_color)
+            color_swatch.clicked.connect(
+                lambda e=edit, s=color_swatch: self._pick_color(e, s)
+            )
+            edit.textChanged.connect(
+                lambda txt, n=name, e=edit, s=color_swatch: self._on_color_text(n, txt, e, s)
+            )
+            edit.editingFinished.connect(
+                lambda e=edit, s=color_swatch: self._revert_invalid_color(e, s)
             )
             hbox.addWidget(color_swatch)
-
-            btn = QPushButton("...")
-            btn.setFixedWidth(30)
-            btn.clicked.connect(
-                lambda checked=False, e=edit, s=color_swatch:
-                self._pick_color(e, s)
-            )
-            hbox.addWidget(btn)
             hbox.addStretch()
 
             self._field_widgets[name] = edit
@@ -518,15 +556,32 @@ class PropertyEditor(QWidget):
             self._field_rows[name] = res_widget
         return res_widget
 
-    def _pick_color(self, edit: QLineEdit, swatch: QLabel) -> None:
-        color = QColorDialog.getColor()
-        if color.isValid():
-            color_name = color.name()
-            edit.setText(color_name)
-            swatch.setStyleSheet(
-                f"background-color: {color_name}; "
-                f"border: 1px solid #555; border-radius: 2px;"
-            )
+    def _pick_color(self, edit: QLineEdit, swatch: "ColorSwatch") -> None:
+        initial = QColor(swatch.color_name)
+        color = QColorDialog.getColor(initial, self, "Wybierz kolor")
+        if color.isValid():  # Anuluj → invalid QColor → nic nie zapisujemy
+            # Writing the HEX field updates the swatch and the model through
+            # the same path as manual editing (_on_color_text).
+            edit.setText(color.name().upper())
+
+    def _on_color_text(self, field_name: str, text: str, edit: QLineEdit, swatch: "ColorSwatch") -> None:
+        color = _valid_hex_color(text)
+        if color is None:
+            # Niepoprawny HEX: nie trafia do modelu, pole oznaczone na czerwono.
+            edit.setStyleSheet("border: 1px solid #c33;")
+            return
+        edit.setStyleSheet("")
+        swatch.set_color(text.strip())
+        self._emit_change(field_name, text.strip())
+
+    def _revert_invalid_color(self, edit: QLineEdit, swatch: "ColorSwatch") -> None:
+        if _valid_hex_color(edit.text()) is None:
+            # Restores the last model value — not a new change to emit.
+            suppressed, self._suppress_emit = self._suppress_emit, True
+            try:
+                edit.setText(swatch.color_name)
+            finally:
+                self._suppress_emit = suppressed
 
     def _pick_font_file(self, edit: QLineEdit) -> None:
         path, _ = QFileDialog.getOpenFileName(
