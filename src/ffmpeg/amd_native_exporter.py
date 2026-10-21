@@ -4198,7 +4198,8 @@ def export_amd_native_d3d11(
             marker_style = str(map_cfg.get("map_marker_style", "dot")).strip().lower()
             marker_color = _parse_marker_color(map_cfg.get("marker_color", "#FFFFFF"))
             marker_radius = max(1, int(round(float(map_cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"]))))
-            if not gpu_map_pitch:
+            from src.map_providers import MapProviderRegistry
+            if not gpu_map_pitch and MapProviderRegistry.resolve_provider_id(map_cfg.get("map_style", "light_all")) != "satellite":
                 mkr_tile, mkr_rect = build_static_map_marker_tile(map_w_cfg, marker_radius, marker_style, marker_color)
                 if mkr_tile is not None:
                     mkr_bytes = mkr_tile.tobytes("raw", "RGBA")
@@ -6768,6 +6769,32 @@ def export_amd_native_d3d11(
                 ):
                     raise RuntimeError("AMD: nie udało się przesłać statycznego stylu mapy GPU.")
                 print(f"[AMD MAP STYLE] size={out_w}x{out_h} shape={map_cfg.get('map_shape', 'square')} uploads=1 bytes={len(style_bytes)}", flush=True)
+            # Reuse the DLL's existing persistent screen-space marker layer.
+            # No glyph work or upload in subsequent frames; never put text in
+            # the rotating/pitched source raster.
+            from src.map_providers import MapProviderRegistry
+            if MapProviderRegistry.resolve_provider_id(map_cfg.get("map_style", "light_all")) == "satellite":
+                from src.map_attribution import build_map_foreground_tile
+                marker_tile, marker_rect = None, None
+                if gpu_map_rotate and not gpu_map_pitch:
+                    render_plan = _map_render_plan(video_width, out_w, int(map_cfg.get("zoom", 16)))
+                    marker_tile, marker_rect = build_static_map_marker_tile(
+                        out_w,
+                        max(1, int(round(float(map_cfg.get("marker_size", 7)) * (2.0 ** render_plan["zoom_offset"])))),
+                        str(map_cfg.get("map_marker_style", "dot")).strip().lower(),
+                        _parse_marker_color(map_cfg.get("marker_color", "#FFFFFF")),
+                    )
+                foreground, rect = build_map_foreground_tile(
+                    (out_w, out_h), map_cfg.get("map_style", "light_all"), map_cfg,
+                    marker_tile, marker_rect, shape_scale=min(video_width, video_height) / 1080.,
+                )
+                if foreground is None:
+                    raise RuntimeError("Esri: brak wymaganej atrybucji; sprawdź połączenie w Ustawienia → Integracje.")
+                fx, fy, fw, fh = rect
+                if not native_dll.telem_amd_update_map_marker(
+                    h_context, foreground.tobytes("raw", "RGBA"), fw, fh, fw * 4, fx, fy,
+                ):
+                    raise RuntimeError("AMD: nie udało się przesłać atrybucji mapy.")
         if prepared.map_data is not None:
             if len(prepared.map_data) == 7:
                 _, mw, mh, mdst, m_ptr_int, m_stride, _ = prepared.map_data

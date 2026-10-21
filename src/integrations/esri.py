@@ -46,6 +46,7 @@ class EsriClient:
         self._retry_at = 0.0
         self.attribution = ""
         self._tiles = {}
+        self.layout_error = ""
 
     def credentials_changed(self):
         # Never wait on the network lock in the GUI thread.
@@ -54,6 +55,7 @@ class EsriClient:
         self._retry_at = 0.0
         self.attribution = ""
         self._tiles.clear()
+        self.layout_error = ""
         self._status = "Klucz zapisany — sprawdź połączenie" if get_map_api_key("esri") else "Brak klucza"
 
     @property
@@ -62,7 +64,7 @@ class EsriClient:
             return "Brak klucza — Ustawienia → Integracje → Esri World Imagery"
         if self._status == "Brak klucza":
             return "Klucz zapisany — sprawdź połączenie"
-        return self._status
+        return self._status + (" — " + self.layout_error if self.layout_error else "")
 
     def _request(self, url, key):
         # The World Imagery MapServer did not accept Bearer headers in live

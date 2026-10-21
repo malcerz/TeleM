@@ -1,0 +1,87 @@
+{
+  "rasters": [
+    {
+      "shape": "square",
+      "mode": "Preview 1060",
+      "size": 240,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 21.184299956075847
+    },
+    {
+      "shape": "square",
+      "mode": "1080p",
+      "size": 435,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 40.31790001317859
+    },
+    {
+      "shape": "square",
+      "mode": "4K",
+      "size": 870,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 121.87660002382472
+    },
+    {
+      "shape": "rounded",
+      "mode": "Preview 1060",
+      "size": 240,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 22.557999996934086
+    },
+    {
+      "shape": "rounded",
+      "mode": "1080p",
+      "size": 435,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 41.439799999352545
+    },
+    {
+      "shape": "rounded",
+      "mode": "4K",
+      "size": 870,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 119.19340002350509
+    },
+    {
+      "shape": "circle",
+      "mode": "Preview 1060",
+      "size": 240,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 22.602799988817424
+    },
+    {
+      "shape": "circle",
+      "mode": "1080p",
+      "size": 435,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 41.33119998732582
+    },
+    {
+      "shape": "circle",
+      "mode": "4K",
+      "size": 870,
+      "outside_max_diff": 0,
+      "outside_MAE": 0.0,
+      "outside_different_pixels": 0,
+      "first_overlay_ms": 120.942700013984
+    }
+  ],
+  "cache_lookup_median_ms": 0.0035999692045152187,
+  "cache_lookup_p95_ms": 0.005499983672052622
+}

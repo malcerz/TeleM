@@ -2,7 +2,7 @@
 
 **Status: CZĘŚCIOWA IMPLEMENTACJA / NIE GOTOWE DO WYDANIA. Kryterium zakończenia NIE ZOSTAŁO spełnione.**
 
-Brak prawdziwego klucza w Windows Credential Manager, brak kanonicznego materiału benchmarkowego oraz oczekiwanie na zatwierdzenie większego podpisu. Nie deklarujemy rzeczywistego E2E ani zgodności gotowego eksportu. Transport i GUI są przygotowane; docelowa atrybucja Preview/Final NIE jest jeszcze wdrożona. Nie wydawać tej zmiany jako gotowej integracji satelitarnej.
+Brak prawdziwego klucza w Windows Credential Manager i kanonicznego materiału benchmarkowego. Użytkownik zatwierdził środkowy wariant podpisu (9 px / padding 3 px / tło alpha 80 przy mapie 240 px). Wariant został wdrożony we wspólnej warstwie Preview/Final i statycznej warstwie AMD. Nie deklarujemy rzeczywistego E2E ani zgodności gotowego eksportu. Nie wydawać tej zmiany jako w pełni zweryfikowanej integracji satelitarnej.
 
 ## 1. Stan kodu przed zmianami
 
@@ -26,7 +26,9 @@ Wykorzystano istniejący Windows Credential Manager przez produkcyjne API creden
 - `src/indicators/moving_map.py`, `src/indicators/static_map.py`: unieważnianie cache po zmianie klucza, brak wykorzystania starego cache satelitarnego.
 - `src/gui/qt/tabs/settings_tab.py`, `signals.py`, `main_window.py`, `controller.py`: panel i status z przejściem do ustawień, aktualizacja Preview po zmianie klucza.
 - `tests/test_esri_byok.py`, `tests/test_esri_settings_gui.py`: syntetyczne klucze, mock HTTP, testowy magazyn.
-- `src/map_attribution.py`: NIE ZMIENIONO — większa ingerencja wizualna oczekuje na zatwierdzenie zgodnie z poleceniem użytkownika.
+- `src/map_attribution.py`: zatwierdzony wariant 9 px, pełny tekst źródeł, zawijanie, maski, antyaliasing 3×, cache do 128 warstw uwzględniający tekst/font/padding/kształt/skalę.
+- `src/ffmpeg/amd_native_exporter.py`: wyłącznie statyczny upload podpisu razem z istniejącą warstwą znacznika; bez zmian DLL, shaderów, pitch, rotacji, kodowania i muxowania.
+- `tests/test_esri_attribution.py`: geometria, cache, zachowanie markera, zgodność adapterów CPU/AMD oraz wywołania obu gałęzi wskaźników Preview/Final.
 
 ## 3. Endpoint i autoryzacja
 
@@ -66,17 +68,23 @@ Automatyczne testy: wyłącznie syntetyczne wartości, mock HTTP i testowy magaz
 
 Żywa usługa z syntetycznym błędnym kluczem: odrzucona przez usługę stylów. **Prawidłowy klucz użytkownika i cała sekwencja GUI → Credential Manager → Esri → Preview → MP4: NOT TESTED.**
 
-## 8. Wygląd na małej mapie
+## 8. Wygląd na małej mapie — WARIANT ZATWIERDZONY
 
-Makieta do zatwierdzenia: [attribution_proposal.png](esri_byok_20261021/attribution_proposal.png). Dwie mapy 240/280 px, szary tekst na ciemnym tle, zaokrąglone narożniki, bez logo; pełny podpis wymaga kilku wierszy. Tło to schemat, NIE rzeczywista mapa i NIE screenshot Preview.
+Po porównaniu wariantów użytkownik odpowiedział „ten srodkowy”, akceptując [środkową makietę](esri_byok_20261021/attribution_proposal_small.png).
 
-Użytkownik wymaga zatwierdzenia większej ingerencji wizualnej. Wysłano pytanie o akceptację tej makiety. **Brak odpowiedzi nie stanowi zgody.** Nie wdrożono większego panelu, nie uznano „© Esri” za wystarczające. Istniejąca niepełna atrybucja nie stanowi spełnienia kryterium.
+Implementacja: Arial 9 px dla mapy 240 px, padding 3 px, margines 8 px, czarne tło alpha 80/255 (68,6% przezroczystości), jasnoszary tekst (235,235,235,240), promień panelu 3 px. Wymiary skalowane proporcjonalnie do rozmiaru wskaźnika; font nie maleje poniżej 9 px. Rasteryzacja w skali 3× i filtr LANCZOS zachowują antyaliasing. Pełne nazwy źródeł są zawijane, nigdy zastępowane skrótem „© Esri”.
+
+Panel jest w dolnej prawej części mapy, w całości wewnątrz maski; na okręgu przesuwa się do miejsca mieszczącego prostokąt. Cały panel jest poniżej 55% wysokości, pozostawiając środkowy marker. Dla za małego wskaźnika zamiast nieczytelnego/uciętego podpisu występuje jawny komunikat „Zwiększ mapę”, a w statusie Esri pełna przyczyna. Final GPU zgłasza w takiej sytuacji błąd, zamiast utrwalić zdjęcia bez źródeł.
+
+Dla Esri podpis jest obowiązkowy także przy `show_attribution=false` w starym presecie. Dla pozostałych źródeł zachowano dotychczasową opcję włączenia atrybucji; po jej włączeniu tekst pochodzi z właściwego dostawcy (OSM/CARTO/Custom), bez używania klucza Esri.
+
+CPU: podpis dodawany po rotacji/pitch i masce, przed wspólną przezroczystością. AMD: istniejący slot `telem_amd_update_map_marker` jest statyczną warstwą ekranu nakładaną po transformacji mapy. Do tej warstwy dołączono podpis przy jednorazowym ustawieniu geometrii. Oryginalne piksele strzałki są zachowane. Bez powtarzania pomiaru fontów i uploadów podpisu w kolejnych klatkach.
 
 ## 9. Informacje o źródłach
 
 Klient pobiera atrybucję źródeł ze stylu `sources.*.attribution`, usuwa znaczniki HTML i dekoduje encje. Jeżeli styl nie podaje źródeł, odczytuje `copyrightText` z oficjalnego uwierzytelnionego MapServer. Przechowuje tylko tekst, a nie cały JSON stylu, który mógłby zawierać token.
 
-Publiczne metadane odczytane wyłącznie jako materiał porównawczy podają aktualnie: `Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community`. Starszy rejestr wymienia Maxar; dlatego statyczna lista nie może zastąpić bieżących metadanych. Klient dokłada `Powered by Esri`. Docelowe przekazanie tego tekstu do MapAttributionRenderer i wybór danych właściwych dla zasięgu wymagają dalszej implementacji/walidacji.
+Publiczne metadane odczytane wyłącznie jako materiał porównawczy podają aktualnie: `Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community`. Starszy rejestr wymienia Maxar; dlatego statyczna lista nie może zastąpić bieżących metadanych. Klient dokłada `Powered by Esri`. Tekst ten jest przekazywany do MapAttributionRenderer przez MapProviderRegistry.get_attribution. Zmiana tekstu unieważnia cache warstwy. Wybór danych właściwych dla konkretnego zasięgu i zgodność odpowiedzi rzeczywistej usługi nadal wymagają walidacji na poprawnym kluczu.
 
 ## 10. Wymagania i ograniczenia licencyjne
 
@@ -98,20 +106,23 @@ Prefetch całej trasy pozostaje wyłączony. Esri nie czyta wcześniejszego dysk
 
 **Nierozwiązany kontrakt eksportu:** ensure_map_tiles_cached kończy przygotowanie bez pobierania dla dostawcy zakazującego prefetchu, zwracając liczbę braków. AMD exporter następnie wywołuje `set_map_network_allowed(True)`. Nie potwierdzono więc obietnicy z AGENTS.md „HTTP=0 podczas renderu” dla zimnego cache Esri. Nie zmieniano tego mechanizmu ani nie dodano niedozwolonego prefetchu. Wymaga rozwiązania przed wydaniem: jawne sprawdzenie kompletności legalnego cache/odpowiedni tryb pobierania zatwierdzony przez Esri, obsługa braków bez zastępowania nieautoryzowanymi zdjęciami.
 
-## 11. Zrzuty Preview i Final
+## 11. Zrzuty i porównanie rastra
 
-- [Rzeczywisty widget ustawień Qt, brak klucza](esri_byok_20261021/settings_no_key.png), renderowany offscreen z Arial do czytelnej inspekcji; NIE pełne E2E aplikacji.
-- Preview z prawdziwą mapą i nową atrybucją: NOT TESTED / brak zrzutu.
-- Final MP4 z nową atrybucją: NOT TESTED / brak zrzutu.
-- Testy mała/duża mapa, 1080p/4K, wszystkie maski, marker, seek, kilka map, zgodność pikseli poza podpisem: dla nowej atrybucji NOT TESTED.
-- Metadane World Imagery potwierdzają 256×256 JPEG, EPSG:3857 (102100), północny początek siatki i LOD 0–23. Nie zmieniono projekcji, zoomu, markerów, rotacji, pitch ani proporcji. Rzeczywista zgodność kolorów/orientacji i mozaiki: NOT PROVEN.
+- [Rzeczywisty widget ustawień Qt, brak klucza](esri_byok_20261021/settings_no_key.png), offscreen z Arial; NIE pełne E2E.
+- [Macierz zatwierdzonego renderera: Preview 1060, 1080p, 4K / kwadrat, rounded, circle](esri_byok_20261021/attribution_approved_matrix.png).
+- [Raster 240 px](esri_byok_20261021/attribution_square_Preview_1060.png) i [raster 4K wskaźnika 870 px](esri_byok_20261021/attribution_square_4K.png). Są to syntetyczne obrazy testowe, NIE prawdziwe kafelki i NIE klatki zakodowanego MP4.
+- Metryki: [attribution_raster_metrics.json](esri_byok_20261021/attribution_raster_metrics.json).
+- Dla wszystkich 9 obrazów: **poza maską podpisu max_diff=0, MAE=0, different_pixels=0**. Test osobno potwierdza niezmienione piksele środkowego markera i oryginalnej strzałki AMD.
+- Testy 240/480/960 px oraz prostokątów 320×180/640×360, kształtów square/rounded/circle/round: PASS. Fixture obu wskaźników Preview/Final przy north_up/track_up i seek 0/.5/1: PASS. Zgodność rastra warstwy CPU i przygotowanego foreground AMD przy opacity .7: byte-exact.
+- Rzeczywista mapa po seek, wiele map na prawdziwym projekcie, screenshot Preview na Esri i finalny MP4: **NOT TESTED**.
+- Metadane World Imagery: 256×256 JPEG, EPSG:3857 (102100), północny początek siatki, LOD 0–23. Nie zmieniono projekcji, zoomu, markerów, rotacji, pitch i proporcji. Zgodność kolorów/orientacji rzeczywistej mozaiki: NOT PROVEN.
 
 ## 12. Sprzętowy eksport AMD i testy
 
-Wybrany zestaw: **104 passed, 7.45 s**:
+Najnowszy wybrany zestaw po wdrożeniu podpisu: **153 passed, 9.50 s** (w tym 47 testów nowej atrybucji):
 
 ```text
-python -m pytest tests/test_esri_byok.py tests/test_esri_settings_gui.py tests/test_map_licensing_and_capabilities.py tests/test_preview_map_panel_parity.py tests/test_map_style_5w.py tests/test_map_pitch_keeps_shape.py tests/test_map_first_render_parity.py tests/test_amd_vbr_governance.py tests/test_amd_qp_governance.py tests/test_amd_direct_mp4_mux.py tests/test_amd_native_ordered_map.py -q
+python -m pytest tests/test_esri_attribution.py tests/test_esri_byok.py tests/test_esri_settings_gui.py tests/test_map_licensing_and_capabilities.py tests/test_preview_map_panel_parity.py tests/test_map_style_5w.py tests/test_map_pitch_keeps_shape.py tests/test_map_first_render_parity.py tests/test_amd_vbr_governance.py tests/test_amd_qp_governance.py tests/test_amd_direct_mp4_mux.py tests/test_amd_native_ordered_map.py tests/test_directional_map_marker.py -q
 ```
 
 Szerszy zestaw z `test_preview_map_cache_miss.py`: **114 passed, 1 failed**. Nieudana próba referencji dla static_map wykonuje kod z Git HEAD i uzyskuje `before is None`; nie stanowi poprawnego porównania pikselowego. Oddzielny zestaw z `test_track_up_map.py`: **38 passed, 1 failed**, oczekiwana lista resolvera kierunku nie uwzględnia dodatkowego wywołania `distance/fit/fit_distance_text` w niezmienionym module przygotowania telemetrii. Nie naprawiano synchronizacji FIT/IMU ani tego testu poza zakresem zadania.
@@ -120,7 +131,11 @@ Testy kontraktów QP/VBR/live mux/kolejności nie są sprzętowym renderem. **Sp
 
 ## 13. Wydajność
 
-FPS, czas przygotowania rzeczywistej mapy, parytet rastra i koszt docelowej atrybucji: **NOT MEASURED**. Nie przedstawiono testów fixture jako benchmarku AMD. Brak zmian rasteryzacji fontów w produkcji; cache warstwy podpisu i jednokrotny upload GPU pozostają do wdrożenia po akceptacji projektu.
+Pomiar lokalny cache warstwy, 900 lookupów / 9 konfiguracji: mediana **0.00360 ms**, P95 **0.00550 ms**. Pierwsza rasteryzacja i geometria warstwy: **21,18–121,88 ms** zależnie od rozmiaru i maski. Te koszty występują przy zmianie rozmiaru/stylu/tekstu, nie co klatkę. Cache jest ograniczony do 128 warstw.
+
+AMD przesyła foreground jednokrotnie przy ustawieniu geometrii mapy, przez istniejący slot tekstury. Nie dodano per-frame transferu podpisu CPU/GPU. Scalony prostokąt znacznika i podpisu zwiększa obszar istniejącego screen-space blendu; jego koszt GPU wymaga pomiaru na sprzętowym eksporcie.
+
+**FPS, rzeczywisty czas przygotowania mapy i wpływ na całkowity eksport AMD: NOT MEASURED.** Lookup cache i fixture nie zastępują benchmarku aplikacji.
 
 ## 14. Chroniona DLL i izolacja
 
@@ -128,7 +143,7 @@ Przed i po zmianach SHA-256 `runtime/amd/bin/telem_amd_native.dll`:
 
 `BBCA75FBD0DFC5D7CBB61922E92F8D5F049B4305DD18335315667E6E5E54CA5F`
 
-Nie zmieniono DLL, native AMD, eksportera, QP/VBR, HLG/HDR, live mux, audio, finalizacji, kompasu, BAR, temperatury ani synchronizacji FIT/IMU. Brak Dockera, serwera, nowej gałęzi/worktree i push. Zmiany współdzielone ograniczono do transportu/cache Esri oraz obsługi GUI; źródła OSM/CARTO/Custom pozostają dostępne i nie otrzymują klucza Esri.
+Nie zmieniono DLL, native AMD, QP/VBR, HLG/HDR, live mux, audio, finalizacji, kompasu, BAR, temperatury ani synchronizacji FIT/IMU. Jedyna zmiana eksportera dotyczy przygotowania statycznej warstwy podpisu w istniejącym screen-space slocie znacznika. GPU Pitch i algorytm rotacji pozostają bez zmian. Brak Dockera, serwera, nowej gałęzi/worktree i push. Zmiany współdzielone ograniczono do transportu/cache Esri oraz obsługi GUI; źródła OSM/CARTO/Custom pozostają dostępne i nie otrzymują klucza Esri.
 
 ## 15. Lokalne commity
 
@@ -136,12 +151,12 @@ Nie zmieniono DLL, native AMD, eksportera, QP/VBR, HLG/HDR, live mux, audio, fin
 
 ## 16. Końcowy Git i warunki kontynuacji
 
-Po commicie implementacji: `main`, jedyna zmiana śledzonego pliku to zastana ` M def_layout.json`; 103 zastane pliki/katalogi nieśledzone. Po commicie dokumentacji brak zmian implementacji w working tree. Gałąź będzie 40 commitów przed origin/main. Istniejące zmiany użytkownika pozostają poza staged/commit. Zrzuty PNG dodano jawnie mimo globalnego ignorowania PNG, ponieważ stanowią wymagany materiał raportu. Pełne zakończenie wymaga:
+Gałąź `main`. Zmiany `def_layout.json` (88 dodanych / 54 usunięte linie) pozostają identyczne z początkiem zadania i poza commitami. Zachowano 103 zastane wpisy nieśledzone. Bez gałęzi/worktree/push.
 
-1. Odpowiedzi na przedstawioną propozycję atrybucji (zgodnie z poleceniem użytkownika).
-2. Zapisania rzeczywistego klucza przez nowe GUI — nigdy w rozmowie ani w pliku.
-3. Implementacji zatwierdzonej warstwy we wszystkich ścieżkach, w tym AMD GPU Track-Up bez obracania napisu.
-4. Rozwiązania kontraktu eksportu bez niedozwolonego prefetchu i sprawdzenia kompletności map.
-5. Dostępnej kanonicznej pary VIDEO/FIT, testu rzeczywistego E2E, zrzutów i pomiarów.
+Po zatwierdzeniu wariantu wykonano implementację, testy i porównanie fixture. Do pełnego zakończenia nadal wymagane:
 
-**PASS: testowana część GUI/transport/magazyn testowy i zachowanie DLL. FAIL / NOT PROVEN: kryterium końcowe całego zadania.**
+1. Zapisanie rzeczywistego klucza przez GUI — nigdy w rozmowie lub pliku.
+2. Rozwiązanie i potwierdzenie kontraktu eksportu bez niedozwolonego prefetchu oraz prawa do utrwalania MP4.
+3. Dostępna kanoniczna para VIDEO/FIT i rzeczywisty E2E GUI → Windows Credential Manager → Esri → Preview → sprzętowy Final, zrzuty oraz pomiary.
+
+**PASS: zatwierdzony renderer podpisu, zgodność rastra adapterów, testy GUI/transportu i nienaruszona DLL. NOT PROVEN: kryterium końcowe całej integracji i sprzętowy eksport.**

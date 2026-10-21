@@ -5,6 +5,7 @@ Extracted from ``overlay_renderer.py``.
 
 from __future__ import annotations
 
+from src.map_attribution import apply_map_attribution
 import threading
 import os
 from datetime import timezone
@@ -115,6 +116,7 @@ def _render_static_map_indicator(
             map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
+            map_img = apply_map_attribution(map_img, map_style, cfg, shape_scale=min(canvas_w, canvas_h) / 1080.)
             map_img = apply_map_opacity(map_img, cfg.get("opacity"))
             return map_img, _pos_xy[0], _pos_xy[1], None
 
@@ -186,11 +188,7 @@ def _render_static_map_indicator(
         map_img = apply_map_shape(map_img, cfg.get("map_shape", "square"),
                                   cfg.get("map_corner_radius", 16), cfg.get("map_border_width", 0),
                                   cfg.get("map_border_color", "#FFFFFF"), min(canvas_w, canvas_h) / 1080.)
-        if bool(cfg.get("show_attribution", False)) or os.environ.get("TELEM_MAP_SHOW_ATTRIBUTION") == "1":
-            from src.map_attribution import MapAttributionRenderer
-            attr_img = MapAttributionRenderer.get_attribution_overlay(map_style, map_w, map_h)
-            if attr_img is not None:
-                map_img = Image.alpha_composite(map_img, attr_img)
+        map_img = apply_map_attribution(map_img, map_style, cfg, shape_scale=min(canvas_w, canvas_h) / 1080.)
         map_img = apply_map_opacity(map_img, cfg.get("opacity"))
         return map_img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None
     except Exception:

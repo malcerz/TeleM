@@ -355,6 +355,9 @@ class MapProviderRegistry:
     def get_attribution(cls, style_or_id: str) -> tuple[str, str]:
         """Return (attribution_text, attribution_url) for the provider."""
         caps = cls.get_capabilities(style_or_id)
+        if caps.provider_id == "satellite":
+            from src.integrations.esri import esri_client
+            return esri_client.attribution, caps.attribution_url
         return caps.attribution_text, caps.attribution_url
 
     @classmethod
