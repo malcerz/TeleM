@@ -31,6 +31,10 @@ def main() -> int:
     layout_override = None
     if "--layout" in sys.argv:
         layout_override = sys.argv[sys.argv.index("--layout") + 1]
+    times = TIMES
+    if "--times" in sys.argv:
+        a, b, step = (float(x) for x in sys.argv[sys.argv.index("--times") + 1].split(":"))
+        times = [round(a + i * step, 3) for i in range(int((b - a) / step) + 1)]
     app = QApplication.instance() or QApplication(sys.argv)
     from src.gui.qt.controller import AppController
     from src.gui.qt.main_window import MainWindow
@@ -90,7 +94,7 @@ def main() -> int:
     fit_h = tm.resolve_samples("heading", "fit")
     gpmf_h = tm.resolve_samples("heading", "gpmf")
     from src.telemetry_heading import interpolate_heading
-    for t in TIMES:
+    for t in times:
         info = ctl._resolve_preview_time(float(t))
         dt = info.get("absolute_dt")
         drawn.clear()

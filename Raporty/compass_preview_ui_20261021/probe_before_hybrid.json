@@ -1,0 +1,154 @@
+{
+  "layout_source": "Raporty/compass_preview_ui_20261021/layout_user_hybrid.json",
+  "load_seconds": 1.61,
+  "compass_cfg_mode": "gps_imu",
+  "compass_cfg_reference": "<missing>",
+  "compass_cfg_source": "gpmf",
+  "compass_status": "Gotowe",
+  "compass_result_ready": true,
+  "samples": [
+    {
+      "t": 0,
+      "fit_heading": null,
+      "gpmf_heading": null,
+      "hybrid_heading": 258.2208557128906,
+      "preview_resolver": 258.2208557128906,
+      "renderer_values": [
+        {
+          "value": 258.2208557128906,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 10,
+      "fit_heading": 61.97690371290449,
+      "gpmf_heading": null,
+      "hybrid_heading": 297.1056213378906,
+      "preview_resolver": 297.1056213378906,
+      "renderer_values": [
+        {
+          "value": 297.1056213378906,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 30,
+      "fit_heading": 216.126612697464,
+      "gpmf_heading": null,
+      "hybrid_heading": 185.82760620117188,
+      "preview_resolver": 185.82760620117188,
+      "renderer_values": [
+        {
+          "value": 185.82760620117188,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 60,
+      "fit_heading": 159.11241409514687,
+      "gpmf_heading": null,
+      "hybrid_heading": 152.29281616210938,
+      "preview_resolver": 152.29281616210938,
+      "renderer_values": [
+        {
+          "value": 152.29281616210938,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 79,
+      "fit_heading": 76.43868905145989,
+      "gpmf_heading": null,
+      "hybrid_heading": 78.51359558105469,
+      "preview_resolver": 78.51359558105469,
+      "renderer_values": [
+        {
+          "value": 78.51359558105469,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 120,
+      "fit_heading": 147.9579599911762,
+      "gpmf_heading": 152.70102180909737,
+      "hybrid_heading": 150.517333984375,
+      "preview_resolver": 150.517333984375,
+      "renderer_values": [
+        {
+          "value": 150.517333984375,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 150,
+      "fit_heading": 148.44327746213776,
+      "gpmf_heading": 148.27672039649877,
+      "hybrid_heading": 149.8119354248047,
+      "preview_resolver": 149.8119354248047,
+      "renderer_values": [
+        {
+          "value": 149.8119354248047,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 163,
+      "fit_heading": 156.4173812672471,
+      "gpmf_heading": 155.97421957349448,
+      "hybrid_heading": 151.76307678222656,
+      "preview_resolver": 151.76307678222656,
+      "renderer_values": [
+        {
+          "value": 151.76307678222656,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 164,
+      "fit_heading": 153.19147893892054,
+      "gpmf_heading": 152.50100243800298,
+      "hybrid_heading": 149.6377716064453,
+      "preview_resolver": 149.6377716064453,
+      "renderer_values": [
+        {
+          "value": 149.6377716064453,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 165,
+      "fit_heading": 148.78798076317798,
+      "gpmf_heading": 149.44000219760855,
+      "hybrid_heading": 146.3310546875,
+      "preview_resolver": 146.3310546875,
+      "renderer_values": [
+        {
+          "value": 146.3310546875,
+          "missing": false
+        }
+      ]
+    },
+    {
+      "t": 180,
+      "fit_heading": 173.75628363699832,
+      "gpmf_heading": 176.36941202813674,
+      "hybrid_heading": 192.0332489013672,
+      "preview_resolver": 192.0332489013672,
+      "renderer_values": [
+        {
+          "value": 192.0332489013672,
+          "missing": false
+        }
+      ]
+    }
+  ]
+}

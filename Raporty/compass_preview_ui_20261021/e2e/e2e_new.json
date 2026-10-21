@@ -1,0 +1,66 @@
+{
+  "simulate_old_project_load": false,
+  "mode_in_saved_layout": "<missing>",
+  "mode_after_gui_edit": "gps_imu",
+  "mode_after_reopen": "gps_imu",
+  "reopen_load_seconds": 2.53,
+  "compass_status": "Gotowe",
+  "playing": false,
+  "rows": [
+    {
+      "t": 0,
+      "drawn_heading": 258.2208557128906,
+      "frame_png": "preview_new_t000.png"
+    },
+    {
+      "t": 10,
+      "drawn_heading": 297.1056213378906,
+      "frame_png": "preview_new_t010.png"
+    },
+    {
+      "t": 30,
+      "drawn_heading": 185.82760620117188,
+      "frame_png": "preview_new_t030.png"
+    },
+    {
+      "t": 60,
+      "drawn_heading": 152.29281616210938,
+      "frame_png": "preview_new_t060.png"
+    },
+    {
+      "t": 79,
+      "drawn_heading": 78.51359558105469,
+      "frame_png": "preview_new_t079.png"
+    },
+    {
+      "t": 120,
+      "drawn_heading": 150.517333984375,
+      "frame_png": "preview_new_t120.png"
+    },
+    {
+      "t": 150,
+      "drawn_heading": 149.8119354248047,
+      "frame_png": "preview_new_t150.png"
+    },
+    {
+      "t": 163,
+      "drawn_heading": 151.76307678222656,
+      "frame_png": "preview_new_t163.png"
+    },
+    {
+      "t": 164,
+      "drawn_heading": 149.6377716064453,
+      "frame_png": "preview_new_t164.png"
+    },
+    {
+      "t": 165,
+      "drawn_heading": 146.3310546875,
+      "frame_png": "preview_new_t165.png"
+    },
+    {
+      "t": 180,
+      "drawn_heading": 192.0332489013672,
+      "frame_png": "preview_new_t180.png"
+    }
+  ]
+}
