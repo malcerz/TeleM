@@ -22,6 +22,7 @@ _TARGET_GARMIN_DI_SESSION = "SportCamHUD/Garmin/session"
 _GARMIN_PART_PREFIX = "SportCamHUD/Garmin/session/"
 _TARGET_STRAVA_SECRET = "SportCamHUD:strava:client_secret"
 _TARGET_STRAVA_TOKENS = "SportCamHUD:strava:tokens"
+_TARGET_MAP_API_KEY_PREFIX = "SportCamHUD:map:"
 
 # In-memory store for unit testing or fallback
 _MOCK_STORE: dict[str, str] = {}
@@ -310,6 +311,53 @@ def get_strava_tokens() -> Optional[dict]:
 
 def delete_strava_tokens() -> bool:
     return delete_credential(_TARGET_STRAVA_TOKENS)
+
+
+def _map_api_key_target(provider_id: str) -> str:
+    clean_id = str(provider_id or "").strip().lower()
+    return f"{_TARGET_MAP_API_KEY_PREFIX}{clean_id}:api_key"
+
+
+def save_map_api_key(provider_id: str, api_key: str) -> bool:
+    """Store an API key for a map provider securely in Windows Credential Manager."""
+    if not provider_id or not api_key:
+        return False
+    return set_credential(_map_api_key_target(provider_id), str(api_key).strip())
+
+
+def get_map_api_key(provider_id: str) -> Optional[str]:
+    """Retrieve an API key for a map provider, checking Windows Credential Manager then env vars."""
+    if not provider_id:
+        return None
+    val = get_credential(_map_api_key_target(provider_id))
+    if val:
+        return val
+
+    # Environment variable fallbacks
+    clean = str(provider_id).strip().upper()
+    env_keys = [
+        f"SPORTCAMHUD_MAP_API_KEY_{clean}",
+        f"SPORTCAMHUD_{clean}_API_KEY",
+        f"TELEM_MAP_API_KEY_{clean}",
+        f"TELEM_{clean}_API_KEY",
+    ]
+    if clean in ("CARTO", "LIGHT_ALL", "LIGHT_NOLABELS", "DARK_ALL", "DARK_NOLABELS", "VOYAGER_ALL", "VOYAGER_NOLABELS"):
+        env_keys.append("CARTO_API_KEY")
+    elif clean in ("SATELLITE", "ESRI", "ARCGIS"):
+        env_keys.extend(["ARCGIS_API_KEY", "ESRI_API_KEY", "ARCGIS_TOKEN"])
+
+    for ek in env_keys:
+        v = os.environ.get(ek)
+        if v:
+            return v.strip()
+    return None
+
+
+def delete_map_api_key(provider_id: str) -> bool:
+    """Delete a stored map API key."""
+    if not provider_id:
+        return False
+    return delete_credential(_map_api_key_target(provider_id))
 
 
 def clear_all_credentials() -> None:
