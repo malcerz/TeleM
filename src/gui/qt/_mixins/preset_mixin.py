@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from src.gui.indicator_schemas import BUILTIN_FIELDS
 from src.gui.qt.models import (
@@ -49,6 +49,11 @@ class PresetMixin:
                 json.dump(layout_copy, f, indent=2, ensure_ascii=False)
             self._layout_dirty = False
             print(f"[Preset] Zapisano preset użytkownika do {path}", flush=True)
+            from src.export_paths import startup_preset_conflict
+            warning = startup_preset_conflict(getattr(self, "_startup_preset_path", ""), path)
+            if warning:
+                print(f"[Preset] WARNING startup preset conflict: {getattr(self, '_startup_preset_path', '')}", flush=True)
+                QMessageBox.warning(None, "Zapisz preset", warning)
         except Exception as e:
             self.signals.sig_error.emit(f"Błąd zapisu presetu: {e}")
 

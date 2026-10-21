@@ -533,6 +533,10 @@ class SettingsTab(QWidget):
         # Po zapisie layoutu (który zeruje _startup_preset w def_layout.json)
         # przekaż kontrolerowi zapisaną wartość startowego presetu.
         self.signals.sig_settings_changed.emit("startup_preset", startup_preset)
+        from src.export_paths import startup_preset_conflict
+        warning = startup_preset_conflict(startup_preset, self.base_dir / "def_layout.json")
+        if warning:
+            QMessageBox.warning(self, "Zapisz ustawienia", warning)
         print(
             f"[Settings] Zapisano ustawienia: skip_pauses={self.chk_skip_pauses.isChecked()} "
             f"amd_export_logging={self.chk_amd_export_logging.isChecked()} "

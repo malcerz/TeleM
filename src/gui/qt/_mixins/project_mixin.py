@@ -879,6 +879,7 @@ class ProjectMixin:
                         self.layout = working
                         print("[ProjectLayout] Zachowano roboczy layout sesji (bez ponownego odczytu z dysku)", flush=True)
                     elif preset_path and Path(preset_path).exists():
+                        print(f"[ProjectLayout] Wczytano układ ze Startowego presetu: {preset_path}", flush=True)
                         self.layout = json.loads(
                             Path(preset_path).read_text(encoding="utf-8")
                         )

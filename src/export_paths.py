@@ -77,6 +77,31 @@ def load_startup_preset(base_dir: Path | None = None) -> str:
     return ""
 
 
+def startup_preset_conflict(startup_preset: str, saved_path: Path | str) -> str:
+    """Warning text when another existing file is the 'Startowy preset'.
+
+    That file — not ``saved_path`` — is what the next project open / app
+    start loads, so a layout saved elsewhere looks as if it was not saved.
+    """
+    preset = str(startup_preset or "").strip()
+    if not preset or not Path(preset).is_file():
+        return ""
+    try:
+        if Path(preset).resolve() == Path(saved_path).resolve():
+            return ""
+    except OSError:
+        pass
+    return (
+        "Układ zapisano do:\n"
+        f"{saved_path}\n\n"
+        "Ale jako „Startowy preset” ustawiony jest INNY plik:\n"
+        f"{preset}\n\n"
+        "Przy następnym uruchomieniu lub otwarciu MP4 zostanie wczytany tamten plik, "
+        "a nie zapisany układ. Ustaw „Startowy preset” na zapisany plik albo wyczyść "
+        "to pole w Ustawieniach i kliknij „Zapisz ustawienia”."
+    )
+
+
 def load_amd_export_logging_enabled() -> bool:
     """Global 'Zapisuj log eksportu AMD' value (default ON)."""
     value = load_app_preferences().get("amd_export_logging_enabled")
