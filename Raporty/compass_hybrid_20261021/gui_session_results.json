@@ -1,0 +1,74 @@
+{
+  "video": "F:\\GoPro\\2026-10-16\\GX010380.MP4",
+  "fit": "F:\\GoPro\\2026-10-16\\2026-10-16_06-22-14.fit",
+  "cold_load": {
+    "load_seconds": 2.06,
+    "compass_status": "Gotowe",
+    "has_result": true,
+    "reference_source": "fit",
+    "method": "GYRO+ACCL quaternion",
+    "cache_hit": true,
+    "prepare_seconds": 0.053663200000301
+  },
+  "warm_load": {
+    "load_seconds": 1.59,
+    "cache_hit": true,
+    "prepare_seconds": 0.04594139999244362
+  },
+  "seek_measurements": [
+    {
+      "target_s": 0.0,
+      "heading_deg": 258.22,
+      "resolve_ms": 0.68,
+      "hud_render_ms": 2423.23,
+      "target_dt": "2026-10-16T04:22:16.182130"
+    },
+    {
+      "target_s": 10.0,
+      "heading_deg": 297.11,
+      "resolve_ms": 0.24,
+      "hud_render_ms": 28.82,
+      "target_dt": "2026-10-16T04:22:26.182130"
+    },
+    {
+      "target_s": 30.0,
+      "heading_deg": 185.83,
+      "resolve_ms": 0.21,
+      "hud_render_ms": 23.38,
+      "target_dt": "2026-10-16T04:22:46.182130"
+    },
+    {
+      "target_s": 60.0,
+      "heading_deg": 152.29,
+      "resolve_ms": 0.2,
+      "hud_render_ms": 23.77,
+      "target_dt": "2026-10-16T04:23:16.182130"
+    },
+    {
+      "target_s": 79.0,
+      "heading_deg": 78.51,
+      "resolve_ms": 0.21,
+      "hud_render_ms": 25.77,
+      "target_dt": "2026-10-16T04:23:35.182130"
+    },
+    {
+      "target_s": 120.0,
+      "heading_deg": 150.52,
+      "resolve_ms": 0.31,
+      "hud_render_ms": 23.38,
+      "target_dt": "2026-10-16T04:24:16.182130"
+    },
+    {
+      "target_s": 0.0,
+      "heading_deg": 258.22,
+      "resolve_ms": 0.2,
+      "hud_render_ms": 17.53,
+      "target_dt": "2026-10-16T04:22:16.182130"
+    }
+  ],
+  "source_switch": {
+    "switch_seconds": 0.096,
+    "reference_source": "gpmf",
+    "heading_frame_0": 255.83
+  }
+}
