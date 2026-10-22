@@ -214,24 +214,25 @@ def test_esri_attribution_strictly_max_two_lines():
 
 
 def test_format_attribution_lines_logic():
-    """Unit test for _format_attribution_lines helper adhering to official licensing."""
+    """Unit test for _format_attribution_lines helper adhering to approved statutory 2-line format."""
     probe = lambda text: len(text) * 7.0  # rough character width probe
     text = (
-        "Powered by Esri | Source: Esri, Maxar, Earthstar Geographics, "
-        "CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community"
+        "Powered by Esri. Source: Esri, Vantor, | Earthstar Geographics, and the GIS User Community"
     )
 
-    # Wide viewport -> full 2 lines
-    lines_wide = _format_attribution_lines(text, 1000.0, probe)
-    assert len(lines_wide) <= 2
-    assert lines_wide[0] == "Powered by Esri"
+    lines = _format_attribution_lines(text, 220.0, probe)
+    assert len(lines) == 2
+    assert lines[0] == "Powered by Esri. Source: Esri, Vantor,"
+    assert lines[1] == "Earthstar Geographics, and the GIS User Community"
+    assert "et al." not in lines[0] and "et al." not in lines[1]
+    assert "licensors" not in lines[0] and "licensors" not in lines[1]
 
-    # Constrained viewport -> statutory licensing attribution without synthetic 'et al.'
-    lines_compact = _format_attribution_lines(text, 220.0, probe)
-    assert len(lines_compact) == 2
-    assert lines_compact[0] == "Powered by Esri"
-    assert not lines_compact[1].endswith(", et al."), "Unauthorized 'et al.' must never be injected"
-    assert "licensors" in lines_compact[1] or "Esri" in lines_compact[1]
+    # Also works when input is the raw metadata string
+    raw_metadata_text = "Powered by Esri | Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community"
+    raw_lines = _format_attribution_lines(raw_metadata_text, 220.0, probe)
+    assert len(raw_lines) == 2
+    assert raw_lines[0] == "Powered by Esri. Source: Esri, Vantor,"
+    assert raw_lines[1] == "Earthstar Geographics, and the GIS User Community"
 
 
 def test_esri_attribution_bottom_margin_and_tight_padding():

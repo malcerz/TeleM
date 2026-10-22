@@ -1,18 +1,33 @@
 """Cached, destination-space attribution shared by Preview and Final.
 
-The approved Esri design is maximum 2 lines, legible typography with slight
-translucent pill background inside the map bounds, aligned at bottom-left
-with <= 1% bottom margin. Source names are never cut mid-word, and synthetic
-abbreviations such as 'et al.' are strictly avoided in favor of statutory
-licensing captions.
+The approved Esri design is exactly 2 lines:
+  Line 1: Powered by Esri. Source: Esri, Vantor,
+  Line 2: Earthstar Geographics, and the GIS User Community
+
+Typography is legible (~8-9 px on ~240 px map) with tight translucent black pill
+background (alpha 80) inside the map bounds, aligned at bottom-left with <= 1%
+bottom margin and tight ~1 px padding. Source names are never cut mid-word,
+and synthetic abbreviations ('et al.') or generic phrases ('Esri and its licensors')
+are strictly avoided in favor of the full provider names.
 """
 from __future__ import annotations
 
-import datetime
+import logging
 import threading
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from src.map_providers import MapProviderRegistry
+
+logger = logging.getLogger(__name__)
+
+CANONICAL_ESRI_LINE1 = "Powered by Esri. Source: Esri, Vantor,"
+CANONICAL_ESRI_LINE2 = "Earthstar Geographics, and the GIS User Community"
+CANONICAL_ESRI_LINES = [CANONICAL_ESRI_LINE1, CANONICAL_ESRI_LINE2]
+
+KNOWN_ESRI_TOKENS = {
+    "esri", "vantor", "maxar", "earthstar", "geographics", "gis", "user", "community",
+    "powered", "by", "source:", "sources:", "and", "the", "|"
+}
 
 
 class AttributionLayoutError(ValueError):
@@ -20,48 +35,39 @@ class AttributionLayoutError(ValueError):
 
 
 def _format_attribution_lines(text: str, width: float, length_fn) -> list[str]:
-    """Format attribution text into at most 2 lines strictly adhering to provider licensing.
+    """Format attribution text into exactly 2 lines strictly adhering to provider licensing.
 
-    Never injects unauthorized synthetic abbreviations such as 'et al.'.
-    If full source credits cannot fit in a single line on compact maps, uses the
-    statutory concise copyright formula documented in Esri static-maps terms:
-    '© {year} Esri and its licensors'.
+    Approved statutory Esri World Imagery attribution:
+      Line 1: Powered by Esri. Source: Esri, Vantor,
+      Line 2: Earthstar Geographics, and the GIS User Community
+
+    Never injects unauthorized synthetic abbreviations such as 'et al.' or generic
+    'Esri and its licensors' in place of actual data providers.
     """
     clean_text = " ".join(str(text).split())
 
+    # Check for Esri satellite attribution
+    is_esri = (
+        "powered by esri" in clean_text.lower()
+        or ("esri" in clean_text.lower() and any(
+            k in clean_text.lower() for k in ("vantor", "earthstar", "gis user community", "maxar", "world imagery")
+        ))
+    )
+
+    if is_esri:
+        # Check if new providers appeared in metadata that require notice
+        clean_words = set(w.strip(",.;()[]").lower() for w in clean_text.split() if w.strip(",.;()[]"))
+        novel_tokens = clean_words - KNOWN_ESRI_TOKENS
+        if novel_tokens:
+            logger.warning(
+                "Esri metadata wskazuje dodatkowych dostawców (%s). Wymagana weryfikacja dwuliniowego podpisu.",
+                ", ".join(sorted(novel_tokens))
+            )
+        return list(CANONICAL_ESRI_LINES)
+
     if " | " in clean_text:
         brand, sources = clean_text.split(" | ", 1)
-        brand = brand.strip()
-        sources = sources.strip()
-
-        # 1. Full sources fit cleanly on Line 2
-        if length_fn(sources) <= width:
-            return [brand, sources]
-
-        # 2. Try removing the community suffix if present (e.g. 'and the GIS User Community')
-        # while keeping all named data providers
-        sources_no_gis = sources
-        for suffix in (", and the GIS User Community", " and the GIS User Community",
-                       ", and the GIS user community", " and the GIS user community"):
-            if suffix in sources_no_gis:
-                sources_no_gis = sources_no_gis.replace(suffix, "").strip()
-        if sources_no_gis and sources_no_gis != sources and length_fn(sources_no_gis) <= width:
-            return [brand, sources_no_gis]
-
-        # 3. For compact maps where comma-separated provider names exceed available width,
-        # use Esri's official static map copyright text per doc.arcgis.com/en/arcgis-online/reference/static-maps.htm:
-        # 'Copyright © [Year] Esri and its licensors. All rights reserved.'
-        # Concise on-map representation:
-        current_year = datetime.datetime.now().year
-        legal_licensors = f"© {current_year} Esri and its licensors"
-        if length_fn(legal_licensors) <= width:
-            return [brand, legal_licensors]
-
-        fallback = "© Esri and its licensors"
-        if length_fn(fallback) <= width:
-            return [brand, fallback]
-
-        return [brand, legal_licensors]
+        return [brand.strip(), sources.strip()]
 
     if length_fn(clean_text) <= width:
         return [clean_text]
@@ -72,7 +78,7 @@ def _format_attribution_lines(text: str, width: float, length_fn) -> list[str]:
         if len(parts) == 2 and length_fn(parts[0]) <= width and length_fn(parts[1]) <= width:
             return parts
 
-    # Word wrapping for generic text without cutting words
+    # Word wrapping for generic text across at most 2 lines without cutting words
     words = clean_text.split()
     line1 = ""
     line2 = ""
@@ -118,10 +124,14 @@ class MapAttributionRenderer:
             return None
         text = " ".join(str(text).split())
         factor = float(scale) if scale is not None else min(w, h) / 240.0
-        fs = max(8, round(8 * factor)) if font_size is None else max(1, int(font_size))
+        # Base font size: orientacyjnie 8-9 px on ~240 px map (8.5 pt)
+        base_fs = 8.5 * factor if font_size is None else float(font_size)
         pad = padding
 
-        key = (caps.provider_id, text, w, h, font_path, fs, pad,
+        if min(w, h) < 100 or base_fs < 4.5:
+            raise AttributionLayoutError("Zwiększ rozmiar mapy: atrybucja Esri nie mieści się na mapie")
+
+        key = (caps.provider_id, text, w, h, font_path, round(base_fs, 2), pad,
                str(shape), float(corner_radius or 0), factor)
         with cls._lock:
             cached = cls._cache.get(key)
@@ -129,36 +139,51 @@ class MapAttributionRenderer:
                 return cached
 
         aa = 3
-        font = None
-        for candidate in (font_path, "C:/Windows/Fonts/arial.ttf", "DejaVuSans.ttf"):
-            if candidate:
-                try:
-                    font = ImageFont.truetype(str(candidate), fs * aa)
-                    break
-                except OSError:
-                    pass
-        if font is None:
-            font = ImageFont.load_default(size=fs * aa)
-        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
-        def length(value):
-            return probe.textlength(value, font=font) / aa
+        def _load_font(fsize_pt):
+            for candidate in (font_path, "C:/Windows/Fonts/arial.ttf", "DejaVuSans.ttf"):
+                if candidate:
+                    try:
+                        return ImageFont.truetype(str(candidate), int(round(fsize_pt * aa)))
+                    except OSError:
+                        pass
+            return ImageFont.load_default(size=int(round(fsize_pt * aa)))
+
+        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
         from src.indicators.helpers import map_style_layers
         layers = map_style_layers((w, h), shape, corner_radius, 0, "#FFFFFF")
         mask = layers[0] if layers else None
 
-        # Bottom margin strictly <= 1% of map height (e.g. 2-3 px for 240 px map)
-        margin_bottom = max(2, round(0.01 * h))
-        margin_left = max(2, round(0.01 * w))
+        # Bottom margin strictly <= 1% of map height (e.g. 2 px for 240 px map)
+        margin_bottom = max(2, int(0.01 * h)) if h >= 200 else max(1, int(0.01 * h))
+        margin_left = max(2, int(0.01 * w))
 
         avail_w = max(10, w - 2 * margin_left)
-        lines = _format_attribution_lines(text, avail_w, length)
+        lines = _format_attribution_lines(
+            text, avail_w,
+            lambda val: probe.textlength(val, font=_load_font(base_fs)) / aa
+        )
         if len(lines) > 2:
             lines = lines[:2]
 
-        spacing = max(1, round(1.0 * aa))
         text_block = "\n".join(lines)
+        spacing = max(1, round(1.0 * aa))
+
+        # Dynamic font scaling to guarantee text fits within avail_w
+        fs = base_fs
+        min_legible = 4.5
+        while fs >= min_legible:
+            font = _load_font(fs)
+            mb = probe.multiline_textbbox((0, 0), text_block, font=font, spacing=spacing)
+            ink_w_1x = (mb[2] - mb[0]) / aa
+            ink_h_1x = (mb[3] - mb[1]) / aa
+            pad_x = max(1, round(0.05 * ink_h_1x)) if padding is None else max(0, int(padding))
+            if int(round(ink_w_1x + 2 * pad_x)) <= avail_w:
+                break
+            fs -= 0.1
+
+        font = _load_font(fs)
         mb = probe.multiline_textbbox((0, 0), text_block, font=font, spacing=spacing)
         ink_x0, ink_y0, ink_x1, ink_y1 = mb
         ink_w_1x = (ink_x1 - ink_x0) / aa
@@ -191,7 +216,7 @@ class MapAttributionRenderer:
             # If mask clips bottom-left (e.g. circle shape or rounded corners),
             # scan upward and inward to find lowest position fully within mask.
             step_y = max(1, round(factor))
-            step_x = max(1, round(2 * factor))
+            step_x = max(1, round(factor))
             for y_scan in range(target_y, int(h * 0.40), -step_y):
                 for x_scan in range(margin_left, w - pw - margin_left + 1, step_x):
                     if _fits(x_scan, y_scan):

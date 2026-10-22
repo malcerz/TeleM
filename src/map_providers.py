@@ -187,7 +187,7 @@ _BUILTIN_PROVIDERS: dict[str, MapProviderCapabilities] = {
         provider_id="satellite",
         name="Esri World Imagery (Satellite)",
         service_url="https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        attribution_text="Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        attribution_text="Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
         attribution_url="https://www.esri.com/en-us/legal/copyright-trademarks",
         requires_api_key=True,
         supports_live_tiles=True,
@@ -357,7 +357,8 @@ class MapProviderRegistry:
         caps = cls.get_capabilities(style_or_id)
         if caps.provider_id == "satellite":
             from src.integrations.esri import esri_client
-            return (esri_client.attribution or ("Powered by Esri | " + caps.attribution_text)), caps.attribution_url
+            default_text = "Powered by Esri. Source: Esri, Vantor, | Earthstar Geographics, and the GIS User Community"
+            return (esri_client.attribution or default_text), caps.attribution_url
         return caps.attribution_text, caps.attribution_url
 
     @classmethod

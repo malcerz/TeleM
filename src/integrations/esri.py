@@ -111,7 +111,10 @@ class EsriClient:
         credit = "; ".join(credits) or metadata.get("copyrightText", "")
         if not credit or key in credit:
             raise EsriError("Brak poprawnej atrybucji Esri")
-        self.attribution = "Powered by Esri | " + credit
+        if "Vantor" in credit and "Earthstar" in credit:
+            self.attribution = "Powered by Esri. Source: Esri, Vantor, | Earthstar Geographics, and the GIS User Community"
+        else:
+            self.attribution = "Powered by Esri | " + credit
         self._validated_key = key
 
     def tile(self, z, x, y, *, force=False):
