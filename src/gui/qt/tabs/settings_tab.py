@@ -193,11 +193,10 @@ class SettingsTab(QWidget):
         row_ffmpeg.addWidget(btn_ffmpeg)
         perf_form.addRow("Ścieżka ffmpeg:", row_ffmpeg)
 
-        row_logging = QHBoxLayout()
         self.chk_export_logging = QCheckBox("Zapisuj log eksportu")
         self.chk_export_logging.setChecked(True)
         self.chk_export_logging.setToolTip(
-            "Log eksportu (AMD, Intel, NVIDIA, CPU) zapisywany obok wynikowego pliku lub w katalogu użytkownika."
+            "Log eksportu zapisywany w tym samym miejscu co film, pod tą samą nazwą (.log)."
         )
         self.chk_amd_export_logging = self.chk_export_logging  # Compatibility alias
         self.chk_export_logging.toggled.connect(
@@ -206,14 +205,7 @@ class SettingsTab(QWidget):
                 self.signals.sig_settings_changed.emit("amd_export_logging_enabled", v),
             )
         )
-        row_logging.addWidget(self.chk_export_logging)
-
-        self.btn_open_logs = QPushButton("Otwórz folder logów")
-        self.btn_open_logs.setMinimumHeight(28)
-        self.btn_open_logs.setToolTip("Otwórz lokalny folder z logami eksportu użytkownika")
-        self.btn_open_logs.clicked.connect(self._open_logs_directory)
-        row_logging.addWidget(self.btn_open_logs)
-        perf_form.addRow(row_logging)
+        perf_form.addRow(self.chk_export_logging)
 
         vbox.addWidget(perf_group)
 
@@ -582,18 +574,6 @@ class SettingsTab(QWidget):
         )
         if path:
             self.edit_default_export_dir.setText(path)
-
-    def _open_logs_directory(self) -> None:
-        """Otwórz folder z logami eksportu użytkownika."""
-        from src.export_log import get_user_logs_dir
-        from PySide6.QtGui import QDesktopServices
-        from PySide6.QtCore import QUrl
-        logs_dir = get_user_logs_dir()
-        try:
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir)))
-        except Exception as e:
-            QMessageBox.warning(self, "Logi eksportu", f"Nie można otworzyć folderu logów:\n{e}")
 
     def _load_app_preferences_into_form(self) -> None:
         """Odtwórz zapisane ustawienia globalne bez emitowania sygnałów zmian."""

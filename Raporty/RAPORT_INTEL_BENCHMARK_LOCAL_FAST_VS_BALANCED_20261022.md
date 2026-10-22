@@ -178,8 +178,8 @@ W stanie ustalonym (steady-state) profil Fast osiąga na zintegrowanym układzie
    - Zapis ustawień aktualizuje równolegle oba klucze (`export_logging_enabled` i `amd_export_logging_enabled`), co gwarantuje pełną zgodność wprzód i wstecz.
    - Ustawienie jest całkowicie odseparowane od `def_layout.json` (nie jest resetowane przy zmianie layoutu ani backendu).
 2. **Interfejs GUI (`SettingsTab`):**
-   - Checkbox przemianowany na: **„Zapisuj log eksportu”**.
-   - Dodano przycisk **„Otwórz folder logów”** ([`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/SportCamHUD/src/gui/qt/tabs/settings_tab.py)), który otwiera w Eksploratorze Windows katalog logów użytkownika (`%LOCALAPPDATA%\SportCamHUD\logs`).
+   - Checkbox w sekcji Wydajność: **„Zapisuj log eksportu”** ([`src/gui/qt/tabs/settings_tab.py`](file:///C:/_DEV/SportCamHUD/src/gui/qt/tabs/settings_tab.py)) z bezpośrednim zapisem obok filmu pod tą samą nazwą (`<film>.log`).
+   - Usunięto zbędny przycisk otwierania katalogu z ustawień, zachowując czysty interfejs i jednoznaczny zapis obok wideo.
 
 ---
 
