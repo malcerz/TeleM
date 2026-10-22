@@ -193,15 +193,27 @@ class SettingsTab(QWidget):
         row_ffmpeg.addWidget(btn_ffmpeg)
         perf_form.addRow("Ścieżka ffmpeg:", row_ffmpeg)
 
-        self.chk_amd_export_logging = QCheckBox("Zapisuj log eksportu AMD")
-        self.chk_amd_export_logging.setChecked(True)
-        self.chk_amd_export_logging.setToolTip(
-            "Log eksportu AMD zapisywany obok wynikowego MP4 (ta sama nazwa, rozszerzenie .log)."
+        row_logging = QHBoxLayout()
+        self.chk_export_logging = QCheckBox("Zapisuj log eksportu")
+        self.chk_export_logging.setChecked(True)
+        self.chk_export_logging.setToolTip(
+            "Log eksportu (AMD, Intel, NVIDIA, CPU) zapisywany obok wynikowego pliku lub w katalogu użytkownika."
         )
-        self.chk_amd_export_logging.toggled.connect(
-            lambda v: self.signals.sig_settings_changed.emit("amd_export_logging_enabled", v)
+        self.chk_amd_export_logging = self.chk_export_logging  # Compatibility alias
+        self.chk_export_logging.toggled.connect(
+            lambda v: (
+                self.signals.sig_settings_changed.emit("export_logging_enabled", v),
+                self.signals.sig_settings_changed.emit("amd_export_logging_enabled", v),
+            )
         )
-        perf_form.addRow(self.chk_amd_export_logging)
+        row_logging.addWidget(self.chk_export_logging)
+
+        self.btn_open_logs = QPushButton("Otwórz folder logów")
+        self.btn_open_logs.setMinimumHeight(28)
+        self.btn_open_logs.setToolTip("Otwórz lokalny folder z logami eksportu użytkownika")
+        self.btn_open_logs.clicked.connect(self._open_logs_directory)
+        row_logging.addWidget(self.btn_open_logs)
+        perf_form.addRow(row_logging)
 
         vbox.addWidget(perf_group)
 
@@ -571,9 +583,22 @@ class SettingsTab(QWidget):
         if path:
             self.edit_default_export_dir.setText(path)
 
+    def _open_logs_directory(self) -> None:
+        """Otwórz folder z logami eksportu użytkownika."""
+        from src.export_log import get_user_logs_dir
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        logs_dir = get_user_logs_dir()
+        try:
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir)))
+        except Exception as e:
+            QMessageBox.warning(self, "Logi eksportu", f"Nie można otworzyć folderu logów:\n{e}")
+
     def _load_app_preferences_into_form(self) -> None:
         """Odtwórz zapisane ustawienia globalne bez emitowania sygnałów zmian."""
         from src.export_paths import (
+            load_export_logging_enabled,
             load_amd_export_logging_enabled,
             load_app_preferences,
             load_charts_skip_pauses,
@@ -584,9 +609,9 @@ class SettingsTab(QWidget):
         self.chk_skip_pauses.blockSignals(True)
         self.chk_skip_pauses.setChecked(load_charts_skip_pauses(self.base_dir))
         self.chk_skip_pauses.blockSignals(False)
-        self.chk_amd_export_logging.blockSignals(True)
-        self.chk_amd_export_logging.setChecked(load_amd_export_logging_enabled())
-        self.chk_amd_export_logging.blockSignals(False)
+        self.chk_export_logging.blockSignals(True)
+        self.chk_export_logging.setChecked(load_export_logging_enabled())
+        self.chk_export_logging.blockSignals(False)
         self.edit_startup_preset.setText(load_startup_preset(self.base_dir))
         for combo, key in ((self.cmb_lang, "ui_language"), (self.cmb_theme, "ui_theme")):
             value = prefs.get(key)
@@ -605,7 +630,8 @@ class SettingsTab(QWidget):
         try:
             update_app_preferences({
                 "charts_skip_pauses": bool(self.chk_skip_pauses.isChecked()),
-                "amd_export_logging_enabled": bool(self.chk_amd_export_logging.isChecked()),
+                "export_logging_enabled": bool(self.chk_export_logging.isChecked()),
+                "amd_export_logging_enabled": bool(self.chk_export_logging.isChecked()),
                 "startup_preset": startup_preset,
                 "ui_language": self.cmb_lang.currentText(),
                 "ui_theme": self.cmb_theme.currentText(),
@@ -623,7 +649,8 @@ class SettingsTab(QWidget):
             QMessageBox.warning(self, "Zapisz ustawienia", warning)
         print(
             f"[Settings] Zapisano ustawienia: skip_pauses={self.chk_skip_pauses.isChecked()} "
-            f"amd_export_logging={self.chk_amd_export_logging.isChecked()} "
+            f"export_logging={self.chk_export_logging.isChecked()} "
+            f"amd_export_logging={self.chk_export_logging.isChecked()} "
             f"startup_preset={startup_preset!r} "
             f"export_dir={self.edit_default_export_dir.text().strip()!r}",
             flush=True,

@@ -976,8 +976,13 @@ def export_nvidia_native_d3d11(
     preview_fps: float = 8.0,
     on_preview_frame: Optional[Callable[[bytes, int, int, int, int, float], None]] = None,
     gui_runtime_snapshot: Optional[dict[str, Any]] = None,
+    export_log_path: Optional[str | Path] = None,
+    **kwargs: Any,
 ) -> bool:
     """Execute complete single-pass NVIDIA Native D3D11/NVENC export."""
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[NVIDIA NATIVE] NVENC D3D11 pipeline initialized ({codec} {quality_profile})")
     override = os.environ.get("TELEM_NVENC_DLL_OVERRIDE")
     active_dll_path = get_native_dll_path()
     active_dll_bytes = active_dll_path.read_bytes() if active_dll_path.exists() else b""

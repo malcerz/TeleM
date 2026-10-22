@@ -391,8 +391,14 @@ def _resolve_cache_samples(
     field_name: str, source: str = "fit", indicator_key: str | None = None
 ) -> list:
     """Return raw samples from exactly ``source``; no cross-source fallback."""
-    del indicator_key
     field_samples = WORKER_CACHE.get("field_samples", {}) or {}
+    if field_name == "heading" and indicator_key == "compass":
+        compass_cfg = WORKER_CACHE.get("layout", {}).get("indicators", {}).get("compass", {})
+        if hybrid_enabled(compass_cfg):
+            hyb = field_samples.get("compass_hybrid_samples")
+            if hyb is not None and len(hyb):
+                return hyb
+    del indicator_key
     gpmf_map = {
         "speed": "speed_samples", "alt": "alt_samples", "altitude": "alt_samples",
         "dist": "track_samples", "track": "track_samples", "iso": "iso_samples",

@@ -201,15 +201,17 @@ class AppController(
         # Globalne „Pomiń pauzy aktywności” (profil użytkownika) ma pierwszeństwo
         # przed wartością z layoutu projektu/presetu.
         from src.export_paths import (
+            load_export_logging_enabled,
             load_amd_export_logging_enabled,
             load_charts_skip_pauses,
             load_startup_preset,
         )
         self.charts_skip_pauses: bool = load_charts_skip_pauses(self.base_dir)
         self._apply_global_chart_preferences()
-        # Startowy preset i log eksportu AMD — profil użytkownika (app_preferences.json).
+        # Startowy preset i log eksportu — profil użytkownika (app_preferences.json).
         self._startup_preset_path = load_startup_preset(self.base_dir)
-        self.amd_export_logging_enabled: bool = load_amd_export_logging_enabled()
+        self.export_logging_enabled: bool = load_export_logging_enabled()
+        self.amd_export_logging_enabled: bool = self.export_logging_enabled
 
         # ── Narzędzia ──────────────────────────────────────────────────
         self.ffprobe_path = find_local_tool(self.base_dir, ["ffprobe.exe", "ffprobe"]) or "ffprobe"

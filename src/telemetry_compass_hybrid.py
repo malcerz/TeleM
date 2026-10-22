@@ -16,7 +16,7 @@ import time
 
 import numpy as np
 
-ALGORITHM_VERSION = 2  # 2: end-of-data calibration windows for short files
+ALGORITHM_VERSION = 3  # 3: sliding calibration windows and late-stretch recovery
 DEFAULTS = {
     "compass_heading_mode": "gps_imu",
     "compass_reference_source": "fit",
@@ -484,11 +484,10 @@ def calibrate_segment(imu, observations, cfg):
             model.update(stable_fix_ts=float(detected), calibration_start_ts=float(calibration_start),
                          calibration_end_ts=float(ts), window_seconds=float(elapsed))
             return model, {"status": "ok", "attempts": attempts}
-        if checkpoint == len(checkpoints):
+        if checkpoint == len(checkpoints) and model is None and reason != "insufficient independent moving samples or temporal coverage":
             return None, {"status": "insufficient_quality", "attempts": attempts, "reason": reason}
-    # The data ended before the next checkpoint (short file). Calibration may
-    # use any later stretch: try windows that start later and run to the end
-    # of the data, under the same acceptance criteria as above.
+    # If initial checkpoints starting from calibration_start didn't fit,
+    # evaluate later stretches and sliding windows across the full dataset.
     if calibration_start is not None and len(candidate) >= 20:
         vals = np.asarray(candidate)
         end_ts = float(vals[-1, 0])
@@ -508,6 +507,26 @@ def calibrate_segment(imu, observations, cfg):
                              calibration_end_ts=end_ts, window_seconds=float(span))
                 return model, {"status": "ok", "attempts": attempts}
             shift += 15.
+
+        # Also try candidate sliding windows of standard sizes
+        for win in [300., 180., 120., 60., 30.]:
+            if win < minimum:
+                continue
+            shift = 0.
+            while calibration_start + shift + win <= end_ts:
+                t0 = calibration_start + shift
+                t1 = t0 + win
+                sub = vals[(vals[:, 0] >= t0) & (vals[:, 0] <= t1)]
+                if len(sub) >= max(20, int(win*.65)) and sub[-1, 0]-sub[0, 0] >= win*.8:
+                    model, reason = _fit_anchor(sub[:, 0], sub[:, 1], sub[:, 2]+float(cfg["compass_mount_offset_deg"]),
+                                                drift_enabled=bool(cfg["compass_drift_correction"]), target_start=imu[0, 0])
+                    attempts.append({"window_seconds": win, "start_offset_s": shift, "sliding_window": True,
+                                     "status": reason, "samples": len(sub)})
+                    if model is not None:
+                        model.update(stable_fix_ts=float(detected), calibration_start_ts=float(t0),
+                                     calibration_end_ts=float(t1), window_seconds=float(win))
+                        return model, {"status": "ok", "attempts": attempts}
+                shift += 15.
     return None, {"status": "insufficient_data", "attempts": attempts,
                   "reason": "No stable fix followed by a sufficiently long calibration"}
 

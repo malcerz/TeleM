@@ -102,10 +102,25 @@ def startup_preset_conflict(startup_preset: str, saved_path: Path | str) -> str:
     )
 
 
+def load_export_logging_enabled() -> bool:
+    """Global 'Zapisuj log eksportu' value (default ON).
+
+    Checks 'export_logging_enabled' first; falls back to legacy
+    'amd_export_logging_enabled' for backward compatibility.
+    """
+    prefs = load_app_preferences()
+    val = prefs.get("export_logging_enabled")
+    if isinstance(val, bool):
+        return val
+    legacy = prefs.get("amd_export_logging_enabled")
+    if isinstance(legacy, bool):
+        return legacy
+    return True
+
+
 def load_amd_export_logging_enabled() -> bool:
-    """Global 'Zapisuj log eksportu AMD' value (default ON)."""
-    value = load_app_preferences().get("amd_export_logging_enabled")
-    return value if isinstance(value, bool) else True
+    """Backward compatibility alias for load_export_logging_enabled()."""
+    return load_export_logging_enabled()
 
 
 def save_default_export_dir(value: str) -> None:

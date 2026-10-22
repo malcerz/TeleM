@@ -656,12 +656,12 @@ class RenderMixin:
                     output = options.get("output", "output.mp4")
                     stats["_queue_job_id"] = options.get("_queue_job_id")
 
-                    self._finish_amd_export_log(options, "completed", f"output={output}")
+                    self._finish_export_log(options, "completed", f"output={output}", stats=stats)
                     emit_terminal_state("completed")
                     self.signals.sig_render_finished.emit(stats, output)
                     _notify_queue(success=True, stats=stats)
                 else:
-                    self._finish_amd_export_log(options, "cancelled")
+                    self._finish_export_log(options, "cancelled")
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
                     _notify_queue(success=False)
@@ -676,7 +676,7 @@ class RenderMixin:
                 monitor = getattr(self, "_active_storage_monitor", None)
                 storage_cancel = monitor is not None and monitor.stop_requested_low_space.is_set()
                 if isinstance(e, RenderCancelled) and not storage_cancel:
-                    self._finish_amd_export_log(options, "cancelled")
+                    self._finish_export_log(options, "cancelled")
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
                     _notify_queue(success=False)
@@ -714,11 +714,11 @@ class RenderMixin:
                 print(f"[RENDER PRIMARY TRACEBACK]\n{trace}", flush=True)
                 explicit_cancel = getattr(self, "_render_cancel_reason", RenderCancelReason.NONE) is not RenderCancelReason.NONE
                 if not self.render_cancel_event.is_set() or storage_cancel or not explicit_cancel:
-                    amd_log = options.get("_amd_export_log_path") or ""
+                    amd_log = options.get("_export_log_path") or options.get("_amd_export_log_path") or ""
                     if amd_log and Path(amd_log).is_file():
                         # GUI error message points at the log beside the MP4.
                         render_error.details["diagnostics_path"] = amd_log
-                    self._finish_amd_export_log(options, "failed", f"{primary_error}\n{trace}")
+                    self._finish_export_log(options, "failed", f"{primary_error}\n{trace}")
                     emit_terminal_state("failed", error=True)
                     typed_signal = getattr(self.signals, "sig_render_error", None)
                     if typed_signal is not None:
@@ -726,7 +726,7 @@ class RenderMixin:
                     self.signals.sig_error.emit(render_error.display_message())
                     _notify_queue(success=False, render_error=render_error)
                 else:
-                    self._finish_amd_export_log(options, "cancelled", primary_error)
+                    self._finish_export_log(options, "cancelled", primary_error)
                     emit_terminal_state("cancelled")
                     self.signals.sig_render_stopped.emit()
                     _notify_queue(success=False)
@@ -762,14 +762,18 @@ class RenderMixin:
             return
 
     @staticmethod
-    def _finish_amd_export_log(options: dict, status: str, detail: str = "") -> None:
-        """Close the AMD export log session (no-op when logging is disabled)."""
-        log_path = options.get("_amd_export_log_path") or ""
+    def _finish_export_log(options: dict, status: str, detail: str = "", stats: Optional[dict] = None) -> None:
+        """Close the export log session for any backend (no-op when logging is disabled)."""
+        log_path = options.get("_export_log_path") or options.get("_amd_export_log_path") or ""
         if not log_path:
             return
-        from src.ffmpeg.amd_export_log import end_amd_export_log_session
+        from src.export_log import end_export_log_session
+        end_export_log_session(log_path, status, detail=detail, stats=stats)
 
-        end_amd_export_log_session(log_path, status, detail)
+    @staticmethod
+    def _finish_amd_export_log(options: dict, status: str, detail: str = "") -> None:
+        """Close the AMD export log session (backward compatibility)."""
+        RenderMixin._finish_export_log(options, status, detail=detail)
 
     def _render_pipeline(self, options: dict) -> dict:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
@@ -875,34 +879,53 @@ class RenderMixin:
         options["output"] = str(output_path)
         output = str(output_path)
 
-        # AMD export log beside the final MP4 (film.mp4 -> film.log). The queue
+        # Universal export log beside the final MP4 (film.mp4 -> film.log). The queue
         # job snapshot wins; a direct export uses the current global setting.
+        # Works uniformly across all backends: AMD, Intel, NVIDIA, and CPU.
+        options["_export_log_path"] = ""
         options["_amd_export_log_path"] = ""
-        if str(encoder).lower() in ("amd", "amd_native"):
-            from src.ffmpeg.amd_export_log import (
-                amd_export_log_path,
-                begin_amd_export_log_session,
-                resolve_amd_export_logging,
+        from src.export_log import (
+            export_log_path,
+            begin_export_log_session,
+            resolve_export_logging,
+        )
+        logging_enabled = resolve_export_logging(
+            options, getattr(self, "export_logging_enabled", getattr(self, "amd_export_logging_enabled", True))
+        )
+        options["export_logging_enabled"] = logging_enabled
+        options["amd_export_logging_enabled"] = logging_enabled
+        if logging_enabled:
+            log_path = export_log_path(output_path, backend=str(encoder))
+            options["_export_log_path"] = str(log_path)
+            options["_amd_export_log_path"] = str(log_path)
+            begin_export_log_session(
+                log_path,
+                output=output_path,
+                backend=str(encoder),
+                encoder=str(encoder),
+                codec=str(options.get("intel_codec") or options.get("amd_codec") or options.get("nvidia_codec") or options.get("codec") or "hevc"),
+                profile=str(options.get("encoder_profile") or options.get("amd_encoder_quality") or options.get("nvidia_quality") or options.get("profile") or "balanced"),
+                job_id=str(options.get("_queue_job_id") or ""),
+                generation_id=int(options.get("_render_generation_id", 0) or 0),
+                mode="QUEUE" if options.get("_queue_job_id") else "DIRECT",
+                video_paths=list(options.get("video_paths") or getattr(self, "video_paths", []) or []),
+                fit_path=str(getattr(self, "fit_path", None) or getattr(getattr(self, "telemetry", None), "fit_path", None) or ""),
+                gpx_path=str(getattr(self, "gpx_path", None) or ""),
+                resolution=str(options.get("resolution", "source")),
+                target_fps=float(options.get("target_fps") or 30.0),
+                bitrate=str(options.get("bitrate") or "40M"),
+                hdr_mode=str(options.get("amd_hdr_mode", "preserve_hlg")),
+                duration_s=float(getattr(self, "video_duration_s", 0.0) or options.get("duration", 0.0) or 0.0),
+                vbr_settings=options.get("vbr_settings"),
+                layout=getattr(self, "layout", None),
+                telemetry=getattr(self, "telemetry", None),
+                video_timeline=getattr(self, "video_timeline", None),
             )
-            logging_enabled = resolve_amd_export_logging(
-                options, getattr(self, "amd_export_logging_enabled", True)
-            )
-            options["amd_export_logging_enabled"] = logging_enabled
-            if logging_enabled:
-                log_path = amd_export_log_path(output_path)
-                options["_amd_export_log_path"] = str(log_path)
-                begin_amd_export_log_session(
-                    log_path,
-                    output=output_path,
-                    job_id=str(options.get("_queue_job_id") or ""),
-                    generation_id=int(options.get("_render_generation_id", 0) or 0),
-                    mode="QUEUE" if options.get("_queue_job_id") else "DIRECT",
-                )
-            print(
-                f"[AMD EXPORT LOG] enabled={logging_enabled} "
-                f"path={options['_amd_export_log_path'] or '-'}",
-                flush=True,
-            )
+        print(
+            f"[EXPORT LOG] enabled={logging_enabled} backend={encoder} "
+            f"path={options['_export_log_path'] or '-'}",
+            flush=True,
+        )
 
         from src.ffmpeg.render_errors import (
             RuntimeStorageMonitor,
@@ -1245,6 +1268,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             codec=options.get("intel_codec") or "hevc",
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
+            export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
         )
         _sig = inspect.signature(stream_overlay_to_ffmpeg)
         if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _sig.parameters.values()):
@@ -1501,6 +1525,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     enable_preview=preview_enabled,
                     on_preview_frame=options.get("_nvidia_preview_tap"),
                     gui_runtime_snapshot=gui_snapshot,
+                    export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
                 )
             else:
                 success = export_nvidia_native_d3d11(
@@ -1524,6 +1549,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     enable_preview=preview_enabled,
                     on_preview_frame=options.get("_nvidia_preview_tap"),
                     gui_runtime_snapshot=gui_snapshot,
+                    export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
                 )
             if not success and not self.render_cancel_event.is_set():
                 raise RuntimeError("NVIDIA Native D3D11 export nie powiódł się.")

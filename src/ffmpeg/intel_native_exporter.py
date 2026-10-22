@@ -714,6 +714,7 @@ def export_intel_native_d3d11(
 ) -> bool:
     """Execute production native Intel D3D11 Video Processor + AV1 QSV video export pipeline."""
     cleanup = kwargs["_resource_cleanup"]
+    export_log_path = kwargs.get("export_log_path")
     codec = validate_intel_codec(os.environ.get("TELEM_INTEL_CODEC") or codec, ffmpeg_exe)
     if codec == "hevc_sdr":
         raise ValueError("Intel native HEVC uses Main10; select the FFmpeg QSV path for HEVC 8-bit SDR")
@@ -840,6 +841,9 @@ def export_intel_native_d3d11(
         height=video_height,
     )
     render_print(effective_profile_cfg.format_log(), flush=True)
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[INTEL NATIVE] D3D11 Video Processor & oneVPL ({codec_name} {effective_profile_cfg.profile}) initialized for {video_width}x{video_height} @ {target_fps} fps")
 
     # 3b. Mux architecture selection (Live Mux vs Legacy Post-Mux fallback)
     use_legacy_post_mux = (os.environ.get("TELEM_INTEL_LEGACY_POST_MUX") == "1")
@@ -1555,6 +1559,9 @@ def export_intel_native_d3d11(
                 frames_rendered += 1
                 if frames_rendered == 1:
                     first_frame_latency = time.perf_counter() - t_render_start
+                if export_log_path:
+                    from src.export_log import append_export_log
+                    append_export_log(export_log_path, f"[INTEL NATIVE] First frame latency: {first_frame_latency:.3f} s")
 
                 _report_stream_progress(
                     frames_rendered, total_frames, t_render_start,
@@ -1803,6 +1810,9 @@ def export_intel_native_d3d11(
                         render_print(f"[STREAM INTEL] Rendered frame {frames_rendered}/{total_frames}", flush=True)
                     if frames_rendered == 1:
                         first_frame_latency = time.perf_counter() - t_render_start
+                        if export_log_path:
+                            from src.export_log import append_export_log
+                            append_export_log(export_log_path, f"[INTEL NATIVE] First frame latency: {first_frame_latency:.3f} s")
                         if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
                             render_print(f"[HUD STARTUP TRACE] main first_frame={time.time():.3f} hud_wait_s={total_hud_wait_s:.3f}", flush=True)
                         if t_first_frame is None:
@@ -2314,6 +2324,9 @@ def export_intel_native_d3d11(
     render_print(f"Frame Render Wall Time:     {frame_render_s:.3f} s", flush=True)
     render_print(f"Finalization Wall Time:     {finalization_s:.3f} s", flush=True)
     render_print(f"Mux Wall Time:              {mux_wall_s:.3f} s", flush=True)
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[INTEL NATIVE] Render loop finished: frames={frames_rendered}, render_fps={render_fps:.2f}, eff_fps={user_effective_fps:.2f}")
     render_print(f"RENDER FPS:                 {render_fps:.3f} FPS", flush=True)
     render_print(f"USER EFFECTIVE FPS:         {user_effective_fps:.3f} FPS", flush=True)
     render_print(f"First Frame Latency:        {first_frame_latency:.3f} s", flush=True)

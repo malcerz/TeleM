@@ -348,7 +348,8 @@ class PresetMixin:
             self.layout["charts_skip_pauses"] = bool(value)
             self._chart_data_cache = None
             self._render_preview()
-        elif name == "amd_export_logging_enabled":
+        elif name in ("export_logging_enabled", "amd_export_logging_enabled"):
+            self.export_logging_enabled = bool(value)
             self.amd_export_logging_enabled = bool(value)
         elif name == "startup_preset":
             # Trwały zapis robi zielony „Zapisz ustawienia” (app_preferences.json);

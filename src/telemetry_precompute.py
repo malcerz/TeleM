@@ -56,6 +56,7 @@ class _FrameRec:
     temp_value: float
     heading_value: Optional[float]
     map_heading_value: Optional[float]
+    compass_heading_value: Optional[float]
     slope_value: Optional[float]
     indicator_values: dict[str, float]
     fit_vals: tuple
@@ -138,8 +139,16 @@ class TelemetryFrameCache:
                 st.lean_labels[key],
             )
         for key in st.heading_keys:
+            if key == "track_map":
+                h_val = rec.map_heading_value
+            elif key == "compass":
+                h_val = getattr(rec, "compass_heading_value", None)
+                if h_val is None:
+                    h_val = rec.heading_value
+            else:
+                h_val = rec.heading_value
             extra_indicators[key] = (
-                rec.map_heading_value if key == "track_map" else rec.heading_value,
+                h_val,
                 st.heading_units[key],
                 st.heading_labels[key],
             )
@@ -174,6 +183,7 @@ class TelemetryFrameCache:
             "extra_indicators": extra_indicators,
             "gps_track": st.gps_track,
             "map_heading": rec.map_heading_value,
+            "heading_compass": getattr(rec, "compass_heading_value", None) or rec.heading_value,
             "target_dt": rec.target_dt,
             "start_dt_utc": st.start_dt_utc,
             "elapsed_seconds": rec.elapsed_seconds,
@@ -765,35 +775,28 @@ def build_telemetry_cache(
     # semantics only when a future heading consumer is enabled in the layout.
     t0_heading = time.perf_counter()
     heading_arr: list[Optional[float]] = [None] * total_frames
+    compass_heading_arr: list[Optional[float]] = [None] * total_frames
     map_heading_arr: list[Optional[float]] = [None] * total_frames
     if "heading" in std_names:
         def _heading_array(key: str) -> list[Optional[float]]:
             heading_cfg = indicators.get(key, {})
+            if key == "compass":
+                from src.telemetry_compass_hybrid import hybrid_enabled
+                if hybrid_enabled(heading_cfg):
+                    from src.telemetry_compass_hybrid import sample_array, sample_hybrid_axis, timestamp
+                    from src.ffmpeg.worker_cache import WORKER_CACHE
+                    prepared = (WORKER_CACHE.get("field_samples") or {}).get("compass_hybrid_samples")
+                    if prepared is not None and len(prepared):
+                        sampled = sample_hybrid_axis(sample_array(prepared), timestamp(ref_dt) + target_ts_arr)
+                        return [float(v) if np.isfinite(v) else None for v in sampled]
+                    if resolve_cache_value is not None:
+                        heading_src = heading_cfg.get("source", "gpmf")
+                        return [
+                            resolve_cache_value("heading", heading_src, dt, key)
+                            for dt in target_dts
+                        ]
             heading_src = heading_cfg.get("source", "gpmf")
-            heading_samples = _resolve_cache_samples("heading", heading_src)
-            if heading_samples:
-                return _vectorize_heading(
-                    heading_samples, target_dts, target_ts_arr, ref_dt
-                )
-            if resolve_cache_value is not None:
-                return [
-                    resolve_cache_value("heading", heading_src, dt, key)
-                    for dt in target_dts
-                ]
-            return [None] * total_frames
-
-        heading_key = next((key for key in heading_keys if key != "track_map"), None)
-
-    # Heading is derived once per source and interpolated with circular
-    # semantics only when a future heading consumer is enabled in the layout.
-    t0_heading = time.perf_counter()
-    heading_arr: list[Optional[float]] = [None] * total_frames
-    map_heading_arr: list[Optional[float]] = [None] * total_frames
-    if "heading" in std_names:
-        def _heading_array(key: str) -> list[Optional[float]]:
-            heading_cfg = indicators.get(key, {})
-            heading_src = heading_cfg.get("source", "gpmf")
-            heading_samples = _resolve_cache_samples("heading", heading_src)
+            heading_samples = _resolve_cache_samples("heading", heading_src, key)
             if heading_samples:
                 if key == "track_map":
                     smooth_s = float(heading_cfg.get("map_rotation_smoothing_s", 0.0) or 0.0)
@@ -810,9 +813,13 @@ def build_telemetry_cache(
                 ]
             return [None] * total_frames
 
-        heading_key = next((key for key in heading_keys if key != "track_map"), None)
+        heading_key = next((key for key in heading_keys if key not in ("track_map", "compass")), None)
         if heading_key is not None:
             heading_arr = _heading_array(heading_key)
+        elif "compass" in heading_keys:
+            heading_arr = _heading_array("compass")
+        if "compass" in heading_keys:
+            compass_heading_arr = _heading_array("compass")
         if "track_map" in heading_keys:
             map_heading_arr = _heading_array("track_map")
     t_heading_ms = (time.perf_counter() - t0_heading) * 1000.0
@@ -1006,6 +1013,7 @@ def build_telemetry_cache(
             temp_value=temp_arr[i],
             heading_value=heading_arr[i],
             map_heading_value=map_heading_arr[i],
+            compass_heading_value=compass_heading_arr[i] if compass_heading_arr else None,
             slope_value=slope_arr[i],
             indicator_values=ind_vals,
             fit_vals=fit_v,

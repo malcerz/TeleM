@@ -69,9 +69,14 @@ def run_nvidia_render_child(
     preview_fps: float = 8.0,
     on_preview_frame: Optional[Callable[[bytes, int, int, int, int, float], None]] = None,
     gui_runtime_snapshot: Optional[dict[str, Any]] = None,
+    export_log_path: Optional[str | Path] = None,
+    **kwargs: Any,
 ) -> bool:
     """Serialize parameters and run export_nvidia_native_d3d11 in a clean child process."""
     _ensure_telemetry_picklable()
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[NVIDIA CHILD] Spawning isolated NVENC child process for {output_file}...")
 
     base_dir = Path(__file__).resolve().parent.parent.parent
     scratch_dir = Path(output_file).resolve().parent

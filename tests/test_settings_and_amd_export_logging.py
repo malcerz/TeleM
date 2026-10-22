@@ -349,6 +349,7 @@ def _run_pipeline_to_preflight(monkeypatch, tmp_path, owner, options):
 
     monkeypatch.setattr(render_module, "detect_best_encoder", lambda: "amd")
     monkeypatch.setattr(render_module, "_test_encoder", lambda *_a: True)
+    monkeypatch.setattr("src.ffmpeg.backend_capabilities.validate_backend_available", lambda enc, caps: (True, "mocked"))
     with pytest.raises(RenderError) as info:
         render_module.RenderMixin._render_pipeline(owner, options)
     return info.value

@@ -837,6 +837,9 @@ def run_ffmpeg_with_progress(
         pass
     if active_process_holder is not None:
         active_process_holder["process"] = process
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[STAGE] FFmpeg child spawned pid={process.pid} encoder={encoder}")
 
     frame, fps, out_time, speed = 0, "0", "00:00:00", "0x"
     start_time = time.time()
@@ -1028,6 +1031,7 @@ def stream_overlay_to_ffmpeg(
     **kwargs: Any,
 ) -> int:
     """Stream rendered overlay frames into an FFmpeg process."""
+    export_log_path: Optional[str] = kwargs.get("export_log_path")
     hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
         encoder=encoder,
         render_w=render_w,
@@ -1353,6 +1357,7 @@ def stream_overlay_to_ffmpeg(
                     inline_gpmf_plan=inline_gpmf_plan,
                     rotation_degrees=rotation_degrees,
                     container_rotation=container_rotation,
+                    export_log_path=export_log_path,
                 )
                 if success:
                     print("[INTEL_NATIVE_RESULT] success=YES", flush=True)
@@ -2044,6 +2049,9 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         pass
     if active_process_holder is not None:
         active_process_holder["process"] = process
+    if export_log_path:
+        from src.export_log import append_export_log
+        append_export_log(export_log_path, f"[STAGE] FFmpeg child spawned pid={process.pid} encoder={encoder}")
 
     rate_control_tracker = None
     nv_profile_name = ""
@@ -2061,6 +2069,11 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             rate_control_tracker=rate_control_tracker,
             profile_name=nv_profile_name,
         )
+        if export_log_path and (piped == 1 or piped % 250 == 0 or piped == total_overlay_frames):
+            from src.export_log import log_export_progress
+            _now_p = time.time()
+            _el_p = max(0.001, _now_p - start_time)
+            log_export_progress(export_log_path, frame=piped, total=total_overlay_frames, fps=(piped / _el_p), elapsed_s=_el_p)
 
     # ── Async stdout reader thread (prevents FFmpeg stdout buffer deadlock) ──
     stdout_lines: list[str] = []
