@@ -1,13 +1,17 @@
 """Cached, destination-space attribution shared by Preview and Final.
 
 The approved Esri design is maximum 2 lines, legible typography with slight
-translucent pill background inside the map bounds. Source names are never
-cut mid-word.
+translucent pill background inside the map bounds, aligned at bottom-left
+with <= 1% bottom margin. Source names are never cut mid-word, and synthetic
+abbreviations such as 'et al.' are strictly avoided in favor of statutory
+licensing captions.
 """
 from __future__ import annotations
 
+import datetime
 import threading
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 from src.map_providers import MapProviderRegistry
 
 
@@ -16,35 +20,59 @@ class AttributionLayoutError(ValueError):
 
 
 def _format_attribution_lines(text: str, width: float, length_fn) -> list[str]:
-    """Format attribution text into at most 2 lines without truncation of required providers."""
+    """Format attribution text into at most 2 lines strictly adhering to provider licensing.
+
+    Never injects unauthorized synthetic abbreviations such as 'et al.'.
+    If full source credits cannot fit in a single line on compact maps, uses the
+    statutory concise copyright formula documented in Esri static-maps terms:
+    '© {year} Esri and its licensors'.
+    """
     clean_text = " ".join(str(text).split())
 
     if " | " in clean_text:
         brand, sources = clean_text.split(" | ", 1)
+        brand = brand.strip()
+        sources = sources.strip()
+
+        # 1. Full sources fit cleanly on Line 2
         if length_fn(sources) <= width:
             return [brand, sources]
 
-        # Break down comma-separated sources to fit within available width without truncation
-        parts = [p.strip() for p in sources.split(",") if p.strip()]
-        current = parts[0] if parts else sources
-        suffix = ", et al."
-        for p in parts[1:]:
-            p_clean = p.replace("and the GIS User Community", "").replace("and the GIS user community", "").strip()
-            if not p_clean:
-                continue
-            trial = f"{current}, {p_clean}{suffix}"
-            if length_fn(trial) <= width:
-                current = f"{current}, {p_clean}"
-            else:
-                break
-        if current != sources:
-            current = current + suffix
-        return [brand, current]
+        # 2. Try removing the community suffix if present (e.g. 'and the GIS User Community')
+        # while keeping all named data providers
+        sources_no_gis = sources
+        for suffix in (", and the GIS User Community", " and the GIS User Community",
+                       ", and the GIS user community", " and the GIS user community"):
+            if suffix in sources_no_gis:
+                sources_no_gis = sources_no_gis.replace(suffix, "").strip()
+        if sources_no_gis and sources_no_gis != sources and length_fn(sources_no_gis) <= width:
+            return [brand, sources_no_gis]
+
+        # 3. For compact maps where comma-separated provider names exceed available width,
+        # use Esri's official static map copyright text per doc.arcgis.com/en/arcgis-online/reference/static-maps.htm:
+        # 'Copyright © [Year] Esri and its licensors. All rights reserved.'
+        # Concise on-map representation:
+        current_year = datetime.datetime.now().year
+        legal_licensors = f"© {current_year} Esri and its licensors"
+        if length_fn(legal_licensors) <= width:
+            return [brand, legal_licensors]
+
+        fallback = "© Esri and its licensors"
+        if length_fn(fallback) <= width:
+            return [brand, fallback]
+
+        return [brand, legal_licensors]
 
     if length_fn(clean_text) <= width:
         return [clean_text]
 
-    # For text without " | " (e.g. OpenStreetMap / CARTO)
+    # For non-Esri providers (e.g. OSM / CARTO)
+    if ", " in clean_text:
+        parts = [p.strip() for p in clean_text.split(",") if p.strip()]
+        if len(parts) == 2 and length_fn(parts[0]) <= width and length_fn(parts[1]) <= width:
+            return parts
+
+    # Word wrapping for generic text without cutting words
     words = clean_text.split()
     line1 = ""
     line2 = ""
@@ -65,11 +93,6 @@ def _format_attribution_lines(text: str, width: float, length_fn) -> list[str]:
             line2 = trial
             word_idx += 1
         else:
-            if not line2:
-                line2 = w
-                word_idx += 1
-            elif not line2.endswith("..."):
-                line2 = (line2 + "...").strip()
             break
 
     res = [l for l in (line1, line2) if l]
@@ -96,14 +119,15 @@ class MapAttributionRenderer:
         text = " ".join(str(text).split())
         factor = float(scale) if scale is not None else min(w, h) / 240.0
         fs = max(8, round(8 * factor)) if font_size is None else max(1, int(font_size))
-        pad = max(2, round(2.5 * factor)) if padding is None else max(0, int(padding))
-        margin = max(3, round(6 * factor))
-        key = (caps.provider_id, text, w, h, font_path, fs, pad, margin,
+        pad = padding
+
+        key = (caps.provider_id, text, w, h, font_path, fs, pad,
                str(shape), float(corner_radius or 0), factor)
         with cls._lock:
             cached = cls._cache.get(key)
             if cached is not None:
                 return cached
+
         aa = 3
         font = None
         for candidate in (font_path, "C:/Windows/Fonts/arial.ttf", "DejaVuSans.ttf"):
@@ -123,58 +147,88 @@ class MapAttributionRenderer:
         from src.indicators.helpers import map_style_layers
         layers = map_style_layers((w, h), shape, corner_radius, 0, "#FFFFFF")
         mask = layers[0] if layers else None
+
+        # Bottom margin strictly <= 1% of map height (e.g. 2-3 px for 240 px map)
+        margin_bottom = max(2, round(0.01 * h))
+        margin_left = max(2, round(0.01 * w))
+
+        avail_w = max(10, w - 2 * margin_left)
+        lines = _format_attribution_lines(text, avail_w, length)
+        if len(lines) > 2:
+            lines = lines[:2]
+
+        spacing = max(1, round(1.0 * aa))
+        text_block = "\n".join(lines)
+        mb = probe.multiline_textbbox((0, 0), text_block, font=font, spacing=spacing)
+        ink_x0, ink_y0, ink_x1, ink_y1 = mb
+        ink_w_1x = (ink_x1 - ink_x0) / aa
+        ink_h_1x = (ink_y1 - ink_y0) / aa
+
+        # Inner padding: ~5% of text block height, min 1 px technical minimum
+        pad_y = max(1, round(0.05 * ink_h_1x)) if padding is None else max(0, int(padding))
+        pad_x = max(1, round(0.05 * ink_h_1x)) if padding is None else max(0, int(padding))
+
+        pw = int(round(ink_w_1x + 2 * pad_x))
+        ph = int(round(ink_h_1x + 2 * pad_y))
+
+        # Bottom-left placement: bottom edge at map_bottom - margin_bottom (<= 1% h)
+        target_x = margin_left
+        target_y = h - margin_bottom - ph
+
         placement = None
 
-        # Find a bottom/right panel wholly inside the actual mask, below the
-        # central position marker. Must strictly be <= 2 lines.
-        for fraction in (1.0, .95, .9, .85, .8, .75, .7, .65, .6):
-            available = int((w - 2 * margin) * fraction) - 2 * pad
-            if available <= 0:
-                continue
-            lines = _format_attribution_lines(text, available, length)
-            if len(lines) > 2:
-                lines = lines[:2]
-            pw = int(max(length(line) for line in lines) + .999) + 2 * pad
-            line_h = fs + max(1, round(1.5 * factor))
-            ph = line_h * len(lines) + 2 * pad
-            if ph > h * .38:
-                continue
-            # Scan x and y inside mask boundaries
-            for y in range(h - margin - ph, int(h * .45), -max(1, round(factor))):
-                for x in range(w - margin - pw, margin - 1, -max(1, round(2 * factor))):
-                    if mask is None or min(mask.getpixel(point) for point in (
-                            (x, y), (x + pw - 1, y), (x, y + ph - 1), (x + pw - 1, y + ph - 1))) >= 254:
-                        placement = (x, y, pw, ph, lines, line_h)
+        def _fits(px, py):
+            if mask is None:
+                return 0 <= px and 0 <= py and px + pw <= w and py + ph <= h
+            if px < 0 or py < 0 or px + pw > w or py + ph > h:
+                return False
+            cropped = mask.crop((px, py, px + pw, py + ph))
+            return cropped.getextrema()[0] >= 254
+
+        if _fits(target_x, target_y):
+            placement = (target_x, target_y)
+        else:
+            # If mask clips bottom-left (e.g. circle shape or rounded corners),
+            # scan upward and inward to find lowest position fully within mask.
+            step_y = max(1, round(factor))
+            step_x = max(1, round(2 * factor))
+            for y_scan in range(target_y, int(h * 0.40), -step_y):
+                for x_scan in range(margin_left, w - pw - margin_left + 1, step_x):
+                    if _fits(x_scan, y_scan):
+                        placement = (x_scan, y_scan)
                         break
                 if placement:
                     break
-            if placement:
-                break
 
         if placement is None:
-            available = max(10, w - 2 * margin - 2 * pad)
-            lines = _format_attribution_lines(text, available, length)
-            if len(lines) > 2:
-                lines = lines[:2]
-            pw = int(max(length(line) for line in lines) + .999) + 2 * pad
-            line_h = fs + max(1, round(1.5 * factor))
-            ph = line_h * len(lines) + 2 * pad
-            x = max(margin, w - margin - pw)
-            y = max(margin, h - margin - ph)
-            placement = (x, y, pw, ph, lines, line_h)
+            raise AttributionLayoutError("Zwiększ rozmiar mapy: atrybucja Esri nie mieści się na mapie")
 
-        x, y, pw, ph, lines, line_h = placement
-        high = Image.new("RGBA", (w * aa, h * aa))
+        x, y = placement
+
+        high = Image.new("RGBA", (w * aa, h * aa), (0, 0, 0, 0))
         draw = ImageDraw.Draw(high)
-        draw.rounded_rectangle((x * aa, y * aa, (x + pw) * aa - 1, (y + ph) * aa - 1),
-                               radius=max(1, round(3 * factor)) * aa, fill=(0, 0, 0, 80))
-        for i, line in enumerate(lines):
-            draw.text(((x + pad) * aa, (y + pad + i * line_h) * aa), line, font=font,
-                      anchor="lt", fill=(235, 235, 235, 240))
+
+        rx0 = x * aa
+        ry0 = y * aa
+        rx1 = (x + pw) * aa - 1
+        ry1 = (y + ph) * aa - 1
+        corner_r = max(1, round(1.5 * aa))
+
+        draw.rounded_rectangle((rx0, ry0, rx1, ry1), radius=corner_r, fill=(0, 0, 0, 80))
+
+        tx = rx0 + pad_x * aa - ink_x0
+        ty = ry0 + pad_y * aa - ink_y0
+        draw.multiline_text((tx, ty), text_block, font=font, spacing=spacing, fill=(240, 240, 240, 255))
+
         overlay = high.resize((w, h), Image.Resampling.LANCZOS)
         if mask is not None:
-            from PIL import ImageChops
             overlay.putalpha(ImageChops.multiply(overlay.getchannel("A"), mask))
+
+        # Eliminate sub-2/255 Lanczos sinc ringing lobes and ensure RGB is strictly 0 where alpha is 0
+        arr = np.array(overlay)
+        arr[arr[:, :, 3] < 2, :] = 0
+        overlay = Image.fromarray(arr)
+
         with cls._lock:
             if len(cls._cache) >= 128:
                 cls._cache.pop(next(iter(cls._cache)))

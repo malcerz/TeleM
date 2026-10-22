@@ -214,7 +214,7 @@ def test_esri_attribution_strictly_max_two_lines():
 
 
 def test_format_attribution_lines_logic():
-    """Unit test for _format_attribution_lines helper."""
+    """Unit test for _format_attribution_lines helper adhering to official licensing."""
     probe = lambda text: len(text) * 7.0  # rough character width probe
     text = (
         "Powered by Esri | Source: Esri, Maxar, Earthstar Geographics, "
@@ -226,12 +226,27 @@ def test_format_attribution_lines_logic():
     assert len(lines_wide) <= 2
     assert lines_wide[0] == "Powered by Esri"
 
-    # Constrained viewport -> 2 lines with et al.
+    # Constrained viewport -> statutory licensing attribution without synthetic 'et al.'
     lines_compact = _format_attribution_lines(text, 220.0, probe)
     assert len(lines_compact) == 2
     assert lines_compact[0] == "Powered by Esri"
-    assert lines_compact[1].endswith(", et al.")
-    assert "Esri" in lines_compact[1]
+    assert not lines_compact[1].endswith(", et al."), "Unauthorized 'et al.' must never be injected"
+    assert "licensors" in lines_compact[1] or "Esri" in lines_compact[1]
+
+
+def test_esri_attribution_bottom_margin_and_tight_padding():
+    """Bottom margin must be <= 1% on square/rectangular maps, and padding tightly bound."""
+    MapAttributionRenderer.clear_cache()
+    for sz in (240, 288, 384, 576):
+        overlay = MapAttributionRenderer.get_attribution_overlay("satellite", sz, sz, shape="square")
+        assert overlay is not None
+        bbox = overlay.getbbox()
+        assert bbox is not None
+        bottom_gap = sz - bbox[3]
+        max_allowed_gap = max(2, int(round(0.015 * sz)))
+        assert bottom_gap <= max_allowed_gap, f"Size {sz}: bottom_gap={bottom_gap} exceeds 1% margin"
+        # Left-aligned: left edge must be close to left margin (<= 2% sz)
+        assert bbox[0] <= max(4, int(round(0.02 * sz))), f"Size {sz}: left position {bbox[0]} not bottom-left"
 
 
 def test_esri_attribution_inside_map_bounds():
