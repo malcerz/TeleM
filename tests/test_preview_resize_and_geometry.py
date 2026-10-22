@@ -182,3 +182,64 @@ def test_gui_resize_and_display_change_does_not_interrupt_export():
     tab.showNormal()
     app.processEvents()
     assert tab._rendering is True
+
+
+def test_top_level_hud_window_can_show_hud_tab_and_state_contract():
+    from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout
+    app = QApplication.instance() or QApplication(sys.argv)
+    win = QMainWindow()
+    tabs = QTabWidget(win)
+    win.tabs = tabs
+
+    # Tab 0: Project tab with preview_slot
+    tab0 = QWidget()
+    tab0.preview_slot = QWidget(tab0)
+    QVBoxLayout(tab0.preview_slot)
+    QVBoxLayout(tab0).addWidget(tab0.preview_slot)
+    tabs.addTab(tab0, "Projekt")
+
+    # Tab 1: Render tab with preview_slot
+    preview = VideoPreview()
+    tab0.preview_slot.layout().addWidget(preview)
+    render_tab = RenderTab(preview=preview)
+    tabs.addTab(render_tab, "Render")
+
+    # Tab 2: Settings tab (no preview_slot)
+    tab2 = QWidget()
+    tabs.addTab(tab2, "Ustawienia")
+
+    win.show()
+    tab0.show()
+    tab0.preview_slot.show()
+    preview.show()
+    if preview.stacked_widget:
+        preview.stacked_widget.show()
+
+    hud = TopLevelHUDWindow(preview)
+    preview.hud_overlay = hud
+
+    # 1. Project tab active -> HUD allowed
+    tabs.setCurrentWidget(tab0)
+    assert hud.can_show_hud() is True
+
+    # 2. Settings tab active (no preview_slot) -> HUD strictly forbidden
+    tabs.setCurrentWidget(tab2)
+    assert hud.can_show_hud() is False
+
+    # 3. Render tab active and exporting -> HUD strictly forbidden (export preview uses hud_preview_label)
+    tabs.setCurrentWidget(render_tab)
+    preview.setParent(render_tab.preview_slot)
+    render_tab.preview_slot.layout().addWidget(preview)
+    preview.show()
+    if preview.stacked_widget:
+        preview.stacked_widget.show()
+    render_tab._rendering = True
+    assert hud.can_show_hud() is False
+
+    # 4. Render tab idle -> HUD allowed
+    render_tab._rendering = False
+    assert hud.can_show_hud() is True
+
+    # 5. Minimized main window -> HUD strictly forbidden
+    win.showMinimized()
+    assert hud.can_show_hud() is False

@@ -838,11 +838,8 @@ def build_telemetry_cache(
             slope_arr = _vectorize_step(
                 slope_samples, target_dts, target_ts_arr, ref_dt
             )
-        elif resolve_cache_value is not None:
-            slope_arr = [
-                resolve_cache_value("slope", slope_src, dt, slope_keys[0])
-                for dt in target_dts
-            ]
+        else:
+            slope_arr = [None] * total_frames
     t_slope_ms = (time.perf_counter() - t0_slope) * 1000.0
     _progress("slope")
 
@@ -856,8 +853,6 @@ def build_telemetry_cache(
             fit_field_arrs.append([resolve_current_presentation(samples, dt, name, cfg,
                 active_time_mapper=eff_fit_mapper,
                 timeline=video_timeline) for dt in target_dts])
-        elif resolve_cache_value is not None:
-            fit_field_arrs.append([resolve_cache_value(name, "fit", dt, f"fit_{name}_text") for dt in target_dts])
         else:
             fit_field_arrs.append([None] * total_frames)
     t_fit_ms = (time.perf_counter() - t0_fit) * 1000.0
@@ -873,8 +868,6 @@ def build_telemetry_cache(
         samples = _resolve_cache_samples(field_name, src)
         if samples:
             dynamic_field_arrs.append(_vectorize_step(samples, target_dts, target_ts_arr, ref_dt))
-        elif resolve_cache_value is not None:
-            dynamic_field_arrs.append([resolve_cache_value(field_name, src, dt, key) for dt in target_dts])
         else:
             dynamic_field_arrs.append([None] * total_frames)
     t_imu_ms = (time.perf_counter() - t0_imu) * 1000.0
@@ -899,10 +892,6 @@ def build_telemetry_cache(
                 lean_field_arrs.append(
                     _vectorize_step(s_samples, target_dts, target_ts_arr, ref_dt)
                 )
-            elif resolve_cache_value is not None:
-                lean_field_arrs.append([
-                    resolve_cache_value("slope", s_src, dt, key) for dt in target_dts
-                ])
             else:
                 lean_field_arrs.append([None] * total_frames)
         else:
@@ -921,6 +910,13 @@ def build_telemetry_cache(
                     _vectorize_linear_roll(timeline, target_dts, target_ts_arr, ref_dt)
                 )
             elif resolve_cache_value is not None:
+                if getattr(resolve_cache_value, "__name__", "") == "_resolve_cache_value":
+                    from src.ffmpeg.worker_cache import WORKER_CACHE
+                    fs = WORKER_CACHE.get("field_samples", {}) or {}
+                    has_imu = any(fs.get(f"{p}_{a}_samples") for p in ("accel", "gyro") for a in ("x", "y", "z"))
+                    if not has_imu:
+                        lean_field_arrs.append([None] * total_frames)
+                        continue
                 lean_field_arrs.append([
                     resolve_cache_value(f"lean_roll_{axis}", "gpmf", dt, key)
                     for dt in target_dts

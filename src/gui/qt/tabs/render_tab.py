@@ -1214,15 +1214,12 @@ class RenderTab(QWidget):
             is_nv_selected
             and options.get("nvidia_backend") in ("native_d3d11", "NVIDIA Native D3D11")
         )
+        is_intel = (selected_encoder == "intel")
         amd_use_standard_preview = bool(os.environ.get("TELEM_AMD_USE_NATIVE_PREVIEW") == "1")
         self._export_preview_hevc = bool(hud_on and resolved_amd and not amd_use_standard_preview)
-        self._export_preview_gpu_tap = bool(hud_on and ((resolved_amd and not amd_use_standard_preview) or is_nv_native))
+        self._export_preview_gpu_tap = bool(hud_on and ((resolved_amd and not amd_use_standard_preview) or is_nv_native or is_intel))
         self._export_preview_lightweight = False
-        self._export_preview_native = bool(
-            hud_on and self._uses_native_export_video()
-            and not self._export_preview_hevc
-            and not is_nv_native
-        )
+        self._export_preview_native = False
         if self._export_preview_hevc:
             preview_width = max(2, int(os.environ.get("AMD_EXPORT_PREVIEW_WIDTH", "960")))
             preview_height = max(2, int(round(preview_width * 9 / 16)))
@@ -1242,6 +1239,11 @@ class RenderTab(QWidget):
             self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
             self._preview_device = "NVIDIA native D3D11"
             options["_nvidia_preview_tap"] = lambda buf, w, h, s, f, pts: self._on_amd_gpu_preview_frame(buf, w, h)
+        elif hud_on and is_intel:
+            self._preview_decoder = "native D3D11 GPU frame tap"
+            self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
+            self._preview_device = "Intel native D3D11"
+            options["_intel_preview_tap"] = lambda buf, w, h: self._on_amd_gpu_preview_frame(buf, w, h)
         elif self._export_preview_native:
             self._preview_decoder = "MPV/QMedia"
             self._preview_hardware_decode = "existing preview setting"
@@ -1272,12 +1274,12 @@ class RenderTab(QWidget):
             }
             if self._export_preview_hevc else None
         )
-        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else (960 if (hud_on and is_nv_native) else 0)
-        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else (540 if (hud_on and is_nv_native) else 0)
-        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else (8.0 if (hud_on and is_nv_native) else 0.0)
+        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else (960 if (hud_on and (is_nv_native or is_intel)) else 0)
+        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else (540 if (hud_on and (is_nv_native or is_intel)) else 0)
+        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else (8.0 if (hud_on and (is_nv_native or is_intel)) else 0.0)
         print(
-            f"[EXPORT PREVIEW] enabled={'True' if (self._export_preview_hevc or (hud_on and is_nv_native)) else 'False'} "
-            f"backend={'gpu_frame_tap' if (self._export_preview_hevc or (hud_on and is_nv_native)) else 'disabled'} "
+            f"[EXPORT PREVIEW] enabled={'True' if (self._export_preview_hevc or (hud_on and (is_nv_native or is_intel))) else 'False'} "
+            f"backend={'gpu_frame_tap' if (self._export_preview_hevc or (hud_on and (is_nv_native or is_intel))) else 'disabled'} "
             f"target_fps={preview_fps:g} target_size={preview_w}x{preview_h}",
             flush=True,
         )
@@ -3243,8 +3245,9 @@ class RenderTab(QWidget):
             self.hud_preview_label.setPixmap(
                 pix.scaled(self.hud_preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
+            src_tag = "INTEL_D3D11_FINAL_FRAME" if getattr(self, "_preview_device", "") == "Intel native D3D11" else "final_d3d11_frame"
             self._log_export_preview_once(
-                source="final_d3d11_frame",
+                source=src_tag,
                 has_video_frame=True,
                 has_hud=True,
                 frame_size=f"{qimg.width()}x{qimg.height()}",

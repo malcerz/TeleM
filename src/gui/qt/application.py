@@ -1025,10 +1025,15 @@ def main() -> None:
         dialog_timer = QTimer(window)
         def _inspect_intel_error_dialog():
             dialog = QApplication.activeModalWidget()
-            if isinstance(dialog, QMessageBox) and ("Intel: wybrany kodek" in dialog.text() or "HARNESS_EXECUTOR_INIT_FAILURE" in dialog.text()):
-                bench_result["codec_error_dialog"] = dialog.text()
-                print(f"[BENCH DIALOG] {dialog.text()}", flush=True)
-                dialog.reject()
+            if isinstance(dialog, QMessageBox):
+                txt = dialog.text()
+                if "Plik już istnieje" in txt or "nadpisać" in txt or "zastąpić" in txt:
+                    print(f"[BENCH DIALOG AUTO-YES] {txt}", flush=True)
+                    dialog.accept()
+                elif "Intel: wybrany kodek" in txt or "HARNESS_EXECUTOR_INIT_FAILURE" in txt:
+                    bench_result["codec_error_dialog"] = txt
+                    print(f"[BENCH DIALOG] {txt}", flush=True)
+                    dialog.reject()
         dialog_timer.timeout.connect(_inspect_intel_error_dialog)
         dialog_timer.start(100)
 

@@ -255,6 +255,7 @@ def test_amd_encoder_resolution_gate(qapp, monkeypatch):
         hevc_encode_available=True,
     )
     monkeypatch.setattr("src.ffmpeg.amd_capabilities.get_gpu_capabilities", lambda: mock_caps)
+    monkeypatch.setattr("src.ffmpeg.backend_capabilities.get_available_backends", lambda caps=None: ["auto", "amd", "cpu"])
     rt = RenderTab()
 
     # Switch to CPU: 5.3k and 8k should be enabled

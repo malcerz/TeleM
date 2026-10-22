@@ -1269,6 +1269,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             encoder_profile=options.get("encoder_profile", "balanced"),
             max_frames=options.get("max_frames"),
             export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
+            _intel_preview_tap=options.get("_intel_preview_tap"),
         )
         _sig = inspect.signature(stream_overlay_to_ffmpeg)
         if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _sig.parameters.values()):
@@ -1526,6 +1527,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     on_preview_frame=options.get("_nvidia_preview_tap"),
                     gui_runtime_snapshot=gui_snapshot,
                     export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
+            _intel_preview_tap=options.get("_intel_preview_tap"),
                 )
             else:
                 success = export_nvidia_native_d3d11(
@@ -1550,6 +1552,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     on_preview_frame=options.get("_nvidia_preview_tap"),
                     gui_runtime_snapshot=gui_snapshot,
                     export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
+            _intel_preview_tap=options.get("_intel_preview_tap"),
                 )
             if not success and not self.render_cancel_event.is_set():
                 raise RuntimeError("NVIDIA Native D3D11 export nie powiódł się.")

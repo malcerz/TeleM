@@ -1358,6 +1358,7 @@ def stream_overlay_to_ffmpeg(
                     rotation_degrees=rotation_degrees,
                     container_rotation=container_rotation,
                     export_log_path=export_log_path,
+                    intel_preview_tap=kwargs.get("_intel_preview_tap") or kwargs.get("intel_preview_tap"),
                 )
                 if success:
                     print("[INTEL_NATIVE_RESULT] success=YES", flush=True)

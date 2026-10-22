@@ -259,8 +259,10 @@ class MainWindow(QMainWindow):
                 elif hasattr(self._controller, "refresh_preview_geometry_and_hud"):
                     self._controller.refresh_preview_geometry_and_hud()
         else:
-            if hasattr(self, "preview") and self.preview and hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():
-                self.preview.hud_overlay.hide()
+            if hasattr(self, "preview") and self.preview:
+                self.preview.hide()
+                if hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():
+                    self.preview.hud_overlay.hide()
 
 
     def _connect_controller_signals(self) -> None:
@@ -544,7 +546,14 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() in (QEvent.WindowActivate, QEvent.WindowDeactivate, QEvent.WindowStateChange):
+            if self.isMinimized() and hasattr(self, "preview") and self.preview and hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():
+                self.preview.hud_overlay.hide()
             render_tab = getattr(self, "_render_tab", None)
             notify = getattr(render_tab, "notify_window_state_changed", None)
             if callable(notify):
                 notify()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        if hasattr(self, "preview") and self.preview and hasattr(self.preview, "_hud_alive") and self.preview._hud_alive():
+            self.preview.hud_overlay.hide()

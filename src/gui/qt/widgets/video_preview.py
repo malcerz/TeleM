@@ -142,22 +142,78 @@ class TopLevelHUDWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.hud_pixmap = None
 
+    def can_show_hud(self) -> bool:
+        """Centralny warunek dopuszczalności wyświetlania nakładki HUD."""
+        if not self.parent_preview_widget:
+            return False
+        preview = self.parent_preview_widget
+        main_win = preview.window()
+        if main_win and main_win != preview:
+            if not main_win.isVisible() or main_win.isMinimized():
+                return False
+            # Sprawdź aktywne okna dialogowe (modalne)
+            from PySide6.QtWidgets import QApplication
+            if QApplication.activeModalWidget() is not None:
+                return False
+            # Jeśli tryb pełnoekranowy True Fullscreen jest aktywny, zezwalaj na HUD
+            if getattr(main_win, "_preview_fullscreen", False):
+                return bool(preview.isVisible() and preview.stacked_widget and preview.stacked_widget.isVisible())
+            # Sprawdź aktualną zakładkę w głównym oknie
+            tabs = getattr(main_win, "tabs", None)
+            if tabs is not None:
+                current_tab = tabs.currentWidget()
+                # HUD może być widoczny WYŁĄCZNIE na zakładce posiadającej preview_slot goszczący preview
+                slot = getattr(current_tab, "preview_slot", None)
+                if slot is None:
+                    return False
+                # W trakcie aktywnego eksportu w RenderTab podgląd korzysta z hud_preview_label
+                from src.gui.qt.tabs.render_tab import RenderTab
+                if isinstance(current_tab, RenderTab) and getattr(current_tab, "_rendering", False):
+                    return False
+                if preview.parentWidget() is not slot and preview.parent() is not slot:
+                    return False
+        if not preview.isVisible():
+            return False
+        if not preview.stacked_widget or not preview.stacked_widget.isVisible():
+            return False
+        return True
+
+    def setVisible(self, visible: bool) -> None:
+        if visible and not self.can_show_hud():
+            super().setVisible(False)
+            return
+        super().setVisible(visible)
+
+    def show(self) -> None:
+        if not self.can_show_hud():
+            self.hide()
+            return
+        super().show()
+
+    def raise_(self) -> None:
+        if not self.can_show_hud():
+            self.hide()
+            return
+        super().raise_()
+
     def set_hud_pixmap(self, pixmap):
         self.hud_pixmap = pixmap
+        if not self.can_show_hud():
+            self.hide()
+            return
         self.update()
 
     def sync_geometry(self):
         if not self.parent_preview_widget:
+            return
+        if not self.can_show_hud():
+            self.hide()
             return
         main_win = self.parent_preview_widget.window()
         if main_win and main_win != self and self.parent() != main_win:
             self.setParent(main_win)
             self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowTransparentForInput)
             self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-        if main_win and (main_win.isMinimized() or not self.parent_preview_widget.isVisible()):
-            self.hide()
-            return
 
         if self.parent_preview_widget.stacked_widget:
             widget = self.parent_preview_widget.stacked_widget
@@ -187,11 +243,13 @@ class TopLevelHUDWindow(QWidget):
                 self.setGeometry(gx, gy, gw, gh)
             except Exception:
                 pass
-            if self.parent_preview_widget.is_using_mpv() and self.parent_preview_widget.isVisible():
+            if self.parent_preview_widget.is_using_mpv() and self.can_show_hud():
                 self.show()
                 self.raise_()
 
     def paintEvent(self, event):
+        if not self.can_show_hud():
+            return
         state = getattr(self.parent_preview_widget, "_preparing_state", None)
         if state and state.get("active"):
             # HUD_PREPARING: the video stays visible (mpv) under the dim; no

@@ -710,6 +710,7 @@ def export_intel_native_d3d11(
     inline_gpmf_plan: Optional[Any] = None,
     rotation_degrees: int = 0,
     container_rotation: int = 0,
+    intel_preview_tap: Optional[Any] = None,
     **kwargs: Any,
 ) -> bool:
     """Execute production native Intel D3D11 Video Processor + AV1 QSV video export pipeline."""
@@ -1526,6 +1527,32 @@ def export_intel_native_d3d11(
     elif region_upload_cfg:
         render_print(f"[STREAM INTEL] 1B Region HUD Upload enabled: {len(widget_boxes)} active widget boxes precomputed.", flush=True)
 
+    preview_tap_cb = intel_preview_tap or kwargs.get("intel_preview_tap") or kwargs.get("_intel_preview_tap")
+    preview_worker = None
+    preview_queue = None
+    preview_stop = None
+    if preview_tap_cb is not None:
+        from PIL import Image
+        preview_queue = queue.Queue(maxsize=1)
+        preview_stop = threading.Event()
+        tap_w, tap_h = 960, 540
+
+        def _preview_pump():
+            while not preview_stop.is_set():
+                try:
+                    hud_frame_bytes = preview_queue.get(timeout=0.2)
+                except Exception:
+                    continue
+                try:
+                    img = Image.frombuffer("RGBA", (overlay_w, overlay_h), hud_frame_bytes, "raw", "RGBA", 0, 1)
+                    downscaled = img.resize((tap_w, tap_h), Image.Resampling.BILINEAR)
+                    preview_tap_cb(downscaled.tobytes(), tap_w, tap_h)
+                except Exception:
+                    pass
+
+        preview_worker = threading.Thread(target=_preview_pump, name="intel_preview_tap", daemon=True)
+        preview_worker.start()
+
     eof_reached = False
     error_occurred = False
     finish_rc = 0
@@ -1806,6 +1833,12 @@ def export_intel_native_d3d11(
                         break
 
                     frames_rendered += 1
+                    if preview_queue is not None and (frames_rendered % max(1, int(round(target_fps / 4.0))) == 0):
+                        if step_hud_bytes:
+                            try:
+                                preview_queue.put_nowait(bytes(step_hud_bytes))
+                            except Exception:
+                                pass
                     if frames_rendered == 1 or frames_rendered % 50 == 0:
                         render_print(f"[STREAM INTEL] Rendered frame {frames_rendered}/{total_frames}", flush=True)
                     if frames_rendered == 1:
@@ -1841,6 +1874,10 @@ def export_intel_native_d3d11(
         render_print(f"[STREAM INTEL] EXCEPTION in render loop: {exc}\n{traceback.format_exc()}", flush=True)
         raise
     finally:
+        if preview_stop is not None:
+            preview_stop.set()
+        if preview_worker is not None and preview_worker.is_alive():
+            preview_worker.join(timeout=0.5)
         render_failed = sys.exc_info()[0] is not None
         if render_failed and p_mux is not None and p_mux.poll() is None:
             from src.ffmpeg.streaming import _stop_ffmpeg_process
