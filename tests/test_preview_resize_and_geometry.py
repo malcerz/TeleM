@@ -243,3 +243,61 @@ def test_top_level_hud_window_can_show_hud_tab_and_state_contract():
     # 5. Minimized main window -> HUD strictly forbidden
     win.showMinimized()
     assert hud.can_show_hud() is False
+
+
+def test_tab_switching_export_hud_isolation():
+    from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout
+    app = QApplication.instance() or QApplication(sys.argv)
+    win = QMainWindow()
+    tabs = QTabWidget(win)
+    win.tabs = tabs
+
+    tab0 = QWidget()
+    tab0.preview_slot = QWidget(tab0)
+    QVBoxLayout(tab0.preview_slot)
+    QVBoxLayout(tab0).addWidget(tab0.preview_slot)
+    tabs.addTab(tab0, "Projekt")
+
+    preview = VideoPreview()
+    tab0.preview_slot.layout().addWidget(preview)
+    render_tab = RenderTab(preview=preview)
+    win._render_tab = render_tab
+    tabs.addTab(render_tab, "Rendering")
+
+    tab_settings = QWidget()
+    tabs.addTab(tab_settings, "Ustawienia")
+
+    tab_wczytaj = QWidget()
+    tabs.addTab(tab_wczytaj, "Wczytywanie")
+
+    win.show()
+    hud = TopLevelHUDWindow(preview)
+    preview.hud_overlay = hud
+
+    # Rendering -> Ustawienia -> Projekt -> Wczytywanie -> Rendering during export
+    render_tab._rendering = True
+
+    # 1. Rendering tab
+    tabs.setCurrentWidget(render_tab)
+    assert hud.can_show_hud() is False
+
+    # 2. Ustawienia tab
+    tabs.setCurrentWidget(tab_settings)
+    assert hud.can_show_hud() is False
+
+    # 3. Projekt tab during active render
+    tabs.setCurrentWidget(tab0)
+    assert hud.can_show_hud() is False
+
+    # 4. Wczytywanie tab
+    tabs.setCurrentWidget(tab_wczytaj)
+    assert hud.can_show_hud() is False
+
+    # 5. Back to Rendering tab
+    tabs.setCurrentWidget(render_tab)
+    assert hud.can_show_hud() is False
+
+    # 6. Idle after export completes (switch back to Projekt tab where preview is embedded)
+    tabs.setCurrentWidget(tab0)
+    render_tab._rendering = False
+    assert hud.can_show_hud() is True

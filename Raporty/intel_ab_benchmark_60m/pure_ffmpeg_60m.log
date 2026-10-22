@@ -1,0 +1,57 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\GoPro\2026-10-16\GX010381.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-16T11:06:09.000000Z
+    firmware        : H26.02.04.01.00
+  Duration: 00:20:41.17, start: 0.000000, bitrate: 56289 kb/s
+  Stream group #0:0[0x3]: Track Reference:
+    Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 55843 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro H.265
+        encoder         : GoPro H.265 encoder
+        timecode        : 13:06:09;06
+      Side data:
+        Display Matrix: rotation of -180.00 degrees
+    Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro AAC
+        timecode        : 13:06:09;06
+    Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-16T11:06:09.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 13:06:09;06
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 175 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro MET
+[D3D11VA @ 0000019dae343000] Using device 8086:46a8 (Intel(R) Iris(R) Xe Graphics).
+Stream mapping:
+  Stream #0:0 -> #0:0 (hevc (hevc_qsv) -> hevc (hevc_qsv))
+  Stream #0:1 -> #0:1 (copy)
+Output #0, mp4, to 'C:\_DEV\SportCamHUD\Raporty\intel_ab_benchmark_60m\pure_ffmpeg_60m.mp4':
+  Metadata:
+    firmware        : H26.02.04.01.00
+    encoder         : Lavf63.6.100
+  Stream #0:0(eng): Video: hevc (hev1 / 0x31766568), p010le(pc, bt2020nc/bt2020/arib-std-b67, progressive), 3840x2160 [SAR 1:1 DAR 16:9], q=2-31, 60000 kb/s, 29.97 fps, 30k tbn (default)
+    Metadata:
+      encoder         : Lavc63.8.101 hevc_qsv
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro H.265
+      timecode        : 13:06:09;06
+    Side data:
+      Display Matrix: rotation of -180.00 degrees
+      CPB properties: bitrate max/min/avg: 75000000/0/60000000 buffer size: 150000000 vbv_delay: N/A
+  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+    Metadata:
+      creation_time   : 2026-10-16T11:06:09.000000Z
+      handler_name    : GoPro AAC
+      timecode        : 13:06:09;06
+frame=   14 fps=0.0 q=-0.0 size=    3072KiB time=00:00:01.21 bitrate=20695.9kbits/s speed=2.34x elapsed=0:00:00.51    frame=   47 fps= 46 q=-0.0 size=   12032KiB time=00:00:02.30 bitrate=42780.6kbits/s speed=2.23x elapsed=0:00:01.03    frame=   80 fps= 52 q=-0.0 size=   20224KiB time=00:00:03.41 bitrate=48537.7kbits/s speed=2.21x elapsed=0:00:01.54    frame=  113 fps= 55 q=-0.0 size=   28672KiB time=00:00:04.52 bitrate=51934.3kbits/s speed=2.18x elapsed=0:00:02.07    frame=  143 fps= 55 q=-0.0 size=   36608KiB time=00:00:05.52 bitrate=54276.0kbits/s speed=2.14x elapsed=0:00:02.58    frame=  176 fps= 57 q=-0.0 size=   44032KiB time=00:00:06.61 bitrate=54542.9kbits/s speed=2.13x elapsed=0:00:03.10    frame=  208 fps= 57 q=-0.0 size=   51712KiB time=00:00:07.68 bitrate=55159.5kbits/s speed=2.12x elapsed=0:00:03.61    frame=  238 fps= 58 q=-0.0 size=   59136KiB time=00:00:08.68 bitrate=55794.2kbits/s speed= 2.1x elapsed=0:00:04.13    frame=  270 fps= 58 q=-0.0 size=   66816KiB time=00:00:09.74 bitrate=56143.0kbits/s speed= 2.1x elapsed=0:00:04.64    frame=  304 fps= 59 q=-0.0 size=   74752KiB time=00:00:10.88 bitrate=56283.9kbits/s speed= 2.1x elapsed=0:00:05.16    frame=  335 fps= 59 q=-0.0 size=   82176KiB time=00:00:11.92 bitrate=56450.1kbits/s speed= 2.1x elapsed=0:00:05.68    frame=  366 fps= 59 q=-0.0 size=   89600KiB time=00:00:12.94 bitrate=56682.7kbits/s speed=2.09x elapsed=0:00:06.18    frame=  399 fps= 60 q=-0.0 size=   97024KiB time=00:00:14.05 bitrate=56536.0kbits/s speed= 2.1x elapsed=0:00:06.70    frame=  431 fps= 60 q=-0.0 size=  104960KiB time=00:00:15.12 bitrate=56847.2kbits/s speed=2.09x elapsed=0:00:07.23    frame=  462 fps= 60 q=-0.0 size=  113152KiB time=00:00:16.17 bitrate=57322.4kbits/s speed=2.09x elapsed=0:00:07.74    frame=  493 fps= 60 q=-0.0 size=  120832KiB time=00:00:17.19 bitrate=57567.6kbits/s speed=2.08x elapsed=0:00:08.25    frame=  525 fps= 60 q=-0.0 size=  129024KiB time=00:00:18.26 bitrate=57879.9kbits/s speed=2.08x elapsed=0:00:08.76    frame=  557 fps= 60 q=-0.0 size=  137216KiB time=00:00:19.32 bitrate=58157.8kbits/s speed=2.08x elapsed=0:00:09.28    frame=  589 fps= 60 q=-0.0 size=  145408KiB time=00:00:20.39 bitrate=58406.6kbits/s speed=2.08x elapsed=0:00:09.80    frame=  622 fps= 60 q=-0.0 size=  153088KiB time=00:00:21.50 bitrate=58319.3kbits/s speed=2.08x elapsed=0:00:10.31    frame=  654 fps= 60 q=-0.0 size=  160768KiB time=00:00:22.57 bitrate=58350.6kbits/s speed=2.08x elapsed=0:00:10.82    frame=  687 fps= 60 q=-0.0 size=  169472KiB time=00:00:23.65 bitrate=58681.0kbits/s speed=2.08x elapsed=0:00:11.35    frame=  719 fps= 61 q=-0.0 size=  177152KiB time=00:00:24.72 bitrate=58694.0kbits/s speed=2.08x elapsed=0:00:11.86    frame=  748 fps= 60 q=-0.0 size=  184320KiB time=00:00:25.70 bitrate=58737.7kbits/s speed=2.08x elapsed=0:00:12.37    frame=  779 fps= 60 q=-0.0 size=  192000KiB time=00:00:26.73 bitrate=58841.2kbits/s speed=2.07x elapsed=0:00:12.89    frame=  813 fps= 61 q=-0.0 size=  199936KiB time=00:00:27.86 bitrate=58786.7kbits/s speed=2.08x elapsed=0:00:13.41    frame=  844 fps= 61 q=-0.0 size=  207872KiB time=00:00:28.90 bitrate=58909.9kbits/s speed=2.08x elapsed=0:00:13.92    frame=  876 fps= 61 q=-0.0 size=  216576KiB time=00:00:29.97 bitrate=59192.3kbits/s speed=2.07x elapsed=0:00:14.45    frame=  906 fps= 61 q=-0.0 size=  224256KiB time=00:00:30.97 bitrate=59307.4kbits/s speed=2.07x elapsed=0:00:14.95    frame=  938 fps= 61 q=-0.0 size=  231936KiB time=00:00:32.04 bitrate=59296.6kbits/s speed=2.07x elapsed=0:00:15.47    frame=  973 fps= 61 q=-0.0 size=  240128KiB time=00:00:33.21 bitrate=59222.3kbits/s speed=2.08x elapsed=0:00:15.99    [out#0/mp4 @ 0000019db05d97c0] video:246465KiB audio:1580KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.013806%
+frame= 1000 fps= 61 q=-0.0 Lsize=  248079KiB time=00:01:01.14 bitrate=33238.7kbits/s speed=3.73x elapsed=0:00:16.39    
+bench: utime=2.516s stime=1.141s rtime=16.399s
+bench: maxrss=1088672KiB

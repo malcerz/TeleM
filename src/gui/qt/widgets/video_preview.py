@@ -166,9 +166,16 @@ class TopLevelHUDWindow(QWidget):
                 slot = getattr(current_tab, "preview_slot", None)
                 if slot is None:
                     return False
-                # W trakcie aktywnego eksportu w RenderTab podgląd korzysta z hud_preview_label
+                # W trakcie aktywnego eksportu podgląd korzysta z wewnętrznego hud_preview_label,
+                # a okno nakładki TopLevelHUDWindow musi pozostać bezwzględnie ukryte na wszystkich zakładkach.
                 from src.gui.qt.tabs.render_tab import RenderTab
+                rt = getattr(main_win, "_render_tab", None) or getattr(main_win, "render_tab", None)
+                if rt is not None and getattr(rt, "_rendering", False):
+                    return False
                 if isinstance(current_tab, RenderTab) and getattr(current_tab, "_rendering", False):
+                    return False
+                ctrl = getattr(preview, "controller", None) or getattr(main_win, "_controller", None)
+                if ctrl is not None and (getattr(ctrl, "_rendering", False) or getattr(ctrl, "is_rendering", False)):
                     return False
                 if preview.parentWidget() is not slot and preview.parent() is not slot:
                     return False

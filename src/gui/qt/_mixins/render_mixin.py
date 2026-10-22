@@ -1084,7 +1084,25 @@ class RenderMixin:
             "gyro_y_samples": getattr(self.telemetry, "gyro_y_samples", None),
             "gyro_z_samples": getattr(self.telemetry, "gyro_z_samples", None),
             "gyro_magnitude_samples": getattr(self.telemetry, "gyro_magnitude_samples", None),
+            "accelerometer_array": getattr(self.telemetry, "accelerometer_array", None),
+            "gyroscope_array": getattr(self.telemetry, "gyroscope_array", None),
         }
+        lean_timelines = {}
+        if hasattr(self.telemetry, "_get_lean_roll_samples"):
+            for k, cfg in (layout or {}).get("indicators", {}).items():
+                if isinstance(cfg, dict) and (cfg.get("form") == "lean" or k == "lean_indicator"):
+                    axis = str(cfg.get("axis", "x")).strip().lower()
+                    if axis not in ("x", "y", "z"):
+                        axis = "x"
+                    smooth_s = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
+                    try:
+                        tl = self.telemetry._get_lean_roll_samples(axis, smooth_s)
+                        if tl:
+                            lean_timelines[f"{axis}_{smooth_s:.2f}"] = tl
+                            lean_timelines[k] = tl
+                    except Exception:
+                        pass
+        field_samples["lean_timelines"] = lean_timelines
 
         # Resolve HUD resolution scale policy (Auto -> 75% for Intel 4K, 100% for other)
         from src.ffmpeg.streaming import resolve_hud_resolution_policy

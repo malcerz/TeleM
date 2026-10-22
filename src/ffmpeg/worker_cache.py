@@ -289,6 +289,46 @@ def _worker_lean_roll(axis: str, smoothing_s: float = 0.0) -> list:
     cache: dict = WORKER_CACHE.setdefault("_lean_roll", {})
     if cache_key in cache:
         return cache[cache_key]
+
+    # Fast-path 1: Reuse precomputed lean_timelines passed in field_samples
+    lean_timelines = fs.get("lean_timelines")
+    if isinstance(lean_timelines, dict):
+        if cache_key in lean_timelines:
+            cache[cache_key] = lean_timelines[cache_key]
+            return cache[cache_key]
+        for k, tl in lean_timelines.items():
+            if tl and (k == cache_key or k.startswith(f"lean_roll_{axis}") or k == "lean_indicator"):
+                cache[cache_key] = tl
+                return tl
+
+    # Fast-path 2: Reuse TelemetryDataManager cached roll timeline if available
+    telem = WORKER_CACHE.get("telemetry") or getattr(WORKER_CACHE.get("controller"), "telemetry", None)
+    if telem is not None and hasattr(telem, "_get_lean_roll_samples"):
+        try:
+            timeline = telem._get_lean_roll_samples(axis, smoothing_s)
+            if timeline:
+                cache[cache_key] = timeline
+                return timeline
+        except Exception:
+            pass
+
+    # Fast-path 3: Vectorized NumPy computation from raw arrays if available
+    accel_arr = fs.get("accelerometer_array")
+    gyro_arr = fs.get("gyroscope_array")
+    if accel_arr is not None or gyro_arr is not None:
+        try:
+            from src.telemetry_imu import compute_roll_timeline_from_arrays, smooth_roll_samples
+            timeline = compute_roll_timeline_from_arrays(
+                accel_arr, gyro_arr, roll_axis=axis
+            )
+            if smoothing_s > 0.0 and timeline:
+                timeline = smooth_roll_samples(timeline, smoothing_s)
+            if timeline:
+                cache[cache_key] = timeline
+                return timeline
+        except Exception:
+            pass
+
     from src.telemetry_imu import compute_roll_timeline, merge_axis_samples, smooth_roll_samples
     accel = merge_axis_samples(
         fs.get("accel_x_samples", []), fs.get("accel_y_samples", []),

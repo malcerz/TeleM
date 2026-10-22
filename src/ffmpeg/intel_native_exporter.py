@@ -1438,7 +1438,23 @@ def export_intel_native_d3d11(
     )
     _range_cache["max_distance_m"] = distance_max_m(distance_stream)
 
-    def _hud_init_args(telemetry_cache):
+    def _hud_init_args(telemetry_cache, worker_lean: bool = False):
+        if worker_lean and telemetry_cache is not None:
+            return (
+                overlay_w, overlay_h, font_path, layout, {}, max_distance_m,
+                None, None, None,
+                None, None, None,
+                None, None, None, None,
+                None,
+                None,
+                start_dt_utc, tz_offset_hours,
+                None, None, None,
+                target_fps, 1, total_frames,
+                None, effective_rotation, None, None,
+                hud_rotate_180,
+                telemetry_cache,
+                video_timeline,
+            )
         return (
             overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
             iso_samples, exposure_samples, temperature_samples,
@@ -1531,22 +1547,44 @@ def export_intel_native_d3d11(
     preview_worker = None
     preview_queue = None
     preview_stop = None
+    p010_readback_buf = None
+    req_p010_bytes = (video_width * video_height * 2) + (video_width * (video_height // 2) * 2)
     if preview_tap_cb is not None:
         from PIL import Image
+        import numpy as np
+        import cv2
         preview_queue = queue.Queue(maxsize=1)
         preview_stop = threading.Event()
         tap_w, tap_h = 960, 540
+        p010_readback_buf = (ctypes.c_char * req_p010_bytes)()
 
         def _preview_pump():
+            step_y = max(1, video_height // tap_h)
+            step_x = max(1, video_width // tap_w)
+            y_bytes = video_width * video_height * 2
             while not preview_stop.is_set():
                 try:
-                    hud_frame_bytes = preview_queue.get(timeout=0.2)
+                    payload = preview_queue.get(timeout=0.2)
                 except Exception:
                     continue
                 try:
-                    img = Image.frombuffer("RGBA", (overlay_w, overlay_h), hud_frame_bytes, "raw", "RGBA", 0, 1)
-                    downscaled = img.resize((tap_w, tap_h), Image.Resampling.BILINEAR)
-                    preview_tap_cb(downscaled.tobytes(), tap_w, tap_h)
+                    if isinstance(payload, tuple) and len(payload) == 3:
+                        p010_bytes, pts, pts_sec = payload
+                        if p010_bytes:
+                            y_full = np.frombuffer(p010_bytes[:y_bytes], dtype=np.uint16).reshape((video_height, video_width))
+                            uv_full = np.frombuffer(p010_bytes[y_bytes:], dtype=np.uint16).reshape((video_height // 2, video_width))
+                            y_down = (y_full[::step_y, ::step_x][:tap_h, :tap_w] >> 8).astype(np.uint8)
+                            uv_down = (uv_full[::step_y, ::step_x][:tap_h // 2, :tap_w] >> 8).astype(np.uint8)
+                            yuv = np.vstack([y_down, uv_down])
+                            bgra = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGRA_NV12)
+                            preview_tap_cb(bgra.tobytes(), tap_w, tap_h)
+                            continue
+                    # Fallback to transparent HUD overlay
+                    hud_frame_bytes = payload if isinstance(payload, (bytes, bytearray)) else (payload[0] if isinstance(payload, tuple) else None)
+                    if hud_frame_bytes:
+                        img = Image.frombuffer("RGBA", (overlay_w, overlay_h), hud_frame_bytes, "raw", "RGBA", 0, 1)
+                        downscaled = img.resize((tap_w, tap_h), Image.Resampling.BILINEAR)
+                        preview_tap_cb(downscaled.tobytes(), tap_w, tap_h)
                 except Exception:
                     pass
 
@@ -1607,7 +1645,7 @@ def export_intel_native_d3d11(
             if os.environ.get("TELEM_INTEL_HUD_INIT_BLOB", "1").strip() != "0":
                 try:
                     from src.ffmpeg.shared_memory import WorkerInitBlob, _init_worker_with_shm_blob
-                    init_blob = WorkerInitBlob(init_args)
+                    init_blob = WorkerInitBlob(_hud_init_args(telemetry_cache, worker_lean=True))
 
                     def _close_init_blob(blob=init_blob):
                         blob.close()
@@ -1833,8 +1871,25 @@ def export_intel_native_d3d11(
                         break
 
                     frames_rendered += 1
-                    if preview_queue is not None and (frames_rendered % max(1, int(round(target_fps / 4.0))) == 0):
-                        if step_hud_bytes:
+                    if preview_queue is not None and (frames_rendered % max(1, int(round(target_fps / 2.0))) == 0):
+                        t_tap_0 = time.perf_counter()
+                        tapped = False
+                        if hasattr(native_lib, "intel_d3d11_vp_get_output_frame") and p010_readback_buf is not None:
+                            try:
+                                rc_vp = native_lib.intel_d3d11_vp_get_output_frame(p010_readback_buf, req_p010_bytes)
+                                if rc_vp == 0:
+                                    t_tap_1 = time.perf_counter()
+                                    tap_dur_ms = (t_tap_1 - t_tap_0) * 1000.0
+                                    try:
+                                        preview_queue.put_nowait((bytes(p010_readback_buf), int(out_pts.value), float(out_pts_sec.value)))
+                                        tapped = True
+                                        if frames_rendered == 1 or frames_rendered % 30 == 0:
+                                            render_print(f"[STREAM INTEL PREVIEW TAP] GPU D3D11 frame tap: frame={frames_rendered} pts={out_pts.value} pts_sec={out_pts_sec.value:.3f} readback={tap_dur_ms:.2f}ms", flush=True)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                        if not tapped and step_hud_bytes:
                             try:
                                 preview_queue.put_nowait(bytes(step_hud_bytes))
                             except Exception:
