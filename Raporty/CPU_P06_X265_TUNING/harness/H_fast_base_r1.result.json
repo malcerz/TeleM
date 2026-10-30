@@ -1,0 +1,204 @@
+{
+  "backend": "cpu",
+  "start_frame": 900,
+  "codec": "hevc",
+  "profile": "fast",
+  "cpu_rate_mode": "abr",
+  "intel_path": "native",
+  "mode": "direct",
+  "video": "D:\\GoPro\\GX010370.MP4",
+  "fit": "D:\\GoPro\\2026-10-13_15-02-49.fit",
+  "output": "C:\\_DEV\\SportCamHUD\\Raporty\\CPU_P06_X265_TUNING\\harness\\H_fast_base_r1.mp4",
+  "bitrate": "16M",
+  "max_frames": 300,
+  "success": true,
+  "error": "",
+  "elapsed_s": 27.3,
+  "total_frames": 300,
+  "effective_fps": 10.99,
+  "ram_used_gb": 13.89,
+  "_last_not_ready": "przygotowanie danych HUD (wykresy, telemetria klatek)",
+  "map_preparation": {
+    "generation": 2,
+    "state": "ready",
+    "error": "",
+    "required": 74,
+    "prepared": 74,
+    "downloaded": 0,
+    "elapsed_s": 0.038,
+    "per_consumer": {
+      "track_map": {
+        "preview": {
+          "zoom": 12,
+          "footprint_px": 204,
+          "tiles": 25
+        },
+        "export:cpu": {
+          "zoom": 15,
+          "footprint_px": 815,
+          "tiles": 49
+        }
+      }
+    }
+  },
+  "project_load_until_click_s": 4.842705199996999,
+  "prepare_gui_heartbeat": {
+    "interval_ms": 20,
+    "samples": 199,
+    "max_gap_ms": 253.06689999706578,
+    "p95_gap_ms": 46.52489999716636,
+    "gaps_over_100ms": 4,
+    "stall_samples": []
+  },
+  "pipe_forwarders_after_export": [],
+  "cpu_validation": {
+    "av": {
+      "duration": 10.01,
+      "has_video": true,
+      "has_audio": true,
+      "streams_count": 2,
+      "size_bytes": 24201797,
+      "timing_error": null
+    },
+    "source_color": {
+      "path": "D:\\GoPro\\GX010370.MP4",
+      "kind": "hlg",
+      "codec": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "bit_depth": 10,
+      "color_transfer": "arib-std-b67",
+      "color_primaries": "bt2020",
+      "color_space": "bt2020nc",
+      "color_range": "pc",
+      "full_range": true,
+      "width": 3840,
+      "height": 2160,
+      "fps": "30000/1001",
+      "rotation": 180,
+      "reason": "color_transfer=arib-std-b67 + BT.2020 + full"
+    },
+    "output_color": {
+      "path": "C:\\_DEV\\SportCamHUD\\Raporty\\CPU_P06_X265_TUNING\\harness\\H_fast_base_r1.mp4",
+      "kind": "hlg",
+      "codec": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "bit_depth": 10,
+      "color_transfer": "arib-std-b67",
+      "color_primaries": "bt2020",
+      "color_space": "bt2020nc",
+      "color_range": "pc",
+      "full_range": true,
+      "width": 3840,
+      "height": 2160,
+      "fps": "30000/1001",
+      "rotation": 180,
+      "reason": "color_transfer=arib-std-b67 + BT.2020 + full"
+    },
+    "color_valid": true
+  },
+  "validation": {
+    "valid": true,
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "hevc",
+          "codec_type": "video",
+          "width": 3840,
+          "height": 2160,
+          "avg_frame_rate": "30000/1001",
+          "duration": "10.010000",
+          "nb_frames": "300",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "avg_frame_rate": "0/0",
+          "duration": "9.991333",
+          "nb_frames": "469"
+        }
+      ],
+      "format": {
+        "duration": "10.010000",
+        "size": "24201797"
+      }
+    },
+    "actual_video_frames": 300
+  },
+  "output_size_bytes": 24201797,
+  "stats": {
+    "generation_id": 1,
+    "output_validation": {
+      "duration_s": 10.01,
+      "has_audio": true,
+      "size_bytes": 24201797,
+      "state": "valid"
+    },
+    "png_duration": 0,
+    "total_overlay_frames": 0
+  },
+  "cpu_stream_metrics": {
+    "stream_wall_s": 27.066532600001665,
+    "stream_prepare_s": 0.0006683000028715469,
+    "first_piped_frame_s": 1.0050773000039044,
+    "pipe_first_to_last_s": 24.423532199994952,
+    "pipe_steady_fps": 11.873054827865648,
+    "pipe_steady_window_frames": [
+      31,
+      270
+    ],
+    "ffmpeg_drain_and_finalize_s": 1.818182799994247,
+    "metadata_finalize_s": 0.0015299000006052665,
+    "frames_written": 300,
+    "filter_graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[ov];[base][ov]overlay=0:0:shortest=1:format=yuv420p10[vtemp]",
+    "ffmpeg_trace": [
+      "[graph 0 input from stream 0:0 @ 000001c6a1be8c00] w:3840 h:2160 pixfmt:yuv420p10le tb:1/30000 fr:30000/1001 sar:1/1 csp:bt2020nc range:pc alpha:unspecified",
+      "[graph 0 input from stream 1:0 @ 000001c6a1be9e00] w:3840 h:2160 pixfmt:rgba tb:1001/30000 fr:30000/1001 sar:0/1 csp:unknown range:unknown alpha:unspecified",
+      "[auto_scale_0 @ 000001c6a1be8600] w:iw h:ih flags:'' interl:0",
+      "[Parsed_overlay_2 @ 000001c6a1be8e00] auto-inserting filter 'auto_scale_0' between the filter 'Parsed_setpts_1' and the filter 'Parsed_overlay_2'",
+      "[auto_scale_0 @ 000001c6a1be8600] w:3840 h:2160 fmt:rgba csp:gbr range:pc sar:0/1 -> w:3840 h:2160 fmt:yuva420p10le csp:bt2020nc range:pc sar:0/1 flags:0x00000004",
+      "[auto_scale_0 @ 000001c6a1be8600] [framesync @ 000001c6a61ddd50] Selected 1001/30000 time base",
+      "[auto_scale_0 @ 000001c6a1be8600] [framesync @ 000001c6a61ddd50] Sync level 1",
+      "[Parsed_overlay_2 @ 000001c6a1be8e00] main w:3840 h:2160 fmt:yuv420p10le overlay w:3840 h:2160 fmt:yuva420p10le",
+      "[Parsed_overlay_2 @ 000001c6a1be8e00] [framesync @ 000001c6a3e0ffa8] Selected 1/30000 time base",
+      "[Parsed_overlay_2 @ 000001c6a1be8e00] [framesync @ 000001c6a3e0ffa8] Sync level 2",
+      "x265 [info]: HEVC encoder version 4.3+13-fe9bc85",
+      "x265 [info]: build info [Windows][GCC 16.1.0][64 bit] 10bit",
+      "x265 [info]: using cpu capabilities: MMX2 SSE2Fast LZCNT SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2",
+      "x265 [info]: Main 10 profile, Level-5 (Main tier)",
+      "x265 [info]: Thread pool created using 16 threads",
+      "x265 [info]: frame threads / pool features       : 4 / wpp(68 rows)",
+      "x265 [info]: Slices                              : 1",
+      "x265 [info]: Coding QT: max CU size, min CU size : 32 / 16",
+      "x265 [info]: Residual QT: max TU size, max depth : 32 / 1 inter / 1 intra",
+      "x265 [info]: ME / range / subpel / merge         : dia / 57 / 0 / 2",
+      "x265 [info]: Lookahead / bframes / badapt        : 5 / 3 / 0",
+      "x265 [info]: b-pyramid / weightp / weightb       : 1 / 0 / 0",
+      "x265 [info]: References / ref-limit  cu / depth  : 1 / off / off",
+      "x265 [info]: AQ: mode / str / qg-size / cu-tree  : 1 / 0.0 / 32 / 1",
+      "x265 [info]: Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+      "x265 [info]: tools: rd=2 psy-rd=2.00 early-skip rskip mode=1 tmvp fast-intra",
+      "x265 [info]: tools: strong-intra-smoothing lslices=8 deblock dhdr10-info",
+      "[auto_scale_0 @ 000001c6a1be8600] [framesync @ 000001c6a61ddd50] Sync level 0",
+      "x265 [info]: frame I:      2, Avg QP:28.82  kb/s: 112840.40",
+      "x265 [info]: frame P:     75, Avg QP:30.39  kb/s: 38145.56",
+      "x265 [info]: frame B:    223, Avg QP:33.17  kb/s: 11821.21",
+      "encoded 300 frames in 25.77s (11.64 fps), 19075.76 kb/s, Avg QP:32.45"
+    ]
+  },
+  "prepare_contract": {
+    "label": "",
+    "active": false,
+    "violations": 0,
+    "network_attempts": 0,
+    "kinds": {}
+  }
+}

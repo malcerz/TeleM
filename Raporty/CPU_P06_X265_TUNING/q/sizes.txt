@@ -1,0 +1,8 @@
+11023573 sweeps/q_f_base.mp4
+11107613 sweeps/q_f_bf2.mp4
+11040316 sweeps/q_f_ctu32.mp4
+834509991 sweeps/q_ref_lossless.mp4
+10933366 sweeps/q_u_base.mp4
+10733068 sweeps/q_u_bf1.mp4
+10913341 sweeps/q_u_ft6_lat4.mp4
+10933366 sweeps/q_u_lat4.mp4

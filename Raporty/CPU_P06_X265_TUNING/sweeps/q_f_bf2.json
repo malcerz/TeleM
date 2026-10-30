@@ -1,0 +1,29 @@
+{
+ "tag": "q_f_bf2",
+ "preset": "faster",
+ "x265_params": "bframes=2",
+ "bitrate_kbps_target": 16000,
+ "frames": 150,
+ "rc": 0,
+ "wall_s": 21.11,
+ "wall_fps": 7.105,
+ "first_frame_s": 2.12,
+ "steady_fps": 7.622,
+ "finalize_s": 0.29,
+ "cores_avg": 13.11,
+ "cpu_util_pct_of_16": 81.9,
+ "core_s_per_frame": 1.845,
+ "rss_peak_mb": 4999,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 2 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.26,
+ "x265_kbps": 17744.69,
+ "bytes": 11107613,
+ "errors": []
+}

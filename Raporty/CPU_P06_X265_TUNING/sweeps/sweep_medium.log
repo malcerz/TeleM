@@ -1,0 +1,5 @@
+m_base wall 4.397 steady 4.534 util% 83.8 rssMB 8779 kbps 17425.48 first 3.15 fin 0.43
+m_lat3 wall 4.299 steady 4.567 util% 78.4 rssMB 8609 kbps 17400.77 first 4.17 fin 0.44
+m_lat4 wall 4.58 steady 4.828 util% 80.4 rssMB 4897 kbps 17425.48 first 3.65 fin 0.19
+m_ctu32 wall 4.068 steady 4.156 util% 78.9 rssMB 9127 kbps 17373.62 first 3.65 fin 0.43
+m_base2 wall 4.38 steady 4.515 util% 83.2 rssMB 8783 kbps 17425.48 first 3.16 fin 0.39

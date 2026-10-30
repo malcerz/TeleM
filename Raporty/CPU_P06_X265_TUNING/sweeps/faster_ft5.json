@@ -1,0 +1,29 @@
+{
+ "tag": "faster_ft5",
+ "preset": "faster",
+ "x265_params": "frame-threads=5",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 39.9,
+ "wall_fps": 7.519,
+ "first_frame_s": 2.63,
+ "steady_fps": 7.752,
+ "finalize_s": 0.23,
+ "cores_avg": 13.92,
+ "cpu_util_pct_of_16": 87.0,
+ "core_s_per_frame": 1.851,
+ "rss_peak_mb": 4659,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 5 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.6,
+ "x265_kbps": 19004.98,
+ "bytes": 23788306,
+ "errors": []
+}

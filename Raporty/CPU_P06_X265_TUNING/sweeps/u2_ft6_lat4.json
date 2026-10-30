@@ -1,0 +1,29 @@
+{
+ "tag": "u2_ft6_lat4",
+ "preset": "ultrafast",
+ "x265_params": "frame-threads=6:lookahead-threads=4",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 21.87,
+ "wall_fps": 13.718,
+ "first_frame_s": 1.59,
+ "steady_fps": 14.143,
+ "finalize_s": 0.11,
+ "cores_avg": 14.57,
+ "cpu_util_pct_of_16": 91.1,
+ "core_s_per_frame": 1.062,
+ "rss_peak_mb": 3248,
+ "x265_info": [
+  "Thread pool created using 12 threads",
+  "Thread pool created using 4 threads",
+  "frame threads / pool features       : 6 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 13.89,
+ "x265_kbps": 19321.03,
+ "bytes": 24184236,
+ "errors": []
+}

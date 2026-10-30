@@ -1,0 +1,28 @@
+{
+ "tag": "q_ref_lossless",
+ "preset": "ultrafast",
+ "x265_params": "lossless=1",
+ "bitrate_kbps_target": 16000,
+ "frames": 150,
+ "rc": 0,
+ "wall_s": 22.67,
+ "wall_fps": 6.618,
+ "first_frame_s": 1.6,
+ "steady_fps": 7.032,
+ "finalize_s": 0.19,
+ "cores_avg": 14.48,
+ "cpu_util_pct_of_16": 90.5,
+ "core_s_per_frame": 2.188,
+ "rss_peak_mb": 3604,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control                        : Lossless"
+ ],
+ "x265_fps": 6.73,
+ "x265_kbps": 1333871.83,
+ "bytes": 834509991,
+ "errors": []
+}

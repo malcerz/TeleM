@@ -1,0 +1,31 @@
+{
+ "tag": "faster_pmode",
+ "preset": "faster",
+ "x265_params": "pmode=1",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 50.83,
+ "wall_fps": 5.902,
+ "first_frame_s": 2.65,
+ "steady_fps": 6.066,
+ "finalize_s": 0.28,
+ "cores_avg": 14.27,
+ "cpu_util_pct_of_16": 89.2,
+ "core_s_per_frame": 2.418,
+ "rss_peak_mb": 6072,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows) + pmode",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 5.95,
+ "x265_kbps": 19025.77,
+ "bytes": 23814334,
+ "errors": [
+  "x265 [warning]: Limit reference options 2 and 3 are not supported with pmode. Disabling limit reference"
+ ]
+}

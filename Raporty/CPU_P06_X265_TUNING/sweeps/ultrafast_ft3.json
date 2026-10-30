@@ -1,0 +1,28 @@
+{
+ "tag": "ultrafast_ft3",
+ "preset": "ultrafast",
+ "x265_params": "frame-threads=3",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 24.06,
+ "wall_fps": 12.471,
+ "first_frame_s": 1.6,
+ "steady_fps": 12.891,
+ "finalize_s": 0.14,
+ "cores_avg": 13.31,
+ "cpu_util_pct_of_16": 83.2,
+ "core_s_per_frame": 1.067,
+ "rss_peak_mb": 3008,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 3 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 12.64,
+ "x265_kbps": 19303.94,
+ "bytes": 24162873,
+ "errors": []
+}

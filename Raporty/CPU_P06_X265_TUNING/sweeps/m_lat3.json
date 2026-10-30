@@ -1,0 +1,30 @@
+{
+ "tag": "m_lat3",
+ "preset": "medium",
+ "x265_params": "lookahead-threads=3",
+ "bitrate_kbps_target": 16000,
+ "frames": 150,
+ "rc": 0,
+ "wall_s": 34.89,
+ "wall_fps": 4.299,
+ "first_frame_s": 4.17,
+ "steady_fps": 4.567,
+ "finalize_s": 0.44,
+ "cores_avg": 12.54,
+ "cpu_util_pct_of_16": 78.4,
+ "core_s_per_frame": 2.917,
+ "rss_peak_mb": 8609,
+ "x265_info": [
+  "Thread pool created using 13 threads",
+  "Thread pool created using 3 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 20 / 4 / 2",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 4.37,
+ "x265_kbps": 17400.77,
+ "bytes": 10892379,
+ "errors": []
+}

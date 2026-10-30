@@ -1,0 +1,296 @@
+{
+ "q_u_base": {
+  "digits_text_topleft": {
+   "ssim_y": 0.964408,
+   "psnr_y": 36.623493
+  },
+  "bar_distance": {
+   "ssim_y": 0.976289,
+   "psnr_y": 39.29578
+  },
+  "bar_power": {
+   "ssim_y": 0.950076,
+   "psnr_y": 36.257714
+  },
+  "map_and_track": {
+   "ssim_y": 0.977999,
+   "psnr_y": 37.266132
+  },
+  "compass": {
+   "ssim_y": 0.955509,
+   "psnr_y": 35.531924
+  },
+  "speed_gauge": {
+   "ssim_y": 0.949799,
+   "psnr_y": 35.27955
+  },
+  "chart_cadence": {
+   "ssim_y": 0.950961,
+   "psnr_y": 36.833111
+  },
+  "chart_hr": {
+   "ssim_y": 0.963735,
+   "psnr_y": 37.794954
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.963637,
+   "psnr_y": 36.907884
+  },
+  "full_frame": {
+   "ssim_y": 0.971788,
+   "psnr_y": 39.389486
+  }
+ },
+ "q_u_lat4": {
+  "digits_text_topleft": {
+   "ssim_y": 0.964408,
+   "psnr_y": 36.623493
+  },
+  "bar_distance": {
+   "ssim_y": 0.976289,
+   "psnr_y": 39.29578
+  },
+  "bar_power": {
+   "ssim_y": 0.950076,
+   "psnr_y": 36.257714
+  },
+  "map_and_track": {
+   "ssim_y": 0.977999,
+   "psnr_y": 37.266132
+  },
+  "compass": {
+   "ssim_y": 0.955509,
+   "psnr_y": 35.531924
+  },
+  "speed_gauge": {
+   "ssim_y": 0.949799,
+   "psnr_y": 35.27955
+  },
+  "chart_cadence": {
+   "ssim_y": 0.950961,
+   "psnr_y": 36.833111
+  },
+  "chart_hr": {
+   "ssim_y": 0.963735,
+   "psnr_y": 37.794954
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.963637,
+   "psnr_y": 36.907884
+  },
+  "full_frame": {
+   "ssim_y": 0.971788,
+   "psnr_y": 39.389486
+  }
+ },
+ "q_u_ft6_lat4": {
+  "digits_text_topleft": {
+   "ssim_y": 0.963945,
+   "psnr_y": 36.2923
+  },
+  "bar_distance": {
+   "ssim_y": 0.975862,
+   "psnr_y": 39.138622
+  },
+  "bar_power": {
+   "ssim_y": 0.94861,
+   "psnr_y": 36.140062
+  },
+  "map_and_track": {
+   "ssim_y": 0.9782,
+   "psnr_y": 37.280321
+  },
+  "compass": {
+   "ssim_y": 0.955833,
+   "psnr_y": 35.423972
+  },
+  "speed_gauge": {
+   "ssim_y": 0.947565,
+   "psnr_y": 34.931357
+  },
+  "chart_cadence": {
+   "ssim_y": 0.949171,
+   "psnr_y": 36.615634
+  },
+  "chart_hr": {
+   "ssim_y": 0.963129,
+   "psnr_y": 37.618623
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.96179,
+   "psnr_y": 36.481372
+  },
+  "full_frame": {
+   "ssim_y": 0.971151,
+   "psnr_y": 39.173752
+  }
+ },
+ "q_u_bf1": {
+  "digits_text_topleft": {
+   "ssim_y": 0.964715,
+   "psnr_y": 36.637105
+  },
+  "bar_distance": {
+   "ssim_y": 0.975386,
+   "psnr_y": 39.106313
+  },
+  "bar_power": {
+   "ssim_y": 0.948228,
+   "psnr_y": 36.052105
+  },
+  "map_and_track": {
+   "ssim_y": 0.978456,
+   "psnr_y": 37.377781
+  },
+  "compass": {
+   "ssim_y": 0.956208,
+   "psnr_y": 35.499184
+  },
+  "speed_gauge": {
+   "ssim_y": 0.948276,
+   "psnr_y": 35.168229
+  },
+  "chart_cadence": {
+   "ssim_y": 0.947711,
+   "psnr_y": 36.550787
+  },
+  "chart_hr": {
+   "ssim_y": 0.962286,
+   "psnr_y": 37.598153
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.963828,
+   "psnr_y": 37.057274
+  },
+  "full_frame": {
+   "ssim_y": 0.97051,
+   "psnr_y": 39.19232
+  }
+ },
+ "q_f_base": {
+  "digits_text_topleft": {
+   "ssim_y": 0.983648,
+   "psnr_y": 38.500977
+  },
+  "bar_distance": {
+   "ssim_y": 0.986045,
+   "psnr_y": 41.35169
+  },
+  "bar_power": {
+   "ssim_y": 0.965283,
+   "psnr_y": 37.827648
+  },
+  "map_and_track": {
+   "ssim_y": 0.987642,
+   "psnr_y": 39.454911
+  },
+  "compass": {
+   "ssim_y": 0.977921,
+   "psnr_y": 37.561746
+  },
+  "speed_gauge": {
+   "ssim_y": 0.963483,
+   "psnr_y": 36.353998
+  },
+  "chart_cadence": {
+   "ssim_y": 0.96446,
+   "psnr_y": 38.410724
+  },
+  "chart_hr": {
+   "ssim_y": 0.974378,
+   "psnr_y": 39.417247
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.983446,
+   "psnr_y": 39.650641
+  },
+  "full_frame": {
+   "ssim_y": 0.978706,
+   "psnr_y": 40.61976
+  }
+ },
+ "q_f_ctu32": {
+  "digits_text_topleft": {
+   "ssim_y": 0.983406,
+   "psnr_y": 38.431388
+  },
+  "bar_distance": {
+   "ssim_y": 0.985474,
+   "psnr_y": 41.191188
+  },
+  "bar_power": {
+   "ssim_y": 0.965522,
+   "psnr_y": 37.77974
+  },
+  "map_and_track": {
+   "ssim_y": 0.987696,
+   "psnr_y": 39.422247
+  },
+  "compass": {
+   "ssim_y": 0.978032,
+   "psnr_y": 37.582824
+  },
+  "speed_gauge": {
+   "ssim_y": 0.963445,
+   "psnr_y": 36.347785
+  },
+  "chart_cadence": {
+   "ssim_y": 0.963971,
+   "psnr_y": 38.356775
+  },
+  "chart_hr": {
+   "ssim_y": 0.974299,
+   "psnr_y": 39.377037
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.982989,
+   "psnr_y": 39.57673
+  },
+  "full_frame": {
+   "ssim_y": 0.978335,
+   "psnr_y": 40.533181
+  }
+ },
+ "q_f_bf2": {
+  "digits_text_topleft": {
+   "ssim_y": 0.984085,
+   "psnr_y": 38.599311
+  },
+  "bar_distance": {
+   "ssim_y": 0.986537,
+   "psnr_y": 41.428184
+  },
+  "bar_power": {
+   "ssim_y": 0.966619,
+   "psnr_y": 37.957633
+  },
+  "map_and_track": {
+   "ssim_y": 0.98729,
+   "psnr_y": 39.378864
+  },
+  "compass": {
+   "ssim_y": 0.978643,
+   "psnr_y": 37.573384
+  },
+  "speed_gauge": {
+   "ssim_y": 0.96522,
+   "psnr_y": 36.543809
+  },
+  "chart_cadence": {
+   "ssim_y": 0.965241,
+   "psnr_y": 38.466303
+  },
+  "chart_hr": {
+   "ssim_y": 0.975043,
+   "psnr_y": 39.520005
+  },
+  "battery_digits_bar": {
+   "ssim_y": 0.98385,
+   "psnr_y": 39.798845
+  },
+  "full_frame": {
+   "ssim_y": 0.979264,
+   "psnr_y": 40.751279
+  }
+ }
+}

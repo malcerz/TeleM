@@ -1,0 +1,29 @@
+{
+ "tag": "faster_ft3",
+ "preset": "faster",
+ "x265_params": "frame-threads=3",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 40.22,
+ "wall_fps": 7.459,
+ "first_frame_s": 2.62,
+ "steady_fps": 7.72,
+ "finalize_s": 0.21,
+ "cores_avg": 13.76,
+ "cpu_util_pct_of_16": 86.0,
+ "core_s_per_frame": 1.845,
+ "rss_peak_mb": 4336,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 3 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.53,
+ "x265_kbps": 19082.59,
+ "bytes": 23885420,
+ "errors": []
+}

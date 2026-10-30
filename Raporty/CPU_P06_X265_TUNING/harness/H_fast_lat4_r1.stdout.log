@@ -1,0 +1,383 @@
+[HARNESS CONFIG] private=C:\Users\Malcerz\AppData\Local\Temp\SportCamHUD_harness_jdr9hev_ source=C:\_DEV\SportCamHUD\def_layout.json sha256=0cd2a07e49f6a2ff32a24736112bc495b408a78e3cc72c9cc39b8f52f2ebfc8f
+[GPU CAPABILITIES]
+Adapter: AMD Radeon (TM) Graphics
+Vendor: AMD
+DeviceId: 0x15e7
+Driver: 31.0.21925.1001
+Encoder: AMF HEVC
+HEVC Main10: NO
+Max encode: 4096x4096
+Cache: HIT
+Probe: 54.14 ms
+[FONT RESOLVER] requested='Arial' -> resolved='C:\Windows\Fonts\arial.ttf'
+[FONT RESOLVER] requested='Digital-7 Mono' -> resolved='C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf'
+[Controller] Przywrócono font: 'Digital-7 Mono' -> 'C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf'
+[Controller] Akceleracja GPU aktywna: gfx90c
+[INTEL] Probing hardware QSV encoders with C:\_DEV\SportCamHUD\runtime\common\ffmpeg\ffmpeg.exe...
+[INTEL_CAPABILITY] codec=h264_qsv format=nv12 usable=False detail=[D3D11VA @ 0000029538a7f380] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_qsv format=nv12 usable=False detail=[D3D11VA @ 00000216645c1700] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=hevc_main10 format=p010le usable=False detail=[D3D11VA @ 000001e3bc8bf3c0] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[INTEL_CAPABILITY] codec=av1_qsv format=p010le usable=False detail=[D3D11VA @ 000002bb0c8ee8c0] Failed to find d3d11va adapter by vendor id 0x8086
+Device creation failed: -1313558101.
+Failed to set value 'd3d11va=intel_probe:,vendor_id=0x8086' for option 'init_hw_device': Unknown error occurred
+Error parsing global options: Unknown error occurred
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[PREVIEW RESOURCE SNAPSHOT]
+{"d3d11_mf_preview_resources": "idle-player-owned", "ffmpeg_child_pids": [], "ffmpeg_render_state": {"alive": false, "pid": null}, "label": "A_fresh_before_render", "mpv_state": {"exists": false, "type": null}, "open_handles": 584, "opencv_active_decoders": 0, "opencv_decoder_cache": {"count": 0, "paths": []}, "pending_timestamp": null, "pid": 12108, "preview_generation_id": 0, "preview_stop_event": {"id": 2381747143248, "set": false}, "preview_threads": [], "preview_worker": {"alive": false, "id": null}, "private_or_commit_bytes": 742182912, "producer_state": {"holder_keys": []}, "pump_state": {"holder_keys": []}, "qmedia_state": {"exists": false, "state": null, "type": null}, "render_cancel_event": {"id": 140720356272960, "set": false}, "render_generation_id": 0, "request_sequence": 0, "rss_bytes": 203735040, "thread_count": 26}
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[Controller] MPV zinicjalizowany pomyœlnie (GPU: AMD, hwdec=d3d11va,dxva2,auto)
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[ExportQueue] Initialized
+[BENCH] Loading project: GX010370.MP4 + 2026-10-13_15-02-49.fit (mode=direct)
+[TELEMETRY CACHE] source=GX010370.MP4 key=GX010370_b83962cac16dc802 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010370_b83962cac16dc802\telem_time.json (telem_time)
+[TELEMETRY VALIDATION] VALIDATION_VIDEO_TIME_OBJECT=candidate_video_probe VALIDATION_VIDEO_TIME_SOURCE=gpmf_candidate_paths paths=1 range=2026-10-13 13:02:52.801750+00:00..2026-10-13 13:05:55.517617+00:00
+[GarminConnect] GARMIN_AUTH=CONNECTED
+[MAP GPS SOURCE] {"requested": "auto", "selected": "none", "fallback": "", "sources": {"fit": {"source": "fit", "input": 0, "valid": 0, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": null}, "gpx": {"source": "gpx", "input": 0, "valid": 0, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": null}, "gpmf": {"source": "gpmf", "input": 0, "valid": 0, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": null}}}
+[INDICATOR AVAILABILITY] key=alt_text visible=False reason="no source available (configured=fit)"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="hybrid compass (prepared result or unavailable state)"
+[INDICATOR AVAILABILITY] key=exposure_text visible=False reason="no source available (configured=gpmf)"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=False reason="no FIT dataset loaded"
+[INDICATOR AVAILABILITY] key=iso_text visible=False reason="no source available (configured=gpmf)"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=False reason="no IMU / gyro / accelerometer data available"
+[INDICATOR AVAILABILITY] key=speed_text visible=False reason="no source available (configured=fit)"
+[INDICATOR AVAILABILITY] key=temp_text visible=False reason="no source available (configured=gpmf)"
+[INDICATOR AVAILABILITY] key=time_display visible=False reason="no project timeline or duration"
+[INDICATOR AVAILABILITY] key=track_map visible=False reason="source=none"
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'D:/GoPro/GX010370.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2026-10-13T13:02:53.000000Z
+    firmware        : H26.02.02.02.00
+  Duration: 00:03:02.72, start: 0.000000, bitrate: 52474 kb/s
+  Stream #0:0[0x1](eng): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(pc, bt2020nc/bt2020/arib-std-b67), 3840x2160 [SAR 1:1 DAR 16:9], 52025 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+      Metadata:
+        creation_time   : 2026-10-13T13:02:53.000000Z
+        handler_name    : GoPro H.265
+        vendor_id       : [0][0][0][0]
+        encoder         : GoPro H.265 encoder
+        timecode        : 15:02:53;12
+      Side data:
+        displaymatrix: rotation of -180.00 degrees
+  Stream #0:1[0x2]: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 253 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-13T13:02:53.000000Z
+        handler_name    : GoPro AAC
+        vendor_id       : [0][0][0][0]
+        timecode        : 15:02:53;12
+  Stream #0:2[0x3](eng): Data: none (tmcd / 0x64636D74) (default)
+      Metadata:
+        creation_time   : 2026-10-13T13:02:53.000000Z
+        handler_name    : GoPro TCD
+        timecode        : 15:02:53;12
+  Stream #0:3[0x4](eng): Data: bin_data (gpmd / 0x646D7067), 179 kb/s (default)
+      Metadata:
+        creation_time   : 2026-10-13T13:02:53.000000Z
+        handler_name    : GoPro MET
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[HDR] source color kind=hlg error=-
+[HDR GUI] source kind=hlg hdr_selector=VISIBLE mode=preserve_hlg
+[ProjectLayout] Wczytano uk³ad ze Startowego presetu: C:/_DEV/SportCamHUD/def_layout.json
+[MultiFile Load] Rozpoczynanie wczytywania telemetrii dla 1 klip(ów)...
+[DJI LOAD] stage=detect start
+[DJI LOAD] stage=detect end wall_time=41.1ms source=gopro_gpmf
+[Telemetry] camera source: GoPro GPMF file=GX010370.MP4
+[TMPC Cache] read_count=183
+[TELEMETRY CACHE] source=GX010370.MP4 key=GX010370_b83962cac16dc802 status=HIT path=C:\Users\Malcerz\AppData\Local\SportCamHUD\cache\media\GX010370_b83962cac16dc802\telemetry.npz
+[Telemetry Cache] PROCESSED HIT file=telemetry.npz
+[GPMF LOAD]
+SOURCE=D:\GoPro\GX010370.MP4
+CACHE_HIT=True
+NATIVE_MODULE_AVAILABLE=True
+NATIVE_PARSE_OK=False
+GPS_SAMPLES=1827
+ACC_SAMPLES=36312
+GYRO_SAMPLES=36312
+ISO_SAMPLES=5476
+TEMP_SAMPLES=183
+NATIVE_CHANNELS_USED=-
+PYTHON_FALLBACK_CHANNELS=-
+NATIVE_RESULT_ACCEPTED=False
+FALLBACK_REASON=processed_cache
+PARSE_MS=0.00
+CACHE_LOAD_MS=70.24
+[LoadProfile] stage=gpmf_decode_ms elapsed_ms=70.31 thread=Thread-23 (bg_load)/30356 input_bytes=1198487674 records=0
+[LoadProfile] stage=clip_load_1_ms elapsed_ms=70.35 thread=Thread-23 (bg_load)/30356 input_bytes=1198487674 records=0
+[TMPC Telemetry] temperature_samples=183
+[SmartSync] absolute_overlap=yes WARNING: trajectory alignment rejected: baseline=0.000s candidate=8.400s matched=79/84 coverage=0.94 median_error=66.4m p90_error=453.4m
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[7537.48]
+normalized_final=7537.48
+session_total=7537.48
+match=True
+[MultiFile] project_duration=182.715867 s clip_count=1 (canonical, emitted to seek bar)
+[MultiFile] Timeline: 1 clips, project_duration=182.7s
+[MultiFile] Clip 1/1
+  path=GX010370.MP4
+  global=0.000-182.716
+  absolute=2026-10-13T13:02:52.801-2026-10-13T13:05:55.517
+  source=gpmf_gps9 reliable=True quality=exact
+  detail=resolved from native gpmf light metadata (2026-10-13 13:02:52.802)
+[FIT DISTANCE NORMALIZE]
+segments=1
+resets=0
+segment_ends=[7537.48]
+normalized_final=7537.48
+session_total=7537.48
+match=True
+[TelemetrySync] offset=+0.000s clip_offsets={} fit=yes gpx=no rederive_ms=32.3
+[MAP GPS SOURCE] {"requested": "auto", "selected": "fit", "fallback": "", "sources": {"fit": {"source": "fit", "input": 1463, "valid": 1463, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": {"lat_min": 54.33111841790378, "lat_max": 54.36577926389873, "lon_min": 18.60025467351079, "lon_max": 18.643350061029196}}, "gpx": {"source": "gpx", "input": 0, "valid": 0, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": null}, "gpmf": {"source": "gpmf", "input": 1827, "valid": 1827, "rejected": 0, "invalid": 0, "isolated_jumps": 0, "bounds": {"lat_min": 54.3614513, "lat_max": 54.3680398, "lon_min": 18.620618, "lon_max": 18.6369152}}}}
+[INDICATOR AVAILABILITY] key=alt_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=compass visible=True reason="hybrid compass (prepared result or unavailable state)"
+[INDICATOR AVAILABILITY] key=exposure_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=fit_K1_text visible=False reason="field 'K1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_K2_text visible=False reason="field 'K2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_2_1_text visible=False reason="field 'battery_pct_2_1' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_3_2_text visible=False reason="field 'battery_pct_3_2' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_battery_pct_text visible=True reason="source=fit (field=battery_pct)"
+[INDICATOR AVAILABILITY] key=fit_cadence_text visible=True reason="source=fit (field=cadence)"
+[INDICATOR AVAILABILITY] key=fit_curVpower_text visible=True reason="source=fit (field=curVpower)"
+[INDICATOR AVAILABILITY] key=fit_discharge_text visible=False reason="field 'discharge' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_distance_text visible=True reason="source=fit (field=distance)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_altitude_text visible=True reason="source=fit (field=enhanced_altitude)"
+[INDICATOR AVAILABILITY] key=fit_enhanced_speed_text visible=True reason="source=fit (field=enhanced_speed)"
+[INDICATOR AVAILABILITY] key=fit_fractional_cadence_text visible=True reason="source=fit (field=fractional_cadence)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_percent_text visible=True reason="source=fit (field=garmin_battery_percent)"
+[INDICATOR AVAILABILITY] key=fit_garmin_battery_voltage_text visible=True reason="source=fit (field=garmin_battery_voltage)"
+[INDICATOR AVAILABILITY] key=fit_garmin_temperature_text visible=True reason="source=fit (field=garmin_temperature)"
+[INDICATOR AVAILABILITY] key=fit_gopro_battery_text visible=True reason="source=fit (field=gopro_battery)"
+[INDICATOR AVAILABILITY] key=fit_heart_rate_text visible=True reason="source=fit (field=heart_rate)"
+[INDICATOR AVAILABILITY] key=fit_passing_speed_text visible=False reason="field 'passing_speed' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_passing_speedabs_text visible=False reason="field 'passing_speedabs' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_radar_current_text visible=False reason="field 'radar_current' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_pct_text visible=False reason="field 'solar_pct' not in discovered FIT fields"
+[INDICATOR AVAILABILITY] key=fit_solar_text visible=True reason="source=fit (field=solar)"
+[INDICATOR AVAILABILITY] key=fit_temperature_text visible=True reason="source=fit (field=temperature)"
+[INDICATOR AVAILABILITY] key=iso_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=lean_indicator visible=True reason="source=imu"
+[INDICATOR AVAILABILITY] key=speed_text visible=True reason="source=fit"
+[INDICATOR AVAILABILITY] key=temp_text visible=True reason="source=gpmf"
+[INDICATOR AVAILABILITY] key=time_display visible=True reason="project timeline available"
+[INDICATOR AVAILABILITY] key=track_map visible=True reason="source=fit"
+[COMPASS HYBRID] {"status": "ok", "reference_source": "fit", "clips": [{"status": "ok", "segments": [{"status": "ok", "attempts": [{"window_seconds": 30.0, "status": "backward drift uncertainty requires a longer calibration", "samples": 31}, {"window_seconds": 60, "status": "ok", "samples": 61}], "model": {"offset_deg": 166.94509973214645, "drift_deg_s": 0.0, "drift_applied": false, "drift_standard_error": 0.01812850849976827, "drift_rate_bound_deg_s": 0.08373006100695699, "origin_ts": 1791896698.2166667, "error_median_deg": 1.8847586168868702, "error_p95_deg": 4.958375898279055, "error_max_deg": 7.689554479500941, "accepted_samples": 59, "rejected_samples": 2, "backward_uncertainty_deg": 11.612771581168039, "turn_correlation": 0.8944881359619341, "stable_fix_ts": 1791896638.0, "calibration_start_ts": 1791896668.0, "calibration_end_ts": 1791896728.0, "window_seconds": 60.0}, "reconstructed_start_ts": 1791896572.80175}], "valid_percent": 100.0, "reconstructed_percent": 84.93870402802102, "method": "GYRO+ACCL quaternion", "imu_segments": 1, "integration_hz": 100, "CORI_rejection": {"reason": "CORI gravity-frame consistency failed", "gravity_p95_deg": 23.168680144565926}, "independent_gps_samples": 125, "gps_rejected": 3, "orientation_reader_cache_hit": false, "memory_bytes": 584704, "rigid_mount_assumption": true, "file": "D:\\GoPro\\GX010370.MP4", "cache_key": "c8813e13d6341b918b0bfce670dc0070647a2a5486d6480ce00105300dac0ed3", "cache_hit": true, "reference_source": "fit"}], "prepare_seconds": 0.005846799998835195, "axis_memory_bytes": 292368, "algorithm_version": 3}
+[AUTO ENCODER]
+available=['amd', 'cpu']
+selected=amd
+[PROJECT MAP PREPARE] request reason=telemetry_loaded consumers=['preview:959', 'export:amd:3840']
+[MAP GPS TILES] source=fit points=1463 unique_tiles=74 consumers={'preview': {'zoom': 12, 'footprint_px': 204, 'tiles': 25}, 'export:amd': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}}
+[PROJECT MAP PREPARE] schedule generation=1 required=74 maps=[('track_map', 'satellite', 74, {'preview': {'zoom': 12, 'footprint_px': 204, 'tiles': 25}, 'export:amd': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}})]
+[LEAN PREPARE] start key=y_0.90 generation=0
+[PROJECT PREPARATION] state=preparing reason=trwa przygotowanie osi Lean (lean_indicator)
+[BENCH] waiting for READY: trwa przygotowanie osi Lean (lean_indicator)
+[LEAN PREPARE] end key=y_0.90 generation=0 current_generation=0 state=ready samples=36312 error='' callbacks=1 background_ms=296.8
+[PROJECT PREPARATION] state=preparing reason=przygotowanie mapy 0/74
+[PROJECT HUD DATA PREPARE] start frames=5476
+[BENCH] waiting for READY: przygotowanie mapy 0/74
+[BENCH] waiting for READY: przygotowanie mapy 24/74
+[INTEL START STAGE] charts_begin qpc_s=57560.199480300
+[INTEL START STAGE] charts_end qpc_s=57560.206667100
+[INTEL START STAGE] parent_worker_init_begin qpc_s=57560.206983700
+[INTEL START STAGE] telemetry_cache_begin qpc_s=57560.210385400
+[BENCH] waiting for READY: przygotowanie mapy 48/74
+[HUD PREP LEAN] stage=lean_vectorize keys=('lean_indicator',) frames=5476 elapsed_ms=16.63
+[HUD PREP COLUMNS] fit_columns=10 skipped_disabled=['fit_K1_text', 'fit_K2_text', 'fit_battery_pct_2_1_text', 'fit_battery_pct_3_2_text', 'fit_discharge_text', 'fit_enhanced_altitude_text', 'fit_enhanced_speed_text', 'fit_fractional_cadence_text', 'fit_garmin_battery_voltage_text', 'fit_garmin_temperature_text', 'fit_passing_speed_text', 'fit_passing_speedabs_text', 'fit_radar_current_text'] empty_sources=[] frames=5476
+[INTEL START STAGE] telemetry_cache_end qpc_s=57560.438229400
+[BENCH] waiting for READY: przygotowanie mapy 72/74
+[PROJECT MAP PREPARE] READY {'generation': 1, 'ok': True, 'error': '', 'required': 74, 'downloaded': 74, 'elapsed_s': 1.479}
+[PROJECT PREPARATION] state=preparing reason=przygotowanie danych HUD (wykresy, telemetria klatek)
+[INTEL HUD DATA] prepared frames=5476 build_s=0.47
+[MPV HW] OSTRZE¯ENIE: Dekodowanie PROGRAMOWE (brak akceleracji sprzêtowej). SprawdŸ GPU/sterowniki.
+          hwdec-current=None, codec=None
+[BENCH] waiting for READY: przygotowanie danych HUD (wykresy, telemetria klatek)
+[PROJECT HUD DATA PREPARE] READY frames=5476 elapsed_s=1.47
+[PROJECT PREPARATION] state=ready reason=
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[PROJECT MAP PREPARE] request reason=export_target_change consumers=['preview:959', 'export:cpu:3840']
+[MAP GPS TILES] source=fit points=1463 unique_tiles=74 consumers={'preview': {'zoom': 12, 'footprint_px': 204, 'tiles': 25}, 'export:cpu': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}}
+[PROJECT MAP PREPARE] schedule generation=2 required=74 maps=[('track_map', 'satellite', 74, {'preview': {'zoom': 12, 'footprint_px': 204, 'tiles': 25}, 'export:cpu': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}})]
+[PREVIEW RESOURCE RELEASE] reason=checkbox_off worker_alive=0
+[PROJECT MAP PREPARE] READY {'generation': 2, 'ok': True, 'error': '', 'required': 74, 'downloaded': 0, 'elapsed_s': 0.035}
+[INTEL HUD DATA] prepared data does not match this export: ['layout', ["layout._indicator_availability: {'alt_text': True, 'exposure_text': True, 'fit_K1_text': Fal -> <missing>", "layout.integrations: {'auto_activity_source': 'garmin'} -> <missing>", 'layout.telemetry_sync_method: none -> <missing>', 'layout.telemetry_sync_offset_s: 0.0 -> <missing>']]
+[PROJECT HUD DATA PREPARE] start frames=5476
+[PROJECT PREPARATION] state=preparing reason=przygotowanie danych HUD (wykresy, telemetria klatek)
+[INTEL START STAGE] charts_begin qpc_s=57561.843936200
+[INTEL START STAGE] charts_end qpc_s=57561.854223000
+[INTEL START STAGE] parent_worker_init_begin qpc_s=57561.854612300
+[INTEL START STAGE] telemetry_cache_begin qpc_s=57561.858281000
+[HUD PREP LEAN] stage=lean_vectorize keys=('lean_indicator',) frames=5476 elapsed_ms=16.84
+[HUD PREP COLUMNS] fit_columns=10 skipped_disabled=['fit_K1_text', 'fit_K2_text', 'fit_battery_pct_2_1_text', 'fit_battery_pct_3_2_text', 'fit_discharge_text', 'fit_enhanced_altitude_text', 'fit_enhanced_speed_text', 'fit_fractional_cadence_text', 'fit_garmin_battery_voltage_text', 'fit_garmin_temperature_text', 'fit_passing_speed_text', 'fit_passing_speedabs_text', 'fit_radar_current_text'] empty_sources=[] frames=5476
+[INTEL START STAGE] telemetry_cache_end qpc_s=57562.089491200
+[INTEL HUD DATA] prepared frames=5476 build_s=0.47
+[PROJECT HUD DATA PREPARE] READY frames=5476 elapsed_s=1.50
+[PROJECT PREPARATION] state=ready reason=
+[BENCH] Project READY {"generation": 2, "state": "ready", "error": "", "required": 74, "prepared": 74, "downloaded": 0, "elapsed_s": 0.035, "per_consumer": {"track_map": {"preview": {"zoom": 12, "footprint_px": 204, "tiles": 25}, "export:cpu": {"zoom": 15, "footprint_px": 815, "tiles": 49}}}}; clicking Start
+[BENCH] Triggering direct render...
+[STARTUP TIMELINE] event='GUI Render clicked' t=57562.796869s
+[STARTUP TIMELINE] event='GUI dispatch begin' t=57562.796898s
+[PREVIEW RESOURCE RELEASE] reason=new_render worker_alive=0
+[EXPORT PREVIEW] enabled=False backend=disabled target_fps=0 target_size=0x0
+[QUEUE DISPATCH] ts=2026-10-30 09:48:12.794 (1793350092.7947) thread=MainThread/15176 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\CPU_P06_X265_TUNING\harness\H_fast_lat4_r1.mp4 input_videos=[] encoder=cpu render_mode=gpu
+[STARTUP TIMELINE] event='GUI dispatch end' t=57562.827621s
+[STARTUP TIMELINE] stage='GUI dispatch' duration=30.723ms notes=
+[STARTUP TIMELINE] event='snapshot begin' t=57562.827657s
+[EXPORT LOG] enabled=True backend=cpu path=C:\_DEV\SportCamHUD\Raporty\CPU_P06_X265_TUNING\harness\H_fast_lat4_r1.log
+[MAP GPS TILES] source=fit points=1463 unique_tiles=49 consumers={'export:cpu': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}}
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.0s
+[PREPARE CONTRACT] map gate backend=cpu consumer=export:cpu required=49 missing=0 per_map=[('track_map', 'satellite', {'export:cpu': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}})]
+[PREPARE CONTRACT] export consumes prepared map tiles=49
+[PREPARE CONTRACT] HUD model READY: provider_frames=5476 export_frames=5476 native_states_path=C:\Users\Malcerz\AppData\Local\Temp\SportCamHUD_prepared_ebq0w4ks\nvidia_states.bin
+[FFMPEG START] ts=2026-10-30 09:48:12.899 (1793350092.8996) thread=TeleM-RenderWorker/10292 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\CPU_P06_X265_TUNING\harness\H_fast_lat4_r1.mp4 input_videos=['D:\\GoPro\\GX010370.MP4'] encoder=cpu mode=direct
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.0
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[HUD PREP PROGRESS] phase=worker_init done=0 total=1 phase_pct=0.0% overall_pct=0.0% elapsed_ms=0.3
+[HUD PREP PROGRESS] phase=worker_init done=1 total=1 phase_pct=100.0% overall_pct=5.0% elapsed_ms=0.7
+[FIRST FRAME] ts=2026-10-30 09:48:12.900 (1793350092.9009) thread=TeleM-RenderWorker/10292 job_id= output_path=C:\_DEV\SportCamHUD\Raporty\CPU_P06_X265_TUNING\harness\H_fast_lat4_r1.mp4 input_videos=['D:\\GoPro\\GX010370.MP4'] frame=1/1
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[MAP PREFETCH DIAG] MAP_PREFETCH_ALIVE_AT_FIRST_FRAME=NO
+[HUD PREP PROGRESS] phase=map_preload done=0 total=1 phase_pct=0.0% overall_pct=5.0% elapsed_ms=1.6
+[HUD PREP PROGRESS] phase=map_preload done=1 total=1 phase_pct=100.0% overall_pct=10.0% elapsed_ms=1.7
+[DIRECT PROGRESS] frame=1/1 fps=0.0 elapsed=0.0s
+[DIRECT PROGRESS] frame=0/1 fps=0.0 elapsed=0.0s
+[DIRECT PROGRESS] frame=1/1 fps=0.0 elapsed=0.0s
+[CPU] Preserving HLG Main10: GX010370.MP4: hlg hevc/Main 10 yuv420p10le 10-bit bt2020/arib-std-b67/bt2020nc range=full 3840x2160@30000/1001 rot=180
+[CPU] x265 preset=ultrafast rate_control=ABR avg_bitrate=16000kbps (average, not CBR, no hard cap)
+[PROC] job created handle=3420
+[PROC] assigned TeleM parent pid=12108 to job (in_prior_job=False)
+[PROC] assigned pid=29816
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=0.1s
+[HUD PREP PROGRESS] phase=map_preload done=1 total=1 phase_pct=100.0% overall_pct=100.0% elapsed_ms=67.4
+[HUD PREP PROGRESS] TOTAL HUD PREPARATION: 67.4 ms (0.07 s)
+[DIRECT PROGRESS] frame=1/1 fps=0.0 elapsed=0.1s
+[PREPARE CONTRACT] map gate backend=cpu consumer=export:cpu required=49 missing=0 per_map=[('track_map', 'satellite', {'export:cpu': {'zoom': 15, 'footprint_px': 815, 'tiles': 49}})]
+[PROC] assigned pid=29308 (already in job via inheritance)
+[PROC] assigned pid=20312 (already in job via inheritance)
+[PREPARE CONTRACT] export phase begin label=prepared_hud_worker pid=29308
+[PREPARE CONTRACT] export phase begin label=prepared_hud_worker pid=20312
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=scale
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=value
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[GAUGE FONT]
+indicator=speed_text
+element=unit
+requested=(default)
+resolved=C:\Users\Malcerz\AppData\Local\Microsoft\Windows\Fonts\digital-7 (mono).ttf
+renderer=_render_gauge_indicator
+[DIRECT PROGRESS] frame=100/300 fps=13.8 elapsed=7.3s
+[DIRECT PROGRESS] frame=300/300 fps=13.1 elapsed=23.0s
+[DIRECT PROGRESS] frame=0/0 fps=0.0 elapsed=23.3s
+[RenderCancel] ffmpeg graceful stop requested elapsed=0.000s thread=TeleM-RenderWorker pid=29816
+[RenderCancel] stdin_closed elapsed=0.000s thread=TeleM-RenderWorker pid=29816
+[RenderCancel] ffmpeg graceful wait start elapsed=0.000s thread=TeleM-RenderWorker pid=29816
+[RenderCancel] ffmpeg exited rc=0 elapsed=0.050s thread=TeleM-RenderWorker pid=29816
+[PROC] ffmpeg exit
+[PROC] registry empty
+[PROC] registry empty
+
+=== TeleM PERFORMANCE BENCHMARK ===
+ffmpeg_write             : avg= 67.44ms | p95=273.92ms | range=[6.16-346.11]ms (n=300)
+===================================
+
+[PREVIEW RESOURCE RELEASE] reason=render_end worker_alive=0
+[EXPORT PREVIEW RESOURCES]
+decoder=none
+hardware_decode=off
+device=CPU
+workers=0
+updates=0
+mean_ms=0.000
+p95_ms=0.000
+[PROC] render thread exit
+
+[BENCH RESULT] mode=direct success=True frames=300 elapsed=25.2s fps=11.9
+[PROC] GUI closeEvent complete
+[PROC] aboutToQuit
+[PROC] QApplication returned rc=0

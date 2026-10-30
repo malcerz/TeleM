@@ -1,0 +1,29 @@
+{
+ "tag": "r3_ft8_lat4",
+ "preset": "ultrafast",
+ "x265_params": "frame-threads=8:lookahead-threads=4",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 21.94,
+ "wall_fps": 13.672,
+ "first_frame_s": 1.59,
+ "steady_fps": 14.092,
+ "finalize_s": 0.14,
+ "cores_avg": 14.53,
+ "cpu_util_pct_of_16": 90.8,
+ "core_s_per_frame": 1.063,
+ "rss_peak_mb": 3567,
+ "x265_info": [
+  "Thread pool created using 12 threads",
+  "Thread pool created using 4 threads",
+  "frame threads / pool features       : 8 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 13.87,
+ "x265_kbps": 19253.89,
+ "bytes": 24100239,
+ "errors": []
+}

@@ -1,0 +1,22 @@
+{
+ "tag": "u3_bf6_retry",
+ "preset": "ultrafast",
+ "x265_params": "bframes=6",
+ "bitrate_kbps_target": 16000,
+ "frames": 150,
+ "rc": 3199971767,
+ "wall_s": 0.33,
+ "wall_fps": 447.861,
+ "first_frame_s": 0.33,
+ "finalize_s": 0.01,
+ "cores_avg": 3.8,
+ "cpu_util_pct_of_16": 23.8,
+ "core_s_per_frame": 0.008,
+ "rss_peak_mb": 436,
+ "bytes": 0,
+ "errors": [
+  "[fc#0 @ 00000248c55d0300] Terminating thread with error: Invalid data found when processing input",
+  "[vost#0:0/libx265 @ 00000248c741ab80] Task finished with error: Invalid argument",
+  "[vost#0:0/libx265 @ 00000248c741ab80] Terminating thread with error: Invalid argument"
+ ]
+}

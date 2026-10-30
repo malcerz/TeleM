@@ -1,0 +1,30 @@
+{
+ "tag": "f2_lat6",
+ "preset": "faster",
+ "x265_params": "lookahead-threads=6",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 42.42,
+ "wall_fps": 7.072,
+ "first_frame_s": 2.64,
+ "steady_fps": 7.24,
+ "finalize_s": 0.18,
+ "cores_avg": 11.99,
+ "cpu_util_pct_of_16": 74.9,
+ "core_s_per_frame": 1.695,
+ "rss_peak_mb": 4515,
+ "x265_info": [
+  "Thread pool created using 10 threads",
+  "Thread pool created using 6 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.13,
+ "x265_kbps": 19027.91,
+ "bytes": 23817014,
+ "errors": []
+}

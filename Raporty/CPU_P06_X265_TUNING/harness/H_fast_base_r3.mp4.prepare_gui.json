@@ -1,0 +1,8 @@
+{
+  "interval_ms": 20,
+  "samples": 198,
+  "max_gap_ms": 311.2671999988379,
+  "p95_gap_ms": 49.88249999587424,
+  "gaps_over_100ms": 1,
+  "stall_samples": []
+}

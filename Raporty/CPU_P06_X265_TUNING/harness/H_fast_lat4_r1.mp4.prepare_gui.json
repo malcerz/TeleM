@@ -1,0 +1,18 @@
+{
+  "interval_ms": 20,
+  "samples": 195,
+  "max_gap_ms": 329.29780000267783,
+  "p95_gap_ms": 47.517499995592516,
+  "gaps_over_100ms": 4,
+  "stall_samples": [
+    {
+      "gap_ms": 250.2223999981652,
+      "stack": "  File \"C:\\_DEV\\SportCamHUD\\SportCamHUD.py\", line 53, in <module>\n    main()\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\qt\\application.py\", line 1820, in main\n    rc = app.exec()\n",
+      "hud_building": false,
+      "project_loading": true,
+      "workers": {
+        "Thread-23 (bg_load)": "  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1044, in _bootstrap\n    self._bootstrap_inner()\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\qt\\_mixins\\project_mixin.py\", line 1465, in bg_load\n    fit_loaded = self.telemetry.load_fit(\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\telemetry_manager.py\", line 1059, in load_fit\n    records = preparsed if preparsed is not None else parse_fit(fit_path)\n  File \"C:\\_DEV\\SportCamHUD\\telemetry_fit.py\", line 495, in parse_fit\n    from src.telemetry_active_time import build_active_time_mapper_from_events\n  File \"shibokensupport/signature/loader.py\", line 71, in feature_imported\n  File \"shibokensupport/feature.py\", line 147, in feature_imported\n  File \"shibokensupport/feature.py\", line 158, in _mod_uses_pyside\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\inspect.py\", line 1166, in getsource\n    lines, lnum = getsourcelines(object)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\inspect.py\", line 1148, in getsourcelines\n    lines, lnum = findsource(object)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\inspect.py\", line 977, in findsource\n    lines = linecache.getlines(file, module.__dict__)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\linecache.py\", line 41, in getlines\n    return updatecache(filename, module_globals)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\linecache.py\", line 188, in updatecache\n    lines = fp.readlines()\n"
+      }
+    }
+  ]
+}

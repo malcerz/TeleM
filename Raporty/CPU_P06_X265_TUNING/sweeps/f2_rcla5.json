@@ -1,0 +1,29 @@
+{
+ "tag": "f2_rcla5",
+ "preset": "faster",
+ "x265_params": "rc-lookahead=5",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 39.62,
+ "wall_fps": 7.572,
+ "first_frame_s": 2.1,
+ "steady_fps": 7.741,
+ "finalize_s": 0.17,
+ "cores_avg": 14.28,
+ "cpu_util_pct_of_16": 89.2,
+ "core_s_per_frame": 1.886,
+ "rss_peak_mb": 4040,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 5 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.64,
+ "x265_kbps": 18879.27,
+ "bytes": 23630972,
+ "errors": []
+}

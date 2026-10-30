@@ -1,0 +1,28 @@
+{
+ "tag": "u2_rcla20",
+ "preset": "ultrafast",
+ "x265_params": "rc-lookahead=20",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 24.74,
+ "wall_fps": 12.128,
+ "first_frame_s": 2.1,
+ "steady_fps": 12.438,
+ "finalize_s": 0.18,
+ "cores_avg": 12.61,
+ "cpu_util_pct_of_16": 78.8,
+ "core_s_per_frame": 1.04,
+ "rss_peak_mb": 3958,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 20 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 12.3,
+ "x265_kbps": 19397.81,
+ "bytes": 24280348,
+ "errors": []
+}

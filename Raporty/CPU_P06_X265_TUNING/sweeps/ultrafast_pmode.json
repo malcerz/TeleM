@@ -1,0 +1,28 @@
+{
+ "tag": "ultrafast_pmode",
+ "preset": "ultrafast",
+ "x265_params": "pmode=1",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 28.47,
+ "wall_fps": 10.536,
+ "first_frame_s": 1.6,
+ "steady_fps": 10.74,
+ "finalize_s": 0.17,
+ "cores_avg": 13.67,
+ "cpu_util_pct_of_16": 85.4,
+ "core_s_per_frame": 1.297,
+ "rss_peak_mb": 3825,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(68 rows) + pmode",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 10.66,
+ "x265_kbps": 19202.78,
+ "bytes": 24036290,
+ "errors": []
+}

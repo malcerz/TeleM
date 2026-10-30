@@ -1,0 +1,29 @@
+{
+ "tag": "base_medium",
+ "preset": "medium",
+ "x265_params": "",
+ "bitrate_kbps_target": 16000,
+ "frames": 150,
+ "rc": 0,
+ "wall_s": 34.27,
+ "wall_fps": 4.376,
+ "first_frame_s": 3.16,
+ "steady_fps": 4.555,
+ "finalize_s": 0.46,
+ "cores_avg": 13.44,
+ "cpu_util_pct_of_16": 84.0,
+ "core_s_per_frame": 3.071,
+ "rss_peak_mb": 7360,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 20 / 4 / 2",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 4.46,
+ "x265_kbps": 17425.48,
+ "bytes": 10907862,
+ "errors": []
+}

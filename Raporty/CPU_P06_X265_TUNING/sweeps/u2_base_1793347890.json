@@ -1,0 +1,28 @@
+{
+ "tag": "u2_base_1793347890",
+ "preset": "ultrafast",
+ "x265_params": "",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 23.99,
+ "wall_fps": 12.507,
+ "first_frame_s": 1.63,
+ "steady_fps": 12.786,
+ "finalize_s": 0.19,
+ "cores_avg": 13.3,
+ "cpu_util_pct_of_16": 83.1,
+ "core_s_per_frame": 1.063,
+ "rss_peak_mb": 3782,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(68 rows)",
+  "Slices                              : 1",
+  "Lookahead / bframes / badapt        : 5 / 3 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 12.7,
+ "x265_kbps": 19284.6,
+ "bytes": 24138651,
+ "errors": []
+}

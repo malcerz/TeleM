@@ -1,0 +1,29 @@
+{
+ "tag": "faster_base_z",
+ "preset": "faster",
+ "x265_params": "",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 39.6,
+ "wall_fps": 7.576,
+ "first_frame_s": 2.62,
+ "steady_fps": 7.727,
+ "finalize_s": 0.22,
+ "cores_avg": 14.04,
+ "cpu_util_pct_of_16": 87.8,
+ "core_s_per_frame": 1.853,
+ "rss_peak_mb": 4584,
+ "x265_info": [
+  "Thread pool created using 16 threads",
+  "frame threads / pool features       : 4 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 7.65,
+ "x265_kbps": 19027.91,
+ "bytes": 23817014,
+ "errors": []
+}

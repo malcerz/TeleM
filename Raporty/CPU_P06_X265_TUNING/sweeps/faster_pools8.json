@@ -1,0 +1,29 @@
+{
+ "tag": "faster_pools8",
+ "preset": "faster",
+ "x265_params": "pools=8",
+ "bitrate_kbps_target": 16000,
+ "frames": 300,
+ "rc": 0,
+ "wall_s": 43.37,
+ "wall_fps": 6.918,
+ "first_frame_s": 2.12,
+ "steady_fps": 7.04,
+ "finalize_s": 0.19,
+ "cores_avg": 9.34,
+ "cpu_util_pct_of_16": 58.4,
+ "core_s_per_frame": 1.35,
+ "rss_peak_mb": 4281,
+ "x265_info": [
+  "Thread pool created using 8 threads",
+  "frame threads / pool features       : 3 / wpp(34 rows)",
+  "Slices                              : 1",
+  "Keyframe min / max / scenecut / bias  : 25 / 250 / 40 / 5.00",
+  "Lookahead / bframes / badapt        : 15 / 4 / 0",
+  "Rate Control / qCompress            : ABR-16000 kbps / 0.60"
+ ],
+ "x265_fps": 6.97,
+ "x265_kbps": 19082.59,
+ "bytes": 23885419,
+ "errors": []
+}
