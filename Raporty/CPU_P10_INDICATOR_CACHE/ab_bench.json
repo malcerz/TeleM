@@ -1,0 +1,250 @@
+{
+ "900.lean_indicator": {
+  "A": {
+   "mean_ms": 3.3044985555555555,
+   "median_ms": 3.2152000000000003
+  },
+  "B": {
+   "mean_ms": 3.097544555555556,
+   "median_ms": 3.0073499999999997
+  },
+  "B_vs_A_mean_pct": -6.262795898399364,
+  "B_vs_A_median_pct": -6.464605623289388,
+  "rgba_mismatches": 0,
+  "renders_per_version": 900,
+  "cache_after_last_pass": {
+   "A": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 150,
+     "max_entries": 360,
+     "bytes": 21788616
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 64,
+     "bytes": 0
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 150,
+     "max_entries": 1024,
+     "bytes": 36069600
+    }
+   },
+   "B": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 8,
+     "max_entries": 8,
+     "bytes": 1163080
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 8,
+     "bytes": 0
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   }
+  }
+ },
+ "900.compass": {
+  "A": {
+   "mean_ms": 3.608018888888889,
+   "median_ms": 3.5227500000000003
+  },
+  "B": {
+   "mean_ms": 3.1186705555555556,
+   "median_ms": 3.0227500000000003
+  },
+  "B_vs_A_mean_pct": -13.562798544107157,
+  "B_vs_A_median_pct": -14.193456816407634,
+  "rgba_mismatches": 0,
+  "renders_per_version": 900,
+  "cache_after_last_pass": {
+   "A": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 360,
+     "bytes": 0
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 64,
+     "max_entries": 64,
+     "bytes": 41576704
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   },
+   "B": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 8,
+     "bytes": 0
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 8,
+     "max_entries": 8,
+     "bytes": 5197088
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   }
+  }
+ },
+ "1800.lean_indicator": {
+  "A": {
+   "mean_ms": 3.3534363333333337,
+   "median_ms": 3.3168499999999996
+  },
+  "B": {
+   "mean_ms": 3.1608735555555554,
+   "median_ms": 3.1364
+  },
+  "B_vs_A_mean_pct": -5.742252383434099,
+  "B_vs_A_median_pct": -5.440402791805465,
+  "rgba_mismatches": 0,
+  "renders_per_version": 900,
+  "cache_after_last_pass": {
+   "A": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 150,
+     "max_entries": 360,
+     "bytes": 21474100
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 64,
+     "bytes": 0
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 150,
+     "max_entries": 1024,
+     "bytes": 36069600
+    }
+   },
+   "B": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 8,
+     "max_entries": 8,
+     "bytes": 1110304
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 8,
+     "bytes": 0
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   }
+  }
+ },
+ "1800.compass": {
+  "A": {
+   "mean_ms": 3.5638566666666667,
+   "median_ms": 3.4308500000000004
+  },
+  "B": {
+   "mean_ms": 3.1179725555555553,
+   "median_ms": 2.98365
+  },
+  "B_vs_A_mean_pct": -12.51128069435391,
+  "B_vs_A_median_pct": -13.034670708425033,
+  "rgba_mismatches": 0,
+  "renders_per_version": 900,
+  "cache_after_last_pass": {
+   "A": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 360,
+     "bytes": 0
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 64,
+     "max_entries": 64,
+     "bytes": 41576704
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   },
+   "B": {
+    "lean_patch": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 8,
+     "bytes": 0
+    },
+    "compass": {
+     "hits": 0,
+     "misses": 150,
+     "entries": 8,
+     "max_entries": 8,
+     "bytes": 5197088
+    },
+    "effects": {
+     "hits": 0,
+     "misses": 0,
+     "entries": 0,
+     "max_entries": 1024,
+     "bytes": 0
+    }
+   }
+  }
+ }
+}

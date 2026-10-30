@@ -40,7 +40,10 @@ from src.indicators.helpers import (
     s,
 )
 _GAUGE_RASTER_CACHE = _BoundedStaticCache(max_entries=16)
-_COMPASS_INDICATOR_CACHE = _BoundedStaticCache(max_entries=64)
+# Keys hold the exact heading, which rarely repeats outside a stationary
+# heading or a redraw of the same frame; a few entries cover those.
+_COMPASS_INDICATOR_CACHE = _BoundedStaticCache(max_entries=8)
+_OPACITY_LUTS: dict[float, list[int]] = {}
 _GAUGE_CANVAS_STATE: dict[str, Any] = {"canvas": None, "bg_key": None, "needle_sig": None, "prev_dirty_boxes": []}
 
 
@@ -845,9 +848,15 @@ def _render_compass_indicator(
                     shadow_img = Image.new("RGBA", (out_size, out_size), (*shadow_color, 0))
                     shadow_img.putalpha(trail_alpha)
 
-        img = Image.new("RGBA", (out_size, out_size), (0, 0, 0, 0))
-        if shadow_img is not None:
-            img.alpha_composite(shadow_img)
+        if shadow_img is not None and tuple(shadow_color[:3]) == (0, 0, 0):
+            # Compositing onto a transparent canvas returns the source with RGB
+            # zeroed where alpha is 0 (checked for every value pair); a black
+            # shadow layer already has that form.
+            img = shadow_img
+        else:
+            img = Image.new("RGBA", (out_size, out_size), (0, 0, 0, 0))
+            if shadow_img is not None:
+                img.alpha_composite(shadow_img)
         img.alpha_composite(rot_dial_img)
         img.alpha_composite(needle_buf)
 
@@ -900,8 +909,12 @@ def _render_compass_indicator(
 
     opacity = max(0.0, min(1.0, float(cfg.get("opacity", 1.0))))
     if opacity < 1.0:
-        alpha = img.getchannel("A").point(lambda a: int(round(a * opacity)))
-        img.putalpha(alpha)
+        lut = _OPACITY_LUTS.get(opacity)
+        if lut is None:
+            if len(_OPACITY_LUTS) >= 64:
+                _OPACITY_LUTS.clear()
+            lut = _OPACITY_LUTS[opacity] = [int(round(a * opacity)) for a in range(256)]
+        img.putalpha(img.getchannel("A").point(lut))
     res = (img, s(cfg["x"], canvas_w), s(cfg["y"], canvas_h), None)
     if img is not None:
         _COMPASS_INDICATOR_CACHE[compass_cache_key] = res

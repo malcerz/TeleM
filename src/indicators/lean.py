@@ -44,7 +44,9 @@ from src.indicators.helpers import (
 
 _LEAN_BASE_CACHE = _BoundedStaticCache(max_entries=64)
 _LEAN_GRAPHIC_CACHE = _BoundedStaticCache(max_entries=16)
-_LEAN_ROTATED_PATCH_CACHE = _BoundedStaticCache(max_entries=360)
+# Keys are exact angles, which almost never repeat in video; keep only a few
+# entries for exact repeats (clamped max angle, redraw of the same frame).
+_LEAN_ROTATED_PATCH_CACHE = _BoundedStaticCache(max_entries=8)
 _ROWER_ICO = Path(__file__).resolve().parents[2] / "wzor" / "rower_ico.png"
 
 
@@ -120,6 +122,7 @@ class _LeanRotationSource:
     __slots__ = (
         "graphic",
         "padded_graphic",
+        "padded_premul",
         "gw",
         "gh",
         "pivot_px",
@@ -153,6 +156,8 @@ class _LeanRotationSource:
     ):
         self.graphic = graphic
         self.padded_graphic = padded_graphic
+        # Image.transform premultiplies RGBA on every call; do it once here.
+        self.padded_premul = padded_graphic.convert("RGBa")
         self.gw = gw
         self.gh = gh
         self.pivot_px = pivot_px
@@ -453,16 +458,20 @@ def _render_lean_indicator(
                 c_y = d_mat * (xd0 - rot_src.Cx) + e_mat * (yd0 - rot_src.Cy) + rot_src.Py
                 matrix = (a_mat, b_mat, c_x, d_mat, e_mat, c_y)
 
-                tight_rot = rot_src.padded_graphic.transform(
+                # Same steps as Image.transform on RGBA, minus the per-call premultiply.
+                tight_rot = rot_src.padded_premul.transform(
                     (tw, th),
                     Image.Transform.AFFINE,
                     matrix,
                     resample=Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC,
-                )
+                ).convert("RGBA")
 
                 dest_x = px_ref + xd0
                 dest_y = py_ref + yd0
                 _LEAN_ROTATED_PATCH_CACHE[patch_key] = (tight_rot, dest_x, dest_y, tw, th)
+                # A first-seen angle gives a raster the effect cache has never
+                # seen either; let effects skip hashing/caching it.
+                img._effects_no_cache = True
             cx0 = max(0, dest_x)
             cy0 = max(0, dest_y)
             cx1 = min(raster_w, dest_x + tw)

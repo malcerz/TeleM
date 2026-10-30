@@ -197,6 +197,9 @@ def apply_indicator_effects(
     profile_start_ns = time.perf_counter_ns() if _PROFILE_EFFECT_CACHE else 0
 
     dynamic_key = getattr(image, "_dynamic_key", None)
+    # Set by renderers for a raster that is new by construction (e.g. Lean at a
+    # first-seen exact angle): hashing and caching it could never produce a hit.
+    no_cache = dynamic_key is None and bool(getattr(image, "_effects_no_cache", False))
     if dynamic_key is not None:
         full_dyn_key = ("effects_full_dyn", dynamic_key, image.size, cfg_sig)
         cached_full = _EFFECT_CACHE.get(full_dyn_key)
@@ -247,7 +250,9 @@ def apply_indicator_effects(
         if use_sub:
             sub_alpha = src_alpha[by0:by1, bx0:bx1]
             bbox_tag = (bx0, by0, bx1, by1)
-            if _PROFILE_EFFECT_CACHE:
+            if no_cache:
+                cache_key = None
+            elif _PROFILE_EFFECT_CACHE:
                 payload_start_ns = time.perf_counter_ns()
                 hash_payload = sub_alpha.tobytes()
                 _profile_add(widget_key, "alpha_tobytes_ms", (time.perf_counter_ns() - payload_start_ns) / 1_000_000.0)
@@ -258,7 +263,10 @@ def apply_indicator_effects(
                 del hash_payload
             else:
                 content_hash = blake2b(sub_alpha.tobytes(), digest_size=16).digest()
-            cache_key = (content_hash, bbox_tag, image.size, cfg_sig)
+            if not no_cache:
+                cache_key = (content_hash, bbox_tag, image.size, cfg_sig)
+        elif no_cache:
+            cache_key = None
         else:
             if _PROFILE_EFFECT_CACHE:
                 payload_start_ns = time.perf_counter_ns()
@@ -274,7 +282,7 @@ def apply_indicator_effects(
             cache_key = (content_hash, image.size, cfg_sig)
 
     lookup_start_ns = time.perf_counter_ns() if (_PROFILE_EFFECT_CACHE or breakdown is not None) else 0
-    cached = _EFFECT_CACHE.get(cache_key)
+    cached = _EFFECT_CACHE.get(cache_key) if cache_key is not None else None
     if breakdown is not None and profile_key:
         breakdown[f"{profile_key}.lookup"] = (time.perf_counter_ns() - lookup_start_ns) / 1_000_000.0
     if _PROFILE_EFFECT_CACHE:
@@ -415,6 +423,11 @@ def apply_indicator_effects(
         result.paste(target_res, (bx0, by0))
     else:
         result = target_res
+
+    if cache_key is None:
+        # Uncached: `result` is a fresh raster nobody else holds, so compose in place.
+        result.alpha_composite(image, (pad, pad))
+        return result
 
     global _CACHED_BYTES
     entry_bytes = W * H * 4
