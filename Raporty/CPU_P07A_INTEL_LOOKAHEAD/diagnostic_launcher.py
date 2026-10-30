@@ -42,4 +42,3 @@ if __name__ == '__main__':
     st._build_stream_ffmpeg_cmd = build
     sys.argv[0] = r'C:\_DEV\SportCamHUD\SportCamHUD.py'
     runpy.run_path(sys.argv[0],run_name='__main__')
-    
