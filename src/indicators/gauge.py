@@ -329,7 +329,8 @@ def _render_compass_indicator(
     _cy = out_size // 2
     ring_r_out = int(round(ring_r / ss))
 
-    heading_key = round(float(value), 1) if (value is not None and not bool(cfg.get("_compass_missing", False))) else None
+    # Rendering uses the full heading; nearby headings cannot share an image.
+    heading_key = float(value) if (value is not None and not bool(cfg.get("_compass_missing", False))) else None
     cfg_sig = tuple(sorted((str(k), str(v)) for k, v in cfg.items() if not str(k).startswith("_")))
     compass_cache_key = _static_cache_key(
         "compass_full_v3", canvas_w, canvas_h, font_path, key, heading_key, str(formatted_val or ""),

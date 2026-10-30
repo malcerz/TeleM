@@ -417,8 +417,10 @@ def _render_lean_indicator(
                     cropped = rot_src.graphic.crop((cx0 - dest_x, cy0 - dest_y, cx1 - dest_x, cy1 - dest_y))
                     img.alpha_composite(cropped, (cx0, cy0))
         else:
-            q_angle = round(float(angle), 1)
-            patch_key = (id(rot_src), q_angle)
+            # The raster uses the full angle, so its cache key must as well.
+            # Quantizing only the key makes the result depend on which frame
+            # happened to populate this process-local cache first.
+            patch_key = (id(rot_src), float(angle))
             cached_patch = _LEAN_ROTATED_PATCH_CACHE.get(patch_key)
             if cached_patch is not None:
                 tight_rot, dest_x, dest_y, tw, th = cached_patch
