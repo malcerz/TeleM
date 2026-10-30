@@ -1,0 +1,1 @@
+{"t": 1793366222.6473897, "jobs": [{"t_start": 1793365240.9411547, "t_first": 1793365242.1667998, "t_last": 1793366218.5176253, "done": 4394, "distinct": 4394, "duplicates": 0, "min_idx": 0, "max_idx": 4393, "per_worker_pid": {}, "errors": []}]}
