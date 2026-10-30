@@ -1,36 +1,46 @@
 # SportCamHUD — CPU P0.7: lookahead
 
-## Status: CZĘŚCIOWO / BLOCKED
+## Decyzja: nie wdrażać automatycznego doboru; etap częściowo wykonany
 
-Nie wdrożono zmiany produkcyjnej. P0.6 dostarcza obiecujący wynik, którego nie należy odrzucać z powodu progu 10%, ale nie potwierdzono go na kilku fragmentach ani na tej maszynie. Nie wyciągamy wniosków dla innych procesorów z liczby wątków.
+P0.6 dał na Ryzen 7 7730U 11,08 → 11,87 FPS (+7,2%) i zgodność bitową w badanej próbce; nie odrzucamy go z powodu progu 10%. W P0.7 Ryzen nie był dostępny. Na dostępnym Intel Core i7-1265U (12 wątków logicznych) krótkie testy nie wykazały stabilnego zysku `lookahead-threads=4`; ponadto powtórzenie bazy dało inny zakodowany strumień. Automatyczna reguła na podstawie liczby wątków i profilu jest nieuzasadniona. Również wyjątek dla Ryzena wymaga potwierdzenia na kilku fragmentach na tej maszynie. `TELEM_CPU_X265_PARAMS` pozostaje jawnym eksperymentalnym ustawieniem, stosowanym do wszystkich profili; żadna zmiana produkcyjna nie została wykonana.
 
-## Stan i publikacja P0.6
+## Git i stan początkowy
 
-Gałąź `cpu-optimization`, początkowy HEAD `f809e2577908f91f7683ca6197d27c21bc521436`; `git ls-remote origin refs/heads/cpu-optimization` wskazał ten sam pełny SHA. Commit `docs(cpu): P0.6 libx265 tuning measurements, no parameter change deployed` zawiera raport P0.6 i jest opublikowany na origin. W katalogu roboczym zastano 778 usunięć, 107 modyfikacji i 338 pozycji nieśledzonych; pozostawiono je bez zmian. Indeks był pusty.
+Początkowy HEAD gałęzi `cpu-optimization` to `f809e2577908f91f7683ca6197d27c21bc521436`, potwierdzony przez `git ls-remote origin`: raport i commit P0.6 zostały opublikowane. Zastano 778 usunięć, 107 modyfikacji i 338 pozycji nieśledzonych; indeks był pusty. Zmiany pozostawiono. Pierwszy commit P0.7 `edacb266a89e3a4e5b0b1457bb8d5238764a4371` udokumentował brak pary; po wskazaniu przez użytkownika poniższej pary wykonano pomiary. W P0.7 zmieniono wyłącznie ten raport i dane pomiarowe w `Raporty/CPU_P07_LOOKAHEAD/`. Nie zmieniono kodu GPU ani telemetrii.
 
-## Środowisko i próba
+## Metoda
 
-Dostępny CPU: Intel Core i7-1265U, 12 wątków logicznych. Maszyna z Ryzen 7 7730U nie jest dostępna. Kanoniczny wrapper `Raporty/CPU_P02_PERFORMANCE/scripts/run_harness.py` ma na sztywno `D:\GoPro\GX010370.MP4` i `D:\GoPro\2026-10-13_15-02-49.fit`; dysk D: i ta para są niedostępne. Zdefiniowanych w BENCHMARKS.md par GX020079 oraz GX030120 nie znaleziono w C:\GoPro ani w sprawdzonych katalogach projektu na C: i Z:.
+Użytkownik wskazał parę `C:\GoPro\GX010378.MP4` + `C:\GoPro\2026-10-15_15-03-50.fit`. Harness `--test-cpu-export`, przez wrapper P0.2 z podmienionymi tylko ścieżkami wejścia, `def_layout.json`, 3840×2160, fast/ultrafast, ABR 16M, 60 klatek, start 0, 900 i 1800. Przy 0 i 900 testowano domyślne i 2/3/4/5; przy 1800 domyślne i 4; dodatkowo powtórzono domyślne i 4 na 0. Kolejność 0: baza, 2, 3, 4, 5, później powtórzenia; 900: 5, 4, 3, 2, baza. Krótkie testy pojedyncze, bez kontrolowanego schładzania; start/finalizacja są znaczną częścią czasu. Nie jest to miarodajny szacunek długiego eksportu ani dowód powtarzalności. Żadnego długiego eksportu ani pełnego sweepu nie wykonywano. `summaries.json` zawiera próbki zagregowane przez wrapper; pliki MP4 i pełne logi pozostają lokalnie w `C:\GoPro\TO\p07`.
 
-Uruchomiono kanoniczny punkt wejścia `--test-cpu-export` na dostępnym `C:\GoPro\GX010378.MP4`, bez FIT, 30 klatek, profil fast, 16M, start 0, `--wait-prepared`, offscreen. Przygotowanie projektu osiągnęło READY, jednak przez ponad 40 sekund potem eksport nie rozpoczął kodowania ani nie zapisał wyniku. Próbę przerwano; brak wyniku MP4 i JSON. Bez FIT wskaźniki FIT były niedostępne, więc i tak nie byłby to porównywalny Golden HUD. Przyczynę zatrzymania nie ustalono. Nie uruchamiano długiego eksportu.
+## Wyniki Intel
 
-## Wyniki i ograniczenia
+| start | parametr | FPS eksportu | bitrate x265 kb/s | CPU systemu % | szczyt RAM systemu GB | peak RSS ffmpeg MB |
+|---:|---|---:|---:|---:|---:|---:|
+| 0 | default | 6,21 | 14994,43 | 54,6 | 14,57 | 2964,5 |
+| 0 | 2 | 4,83 | 14996,12 | 66,1 | 13,96 | 2968,0 |
+| 0 | 3 | 5,07 | 14988,59 | 62,8 | 13,98 | 2967,5 |
+| 0 | 4 | 4,95 | 14993,74 | 60,9 | 14,00 | 2959,2 |
+| 0 | 5 | 4,99 | 14993,92 | 60,0 | 13,99 | 2950,2 |
+| 900 | default | 4,28 | 17836,36 | 67,0 | 14,11 | 2991,3 |
+| 900 | 2 | 4,37 | 17813,43 | 67,7 | 14,00 | 2952,5 |
+| 900 | 3 | 4,35 | 17825,59 | 68,4 | 14,02 | 2970,0 |
+| 900 | 4 | 4,24 | 17848,40 | 67,0 | 14,10 | 2960,9 |
+| 900 | 5 | 4,14 | 17798,01 | 65,5 | 14,08 | 3136,2 |
+| 1800 | default | 4,27 | 18069,68 | 69,3 | 14,03 | — |
+| 1800 | 4 | 4,30 | 18068,10 | 67,1 | 13,69 | — |
+| 0 | default powtórzenie | 4,41 | 14990,40 | 67,0 | 13,95 | — |
+| 0 | 4 powtórzenie | 4,83 | 14992,44 | 62,0 | 13,96 | — |
 
-| Kontrola | Wynik P0.7 |
-|---|---|
-| FPS przed/po, domyślne i lookahead 2/3/4/5, kilka fragmentów 4K | NOT TESTED — brak ukończonego przebiegu |
-| Intel i7-1265U | NOT TESTED — próba nie doszła do kodowania |
-| Ryzen 7 7730U | NOT TESTED w P0.7 — niedostępny |
-| Zgodność bitowa, bitrate, Main10 HLG, orientacja, audio live mux, CPU/RAM, Golden HUD | NOT TESTED w P0.7 |
+CPU to średnia systemowa w oknie 25–90% całego procesu, obejmującym również przygotowanie; nie jest to precyzyjny pomiar steady-state. Dane RSS pozostałych przebiegów są w JSON. Duża różnica 6,21 vs 4,41 FPS powtórzonej bazy wskazuje na silny dryf warunków; nie należy obliczać wiarygodnego zysku z tych pojedynczych par. Przed/po dla trzech fragmentów: 6,21→4,95 (powtórzenie 4,41→4,83), 4,28→4,24, 4,27→4,30 FPS.
 
-Historyczny wynik P0.6, nie nowy pomiar: Ryzen 7 7730U, ultrafast, 300 klatek, trzy pary harnessu: **11,08 → 11,87 FPS (+7,2%)**. Raport P0.6 podaje bitową zgodność dla porównania sweepu, identyczny bitrate i brak regresji startu/finalizacji/pamięci w tych pomiarach. Nie należy przenosić tych wyników na Intel ani inne fragmenty. P0.6 nie dowodzi bitowej zgodności wszystkich możliwych wejść.
+## Poprawność
 
-## Reguła i decyzja
+- Wszystkie 14 przebiegów zgłosiły success, 60/60 klatek, poprawny MP4, audio i kolor w walidatorze. ffprobe na `s0_lat4` potwierdził HEVC Main 10, yuv420p10le, BT.2020, arib-std-b67 oraz AAC. Wejście i wynik mają display matrix −180°. Wizualna kontrola orientacji i wariant 0°: NOT TESTED.
+- Hashe SHA-256 skopiowanego strumienia wideo są różne: baza 0 `d20e5cc10e4a30301bb3dbb729ddaddb1cd0714bad203a89468fcbdf4938c362`, jej powtórzenie `6eddffb9bd2cc6940ae2e2a6db7d387aef5910ffffed98c479a73b4602e81702`, lat4 `fb1c7170af491e57b636825681e4987b027af88b0c058f5d1df345b73e372e8a`. Pozostałe warianty także różne od bazy. Zgodność bitowa NOT PROVEN; ponieważ powtórzenia bazy też różne, przyczyny nie ustalono. Nie twierdzimy, że sam lookahead powoduje różnicę.
+- Audio w wyniku obecne i timing walidatora prawidłowy. Brak niezależnego potwierdzenia całego procesu live mux i niewystępowania wyodrębnienia: NOT PROVEN; kod nie był zmieniany.
+- `python -m pytest -q tests/test_cpu_golden_p04.py tests/test_cpu_p0_correctness.py tests/test_cpu_p03_presets.py`: 23 passed, 1 skipped. Integralność zamrożonego Golden HUD i jego obrót PASS; rzeczywisty rerun Golden pominięty z powodu niedostępnego oryginalnego źródła GX010370, więc porównanie HUD eksportu P0.7 z golden NOT TESTED.
+- Profile Szybki, Zbalansowany, Jakość i mechanizmy jakości x265 bez zmian. Pozostałe profile w P0.7 NOT TESTED. Ryzen P0.7 NOT TESTED, Intel i7-1265U przetestowany tylko w opisanym zakresie; inne procesory NOT TESTED.
 
-Brak podstaw do automatycznego doboru na podstawie liczby logicznych wątków i profilu: nawet na 16 wątkach P0.6 wykazał regresję dla wartości 2 i 8, a zależność od procesora i materiału nie została potwierdzona. Hipoteza `logiczne wątki // 4` pozostaje niesprawdzona. Nie wdrożono także wyjątku dla Ryzena, ponieważ wymagane powtórzenie na różnych fragmentach nie zostało wykonane. Istniejący diagnostyczny `TELEM_CPU_X265_PARAMS=lookahead-threads=4` pozostaje eksperymentalny; nie jest automatyczną regułą i nie jest ograniczony do profilu fast. Profile Szybki, Zbalansowany i Jakość oraz mechanizmy jakości x265 pozostają bez zmian. Kod GPU i telemetrii nie był zmieniany.
+## Dalsze kroki
 
-Aby dokończyć etap, potrzebna jest dostępna, jawnie zatwierdzona para wideo/FIT albo kanoniczny zestaw, sprawny harness oraz pomiary na Ryzen i Intel: przeplatane przebiegi domyślne i 2/3/4/5 dla kilku fragmentów, z wynikami FPS, hashami, bitrate, walidacją HLG/orientacji/audio i Golden HUD oraz próbkowaniem zasobów. Dopiero te dane mogą uzasadnić ograniczony wyjątek lub regułę.
-
-## Zmienione pliki i podsumowanie
-
-Wyłącznie niniejszy raport. Testy wymagane do decyzji wdrożeniowej: BLOCKED; wdrożenie: NIE; izolacja backendów: bez zmian kodu. Wynik P0.6 opublikowany: PASS. P0.7 jako całość: NIEUKOŃCZONY.
+Na Ryzen powtórzyć przeplatane krótkie pary na kilku fragmentach i ustalić źródło niedeterministyczności przed porównaniem bitowym. Na Intel powtórzyć pary w stabilnych warunkach, zebrać bezpośredni dowód ścieżki audio i wizualną orientację oraz prawdziwy rerun Golden HUD. Dopiero wtedy rozważyć ograniczoną regułę. P0.7 pozostaje CZĘŚCIOWO / brak wdrożenia.
