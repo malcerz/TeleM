@@ -1,0 +1,96 @@
+{
+  "base1": {
+    "x265_config": [
+      "x265 [info]: HEVC encoder version 4.3+13-fe9bc85",
+      "x265 [info]: build info [Windows][GCC 16.1.0][64 bit] 10bit",
+      "x265 [info]: using cpu capabilities: MMX2 SSE2Fast LZCNT SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2",
+      "x265 [info]: Main 10 profile, Level-5 (Main tier)",
+      "x265 [info]: Thread pool created using 12 threads",
+      "x265 [info]: frame threads / pool features       : 3 / wpp(68 rows)",
+      "x265 [info]: Slices                              : 1",
+      "x265 [info]: Coding QT: max CU size, min CU size : 32 / 16",
+      "x265 [info]: Residual QT: max TU size, max depth : 32 / 1 inter / 1 intra",
+      "x265 [info]: ME / range / subpel / merge         : dia / 57 / 0 / 2",
+      "x265 [info]: Lookahead / bframes / badapt        : 5 / 3 / 0",
+      "x265 [info]: b-pyramid / weightp / weightb       : 1 / 0 / 0",
+      "x265 [info]: References / ref-limit  cu / depth  : 1 / off / off",
+      "x265 [info]: AQ: mode / str / qg-size / cu-tree  : 1 / 0.0 / 32 / 1",
+      "x265 [info]: Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+      "x265 [info]: tools: rd=2 psy-rd=2.00 early-skip rskip mode=1 tmvp fast-intra",
+      "x265 [info]: tools: strong-intra-smoothing lslices=8 deblock dhdr10-info"
+    ],
+    "filter_graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[ov];[base][ov]overlay=0:0:shortest=1:format=yuv420p10[vtemp]",
+    "sha256_hevc": "SHA256=260c27c849eca4ae738d76349047bdad021da78b273e5d34b2cb085f65c3f54a"
+  },
+  "base2": {
+    "x265_config": [
+      "x265 [info]: HEVC encoder version 4.3+13-fe9bc85",
+      "x265 [info]: build info [Windows][GCC 16.1.0][64 bit] 10bit",
+      "x265 [info]: using cpu capabilities: MMX2 SSE2Fast LZCNT SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2",
+      "x265 [info]: Main 10 profile, Level-5 (Main tier)",
+      "x265 [info]: Thread pool created using 12 threads",
+      "x265 [info]: frame threads / pool features       : 3 / wpp(68 rows)",
+      "x265 [info]: Slices                              : 1",
+      "x265 [info]: Coding QT: max CU size, min CU size : 32 / 16",
+      "x265 [info]: Residual QT: max TU size, max depth : 32 / 1 inter / 1 intra",
+      "x265 [info]: ME / range / subpel / merge         : dia / 57 / 0 / 2",
+      "x265 [info]: Lookahead / bframes / badapt        : 5 / 3 / 0",
+      "x265 [info]: b-pyramid / weightp / weightb       : 1 / 0 / 0",
+      "x265 [info]: References / ref-limit  cu / depth  : 1 / off / off",
+      "x265 [info]: AQ: mode / str / qg-size / cu-tree  : 1 / 0.0 / 32 / 1",
+      "x265 [info]: Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+      "x265 [info]: tools: rd=2 psy-rd=2.00 early-skip rskip mode=1 tmvp fast-intra",
+      "x265 [info]: tools: strong-intra-smoothing lslices=8 deblock dhdr10-info"
+    ],
+    "filter_graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[ov];[base][ov]overlay=0:0:shortest=1:format=yuv420p10[vtemp]",
+    "sha256_hevc": "SHA256=110d1d7c31b345e4c8fb0f151eded248f721e02fc2cf6d62d5ae5c8c19eecbd5"
+  },
+  "hash1": {
+    "x265_config": [
+      "x265 [info]: HEVC encoder version 4.3+13-fe9bc85",
+      "x265 [info]: build info [Windows][GCC 16.1.0][64 bit] 10bit",
+      "x265 [info]: using cpu capabilities: MMX2 SSE2Fast LZCNT SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2",
+      "x265 [info]: Main 10 profile, Level-5 (Main tier)",
+      "x265 [info]: Thread pool created using 12 threads",
+      "x265 [info]: frame threads / pool features       : 3 / wpp(68 rows)",
+      "x265 [info]: Slices                              : 1",
+      "x265 [info]: Coding QT: max CU size, min CU size : 32 / 16",
+      "x265 [info]: Residual QT: max TU size, max depth : 32 / 1 inter / 1 intra",
+      "x265 [info]: ME / range / subpel / merge         : dia / 57 / 0 / 2",
+      "x265 [info]: Lookahead / bframes / badapt        : 5 / 3 / 0",
+      "x265 [info]: b-pyramid / weightp / weightb       : 1 / 0 / 0",
+      "x265 [info]: References / ref-limit  cu / depth  : 1 / off / off",
+      "x265 [info]: AQ: mode / str / qg-size / cu-tree  : 1 / 0.0 / 32 / 1",
+      "x265 [info]: Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+      "x265 [info]: tools: rd=2 psy-rd=2.00 early-skip rskip mode=1 tmvp fast-intra",
+      "x265 [info]: tools: strong-intra-smoothing lslices=8 deblock dhdr10-info"
+    ],
+    "filter_graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[ov];[base][ov]overlay=0:0:shortest=1:format=yuv420p10[tap];[tap]split=2[vtemp][audit]",
+    "sha256_hevc": "SHA256=5d5a379498c3ba48b1b3f861211d66d711581e355a6c6b565037380268a5d154",
+    "record_sha256": "b34f6bdf3fa6aa22068f573f92c9cc07bf0f11faa865e846e68b8c46dd10c9df"
+  },
+  "hash2": {
+    "x265_config": [
+      "x265 [info]: HEVC encoder version 4.3+13-fe9bc85",
+      "x265 [info]: build info [Windows][GCC 16.1.0][64 bit] 10bit",
+      "x265 [info]: using cpu capabilities: MMX2 SSE2Fast LZCNT SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2",
+      "x265 [info]: Main 10 profile, Level-5 (Main tier)",
+      "x265 [info]: Thread pool created using 12 threads",
+      "x265 [info]: frame threads / pool features       : 3 / wpp(68 rows)",
+      "x265 [info]: Slices                              : 1",
+      "x265 [info]: Coding QT: max CU size, min CU size : 32 / 16",
+      "x265 [info]: Residual QT: max TU size, max depth : 32 / 1 inter / 1 intra",
+      "x265 [info]: ME / range / subpel / merge         : dia / 57 / 0 / 2",
+      "x265 [info]: Lookahead / bframes / badapt        : 5 / 3 / 0",
+      "x265 [info]: b-pyramid / weightp / weightb       : 1 / 0 / 0",
+      "x265 [info]: References / ref-limit  cu / depth  : 1 / off / off",
+      "x265 [info]: AQ: mode / str / qg-size / cu-tree  : 1 / 0.0 / 32 / 1",
+      "x265 [info]: Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+      "x265 [info]: tools: rd=2 psy-rd=2.00 early-skip rskip mode=1 tmvp fast-intra",
+      "x265 [info]: tools: strong-intra-smoothing lslices=8 deblock dhdr10-info"
+    ],
+    "filter_graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[ov];[base][ov]overlay=0:0:shortest=1:format=yuv420p10[tap];[tap]split=2[vtemp][audit]",
+    "sha256_hevc": "SHA256=4632088b99be92047b93df4d50bd27c164b5c27426097f79d69e5b334d4bab2f",
+    "record_sha256": "b34f6bdf3fa6aa22068f573f92c9cc07bf0f11faa865e846e68b8c46dd10c9df"
+  }
+}
